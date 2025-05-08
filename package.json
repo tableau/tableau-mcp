@@ -15,10 +15,11 @@
     "tableau-mcp-server": "./build/index.js"
   },
   "scripts": {
-    "build": "npm run lint && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap && npm run exec-perms",
+    "build": "esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap && npm run exec-perms",
     "lint": "npm exec eslint",
     "start": "node build/index.js",
     "inspect": "npx @modelcontextprotocol/inspector --config config.json --server tableau",
+    "build:inspect": "npm run build && npm run inspect",
     "exec-perms": "shx chmod +x build/*.js"
   },
   "dependencies": {
