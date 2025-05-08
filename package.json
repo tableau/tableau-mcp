@@ -1,18 +1,26 @@
 {
   "name": "tableau-mcp",
-  "type": "module",
+  "description": "A MCP server for Tableau, providing a suite of developer primitives, including tools, resources and prompts, that will make it easier for developers to build AI-applications that integrate with Tableau.",
   "version": "0.1.0",
-  "main": "index.js",
+  "homepage": "https://github.com/tableau/tableau-mcp",
+  "bugs": "https://github.com/tableau/tableau-mcp/issues",
+  "author": "Tableau",
+  "type": "module",
+  "license": "ISC",
+  "keywords": [
+    "tableau",
+    "mcp"
+  ],
+  "bin": {
+    "tableau-mcp-server": "./build/index.js"
+  },
   "scripts": {
-    "build": "npm run lint && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap && chmod 755 build/index.js",
+    "build": "npm run lint && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap && npm run exec-perms",
     "lint": "npm exec eslint",
     "start": "node build/index.js",
-    "inspect": "npx @modelcontextprotocol/inspector --config config.json --server tableau"
+    "inspect": "npx @modelcontextprotocol/inspector --config config.json --server tableau",
+    "exec-perms": "shx chmod +x build/*.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.10.2",
     "@zodios/core": "^10.9.6",
@@ -35,7 +43,11 @@
     "eslint-plugin-prettier": "^5.2.6",
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "prettier": "^3.5.3",
+    "shx": "^0.4.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.31.1"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
