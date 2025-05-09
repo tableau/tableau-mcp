@@ -1,8 +1,8 @@
-import { shouldLogWhenLevelIsAtLeast } from '../log.js';
 import {
   RequestInterceptorConfig,
   ResponseInterceptorConfig,
 } from '../sdks/tableau/interceptors.js';
+import { shouldLogWhenLevelIsAtLeast } from './log.js';
 
 type MaskedKeys = 'data' | 'headers';
 type Optional<T, K extends keyof T> = Pick<Partial<T>, K> & Omit<T, K>;

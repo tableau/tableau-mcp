@@ -2,7 +2,7 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 import { config } from './config.js';
-import { log, setLogLevel } from './log.js';
+import { log, setLogLevel } from './logging/log.js';
 import { server } from './server.js';
 
 async function startServer(): Promise<void> {

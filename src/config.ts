@@ -1,7 +1,7 @@
 import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import dotenv from 'dotenv';
 
-import { isLoggingLevel } from './log.js';
+import { isLoggingLevel } from './logging/log.js';
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 
 class Config {

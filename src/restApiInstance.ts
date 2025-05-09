@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { log, shouldLogWhenLevelIsAtLeast } from './log.js';
+import { log, shouldLogWhenLevelIsAtLeast } from './logging/log.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 import { RequestInterceptor, ResponseInterceptor } from './sdks/tableau/interceptors.js';
