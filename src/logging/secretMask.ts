@@ -1,3 +1,5 @@
+import { Err, Ok, Result } from 'ts-results-es';
+
 import {
   RequestInterceptorConfig,
   ResponseInterceptorConfig,
@@ -10,7 +12,12 @@ type MaskedRequest = Optional<RequestInterceptorConfig, MaskedKeys>;
 type MaskedResponse = Optional<ResponseInterceptorConfig, MaskedKeys>;
 
 export const maskRequest = (config: RequestInterceptorConfig): MaskedRequest => {
-  const maskedData: MaskedRequest = clone(config);
+  const result = clone<MaskedRequest>(config);
+  if (result.isErr()) {
+    return config;
+  }
+
+  const maskedData = result.value;
   if (shouldLogWhenLevelIsAtLeast('debug')) {
     if (maskedData.data?.credentials) {
       maskedData.data.credentials = '<redacted>';
@@ -28,7 +35,12 @@ export const maskRequest = (config: RequestInterceptorConfig): MaskedRequest => 
 };
 
 export const maskResponse = (response: ResponseInterceptorConfig): MaskedResponse => {
-  const maskedData: MaskedResponse = clone(response);
+  const result = clone<MaskedResponse>(response);
+  if (result.isErr()) {
+    return response;
+  }
+
+  const maskedData = result.value;
   if (shouldLogWhenLevelIsAtLeast('debug')) {
     if (maskedData.data?.credentials) {
       maskedData.data.credentials = '<redacted>';
@@ -41,14 +53,14 @@ export const maskResponse = (response: ResponseInterceptorConfig): MaskedRespons
   return maskedData;
 };
 
-function clone<T>(obj: T): T {
+function clone<T>(obj: T): Result<T, Error> {
   try {
-    return structuredClone(obj);
+    return Ok(structuredClone(obj));
   } catch (error) {
     const message = error instanceof Error ? error.message : `${error}`;
     process.stderr.write(
       `Could not clone object, notification may not be sanitized! Error: ${message}`,
     );
-    return obj;
+    return Err(error instanceof Error ? error : new Error(message));
   }
 }
