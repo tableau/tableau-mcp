@@ -10,7 +10,7 @@ export const queryDatasourceTool = new Tool({
   description: 'Run a Tableau VizQL query.',
   paramsSchema: { query: Query },
   callback: async ({ query }): Promise<CallToolResult> => {
-    return await getToolCallback(async () => {
+    return await getToolCallback(async (requestId) => {
       const datasource = { datasourceLuid: config.datasourceLuid };
       const options = {
         returnFormat: 'OBJECTS',
@@ -24,7 +24,7 @@ export const queryDatasourceTool = new Tool({
         options,
       };
 
-      const restApi = await getNewRestApiInstanceAsync(config.server, config.authConfig);
+      const restApi = await getNewRestApiInstanceAsync(config.server, config.authConfig, requestId);
       return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
     });
   },

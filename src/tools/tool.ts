@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok, Result } from 'ts-results-es';
@@ -24,7 +26,9 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   }
 }
 
-export async function getToolCallback<T>(callback: () => Promise<T>): Promise<CallToolResult> {
+export async function getToolCallback<T>(
+  callback: (requestId: string) => Promise<T>,
+): Promise<CallToolResult> {
   const result = await getResult(callback);
 
   if (result.isOk()) {
@@ -50,10 +54,16 @@ export async function getToolCallback<T>(callback: () => Promise<T>): Promise<Ca
   };
 }
 
-async function getResult<T>(callback: () => Promise<T>): Promise<Result<T, Error>> {
+async function getResult<T>(
+  callback: (requestId: string) => Promise<T>,
+): Promise<Result<T, Error>> {
+  const requestId = randomUUID();
+
   try {
-    return Ok(await callback());
+    return Ok(await callback(requestId));
   } catch (error) {
-    return Err(error instanceof Error ? error : new Error(`${error}`));
+    return Err(
+      error instanceof Error ? error : new Error(`requestId: ${requestId}, error: ${error}`),
+    );
   }
 }

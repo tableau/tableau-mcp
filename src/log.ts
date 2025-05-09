@@ -6,7 +6,7 @@ type Logger = 'rest-api' | (string & {});
 type LogType = LoggingLevel | 'request' | 'response';
 type LogMessage = {
   type: LogType;
-  currentLogLevel: LoggingLevel;
+  requestId: string;
   [key: string]: any;
 };
 
@@ -27,7 +27,6 @@ const orderedLevels = {
 
 let currentLogLevel: LoggingLevel = 'debug';
 
-export const getCurrentLogLevel = (): LoggingLevel => currentLogLevel;
 export const setLogLevel = (level: LoggingLevel): void => {
   currentLogLevel = level;
   log.notice(`Logging level set to: ${level}`);
@@ -57,10 +56,16 @@ function getSendLoggingMessageFn(level: LoggingLevel) {
     return server.server.sendLoggingMessage({
       level,
       logger,
-      message:
-        typeof message === 'string' || message instanceof String
-          ? message
-          : JSON.stringify(message, null, 2),
+      message: JSON.stringify(
+        {
+          timestamp: new Date().toISOString(),
+          sessionId: server.server.transport?.sessionId ?? 'unknown',
+          currentLogLevel,
+          message,
+        },
+        null,
+        2,
+      ),
     });
   };
 }

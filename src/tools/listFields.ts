@@ -20,8 +20,8 @@ export const listFieldsTool = new Tool({
       }
     }`;
 
-    return await getToolCallback(async () => {
-      const restApi = await getNewRestApiInstanceAsync(config.server, config.authConfig);
+    return await getToolCallback(async (requestId) => {
+      const restApi = await getNewRestApiInstanceAsync(config.server, config.authConfig, requestId);
       const response = await restApi.metadataMethods.graphql(query);
       const published = response.data.publishedDatasources;
 
