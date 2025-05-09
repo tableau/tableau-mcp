@@ -1,6 +1,6 @@
 import jwt, { JwtHeader, JwtPayload } from 'jsonwebtoken';
 
-export async function getJwt({
+export function getJwt({
   username,
   connectedApp,
   scopes,
@@ -12,7 +12,7 @@ export async function getJwt({
     secretValue: string;
   };
   scopes: string[];
-}): Promise<string> {
+}): string {
   const header: JwtHeader = {
     alg: 'HS256',
     typ: 'JWT',

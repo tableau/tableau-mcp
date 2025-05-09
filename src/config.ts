@@ -13,7 +13,6 @@ class Config {
     const {
       SERVER: server,
       DATASOURCE_LUID: datasourceLuid,
-      AUTH_TOKEN: authToken,
       SITE_NAME: siteName,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
@@ -36,15 +35,6 @@ class Config {
 
     this.server = server;
     this.datasourceLuid = datasourceLuid;
-
-    if (authToken && (!authType || authType === 'auth-token')) {
-      this.authConfig = {
-        type: 'auth-token',
-        authToken,
-      };
-
-      return;
-    }
 
     if (!siteName) {
       throw new Error(`The environment variable SITE_NAME is not set.`);

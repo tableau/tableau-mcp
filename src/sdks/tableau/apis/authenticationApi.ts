@@ -1,10 +1,4 @@
-import {
-  makeApi,
-  makeEndpoint,
-  Zodios,
-  ZodiosEndpointDefinitions,
-  ZodiosInstance,
-} from '@zodios/core';
+import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
 import { credentialsSchema } from '../types/credentials.js';
@@ -52,8 +46,6 @@ const signInEndpoint = makeEndpoint({
 });
 
 const authenticationApi = makeApi([signInEndpoint]);
-const authenticationApis = [...authenticationApi] as const satisfies ZodiosEndpointDefinitions;
-
-export type AuthenticationApiClient = ZodiosInstance<typeof authenticationApis>;
-export const getApiClient = (baseUrl: string): AuthenticationApiClient =>
-  new Zodios(baseUrl, authenticationApis);
+export const authenticationApis = [
+  ...authenticationApi,
+] as const satisfies ZodiosEndpointDefinitions;

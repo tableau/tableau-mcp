@@ -1,3 +1,7 @@
+import { ZodiosEndpointDefinitions, ZodiosInstance } from '@zodios/core';
+
+import Methods from './methods.js';
+
 type AuthHeaders = {
   headers: {
     'X-Tableau-Auth': string;
@@ -11,7 +15,9 @@ type AuthHeaders = {
  * @abstract
  * @class AuthenticatedMethods
  */
-export default abstract class AuthenticatedMethods {
+export default abstract class AuthenticatedMethods<
+  T extends ZodiosEndpointDefinitions,
+> extends Methods<T> {
   private _token: string;
 
   protected get authHeader(): AuthHeaders {
@@ -26,7 +32,8 @@ export default abstract class AuthenticatedMethods {
     };
   }
 
-  constructor(token: string) {
+  constructor(apiClient: ZodiosInstance<T>, token: string) {
+    super(apiClient);
     this._token = token;
   }
 }

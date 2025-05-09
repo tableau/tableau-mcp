@@ -1,4 +1,4 @@
-import { makeApi, Zodios, ZodiosEndpointDefinitions, ZodiosInstance } from '@zodios/core';
+import { makeApi, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
 const Connection = z.object({
@@ -198,8 +198,6 @@ const vizqlDataServiceApi = makeApi([
   },
 ]);
 
-const vizqlDataServiceApis = [...vizqlDataServiceApi] as const satisfies ZodiosEndpointDefinitions;
-
-export type VizqlDataServiceApiClient = ZodiosInstance<typeof vizqlDataServiceApis>;
-export const getApiClient = (baseUrl: string): VizqlDataServiceApiClient =>
-  new Zodios(baseUrl, vizqlDataServiceApis);
+export const vizqlDataServiceApis = [
+  ...vizqlDataServiceApi,
+] as const satisfies ZodiosEndpointDefinitions;

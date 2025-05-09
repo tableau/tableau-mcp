@@ -1,10 +1,4 @@
-import {
-  makeApi,
-  makeEndpoint,
-  Zodios,
-  ZodiosEndpointDefinitions,
-  ZodiosInstance,
-} from '@zodios/core';
+import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
 const graphqlResponse = z.object({
@@ -51,8 +45,4 @@ const graphqlEndpoint = makeEndpoint({
 });
 
 const metadataApi = makeApi([graphqlEndpoint]);
-const metadataApis = [...metadataApi] as const satisfies ZodiosEndpointDefinitions;
-
-export type MetadataApiClient = ZodiosInstance<typeof metadataApis>;
-export const getApiClient = (baseUrl: string): MetadataApiClient =>
-  new Zodios(baseUrl, metadataApis);
+export const metadataApis = [...metadataApi] as const satisfies ZodiosEndpointDefinitions;
