@@ -1,28 +1,38 @@
-import { log } from './log.js';
+import { getCurrentLogLevel, log, shouldLogWhenLevelIsAtLeast } from './log.js';
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 import RestApi, { RequestInterceptor, ResponseInterceptor } from './sdks/tableau/restApi.js';
 
 const requestInterceptor: RequestInterceptor = (config) => {
+  const parts = [...config.baseUrl.split('/'), ...config.url.split('/')].filter(Boolean);
   const messageObj = {
+    type: 'request',
+    currentLogLevel: getCurrentLogLevel(),
     method: config.method,
-    url: config.url,
-    headers: config.headers,
-    data: config.data,
-  };
+    url: parts.join('/'),
+    ...(shouldLogWhenLevelIsAtLeast('debug') && {
+      headers: config.headers,
+      data: config.data,
+    }),
+  } as const;
 
-  log.debug(`Request: ${JSON.stringify(messageObj, null, 2)}`);
+  log.info(messageObj, 'rest-api');
   return config;
 };
 
 const responseInterceptor: ResponseInterceptor = (response) => {
+  const parts = [...response.baseUrl.split('/'), ...response.url.split('/')].filter(Boolean);
   const messageObj = {
-    url: response.url,
+    type: 'response',
+    currentLogLevel: getCurrentLogLevel(),
+    url: parts.join('/'),
     status: response.status,
-    headers: response.headers,
-    data: response.data,
-  };
+    ...(shouldLogWhenLevelIsAtLeast('debug') && {
+      headers: response.headers,
+      data: response.data,
+    }),
+  } as const;
 
-  log.debug(`Response: ${JSON.stringify(messageObj, null, 2)}`);
+  log.info(messageObj, 'rest-api');
 };
 
 export const getNewRestApiInstanceAsync = async (

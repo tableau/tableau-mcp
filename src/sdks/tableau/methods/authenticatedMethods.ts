@@ -1,5 +1,6 @@
 import { ZodiosEndpointDefinitions, ZodiosInstance } from '@zodios/core';
 
+import { Credentials } from '../types/credentials.js';
 import Methods from './methods.js';
 
 type AuthHeaders = {
@@ -18,22 +19,22 @@ type AuthHeaders = {
 export default abstract class AuthenticatedMethods<
   T extends ZodiosEndpointDefinitions,
 > extends Methods<T> {
-  private _token: string;
+  private _creds: Credentials;
 
   protected get authHeader(): AuthHeaders {
-    if (!this._token) {
+    if (!this._creds) {
       throw new Error('Authenticate by calling signIn() first');
     }
 
     return {
       headers: {
-        'X-Tableau-Auth': this._token,
+        'X-Tableau-Auth': this._creds.token,
       },
     };
   }
 
-  constructor(apiClient: ZodiosInstance<T>, token: string) {
+  constructor(apiClient: ZodiosInstance<T>, creds: Credentials) {
     super(apiClient);
-    this._token = token;
+    this._creds = creds;
   }
 }

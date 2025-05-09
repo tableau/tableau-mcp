@@ -4,15 +4,18 @@ import { AuthConfig } from './authConfig.js';
 import AuthenticationMethods from './methods/authenticationMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
+import { Credentials } from './types/credentials.js';
 
 export type RequestInterceptor = (config: {
   method: string;
+  baseUrl: string;
   url: string;
   headers: Record<string, string>;
   data: any;
 }) => void;
 
 export type ResponseInterceptor = (response: {
+  baseUrl: string;
   url: string;
   status: number;
   headers: Record<string, any>;
@@ -26,7 +29,7 @@ export type ResponseInterceptor = (response: {
  * @class RestApi
  */
 export default class RestApi {
-  private _token?: string;
+  private _creds?: Credentials;
   private readonly _host: string;
   private readonly _baseUrl: string;
 
@@ -51,18 +54,19 @@ export default class RestApi {
     this._responseInterceptor = options?.responseInterceptor;
   }
 
-  get token(): string {
-    if (!this._token) {
-      throw new Error('No token found. Authenticate by calling signIn() first.');
+  private get creds(): Credentials {
+    if (!this._creds) {
+      throw new Error('No credentials found. Authenticate by calling signIn() first.');
     }
 
-    return this._token;
+    return this._creds;
   }
 
   get metadataMethods(): MetadataMethods {
     if (!this._metadataMethods) {
-      this._metadataMethods = new MetadataMethods(`${this._host}/api/metadata`, this.token);
-      this._addInterceptors(this._metadataMethods.interceptors);
+      const baseUrl = `${this._host}/api/metadata`;
+      this._metadataMethods = new MetadataMethods(baseUrl, this.creds);
+      this._addInterceptors(baseUrl, this._metadataMethods.interceptors);
     }
 
     return this._metadataMethods;
@@ -70,11 +74,9 @@ export default class RestApi {
 
   get vizqlDataServiceMethods(): VizqlDataServiceMethods {
     if (!this._vizqlDataServiceMethods) {
-      this._vizqlDataServiceMethods = new VizqlDataServiceMethods(
-        `${this._host}/api/v1/vizql-data-service`,
-        this.token,
-      );
-      this._addInterceptors(this._vizqlDataServiceMethods.interceptors);
+      const baseUrl = `${this._host}/api/v1/vizql-data-service`;
+      this._vizqlDataServiceMethods = new VizqlDataServiceMethods(baseUrl, this.creds);
+      this._addInterceptors(baseUrl, this._vizqlDataServiceMethods.interceptors);
     }
 
     return this._vizqlDataServiceMethods;
@@ -86,13 +88,17 @@ export default class RestApi {
 
   signIn = async (authConfig: AuthConfig): Promise<void> => {
     const authenticationMethods = new AuthenticationMethods(this._baseUrl);
-    this._token = (await authenticationMethods.signIn(authConfig)).token;
+    this._creds = await authenticationMethods.signIn(authConfig);
   };
 
-  private _addInterceptors = (interceptors: ZodiosClass<any>['axios']['interceptors']): void => {
+  private _addInterceptors = (
+    baseUrl: string,
+    interceptors: ZodiosClass<any>['axios']['interceptors'],
+  ): void => {
     interceptors.request.use((config) => {
       this._requestInterceptor?.({
         method: config.method ?? 'UNKNOWN METHOD',
+        baseUrl,
         url: config.url ?? 'UNKNOWN URL',
         headers: config.headers,
         data: config.data,
@@ -102,6 +108,7 @@ export default class RestApi {
 
     interceptors.response.use((response) => {
       this._responseInterceptor?.({
+        baseUrl,
         url: response.config.url ?? 'UNKNOWN URL',
         status: response.status,
         headers: response.headers,
