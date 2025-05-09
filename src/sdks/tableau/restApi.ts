@@ -82,12 +82,9 @@ export default class RestApi {
     return this._vizqlDataServiceMethods;
   }
 
-  get methods(): (MetadataMethods | VizqlDataServiceMethods)[] {
-    return [this.metadataMethods, this.vizqlDataServiceMethods];
-  }
-
   signIn = async (authConfig: AuthConfig): Promise<void> => {
     const authenticationMethods = new AuthenticationMethods(this._baseUrl);
+    this._addInterceptors(this._baseUrl, authenticationMethods.interceptors);
     this._creds = await authenticationMethods.signIn(authConfig);
   };
 
