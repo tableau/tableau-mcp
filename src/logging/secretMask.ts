@@ -10,7 +10,7 @@ type MaskedRequest = Optional<RequestInterceptorConfig, MaskedKeys>;
 type MaskedResponse = Optional<ResponseInterceptorConfig, MaskedKeys>;
 
 export const maskRequest = (config: RequestInterceptorConfig): MaskedRequest => {
-  const maskedData: MaskedRequest = structuredClone(config);
+  const maskedData: MaskedRequest = clone(config);
   if (shouldLogWhenLevelIsAtLeast('debug')) {
     if (maskedData.data?.credentials) {
       maskedData.data.credentials = '<redacted>';
@@ -28,7 +28,7 @@ export const maskRequest = (config: RequestInterceptorConfig): MaskedRequest => 
 };
 
 export const maskResponse = (response: ResponseInterceptorConfig): MaskedResponse => {
-  const maskedData: MaskedResponse = structuredClone(response);
+  const maskedData: MaskedResponse = clone(response);
   if (shouldLogWhenLevelIsAtLeast('debug')) {
     if (maskedData.data?.credentials) {
       maskedData.data.credentials = '<redacted>';
@@ -40,3 +40,15 @@ export const maskResponse = (response: ResponseInterceptorConfig): MaskedRespons
 
   return maskedData;
 };
+
+function clone<T>(obj: T): T {
+  try {
+    return structuredClone(obj);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : `${error}`;
+    process.stderr.write(
+      `Could not clone object, notification may not be sanitized! Error: ${message}`,
+    );
+    return obj;
+  }
+}

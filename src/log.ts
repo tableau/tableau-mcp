@@ -6,12 +6,7 @@ type Logger = 'rest-api' | (string & {});
 type LogType = LoggingLevel | 'request' | 'response';
 type LogMessage = {
   type: LogType;
-  requestId: string;
   [key: string]: any;
-};
-
-type LogLevelMap<T> = {
-  [level in LoggingLevel]: T;
 };
 
 const loggingLevels = [
@@ -24,17 +19,6 @@ const loggingLevels = [
   'alert',
   'emergency',
 ] as const;
-
-const orderedLevels = {
-  debug: 0,
-  info: 1,
-  notice: 2,
-  warning: 3,
-  error: 4,
-  critical: 5,
-  alert: 6,
-  emergency: 7,
-} satisfies LogLevelMap<number>;
 
 let currentLogLevel: LoggingLevel = 'debug';
 
@@ -60,10 +44,12 @@ export const log = {
   critical: getSendLoggingMessageFn('critical'),
   alert: getSendLoggingMessageFn('alert'),
   emergency: getSendLoggingMessageFn('emergency'),
-} satisfies LogLevelMap<(message: LogMessage, logger: Logger) => Promise<void>>;
+} satisfies {
+  [level in LoggingLevel]: (message: string | LogMessage, logger: Logger) => Promise<void>;
+};
 
 export const shouldLogWhenLevelIsAtLeast = (level = currentLogLevel): boolean => {
-  return orderedLevels[level] >= orderedLevels[currentLogLevel];
+  return loggingLevels.indexOf(level) >= loggingLevels.indexOf(currentLogLevel);
 };
 
 function getSendLoggingMessageFn(level: LoggingLevel) {
