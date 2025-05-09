@@ -1,26 +1,12 @@
 import { ZodiosClass } from '@zodios/core';
 
 import { AuthConfig } from './authConfig.js';
+import { ResponseInterceptor } from './interceptors.js';
+import { RequestInterceptor } from './interceptors.js';
 import AuthenticationMethods from './methods/authenticationMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
 import { Credentials } from './types/credentials.js';
-
-export type RequestInterceptor = (config: {
-  method: string;
-  baseUrl: string;
-  url: string;
-  headers: Record<string, string>;
-  data: any;
-}) => void;
-
-export type ResponseInterceptor = (response: {
-  baseUrl: string;
-  url: string;
-  status: number;
-  headers: Record<string, any>;
-  data: any;
-}) => void;
 
 /**
  * Interface for the Tableau REST APIs

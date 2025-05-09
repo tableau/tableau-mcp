@@ -14,6 +14,17 @@ type LogLevelMap<T> = {
   [level in LoggingLevel]: T;
 };
 
+const loggingLevels = [
+  'debug',
+  'info',
+  'notice',
+  'warning',
+  'error',
+  'critical',
+  'alert',
+  'emergency',
+] as const;
+
 const orderedLevels = {
   debug: 0,
   info: 1,
@@ -27,7 +38,15 @@ const orderedLevels = {
 
 let currentLogLevel: LoggingLevel = 'debug';
 
+export function isLoggingLevel(level: unknown): level is LoggingLevel {
+  return !!loggingLevels.find((l) => l === level);
+}
+
 export const setLogLevel = (level: LoggingLevel): void => {
+  if (currentLogLevel === level) {
+    return;
+  }
+
   currentLogLevel = level;
   log.notice(`Logging level set to: ${level}`);
 };
@@ -59,7 +78,6 @@ function getSendLoggingMessageFn(level: LoggingLevel) {
       message: JSON.stringify(
         {
           timestamp: new Date().toISOString(),
-          sessionId: server.server.transport?.sessionId ?? 'unknown',
           currentLogLevel,
           message,
         },
