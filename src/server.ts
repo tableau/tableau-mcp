@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
-import pkg from '../package.json' assert { type: 'json' };
+import pkg from '../package.json' with { type: 'json' };
 import { setLogLevel } from './log.js';
 import { listFieldsTool } from './tools/listFields.js';
 import { queryDatasourceTool } from './tools/queryDatasource.js';
