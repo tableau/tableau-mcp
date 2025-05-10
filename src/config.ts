@@ -1,14 +1,12 @@
-import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import dotenv from 'dotenv';
 
-import { isLoggingLevel } from './logging/log.js';
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 
 class Config {
   server: string;
   datasourceLuid: string;
   authConfig: AuthConfig;
-  defaultLogLevel: LoggingLevel;
+  defaultLogLevel: string;
   disableLogMasking: boolean;
 
   constructor() {
@@ -32,7 +30,7 @@ class Config {
       DISABLE_LOG_MASKING: disableLogMasking,
     } = process.env;
 
-    this.defaultLogLevel = isLoggingLevel(defaultLogLevel) ? defaultLogLevel : 'debug';
+    this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
 
     const required = { server, datasourceLuid };

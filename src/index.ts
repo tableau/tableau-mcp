@@ -2,14 +2,14 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 import { config } from './config.js';
-import { log, setLogLevel } from './logging/log.js';
+import { isLoggingLevel, log, setLogLevel } from './logging/log.js';
 import { server } from './server.js';
 
 async function startServer(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  setLogLevel(config.defaultLogLevel);
+  setLogLevel(isLoggingLevel(config.defaultLogLevel) ? config.defaultLogLevel : 'debug');
 
   log.info(`${server.name} v${server.version} running on stdio`);
   if (config.disableLogMasking) {
