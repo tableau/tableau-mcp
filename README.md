@@ -1,4 +1,6 @@
-# tableau-mcp
+# Tableau MCP
+
+Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will make it easier for developers to build AI-applications that integrate with Tableau.
 
 ## Getting Started
 
