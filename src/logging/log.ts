@@ -20,19 +20,26 @@ const loggingLevels = [
   'emergency',
 ] as const;
 
-let currentLogLevel: LoggingLevel = 'debug';
+export const defaultLogLevel: LoggingLevel = 'debug';
+let currentLogLevel: LoggingLevel = defaultLogLevel;
 
 export function isLoggingLevel(level: unknown): level is LoggingLevel {
   return !!loggingLevels.find((l) => l === level);
 }
 
-export const setLogLevel = (level: LoggingLevel): void => {
+export const setLogLevel = (
+  level: LoggingLevel,
+  { silent = false }: { silent?: boolean } = {},
+): void => {
   if (currentLogLevel === level) {
     return;
   }
 
   currentLogLevel = level;
-  log.notice(`Logging level set to: ${level}`);
+
+  if (!silent) {
+    log.notice(`Logging level set to: ${level}`);
+  }
 };
 
 export const log = {
