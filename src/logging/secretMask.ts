@@ -4,7 +4,7 @@ import {
   RequestInterceptorConfig,
   ResponseInterceptorConfig,
 } from '../sdks/tableau/interceptors.js';
-import { shouldLogWhenLevelIsAtLeast } from './log.js';
+import { shouldLogWhenLevelIsAtLeast, writeToStderr } from './log.js';
 
 type MaskedKeys = 'data' | 'headers';
 type Optional<T, K extends keyof T> = Pick<Partial<T>, K> & Omit<T, K>;
@@ -58,9 +58,7 @@ function clone<T>(obj: T): Result<T, Error> {
     return Ok(structuredClone(obj));
   } catch (error) {
     const message = error instanceof Error ? error.message : `${error}`;
-    process.stderr.write(
-      `Could not clone object, notification may not be sanitized! Error: ${message}`,
-    );
+    writeToStderr(`Could not clone object, notification may not be sanitized! Error: ${message}`);
     return Err(error instanceof Error ? error : new Error(message));
   }
 }

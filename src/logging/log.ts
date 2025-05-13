@@ -59,6 +59,15 @@ export const shouldLogWhenLevelIsAtLeast = (level = currentLogLevel): boolean =>
   return loggingLevels.indexOf(level) >= loggingLevels.indexOf(currentLogLevel);
 };
 
+export const writeToStderr = (message: string): void => {
+  if (process.env.TABLEAU_MCP_TEST === 'true') {
+    // Silence logging when running in test mode
+    return;
+  }
+
+  process.stderr.write(message);
+};
+
 function getSendLoggingMessageFn(level: LoggingLevel) {
   return async (message: string | LogMessage, logger: Logger = server.name) => {
     if (!shouldLogWhenLevelIsAtLeast(level)) {
