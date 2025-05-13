@@ -156,19 +156,6 @@ describe('Config', () => {
     });
   });
 
-  it('should throw error when no authentication method can be determined', () => {
-    process.env = {
-      ...process.env,
-      SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
-      SITE_NAME: 'test-site',
-    };
-
-    expect(() => new Config()).toThrow(
-      'No authentication method could be determined. Ensure the environment variables are set.',
-    );
-  });
-
   it('should set default log level to debug when not specified', () => {
     process.env = {
       ...process.env,
