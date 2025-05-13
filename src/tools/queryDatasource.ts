@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { config } from '../config.js';
+import { getConfig } from '../config.js';
 import { getNewRestApiInstanceAsync } from '../restApiInstance.js';
 import { Query } from '../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { getToolCallback, Tool } from './tool.js';
@@ -10,6 +10,7 @@ export const queryDatasourceTool = new Tool({
   description: 'Run a Tableau VizQL query.',
   paramsSchema: { query: Query },
   callback: async ({ query }): Promise<CallToolResult> => {
+    const config = getConfig();
     return await getToolCallback(async (requestId) => {
       const datasource = { datasourceLuid: config.datasourceLuid };
       const options = {

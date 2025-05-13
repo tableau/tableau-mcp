@@ -1,4 +1,4 @@
-import { config } from './config.js';
+import { getConfig } from './config.js';
 import { log, shouldLogWhenLevelIsAtLeast } from './logging/log.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
 import { AuthConfig } from './sdks/tableau/authConfig.js';
@@ -22,6 +22,7 @@ export const getNewRestApiInstanceAsync = async (
 export const getRequestInterceptor =
   (requestId: string): RequestInterceptor =>
   (request) => {
+    const config = getConfig();
     const maskedRequest = config.disableLogMasking ? request : maskRequest(request);
     const { baseUrl, url } = maskedRequest;
     const urlParts = [...baseUrl.split('/'), ...url.split('/')].filter(Boolean);
@@ -43,6 +44,7 @@ export const getRequestInterceptor =
 export const getResponseInterceptor =
   (requestId: string): ResponseInterceptor =>
   (response) => {
+    const config = getConfig();
     const maskedResponse = config.disableLogMasking ? response : maskResponse(response);
     const { baseUrl, url } = maskedResponse;
     const urlParts = [...baseUrl.split('/'), ...url.split('/')].filter(Boolean);

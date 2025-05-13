@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { config } from '../config.js';
+import { getConfig } from '../config.js';
 import { getNewRestApiInstanceAsync } from '../restApiInstance.js';
 import { getToolCallback, Tool } from './tool.js';
 
@@ -10,6 +10,7 @@ export const listFieldsTool = new Tool({
     "Fetches field metadata (name, description) for the hard-wired datasource via Tableau's Metadata API, reusing the shared get_datasource_query function. Returns a list of field dicts or an error message.",
   paramsSchema: {},
   callback: async (): Promise<CallToolResult> => {
+    const config = getConfig();
     const query = `
     query Datasources {
       publishedDatasources(filter: { luid: "${config.datasourceLuid}" }) {
