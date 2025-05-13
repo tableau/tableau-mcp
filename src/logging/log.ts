@@ -65,6 +65,7 @@ export const writeToStderr = (message: string): void => {
     return;
   }
 
+  message = message.endsWith('\n') ? message : `${message}\n`;
   process.stderr.write(message);
 };
 
