@@ -22,6 +22,6 @@ try {
   await startServer();
 } catch (error) {
   const message = error instanceof Error ? error.message : `${error}`;
-  process.stderr.write(`Fatal error in main():, ${message}`);
+  process.stderr.write(`Fatal error when starting the server:, ${message}`);
   process.exit(1);
 }

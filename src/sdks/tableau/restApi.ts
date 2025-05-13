@@ -1,8 +1,7 @@
 import { ZodiosClass } from '@zodios/core';
 
 import { AuthConfig } from './authConfig.js';
-import { ResponseInterceptor } from './interceptors.js';
-import { RequestInterceptor } from './interceptors.js';
+import { RequestInterceptor, ResponseInterceptor } from './interceptors.js';
 import AuthenticationMethods from './methods/authenticationMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';

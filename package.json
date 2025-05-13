@@ -6,7 +6,7 @@
   "bugs": "https://github.com/tableau/tableau-mcp/issues",
   "author": "Tableau",
   "type": "module",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "keywords": [
     "tableau",
     "mcp"
