@@ -28,6 +28,9 @@ jobs:
       - name: TypeScript compilation
         run: npx tsc
 
+      - name: Lint
+        run: npm run lint
+
       - name: Build
         run: npm run build
 
