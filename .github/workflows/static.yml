@@ -7,11 +7,12 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
         node-version: [20.x]
+        os: [pub-hk-ubuntu-22.04-small]
 
     steps:
       - uses: actions/checkout@v4
@@ -31,10 +32,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Test with coverage
+      - name: Tests
         run: npm run coverage
 
-    - name: Code Coverage Report
+    - name: Report code coverage
       uses: irongut/CodeCoverageSummary@v1.3.0
       with:
         filename: coverage/**/coverage-cobertura.xml
