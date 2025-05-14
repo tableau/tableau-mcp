@@ -1,5 +1,3 @@
-import { ZodiosClass } from '@zodios/core';
-
 import { AuthConfig } from './authConfig.js';
 import {
   AxiosInterceptor,
