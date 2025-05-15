@@ -22,7 +22,7 @@ const QueryOptions = z
   .partial()
   .passthrough();
 
-const ReadMetadataRequest = z
+export const ReadMetadataRequest = z
   .object({
     datasource: Datasource,
     options: QueryOptions.optional(),
