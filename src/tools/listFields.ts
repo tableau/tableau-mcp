@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { getConfig } from '../config.js';
 import { getNewRestApiInstanceAsync } from '../restApiInstance.js';
-import { getToolCallback, Tool } from './tool.js';
+import { Tool } from './tool.js';
 
 export const listFieldsTool = new Tool({
   name: 'list-fields',
@@ -21,16 +21,23 @@ export const listFieldsTool = new Tool({
       }
     }`;
 
-    return await getToolCallback(async (requestId) => {
-      const restApi = await getNewRestApiInstanceAsync(config.server, config.authConfig, requestId);
-      const response = await restApi.metadataMethods.graphql(query);
-      const published = response.data.publishedDatasources;
+    return await listFieldsTool.getToolCallback({
+      args: undefined,
+      callback: async (requestId) => {
+        const restApi = await getNewRestApiInstanceAsync(
+          config.server,
+          config.authConfig,
+          requestId,
+        );
+        const response = await restApi.metadataMethods.graphql(query);
+        const published = response.data.publishedDatasources;
 
-      if (published.length) {
-        return response;
-      }
+        if (published.length) {
+          return response;
+        }
 
-      throw new Error('No published datasources in response', { cause: response });
+        throw new Error('No published datasources in response', { cause: response });
+      },
     });
   },
 });
