@@ -29,7 +29,7 @@ export const ReadMetadataRequest = z
   })
   .passthrough();
 
-const Function = z.enum([
+export const FunctionEnum = [
   'SUM',
   'AVG',
   'MEDIAN',
@@ -50,10 +50,9 @@ const Function = z.enum([
   'TRUNC_MONTH',
   'TRUNC_WEEK',
   'TRUNC_DAY',
-  'AGG',
-  'NONE',
-  'UNSPECIFIED',
-]);
+] as const;
+
+const Function = z.enum(FunctionEnum);
 
 const FieldMetadata = z
   .object({
@@ -95,17 +94,21 @@ export const TableauError = z
 
 const SortDirection = z.enum(['ASC', 'DESC']);
 
-const FieldBase = z
-  .object({
-    fieldCaption: z.string(),
-    fieldAlias: z.string().optional(),
-    maxDecimalPlaces: z.number().int().optional(),
-    sortDirection: SortDirection.optional(),
-    sortPriority: z.number().int().optional(),
-  })
-  .passthrough();
+export const Field = z.object({
+  fieldCaption: z.string(),
+  fieldAlias: z.string().optional(),
+  maxDecimalPlaces: z.number().int().optional(),
+  sortDirection: SortDirection.optional(),
+  sortPriority: z.number().int().optional(),
+  function: Function.optional(),
+});
 
-const Field = z.union([FieldBase, FieldBase, FieldBase]);
+// Note: This doesn't contain the cases for function and calculation
+// const Field = z.union([
+//   FieldBase,
+//   FieldBase.and(z.object({ function: Function })),
+//   FieldBase.and(z.object({ calculation: z.string() })),
+// ]);
 
 const FilterField = z.union([
   z.object({ fieldCaption: z.string() }),
@@ -113,6 +116,7 @@ const FilterField = z.union([
   z.object({ calculation: z.string() }),
 ]);
 
+// Note: Ask about QuantitativeFilterBase and different cases per FilterType
 const Filter = z
   .object({
     field: FilterField,
