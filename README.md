@@ -118,10 +118,6 @@ You can use the [MCP inspector](https://modelcontextprotocol.io/docs/tools/inspe
 [VS Code Run and Debug function](https://code.visualstudio.com/docs/debugtest/debugging#_start-a-debugging-session)
 to run and debug the server.
 
-1. Link the project as a global CLI using `npm link` from the project root.
-2. Build with `npm run build` or watch for file changes and build automatically with
-   `npm run build:watch`.
-
 ### Use the MCP Inspector
 
 Use the MCP inspector. Code breakpoints will not be available but all server logging will be visible
@@ -135,13 +131,8 @@ npm run inspect
 
 Use the VS Code
 [Run and Debug launcher](https://code.visualstudio.com/docs/debugtest/debugging#_start-a-debugging-session)
-with fully functional breakpoints in the code:
-
-1. Locate and click the `Run and Debug` button in the Activity Bar.
-2. Select the configuration labeled "`Launch MCP Server`" in the dropdown.
-3. Click the Start Debugging ▶️ button, or press F5.
-
-### VS Code / Cursor Debugging Setup
+with fully functional breakpoints in the code. Note that the task automatically builds your
+TypeScript files before launching.
 
 To set up local debugging with breakpoints:
 
@@ -158,11 +149,7 @@ To set up local debugging with breakpoints:
    ...
    ```
 
-2. Note the contents of `.vscode/launch.json`
-3. Note the contents of `.vscode/tasks.json`
-
-4. (Optional) Set breakpoints in your TypeScript files.
-
-5. Press F5 or use the **`Run and Debug`** sidebar.
-
-Note: the debugger automatically builds your TypeScript files before launching.
+2. Set breakpoints in your TypeScript files.
+3. Locate and click the `Run and Debug` button in the Activity Bar.
+4. Select the configuration labeled "`Launch MCP Server`" in the dropdown.
+5. Click the Start Debugging ▶️ button, or press F5.
