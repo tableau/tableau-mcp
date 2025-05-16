@@ -11,7 +11,7 @@ export const queryDatasourceTool = new Tool({
   paramsSchema: { query: Query },
   callback: async ({ query }): Promise<CallToolResult> => {
     const config = getConfig();
-    return await queryDatasourceTool.getToolCallback({
+    return await queryDatasourceTool.logAndExecute({
       args: query,
       callback: async (requestId) => {
         const datasource = { datasourceLuid: config.datasourceLuid };

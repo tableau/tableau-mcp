@@ -21,7 +21,7 @@ export const listFieldsTool = new Tool({
       }
     }`;
 
-    return await listFieldsTool.getToolCallback({
+    return await listFieldsTool.logAndExecute({
       args: undefined,
       callback: async (requestId) => {
         const restApi = await getNewRestApiInstanceAsync(

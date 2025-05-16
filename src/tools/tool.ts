@@ -31,7 +31,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     log.debug(getToolLogMessage(this.name, args));
   }
 
-  getToolCallback = async <T>({
+  logAndExecute = async <T>({
     args,
     callback,
   }: {
