@@ -1,7 +1,12 @@
-import { ZodiosClass } from '@zodios/core';
-
 import { AuthConfig } from './authConfig.js';
-import { RequestInterceptor, ResponseInterceptor } from './interceptors.js';
+import {
+  AxiosInterceptor,
+  ErrorInterceptor,
+  getRequestInterceptorConfig,
+  getResponseInterceptorConfig,
+  RequestInterceptor,
+  ResponseInterceptor,
+} from './interceptors.js';
 import AuthenticationMethods from './methods/authenticationMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
@@ -23,14 +28,14 @@ export default class RestApi {
 
   private static _version = '3.24';
 
-  private _requestInterceptor?: RequestInterceptor;
-  private _responseInterceptor?: ResponseInterceptor;
+  private _requestInterceptor?: [RequestInterceptor, ErrorInterceptor?];
+  private _responseInterceptor?: [ResponseInterceptor, ErrorInterceptor?];
 
   constructor(
     host: string,
     options?: Partial<{
-      requestInterceptor: RequestInterceptor;
-      responseInterceptor: ResponseInterceptor;
+      requestInterceptor: [RequestInterceptor, ErrorInterceptor?];
+      responseInterceptor: [ResponseInterceptor, ErrorInterceptor?];
     }>,
   ) {
     this._host = host;
@@ -73,30 +78,33 @@ export default class RestApi {
     this._creds = await authenticationMethods.signIn(authConfig);
   };
 
-  private _addInterceptors = (
-    baseUrl: string,
-    interceptors: ZodiosClass<any>['axios']['interceptors'],
-  ): void => {
-    interceptors.request.use((config) => {
-      this._requestInterceptor?.({
-        method: config.method ?? 'UNKNOWN METHOD',
-        baseUrl,
-        url: config.url ?? 'UNKNOWN URL',
-        headers: config.headers,
-        data: config.data,
-      });
-      return config;
-    });
+  private _addInterceptors = (baseUrl: string, interceptors: AxiosInterceptor): void => {
+    interceptors.request.use(
+      (config) => {
+        this._requestInterceptor?.[0]({
+          baseUrl,
+          ...getRequestInterceptorConfig(config),
+        });
+        return config;
+      },
+      (error) => {
+        this._requestInterceptor?.[1]?.(error, baseUrl);
+        return Promise.reject(error);
+      },
+    );
 
-    interceptors.response.use((response) => {
-      this._responseInterceptor?.({
-        baseUrl,
-        url: response.config.url ?? 'UNKNOWN URL',
-        status: response.status,
-        headers: response.headers,
-        data: response.data,
-      });
-      return response;
-    });
+    interceptors.response.use(
+      (response) => {
+        this._responseInterceptor?.[0]({
+          baseUrl,
+          ...getResponseInterceptorConfig(response),
+        });
+        return response;
+      },
+      (error) => {
+        this._responseInterceptor?.[1]?.(error, baseUrl);
+        return Promise.reject(error);
+      },
+    );
   };
 }
