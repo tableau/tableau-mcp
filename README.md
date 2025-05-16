@@ -1,6 +1,7 @@
 # Tableau MCP
 
-Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will make it easier for developers to build AI-applications that integrate with Tableau.
+Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will
+make it easier for developers to build AI-applications that integrate with Tableau.
 
 ## Getting Started
 
@@ -110,3 +111,58 @@ the following commands:
 | ----------------- | ---------------------------------------------------------------------------- |
 | `npm run inspect` | Start the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) |
 | `npm run start`   | Start the standalone MCP server                                              |
+
+## Debugging
+
+You can use the [MCP inspector](https://modelcontextprotocol.io/docs/tools/inspector) or the
+[VS Code Run and Debug function](https://code.visualstudio.com/docs/debugtest/debugging#_start-a-debugging-session)
+to run and debug the server.
+
+1. Link the project as a global CLI using `npm link` from the project root.
+2. Build with `npm run build` or watch for file changes and build automatically with
+   `npm run build:watch`.
+
+### Use the MCP Inspector
+
+Use the MCP inspector. Code breakpoints will not be available but all server logging will be visible
+in the inspector UX.
+
+```
+npm run inspect
+```
+
+### Use the VS Code Run and Debug Function
+
+Use the VS Code
+[Run and Debug launcher](https://code.visualstudio.com/docs/debugtest/debugging#_start-a-debugging-session)
+with fully functional breakpoints in the code:
+
+1. Locate and select the run debug.
+2. Select the configuration labeled "`MCP Server Launcher`" in the dropdown.
+3. Select the run/debug button.
+
+### VS Code / Cursor Debugging Setup
+
+To set up local debugging with breakpoints:
+
+1. Store your environment variables in the VS Code user settings:
+
+   - Open the Command Palette (F1 or Cmd/Ctrl + Shift + P).
+   - Type `Preferences: Open User Settings (JSON)`.
+   - This should open your user's `settings.json` file.
+   - Copy the environment variables from `.vscode/settings.example.json`, append them to your user's
+     `settings.json` file, and update their values accordingly:
+
+   ```
+   "tableau.mcp.SERVER": "https://my-tableau-server.com",
+   ...
+   ```
+
+2. Note the contents of `.vscode/launch.json`
+3. Note the contents of `.vscode/tasks.json`
+
+4. (Optional) Set breakpoints in your TypeScript files.
+
+5. Press F5 or use the **`Run and Debug`** sidebar.
+
+Note: the debugger automatically builds your TypeScript files before launching.

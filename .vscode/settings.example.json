@@ -1,0 +1,16 @@
+{
+  "tableau.mcp.SERVER": "https://my-tableau-server.com",
+  "tableau.mcp.DATASOURCE_LUID": "",
+  "tableau.mcp.SITE_NAME": "",
+  "tableau.mcp.PAT_NAME": "",
+  "tableau.mcp.PAT_VALUE": "",
+  "tableau.mcp.JWT": "",
+  "tableau.mcp.USERNAME": "",
+  "tableau.mcp.PASSWORD": "",
+  "tableau.mcp.CONNECTED_APP_CLIENT_ID": "",
+  "tableau.mcp.CONNECTED_APP_SECRET_ID": "",
+  "tableau.mcp.CONNECTED_APP_SECRET_VALUE": "",
+  "tableau.mcp.JWT_SCOPES": "",
+  "tableau.mcp.AUTH_TYPE": "",
+  "tableau.mcp.DEFAULT_LOG_LEVEL": "debug"
+}
