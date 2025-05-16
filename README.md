@@ -137,9 +137,9 @@ Use the VS Code
 [Run and Debug launcher](https://code.visualstudio.com/docs/debugtest/debugging#_start-a-debugging-session)
 with fully functional breakpoints in the code:
 
-1. Locate and select the run debug.
-2. Select the configuration labeled "`MCP Server Launcher`" in the dropdown.
-3. Select the run/debug button.
+1. Locate and click the `Run and Debug` button in the Activity Bar.
+2. Select the configuration labeled "`Launch MCP Server`" in the dropdown.
+3. Click the Start Debugging ▶️ button, or press F5.
 
 ### VS Code / Cursor Debugging Setup
 
