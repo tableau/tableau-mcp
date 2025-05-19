@@ -48,18 +48,6 @@ describe('listFieldsTool', () => {
     vi.clearAllMocks();
   });
 
-  async function getToolResult(): Promise<CallToolResult> {
-    return await listFieldsTool.callback(
-      {},
-      {
-        signal: new AbortController().signal,
-        requestId: 'test-request-id',
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      },
-    );
-  }
-
   it('should create a tool instance with correct properties', () => {
     expect(listFieldsTool.name).toBe('list-fields');
     expect(listFieldsTool.description).toContain('Fetches field metadata');
@@ -69,15 +57,7 @@ describe('listFieldsTool', () => {
   it('should successfully fetch and return field metadata', async () => {
     mocks.mockGraphql.mockResolvedValue(mockMetadataResponses.success);
 
-    const result = await listFieldsTool.callback(
-      {},
-      {
-        signal: new AbortController().signal,
-        requestId: 'test-request-id',
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      },
-    );
+    const result = await getToolResult();
 
     expect(result.isError).toBe(false);
     expect(JSON.parse(result.content[0].text as string)).toEqual(mockMetadataResponses.success);
@@ -102,3 +82,15 @@ describe('listFieldsTool', () => {
     expect(result.content[0].text).toBe(errorMessage);
   });
 });
+
+async function getToolResult(): Promise<CallToolResult> {
+  return await listFieldsTool.callback(
+    {},
+    {
+      signal: new AbortController().signal,
+      requestId: 'test-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    },
+  );
+}
