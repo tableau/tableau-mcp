@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { getConfig } from '../config.js';
 import { getNewRestApiInstanceAsync } from '../restApiInstance.js';
 import { Field } from './queryDatasource/querySchemas.js';
-import { getToolCallback, Tool } from './tool.js';
+import { Tool } from './tool.js';
 
 const DatasourceQuery = z.object({
   fields: z.array(Field),
@@ -70,22 +70,29 @@ export const queryDatasourceTool = new Tool({
   paramsSchema: { datasourceQuery: DatasourceQuery },
   callback: async ({ datasourceQuery }): Promise<CallToolResult> => {
     const config = getConfig();
-    return await getToolCallback(async (requestId) => {
-      const datasource = { datasourceLuid: config.datasourceLuid };
-      const options = {
-        returnFormat: 'OBJECTS',
-        debug: false,
-        disaggregate: false,
-      } as const;
+    return await queryDatasourceTool.logAndExecute({
+      args: datasourceQuery,
+      callback: async (requestId) => {
+        const datasource = { datasourceLuid: config.datasourceLuid };
+        const options = {
+          returnFormat: 'OBJECTS',
+          debug: false,
+          disaggregate: false,
+        } as const;
 
-      const queryRequest = {
-        datasource,
-        query: datasourceQuery,
-        options,
-      };
+        const queryRequest = {
+          datasource,
+          query: datasourceQuery,
+          options,
+        };
 
-      const restApi = await getNewRestApiInstanceAsync(config.server, config.authConfig, requestId);
-      return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+        const restApi = await getNewRestApiInstanceAsync(
+          config.server,
+          config.authConfig,
+          requestId,
+        );
+        return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+      },
     });
   },
 });
