@@ -4,6 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { getConfig } from './config.js';
 import { isLoggingLevel, log, setLogLevel, writeToStderr } from './logging/log.js';
 import { server } from './server.js';
+import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 async function startServer(): Promise<void> {
   const config = getConfig();
@@ -21,7 +22,6 @@ async function startServer(): Promise<void> {
 try {
   await startServer();
 } catch (error) {
-  const message = error instanceof Error ? error.message : `${error}`;
-  writeToStderr(`Fatal error when starting the server: ${message}`);
+  writeToStderr(`Fatal error when starting the server: ${getExceptionMessage(error)}`);
   process.exit(1);
 }

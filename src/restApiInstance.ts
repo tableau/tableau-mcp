@@ -15,6 +15,7 @@ import {
 } from './sdks/tableau/interceptors.js';
 import RestApi from './sdks/tableau/restApi.js';
 import { server } from './server.js';
+import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 export const getNewRestApiInstanceAsync = async (
   host: string,
@@ -45,8 +46,10 @@ export const getRequestErrorInterceptor =
   (requestId: string): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.request) {
-      const message = error instanceof Error ? error.message : `${error}`;
-      log.error(`Request ${requestId} failed with error: ${message}`, 'rest-api');
+      log.error(
+        `Request ${requestId} failed with error: ${getExceptionMessage(error)}`,
+        'rest-api',
+      );
       return;
     }
 
@@ -71,8 +74,10 @@ export const getResponseErrorInterceptor =
   (requestId: string): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.response) {
-      const message = error instanceof Error ? error.message : `${error}`;
-      log.error(`Response from request ${requestId} failed with error: ${message}`, 'rest-api');
+      log.error(
+        `Response from request ${requestId} failed with error: ${getExceptionMessage(error)}`,
+        'rest-api',
+      );
       return;
     }
 
