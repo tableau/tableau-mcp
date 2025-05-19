@@ -1,6 +1,7 @@
 # Tableau MCP
 
-Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will make it easier for developers to build AI-applications that integrate with Tableau.
+Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will
+make it easier for developers to build AI-applications that integrate with Tableau.
 
 ## Getting Started
 
@@ -110,3 +111,46 @@ the following commands:
 | ----------------- | ---------------------------------------------------------------------------- |
 | `npm run inspect` | Start the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) |
 | `npm run start`   | Start the standalone MCP server                                              |
+
+## Debugging
+
+You can use the [MCP inspector](https://modelcontextprotocol.io/docs/tools/inspector) or the
+[VS Code Run and Debug function](https://code.visualstudio.com/docs/debugtest/debugging#_start-a-debugging-session)
+to run and debug the server.
+
+### Use the MCP Inspector
+
+Use the MCP inspector. Code breakpoints will not be available but all server logging will be visible
+in the inspector UX.
+
+```
+npm run inspect
+```
+
+### Use the VS Code Run and Debug Function
+
+Use the VS Code
+[Run and Debug launcher](https://code.visualstudio.com/docs/debugtest/debugging#_start-a-debugging-session)
+with fully functional breakpoints in the code. Note that the task automatically builds your
+TypeScript files before launching.
+
+To set up local debugging with breakpoints:
+
+1. Store your environment variables in the VS Code user settings:
+
+   - Open the Command Palette (F1 or Cmd/Ctrl + Shift + P).
+   - Type `Preferences: Open User Settings (JSON)`.
+   - This should open your user's `settings.json` file.
+   - Copy the environment variables from `.vscode/settings.example.json`, append them to the JSON
+     blob in your user's `settings.json` file, and update their values accordingly:
+
+     ```
+     "tableau.mcp.SERVER": "https://my-tableau-server.com",
+     "tableau.mcp.DATASOURCE_LUID": "...",
+     ...
+     ```
+
+2. Set breakpoints in your TypeScript files.
+3. Locate and click the `Run and Debug` button in the Activity Bar.
+4. Select the configuration labeled "`Launch MCP Server`" in the dropdown.
+5. Click the Start Debugging ▶️ button, or press F5.

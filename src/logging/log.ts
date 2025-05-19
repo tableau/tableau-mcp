@@ -3,7 +3,7 @@ import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import { server } from '../server.js';
 
 type Logger = 'rest-api' | (string & {});
-type LogType = LoggingLevel | 'request' | 'response';
+type LogType = LoggingLevel | 'request' | 'response' | 'tool';
 type LogMessage = {
   type: LogType;
   [key: string]: any;
@@ -67,6 +67,16 @@ export const writeToStderr = (message: string): void => {
 
   message = message.endsWith('\n') ? message : `${message}\n`;
   process.stderr.write(message);
+};
+
+export const getToolLogMessage = (toolName: string, args: unknown): LogMessage => {
+  return {
+    type: 'tool',
+    tool: {
+      name: toolName,
+      ...(args !== undefined ? { args } : {}),
+    },
+  };
 };
 
 function getSendLoggingMessageFn(level: LoggingLevel) {

@@ -3,7 +3,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { getConfig } from '../config.js';
 import { getNewRestApiInstanceAsync } from '../restApiInstance.js';
 import { Query } from '../sdks/tableau/apis/vizqlDataServiceApi.js';
-import { getToolCallback, Tool } from './tool.js';
+import { Tool } from './tool.js';
 
 export const queryDatasourceTool = new Tool({
   name: 'query-datasource',
@@ -11,22 +11,29 @@ export const queryDatasourceTool = new Tool({
   paramsSchema: { query: Query },
   callback: async ({ query }): Promise<CallToolResult> => {
     const config = getConfig();
-    return await getToolCallback(async (requestId) => {
-      const datasource = { datasourceLuid: config.datasourceLuid };
-      const options = {
-        returnFormat: 'OBJECTS',
-        debug: false,
-        disaggregate: false,
-      } as const;
+    return await queryDatasourceTool.logAndExecute({
+      args: query,
+      callback: async (requestId) => {
+        const datasource = { datasourceLuid: config.datasourceLuid };
+        const options = {
+          returnFormat: 'OBJECTS',
+          debug: false,
+          disaggregate: false,
+        } as const;
 
-      const queryRequest = {
-        datasource,
-        query,
-        options,
-      };
+        const queryRequest = {
+          datasource,
+          query,
+          options,
+        };
 
-      const restApi = await getNewRestApiInstanceAsync(config.server, config.authConfig, requestId);
-      return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+        const restApi = await getNewRestApiInstanceAsync(
+          config.server,
+          config.authConfig,
+          requestId,
+        );
+        return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+      },
     });
   },
 });

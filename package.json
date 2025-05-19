@@ -15,7 +15,9 @@
     "tableau-mcp-server": "./build/index.js"
   },
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap && npm run exec-perms",
+    ":build": "rm -rf build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap",
+    "build": "npm run :build && npm run exec-perms",
+    "build:watch": "npm run :build -- --watch",
     "lint": "npm exec eslint",
     "start": "node build/index.js",
     "inspect": "npx @modelcontextprotocol/inspector --config config.json --server tableau",
@@ -35,6 +37,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.25.1",
+    "@modelcontextprotocol/inspector": "^0.12.0",
     "@types/eslint__js": "^8.42.3",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^22.15.3",

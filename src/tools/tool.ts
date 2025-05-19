@@ -5,6 +5,8 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok, Result } from 'ts-results-es';
 import { ZodRawShape } from 'zod';
 
+import { getToolLogMessage, log } from '../logging/log.js';
+
 export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   name: string;
   description: string;
@@ -24,33 +26,43 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.paramsSchema = paramsSchema;
     this.callback = callback;
   }
-}
 
-export async function getToolCallback<T>(
-  callback: (requestId: string) => Promise<T>,
-): Promise<CallToolResult> {
-  const result = await getResult(callback);
+  logInvocation(args: unknown): void {
+    log.debug(getToolLogMessage(this.name, args));
+  }
 
-  if (result.isOk()) {
+  logAndExecute = async <T>({
+    args,
+    callback,
+  }: {
+    args: unknown;
+    callback: (requestId: string) => Promise<T>;
+  }): Promise<CallToolResult> => {
+    this.logInvocation(args);
+
+    const result = await getResult(callback);
+
+    if (result.isOk()) {
+      return {
+        isError: false,
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result.value),
+          },
+        ],
+      };
+    }
+
     return {
-      isError: false,
+      isError: true,
       content: [
         {
           type: 'text',
-          text: JSON.stringify(result.value),
+          text: result.error.message,
         },
       ],
     };
-  }
-
-  return {
-    isError: true,
-    content: [
-      {
-        type: 'text',
-        text: result.error.message,
-      },
-    ],
   };
 }
 
