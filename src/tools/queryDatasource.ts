@@ -1,10 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { getConfig } from '../../config.js';
-import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
-import { Field } from './querySchemas.js';
-import { getToolCallback, Tool } from '../tool.js';
+import { getConfig } from '../config.js';
+import { getNewRestApiInstanceAsync } from '../restApiInstance.js';
+import { Field } from './queryDatasource/querySchemas.js';
+import { getToolCallback, Tool } from './tool.js';
 
 const DatasourceQuery = z.object({
   fields: z.array(Field),
