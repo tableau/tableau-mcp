@@ -1,0 +1,104 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+
+import { server } from '../server.js';
+import { getGraphqlQuery, listFieldsTool } from './listFields.js';
+
+// Mock server.server.sendLoggingMessage since the transport won't be connected.
+vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
+
+const mockMetadataResponses = vi.hoisted(() => ({
+  success: {
+    data: {
+      publishedDatasources: [
+        {
+          name: 'Test Datasource',
+          description: 'Test Description',
+          datasourceFilters: [{ field: { name: 'Filter1', description: 'Filter 1 Desc' } }],
+          fields: [
+            { name: 'Field1', description: 'Field 1 Desc' },
+            { name: 'Field2', description: 'Field 2 Desc' },
+          ],
+        },
+      ],
+    },
+  },
+  error: {
+    data: {
+      publishedDatasources: [],
+    },
+  },
+}));
+
+const mocks = vi.hoisted(() => ({
+  mockGraphql: vi.fn(),
+  mockGraphqlSuccess: vi.fn().mockResolvedValue(mockMetadataResponses.success),
+  mockGraphqlError: vi.fn().mockRejectedValue(mockMetadataResponses.error),
+}));
+
+vi.mock('../restApiInstance.js', () => ({
+  getNewRestApiInstanceAsync: vi.fn().mockResolvedValue({
+    metadataMethods: {
+      graphql: mocks.mockGraphql,
+    },
+  }),
+}));
+
+describe('listFieldsTool', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  async function getToolResult(): Promise<CallToolResult> {
+    return await listFieldsTool.callback(
+      {},
+      {
+        signal: new AbortController().signal,
+        requestId: 'test-request-id',
+        sendNotification: vi.fn(),
+        sendRequest: vi.fn(),
+      },
+    );
+  }
+
+  it('should create a tool instance with correct properties', () => {
+    expect(listFieldsTool.name).toBe('list-fields');
+    expect(listFieldsTool.description).toContain('Fetches field metadata');
+    expect(listFieldsTool.paramsSchema).toEqual({});
+  });
+
+  it('should successfully fetch and return field metadata', async () => {
+    mocks.mockGraphql.mockResolvedValue(mockMetadataResponses.success);
+
+    const result = await listFieldsTool.callback(
+      {},
+      {
+        signal: new AbortController().signal,
+        requestId: 'test-request-id',
+        sendNotification: vi.fn(),
+        sendRequest: vi.fn(),
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.content[0].text as string)).toEqual(mockMetadataResponses.success);
+    expect(mocks.mockGraphql).toHaveBeenCalledWith(getGraphqlQuery());
+  });
+
+  it('should return error when no published datasources are found', async () => {
+    mocks.mockGraphql.mockResolvedValue(mockMetadataResponses.error);
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text as string).toBe('No published datasources in response');
+    expect(mocks.mockGraphql).toHaveBeenCalledWith(getGraphqlQuery());
+  });
+
+  it('should handle API errors gracefully', async () => {
+    const errorMessage = 'API Error';
+    mocks.mockGraphql.mockRejectedValue(new Error(errorMessage));
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(errorMessage);
+  });
+});

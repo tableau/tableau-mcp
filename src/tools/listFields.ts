@@ -4,6 +4,16 @@ import { getConfig } from '../config.js';
 import { getNewRestApiInstanceAsync } from '../restApiInstance.js';
 import { Tool } from './tool.js';
 
+export const getGraphqlQuery = (): string => `
+  query Datasources {
+    publishedDatasources(filter: { luid: "${getConfig().datasourceLuid}" }) {
+      name
+      description
+      datasourceFilters { field { name description } }
+      fields { name description }
+    }
+  }`;
+
 export const listFieldsTool = new Tool({
   name: 'list-fields',
   description:
@@ -11,15 +21,7 @@ export const listFieldsTool = new Tool({
   paramsSchema: {},
   callback: async (): Promise<CallToolResult> => {
     const config = getConfig();
-    const query = `
-    query Datasources {
-      publishedDatasources(filter: { luid: "${config.datasourceLuid}" }) {
-        name
-        description
-        datasourceFilters { field { name description } }
-        fields { name description }
-      }
-    }`;
+    const query = getGraphqlQuery();
 
     return await listFieldsTool.logAndExecute({
       args: undefined,
