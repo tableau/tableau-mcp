@@ -95,7 +95,7 @@ describe('log', () => {
   describe('getToolLogMessage', () => {
     it('should create a tool log message with args', () => {
       const args = { param1: 'value1' };
-      const result = getToolLogMessage('testTool', args);
+      const result = getToolLogMessage('list-fields', args);
 
       expect(result).toEqual({
         type: 'tool',
@@ -107,7 +107,7 @@ describe('log', () => {
     });
 
     it('should create a tool log message without args', () => {
-      const result = getToolLogMessage('testTool', undefined);
+      const result = getToolLogMessage('list-fields', undefined);
 
       expect(result).toEqual({
         type: 'tool',

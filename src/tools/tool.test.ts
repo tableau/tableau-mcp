@@ -10,13 +10,13 @@ vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
 
 describe('Tool', () => {
   const mockParams = {
-    name: 'test-tool',
+    name: 'list-fields',
     description: 'A test tool',
     paramsSchema: {
       param1: z.string(),
     },
     callback: vi.fn(),
-  };
+  } as const;
 
   it('should create a tool instance with correct properties', () => {
     const tool = new Tool(mockParams);
