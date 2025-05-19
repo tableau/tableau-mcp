@@ -74,8 +74,17 @@ async function getResult<T>(
   try {
     return Ok(await callback(requestId));
   } catch (error) {
-    return Err(
-      error instanceof Error ? error : new Error(`requestId: ${requestId}, error: ${error}`),
-    );
+    let message = '';
+    if (error instanceof Error) {
+      message = error.message;
+    } else {
+      try {
+        message = `requestId: ${requestId}, error: ${JSON.stringify(error)}`;
+      } catch {
+        message = `requestId: ${requestId}, error: ${error}`;
+      }
+    }
+
+    return Err(new Error(message));
   }
 }
