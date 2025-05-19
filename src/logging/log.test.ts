@@ -100,7 +100,7 @@ describe('log', () => {
       expect(result).toEqual({
         type: 'tool',
         tool: {
-          name: 'testTool',
+          name: 'list-fields',
           args,
         },
       });
@@ -112,7 +112,7 @@ describe('log', () => {
       expect(result).toEqual({
         type: 'tool',
         tool: {
-          name: 'testTool',
+          name: 'list-fields',
         },
       });
     });

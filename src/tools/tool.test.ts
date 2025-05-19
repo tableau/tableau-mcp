@@ -38,7 +38,7 @@ describe('Tool', () => {
     expect(spy).toHaveBeenCalledExactlyOnceWith({
       type: 'tool',
       tool: {
-        name: 'test-tool',
+        name: 'list-fields',
         args: testArgs,
       },
     });
