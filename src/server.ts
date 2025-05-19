@@ -4,7 +4,7 @@ import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import pkg from '../package.json' with { type: 'json' };
 import { setLogLevel } from './logging/log.js';
 import { listFieldsTool } from './tools/listFields.js';
-import { queryDatasourceTool } from './tools/queryDatasource.js';
+import { queryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
 import { readMetadataTool } from './tools/readMetadata.js';
 
 class Server extends McpServer {

@@ -1,27 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { getConfig } from '../config.js';
-import { getNewRestApiInstanceAsync } from '../restApiInstance.js';
-import { Field } from '../sdks/tableau/apis/vizqlDataServiceApi.js';
-import { getToolCallback, Tool } from './tool.js';
-
-// const FilterBase = z.object({
-//   field: z.string(),
-// });
-
-// filterType: z.enum([
-//   'QUANTITATIVE_DATE',
-//   'QUANTITATIVE_NUMERICAL',
-//   'SET',
-//   'MATCH',
-//   'DATE',
-//   'TOP',
-// ])
-// const Filter = z.union([
-//   FilterBase,
-//   FilterBase.and(z.object({ filterType: 'QUANTITATIVE_DATE', value: z.string() })),
-// ]);
+import { getConfig } from '../../config.js';
+import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
+import { Field } from './querySchemas.js';
+import { getToolCallback, Tool } from '../tool.js';
 
 const DatasourceQuery = z.object({
   fields: z.array(Field),
