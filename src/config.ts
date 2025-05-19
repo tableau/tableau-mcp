@@ -13,10 +13,10 @@ class Config {
   constructor() {
     dotenv.config();
 
+    let { SITE_NAME: siteName } = process.env;
     const {
       SERVER: server,
       DATASOURCE_LUID: datasourceLuid,
-      SITE_NAME: siteName,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
       JWT: jwt,
@@ -31,12 +31,12 @@ class Config {
       DISABLE_LOG_MASKING: disableLogMasking,
     } = process.env;
 
+    siteName = siteName ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
 
     invariant(server, 'The environment variable SERVER is not set');
     invariant(datasourceLuid, 'The environment variable DATASOURCE_LUID is not set');
-    invariant(siteName, 'The environment variable SITE_NAME is not set');
 
     this.server = server;
     this.datasourceLuid = datasourceLuid;

@@ -52,17 +52,6 @@ describe('Config', () => {
     expect(() => new Config()).toThrow('The environment variable DATASOURCE_LUID is not set');
   });
 
-  it('should throw error when SITE_NAME is not set', () => {
-    process.env = {
-      ...process.env,
-      SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
-      SITE_NAME: undefined,
-    };
-
-    expect(() => new Config()).toThrow('The environment variable SITE_NAME is not set');
-  });
-
   it('should throw error when no credentials are provided', () => {
     process.env = {
       ...process.env,
