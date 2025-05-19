@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 
 import { AuthConfig } from './sdks/tableau/authConfig.js';
+import { isToolName, ToolName } from './tools/toolName.js';
 import invariant from './utils/invariant.js';
 
 class Config {
@@ -9,6 +10,8 @@ class Config {
   authConfig: AuthConfig;
   defaultLogLevel: string;
   disableLogMasking: boolean;
+  includeTools: Array<ToolName>;
+  excludeTools: Array<ToolName>;
 
   constructor() {
     dotenv.config();
@@ -29,11 +32,31 @@ class Config {
       AUTH_TYPE: authType,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
+      INCLUDE_TOOLS: includeTools,
+      EXCLUDE_TOOLS: excludeTools,
     } = process.env;
 
     siteName = siteName ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
+
+    this.includeTools = includeTools
+      ? includeTools
+          .split(',')
+          .map((s) => s.trim())
+          .filter(isToolName)
+      : [];
+
+    this.excludeTools = excludeTools
+      ? excludeTools
+          .split(',')
+          .map((s) => s.trim())
+          .filter(isToolName)
+      : [];
+
+    if (this.includeTools.length > 0 && this.excludeTools.length > 0) {
+      throw new Error('Cannot specify both INCLUDE_TOOLS and EXCLUDE_TOOLS');
+    }
 
     invariant(server, 'The environment variable SERVER is not set');
     invariant(datasourceLuid, 'The environment variable DATASOURCE_LUID is not set');

@@ -14,6 +14,8 @@ export interface ProcessEnvEx {
   AUTH_TYPE: string | undefined;
   DEFAULT_LOG_LEVEL: string | undefined;
   DISABLE_LOG_MASKING: string | undefined;
+  INCLUDE_TOOLS: string | undefined;
+  EXCLUDE_TOOLS: string | undefined;
 }
 
 declare global {

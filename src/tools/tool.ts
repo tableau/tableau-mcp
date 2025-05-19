@@ -7,16 +7,17 @@ import { ZodRawShape } from 'zod';
 
 import { getToolLogMessage, log } from '../logging/log.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
+import { ToolName } from './toolName.js';
 
 export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
-  name: string;
+  name: ToolName;
   description: string;
   paramsSchema: Args;
   callback: ToolCallback<Args>;
 };
 
 export class Tool<Args extends ZodRawShape | undefined = undefined> {
-  name: string;
+  name: ToolName;
   description: string;
   paramsSchema: Args;
   callback: ToolCallback<Args>;

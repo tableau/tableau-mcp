@@ -48,10 +48,12 @@ make it easier for developers to build AI-applications that integrate with Table
 
 ### Optional Environment Variables
 
-| **Variable**          | **Description**                                                                   |
-| --------------------- | --------------------------------------------------------------------------------- |
-| `DEFAULT_LOG_LEVEL`   | The default logging level of the server. Default: `debug`                         |
-| `DISABLE_LOG_MASKING` | Disable masking of credentials in logs. For debug purposes only. Default: `false` |
+| **Variable**          | **Description**                                                  | **Default**                        | **Note**                                                                 |
+| --------------------- | ---------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ |
+| `DEFAULT_LOG_LEVEL`   | The default logging level of the server.                         | `debug`                            |                                                                          |
+| `DISABLE_LOG_MASKING` | Disable masking of credentials in logs. For debug purposes only. | `false`                            |                                                                          |
+| `INCLUDE_TOOLS`       | A comma-separated list of tool names to include in the server.   | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts). |
+| `EXCLUDE_TOOLS`       | A comma-separated list of tool names to exclude from the server. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                 |
 
 ## Tableau Authentication
 
