@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const FunctionEnum = [
+const Functions = [
   'SUM',
   'AVG',
   'MEDIAN',
@@ -23,7 +23,7 @@ export const FunctionEnum = [
   'TRUNC_DAY',
 ] as const;
 
-const Function = z.enum(FunctionEnum);
+const Function = z.enum(Functions);
 
 const SortDirection = z.enum(['ASC', 'DESC']);
 
@@ -39,20 +39,3 @@ const Field = z.object({
 export const DatasourceQuery = z.object({
   fields: z.array(Field),
 });
-
-// const FilterBase = z.object({
-//   field: z.string(),
-// });
-
-// filterType: z.enum([
-//   'QUANTITATIVE_DATE',
-//   'QUANTITATIVE_NUMERICAL',
-//   'SET',
-//   'MATCH',
-//   'DATE',
-//   'TOP',
-// ])
-// const Filter = z.union([
-//   FilterBase,
-//   FilterBase.and(z.object({ filterType: 'QUANTITATIVE_DATE', value: z.string() })),
-// ]);
