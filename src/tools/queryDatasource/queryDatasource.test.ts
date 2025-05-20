@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { server } from '../server.js';
+import { server } from '../../server.js';
 import { queryDatasourceTool } from './queryDatasource.js';
 
 // Mock server.server.sendLoggingMessage since the transport won't be connected.
@@ -37,7 +37,7 @@ const mocks = vi.hoisted(() => ({
   mockQueryDatasourceError: vi.fn().mockRejectedValue(mockVdsResponses.error),
 }));
 
-vi.mock('../restApiInstance.js', () => ({
+vi.mock('../../restApiInstance.js', () => ({
   getNewRestApiInstanceAsync: vi.fn().mockResolvedValue({
     vizqlDataServiceMethods: {
       queryDatasource: mocks.mockQueryDatasource,
@@ -52,7 +52,9 @@ describe('queryDatasourceTool', () => {
 
   it('should create a tool instance with correct properties', () => {
     expect(queryDatasourceTool.name).toBe('query-datasource');
-    expect(queryDatasourceTool.description).toContain('Run a Tableau VizQL query');
+    expect(queryDatasourceTool.description).toContain(
+      'Requests relevant data from a datasource using a query.',
+    );
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
   });
 
@@ -130,7 +132,7 @@ describe('queryDatasourceTool', () => {
 async function getToolResult(): Promise<CallToolResult> {
   return await queryDatasourceTool.callback(
     {
-      query: {
+      datasourceQuery: {
         fields: [
           { fieldCaption: 'Category' },
           { fieldCaption: 'Profit', function: 'SUM', sortDirection: 'DESC' },
