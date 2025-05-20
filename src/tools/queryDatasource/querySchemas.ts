@@ -27,13 +27,17 @@ const Function = z.enum(FunctionEnum);
 
 const SortDirection = z.enum(['ASC', 'DESC']);
 
-export const Field = z.object({
+const Field = z.object({
   fieldCaption: z.string(),
   fieldAlias: z.string().optional(),
   maxDecimalPlaces: z.number().int().optional(),
   sortDirection: SortDirection.optional(),
   sortPriority: z.number().int().optional(),
   function: Function.optional(),
+});
+
+export const DatasourceQuery = z.object({
+  fields: z.array(Field),
 });
 
 // const FilterBase = z.object({
