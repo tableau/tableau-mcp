@@ -3,8 +3,8 @@ import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
-import { Field } from './querySchemas.js';
 import { Tool } from '../tool.js';
+import { Field } from './querySchemas.js';
 
 const DatasourceQuery = z.object({
   fields: z.array(Field),
