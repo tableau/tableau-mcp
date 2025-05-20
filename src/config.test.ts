@@ -86,6 +86,33 @@ describe('Config', () => {
     });
   });
 
+  it('should configure PAT authentication when multiple credentials are provided', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'test-server',
+      DATASOURCE_LUID: 'test-luid',
+      SITE_NAME: 'test-site',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: 'test-pat-value',
+      JWT: 'test-jwt',
+      USERNAME: 'test-user',
+      PASSWORD: 'test-password',
+      CONNECTED_APP_CLIENT_ID: 'test-client-id',
+      CONNECTED_APP_SECRET_ID: 'test-secret-id',
+      CONNECTED_APP_SECRET_VALUE: 'test-secret-value',
+      JWT_SCOPES: 'tableau:books:read',
+      AUTH_TYPE: 'pat',
+    };
+
+    const config = new Config();
+    expect(config.authConfig).toEqual({
+      type: 'pat',
+      patName: 'test-pat-name',
+      patValue: 'test-pat-value',
+      siteName: 'test-site',
+    });
+  });
+
   it('should configure JWT authentication when JWT is provided', () => {
     process.env = {
       ...process.env,
@@ -93,6 +120,32 @@ describe('Config', () => {
       DATASOURCE_LUID: 'test-luid',
       SITE_NAME: 'test-site',
       JWT: 'test-jwt',
+    };
+
+    const config = new Config();
+    expect(config.authConfig).toEqual({
+      type: 'jwt',
+      jwt: 'test-jwt',
+      siteName: 'test-site',
+    });
+  });
+
+  it('should configure JWT authentication when multiple credentials are provided', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'test-server',
+      DATASOURCE_LUID: 'test-luid',
+      SITE_NAME: 'test-site',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: 'test-pat-value',
+      JWT: 'test-jwt',
+      USERNAME: 'test-user',
+      PASSWORD: 'test-password',
+      CONNECTED_APP_CLIENT_ID: 'test-client-id',
+      CONNECTED_APP_SECRET_ID: 'test-secret-id',
+      CONNECTED_APP_SECRET_VALUE: 'test-secret-value',
+      JWT_SCOPES: 'tableau:books:read',
+      AUTH_TYPE: 'jwt',
     };
 
     const config = new Config();
@@ -128,6 +181,36 @@ describe('Config', () => {
     });
   });
 
+  it('should configure direct-trust authentication when multiple credentials are provided', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'test-server',
+      DATASOURCE_LUID: 'test-luid',
+      SITE_NAME: 'test-site',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: 'test-pat-value',
+      JWT: 'test-jwt',
+      USERNAME: 'test-user',
+      PASSWORD: 'test-password',
+      CONNECTED_APP_CLIENT_ID: 'test-client-id',
+      CONNECTED_APP_SECRET_ID: 'test-secret-id',
+      CONNECTED_APP_SECRET_VALUE: 'test-secret-value',
+      JWT_SCOPES: 'tableau:books:read',
+      AUTH_TYPE: 'direct-trust',
+    };
+
+    const config = new Config();
+    expect(config.authConfig).toEqual({
+      type: 'direct-trust',
+      username: 'test-user',
+      clientId: 'test-client-id',
+      secretId: 'test-secret-id',
+      secretValue: 'test-secret-value',
+      siteName: 'test-site',
+      scopes: ['tableau:viz_data_service:read', 'tableau:content:read', 'tableau:books:read'],
+    });
+  });
+
   it('should configure username-password authentication when credentials are provided', () => {
     process.env = {
       ...process.env,
@@ -136,6 +219,33 @@ describe('Config', () => {
       SITE_NAME: 'test-site',
       USERNAME: 'test-user',
       PASSWORD: 'test-password',
+    };
+
+    const config = new Config();
+    expect(config.authConfig).toEqual({
+      type: 'username-password',
+      username: 'test-user',
+      password: 'test-password',
+      siteName: 'test-site',
+    });
+  });
+
+  it('should configure username-password authentication when multiple credentials are provided', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'test-server',
+      DATASOURCE_LUID: 'test-luid',
+      SITE_NAME: 'test-site',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: 'test-pat-value',
+      JWT: 'test-jwt',
+      USERNAME: 'test-user',
+      PASSWORD: 'test-password',
+      CONNECTED_APP_CLIENT_ID: 'test-client-id',
+      CONNECTED_APP_SECRET_ID: 'test-secret-id',
+      CONNECTED_APP_SECRET_VALUE: 'test-secret-value',
+      JWT_SCOPES: 'tableau:books:read',
+      AUTH_TYPE: 'username-password',
     };
 
     const config = new Config();
