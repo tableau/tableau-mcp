@@ -1,7 +1,7 @@
 import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 
 import { server } from '../server.js';
-
+import { ToolName } from '../tools/toolName.js';
 type Logger = 'rest-api' | (string & {});
 type LogType = LoggingLevel | 'request' | 'response' | 'tool';
 type LogMessage = {
@@ -69,7 +69,7 @@ export const writeToStderr = (message: string): void => {
   process.stderr.write(message);
 };
 
-export const getToolLogMessage = (toolName: string, args: unknown): LogMessage => {
+export const getToolLogMessage = (toolName: ToolName, args: unknown): LogMessage => {
   return {
     type: 'tool',
     tool: {

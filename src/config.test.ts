@@ -52,17 +52,6 @@ describe('Config', () => {
     expect(() => new Config()).toThrow('The environment variable DATASOURCE_LUID is not set');
   });
 
-  it('should throw error when SITE_NAME is not set', () => {
-    process.env = {
-      ...process.env,
-      SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
-      SITE_NAME: undefined,
-    };
-
-    expect(() => new Config()).toThrow('The environment variable SITE_NAME is not set');
-  });
-
   it('should throw error when no credentials are provided', () => {
     process.env = {
       ...process.env,
@@ -212,5 +201,97 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.disableLogMasking).toBe(true);
+  });
+
+  describe('Tool filtering', () => {
+    it('should set empty arrays for includeTools and excludeTools when not specified', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'test-server',
+        DATASOURCE_LUID: 'test-luid',
+        SITE_NAME: 'test-site',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+      };
+
+      const config = new Config();
+      expect(config.includeTools).toEqual([]);
+      expect(config.excludeTools).toEqual([]);
+    });
+
+    it('should parse INCLUDE_TOOLS into an array of valid tool names', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'test-server',
+        DATASOURCE_LUID: 'test-luid',
+        SITE_NAME: 'test-site',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+        INCLUDE_TOOLS: 'query-datasource,list-fields',
+      };
+
+      const config = new Config();
+      expect(config.includeTools).toEqual(['query-datasource', 'list-fields']);
+    });
+
+    it('should parse EXCLUDE_TOOLS into an array of valid tool names', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'test-server',
+        DATASOURCE_LUID: 'test-luid',
+        SITE_NAME: 'test-site',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+        EXCLUDE_TOOLS: 'query-datasource',
+      };
+
+      const config = new Config();
+      expect(config.excludeTools).toEqual(['query-datasource']);
+    });
+
+    it('should filter out invalid tool names from INCLUDE_TOOLS', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'test-server',
+        DATASOURCE_LUID: 'test-luid',
+        SITE_NAME: 'test-site',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+        INCLUDE_TOOLS: 'query-datasource,order-hamburgers',
+      };
+
+      const config = new Config();
+      expect(config.includeTools).toEqual(['query-datasource']);
+    });
+
+    it('should filter out invalid tool names from EXCLUDE_TOOLS', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'test-server',
+        DATASOURCE_LUID: 'test-luid',
+        SITE_NAME: 'test-site',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+        EXCLUDE_TOOLS: 'query-datasource,order-hamburgers',
+      };
+
+      const config = new Config();
+      expect(config.excludeTools).toEqual(['query-datasource']);
+    });
+
+    it('should throw error when both INCLUDE_TOOLS and EXCLUDE_TOOLS are specified', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'test-server',
+        DATASOURCE_LUID: 'test-luid',
+        SITE_NAME: 'test-site',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+        INCLUDE_TOOLS: 'query-datasource',
+        EXCLUDE_TOOLS: 'list-fields',
+      };
+
+      expect(() => new Config()).toThrow('Cannot specify both INCLUDE_TOOLS and EXCLUDE_TOOLS');
+    });
   });
 });

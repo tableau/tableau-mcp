@@ -42,16 +42,18 @@ make it easier for developers to build AI-applications that integrate with Table
 | **Variable**      | **Description**                                                                                                                                |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SERVER`          | The URL of the Tableau server.                                                                                                                 |
-| `SITE_NAME`       | The name of the Tableau site to use.                                                                                                           |
+| `SITE_NAME`       | The name of the Tableau site to use. For Tableau Server, to specify the default site, set this to an empty string.                             |
 | `DATASOURCE_LUID` | The LUID of the datasource to use. To find it, navigate to the datasource in Tableau Server under the `Explore` tab and click the info icon 🛈. |
 | _Credentials_     | The credentials to use to authenticate to the Tableau server. See [Tableau Authentication](#tableau-authentication) section.                   |
 
 ### Optional Environment Variables
 
-| **Variable**          | **Description**                                                                   |
-| --------------------- | --------------------------------------------------------------------------------- |
-| `DEFAULT_LOG_LEVEL`   | The default logging level of the server. Default: `debug`                         |
-| `DISABLE_LOG_MASKING` | Disable masking of credentials in logs. For debug purposes only. Default: `false` |
+| **Variable**          | **Description**                                                                                     | **Default**                        | **Note**                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ |
+| `DEFAULT_LOG_LEVEL`   | The default logging level of the server.                                                            | `debug`                            |                                                                          |
+| `DISABLE_LOG_MASKING` | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                          |
+| `INCLUDE_TOOLS`       | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts). |
+| `EXCLUDE_TOOLS`       | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                 |
 
 ## Tableau Authentication
 
@@ -80,7 +82,7 @@ you can use it by setting the `JWT` environment variable.
 > ⚠️ Required scopes are:
 >
 > - `tableau:viz_data_service:read`
-> - `tableau:content:read`.
+> - `tableau:content:read`
 
 ### Connected App
 

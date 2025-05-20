@@ -6,16 +6,18 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { ZodRawShape } from 'zod';
 
 import { getToolLogMessage, log } from '../logging/log.js';
+import { getExceptionMessage } from '../utils/getExceptionMessage.js';
+import { ToolName } from './toolName.js';
 
 export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
-  name: string;
+  name: ToolName;
   description: string;
   paramsSchema: Args;
   callback: ToolCallback<Args>;
 };
 
 export class Tool<Args extends ZodRawShape | undefined = undefined> {
-  name: string;
+  name: ToolName;
   description: string;
   paramsSchema: Args;
   callback: ToolCallback<Args>;
@@ -74,8 +76,10 @@ async function getResult<T>(
   try {
     return Ok(await callback(requestId));
   } catch (error) {
-    return Err(
-      error instanceof Error ? error : new Error(`requestId: ${requestId}, error: ${error}`),
-    );
+    if (error instanceof Error) {
+      return Err(error);
+    }
+
+    return Err(new Error(`requestId: ${requestId}, error: ${getExceptionMessage(error)}`));
   }
 }
