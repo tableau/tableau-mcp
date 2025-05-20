@@ -128,7 +128,7 @@ class Config {
   }
 }
 
-let config: Config;
+let config: Config | undefined;
 export const getConfig = (): Config => {
   if (!config) {
     config = new Config();
@@ -139,4 +139,7 @@ export const getConfig = (): Config => {
 
 export const exportedForTesting = {
   Config,
+  resetConfig: () => {
+    config = undefined;
+  },
 };
