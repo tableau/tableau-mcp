@@ -6,6 +6,7 @@ import { getConfig } from './config.js';
 import { setLogLevel } from './logging/log.js';
 import { listFieldsTool } from './tools/listFields.js';
 import { queryDatasourceTool } from './tools/queryDatasource.js';
+import { readMetadataTool } from './tools/readMetadata.js';
 import { toolNames } from './tools/toolName.js';
 
 class Server extends McpServer {
@@ -34,7 +35,7 @@ class Server extends McpServer {
 export const server = new Server();
 
 const { includeTools, excludeTools } = getConfig();
-const tools = [queryDatasourceTool, listFieldsTool].filter((tool) => {
+const tools = [queryDatasourceTool, listFieldsTool, readMetadataTool].filter((tool) => {
   if (includeTools.length > 0) {
     return includeTools.includes(tool.name);
   }
