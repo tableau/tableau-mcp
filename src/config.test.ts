@@ -26,6 +26,8 @@ describe('Config', () => {
       AUTH_TYPE: undefined,
       DEFAULT_LOG_LEVEL: undefined,
       DISABLE_LOG_MASKING: undefined,
+      INCLUDE_TOOLS: undefined,
+      EXCLUDE_TOOLS: undefined,
     };
   });
 

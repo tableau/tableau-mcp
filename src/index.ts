@@ -8,6 +8,10 @@ import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 async function startServer(): Promise<void> {
   const config = getConfig();
+
+  server.registerTools();
+  server.registerRequestHandlers();
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
