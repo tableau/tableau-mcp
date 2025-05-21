@@ -47,7 +47,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
       SITE_NAME: 'test-site',
     };
 
@@ -60,7 +59,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
@@ -79,7 +77,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
@@ -106,7 +103,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
       SITE_NAME: 'test-site',
       JWT: 'test-jwt',
     };
@@ -123,7 +119,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
@@ -149,7 +144,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
       SITE_NAME: 'test-site',
       USERNAME: 'test-user',
       CONNECTED_APP_CLIENT_ID: 'test-client-id',
@@ -174,7 +168,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
@@ -204,7 +197,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
       SITE_NAME: 'test-site',
       USERNAME: 'test-user',
       PASSWORD: 'test-password',
@@ -223,7 +215,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
@@ -250,7 +241,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
@@ -264,7 +254,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
@@ -279,7 +268,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
@@ -293,7 +281,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
-      DATASOURCE_LUID: 'test-luid',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
@@ -309,7 +296,6 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         SERVER: 'test-server',
-        DATASOURCE_LUID: 'test-luid',
         SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
@@ -324,7 +310,6 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         SERVER: 'test-server',
-        DATASOURCE_LUID: 'test-luid',
         SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
@@ -339,7 +324,6 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         SERVER: 'test-server',
-        DATASOURCE_LUID: 'test-luid',
         SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
@@ -354,7 +338,6 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         SERVER: 'test-server',
-        DATASOURCE_LUID: 'test-luid',
         SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
@@ -369,7 +352,6 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         SERVER: 'test-server',
-        DATASOURCE_LUID: 'test-luid',
         SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
@@ -384,7 +366,6 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         SERVER: 'test-server',
-        DATASOURCE_LUID: 'test-luid',
         SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',

@@ -45,7 +45,6 @@ make it easier for developers to build AI-applications that integrate with Table
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SERVER`          | The URL of the Tableau server.                                                                                                                 |
 | `SITE_NAME`       | The name of the Tableau site to use. For Tableau Server, to specify the default site, set this to an empty string.                             |
-| `DATASOURCE_LUID` | The LUID of the datasource to use. To find it, navigate to the datasource in Tableau Server under the `Explore` tab and click the info icon 🛈. |
 | _Credentials_     | The credentials to use to authenticate to the Tableau server. See [Tableau Authentication](#tableau-authentication) section.                   |
 
 ### Optional Environment Variables
@@ -150,7 +149,6 @@ To set up local debugging with breakpoints:
 
      ```
      "tableau.mcp.SERVER": "https://my-tableau-server.com",
-     "tableau.mcp.DATASOURCE_LUID": "...",
      ...
      ```
 
