@@ -10,9 +10,9 @@ import { DatasourceQuery } from './querySchemas.js';
 export const queryDatasourceTool = new Tool({
   name: 'query-datasource',
   description: queryDatasourceToolDescription,
-  paramsSchema: { 
+  paramsSchema: {
     datasourceLuid: z.string(),
-    datasourceQuery: DatasourceQuery 
+    datasourceQuery: DatasourceQuery,
   },
   callback: async ({ datasourceLuid, datasourceQuery }): Promise<CallToolResult> => {
     const config = getConfig();
