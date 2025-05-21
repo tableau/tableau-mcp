@@ -12,7 +12,6 @@ describe('Config', () => {
     process.env = {
       ...originalEnv,
       SERVER: undefined,
-      DATASOURCE_LUID: undefined,
       SITE_NAME: undefined,
       PAT_NAME: undefined,
       PAT_VALUE: undefined,
@@ -40,16 +39,6 @@ describe('Config', () => {
     };
 
     expect(() => new Config()).toThrow('The environment variable SERVER is not set');
-  });
-
-  it('should throw error when DATASOURCE_LUID is missing', () => {
-    process.env = {
-      ...process.env,
-      SERVER: 'test-server',
-      DATASOURCE_LUID: undefined,
-    };
-
-    expect(() => new Config()).toThrow('The environment variable DATASOURCE_LUID is not set');
   });
 
   it('should throw error when no credentials are provided', () => {

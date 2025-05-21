@@ -4,6 +4,7 @@ import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import pkg from '../package.json' with { type: 'json' };
 import { getConfig } from './config.js';
 import { setLogLevel } from './logging/log.js';
+import { listDatasourcesTool } from './tools/listDatasources.js';
 import { listFieldsTool } from './tools/listFields.js';
 import { queryDatasourceTool } from './tools/queryDatasource.js';
 import { readMetadataTool } from './tools/readMetadata.js';
@@ -35,7 +36,7 @@ class Server extends McpServer {
 export const server = new Server();
 
 const { includeTools, excludeTools } = getConfig();
-const tools = [queryDatasourceTool, listFieldsTool, readMetadataTool].filter((tool) => {
+const tools = [listDatasourcesTool, queryDatasourceTool, listFieldsTool, readMetadataTool].filter((tool) => {
   if (includeTools.length > 0) {
     return includeTools.includes(tool.name);
   }
