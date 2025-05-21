@@ -1,9 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { getConfig } from '../config.js';
-import { getNewRestApiInstanceAsync } from '../restApiInstance.js';
-import { Tool } from './tool.js';
+import { getConfig } from '../../config.js';
+import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
+import { Tool } from '../tool.js';
+import { parseAndValidateFilterString } from './datasourcesFilterUtils.js';
 
 export const listDatasourcesTool = new Tool({
   name: 'list-datasources',
@@ -13,28 +14,32 @@ Retrieves a list of published data sources from a specified Tableau site using t
 **Example Usage:**
 - List all data sources on a site
 - List data sources with the name "Project Views":
-  - filter: "name:eq:Project Views"\`
+    filter: "name:eq:Project Views"
 - List data sources in the "Finance" project:
-  - filter: "projectName:eq:Finance"\`
+    filter: "projectName:eq:Finance"
 - List data sources created after January 1, 2023:
-  - filter: "createdAt:gt:2023-01-01T00:00:00Z"\`
+    filter: "createdAt:gt:2023-01-01T00:00:00Z"
 - List data sources with the name "Project Views" in the "Finance" project and created after January 1, 2023:
-  - filter: "name:eq:Project Views,projectName:eq:Finance,createdAt:gt:2023-01-01T00:00:00Z"\`
+    filter: "name:eq:Project Views,projectName:eq:Finance,createdAt:gt:2023-01-01T00:00:00Z"
 `,
   paramsSchema: {
     filter: z.string().optional(),
   },
   callback: async ({ filter }): Promise<CallToolResult> => {
     const config = getConfig();
+    const validatedFilter = filter ? parseAndValidateFilterString(filter) : undefined;
     return await listDatasourcesTool.logAndExecute({
-      args: { filter },
+      args: { filter: validatedFilter },
       callback: async (requestId) => {
         const restApi = await getNewRestApiInstanceAsync(
           config.server,
           config.authConfig,
           requestId,
         );
-        return await restApi.datasourcesMethods.listDatasources(restApi.siteId, filter ?? '');
+        return await restApi.datasourcesMethods.listDatasources(
+          restApi.siteId,
+          validatedFilter ?? '',
+        );
       },
     });
   },
