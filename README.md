@@ -7,6 +7,8 @@ make it easier for developers to build AI-applications that integrate with Table
 
 ## Getting Started
 
+### Contributors
+
 1. Clone the repository
 2. Install [Node.js](https://nodejs.org/en/download) (tested with 22.15.0 LTS)
 3. `npm install`
@@ -20,43 +22,16 @@ docker build -t tableau-mcp .
 
 ## Environment Variables
 
-- If you are using [MCP Inspector](https://github.com/modelcontextprotocol/inspector) and prefer
-  running the server locally as opposed to using Docker, create a `config.json` file in the root of
-  the project using `config.example.json` as a template. Docker users should create an `env.list`
-  file in the root of the project using `env.example.list` as a template.
+- Docker users should create an `env.list` file in the root of the project using `env.example.list`
+  as a template.
+
+- If you are using [MCP Inspector](https://github.com/modelcontextprotocol/inspector), create a
+  `config.json` file in the root of the project using `config.example.json` as a template. Docker
+  users can skip this step.
 
 - If you are using Claude or other client, add the `tableau` MCP server to the `mcpServers` object
-  in the config using `config.example.json` as a template. For Claude, open the settings dialog,
-  select the **Developer** section, and click **Edit Config**.
-
-  ```json
-  {
-    "mcpServers": {
-      "tableau": {
-        "command": "node",
-        "args": ["C:\\path\\to\\tableau-mcp\\build\\index.js"],
-        "env": {
-          "SERVER": "https://my-tableau-server.com",
-          ...
-        }
-      }
-    }
-  }
-  ```
-
-  - Docker users should create an `env.list` file using `env.example.list` as a template and
-    configure Claude using:
-
-    ```json
-    {
-      "mcpServers": {
-        "tableau": {
-          "command": "docker",
-          "args": ["run", "-i", "--rm", "--env-file", "C:\\path\\to\\env.list", "tableau-mcp"]
-        }
-      }
-    }
-    ```
+  in the config using `config.example.json` or `config.docker.json` as a template. For Claude, open
+  the settings dialog, select the **Developer** section, and click **Edit Config**.
 
 ### Required Environment Variables
 
@@ -130,32 +105,16 @@ environment variables.
 After building the project and setting the environment variables, you can start the MCP server using
 the following commands:
 
-| **Command**       | **Description**                                                              |
-| ----------------- | ---------------------------------------------------------------------------- |
-| `npm run inspect` | Start the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) |
-| `npm run start`   | Start the standalone MCP server                                              |
+| **Command**              | **Description**                                                                                                              |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `npm run inspect`        | Start the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) which runs the server locally using Node.js.    |
+| `npm run inspect:docker` | Start the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) which runs the server using a Docker container. |
 
 ## Debugging
 
-You can use the [MCP inspector](https://modelcontextprotocol.io/docs/tools/inspector) or the
-[VS Code Run and Debug function](https://code.visualstudio.com/docs/debugtest/debugging#_start-a-debugging-session)
+You can use the
+[VS Code Run and Debug Launcher](https://code.visualstudio.com/docs/debugtest/debugging#_start-a-debugging-session)
 to run and debug the server.
-
-### Use the MCP Inspector
-
-Use the MCP inspector. Code breakpoints will not be available but all server logging will be visible
-in the inspector UX.
-
-```
-npm run inspect
-```
-
-### Use the VS Code Run and Debug Function
-
-Use the VS Code
-[Run and Debug launcher](https://code.visualstudio.com/docs/debugtest/debugging#_start-a-debugging-session)
-with fully functional breakpoints in the code. Note that the task automatically builds your
-TypeScript files before launching.
 
 To set up local debugging with breakpoints:
 
