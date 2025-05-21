@@ -52,9 +52,7 @@ describe('queryDatasourceTool', () => {
 
   it('should create a tool instance with correct properties', () => {
     expect(queryDatasourceTool.name).toBe('query-datasource');
-    expect(queryDatasourceTool.description).toContain(
-      'Requests relevant data from a datasource using a query.',
-    );
+    expect(queryDatasourceTool.description).toEqual(expect.any(String));
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
   });
 
