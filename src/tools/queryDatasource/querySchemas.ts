@@ -39,20 +39,3 @@ const Field = z.object({
 export const DatasourceQuery = z.object({
   fields: z.array(Field),
 });
-
-// const FilterBase = z.object({
-//   field: z.string(),
-// });
-
-// filterType: z.enum([
-//   'QUANTITATIVE_DATE',
-//   'QUANTITATIVE_NUMERICAL',
-//   'SET',
-//   'MATCH',
-//   'DATE',
-//   'TOP',
-// ])
-// const Filter = z.union([
-//   FilterBase,
-//   FilterBase.and(z.object({ filterType: 'QUANTITATIVE_DATE', value: z.string() })),
-// ]);
