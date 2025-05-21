@@ -1,0 +1,7 @@
+.cursor
+.github
+.vscode
+.dockerignore
+.gitignore
+**/*.md
+**/*.test.ts

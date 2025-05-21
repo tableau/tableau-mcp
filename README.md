@@ -12,13 +12,18 @@ make it easier for developers to build AI-applications that integrate with Table
 3. `npm install`
 4. `npm run build`
 
+### Docker users who just want to run the server
+
+```bash
+docker build -t tableau-mcp .
+```
+
 ## Environment Variables
 
-- If you are running the server standalone, create an `.env` file in the root of the project using
-  `.example.env` as a template.
-
-- If you are using [MCP Inspector](https://github.com/modelcontextprotocol/inspector), create a
-  `config.json` file in the root of the project using `config.example.json` as a template.
+- If you are using [MCP Inspector](https://github.com/modelcontextprotocol/inspector) and prefer
+  running the server locally as opposed to using Docker, create a `config.json` file in the root of
+  the project using `config.example.json` as a template. Docker users should create an `env.list`
+  file in the root of the project using `env.example.list` as a template.
 
 - If you are using Claude or other client, add the `tableau` MCP server to the `mcpServers` object
   in the config using `config.example.json` as a template. For Claude, open the settings dialog,
@@ -38,6 +43,20 @@ make it easier for developers to build AI-applications that integrate with Table
     }
   }
   ```
+
+  - Docker users should create an `env.list` file using `env.example.list` as a template and
+    configure Claude using:
+
+    ```json
+    {
+      "mcpServers": {
+        "tableau": {
+          "command": "docker",
+          "args": ["run", "-i", "--rm", "--env-file", "C:\\path\\to\\env.list", "tableau-mcp"]
+        }
+      }
+    }
+    ```
 
 ### Required Environment Variables
 

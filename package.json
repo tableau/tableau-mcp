@@ -18,9 +18,11 @@
     ":build": "rm -rf build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap",
     "build": "npm run :build && npm run exec-perms",
     "build:watch": "npm run :build -- --watch",
+    "build:docker": "docker build -t tableau-mcp .",
     "lint": "npm exec eslint",
     "start": "node build/index.js",
     "inspect": "npx @modelcontextprotocol/inspector --config config.json --server tableau",
+    "inspect:docker": "npx @modelcontextprotocol/inspector --config config.docker.json --server tableau",
     "build:inspect": "npm run build && npm run inspect",
     "exec-perms": "shx chmod +x build/*.js",
     "test": "vitest",
@@ -29,7 +31,6 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.10.2",
     "@zodios/core": "^10.9.6",
-    "dotenv": "^16.5.0",
     "jsonwebtoken": "^9.0.2",
     "ts-results-es": "^5.0.1",
     "zod": "^3.24.3"

@@ -22,6 +22,9 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
       - name: Install dependencies
         run: npm ci
 
@@ -33,6 +36,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Build Docker image
+        run: npm run build:docker
 
       - name: Tests
         run: npm run coverage

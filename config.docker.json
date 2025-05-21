@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "tableau": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "--env-file", "env.list", "tableau-mcp"]
+    }
+  }
+}
