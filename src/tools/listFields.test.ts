@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
 
 import { server } from '../server.js';
 import { getGraphqlQuery, listFieldsTool } from './listFields.js';

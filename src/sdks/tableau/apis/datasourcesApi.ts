@@ -1,19 +1,15 @@
-import {
-    makeApi,
-    makeEndpoint,
-    ZodiosEndpointDefinitions,
-  } from '@zodios/core';
+import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
 const projectSchema = z.object({
-    name: z.string(),
-    id: z.string(),
+  name: z.string(),
+  id: z.string(),
 });
-  
+
 const dataSourceSchema = z.object({
-    id: z.string(),
-    name: z.string(),
-    project: projectSchema,
+  id: z.string(),
+  name: z.string(),
+  project: projectSchema,
 });
 
 export type Datasource = z.infer<typeof dataSourceSchema>;
@@ -21,7 +17,8 @@ const listDatasourcesRestEndpoint = makeEndpoint({
   method: 'get',
   path: '/sites/:siteId/datasources',
   alias: 'listDatasources',
-  description: 'Returns a list of published data sources on the specified site. Supports a filter string as a query parameter in the format field:operator:value.',
+  description:
+    'Returns a list of published data sources on the specified site. Supports a filter string as a query parameter in the format field:operator:value.',
   parameters: [
     {
       name: 'siteId',

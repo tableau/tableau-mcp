@@ -55,6 +55,7 @@ export const server = new Server();
 
 <<<<<<< HEAD
 const { includeTools, excludeTools } = getConfig();
+<<<<<<< Updated upstream
 const tools = [listDatasourcesTool, queryDatasourceTool, listFieldsTool, readMetadataTool].filter((tool) => {
   if (includeTools.length > 0) {
     return includeTools.includes(tool.name);
@@ -84,6 +85,29 @@ function getToolsToRegister(): Array<Tool<any>> {
   }
 
   return toolsToRegister;
+=======
+const tools = [listDatasourcesTool, queryDatasourceTool, listFieldsTool, readMetadataTool].filter(
+  (tool) => {
+    if (includeTools.length > 0) {
+      return includeTools.includes(tool.name);
+    }
+
+    if (excludeTools.length > 0) {
+      return !excludeTools.includes(tool.name);
+    }
+
+    return true;
+  },
+);
+
+if (tools.length === 0) {
+  throw new Error(`
+      No tools to register.
+      Tools available: [${toolNames.join(', ')}].
+      EXCLUDE_TOOLS = [${excludeTools.join(', ')}].
+      INCLUDE_TOOLS = [${includeTools.join(', ')}]
+    `);
+>>>>>>> Stashed changes
 }
 
 export const exportedForTesting = {

@@ -57,9 +57,9 @@ class Config {
     }
 
     invariant(server, 'The environment variable SERVER is not set');
-    
+
     this.server = server;
-    
+
     if (patName && patValue && (!authType || authType === 'pat')) {
       this.authConfig = {
         type: 'pat',

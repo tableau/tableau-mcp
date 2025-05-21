@@ -82,7 +82,7 @@ export default class RestApi {
       this._datasourcesMethods = new DatasourcesMethods(this._baseUrl, this.creds);
       this._addInterceptors(this._baseUrl, this._datasourcesMethods.interceptors);
     }
-  
+
     return this._datasourcesMethods;
   }
 

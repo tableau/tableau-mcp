@@ -1,13 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 
 import { getConfig } from '../config.js';
 import { getNewRestApiInstanceAsync } from '../restApiInstance.js';
 import { Tool } from './tool.js';
-import { z } from 'zod';
 
 export const listDatasourcesTool = new Tool({
-    name: 'list-datasources',
-    description: `
+  name: 'list-datasources',
+  description: `
 This tool helps find datasources on a specified Tableau site. It retrieves a list of published data sources from a specified Tableau site using the Tableau REST API. You can optionally filter the results using a filter string in the format \`field:operator:value\` (e.g., \`name:eq:Views\`). This tool supports a wide range of filter fields and operators, enabling precise and flexible queries for data source discovery and automation.
 
 **Supported Filter Fields and Operators**
@@ -83,21 +83,21 @@ This tool helps find datasources on a specified Tableau site. It retrieves a lis
 **Reference:**
 For more details, see the [Tableau REST API documentation: Query Data Sources](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources).
 `,
-    paramsSchema: {
-      filter: z.string().optional(),
-    },
-    callback: async ({ filter }): Promise<CallToolResult> => {
-      const config = getConfig();
-      return await listDatasourcesTool.logAndExecute({
-        args: { filter },
-        callback: async (requestId) => {
-          const restApi = await getNewRestApiInstanceAsync(
-            config.server,
-            config.authConfig,
-            requestId,
-          );
-          return await restApi.datasourcesMethods.listDatasources(restApi.siteId, filter ?? "");
-        },
-      });
-    },
-  });
+  paramsSchema: {
+    filter: z.string().optional(),
+  },
+  callback: async ({ filter }): Promise<CallToolResult> => {
+    const config = getConfig();
+    return await listDatasourcesTool.logAndExecute({
+      args: { filter },
+      callback: async (requestId) => {
+        const restApi = await getNewRestApiInstanceAsync(
+          config.server,
+          config.authConfig,
+          requestId,
+        );
+        return await restApi.datasourcesMethods.listDatasources(restApi.siteId, filter ?? '');
+      },
+    });
+  },
+});
