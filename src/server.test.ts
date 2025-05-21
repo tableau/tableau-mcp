@@ -2,7 +2,7 @@ import { ZodObject } from 'zod';
 
 import { exportedForTesting as configExportedForTesting } from './config.js';
 import { exportedForTesting as serverExportedForTesting } from './server.js';
-import { queryDatasourceTool } from './tools/queryDatasource.js';
+import { queryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
 import { toolNames } from './tools/toolName.js';
 import { tools } from './tools/tools.js';
 

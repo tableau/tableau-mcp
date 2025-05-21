@@ -95,17 +95,19 @@ export const TableauError = z
 
 const SortDirection = z.enum(['ASC', 'DESC']);
 
-const FieldBase = z
-  .object({
-    fieldCaption: z.string(),
-    fieldAlias: z.string().optional(),
-    maxDecimalPlaces: z.number().int().optional(),
-    sortDirection: SortDirection.optional(),
-    sortPriority: z.number().int().optional(),
-  })
-  .passthrough();
+const FieldBase = z.object({
+  fieldCaption: z.string(),
+  fieldAlias: z.string().optional(),
+  maxDecimalPlaces: z.number().int().optional(),
+  sortDirection: SortDirection.optional(),
+  sortPriority: z.number().int().optional(),
+});
 
-const Field = z.union([FieldBase, FieldBase, FieldBase]);
+const Field = z.union([
+  FieldBase,
+  FieldBase.and(z.object({ function: Function })),
+  FieldBase.and(z.object({ calculation: z.string() })),
+]);
 
 const FilterField = z.union([
   z.object({ fieldCaption: z.string() }),

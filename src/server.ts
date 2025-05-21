@@ -4,14 +4,7 @@ import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import pkg from '../package.json' with { type: 'json' };
 import { getConfig } from './config.js';
 import { setLogLevel } from './logging/log.js';
-<<<<<<< HEAD
-import { listDatasourcesTool } from './tools/listDatasources.js';
-import { listFieldsTool } from './tools/listFields.js';
-import { queryDatasourceTool } from './tools/queryDatasource.js';
-import { readMetadataTool } from './tools/readMetadata.js';
-=======
 import { Tool } from './tools/tool.js';
->>>>>>> main
 import { toolNames } from './tools/toolName.js';
 import { tools } from './tools/tools.js';
 
@@ -53,13 +46,6 @@ class Server extends McpServer {
 
 export const server = new Server();
 
-<<<<<<< HEAD
-const { includeTools, excludeTools } = getConfig();
-<<<<<<< Updated upstream
-const tools = [listDatasourcesTool, queryDatasourceTool, listFieldsTool, readMetadataTool].filter((tool) => {
-  if (includeTools.length > 0) {
-    return includeTools.includes(tool.name);
-=======
 function getToolsToRegister(): Array<Tool<any>> {
   const { includeTools, excludeTools } = getConfig();
   const toolsToRegister = tools.filter((tool) => {
@@ -81,33 +67,9 @@ function getToolsToRegister(): Array<Tool<any>> {
         EXCLUDE_TOOLS = [${excludeTools.join(', ')}].
         INCLUDE_TOOLS = [${includeTools.join(', ')}]
       `);
->>>>>>> main
   }
 
   return toolsToRegister;
-=======
-const tools = [listDatasourcesTool, queryDatasourceTool, listFieldsTool, readMetadataTool].filter(
-  (tool) => {
-    if (includeTools.length > 0) {
-      return includeTools.includes(tool.name);
-    }
-
-    if (excludeTools.length > 0) {
-      return !excludeTools.includes(tool.name);
-    }
-
-    return true;
-  },
-);
-
-if (tools.length === 0) {
-  throw new Error(`
-      No tools to register.
-      Tools available: [${toolNames.join(', ')}].
-      EXCLUDE_TOOLS = [${excludeTools.join(', ')}].
-      INCLUDE_TOOLS = [${includeTools.join(', ')}]
-    `);
->>>>>>> Stashed changes
 }
 
 export const exportedForTesting = {
