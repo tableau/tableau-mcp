@@ -61,7 +61,7 @@ authenticate to these APIs, you must provide your credentials via environment va
 > 💡 When multiple credentials are provided, the order in which the below authentication methods are
 > listed is also the order of precedence used by the server. Provide the `AUTH_TYPE` environment
 > variable to specify which authentication method to use. Allowed values are `pat`, `jwt`,
-> `connected-app`, and `username-password`.
+> `direct-trust`, and `username-password`.
 
 ### Personal Access Token (PAT)
 
