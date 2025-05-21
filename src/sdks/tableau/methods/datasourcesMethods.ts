@@ -10,7 +10,7 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
   }
 
   /**
-   * Returns a list of published data sources on the specified site, filtered by project name.
+   * Returns a list of published data sources on the specified site.
    * @param siteId - The Tableau site ID
    * @param filter - The filter string to filter datasources by
    */

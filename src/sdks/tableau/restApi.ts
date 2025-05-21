@@ -24,9 +24,9 @@ export default class RestApi {
   private readonly _host: string;
   private readonly _baseUrl: string;
 
+  private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
   private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
-  private _datasourcesMethods?: DatasourcesMethods;
   private static _version = '3.24';
 
   private _requestInterceptor?: [RequestInterceptor, ErrorInterceptor?];
@@ -57,6 +57,15 @@ export default class RestApi {
     return this.creds.site.id;
   }
 
+  get datasourcesMethods(): DatasourcesMethods {
+    if (!this._datasourcesMethods) {
+      this._datasourcesMethods = new DatasourcesMethods(this._baseUrl, this.creds);
+      this._addInterceptors(this._baseUrl, this._datasourcesMethods.interceptors);
+    }
+
+    return this._datasourcesMethods;
+  }
+
   get metadataMethods(): MetadataMethods {
     if (!this._metadataMethods) {
       const baseUrl = `${this._host}/api/metadata`;
@@ -75,15 +84,6 @@ export default class RestApi {
     }
 
     return this._vizqlDataServiceMethods;
-  }
-
-  get datasourcesMethods(): DatasourcesMethods {
-    if (!this._datasourcesMethods) {
-      this._datasourcesMethods = new DatasourcesMethods(this._baseUrl, this.creds);
-      this._addInterceptors(this._baseUrl, this._datasourcesMethods.interceptors);
-    }
-
-    return this._datasourcesMethods;
   }
 
   signIn = async (authConfig: AuthConfig): Promise<void> => {
