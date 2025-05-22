@@ -2,60 +2,66 @@
 
 [![Tableau Supported](https://img.shields.io/badge/Support%20Level-Tableau%20Supported-53bd92.svg)](https://www.tableau.com/support-levels-it-and-developer-tools)
 
+## Overview
+
 Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will
 make it easier for developers to build AI-applications that integrate with Tableau.
 
+Key features:
+
+* Provides access to Tableau published data sources through the [VizQL Data Service (VDS) API](https://help.tableau.com/current/api/vizql-data-service/en-us/index.html)
+* Supports collecting data source metadata (columns with descriptions) through the Tableau [Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/docs/meta_api_start.html)
+* Usable by AI tools which support MCP Tools (e.g., Claude Desktop, Cursor and others)
+* Works with any published data source on either Tableau Cloud or Tableau Server
+
+Note: The Tableau MCP project is currently in early development. As we continue to enhance and
+refine the implementation, the available functionality and tools may evolve. We welcome feedback
+and contributions to help shape the future of this project.
+
 ## Getting Started
 
-### Contributors
+### Install Prerequisites
+
+Follow these steps to install Tableau MCP for the first time:
 
 1. Clone the repository
 2. Install [Node.js](https://nodejs.org/en/download) (tested with 22.15.0 LTS)
 3. `npm install`
 4. `npm run build`
 
-### Docker users who just want to run the server
+To keep up with repo changes:
+
+1. Pull latest changes: `git pull`
+2. `npm install`
+3. `npm run build`
+
+### Docker Build
+
+To use the Docker version of Tableau MCP, build the image from source:
 
 ```bash
-docker build -t tableau-mcp .
+$ docker build -t tableau-mcp .
+$ docker images
+REPOSITORY    TAG       IMAGE ID       CREATED        SIZE
+tableau-mcp   latest    c721228b6dd3   15 hours ago   260MB
 ```
 
-## Environment Variables
+Remember to build the Docker image again whenever you pull the latest repo changes.
 
-- Docker users should create an `env.list` file in the root of the project using `env.example.list`
-  as a template.
+## Tableau Configuration
 
-- If you are using [MCP Inspector](https://github.com/modelcontextprotocol/inspector), create a
-  `config.json` file in the root of the project using `config.example.json` as a template. Docker
-  users can skip this step.
+Tableau MCP works with both Tableau Server and Tableau cloud data with these prerequisites:
 
-- If you are using Claude or other client, add the `tableau` MCP server to the `mcpServers` object
-  in the config using `config.example.json` or `config.docker.json` as a template. For Claude, open
-  the settings dialog, select the **Developer** section, and click **Edit Config**.
-
-### Required Environment Variables
-
-| **Variable**      | **Description**                                                                                                                                |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SERVER`          | The URL of the Tableau server.                                                                                                                 |
-| `SITE_NAME`       | The name of the Tableau site to use. For Tableau Server, to specify the default site, set this to an empty string.                             |
-| _Credentials_     | The credentials to use to authenticate to the Tableau server. See [Tableau Authentication](#tableau-authentication) section.                   |
-
-### Optional Environment Variables
-
-| **Variable**          | **Description**                                                                                     | **Default**                        | **Note**                                                                 |
-| --------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ |
-| `DEFAULT_LOG_LEVEL`   | The default logging level of the server.                                                            | `debug`                            |                                                                          |
-| `DISABLE_LOG_MASKING` | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                          |
-| `INCLUDE_TOOLS`       | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts). |
-| `EXCLUDE_TOOLS`       | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                 |
+* Only published data sources are supported
+* VDS (VizQL Data Service) must be enabled (TODO: is this already on everywhere?)
+* Metadata API must be enabled (Tableau Server users may need to [enable it](https://help.tableau.com/current/api/metadata_api/en-us/docs/meta_api_start.html#enable-the-tableau-metadata-api-for-tableau-server))
 
 ## Tableau Authentication
 
-The MCP server tools call into various Tableau APIs, including
-[VizQL Data Service](https://help.tableau.com/current/api/vizql-data-service/en-us/index.html) and
-the [Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/index.html). To
-authenticate to these APIs, you must provide your credentials via environment variables.
+Tableau MCP requires authentication in order to connect with your Tableau Server or Tableau Cloud
+site. This auth needs to have access to the published data source(s) you plan to access.
+
+Several different authentication options are supported, but you only need to provide one.
 
 > 💡 When multiple credentials are provided, the order in which the below authentication methods are
 > listed is also the order of precedence used by the server. Provide the `AUTH_TYPE` environment
@@ -64,7 +70,7 @@ authenticate to these APIs, you must provide your credentials via environment va
 
 ### Personal Access Token (PAT)
 
-If you have a
+This is probably the best choice for getting started. If you have a
 [personal access token](https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm),
 you can use it by setting the `PAT_NAME` and `PAT_VALUE` environment variables.
 
@@ -79,7 +85,7 @@ you can use it by setting the `JWT` environment variable.
 > - `tableau:viz_data_service:read`
 > - `tableau:content:read`
 
-### Connected App
+### Connected App (Direct Trust)
 
 If you have a
 [Direct Trust Connected App](https://help.tableau.com/current/online/en-us/connected_apps_direct.htm#create-a-connected-app),
@@ -99,9 +105,46 @@ variables:
 If you have a username and password, you can use them by setting the `USERNAME` and `PASSWORD`
 environment variables.
 
-## Running the MCP Server
+## Configuring AI Tools
 
-After building the project and setting the environment variables, you can start the MCP server using
+
+
+### Environment Variables
+
+- Docker users should create an `env.list` file in the root of the project using `env.example.list`
+  as a template.
+
+- If you are using [MCP Inspector](https://github.com/modelcontextprotocol/inspector), create a
+  `config.json` file in the root of the project using `config.example.json` as a template. Docker
+  users can skip this step.
+
+- If you are using Claude or other client, add the `tableau` MCP server to the `mcpServers` object
+  in the config using `config.example.json` or `config.docker.json` as a template. For Claude, open
+  the settings dialog, select the **Developer** section, and click **Edit Config**.
+
+#### Required Environment Variables
+
+| **Variable**      | **Description**                                                                                                                                |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SERVER`          | The URL of the Tableau server.                                                                                                                 |
+| `SITE_NAME`       | The name of the Tableau site to use. For Tableau Server, to specify the default site, set this to an empty string.                             |
+| _Credentials_     | The credentials to use to authenticate to the Tableau server. See [Tableau Authentication](#tableau-authentication) section.                   |
+
+#### Optional Environment Variables
+
+| **Variable**          | **Description**                                                                                     | **Default**                        | **Note**                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ |
+| `DEFAULT_LOG_LEVEL`   | The default logging level of the server.                                                            | `debug`                            |                                                                          |
+| `DISABLE_LOG_MASKING` | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                          |
+| `INCLUDE_TOOLS`       | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts). |
+| `EXCLUDE_TOOLS`       | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                 |
+
+### Running the MCP Inspector
+
+The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a helpful tool to confirm
+your configuration is correct and to explore the Tableau MCP capabilities.
+
+After building the project and setting the environment variables, you can start the MCP Inspector using
 the following commands:
 
 | **Command**              | **Description**                                                                                                              |
@@ -109,7 +152,25 @@ the following commands:
 | `npm run inspect`        | Start the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) which runs the server locally using Node.js.    |
 | `npm run inspect:docker` | Start the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) which runs the server using a Docker container. |
 
-## Debugging
+### Claude Desktop
+
+TODO
+
+### Cursor
+
+TODO
+
+### VSCode
+
+TODO
+
+## Developers
+
+### Contributing
+
+TODO
+
+### Debugging
 
 You can use the
 [VS Code Run and Debug Launcher](https://code.visualstudio.com/docs/debugtest/debugging#_start-a-debugging-session)
