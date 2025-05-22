@@ -18,10 +18,10 @@ The following MCP tools are currently implemented:
 
 | **Variable**       | **Description**                                                                         |
 | ------------------ | --------------------------------------------------------------------------------------- |
-| list-datasources   | Retrieves a list of published data sources from a specified Tableau site (REST API)     |
-| list-fields        | Fetches field metadata (name, description) for the specified datasource (Metadata API)  |
-| query-datasource   | Run a Tableau VizQL query (VDS API)                                                     |
-| read-metadata      | Requests metadata for the specified data source (VDS API)                               |
+| list-datasources   | Retrieves a list of published data sources from a specified Tableau site ([REST API][query])     |
+| list-fields        | Fetches field metadata (name, description) for the specified datasource ([Metadata API][meta])  |
+| query-datasource   | Run a Tableau VizQL query ([VDS API][vds])                                                     |
+| read-metadata      | Requests metadata for the specified data source ([VDS API][vds])                               |
 
 Note: The Tableau MCP project is currently in early development. As we continue to enhance and
 refine the implementation, the available functionality and tools may evolve. We welcome feedback
@@ -43,6 +43,7 @@ To keep up with repo changes:
 1. Pull latest changes: `git pull`
 2. `npm install`
 3. `npm run build`
+4. Relaunch your AI tool or 'refresh' the MCP tools
 
 ### Docker Build
 
@@ -55,7 +56,8 @@ REPOSITORY    TAG       IMAGE ID       CREATED        SIZE
 tableau-mcp   latest    c721228b6dd3   15 hours ago   260MB
 ```
 
-Remember to build the Docker image again whenever you pull the latest repo changes.
+Remember to build the Docker image again whenever you pull the latest repo changes. Also you'll
+need to relaunch your AI tool so it starts using the updated image.
 
 ## Tableau Configuration
 
@@ -150,8 +152,8 @@ template. It should look similar to this:
 ```
 
 For **running with Docker**, create an `env.list` file in the root of the project using `env.example.list`
-as a template. Also create an `mcpServers` JSON snippet using `config.docker.json` as a
-template. It should look similar to this:
+as a template. Also create an `mcpServers` JSON snippet like `config.docker.json`. It should look similar
+to this:
 
 ```json
 {
@@ -171,7 +173,7 @@ These config files will be used in tool configuration explained below.
 | **Variable**      | **Description**                                                                                                                                |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SERVER`          | The URL of the Tableau server.                                                                                                                 |
-| `SITE_NAME`       | The name of the Tableau site to use. For Tableau Server, to specify the default site, set this to an empty string.                             |
+| `SITE_NAME`       | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site.                              |
 | _Credentials_     | The credentials to use to authenticate to the Tableau server. See [Tableau Authentication](#tableau-authentication) section.                   |
 
 #### Optional Environment Variables
@@ -245,3 +247,7 @@ To set up local debugging with breakpoints:
 3. Locate and click the `Run and Debug` button in the Activity Bar.
 4. Select the configuration labeled "`Launch MCP Server`" in the dropdown.
 5. Click the Start Debugging ▶️ button, or press F5.
+
+[query]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources
+[meta]: https://help.tableau.com/current/api/metadata_api/en-us/index.html
+[vds]: https://help.tableau.com/current/api/vizql-data-service/en-us/index.html
