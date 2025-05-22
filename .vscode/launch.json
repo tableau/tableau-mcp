@@ -13,7 +13,6 @@
       "outFiles": ["${workspaceFolder}/**/build/**/*.js"],
       "env": {
         "SERVER": "${config:tableau.mcp.SERVER}",
-        "DATASOURCE_LUID": "${config:tableau.mcp.DATASOURCE_LUID}",
         "SITE_NAME": "${config:tableau.mcp.SITE_NAME}",
         "PAT_NAME": "${config:tableau.mcp.PAT_NAME}",
         "PAT_VALUE": "${config:tableau.mcp.PAT_VALUE}",

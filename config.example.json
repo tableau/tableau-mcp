@@ -5,7 +5,6 @@
       "args": ["build/index.js"],
       "env": {
         "SERVER": "https://my-tableau-server.com",
-        "DATASOURCE_LUID": "",
         "SITE_NAME": "",
         "PAT_NAME": "",
         "PAT_VALUE": "",

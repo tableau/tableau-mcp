@@ -1,6 +1,5 @@
 export interface ProcessEnvEx {
   SERVER: string | undefined;
-  DATASOURCE_LUID: string | undefined;
   USERNAME: string | undefined;
   PASSWORD: string | undefined;
   SITE_NAME: string | undefined;

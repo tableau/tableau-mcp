@@ -51,7 +51,7 @@ describe('listFieldsTool', () => {
   it('should create a tool instance with correct properties', () => {
     expect(listFieldsTool.name).toBe('list-fields');
     expect(listFieldsTool.description).toContain('Fetches field metadata');
-    expect(listFieldsTool.paramsSchema).toEqual({});
+    expect(listFieldsTool.paramsSchema).toMatchObject({ datasourceLuid: expect.any(Object) });
   });
 
   it('should successfully fetch and return field metadata', async () => {
@@ -61,7 +61,7 @@ describe('listFieldsTool', () => {
 
     expect(result.isError).toBe(false);
     expect(JSON.parse(result.content[0].text as string)).toEqual(mockMetadataResponses.success);
-    expect(mocks.mockGraphql).toHaveBeenCalledWith(getGraphqlQuery());
+    expect(mocks.mockGraphql).toHaveBeenCalledWith(getGraphqlQuery('test-luid'));
   });
 
   it('should return error when no published datasources are found', async () => {
@@ -70,7 +70,7 @@ describe('listFieldsTool', () => {
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     expect(result.content[0].text as string).toBe('No published datasources in response');
-    expect(mocks.mockGraphql).toHaveBeenCalledWith(getGraphqlQuery());
+    expect(mocks.mockGraphql).toHaveBeenCalledWith(getGraphqlQuery('test-luid'));
   });
 
   it('should handle API errors gracefully', async () => {
@@ -85,7 +85,7 @@ describe('listFieldsTool', () => {
 
 async function getToolResult(): Promise<CallToolResult> {
   return await listFieldsTool.callback(
-    {},
+    { datasourceLuid: 'test-luid' },
     {
       signal: new AbortController().signal,
       requestId: 'test-request-id',

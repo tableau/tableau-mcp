@@ -1,12 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 
 import { getConfig } from '../config.js';
 import { getNewRestApiInstanceAsync } from '../restApiInstance.js';
 import { Tool } from './tool.js';
 
-export const getGraphqlQuery = (): string => `
+export const getGraphqlQuery = (datasourceLuid: string): string => `
   query Datasources {
-    publishedDatasources(filter: { luid: "${getConfig().datasourceLuid}" }) {
+    publishedDatasources(filter: { luid: "${datasourceLuid}" }) {
       name
       description
       datasourceFilters { field { name description } }
@@ -17,14 +18,16 @@ export const getGraphqlQuery = (): string => `
 export const listFieldsTool = new Tool({
   name: 'list-fields',
   description:
-    "Fetches field metadata (name, description) for the hard-wired datasource via Tableau's Metadata API, reusing the shared get_datasource_query function. Returns a list of field dicts or an error message.",
-  paramsSchema: {},
-  callback: async (): Promise<CallToolResult> => {
+    "Fetches field metadata (name, description) for the specified datasource via Tableau's Metadata API, reusing the shared get_datasource_query function. Returns a list of field dicts or an error message.",
+  paramsSchema: {
+    datasourceLuid: z.string(),
+  },
+  callback: async ({ datasourceLuid }): Promise<CallToolResult> => {
     const config = getConfig();
-    const query = getGraphqlQuery();
+    const query = getGraphqlQuery(datasourceLuid);
 
     return await listFieldsTool.logAndExecute({
-      args: undefined,
+      args: { datasourceLuid },
       callback: async (requestId) => {
         const restApi = await getNewRestApiInstanceAsync(
           config.server,

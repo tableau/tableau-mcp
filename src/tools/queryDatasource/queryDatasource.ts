@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
@@ -9,13 +10,16 @@ import { DatasourceQuery } from './querySchemas.js';
 export const queryDatasourceTool = new Tool({
   name: 'query-datasource',
   description: queryDatasourceToolDescription,
-  paramsSchema: { datasourceQuery: DatasourceQuery },
-  callback: async ({ datasourceQuery }): Promise<CallToolResult> => {
+  paramsSchema: {
+    datasourceLuid: z.string(),
+    datasourceQuery: DatasourceQuery,
+  },
+  callback: async ({ datasourceLuid, datasourceQuery }): Promise<CallToolResult> => {
     const config = getConfig();
     return await queryDatasourceTool.logAndExecute({
-      args: datasourceQuery,
+      args: { datasourceLuid, datasourceQuery },
       callback: async (requestId) => {
-        const datasource = { datasourceLuid: config.datasourceLuid };
+        const datasource = { datasourceLuid };
         const options = {
           returnFormat: 'OBJECTS',
           debug: false,

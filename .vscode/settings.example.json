@@ -1,6 +1,5 @@
 {
   "tableau.mcp.SERVER": "https://my-tableau-server.com",
-  "tableau.mcp.DATASOURCE_LUID": "",
   "tableau.mcp.SITE_NAME": "",
   "tableau.mcp.PAT_NAME": "",
   "tableau.mcp.PAT_VALUE": "",

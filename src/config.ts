@@ -4,7 +4,6 @@ import invariant from './utils/invariant.js';
 
 class Config {
   server: string;
-  datasourceLuid: string;
   authConfig: AuthConfig;
   defaultLogLevel: string;
   disableLogMasking: boolean;
@@ -15,7 +14,6 @@ class Config {
     let { SITE_NAME: siteName } = process.env;
     const {
       SERVER: server,
-      DATASOURCE_LUID: datasourceLuid,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
       JWT: jwt,
@@ -55,10 +53,8 @@ class Config {
     }
 
     invariant(server, 'The environment variable SERVER is not set');
-    invariant(datasourceLuid, 'The environment variable DATASOURCE_LUID is not set');
 
     this.server = server;
-    this.datasourceLuid = datasourceLuid;
 
     if (patName && patValue && (!authType || authType === 'pat')) {
       this.authConfig = {
