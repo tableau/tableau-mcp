@@ -41,6 +41,28 @@ describe('parseAndValidateFilterString', () => {
     const result = parseAndValidateFilterString('name:eq:First,name:eq:Second');
     expect(result).toBe('name:eq:Second');
   });
+
+  it('accepts valid ISO 8601 date-time for createdAt', () => {
+    const result = parseAndValidateFilterString('createdAt:eq:2016-05-04T21:24:49Z');
+    expect(result).toBe('createdAt:eq:2016-05-04T21%3A24%3A49Z');
+  });
+
+  it('throws on invalid date-time for createdAt', () => {
+    expect(() => parseAndValidateFilterString('createdAt:eq:2016-05-04')).toThrow();
+    expect(() => parseAndValidateFilterString('createdAt:eq:not-a-date')).toThrow();
+    expect(() => parseAndValidateFilterString('createdAt:eq:2016-05-04T21:24:49')).toThrow();
+  });
+
+  it('accepts valid ISO 8601 date-time for updatedAt', () => {
+    const result = parseAndValidateFilterString('updatedAt:eq:2020-12-31T23:59:59Z');
+    expect(result).toBe('updatedAt:eq:2020-12-31T23%3A59%3A59Z');
+  });
+
+  it('throws on invalid date-time for updatedAt', () => {
+    expect(() => parseAndValidateFilterString('updatedAt:eq:2020-12-31')).toThrow();
+    expect(() => parseAndValidateFilterString('updatedAt:eq:2020-12-31T23:59:59')).toThrow();
+    expect(() => parseAndValidateFilterString('updatedAt:eq:not-a-date')).toThrow();
+  });
 });
 
 describe('isOperatorAllowed', () => {

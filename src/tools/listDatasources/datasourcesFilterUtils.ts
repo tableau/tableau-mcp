@@ -91,10 +91,16 @@ export function isOperatorAllowed(field: FilterField, operator: FilterOperator):
   return allowed.includes(operator);
 }
 
+function isISO8601DateTime(value: string): boolean {
+  // Basic ISO 8601 regex (covers most common cases)
+  // Example: 2016-05-04T21:24:49Z
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value);
+}
+
 /**
  * Parses and validates a Tableau-style filter string
- * @param filterString e.g. 'name:eq:Project+Views,type:eq:Workbook'
- * @returns modified filter string with validated and decoded filters
+ * @param filterString e.g. 'name:eq:Project Views,type:eq:Workbook'
+ * @returns modified filter string with validated and encoded filters
  * @throws ZodError or custom error for invalid operators
  */
 export function parseAndValidateFilterString(filterString: string): string {
@@ -115,6 +121,13 @@ export function parseAndValidateFilterString(filterString: string): string {
 
     if (!isOperatorAllowed(field, operator)) {
       throw new Error(`Operator '${operator}' is not allowed for field '${field}'`);
+    }
+
+    // Validate ISO 8601 for createdAt and updatedAt
+    if ((field === 'createdAt' || field === 'updatedAt') && !isISO8601DateTime(valueRaw)) {
+      throw new Error(
+        `Value for field '${field}' must be a valid ISO 8601 date-time string (e.g., 2016-05-04T21:24:49Z)`,
+      );
     }
 
     const value = encodeURIComponent(valueRaw);
