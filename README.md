@@ -14,6 +14,15 @@ Key features:
 * Usable by AI tools which support MCP Tools (e.g., Claude Desktop, Cursor and others)
 * Works with any published data source on either Tableau Cloud or Tableau Server
 
+The following MCP tools are currently implemented:
+
+| **Variable**       | **Description**                                                                         |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| list-datasources   | Retrieves a list of published data sources from a specified Tableau site (REST API)     |
+| list-fields        | Fetches field metadata (name, description) for the specified datasource (Metadata API)  |
+| query-datasource   | Run a Tableau VizQL query (VDS API)                                                     |
+| read-metadata      | Requests metadata for the specified data source (VDS API)                               |
+
 Note: The Tableau MCP project is currently in early development. As we continue to enhance and
 refine the implementation, the available functionality and tools may evolve. We welcome feedback
 and contributions to help shape the future of this project.
@@ -53,13 +62,13 @@ Remember to build the Docker image again whenever you pull the latest repo chang
 Tableau MCP works with both Tableau Server and Tableau cloud data with these prerequisites:
 
 * Only published data sources are supported
-* VDS (VizQL Data Service) must be enabled (TODO: is this already on everywhere?)
+* VDS (VizQL Data Service) must be enabled (Tableau Server users may need to [enable it](https://help.tableau.com/current/server-linux/en-us/cli_configuration-set_tsm.htm#featuresvizqldataservicedeploywithtsm))
 * Metadata API must be enabled (Tableau Server users may need to [enable it](https://help.tableau.com/current/api/metadata_api/en-us/docs/meta_api_start.html#enable-the-tableau-metadata-api-for-tableau-server))
 
 ## Tableau Authentication
 
 Tableau MCP requires authentication in order to connect with your Tableau Server or Tableau Cloud
-site. This auth needs to have access to the published data source(s) you plan to access.
+site. This authenticated user must have access to the published data source(s) you plan to access.
 
 Several different authentication options are supported, but you only need to provide one.
 
@@ -107,20 +116,55 @@ environment variables.
 
 ## Configuring AI Tools
 
+AI tools can connect to Tableau MCP in two different ways:
 
+* Running locally: the tool runs Tableau MCP as needed using `node build/index.js`
+* Running in Docker: the tool runs Tableau MCP as a Docker container
+
+Either method will work. The Docker path is slightly easier because all the environment variables
+are stored in one file rather than in each AI tool's config section.
 
 ### Environment Variables
 
-- Docker users should create an `env.list` file in the root of the project using `env.example.list`
-  as a template.
+Depending on your desired mode, create your environment configuration as follows:
 
-- If you are using [MCP Inspector](https://github.com/modelcontextprotocol/inspector), create a
-  `config.json` file in the root of the project using `config.example.json` as a template. Docker
-  users can skip this step.
+For **running locally**, create an `mcpServers` JSON snippet using `config.example.json` as a
+template. It should look similar to this:
 
-- If you are using Claude or other client, add the `tableau` MCP server to the `mcpServers` object
-  in the config using `config.example.json` or `config.docker.json` as a template. For Claude, open
-  the settings dialog, select the **Developer** section, and click **Edit Config**.
+```json
+{
+  "mcpServers": {
+    "tableau": {
+      "command": "node",
+      "args": ["/full-path-to-tableau-mcp/build/index.js"],
+      "env": {
+        "SERVER": "https://my-tableau-server.com",
+        "SITE_NAME": "",
+        "PAT_NAME": "",
+        "PAT_VALUE": "",
+        ... etc
+      }
+    }
+  }
+}
+```
+
+For **running with Docker**, create an `env.list` file in the root of the project using `env.example.list`
+as a template. Also create an `mcpServers` JSON snippet using `config.docker.json` as a
+template. It should look similar to this:
+
+```json
+{
+  "mcpServers": {
+    "tableau": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "--env-file", "/full-path-to-tableau-mcp/env.list", "tableau-mcp"]
+    }
+  }
+}
+```
+
+These config files will be used in tool configuration explained below.
 
 #### Required Environment Variables
 
@@ -142,10 +186,13 @@ environment variables.
 ### Running the MCP Inspector
 
 The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a helpful tool to confirm
-your configuration is correct and to explore the Tableau MCP capabilities.
+your configuration is correct and to explore Tableau MCP capabilities.
 
-After building the project and setting the environment variables, you can start the MCP Inspector using
-the following commands:
+Create a `config.json` file in the root of the project using `config.example.json` as a template. (Docker
+users can skip this step.)
+
+After building the project and setting the environment variables in the `env.list` file, you can start the
+MCP Inspector using either of the following commands:
 
 | **Command**              | **Description**                                                                                                              |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
@@ -154,7 +201,10 @@ the following commands:
 
 ### Claude Desktop
 
-TODO
+For Claude, open the settings dialog, select the **Developer** section, and click **Edit Config**.
+
+Add the `tableau` MCP server to the `mcpServers` object in the config using `config.example.json` or
+`config.docker.json` as a template.
 
 ### Cursor
 
