@@ -19,11 +19,6 @@ describe('parseAndValidateFilterString', () => {
     expect(result).toBe('name:eq:Superstore,projectName:eq:Finance');
   });
 
-  it('encodes special characters in values', () => {
-    const result = parseAndValidateFilterString('name:eq:Project Views');
-    expect(result).toBe('name:eq:Project%20Views');
-  });
-
   it('throws on invalid field', () => {
     expect(() => parseAndValidateFilterString('notAField:eq:value')).toThrow();
   });
@@ -44,7 +39,7 @@ describe('parseAndValidateFilterString', () => {
 
   it('accepts valid ISO 8601 date-time for createdAt', () => {
     const result = parseAndValidateFilterString('createdAt:eq:2016-05-04T21:24:49Z');
-    expect(result).toBe('createdAt:eq:2016-05-04T21%3A24%3A49Z');
+    expect(result).toBe('createdAt:eq:2016-05-04T21:24:49Z');
   });
 
   it('throws on invalid date-time for createdAt', () => {
@@ -55,7 +50,7 @@ describe('parseAndValidateFilterString', () => {
 
   it('accepts valid ISO 8601 date-time for updatedAt', () => {
     const result = parseAndValidateFilterString('updatedAt:eq:2020-12-31T23:59:59Z');
-    expect(result).toBe('updatedAt:eq:2020-12-31T23%3A59%3A59Z');
+    expect(result).toBe('updatedAt:eq:2020-12-31T23:59:59Z');
   });
 
   it('throws on invalid date-time for updatedAt', () => {

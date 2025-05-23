@@ -100,7 +100,7 @@ function isISO8601DateTime(value: string): boolean {
 /**
  * Parses and validates a Tableau-style filter string
  * @param filterString e.g. 'name:eq:Project Views,type:eq:Workbook'
- * @returns modified filter string with validated and encoded filters
+ * @returns validated filter string
  * @throws ZodError or custom error for invalid operators
  */
 export function parseAndValidateFilterString(filterString: string): string {
@@ -114,7 +114,7 @@ export function parseAndValidateFilterString(filterString: string): string {
       throw new Error(`Invalid filter expression format: "${expr}"`);
     }
 
-    const valueRaw = valueParts.join(':');
+    const value = valueParts.join(':');
 
     const field = FilterFieldSchema.parse(fieldRaw);
     const operator = FilterOperatorSchema.parse(operatorRaw);
@@ -124,13 +124,11 @@ export function parseAndValidateFilterString(filterString: string): string {
     }
 
     // Validate ISO 8601 for createdAt and updatedAt
-    if ((field === 'createdAt' || field === 'updatedAt') && !isISO8601DateTime(valueRaw)) {
+    if ((field === 'createdAt' || field === 'updatedAt') && !isISO8601DateTime(value)) {
       throw new Error(
         `Value for field '${field}' must be a valid ISO 8601 date-time string (e.g., 2016-05-04T21:24:49Z)`,
       );
     }
-
-    const value = encodeURIComponent(valueRaw);
 
     parsedFilters[field] = { field, operator, value };
   }
