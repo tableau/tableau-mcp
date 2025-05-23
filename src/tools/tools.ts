@@ -1,4 +1,4 @@
-import { listDatasourcesTool } from './listDatasources.js';
+import { listDatasourcesTool } from './listDatasources/listDatasources.js';
 import { listFieldsTool } from './listFields.js';
 import { queryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { readMetadataTool } from './readMetadata.js';
