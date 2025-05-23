@@ -104,15 +104,15 @@ const FieldBase = z.object({
 });
 
 const Field = z.union([
-  FieldBase,
-  FieldBase.and(z.object({ function: Function })),
-  FieldBase.and(z.object({ calculation: z.string() })),
+  FieldBase.strict(),
+  FieldBase.extend({ function: Function }).strict(),
+  FieldBase.extend({ calculation: z.string() }).strict(),
 ]);
 
 const FilterField = z.union([
-  z.object({ fieldCaption: z.string() }),
-  z.object({ fieldCaption: z.string(), function: Function }),
-  z.object({ calculation: z.string() }),
+  z.object({ fieldCaption: z.string() }).strict(),
+  z.object({ fieldCaption: z.string(), function: Function }).strict(),
+  z.object({ calculation: z.string() }).strict(),
 ]);
 
 const Filter = z
