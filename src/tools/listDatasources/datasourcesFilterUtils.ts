@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
 // === Field and Operator Definitions ===
+// [Tableau REST API Data Sources filter fields](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_filtering_and_sorting.htm#datasources)
 
-export const FilterFieldSchema = z.enum([
+const FilterFieldSchema = z.enum([
   'authenticationType',
   'connectedWorkbookType',
   'connectionTo',
@@ -35,13 +36,13 @@ export const FilterFieldSchema = z.enum([
   'updatedAt',
 ]);
 
-export type FilterField = z.infer<typeof FilterFieldSchema>;
+type FilterField = z.infer<typeof FilterFieldSchema>;
 
-export const FilterOperatorSchema = z.enum(['eq', 'in', 'gt', 'gte', 'lt', 'lte']);
+const FilterOperatorSchema = z.enum(['eq', 'in', 'gt', 'gte', 'lt', 'lte']);
 
-export type FilterOperator = z.infer<typeof FilterOperatorSchema>;
+type FilterOperator = z.infer<typeof FilterOperatorSchema>;
 
-export const allowedOperatorsByField: Record<FilterField, FilterOperator[]> = {
+const allowedOperatorsByField: Record<FilterField, FilterOperator[]> = {
   authenticationType: ['eq', 'in'],
   connectedWorkbookType: ['eq', 'gt', 'gte', 'lt', 'lte'],
   connectionTo: ['eq', 'in'],
@@ -76,17 +77,17 @@ export const allowedOperatorsByField: Record<FilterField, FilterOperator[]> = {
 
 // === Filter Expression Schema ===
 
-export const FilterExpressionSchema = z.object({
+const _FilterExpressionSchema = z.object({
   field: FilterFieldSchema,
   operator: FilterOperatorSchema,
   value: z.string(),
 });
 
-export type FilterExpression = z.infer<typeof FilterExpressionSchema>;
+type FilterExpression = z.infer<typeof _FilterExpressionSchema>;
 
 // === Validation Utilities ===
 
-export function isOperatorAllowed(field: FilterField, operator: FilterOperator): boolean {
+function isOperatorAllowed(field: FilterField, operator: FilterOperator): boolean {
   const allowed = allowedOperatorsByField[field];
   return allowed.includes(operator);
 }
@@ -104,7 +105,10 @@ function isISO8601DateTime(value: string): boolean {
  * @throws ZodError or custom error for invalid operators
  */
 export function parseAndValidateFilterString(filterString: string): string {
-  const expressions = filterString.split(',').filter(Boolean);
+  const expressions = filterString
+    .split(',')
+    .map((f) => f.trim())
+    .filter(Boolean);
 
   const parsedFilters: Record<string, FilterExpression> = {};
 
@@ -120,7 +124,9 @@ export function parseAndValidateFilterString(filterString: string): string {
     const operator = FilterOperatorSchema.parse(operatorRaw);
 
     if (!isOperatorAllowed(field, operator)) {
-      throw new Error(`Operator '${operator}' is not allowed for field '${field}'`);
+      throw new Error(
+        `Operator '${operator}' is not allowed for field '${field}'. Allowed operators: ${allowedOperatorsByField[field].join(', ')}`,
+      );
     }
 
     // Validate ISO 8601 for createdAt and updatedAt
@@ -133,8 +139,14 @@ export function parseAndValidateFilterString(filterString: string): string {
     parsedFilters[field] = { field, operator, value };
   }
 
-  // Reconstruct the filter string from validated and decoded filters
+  // Reconstruct the filter string from validated filters
   return Object.values(parsedFilters)
     .map((f) => `${f.field}:${f.operator}:${f.value}`)
     .join(',');
 }
+
+export const exportedForTesting = {
+  FilterFieldSchema,
+  FilterOperatorSchema,
+  isOperatorAllowed,
+};

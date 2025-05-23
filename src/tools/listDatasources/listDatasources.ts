@@ -56,9 +56,9 @@ Retrieves a list of published data sources from a specified Tableau site using t
 - \`lte\`: less than or equal
 
 **Filter Expression Notes**
+-  Filter expressions can’t contain ampersand (&) or comma (,) characters even if those characters are encoded.
 - Operators are delimited with colons (:). For example: \`filter=name:eq:Project Views\`
 - Field names, operator names, and values are case-sensitive.
-- Values should be URL-encoded. For example, to search for the workbook named "Project Views", use: \`filter=name:eq:Project+Views\`
 - To filter on multiple fields, combine expressions using a comma:  \`filter=lastLogin:gte:2016-01-01T00:00:00Z,siteRole:eq:Publisher\`
 - Multiple expressions are combined using a logical AND.
 - If you include the same field multiple times, only the last reference is used.
@@ -91,7 +91,7 @@ Retrieves a list of published data sources from a specified Tableau site using t
     const config = getConfig();
     const validatedFilter = filter ? parseAndValidateFilterString(filter) : undefined;
     return await listDatasourcesTool.logAndExecute({
-      args: { filter: validatedFilter },
+      args: { filter },
       callback: async (requestId) => {
         const restApi = await getNewRestApiInstanceAsync(
           config.server,

@@ -1,13 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { exportedForTesting, parseAndValidateFilterString } from './datasourcesFilterUtils.js';
 
-import {
-  FilterFieldSchema,
-  FilterOperatorSchema,
-  isOperatorAllowed,
-  parseAndValidateFilterString,
-} from './datasourcesFilterUtils.js';
+const { FilterFieldSchema, FilterOperatorSchema, isOperatorAllowed } = exportedForTesting;
 
-// --- parseAndValidateFilterString ---
 describe('parseAndValidateFilterString', () => {
   it('parses and validates a single valid filter', () => {
     const result = parseAndValidateFilterString('name:eq:Superstore');
