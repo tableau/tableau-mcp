@@ -24,6 +24,11 @@ Retrieves a list of published data sources from a specified Tableau site using t
   paramsSchema: {
     filter: z.string().optional(),
   },
+  annotations: {
+    title: 'List Datasources',
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
   callback: async ({ filter }): Promise<CallToolResult> => {
     const config = getConfig();
     return await listDatasourcesTool.logAndExecute({

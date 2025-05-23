@@ -31,8 +31,8 @@ class Server extends McpServer {
   }
 
   registerTools = (): void => {
-    for (const { name, description, paramsSchema, callback } of getToolsToRegister()) {
-      this.tool(name, description, paramsSchema, callback);
+    for (const { name, description, paramsSchema, annotations, callback } of getToolsToRegister()) {
+      this.tool(name, description, paramsSchema, annotations, callback);
     }
   };
 
