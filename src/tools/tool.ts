@@ -7,6 +7,7 @@ import { ZodRawShape } from 'zod';
 
 import { getToolLogMessage, log } from '../logging/log.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
+import { formatToolDescription } from './toolDescriptions.js';
 import { ToolName } from './toolName.js';
 
 export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
@@ -26,7 +27,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
 
   constructor({ name, description, paramsSchema, annotations, callback }: ToolParams<Args>) {
     this.name = name;
-    this.description = description;
+    this.description = formatToolDescription(name, description);
     this.paramsSchema = paramsSchema;
     this.annotations = annotations;
     this.callback = callback;
