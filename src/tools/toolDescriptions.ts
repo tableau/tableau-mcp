@@ -4,10 +4,8 @@ import { isToolName, ToolName, toolNames } from './toolName.js';
 type CustomToolDescription = { mode: 'append' | 'replace'; description: string };
 type CustomToolDescriptions = { [key in ToolName]?: CustomToolDescription };
 
-const customToolDescriptions = getCustomToolDescriptions();
-
 export function formatToolDescription(toolName: ToolName, initialDescription: string): string {
-  const customDescription = customToolDescriptions[toolName];
+  const customDescription = getCustomToolDescriptions()[toolName];
   if (!customDescription) {
     return initialDescription;
   }
@@ -22,6 +20,9 @@ export function formatToolDescription(toolName: ToolName, initialDescription: st
 function getCustomToolDescriptions(): CustomToolDescriptions {
   // Format: toolName1::mode::description||toolName2::mode::description||...
   const { customToolDescriptions } = getConfig();
+  if (!customToolDescriptions) {
+    return {};
+  }
 
   return customToolDescriptions.split('||').reduce((acc, parts) => {
     const [toolName, mode, description] = parts.split('::');
@@ -41,3 +42,7 @@ function getCustomToolDescriptions(): CustomToolDescriptions {
     return acc;
   }, {} as CustomToolDescriptions);
 }
+
+export const exportedForTesting = {
+  getCustomToolDescriptions,
+};
