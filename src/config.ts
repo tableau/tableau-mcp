@@ -7,6 +7,7 @@ class Config {
   authConfig: AuthConfig;
   defaultLogLevel: string;
   disableLogMasking: boolean;
+  isDryRun: boolean;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
 
@@ -26,6 +27,7 @@ class Config {
       AUTH_TYPE: authType,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
+      DRY_RUN: dryRun,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
     } = process.env;
@@ -33,6 +35,7 @@ class Config {
     siteName = siteName ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
+    this.isDryRun = dryRun === 'true';
 
     this.includeTools = includeTools
       ? includeTools
