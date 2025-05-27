@@ -34,6 +34,7 @@ describe('server', () => {
         tool.name,
         tool.description,
         tool.paramsSchema,
+        tool.annotations,
         tool.callback,
       );
     }
@@ -49,6 +50,7 @@ describe('server', () => {
         tool.name,
         tool.description,
         tool.paramsSchema,
+        tool.annotations,
         tool.callback,
       );
     }
@@ -65,6 +67,7 @@ describe('server', () => {
           tool.name,
           tool.description,
           tool.paramsSchema,
+          tool.annotations,
           tool.callback,
         );
       } else {
@@ -72,6 +75,7 @@ describe('server', () => {
           tool.name,
           tool.description,
           tool.paramsSchema,
+          tool.annotations,
           tool.callback,
         );
       }

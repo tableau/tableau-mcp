@@ -22,6 +22,11 @@ export const listFieldsTool = new Tool({
   paramsSchema: {
     datasourceLuid: z.string(),
   },
+  annotations: {
+    title: 'List Fields',
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
   callback: async ({ datasourceLuid }): Promise<CallToolResult> => {
     const config = getConfig();
     const query = getGraphqlQuery(datasourceLuid);

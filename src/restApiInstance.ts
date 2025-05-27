@@ -105,6 +105,7 @@ function logRequest(request: RequestInterceptorConfig, requestId: string): void 
     ...(shouldLogWhenLevelIsAtLeast('debug') && {
       headers: maskedRequest.headers,
       data: maskedRequest.data,
+      params: maskedRequest.params,
     }),
   } as const;
 

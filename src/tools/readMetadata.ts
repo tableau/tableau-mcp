@@ -12,6 +12,11 @@ export const readMetadataTool = new Tool({
   paramsSchema: {
     datasourceLuid: z.string(),
   },
+  annotations: {
+    title: 'Read Metadata',
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
   callback: async ({ datasourceLuid }): Promise<CallToolResult> => {
     const config = getConfig();
 

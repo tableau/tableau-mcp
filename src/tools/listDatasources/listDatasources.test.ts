@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { server } from '../server.js';
+import { server } from '../../server.js';
 import { listDatasourcesTool } from './listDatasources.js';
 
 // Mock server.server.sendLoggingMessage since the transport won't be connected.
@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   mockListDatasources: vi.fn(),
 }));
 
-vi.mock('../restApiInstance.js', () => ({
+vi.mock('../../restApiInstance.js', () => ({
   getNewRestApiInstanceAsync: vi.fn().mockResolvedValue({
     datasourcesMethods: {
       listDatasources: mocks.mockListDatasources,

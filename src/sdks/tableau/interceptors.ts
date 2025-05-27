@@ -30,6 +30,7 @@ export function getRequestInterceptorConfig(
     url: config.url ?? 'UNKNOWN URL',
     headers: config.headers,
     data: config.data,
+    params: config.params,
   };
 }
 

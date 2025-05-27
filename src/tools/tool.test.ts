@@ -15,6 +15,11 @@ describe('Tool', () => {
     paramsSchema: {
       param1: z.string(),
     },
+    annotations: {
+      title: 'List Fields',
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
     callback: vi.fn(),
   } as const;
 

@@ -14,6 +14,11 @@ export const queryDatasourceTool = new Tool({
     datasourceLuid: z.string(),
     query: Query,
   },
+  annotations: {
+    title: 'Query Datasource',
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
   callback: async ({ datasourceLuid, query }): Promise<CallToolResult> => {
     const config = getConfig();
     return await queryDatasourceTool.logAndExecute({

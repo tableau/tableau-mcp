@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok, Result } from 'ts-results-es';
 import { ZodRawShape } from 'zod';
 
@@ -13,6 +13,7 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   name: ToolName;
   description: string;
   paramsSchema: Args;
+  annotations: ToolAnnotations;
   callback: ToolCallback<Args>;
 };
 
@@ -20,12 +21,14 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   name: ToolName;
   description: string;
   paramsSchema: Args;
+  annotations: ToolAnnotations;
   callback: ToolCallback<Args>;
 
-  constructor({ name, description, paramsSchema, callback }: ToolParams<Args>) {
+  constructor({ name, description, paramsSchema, annotations, callback }: ToolParams<Args>) {
     this.name = name;
     this.description = description;
     this.paramsSchema = paramsSchema;
+    this.annotations = annotations;
     this.callback = callback;
   }
 

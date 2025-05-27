@@ -1,5 +1,4 @@
-import { ZodiosClass, ZodiosInstance } from '@zodios/core';
-import { ZodiosEndpointDefinitions } from '@zodios/core';
+import { ZodiosClass, ZodiosEndpointDefinitions, ZodiosInstance } from '@zodios/core';
 
 export default class Methods<T extends ZodiosEndpointDefinitions> {
   protected _apiClient: ZodiosInstance<T>;
