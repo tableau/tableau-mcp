@@ -2,6 +2,10 @@ import jwt from 'jsonwebtoken';
 
 import { getJwt } from './getJwt.js';
 
+vi.mock('node:crypto', () => {
+  return { randomUUID: vi.fn(() => '123e4567-e89b-12d3-a456-426614174000') };
+});
+
 describe('getJwt', () => {
   const mockConnectedApp = {
     clientId: 'test-client-id',
@@ -11,10 +15,6 @@ describe('getJwt', () => {
 
   const mockUsername = 'test-user';
   const mockScopes = ['read', 'write'];
-
-  beforeEach(() => {
-    vi.spyOn(crypto, 'randomUUID').mockReturnValue('123e4567-e89b-12d3-a456-426614174000');
-  });
 
   afterEach(() => {
     vi.restoreAllMocks();

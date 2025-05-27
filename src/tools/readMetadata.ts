@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../config.js';
@@ -28,11 +29,13 @@ export const readMetadataTool = new Tool({
           config.authConfig,
           requestId,
         );
-        return await restApi.vizqlDataServiceMethods.readMetadata({
-          datasource: {
-            datasourceLuid,
-          },
-        });
+        return new Ok(
+          await restApi.vizqlDataServiceMethods.readMetadata({
+            datasource: {
+              datasourceLuid,
+            },
+          }),
+        );
       },
     });
   },

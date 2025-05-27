@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
 
 import { server } from '../../server.js';
 import { queryDatasourceTool } from './queryDatasource.js';
@@ -45,6 +46,10 @@ vi.mock('../../restApiInstance.js', () => ({
   }),
 }));
 
+vi.mock('node:crypto', () => {
+  return { randomUUID: vi.fn(() => '123e4567-e89b-12d3-a456-426614174000') };
+});
+
 describe('queryDatasourceTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -57,7 +62,7 @@ describe('queryDatasourceTool', () => {
   });
 
   it('should successfully query the datasource', async () => {
-    mocks.mockQueryDatasource.mockResolvedValue(mockVdsResponses.success);
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
 
     const result = await getToolResult();
 
@@ -123,7 +128,9 @@ describe('queryDatasourceTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toBe(errorMessage);
+    expect(result.content[0].text).toBe(
+      'requestId: 123e4567-e89b-12d3-a456-426614174000, error: API Error',
+    );
   });
 });
 

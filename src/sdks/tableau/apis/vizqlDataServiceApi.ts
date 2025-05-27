@@ -159,7 +159,7 @@ export const QueryOutput = z
   .partial()
   .passthrough();
 
-const vizqlDataServiceApi = makeApi([
+export const vizqlDataServiceApi = makeApi([
   {
     method: 'post',
     path: '/query-datasource',
@@ -174,6 +174,12 @@ const vizqlDataServiceApi = makeApi([
       },
     ],
     response: QueryOutput,
+    errors: [
+      {
+        status: 'default',
+        schema: TableauError,
+      },
+    ],
   },
   {
     method: 'post',

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok, Result } from 'ts-results-es';
+import { Result } from 'ts-results-es';
 import { ZodRawShape } from 'zod';
 
 import { getToolLogMessage, log } from '../logging/log.js';
@@ -36,53 +36,75 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     log.debug(getToolLogMessage(this.name, args));
   }
 
-  logAndExecute = async <T>({
+  // Overload for E = undefined (getErrorText omitted)
+  async logAndExecute<T>(params: {
+    args: unknown;
+    callback: (requestId: string) => Promise<Result<T, undefined>>;
+  }): Promise<CallToolResult>;
+
+  // Overload for E != undefined (getErrorText required)
+  async logAndExecute<T, E>(params: {
+    args: unknown;
+    callback: (requestId: string) => Promise<Result<T, E>>;
+    getErrorText: (error: E) => string;
+  }): Promise<CallToolResult>;
+
+  // Implementation
+  async logAndExecute<T, E = undefined>({
     args,
     callback,
+    getErrorText,
   }: {
     args: unknown;
-    callback: (requestId: string) => Promise<T>;
-  }): Promise<CallToolResult> => {
+    callback: (requestId: string) => Promise<Result<T, E>>;
+    getErrorText?: (error: E) => string;
+  }): Promise<CallToolResult> {
+    const requestId = randomUUID();
+
     this.logInvocation(args);
 
-    const result = await getResult(callback);
+    try {
+      const result = await callback(requestId);
 
-    if (result.isOk()) {
-      return {
-        isError: false,
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(result.value),
-          },
-        ],
-      };
+      if (result.isOk()) {
+        return {
+          isError: false,
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result.value),
+            },
+          ],
+        };
+      }
+
+      if (getErrorText) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: getErrorText(result.error),
+            },
+          ],
+        };
+      } else {
+        return getErrorResult(requestId, result.error);
+      }
+    } catch (error) {
+      return getErrorResult(requestId, error);
     }
-
-    return {
-      isError: true,
-      content: [
-        {
-          type: 'text',
-          text: result.error.message,
-        },
-      ],
-    };
-  };
+  }
 }
 
-async function getResult<T>(
-  callback: (requestId: string) => Promise<T>,
-): Promise<Result<T, Error>> {
-  const requestId = randomUUID();
-
-  try {
-    return Ok(await callback(requestId));
-  } catch (error) {
-    if (error instanceof Error) {
-      return Err(error);
-    }
-
-    return Err(new Error(`requestId: ${requestId}, error: ${getExceptionMessage(error)}`));
-  }
+function getErrorResult(requestId: string, error: unknown): CallToolResult {
+  return {
+    isError: true,
+    content: [
+      {
+        type: 'text',
+        text: `requestId: ${requestId}, error: ${getExceptionMessage(error)}`,
+      },
+    ],
+  };
 }

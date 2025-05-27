@@ -1,4 +1,5 @@
-import { Zodios } from '@zodios/core';
+import { isErrorFromAlias, Zodios } from '@zodios/core';
+import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
@@ -6,6 +7,8 @@ import {
   QueryOutput,
   QueryRequest,
   ReadMetadataRequest,
+  TableauError,
+  vizqlDataServiceApi,
   vizqlDataServiceApis,
 } from '../apis/vizqlDataServiceApi.js';
 import { Credentials } from '../types/credentials.js';
@@ -20,8 +23,16 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
 
   queryDatasource = async (
     queryRequest: z.infer<typeof QueryRequest>,
-  ): Promise<z.infer<typeof QueryOutput>> => {
-    return await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader });
+  ): Promise<Result<z.infer<typeof QueryOutput>, z.infer<typeof TableauError>>> => {
+    try {
+      return Ok(await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader }));
+    } catch (error) {
+      if (isErrorFromAlias(vizqlDataServiceApi, 'queryDatasource', error)) {
+        return Err(error.response.data);
+      }
+
+      throw error;
+    }
   };
 
   readMetadata = async (
