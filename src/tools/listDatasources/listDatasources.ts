@@ -56,7 +56,7 @@ Retrieves a list of published data sources from a specified Tableau site using t
 - \`lte\`: less than or equal
 
 **Filter Expression Notes**
--  Filter expressions can’t contain ampersand (&) or comma (,) characters even if those characters are encoded.
+- Filter expressions can’t contain ampersand (&) or comma (,) characters even if those characters are encoded.
 - Operators are delimited with colons (:). For example: \`filter=name:eq:Project Views\`
 - Field names, operator names, and values are case-sensitive.
 - To filter on multiple fields, combine expressions using a comma:  \`filter=lastLogin:gte:2016-01-01T00:00:00Z,siteRole:eq:Publisher\`
