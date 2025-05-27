@@ -5,6 +5,7 @@ import { getConfig } from '../../config.js';
 import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
 import { TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Tool } from '../tool.js';
+import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
 import { DatasourceQuery } from './querySchemas.js';
 
@@ -47,7 +48,7 @@ export const queryDatasourceTool = new Tool({
         return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
       },
       getErrorText: (error: z.infer<typeof TableauError>) => {
-        return JSON.stringify(error);
+        return JSON.stringify(handleQueryDatasourceError(error));
       },
     });
   },

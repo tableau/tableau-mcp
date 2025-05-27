@@ -94,7 +94,13 @@ describe('queryDatasourceTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toBe(JSON.stringify(mockVdsResponses.error));
+    expect(result.content[0].text).toBe(
+      JSON.stringify({
+        ...mockVdsResponses.error,
+        condition: 'Validation failed',
+        details: "The incoming request isn't valid per the validation rules.",
+      }),
+    );
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
       datasource: {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
