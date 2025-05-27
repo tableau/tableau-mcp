@@ -43,6 +43,16 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     args: unknown;
     callback: (requestId: string) => Promise<T>;
   }): Promise<CallToolResult> => {
+    return await this._logAndExecute({ args, callback });
+  };
+
+  protected _logAndExecute = async <T>({
+    args,
+    callback,
+  }: {
+    args: unknown;
+    callback: (requestId: string) => Promise<T>;
+  }): Promise<CallToolResult> => {
     this.logInvocation(args);
 
     const result = await getResult(callback);
