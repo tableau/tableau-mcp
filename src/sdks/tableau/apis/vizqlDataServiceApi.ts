@@ -223,7 +223,7 @@ const TopNFilter = FilterBase.extend({
   direction: z.enum(['TOP', 'BOTTOM']).optional().default('TOP'),
 });
 
-const Filter = z.discriminatedUnion('filterType', [
+const Filter = z.union([
   SetFilter.strict(),
   TopNFilter.strict(),
   ...MatchFilter.options,
