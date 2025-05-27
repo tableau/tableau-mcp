@@ -17,6 +17,12 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   callback: ToolCallback<Args>;
 };
 
+type LogAndExecuteParams<T, E> = {
+  args: unknown;
+  callback: (requestId: string) => Promise<Result<T, E>>;
+  getErrorText?: (error: E) => string;
+};
+
 export class Tool<Args extends ZodRawShape | undefined = undefined> {
   name: ToolName;
   description: string;
@@ -37,28 +43,19 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   }
 
   // Overload for E = undefined (getErrorText omitted)
-  async logAndExecute<T>(params: {
-    args: unknown;
-    callback: (requestId: string) => Promise<Result<T, undefined>>;
-  }): Promise<CallToolResult>;
+  async logAndExecute<T>(
+    params: Omit<LogAndExecuteParams<T, undefined>, 'getErrorText'>,
+  ): Promise<CallToolResult>;
 
   // Overload for E != undefined (getErrorText required)
-  async logAndExecute<T, E>(params: {
-    args: unknown;
-    callback: (requestId: string) => Promise<Result<T, E>>;
-    getErrorText: (error: E) => string;
-  }): Promise<CallToolResult>;
+  async logAndExecute<T, E>(params: Required<LogAndExecuteParams<T, E>>): Promise<CallToolResult>;
 
   // Implementation
-  async logAndExecute<T, E = undefined>({
+  async logAndExecute<T, E>({
     args,
     callback,
     getErrorText,
-  }: {
-    args: unknown;
-    callback: (requestId: string) => Promise<Result<T, E>>;
-    getErrorText?: (error: E) => string;
-  }): Promise<CallToolResult> {
+  }: LogAndExecuteParams<T, E>): Promise<CallToolResult> {
     const requestId = randomUUID();
 
     this.logInvocation(args);
