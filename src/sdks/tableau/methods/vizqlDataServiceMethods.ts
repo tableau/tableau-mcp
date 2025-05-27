@@ -8,7 +8,6 @@ import {
   QueryRequest,
   ReadMetadataRequest,
   TableauError,
-  vizqlDataServiceApi,
   vizqlDataServiceApis,
 } from '../apis/vizqlDataServiceApi.js';
 import { Credentials } from '../types/credentials.js';
@@ -27,7 +26,7 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
     try {
       return Ok(await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader }));
     } catch (error) {
-      if (isErrorFromAlias(vizqlDataServiceApi, 'queryDatasource', error)) {
+      if (isErrorFromAlias(this._apiClient.api, 'queryDatasource', error)) {
         return Err(error.response.data);
       }
 

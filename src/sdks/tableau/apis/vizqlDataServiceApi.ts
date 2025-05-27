@@ -159,7 +159,7 @@ export const QueryOutput = z
   .partial()
   .passthrough();
 
-export const vizqlDataServiceApi = makeApi([
+const vizqlDataServiceApi = makeApi([
   {
     method: 'post',
     path: '/query-datasource',
