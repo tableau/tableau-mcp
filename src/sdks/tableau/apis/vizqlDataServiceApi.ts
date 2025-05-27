@@ -124,7 +124,7 @@ const SimpleFilterBase = z.object({
 
 const SetFilter = SimpleFilterBase.extend({
   filterType: z.literal('SET'),
-  values: z.array(z.any()),
+  values: z.union([z.array(z.string()), z.array(z.number()), z.array(z.boolean())]),
   exclude: z.boolean().optional().default(false),
 });
 
@@ -232,7 +232,7 @@ const Filter = z.union([
   ...RelativeDateFilter.options,
 ]);
 
-export const Query = z.object({
+export const Query = z.strictObject({
   fields: z.array(Field),
   filters: z.array(Filter).optional(),
 });
