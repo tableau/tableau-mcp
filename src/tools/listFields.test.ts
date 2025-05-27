@@ -31,8 +31,6 @@ const mockMetadataResponses = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   mockGraphql: vi.fn(),
-  mockGraphqlSuccess: vi.fn().mockResolvedValue(mockMetadataResponses.success),
-  mockGraphqlError: vi.fn().mockRejectedValue(mockMetadataResponses.error),
 }));
 
 vi.mock('../restApiInstance.js', () => ({
