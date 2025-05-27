@@ -50,9 +50,6 @@ const Function = z.enum([
   'TRUNC_MONTH',
   'TRUNC_WEEK',
   'TRUNC_DAY',
-  'AGG',
-  'NONE',
-  'UNSPECIFIED',
 ]);
 
 const FieldMetadata = z
@@ -125,6 +122,42 @@ const SimpleFilterBase = z.object({
   context: z.boolean().optional().default(false),
 });
 
+const SetFilter = SimpleFilterBase.extend({
+  filterType: z.literal('SET'),
+  values: z.array(z.any()),
+  exclude: z.boolean().optional().default(false),
+});
+
+const RelativeDateFilterBase = SimpleFilterBase.extend({
+  filterType: z.literal('RELATIVE_DATE'),
+  periodType: z.enum(['MINUTES', 'HOURS', 'DAYS', 'WEEKS', 'MONTHS', 'QUARTERS', 'YEARS']),
+  anchorDate: z.string().optional(),
+  includeNulls: z.boolean().optional().default(false),
+});
+
+const RelativeDateFilter = z.discriminatedUnion('dateRangeType', [
+  RelativeDateFilterBase.extend({ dateRangeType: z.literal('CURRENT') }).strict(),
+  RelativeDateFilterBase.extend({ dateRangeType: z.literal('LAST') }).strict(),
+  RelativeDateFilterBase.extend({ dateRangeType: z.literal('NEXT') }).strict(),
+  RelativeDateFilterBase.extend({ dateRangeType: z.literal('TODATE') }).strict(),
+  RelativeDateFilterBase.extend({ dateRangeType: z.literal('LASTN'), rangeN: z.number() }).strict(),
+  RelativeDateFilterBase.extend({ dateRangeType: z.literal('NEXTN'), rangeN: z.number() }).strict(),
+]);
+
+const MatchFilterBase = SimpleFilterBase.extend({
+  filterType: z.literal('MATCH'),
+  startsWith: z.string().optional(),
+  endsWith: z.string().optional(),
+  contains: z.string().optional(),
+  exclude: z.boolean().optional().default(false),
+});
+
+const MatchFilter = z.union([
+  MatchFilterBase.extend({ startsWith: z.string() }).strict(),
+  MatchFilterBase.extend({ endsWith: z.string() }).strict(),
+  MatchFilterBase.extend({ contains: z.string() }).strict(),
+]);
+
 const QuantitativeNumericalFilterBase = FilterBase.extend({
   filterType: z.literal('QUANTITATIVE_NUMERICAL'),
 });
@@ -183,48 +216,12 @@ const QuantitativeDateFilter = z.discriminatedUnion('quantitativeFilterType', [
   }).strict(),
 ]);
 
-const SetFilter = SimpleFilterBase.extend({
-  filterType: z.literal('SET'),
-  values: z.array(z.any()),
-  exclude: z.boolean().optional().default(false),
-});
-
-const RelativeDateFilterBase = SimpleFilterBase.extend({
-  filterType: z.literal('RELATIVE_DATE'),
-  periodType: z.enum(['MINUTES', 'HOURS', 'DAYS', 'WEEKS', 'MONTHS', 'QUARTERS', 'YEARS']),
-  anchorDate: z.string().optional(),
-  includeNulls: z.boolean().optional().default(false),
-});
-
-const RelativeDateFilter = z.discriminatedUnion('dateRangeType', [
-  RelativeDateFilterBase.extend({ dateRangeType: z.literal('CURRENT') }).strict(),
-  RelativeDateFilterBase.extend({ dateRangeType: z.literal('LAST') }).strict(),
-  RelativeDateFilterBase.extend({ dateRangeType: z.literal('NEXT') }).strict(),
-  RelativeDateFilterBase.extend({ dateRangeType: z.literal('TODATE') }).strict(),
-  RelativeDateFilterBase.extend({ dateRangeType: z.literal('LASTN'), rangeN: z.number() }).strict(),
-  RelativeDateFilterBase.extend({ dateRangeType: z.literal('NEXTN'), rangeN: z.number() }).strict(),
-]);
-
 const TopNFilter = FilterBase.extend({
   filterType: z.literal('TOP'),
   howMany: z.number(),
   fieldToMeasure: FilterField,
-  direction: z.enum(['TOP', 'BOTTOM']).optional(),
+  direction: z.enum(['TOP', 'BOTTOM']).optional().default('TOP'),
 });
-
-const MatchFilterBase = SimpleFilterBase.extend({
-  filterType: z.literal('MATCH'),
-  startsWith: z.string().optional(),
-  endsWith: z.string().optional(),
-  contains: z.string().optional(),
-  exclude: z.boolean().optional().default(false),
-});
-
-const MatchFilter = z.union([
-  MatchFilterBase.extend({ startsWith: z.string() }).strict(),
-  MatchFilterBase.extend({ endsWith: z.string() }).strict(),
-  MatchFilterBase.extend({ contains: z.string() }).strict(),
-]);
 
 const Filter = z.discriminatedUnion('filterType', [
   SetFilter.strict(),
