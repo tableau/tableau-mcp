@@ -1,8 +1,6 @@
 import { makeApi, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
-import { datasourceLuidSchema } from '../../../tools/datasourceLuidSchema.js';
-
 const Connection = z.object({
   connectionLuid: z.string().optional(),
   connectionUsername: z.string(),
@@ -10,7 +8,7 @@ const Connection = z.object({
 });
 
 const Datasource = z.object({
-  datasourceLuid: datasourceLuidSchema,
+  datasourceLuid: z.string(),
   connections: z.array(Connection).optional(),
 });
 

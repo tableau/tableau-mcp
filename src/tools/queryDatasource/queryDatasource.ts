@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { getConfig } from '../../config.js';
 import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
 import { TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
-import { datasourceLuidSchema } from '../datasourceLuidSchema.js';
 import { Tool } from '../tool.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
@@ -14,7 +13,7 @@ export const queryDatasourceTool = new Tool({
   name: 'query-datasource',
   description: queryDatasourceToolDescription,
   paramsSchema: {
-    datasourceLuid: datasourceLuidSchema,
+    datasourceLuid: z.string(),
     datasourceQuery: DatasourceQuery,
   },
   annotations: {

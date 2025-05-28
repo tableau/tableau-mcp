@@ -4,7 +4,6 @@ import { z } from 'zod';
 
 import { getConfig } from '../config.js';
 import { getNewRestApiInstanceAsync } from '../restApiInstance.js';
-import { datasourceLuidSchema } from './datasourceLuidSchema.js';
 import { Tool } from './tool.js';
 
 export const readMetadataTool = new Tool({
@@ -12,7 +11,7 @@ export const readMetadataTool = new Tool({
   description:
     'Requests metadata for the specified data source. The metadata provides information about the data fields, such as field names, data types, and descriptions.',
   paramsSchema: {
-    datasourceLuid: datasourceLuidSchema,
+    datasourceLuid: z.string(),
   },
   annotations: {
     title: 'Read Metadata',
