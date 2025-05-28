@@ -15,7 +15,7 @@
     "tableau-mcp-server": "./build/index.js"
   },
   "scripts": {
-    ":build": "rm -rf build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap",
+    ":build": "npx rimraf ./build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap",
     "build": "npm run :build && npm run exec-perms",
     "build:watch": "npm run :build -- --watch",
     "build:docker": "docker build -t tableau-mcp .",
@@ -51,6 +51,7 @@
     "eslint-plugin-prettier": "^5.2.6",
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
     "shx": "^0.4.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.31.1",

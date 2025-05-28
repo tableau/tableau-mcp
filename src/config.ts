@@ -9,6 +9,7 @@ class Config {
   disableLogMasking: boolean;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
+  customToolDescriptions: string;
 
   constructor() {
     let { SITE_NAME: siteName } = process.env;
@@ -28,11 +29,13 @@ class Config {
       DISABLE_LOG_MASKING: disableLogMasking,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
+      CUSTOM_TOOL_DESCRIPTIONS: customToolDescriptions,
     } = process.env;
 
     siteName = siteName ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
+    this.customToolDescriptions = customToolDescriptions ?? '';
 
     this.includeTools = includeTools
       ? includeTools

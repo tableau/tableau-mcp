@@ -27,6 +27,7 @@ describe('Config', () => {
       DISABLE_LOG_MASKING: undefined,
       INCLUDE_TOOLS: undefined,
       EXCLUDE_TOOLS: undefined,
+      CUSTOM_TOOL_DESCRIPTIONS: undefined,
     };
   });
 
