@@ -100,7 +100,7 @@ const FieldBase = z.object({
   sortPriority: z.number().int().optional(),
 });
 
-const Field = z.union([
+export const Field = z.union([
   FieldBase.strict(),
   FieldBase.extend({ function: Function }).strict(),
   FieldBase.extend({ calculation: z.string() }).strict(),
@@ -223,7 +223,7 @@ const TopNFilter = FilterBase.extend({
   direction: z.enum(['TOP', 'BOTTOM']).optional().default('TOP'),
 });
 
-const Filter = z.union([
+export const Filter = z.union([
   SetFilter.strict(),
   TopNFilter.strict(),
   ...MatchFilter.options,
