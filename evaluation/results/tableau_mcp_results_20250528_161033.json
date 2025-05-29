@@ -1,0 +1,25 @@
+[
+  {
+    "test_case": {
+      "question_id": 5,
+      "db_id": "california_schools",
+      "question": "How many schools with an average score in Math greater than 400 in the SAT test are exclusively virtual?",
+      "evidence": "Exclusively virtual refers to Virtual = 'F'",
+      "sql": "SELECT COUNT(DISTINCT T2.School) FROM satscores AS T1 INNER JOIN schools AS T2 ON T1.cds = T2.CDSCode WHERE T2.Virtual = 'F' AND T1.AvgScrMath > 400",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "california_schools",
+      "query": "How many schools with an average score in Math greater than 400 in the SAT test are exclusively virtual?",
+      "trace_id": "trace_b293b6861f9343839b38a6056863d891",
+      "success": true,
+      "data": "To find the number of schools with an average Math score greater than 400 that are exclusively virtual, we can analyze the data retrieved.\n\n### Summary of Findings:\n- **Average Math Score Greater than 400**: We need to filter for scores above 400.\n- **Exclusively Virtual**: We will check for schools marked as \"P\" (indicating they are virtual).\n\n### Results:\nFrom the data retrieved, we can count the number of entries that meet both criteria:\n\n1. **Average Math Score > 400**\n2. **Virtual = \"P\"**\n\n### Count:\nAfter filtering the data, the count of schools that meet the criteria is **27**.\n\nThus, there are **27 schools** with an average Math score greater than 400 that are exclusively virtual.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 10.720355987548828,
+    "status": "success",
+    "error": null,
+    "timestamp": "2025-05-28T16:10:33.146428"
+  }
+]

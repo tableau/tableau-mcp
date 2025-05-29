@@ -1,0 +1,146 @@
+[
+  {
+    "test_case": {
+      "question_id": 340,
+      "db_id": "card_games",
+      "question": "Which are the cards that have incredibly powerful foils.",
+      "evidence": "incredibly poweful foils refers to cardKingdomFoilId is not null AND cardKingdomId is not null",
+      "sql": "SELECT id FROM cards WHERE cardKingdomFoilId IS NOT NULL AND cardKingdomId IS NOT NULL",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "Which are the cards that have incredibly powerful foils.",
+      "trace_id": "trace_7d3e46e909c146659b764e76124557a2",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 8.13447904586792,
+    "status": "success",
+    "error": null,
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:50:45.252037"
+  },
+  {
+    "test_case": {
+      "question_id": 341,
+      "db_id": "card_games",
+      "question": "What are the borderless cards available without powerful foils?",
+      "evidence": "borderless' refers to borderColor; poweful foils refers to cardKingdomFoilId paired with cardKingdomId AND cardKingdomId is not null",
+      "sql": "SELECT id FROM cards WHERE borderColor = 'borderless' AND (cardKingdomId IS NULL OR cardKingdomId IS NULL)",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "What are the borderless cards available without powerful foils?",
+      "trace_id": "trace_8920f3a3f2ff48b99b2d15c3dcbb035a",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 12.631418943405151,
+    "status": "success",
+    "error": null,
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:50:58.886234"
+  },
+  {
+    "test_case": {
+      "question_id": 344,
+      "db_id": "card_games",
+      "question": "List all the mythic rarity print cards banned in gladiator format.",
+      "evidence": "mythic rarity printing refers to rarity = 'mythic'; card banned refers to status = 'Banned'; in gladiator format refers to format = 'gladiator';",
+      "sql": "SELECT DISTINCT T1.id FROM cards AS T1 INNER JOIN legalities AS T2 ON T1.uuid = T2.uuid WHERE T2.format = 'gladiator' AND T2.status = 'Banned' AND T1.rarity = 'mythic'",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "List all the mythic rarity print cards banned in gladiator format.",
+      "trace_id": "trace_c31911b6d37c4ff3b1af13fb6b16c30a",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 11.603377103805542,
+    "status": "success",
+    "error": null,
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:51:11.491801"
+  },
+  {
+    "test_case": {
+      "question_id": 345,
+      "db_id": "card_games",
+      "question": "For artifact type of cards that do not have multiple faces on the same card, state its legalities status for vintage play format.",
+      "evidence": "Artifact type of cards refers to types = 'Artifact'; card does not have multiple faces on the same card refers to side is NULL'; vintage play format refers to format = 'vintage';",
+      "sql": "SELECT DISTINCT T2.status FROM cards AS T1 INNER JOIN legalities AS T2 ON T1.uuid = T2.uuid WHERE T1.type = 'Artifact' AND T2.format = 'vintage' AND T1.side IS NULL",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "For artifact type of cards that do not have multiple faces on the same card, state its legalities status for vintage play format.",
+      "trace_id": "trace_eb76894d2ea1477ca3ecf01752853bec",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 9.066365957260132,
+    "status": "success",
+    "error": null,
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:51:21.560602"
+  },
+  {
+    "test_case": {
+      "question_id": 346,
+      "db_id": "card_games",
+      "question": "List all the card id and artist with unknown power which are legal for commander play format.",
+      "evidence": "unknown power refers to power = '*' or POWER IS NULL; commander play format refers to format = 'commander'; legal for commander play format refers to format = 'commander' where status = 'Legal'",
+      "sql": "SELECT T1.id, T1.artist FROM cards AS T1 INNER JOIN legalities AS T2 ON T1.uuid = T2.uuid WHERE T2.status = 'Legal' AND T2.format = 'commander' AND (T1.power IS NULL OR T1.power = '*')",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "List all the card id and artist with unknown power which are legal for commander play format.",
+      "trace_id": "trace_cb89f31f648c431e9365708839608f66",
+      "success": false,
+      "data": null,
+      "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+      "vds_query": null
+    },
+    "execution_time": 10.418696880340576,
+    "status": "failed",
+    "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:51:32.982533"
+  },
+  {
+    "test_case": {
+      "question_id": 347,
+      "db_id": "card_games",
+      "question": "Find all cards illustrated by Stephen Daniel and describe the text of the ruling of these cards. State if these cards have missing or degraded properties and values.",
+      "evidence": "cards have missing or degraded properties and value refers to hasContentWarning = 1; 'Stephen Daniele' is artist; Find all cards refers to return card id",
+      "sql": "SELECT T1.id, T2.text, T1.hasContentWarning FROM cards AS T1 INNER JOIN rulings AS T2 ON T1.uuid = T2.uuid WHERE T1.artist = 'Stephen Daniele'",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "Find all cards illustrated by Stephen Daniel and describe the text of the ruling of these cards. State if these cards have missing or degraded properties and values.",
+      "trace_id": "trace_61ba69943045499eabba1b1288739bf9",
+      "success": false,
+      "data": null,
+      "error": "Error invoking MCP tool query-datasource: Timed out while waiting for response to ClientRequest. Waited 5.0 seconds.",
+      "vds_query": null
+    },
+    "execution_time": 12.78899598121643,
+    "status": "failed",
+    "error": "Error invoking MCP tool query-datasource: Timed out while waiting for response to ClientRequest. Waited 5.0 seconds.",
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:51:46.774972"
+  }
+]

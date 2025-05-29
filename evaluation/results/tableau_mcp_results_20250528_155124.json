@@ -1,0 +1,71 @@
+[
+  {
+    "test_case": {
+      "question_id": 5,
+      "db_id": "california_schools",
+      "question": "How many schools with an average score in Math greater than 400 in the SAT test are exclusively virtual?",
+      "evidence": "Exclusively virtual refers to Virtual = 'F'",
+      "sql": "SELECT COUNT(DISTINCT T2.School) FROM satscores AS T1 INNER JOIN schools AS T2 ON T1.cds = T2.CDSCode WHERE T2.Virtual = 'F' AND T1.AvgScrMath > 400",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "california_schools",
+      "query": "How many schools with an average score in Math greater than 400 in the SAT test are exclusively virtual?",
+      "trace_id": "trace_2fec83559a854a0fb0bb0fc51c3e3da7",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 2.423314094543457,
+    "status": "success",
+    "error": null,
+    "timestamp": "2025-05-28T15:51:19.044426"
+  },
+  {
+    "test_case": {
+      "question_id": 11,
+      "db_id": "california_schools",
+      "question": "Please list the codes of the schools with a total enrollment of over 500.",
+      "evidence": "Total enrollment can be represented by `Enrollment (K-12)` + `Enrollment (Ages 5-17)`",
+      "sql": "SELECT T2.CDSCode FROM schools AS T1 INNER JOIN frpm AS T2 ON T1.CDSCode = T2.CDSCode WHERE T2.`Enrollment (K-12)` + T2.`Enrollment (Ages 5-17)` > 500",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "california_schools",
+      "query": "Please list the codes of the schools with a total enrollment of over 500.",
+      "trace_id": "trace_537b00240afa45c9b05addd0bbcad550",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 1.7469167709350586,
+    "status": "success",
+    "error": null,
+    "timestamp": "2025-05-28T15:51:21.794478"
+  },
+  {
+    "test_case": {
+      "question_id": 17,
+      "db_id": "california_schools",
+      "question": "Rank schools by their average score in Writing where the score is greater than 499, showing their charter numbers.",
+      "evidence": "Valid charter number means the number is not null",
+      "sql": "SELECT CharterNum, AvgScrWrite, RANK() OVER (ORDER BY AvgScrWrite DESC) AS WritingScoreRank FROM schools AS T1  INNER JOIN satscores AS T2 ON T1.CDSCode = T2.cds WHERE T2.AvgScrWrite > 499 AND CharterNum is not null",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "california_schools",
+      "query": "Rank schools by their average score in Writing where the score is greater than 499, showing their charter numbers.",
+      "trace_id": "trace_698763cf18ae4b0c9d1733fd9e2f28c7",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 1.8257648944854736,
+    "status": "success",
+    "error": null,
+    "timestamp": "2025-05-28T15:51:24.622432"
+  }
+]

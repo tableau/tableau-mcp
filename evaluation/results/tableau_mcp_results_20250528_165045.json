@@ -1,0 +1,26 @@
+[
+  {
+    "test_case": {
+      "question_id": 340,
+      "db_id": "card_games",
+      "question": "Which are the cards that have incredibly powerful foils.",
+      "evidence": "incredibly poweful foils refers to cardKingdomFoilId is not null AND cardKingdomId is not null",
+      "sql": "SELECT id FROM cards WHERE cardKingdomFoilId IS NOT NULL AND cardKingdomId IS NOT NULL",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "Which are the cards that have incredibly powerful foils.",
+      "trace_id": "trace_7d3e46e909c146659b764e76124557a2",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 8.13447904586792,
+    "status": "success",
+    "error": null,
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:50:45.252037"
+  }
+]

@@ -1,0 +1,94 @@
+[
+  {
+    "test_case": {
+      "question_id": 5,
+      "db_id": "california_schools",
+      "question": "How many schools with an average score in Math greater than 400 in the SAT test are exclusively virtual?",
+      "evidence": "Exclusively virtual refers to Virtual = 'F'",
+      "sql": "SELECT COUNT(DISTINCT T2.School) FROM satscores AS T1 INNER JOIN schools AS T2 ON T1.cds = T2.CDSCode WHERE T2.Virtual = 'F' AND T1.AvgScrMath > 400",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "california_schools",
+      "query": "How many schools with an average score in Math greater than 400 in the SAT test are exclusively virtual?",
+      "trace_id": "trace_b293b6861f9343839b38a6056863d891",
+      "success": true,
+      "data": "To find the number of schools with an average Math score greater than 400 that are exclusively virtual, we can analyze the data retrieved.\n\n### Summary of Findings:\n- **Average Math Score Greater than 400**: We need to filter for scores above 400.\n- **Exclusively Virtual**: We will check for schools marked as \"P\" (indicating they are virtual).\n\n### Results:\nFrom the data retrieved, we can count the number of entries that meet both criteria:\n\n1. **Average Math Score > 400**\n2. **Virtual = \"P\"**\n\n### Count:\nAfter filtering the data, the count of schools that meet the criteria is **27**.\n\nThus, there are **27 schools** with an average Math score greater than 400 that are exclusively virtual.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 10.720355987548828,
+    "status": "success",
+    "error": null,
+    "timestamp": "2025-05-28T16:10:33.146428"
+  },
+  {
+    "test_case": {
+      "question_id": 11,
+      "db_id": "california_schools",
+      "question": "Please list the codes of the schools with a total enrollment of over 500.",
+      "evidence": "Total enrollment can be represented by `Enrollment (K-12)` + `Enrollment (Ages 5-17)`",
+      "sql": "SELECT T2.CDSCode FROM schools AS T1 INNER JOIN frpm AS T2 ON T1.CDSCode = T2.CDSCode WHERE T2.`Enrollment (K-12)` + T2.`Enrollment (Ages 5-17)` > 500",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "california_schools",
+      "query": "Please list the codes of the schools with a total enrollment of over 500.",
+      "trace_id": "trace_9a770dba18a94b95aeaa8fc664a910ce",
+      "success": false,
+      "data": null,
+      "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+      "vds_query": null
+    },
+    "execution_time": 6.674762010574341,
+    "status": "failed",
+    "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+    "timestamp": "2025-05-28T16:10:40.822816"
+  },
+  {
+    "test_case": {
+      "question_id": 17,
+      "db_id": "california_schools",
+      "question": "Rank schools by their average score in Writing where the score is greater than 499, showing their charter numbers.",
+      "evidence": "Valid charter number means the number is not null",
+      "sql": "SELECT CharterNum, AvgScrWrite, RANK() OVER (ORDER BY AvgScrWrite DESC) AS WritingScoreRank FROM schools AS T1  INNER JOIN satscores AS T2 ON T1.CDSCode = T2.cds WHERE T2.AvgScrWrite > 499 AND CharterNum is not null",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "california_schools",
+      "query": "Rank schools by their average score in Writing where the score is greater than 499, showing their charter numbers.",
+      "trace_id": "trace_1479db666c714798a76293449bf9b4bb",
+      "success": true,
+      "data": "Here are the schools ranked by their average score in Writing (greater than 499), along with their Charter School Numbers:\n\n| Average Score in Writing | Charter School Number |\n|--------------------------|-----------------------|\n| 661                      |                       |\n| 646                      |                       |\n| 634                      |                       |\n| 622                      |                       |\n| 617                      |                       |\n| 606                      |                       |\n| 605                      |                       |\n| 593                      |                       |\n| 591                      |                       |\n| 588                      |                       |\n| 586                      |                       |\n| 581                      | 0352                  |\n| 579                      | 0930                  |\n| 576                      |                       |\n| 574                      |                       |\n| 573                      |                       |\n| 570                      |                       |\n| 568                      |                       |\n| 567                      |                       |\n| 566                      |                       |\n| 565                      |                       |\n| 563                      |                       |\n| 562                      | 1114                  |\n| 558                      | 1079                  |\n| 554                      |                       |\n| 552                      |                       |\n| 551                      | 0612                  |\n| 550                      |                       |\n| 549                      |                       |\n| 548                      |                       |\n| 547                      |                       |\n| 544                      |                       |\n| 543                      | 0572                  |\n| 541                      |                       |\n| 540                      | 0271                  |\n| 539                      |                       |\n| 538                      |                       |\n| 537                      |                       |\n| 536                      |                       |\n| 535                      |                       |\n| 534                      |                       |\n| 533                      | 0248                  |\n| 532                      |                       |\n| 531                      |                       |\n| 530                      |                       |\n| 529                      | 0419                  |\n| 528                      |                       |\n| 527                      | 0005                  |\n| 526                      |                       |\n| 525                      | 0037                  |\n| 524                      |                       |\n| 523                      |                       |\n| 522                      | 0835                  |\n| 521                      |                       |\n| 520                      | 0169                  |\n| 519                      | 1083                  |\n| 518                      |                       |\n| 517                      | 0267                  |\n| 516                      |                       |\n| 515                      |                       |\n| 514                      |                       |\n| 513                      | 0109                  |\n| 512                      |                       |\n| 511                      |                       |\n| 510                      |                       |\n| 509                      | 1571                  |\n| 508                      |                       |\n| 507                      |                       |\n| 506                      |                       |\n| 505                      | 0127                  |\n| 504                      |                       |\n| 503                      | 0565                  |\n| 502                      |                       |\n| 501                      | 1400                  |\n| 500                      |                       |\n| 499                      |                       |\n\nNote: Some schools may not have a Charter School Number listed.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 16.297023057937622,
+    "status": "success",
+    "error": null,
+    "timestamp": "2025-05-28T16:10:58.122309"
+  },
+  {
+    "test_case": {
+      "question_id": 340,
+      "db_id": "card_games",
+      "question": "Which are the cards that have incredibly powerful foils.",
+      "evidence": "incredibly poweful foils refers to cardKingdomFoilId is not null AND cardKingdomId is not null",
+      "sql": "SELECT id FROM cards WHERE cardKingdomFoilId IS NOT NULL AND cardKingdomId IS NOT NULL",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "Which are the cards that have incredibly powerful foils.",
+      "trace_id": "trace_5eaed3d311364008b8a5ab41981bdec9",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 9.351940870285034,
+    "status": "success",
+    "error": null,
+    "timestamp": "2025-05-28T16:11:08.476804"
+  }
+]

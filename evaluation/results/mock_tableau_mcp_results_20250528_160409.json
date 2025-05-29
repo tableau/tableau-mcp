@@ -1,0 +1,156 @@
+[
+  {
+    "test_case": {
+      "question_id": 5,
+      "db_id": "california_schools",
+      "question": "How many schools with an average score in Math greater than 400 in the SAT test are exclusively virtual?",
+      "evidence": "Exclusively virtual refers to Virtual = 'F'",
+      "sql": "SELECT COUNT(DISTINCT T2.School) FROM satscores AS T1 INNER JOIN schools AS T2 ON T1.cds = T2.CDSCode WHERE T2.Virtual = 'F' AND T1.AvgScrMath > 400",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "california_schools",
+      "query": "How many schools with an average score in Math greater than 400 in the SAT test are exclusively virtual?",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "trace_id": "mock_trace_3184"
+    },
+    "execution_time": 0.9890651702880859,
+    "status": "success",
+    "error": null,
+    "timestamp": "2025-05-28T16:04:00.125066"
+  },
+  {
+    "test_case": {
+      "question_id": 11,
+      "db_id": "california_schools",
+      "question": "Please list the codes of the schools with a total enrollment of over 500.",
+      "evidence": "Total enrollment can be represented by `Enrollment (K-12)` + `Enrollment (Ages 5-17)`",
+      "sql": "SELECT T2.CDSCode FROM schools AS T1 INNER JOIN frpm AS T2 ON T1.CDSCode = T2.CDSCode WHERE T2.`Enrollment (K-12)` + T2.`Enrollment (Ages 5-17)` > 500",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "california_schools",
+      "query": "Please list the codes of the schools with a total enrollment of over 500.",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "trace_id": "mock_trace_5059"
+    },
+    "execution_time": 0.5139508247375488,
+    "status": "success",
+    "error": null,
+    "timestamp": "2025-05-28T16:04:01.141118"
+  },
+  {
+    "test_case": {
+      "question_id": 17,
+      "db_id": "california_schools",
+      "question": "Rank schools by their average score in Writing where the score is greater than 499, showing their charter numbers.",
+      "evidence": "Valid charter number means the number is not null",
+      "sql": "SELECT CharterNum, AvgScrWrite, RANK() OVER (ORDER BY AvgScrWrite DESC) AS WritingScoreRank FROM schools AS T1  INNER JOIN satscores AS T2 ON T1.CDSCode = T2.cds WHERE T2.AvgScrWrite > 499 AND CharterNum is not null",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "california_schools",
+      "query": "Rank schools by their average score in Writing where the score is greater than 499, showing their charter numbers.",
+      "success": true,
+      "data": "Query executed successfully. Found 3 results: {\n  \"columns\": [\n    \"School_Name\",\n    \"Math_Score\",\n    \"Count\"\n  ],\n  \"data\": [\n    [\n      \"Lincoln High School\",\n      85.5,\n      450\n    ],\n    [\n      \"Washington Elementary\",\n      78.2,\n      320\n    ],\n    [\n      \"Roosevelt Middle School\",\n      82.1,\n      280\n    ]\n  ]\n}",
+      "error": null,
+      "trace_id": "mock_trace_9381"
+    },
+    "execution_time": 1.2586579322814941,
+    "status": "success",
+    "error": null,
+    "timestamp": "2025-05-28T16:04:02.902263"
+  },
+  {
+    "test_case": {
+      "question_id": 340,
+      "db_id": "card_games",
+      "question": "Which are the cards that have incredibly powerful foils.",
+      "evidence": "incredibly poweful foils refers to cardKingdomFoilId is not null AND cardKingdomId is not null",
+      "sql": "SELECT id FROM cards WHERE cardKingdomFoilId IS NOT NULL AND cardKingdomId IS NOT NULL",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "Which are the cards that have incredibly powerful foils.",
+      "success": true,
+      "data": "Query executed successfully. Found 3 results: {\n  \"columns\": [\n    \"School_Name\",\n    \"Math_Score\",\n    \"Count\"\n  ],\n  \"data\": [\n    [\n      \"Lincoln High School\",\n      85.5,\n      450\n    ],\n    [\n      \"Washington Elementary\",\n      78.2,\n      320\n    ],\n    [\n      \"Roosevelt Middle School\",\n      82.1,\n      280\n    ]\n  ]\n}",
+      "error": null,
+      "trace_id": "mock_trace_3676"
+    },
+    "execution_time": 0.7383968830108643,
+    "status": "success",
+    "error": null,
+    "timestamp": "2025-05-28T16:04:04.145225"
+  },
+  {
+    "test_case": {
+      "question_id": 341,
+      "db_id": "card_games",
+      "question": "What are the borderless cards available without powerful foils?",
+      "evidence": "borderless' refers to borderColor; poweful foils refers to cardKingdomFoilId paired with cardKingdomId AND cardKingdomId is not null",
+      "sql": "SELECT id FROM cards WHERE borderColor = 'borderless' AND (cardKingdomId IS NULL OR cardKingdomId IS NULL)",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "What are the borderless cards available without powerful foils?",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "trace_id": "mock_trace_3246"
+    },
+    "execution_time": 0.9551849365234375,
+    "status": "success",
+    "error": null,
+    "timestamp": "2025-05-28T16:04:05.603161"
+  },
+  {
+    "test_case": {
+      "question_id": 356,
+      "db_id": "card_games",
+      "question": "How many cards have infinite power?",
+      "evidence": "infinite power refers to power = '*';",
+      "sql": "SELECT COUNT(*) FROM cards WHERE power = '*'",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "How many cards have infinite power?",
+      "success": true,
+      "data": "Query executed successfully. Found 3 results: {\n  \"columns\": [\n    \"School_Name\",\n    \"Math_Score\",\n    \"Count\"\n  ],\n  \"data\": [\n    [\n      \"Lincoln High School\",\n      85.5,\n      450\n    ],\n    [\n      \"Washington Elementary\",\n      78.2,\n      320\n    ],\n    [\n      \"Roosevelt Middle School\",\n      82.1,\n      280\n    ]\n  ]\n}",
+      "error": null,
+      "trace_id": "mock_trace_2262"
+    },
+    "execution_time": 1.9311847686767578,
+    "status": "success",
+    "error": null,
+    "timestamp": "2025-05-28T16:04:08.039083"
+  },
+  {
+    "test_case": {
+      "question_id": 92,
+      "db_id": "financial",
+      "question": "List out the no. of districts that have female average salary is more than 6000 but less than 10000?",
+      "evidence": "A11 refers to average salary; Female mapps to gender = 'F'",
+      "sql": "SELECT COUNT(DISTINCT T2.district_id)  FROM client AS T1 INNER JOIN district AS T2 ON T1.district_id = T2.district_id WHERE T1.gender = 'F' AND T2.A11 BETWEEN 6000 AND 10000",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "financial",
+      "query": "List out the no. of districts that have female average salary is more than 6000 but less than 10000?",
+      "success": false,
+      "data": null,
+      "error": "Query timed out after 60 seconds",
+      "trace_id": "mock_trace_7764"
+    },
+    "execution_time": 1.1888439655303955,
+    "status": "failed",
+    "error": "Query timed out",
+    "timestamp": "2025-05-28T16:04:09.730972"
+  }
+]

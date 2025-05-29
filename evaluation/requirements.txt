@@ -1,0 +1,8 @@
+# OpenAI Agent SDK with MCP support
+openai-agents>=0.0.16
+
+# OpenAI API client
+openai>=1.0.0
+
+# Standard utilities
+python-dotenv>=1.0.0 

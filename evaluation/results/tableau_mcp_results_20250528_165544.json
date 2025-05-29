@@ -1,0 +1,822 @@
+[
+  {
+    "test_case": {
+      "question_id": 340,
+      "db_id": "card_games",
+      "question": "Which are the cards that have incredibly powerful foils.",
+      "evidence": "incredibly poweful foils refers to cardKingdomFoilId is not null AND cardKingdomId is not null",
+      "sql": "SELECT id FROM cards WHERE cardKingdomFoilId IS NOT NULL AND cardKingdomId IS NOT NULL",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "Which are the cards that have incredibly powerful foils.",
+      "trace_id": "trace_7d3e46e909c146659b764e76124557a2",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 8.13447904586792,
+    "status": "success",
+    "error": null,
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:50:45.252037"
+  },
+  {
+    "test_case": {
+      "question_id": 341,
+      "db_id": "card_games",
+      "question": "What are the borderless cards available without powerful foils?",
+      "evidence": "borderless' refers to borderColor; poweful foils refers to cardKingdomFoilId paired with cardKingdomId AND cardKingdomId is not null",
+      "sql": "SELECT id FROM cards WHERE borderColor = 'borderless' AND (cardKingdomId IS NULL OR cardKingdomId IS NULL)",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "What are the borderless cards available without powerful foils?",
+      "trace_id": "trace_8920f3a3f2ff48b99b2d15c3dcbb035a",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 12.631418943405151,
+    "status": "success",
+    "error": null,
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:50:58.886234"
+  },
+  {
+    "test_case": {
+      "question_id": 344,
+      "db_id": "card_games",
+      "question": "List all the mythic rarity print cards banned in gladiator format.",
+      "evidence": "mythic rarity printing refers to rarity = 'mythic'; card banned refers to status = 'Banned'; in gladiator format refers to format = 'gladiator';",
+      "sql": "SELECT DISTINCT T1.id FROM cards AS T1 INNER JOIN legalities AS T2 ON T1.uuid = T2.uuid WHERE T2.format = 'gladiator' AND T2.status = 'Banned' AND T1.rarity = 'mythic'",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "List all the mythic rarity print cards banned in gladiator format.",
+      "trace_id": "trace_c31911b6d37c4ff3b1af13fb6b16c30a",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 11.603377103805542,
+    "status": "success",
+    "error": null,
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:51:11.491801"
+  },
+  {
+    "test_case": {
+      "question_id": 345,
+      "db_id": "card_games",
+      "question": "For artifact type of cards that do not have multiple faces on the same card, state its legalities status for vintage play format.",
+      "evidence": "Artifact type of cards refers to types = 'Artifact'; card does not have multiple faces on the same card refers to side is NULL'; vintage play format refers to format = 'vintage';",
+      "sql": "SELECT DISTINCT T2.status FROM cards AS T1 INNER JOIN legalities AS T2 ON T1.uuid = T2.uuid WHERE T1.type = 'Artifact' AND T2.format = 'vintage' AND T1.side IS NULL",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "For artifact type of cards that do not have multiple faces on the same card, state its legalities status for vintage play format.",
+      "trace_id": "trace_eb76894d2ea1477ca3ecf01752853bec",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 9.066365957260132,
+    "status": "success",
+    "error": null,
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:51:21.560602"
+  },
+  {
+    "test_case": {
+      "question_id": 346,
+      "db_id": "card_games",
+      "question": "List all the card id and artist with unknown power which are legal for commander play format.",
+      "evidence": "unknown power refers to power = '*' or POWER IS NULL; commander play format refers to format = 'commander'; legal for commander play format refers to format = 'commander' where status = 'Legal'",
+      "sql": "SELECT T1.id, T1.artist FROM cards AS T1 INNER JOIN legalities AS T2 ON T1.uuid = T2.uuid WHERE T2.status = 'Legal' AND T2.format = 'commander' AND (T1.power IS NULL OR T1.power = '*')",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "List all the card id and artist with unknown power which are legal for commander play format.",
+      "trace_id": "trace_cb89f31f648c431e9365708839608f66",
+      "success": false,
+      "data": null,
+      "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+      "vds_query": null
+    },
+    "execution_time": 10.418696880340576,
+    "status": "failed",
+    "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:51:32.982533"
+  },
+  {
+    "test_case": {
+      "question_id": 347,
+      "db_id": "card_games",
+      "question": "Find all cards illustrated by Stephen Daniel and describe the text of the ruling of these cards. State if these cards have missing or degraded properties and values.",
+      "evidence": "cards have missing or degraded properties and value refers to hasContentWarning = 1; 'Stephen Daniele' is artist; Find all cards refers to return card id",
+      "sql": "SELECT T1.id, T2.text, T1.hasContentWarning FROM cards AS T1 INNER JOIN rulings AS T2 ON T1.uuid = T2.uuid WHERE T1.artist = 'Stephen Daniele'",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "Find all cards illustrated by Stephen Daniel and describe the text of the ruling of these cards. State if these cards have missing or degraded properties and values.",
+      "trace_id": "trace_61ba69943045499eabba1b1288739bf9",
+      "success": false,
+      "data": null,
+      "error": "Error invoking MCP tool query-datasource: Timed out while waiting for response to ClientRequest. Waited 5.0 seconds.",
+      "vds_query": null
+    },
+    "execution_time": 12.78899598121643,
+    "status": "failed",
+    "error": "Error invoking MCP tool query-datasource: Timed out while waiting for response to ClientRequest. Waited 5.0 seconds.",
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:51:46.774972"
+  },
+  {
+    "test_case": {
+      "question_id": 349,
+      "db_id": "card_games",
+      "question": "Name the card and artist with the most ruling information. Also state if the card is a promotional printing.",
+      "evidence": "with the most ruling information refers to Max(count(rulings.uuid)); the card is the promotional printing refers to isPromo = 1;",
+      "sql": "SELECT T1.name, T1.artist, T1.isPromo FROM cards AS T1 INNER JOIN rulings AS T2 ON T1.uuid = T2.uuid WHERE T1.isPromo = 1 AND T1.artist = (SELECT artist FROM cards WHERE isPromo = 1 GROUP BY artist HAVING COUNT(DISTINCT uuid) = (SELECT MAX(count_uuid) FROM ( SELECT COUNT(DISTINCT uuid) AS count_uuid FROM cards WHERE isPromo = 1 GROUP BY artist ))) LIMIT 1",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "Name the card and artist with the most ruling information. Also state if the card is a promotional printing.",
+      "trace_id": "trace_13edcbf362c24307ad99876703081660",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 12.21567988395691,
+    "status": "success",
+    "error": null,
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:51:59.993058"
+  },
+  {
+    "test_case": {
+      "question_id": 352,
+      "db_id": "card_games",
+      "question": "Calculate the percentage of the cards availabe in Chinese Simplified.",
+      "evidence": "Chinese Simplified' is the language; percentage = Divide(Sum(id where language = 'Chinese Simplified'), Count(id)) *100",
+      "sql": "SELECT CAST(SUM(CASE WHEN T2.language = 'Chinese Simplified' THEN 1 ELSE 0 END) AS REAL) * 100 / COUNT(T1.id) FROM cards AS T1 INNER JOIN foreign_data AS T2 ON T1.uuid = T2.uuid",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "Calculate the percentage of the cards availabe in Chinese Simplified.",
+      "trace_id": "trace_f6ade2106f044493ac86c08c595c17a0",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 12.870906829833984,
+    "status": "success",
+    "error": null,
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:52:13.866467"
+  },
+  {
+    "test_case": {
+      "question_id": 356,
+      "db_id": "card_games",
+      "question": "How many cards have infinite power?",
+      "evidence": "infinite power refers to power = '*';",
+      "sql": "SELECT COUNT(*) FROM cards WHERE power = '*'",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "How many cards have infinite power?",
+      "trace_id": "trace_3dcc9fee9f6e4bd58545a20eee06c939",
+      "success": true,
+      "data": "The query returned no cards with infinite power. \n\nHere\u2019s the VDS query I constructed:\n\nVDS_QUERY: {\"fields\":[{\"fieldCaption\":\"Power\",\"function\":\"COUNT\"}],\"filters\":[{\"fieldCaption\":\"Power\",\"filterType\":\"equals\",\"filterValue\":\"infinite\"}]}",
+      "error": null,
+      "vds_query": {
+        "fields": [
+          {
+            "fieldCaption": "Power",
+            "function": "COUNT"
+          }
+        ],
+        "filters": [
+          {
+            "fieldCaption": "Power",
+            "filterType": "equals",
+            "filterValue": "infinite"
+          }
+        ]
+      }
+    },
+    "execution_time": 7.672282695770264,
+    "status": "success",
+    "error": null,
+    "vds_query": {
+      "fields": [
+        {
+          "fieldCaption": "Power",
+          "function": "COUNT"
+        }
+      ],
+      "filters": [
+        {
+          "fieldCaption": "Power",
+          "filterType": "equals",
+          "filterValue": "infinite"
+        }
+      ]
+    },
+    "timestamp": "2025-05-28T16:52:22.540994"
+  },
+  {
+    "test_case": {
+      "question_id": 358,
+      "db_id": "card_games",
+      "question": "What is the border color of card \"Ancestor's Chosen\"?",
+      "evidence": "name of card  = 'Ancestor''s Chosen' ;",
+      "sql": "SELECT DISTINCT borderColor FROM cards WHERE name = 'Ancestor''s Chosen'",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "What is the border color of card \"Ancestor's Chosen\"?",
+      "trace_id": "trace_965999478824453491cad9714d8f0c57",
+      "success": false,
+      "data": null,
+      "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+      "vds_query": null
+    },
+    "execution_time": 7.536742925643921,
+    "status": "failed",
+    "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:52:31.080118"
+  },
+  {
+    "test_case": {
+      "question_id": 366,
+      "db_id": "card_games",
+      "question": "What is the rule of playing card \"Benalish Knight\"?",
+      "evidence": "Benalish Knight' is the name of card; rule of playing card refers to format;",
+      "sql": "SELECT T2.format FROM cards AS T1 INNER JOIN legalities AS T2 ON T1.uuid = T2.uuid WHERE T1.name = 'Benalish Knight'",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "What is the rule of playing card \"Benalish Knight\"?",
+      "trace_id": "trace_9b372bb8380e441387293db677276521",
+      "success": false,
+      "data": null,
+      "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+      "vds_query": null
+    },
+    "execution_time": 9.77072787284851,
+    "status": "failed",
+    "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:52:41.855212"
+  },
+  {
+    "test_case": {
+      "question_id": 368,
+      "db_id": "card_games",
+      "question": "What is the percentage of borderless cards?",
+      "evidence": "borderless card refers to borderColor = 'borderless'; percentage = Divide(Count (id) where borderColor = 'borderless', Count(id)) *100",
+      "sql": "SELECT CAST(SUM(CASE WHEN borderColor = 'borderless' THEN 1 ELSE 0 END) AS REAL) * 100 / COUNT(id) FROM cards",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "What is the percentage of borderless cards?",
+      "trace_id": "trace_2141191e48d2471a8d7b349b836d8177",
+      "success": true,
+      "data": "To calculate the percentage of borderless cards, we can analyze the data retrieved:\n\n- **Borderless Cards**: \n  - Count of borderless cards (Is full art = 1): 1\n  - Count of non-borderless cards (Is full art = 0): 1\n\nTotal borderless cards = 1  \nTotal cards = 1 (borderless) + 1 (non-borderless) = 2\n\nPercentage of borderless cards = (1 / 2) * 100 = 50%\n\nHere is the VDS query used to retrieve the data:\n\nVDS_QUERY: {\"fields\":[{\"fieldCaption\":\"Border color\"},{\"fieldCaption\":\"Is full art\"}]}",
+      "error": null,
+      "vds_query": {
+        "fields": [
+          {
+            "fieldCaption": "Border color"
+          },
+          {
+            "fieldCaption": "Is full art"
+          }
+        ]
+      }
+    },
+    "execution_time": 17.462805032730103,
+    "status": "success",
+    "error": null,
+    "vds_query": {
+      "fields": [
+        {
+          "fieldCaption": "Border color"
+        },
+        {
+          "fieldCaption": "Is full art"
+        }
+      ]
+    },
+    "timestamp": "2025-05-28T16:53:00.321616"
+  },
+  {
+    "test_case": {
+      "question_id": 371,
+      "db_id": "card_games",
+      "question": "What is the percentage of cards whose language is French among the Story Spotlight cards?",
+      "evidence": "Story Spotlight card refers to isStorySpotlight = 1; French is the language; Percentage = Divide(Count(id) where language = 'French' and isStorySpotlight = 1, Count(id) where isStorySpotlight = 1)*100",
+      "sql": "SELECT CAST(SUM(CASE WHEN T2.language = 'French' THEN 1 ELSE 0 END) AS REAL) * 100 / COUNT(T1.id) FROM cards AS T1 INNER JOIN foreign_data AS T2 ON T1.uuid = T2.uuid WHERE T1.isStorySpotlight = 1",
+      "difficulty": "challenging"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "What is the percentage of cards whose language is French among the Story Spotlight cards?",
+      "trace_id": "trace_13dd2e836caf4358ab4bb76d209ce7d1",
+      "success": true,
+      "data": "To calculate the percentage of cards whose language is French among the Story Spotlight cards, we can summarize the data obtained:\n\n1. **Count of Story Spotlight Cards**: \n   - Total Story Spotlight cards: 6 (from various languages including French, Japanese, Spanish, Korean, Portuguese, and German).\n\n2. **Count of French Story Spotlight Cards**: \n   - French Story Spotlight cards: 1.\n\nNow, we can calculate the percentage:\n\n\\[\n\\text{Percentage} = \\left( \\frac{\\text{Count of French Story Spotlight Cards}}{\\text{Total Story Spotlight Cards}} \\right) \\times 100 = \\left( \\frac{1}{6} \\right) \\times 100 \\approx 16.67\\%\n\\]\n\n### VDS Query\nHere\u2019s the VDS query constructed to retrieve the necessary data:\n\n```json\n{\n  \"fields\": [\n    {\n      \"fieldCaption\": \"Language\",\n      \"function\": \"COUNT\"\n    },\n    {\n      \"fieldCaption\": \"Is story spotlight\",\n      \"function\": \"COUNT\"\n    }\n  ]\n}\n```\n\n### Final Response\nThe percentage of cards whose language is French among the Story Spotlight cards is approximately **16.67%**.\n\nVDS_QUERY: {\"fields\":[{\"fieldCaption\":\"Language\",\"function\":\"COUNT\"},{\"fieldCaption\":\"Is story spotlight\",\"function\":\"COUNT\"}]}",
+      "error": null,
+      "vds_query": {
+        "fields": [
+          {
+            "fieldCaption": "Language",
+            "function": "COUNT"
+          },
+          {
+            "fieldCaption": "Is story spotlight",
+            "function": "COUNT"
+          }
+        ]
+      }
+    },
+    "execution_time": 11.289431095123291,
+    "status": "success",
+    "error": null,
+    "vds_query": {
+      "fields": [
+        {
+          "fieldCaption": "Language",
+          "function": "COUNT"
+        },
+        {
+          "fieldCaption": "Is story spotlight",
+          "function": "COUNT"
+        }
+      ]
+    },
+    "timestamp": "2025-05-28T16:53:12.615120"
+  },
+  {
+    "test_case": {
+      "question_id": 377,
+      "db_id": "card_games",
+      "question": "How many cards with original type of \"Summon - Angel\" have subtype other than \"Angel\"?",
+      "evidence": "subtype other than Angel refers to subtypes is not 'Angel';",
+      "sql": "SELECT COUNT(id) FROM cards WHERE originalType = 'Summon - Angel' AND subtypes != 'Angel'",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "How many cards with original type of \"Summon - Angel\" have subtype other than \"Angel\"?",
+      "trace_id": "trace_626770a88d30497687ee4a3b40de5b22",
+      "success": false,
+      "data": null,
+      "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+      "vds_query": null
+    },
+    "execution_time": 25.521717071533203,
+    "status": "failed",
+    "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:53:39.139807"
+  },
+  {
+    "test_case": {
+      "question_id": 379,
+      "db_id": "card_games",
+      "question": "What are the cards belong to duel deck a? List the ID.",
+      "evidence": "duel deck a refers to duelDeck = a;",
+      "sql": "SELECT id FROM cards WHERE duelDeck = 'a'",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "What are the cards belong to duel deck a? List the ID.",
+      "trace_id": "trace_b155896efce448af9bb0e492fd55034f",
+      "success": false,
+      "data": null,
+      "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+      "vds_query": null
+    },
+    "execution_time": 10.224191188812256,
+    "status": "failed",
+    "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:53:50.367009"
+  },
+  {
+    "test_case": {
+      "question_id": 383,
+      "db_id": "card_games",
+      "question": "How many of the banned cards are white border?",
+      "evidence": "banned card refers to status = 'Banned'; white border refers to borderColor = 'white';",
+      "sql": "SELECT COUNT(T1.id) FROM cards AS T1 INNER JOIN legalities AS T2 ON T1.uuid = T2.uuid WHERE T2.status = 'Banned' AND T1.borderColor = 'white'",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "How many of the banned cards are white border?",
+      "trace_id": "trace_6530eda1a6ec4c54b84ffba425781096",
+      "success": true,
+      "data": "The query results indicate that there are banned cards with a white border. Specifically, the count of banned cards with a white border is 1.\n\nHere is the VDS query I constructed:\n\nVDS_QUERY: {\"fields\":[{\"fieldCaption\":\"Border color\",\"function\":\"COUNT\",\"sortDirection\":\"ASC\",\"sortPriority\":1},{\"fieldCaption\":\"Status\",\"sortDirection\":\"ASC\",\"sortPriority\":2}]}",
+      "error": null,
+      "vds_query": {
+        "fields": [
+          {
+            "fieldCaption": "Border color",
+            "function": "COUNT",
+            "sortDirection": "ASC",
+            "sortPriority": 1
+          },
+          {
+            "fieldCaption": "Status",
+            "sortDirection": "ASC",
+            "sortPriority": 2
+          }
+        ]
+      }
+    },
+    "execution_time": 9.05663776397705,
+    "status": "success",
+    "error": null,
+    "vds_query": {
+      "fields": [
+        {
+          "fieldCaption": "Border color",
+          "function": "COUNT",
+          "sortDirection": "ASC",
+          "sortPriority": 1
+        },
+        {
+          "fieldCaption": "Status",
+          "sortDirection": "ASC",
+          "sortPriority": 2
+        }
+      ]
+    },
+    "timestamp": "2025-05-28T16:54:00.428231"
+  },
+  {
+    "test_case": {
+      "question_id": 391,
+      "db_id": "card_games",
+      "question": "Among the Artifact cards, which are black color and comes with foreign languague translation?",
+      "evidence": "Artifact card refers to originalType = 'Artifact'; black color refers to colors = 'B'; foreign language refers to language in foreign_data",
+      "sql": "SELECT DISTINCT T1.name FROM cards AS T1 INNER JOIN foreign_data AS T2 ON T1.uuid = T2.uuid WHERE T1.originalType = 'Artifact' AND T1.colors = 'B'",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "Among the Artifact cards, which are black color and comes with foreign languague translation?",
+      "trace_id": "trace_913daeb4d2274e3d942c1e01868f3a5a",
+      "success": false,
+      "data": null,
+      "error": "Error invoking MCP tool query-datasource: Timed out while waiting for response to ClientRequest. Waited 5.0 seconds.",
+      "vds_query": null
+    },
+    "execution_time": 12.614053964614868,
+    "status": "failed",
+    "error": "Error invoking MCP tool query-datasource: Timed out while waiting for response to ClientRequest. Waited 5.0 seconds.",
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:54:14.046028"
+  },
+  {
+    "test_case": {
+      "question_id": 397,
+      "db_id": "card_games",
+      "question": "What is the mana cost of cards with a normal layout, a 2003 frame version, with a black border color, and available in paper and mtgo?",
+      "evidence": "available in paper and mtgo refers to availability = 'mtgo,paper'; frameVersion = 2003;borderColor = 'black'",
+      "sql": "SELECT manaCost FROM cards WHERE availability = 'mtgo,paper' AND borderColor = 'black' AND frameVersion = 2003 AND layout = 'normal'",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "What is the mana cost of cards with a normal layout, a 2003 frame version, with a black border color, and available in paper and mtgo?",
+      "trace_id": "trace_8850aacf1ade4334b8069697c6fc7f02",
+      "success": true,
+      "data": "The mana costs of cards with a normal layout, a 2003 frame version, with a black border color, and available in both paper and MTGO are as follows:\n\n1. **Converted Mana Cost: 1**\n2. **Converted Mana Cost: 4**\n3. **Converted Mana Cost: 2**\n4. **Converted Mana Cost: 5**\n\nHere\u2019s the VDS query that was constructed to retrieve this information:\n\nVDS_QUERY: {\n  \"fields\": [\n    {\"fieldCaption\": \"Converted mana cost\"},\n    {\"fieldCaption\": \"Layout\"},\n    {\"fieldCaption\": \"Frame version\"},\n    {\"fieldCaption\": \"Border color\"},\n    {\"fieldCaption\": \"Availability\"}\n  ],\n  \"filters\": [\n    {\"fieldCaption\": \"Layout\", \"value\": \"normal\"},\n    {\"fieldCaption\": \"Frame version\", \"value\": \"2003\"},\n    {\"fieldCaption\": \"Border color\", \"value\": \"black\"},\n    {\"fieldCaption\": \"Availability\", \"value\": \"mtgo,paper\"}\n  ]\n}",
+      "error": null,
+      "vds_query": {
+        "fields": [
+          {
+            "fieldCaption": "Converted mana cost"
+          },
+          {
+            "fieldCaption": "Layout"
+          },
+          {
+            "fieldCaption": "Frame version"
+          },
+          {
+            "fieldCaption": "Border color"
+          },
+          {
+            "fieldCaption": "Availability"
+          }
+        ],
+        "filters": [
+          {
+            "fieldCaption": "Layout",
+            "value": "normal"
+          },
+          {
+            "fieldCaption": "Frame version",
+            "value": "2003"
+          },
+          {
+            "fieldCaption": "Border color",
+            "value": "black"
+          },
+          {
+            "fieldCaption": "Availability",
+            "value": "mtgo,paper"
+          }
+        ]
+      }
+    },
+    "execution_time": 12.109233856201172,
+    "status": "success",
+    "error": null,
+    "vds_query": {
+      "fields": [
+        {
+          "fieldCaption": "Converted mana cost"
+        },
+        {
+          "fieldCaption": "Layout"
+        },
+        {
+          "fieldCaption": "Frame version"
+        },
+        {
+          "fieldCaption": "Border color"
+        },
+        {
+          "fieldCaption": "Availability"
+        }
+      ],
+      "filters": [
+        {
+          "fieldCaption": "Layout",
+          "value": "normal"
+        },
+        {
+          "fieldCaption": "Frame version",
+          "value": "2003"
+        },
+        {
+          "fieldCaption": "Border color",
+          "value": "black"
+        },
+        {
+          "fieldCaption": "Availability",
+          "value": "mtgo,paper"
+        }
+      ]
+    },
+    "timestamp": "2025-05-28T16:54:27.158837"
+  },
+  {
+    "test_case": {
+      "question_id": 402,
+      "db_id": "card_games",
+      "question": "What is the percentage of Story Spotlight cards that do not have a text box? List them by their ID.",
+      "evidence": "Story Spotlight cards that do not have a text box refers to isStorylight = 1 and isTextless = 0; Percentage = DIVIDE(SUM(count(id) where isStorylight = 1 AND isTextless = 0 ), SUM(count(id))) * 100",
+      "sql": "SELECT CAST(SUM(CASE WHEN isTextless = 0 AND  isStorySpotlight = 1 THEN 1 ELSE 0 END) AS REAL) * 100 / COUNT(id) FROM cards",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "What is the percentage of Story Spotlight cards that do not have a text box? List them by their ID.",
+      "trace_id": "trace_f23e0a7cc5e94c9f9ab3417e76267ef3",
+      "success": false,
+      "data": null,
+      "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+      "vds_query": null
+    },
+    "execution_time": 12.036630153656006,
+    "status": "failed",
+    "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:54:40.199196"
+  },
+  {
+    "test_case": {
+      "question_id": 405,
+      "db_id": "card_games",
+      "question": "How many Brazilian Portuguese translated sets are inside the Commander block?",
+      "evidence": "Commander block refer to block = 'Commander'; sets refer to code = setCode; Portuguese refer to language = 'Portuguese (Brasil)'",
+      "sql": "SELECT COUNT(T1.id) FROM sets AS T1 INNER JOIN set_translations AS T2 ON T1.code = T2.setCode WHERE T2.language = 'Portuguese (Brazil)' AND T1.block = 'Commander'",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "How many Brazilian Portuguese translated sets are inside the Commander block?",
+      "trace_id": "trace_f40ce5962cbc4a959723530af5d41ff3",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 11.852012872695923,
+    "status": "success",
+    "error": null,
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:54:53.055628"
+  },
+  {
+    "test_case": {
+      "question_id": 407,
+      "db_id": "card_games",
+      "question": "Lists all types of cards in German.",
+      "evidence": "German refer to language; all types refer to the subtypes, supertypes; subtypes is not null AND supertypes is not null",
+      "sql": "SELECT T1.subtypes, T1.supertypes FROM cards AS T1 INNER JOIN foreign_data AS T2 ON T1.uuid = T2.uuid WHERE T2.language = 'German' AND T1.subtypes IS NOT NULL AND T1.supertypes IS NOT NULL",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "Lists all types of cards in German.",
+      "trace_id": "trace_31d2c89eb0fd4cdf87faa3d8c536a22c",
+      "success": false,
+      "data": null,
+      "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+      "vds_query": null
+    },
+    "execution_time": 6.999549865722656,
+    "status": "failed",
+    "error": "Error code: 400 - {'error': {'message': 'Your input exceeds the context window of this model. Please adjust your input and try again.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'context_length_exceeded'}}",
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:55:01.058574"
+  },
+  {
+    "test_case": {
+      "question_id": 408,
+      "db_id": "card_games",
+      "question": "How many unknown power cards contain info about the triggered ability",
+      "evidence": "unknown power cards refers to power is null or power = '*';contain info about the triggered ability refers to text contains 'triggered ability'",
+      "sql": "SELECT Count(DISTINCT T1.id) FROM cards AS T1 INNER JOIN rulings AS T2 ON T1.uuid = T2.uuid WHERE (T1.power IS NULL OR T1.power = '*') AND T2.text LIKE '%triggered ability%'",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "How many unknown power cards contain info about the triggered ability",
+      "trace_id": "trace_6168e39122e74e04a6c4e949e7c4951a",
+      "success": true,
+      "data": "The query returned various power values, but it seems that none of them specifically indicate a count of unknown power cards containing information about the triggered ability. \n\nTo clarify, the results included a range of power values, including some that are not standard numerical values (like \"*\", \"\u221e\", and \"?\"). \n\nIt appears that there are no cards explicitly categorized as \"unknown power\" with a triggered ability in the dataset.\n\nVDS_QUERY: {\"fields\":[{\"fieldCaption\":\"Power\",\"function\":\"COUNT\"}],\"filters\":[{\"fieldCaption\":\"Keywords\",\"function\":\"CONTAINS\",\"value\":\"unknown power\"},{\"fieldCaption\":\"Text\",\"function\":\"CONTAINS\",\"value\":\"triggered ability\"}]}",
+      "error": null,
+      "vds_query": {
+        "fields": [
+          {
+            "fieldCaption": "Power",
+            "function": "COUNT"
+          }
+        ],
+        "filters": [
+          {
+            "fieldCaption": "Keywords",
+            "function": "CONTAINS",
+            "value": "unknown power"
+          },
+          {
+            "fieldCaption": "Text",
+            "function": "CONTAINS",
+            "value": "triggered ability"
+          }
+        ]
+      }
+    },
+    "execution_time": 9.45017671585083,
+    "status": "success",
+    "error": null,
+    "vds_query": {
+      "fields": [
+        {
+          "fieldCaption": "Power",
+          "function": "COUNT"
+        }
+      ],
+      "filters": [
+        {
+          "fieldCaption": "Keywords",
+          "function": "CONTAINS",
+          "value": "unknown power"
+        },
+        {
+          "fieldCaption": "Text",
+          "function": "CONTAINS",
+          "value": "triggered ability"
+        }
+      ]
+    },
+    "timestamp": "2025-05-28T16:55:11.512344"
+  },
+  {
+    "test_case": {
+      "question_id": 409,
+      "db_id": "card_games",
+      "question": "Indicates the number of cards with pre-modern format, ruling text \"This is a triggered mana ability.\" that do not have multiple faces.",
+      "evidence": "pre-modern format refers to format = 'premodern' ;do not have multiple faces refers to side IS NULL",
+      "sql": "SELECT COUNT(T1.id) FROM cards AS T1 INNER JOIN legalities AS T2 ON T1.uuid = T2.uuid INNER JOIN rulings AS T3 ON T1.uuid = T3.uuid WHERE T2.format = 'premodern' AND T3.text = 'This is a triggered mana ability.' AND T1.Side IS NULL",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "Indicates the number of cards with pre-modern format, ruling text \"This is a triggered mana ability.\" that do not have multiple faces.",
+      "trace_id": "trace_964b682b1fd542d4be1e39417f523bd7",
+      "success": true,
+      "data": "Unable to access Tableau datasources due to authentication issues.",
+      "error": null,
+      "vds_query": null
+    },
+    "execution_time": 11.79060411453247,
+    "status": "success",
+    "error": null,
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:55:24.306589"
+  },
+  {
+    "test_case": {
+      "question_id": 412,
+      "db_id": "card_games",
+      "question": "What is the foreign name of the card in French of type Creature, normal layout and black border color, by artist Matthew D. Wilson?",
+      "evidence": "in French refers to language = 'French'; black border color refers to borderColor = 'black'",
+      "sql": "SELECT name FROM foreign_data WHERE uuid IN ( SELECT uuid FROM cards WHERE types = 'Creature' AND layout = 'normal' AND borderColor = 'black' AND artist = 'Matthew D. Wilson' ) AND language = 'French'",
+      "difficulty": "moderate"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "What is the foreign name of the card in French of type Creature, normal layout and black border color, by artist Matthew D. Wilson?",
+      "trace_id": "trace_885042414b204f78b67bf81cd71fcbc9",
+      "success": false,
+      "data": null,
+      "error": "Error invoking MCP tool query-datasource: Timed out while waiting for response to ClientRequest. Waited 5.0 seconds.",
+      "vds_query": null
+    },
+    "execution_time": 11.368098258972168,
+    "status": "failed",
+    "error": "Error invoking MCP tool query-datasource: Timed out while waiting for response to ClientRequest. Waited 5.0 seconds.",
+    "vds_query": null,
+    "timestamp": "2025-05-28T16:55:36.678464"
+  },
+  {
+    "test_case": {
+      "question_id": 414,
+      "db_id": "card_games",
+      "question": "What language is the set of 180 cards that belongs to the Ravnica block translated into?",
+      "evidence": "set of 180 cards refers to baseSetSize = 180",
+      "sql": "SELECT T2.language FROM sets AS T1 INNER JOIN set_translations AS T2 ON T1.code = T2.setCode WHERE T1.block = 'Ravnica' AND T1.baseSetSize = 180",
+      "difficulty": "simple"
+    },
+    "mcp_result": {
+      "datasource": "card_games",
+      "query": "What language is the set of 180 cards that belongs to the Ravnica block translated into?",
+      "trace_id": "trace_0d5808bdb2bf45fa83b9ca5bb20e4d3e",
+      "success": true,
+      "data": "The set of 180 cards that belongs to the Ravnica block is translated into the following languages:\n\n- Italian\n- Chinese Simplified\n- Japanese\n- Portuguese (Brazil)\n- Korean\n- French\n- German\n- Russian\n- Spanish\n- Chinese Traditional\n\nVDS_QUERY: {\"fields\":[{\"fieldCaption\":\"Language (Set Translations)\",\"function\":\"COUNT\"}]}",
+      "error": null,
+      "vds_query": {
+        "fields": [
+          {
+            "fieldCaption": "Language (Set Translations)",
+            "function": "COUNT"
+          }
+        ]
+      }
+    },
+    "execution_time": 7.0235278606414795,
+    "status": "success",
+    "error": null,
+    "vds_query": {
+      "fields": [
+        {
+          "fieldCaption": "Language (Set Translations)",
+          "function": "COUNT"
+        }
+      ]
+    },
+    "timestamp": "2025-05-28T16:55:44.704820"
+  }
+]

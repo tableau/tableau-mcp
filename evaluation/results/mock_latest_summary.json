@@ -1,0 +1,30 @@
+{
+  "total_tests": 9,
+  "successful": 8,
+  "failed": 1,
+  "errors": 0,
+  "success_rate": 0.8888888888888888,
+  "by_database": {
+    "california_schools": {
+      "total": 3,
+      "success": 3,
+      "failed": 0,
+      "error": 0
+    },
+    "card_games": {
+      "total": 3,
+      "success": 3,
+      "failed": 0,
+      "error": 0
+    },
+    "financial": {
+      "total": 3,
+      "success": 2,
+      "failed": 1,
+      "error": 0
+    }
+  },
+  "average_execution_time": 1.14768828286065,
+  "timestamp": "2025-05-28T16:04:13.992540",
+  "mode": "mock"
+}
