@@ -31,7 +31,7 @@ const mockVdsResponses = vi.hoisted(() => ({
     debug: {
       details: {
         detail:
-          'The formula for calculation [Profit Margin] is invalid:\nAt position 0, length 3: SUM is being called with (string), did you mean (float)?',
+          'Error in query, Unknown Field: Foobar.',
       },
     },
   },
