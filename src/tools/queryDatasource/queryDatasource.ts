@@ -29,7 +29,7 @@ export const queryDatasourceTool = new Tool({
         const datasource = { datasourceLuid };
         const options = {
           returnFormat: 'OBJECTS',
-          debug: false,
+          debug: true,
           disaggregate: false,
         } as const;
 

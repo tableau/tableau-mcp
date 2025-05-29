@@ -28,6 +28,12 @@ const mockVdsResponses = vi.hoisted(() => ({
     errorCode: '400803',
     message: 'Unknown Field: Foobar.',
     datetime: '2024-06-19T17:51:36.4771244Z',
+    debug: {
+      details: {
+        detail:
+          'The formula for calculation [Profit Margin] is invalid:\nAt position 0, length 3: SUM is being called with (string), did you mean (float)?',
+      },
+    },
   },
 }));
 
@@ -70,7 +76,7 @@ describe('queryDatasourceTool', () => {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
       },
       options: {
-        debug: false,
+        debug: true,
         disaggregate: false,
         returnFormat: 'OBJECTS',
       },
@@ -106,7 +112,7 @@ describe('queryDatasourceTool', () => {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
       },
       options: {
-        debug: false,
+        debug: true,
         disaggregate: false,
         returnFormat: 'OBJECTS',
       },
