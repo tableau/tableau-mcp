@@ -17,7 +17,7 @@ const ReturnFormat = z.enum(['OBJECTS', 'ARRAYS']);
 const QueryOptions = z
   .object({
     returnFormat: ReturnFormat,
-    debug: z.boolean().default(true),
+    debug: z.boolean().default(false),
   })
   .partial()
   .passthrough();
