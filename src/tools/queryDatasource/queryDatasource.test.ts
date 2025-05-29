@@ -141,7 +141,7 @@ async function getToolResult(): Promise<CallToolResult> {
   return await queryDatasourceTool.callback(
     {
       datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
-      datasourceQuery: {
+      query: {
         fields: [
           { fieldCaption: 'Category' },
           { fieldCaption: 'Profit', function: 'SUM', sortDirection: 'DESC' },
