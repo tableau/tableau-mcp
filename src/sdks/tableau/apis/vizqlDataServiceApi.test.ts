@@ -587,3 +587,139 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
     expect(() => Filter.parse(data)).toThrow();
   });
 });
+
+describe('RELATIVE_DATE Filter schema', () => {
+  it('accepts a valid RELATIVE_DATE filter (CURRENT)', () => {
+    const data = {
+      filterType: 'RELATIVE_DATE',
+      field: { fieldCaption: 'Order Date' },
+      periodType: 'YEARS',
+      dateRangeType: 'CURRENT',
+    };
+    expect(() => Filter.parse(data)).not.toThrow();
+  });
+
+  it('accepts a valid RELATIVE_DATE filter (LAST)', () => {
+    const data = {
+      filterType: 'RELATIVE_DATE',
+      field: { fieldCaption: 'Order Date' },
+      periodType: 'MONTHS',
+      dateRangeType: 'LAST',
+    };
+    expect(() => Filter.parse(data)).not.toThrow();
+  });
+
+  it('accepts a valid RELATIVE_DATE filter (NEXT)', () => {
+    const data = {
+      filterType: 'RELATIVE_DATE',
+      field: { fieldCaption: 'Order Date' },
+      periodType: 'MONTHS',
+      dateRangeType: 'NEXT',
+    };
+    expect(() => Filter.parse(data)).not.toThrow();
+  });
+
+  it('accepts a valid RELATIVE_DATE filter (TODATE)', () => {
+    const data = {
+      filterType: 'RELATIVE_DATE',
+      field: { fieldCaption: 'Order Date' },
+      periodType: 'DAYS',
+      dateRangeType: 'TODATE',
+      anchorDate: '2025-01-01',
+    };
+    expect(() => Filter.parse(data)).not.toThrow();
+  });
+
+  it('accepts a valid RELATIVE_DATE filter (LASTN)', () => {
+    const data = {
+      filterType: 'RELATIVE_DATE',
+      field: { fieldCaption: 'Order Date' },
+      periodType: 'MONTHS',
+      dateRangeType: 'LASTN',
+      rangeN: 3,
+    };
+    expect(() => Filter.parse(data)).not.toThrow();
+  });
+
+  it('accepts a valid RELATIVE_DATE filter (NEXTN)', () => {
+    const data = {
+      filterType: 'RELATIVE_DATE',
+      field: { fieldCaption: 'Order Date' },
+      periodType: 'MONTHS',
+      dateRangeType: 'NEXTN',
+      rangeN: 2,
+    };
+    expect(() => Filter.parse(data)).not.toThrow();
+  });
+
+  it('rejects a RELATIVE_DATE filter missing periodType', () => {
+    const data = {
+      filterType: 'RELATIVE_DATE',
+      field: { fieldCaption: 'Order Date' },
+      dateRangeType: 'CURRENT',
+    };
+    expect(() => Filter.parse(data)).toThrow();
+  });
+
+  it('rejects a RELATIVE_DATE filter (TODATE) missing dateRangeType', () => {
+    const data = {
+      filterType: 'RELATIVE_DATE',
+      field: { fieldCaption: 'Order Date' },
+      periodType: 'DAYS',
+    };
+    expect(() => Filter.parse(data)).toThrow();
+  });
+
+  it('rejects a RELATIVE_DATE filter (LASTN) missing rangeN', () => {
+    const data = {
+      filterType: 'RELATIVE_DATE',
+      field: { fieldCaption: 'Order Date' },
+      periodType: 'MONTHS',
+      dateRangeType: 'LASTN',
+    };
+    expect(() => Filter.parse(data)).toThrow();
+  });
+
+  it('rejects a RELATIVE_DATE filter (NEXTN) missing rangeN', () => {
+    const data = {
+      filterType: 'RELATIVE_DATE',
+      field: { fieldCaption: 'Order Date' },
+      periodType: 'MONTHS',
+      dateRangeType: 'NEXTN',
+    };
+    expect(() => Filter.parse(data)).toThrow();
+  });
+
+  it('rejects a RELATIVE_DATE filter with rangeN (not NEXTN or LASTN)', () => {
+    const data = {
+      filterType: 'RELATIVE_DATE',
+      field: { fieldCaption: 'Order Date' },
+      periodType: 'MONTHS',
+      dateRangeType: 'CURRENT',
+      rangeN: 1,
+    };
+    expect(() => Filter.parse(data)).toThrow();
+  });
+
+  it('rejects a RELATIVE_DATE filter with function', () => {
+    const data = {
+      filterType: 'RELATIVE_DATE',
+      field: { fieldCaption: 'Order Date', function: 'SUM' },
+      periodType: 'MONTHS',
+      dateRangeType: 'NEXT',
+      rangeN: 1,
+    };
+    expect(() => Filter.parse(data)).toThrow();
+  });
+
+  it('rejects a RELATIVE_DATE filter with calculation', () => {
+    const data = {
+      filterType: 'RELATIVE_DATE',
+      field: { fieldCaption: 'Order Date', calculation: 'SUM([Sales])' },
+      periodType: 'MONTHS',
+      dateRangeType: 'NEXT',
+      rangeN: 1,
+    };
+    expect(() => Filter.parse(data)).toThrow();
+  });
+});
