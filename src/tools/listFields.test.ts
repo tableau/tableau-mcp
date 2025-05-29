@@ -71,7 +71,9 @@ describe('listFieldsTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
-    expect(result.content[0].text as string).toBe('No published datasources in response');
+    expect(result.content[0].text as string).toBe(
+      '{"requestId":"123e4567-e89b-12d3-a456-426614174000","error":"No published datasources in response"}',
+    );
     expect(mocks.mockGraphql).toHaveBeenCalledWith(getGraphqlQuery('test-luid'));
   });
 

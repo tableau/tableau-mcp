@@ -51,8 +51,8 @@ export const listFieldsTool = new Tool({
 
         return new Err('No published datasources in response');
       },
-      getErrorText: (error: string) => {
-        return error;
+      getErrorText: (requestId: string, error: string) => {
+        return JSON.stringify({ requestId, error });
       },
     });
   },

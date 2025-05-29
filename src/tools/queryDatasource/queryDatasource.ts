@@ -48,8 +48,8 @@ export const queryDatasourceTool = new Tool({
 
         return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
       },
-      getErrorText: (error: z.infer<typeof TableauError>) => {
-        return JSON.stringify(handleQueryDatasourceError(error));
+      getErrorText: (requestId: string, error: z.infer<typeof TableauError>) => {
+        return JSON.stringify({ requestId, ...handleQueryDatasourceError(error) });
       },
     });
   },

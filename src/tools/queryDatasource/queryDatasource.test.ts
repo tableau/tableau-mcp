@@ -96,6 +96,7 @@ describe('queryDatasourceTool', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toBe(
       JSON.stringify({
+        requestId: '123e4567-e89b-12d3-a456-426614174000',
         ...mockVdsResponses.error,
         condition: 'Validation failed',
         details: "The incoming request isn't valid per the validation rules.",

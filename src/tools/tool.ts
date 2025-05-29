@@ -25,7 +25,7 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
 type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined> = {
   args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
   callback: (requestId: string) => Promise<Result<T, E>>;
-  getErrorText?: (error: E) => string;
+  getErrorText?: (requestId: string, error: E) => string;
 };
 
 export class Tool<Args extends ZodRawShape | undefined = undefined> {
@@ -77,7 +77,11 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.logInvocation(args);
 
     if (args) {
-      this.argsValidator?.(args);
+      try {
+        this.argsValidator?.(args);
+      } catch (error) {
+        return getErrorResult(requestId, error);
+      }
     }
 
     try {
@@ -101,7 +105,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
           content: [
             {
               type: 'text',
-              text: getErrorText(result.error),
+              text: getErrorText(requestId, result.error),
             },
           ],
         };
