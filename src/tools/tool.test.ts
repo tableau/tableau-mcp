@@ -20,6 +20,7 @@ describe('Tool', () => {
     paramsSchema: {
       param1: z.string(),
     },
+    argsValidator: vi.fn(),
     annotations: {
       title: 'List Fields',
       readOnlyHint: true,
@@ -91,5 +92,14 @@ describe('Tool', () => {
     expect(result.content[0].text).toBe(
       'requestId: 123e4567-e89b-12d3-a456-426614174000, error: Test error',
     );
+  });
+
+  it('should call argsValidator with provided args', () => {
+    const tool = new Tool(mockParams);
+    const args = { param1: 'test' };
+
+    tool.logAndExecute({ args, callback: vi.fn() });
+
+    expect(mockParams.argsValidator).toHaveBeenCalledWith(args);
   });
 });

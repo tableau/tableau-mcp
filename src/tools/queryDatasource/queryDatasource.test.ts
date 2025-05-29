@@ -70,7 +70,7 @@ describe('queryDatasourceTool', () => {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
       },
       options: {
-        debug: false,
+        debug: true,
         disaggregate: false,
         returnFormat: 'OBJECTS',
       },
@@ -106,7 +106,7 @@ describe('queryDatasourceTool', () => {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
       },
       options: {
-        debug: false,
+        debug: true,
         disaggregate: false,
         returnFormat: 'OBJECTS',
       },
