@@ -8,7 +8,7 @@ const Connection = z.object({
 });
 
 const Datasource = z.object({
-  datasourceLuid: z.string(),
+  datasourceLuid: z.string().nonempty(),
   connections: z.array(Connection).optional(),
 });
 

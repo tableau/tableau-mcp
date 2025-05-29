@@ -12,7 +12,7 @@ export const readMetadataTool = new Tool({
   description:
     'Requests metadata for the specified data source. The metadata provides information about the data fields, such as field names, data types, and descriptions.',
   paramsSchema: {
-    datasourceLuid: z.string(),
+    datasourceLuid: z.string().nonempty(),
   },
   annotations: {
     title: 'Read Metadata',

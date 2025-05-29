@@ -13,7 +13,7 @@ export const queryDatasourceTool = new Tool({
   name: 'query-datasource',
   description: queryDatasourceToolDescription,
   paramsSchema: {
-    datasourceLuid: z.string(),
+    datasourceLuid: z.string().nonempty(),
     query: Query,
   },
   annotations: {

@@ -1,7 +1,6 @@
 import { validateDatasourceLuid } from './validateDatasourceLuid.js';
 
-const errorMessage =
-  'datasourceLuid must be a non-empty string. Use the "list-datasources" tool to get a list of datasources and their luid.';
+const errorMessage = 'datasourceLuid must be a non-empty string.';
 
 describe('validateDatasourceLuid', () => {
   it('does not throw when datasourceLuid is a non-empty string', () => {
