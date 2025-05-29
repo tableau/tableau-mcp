@@ -29,7 +29,7 @@ export const ReadMetadataRequest = z
   })
   .passthrough();
 
-const Function = z.enum([
+export const Function = z.enum([
   'SUM',
   'AVG',
   'MEDIAN',
@@ -106,7 +106,7 @@ const Field = z.union([
   FieldBase.extend({ calculation: z.string() }).strict(),
 ]);
 
-const FilterField = z.union([
+export const FilterField = z.union([
   z.object({ fieldCaption: z.string() }).strict(),
   z.object({ fieldCaption: z.string(), function: Function }).strict(),
   z.object({ calculation: z.string() }).strict(),
@@ -122,7 +122,7 @@ const SimpleFilterBase = z.object({
   context: z.boolean().optional().default(false),
 });
 
-const SetFilter = SimpleFilterBase.extend({
+export const SetFilter = SimpleFilterBase.extend({
   filterType: z.literal('SET'),
   values: z.union([z.array(z.string()), z.array(z.number()), z.array(z.boolean())]),
   exclude: z.boolean().optional().default(false),
@@ -216,14 +216,14 @@ const QuantitativeDateFilter = z.discriminatedUnion('quantitativeFilterType', [
   }).strict(),
 ]);
 
-const TopNFilter = FilterBase.extend({
+export const TopNFilter = FilterBase.extend({
   filterType: z.literal('TOP'),
   howMany: z.number(),
   fieldToMeasure: FilterField,
   direction: z.enum(['TOP', 'BOTTOM']).optional().default('TOP'),
 });
 
-const Filter = z.union([
+export const Filter = z.union([
   SetFilter.strict(),
   TopNFilter.strict(),
   ...MatchFilter.options,

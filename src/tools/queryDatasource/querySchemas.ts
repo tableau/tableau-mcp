@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { Filter } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
+
 const Functions = [
   'SUM',
   'AVG',
@@ -39,4 +41,5 @@ const Field = z.object({
 
 export const DatasourceQuery = z.object({
   fields: z.array(Field),
+  filters: z.array(Filter).optional(),
 });
