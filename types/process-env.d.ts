@@ -5,7 +5,6 @@ export interface ProcessEnvEx {
   SITE_NAME: string | undefined;
   PAT_NAME: string | undefined;
   PAT_VALUE: string | undefined;
-  JWT: string | undefined;
   CONNECTED_APP_CLIENT_ID: string | undefined;
   CONNECTED_APP_SECRET_ID: string | undefined;
   CONNECTED_APP_SECRET_VALUE: string | undefined;

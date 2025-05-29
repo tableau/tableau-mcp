@@ -76,7 +76,7 @@ Several different authentication options are supported, but you only need to pro
 
 > 💡 When multiple credentials are provided, the order in which the below authentication methods are
 > listed is also the order of precedence used by the server. Provide the `AUTH_TYPE` environment
-> variable to specify which authentication method to use. Allowed values are `pat`, `jwt`,
+> variable to specify which authentication method to use. Allowed values are `pat`,
 > `direct-trust`, and `username-password`.
 
 ### Personal Access Token (PAT)
@@ -84,17 +84,6 @@ Several different authentication options are supported, but you only need to pro
 This is probably the best choice for getting started. If you have a
 [personal access token](https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm),
 you can use it by setting the `PAT_NAME` and `PAT_VALUE` environment variables.
-
-### JSON Web Token (JWT)
-
-If you have a JWT generated using a
-[Direct Trust Connected App](https://help.tableau.com/current/online/en-us/connected_apps_direct.htm#step-3-configure-the-jwt),
-you can use it by setting the `JWT` environment variable.
-
-> ⚠️ Required scopes are:
->
-> - `tableau:viz_data_service:read`
-> - `tableau:content:read`
 
 ### Connected App (Direct Trust)
 
