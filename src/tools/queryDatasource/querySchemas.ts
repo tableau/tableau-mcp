@@ -34,6 +34,7 @@ const Field = z.object({
   sortDirection: SortDirection.optional(),
   sortPriority: z.number().int().optional(),
   function: Function.optional(),
+  calculation: z.string().optional(),
 });
 
 export const DatasourceQuery = z.object({

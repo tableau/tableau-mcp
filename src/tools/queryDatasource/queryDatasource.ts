@@ -6,6 +6,7 @@ import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
 import { Query, TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Tool } from '../tool.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
+import { validateQuery } from './queryDatasourceValidator.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
 
 export const queryDatasourceTool = new Tool({
@@ -20,6 +21,7 @@ export const queryDatasourceTool = new Tool({
     readOnlyHint: true,
     openWorldHint: false,
   },
+  argsValidator: validateQuery,
   callback: async ({ datasourceLuid, query }): Promise<CallToolResult> => {
     const config = getConfig();
     return await queryDatasourceTool.logAndExecute({
@@ -28,7 +30,7 @@ export const queryDatasourceTool = new Tool({
         const datasource = { datasourceLuid };
         const options = {
           returnFormat: 'OBJECTS',
-          debug: false,
+          debug: true,
           disaggregate: false,
         } as const;
 
