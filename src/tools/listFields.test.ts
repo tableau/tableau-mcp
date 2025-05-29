@@ -31,8 +31,6 @@ const mockMetadataResponses = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   mockGraphql: vi.fn(),
-  mockGraphqlSuccess: vi.fn().mockResolvedValue(mockMetadataResponses.success),
-  mockGraphqlError: vi.fn().mockRejectedValue(mockMetadataResponses.error),
 }));
 
 vi.mock('../restApiInstance.js', () => ({
@@ -42,6 +40,10 @@ vi.mock('../restApiInstance.js', () => ({
     },
   }),
 }));
+
+vi.mock('node:crypto', () => {
+  return { randomUUID: vi.fn(() => '123e4567-e89b-12d3-a456-426614174000') };
+});
 
 describe('listFieldsTool', () => {
   beforeEach(() => {
@@ -79,7 +81,9 @@ describe('listFieldsTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toBe(errorMessage);
+    expect(result.content[0].text).toBe(
+      'requestId: 123e4567-e89b-12d3-a456-426614174000, error: API Error',
+    );
   });
 });
 

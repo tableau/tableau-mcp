@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import jwt, { JwtHeader, JwtPayload } from 'jsonwebtoken';
 
 export function getJwt({
@@ -20,7 +22,7 @@ export function getJwt({
   };
 
   const payload: JwtPayload = {
-    jti: crypto.randomUUID(),
+    jti: randomUUID(),
     iss: connectedApp.clientId,
     aud: 'tableau',
     sub: username,

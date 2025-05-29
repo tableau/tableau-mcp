@@ -3,8 +3,9 @@ import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
-import { Query } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { Query, TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Tool } from '../tool.js';
+import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
 
 export const queryDatasourceTool = new Tool({
@@ -42,7 +43,11 @@ export const queryDatasourceTool = new Tool({
           config.authConfig,
           requestId,
         );
+
         return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+      },
+      getErrorText: (error: z.infer<typeof TableauError>) => {
+        return JSON.stringify(handleQueryDatasourceError(error));
       },
     });
   },

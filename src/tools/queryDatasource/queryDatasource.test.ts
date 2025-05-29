@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err, Ok } from 'ts-results-es';
 
 import { server } from '../../server.js';
 import { queryDatasourceTool } from './queryDatasource.js';
@@ -24,17 +25,14 @@ const mockVdsResponses = vi.hoisted(() => ({
     ],
   },
   error: {
-    errorCode: '500101',
-    message: 'Tableau Server User session has timed out',
+    errorCode: '400803',
+    message: 'Unknown Field: Foobar.',
     datetime: '2024-06-19T17:51:36.4771244Z',
-    details: null,
   },
 }));
 
 const mocks = vi.hoisted(() => ({
   mockQueryDatasource: vi.fn(),
-  mockQueryDatasourceSuccess: vi.fn().mockResolvedValue(mockVdsResponses.success),
-  mockQueryDatasourceError: vi.fn().mockRejectedValue(mockVdsResponses.error),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -44,6 +42,10 @@ vi.mock('../../restApiInstance.js', () => ({
     },
   }),
 }));
+
+vi.mock('node:crypto', () => {
+  return { randomUUID: vi.fn(() => '123e4567-e89b-12d3-a456-426614174000') };
+});
 
 describe('queryDatasourceTool', () => {
   beforeEach(() => {
@@ -57,7 +59,7 @@ describe('queryDatasourceTool', () => {
   });
 
   it('should successfully query the datasource', async () => {
-    mocks.mockQueryDatasource.mockResolvedValue(mockVdsResponses.success);
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
 
     const result = await getToolResult();
 
@@ -88,11 +90,17 @@ describe('queryDatasourceTool', () => {
   });
 
   it('should return error VDS returns an error', async () => {
-    mocks.mockQueryDatasource.mockRejectedValue(mockVdsResponses.error);
+    mocks.mockQueryDatasource.mockResolvedValue(new Err(mockVdsResponses.error));
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Tableau Server User session has timed out');
+    expect(result.content[0].text).toBe(
+      JSON.stringify({
+        ...mockVdsResponses.error,
+        condition: 'Validation failed',
+        details: "The incoming request isn't valid per the validation rules.",
+      }),
+    );
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
       datasource: {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
@@ -123,7 +131,9 @@ describe('queryDatasourceTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toBe(errorMessage);
+    expect(result.content[0].text).toBe(
+      'requestId: 123e4567-e89b-12d3-a456-426614174000, error: API Error',
+    );
   });
 });
 

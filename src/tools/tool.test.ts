@@ -1,3 +1,4 @@
+import { Ok } from 'ts-results-es';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -7,6 +8,10 @@ import { Tool } from './tool.js';
 
 // Mock server.server.sendLoggingMessage since the transport won't be connected.
 vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
+
+vi.mock('node:crypto', () => {
+  return { randomUUID: vi.fn(() => '123e4567-e89b-12d3-a456-426614174000') };
+});
 
 describe('Tool', () => {
   const mockParams = {
@@ -52,7 +57,9 @@ describe('Tool', () => {
   it('should return successful result when callback succeeds', async () => {
     const tool = new Tool(mockParams);
     const successResult = { data: 'success' };
-    const callback = vi.fn().mockImplementation(async (_requestId: string) => successResult);
+    const callback = vi
+      .fn()
+      .mockImplementation(async (_requestId: string) => new Ok(successResult));
 
     const spy = vi.spyOn(tool, 'logInvocation');
     const result = await tool.logAndExecute({
@@ -81,6 +88,8 @@ describe('Tool', () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0].type).toBe('text');
-    expect(result.content[0].text).toBe(errorMessage);
+    expect(result.content[0].text).toBe(
+      'requestId: 123e4567-e89b-12d3-a456-426614174000, error: Test error',
+    );
   });
 });

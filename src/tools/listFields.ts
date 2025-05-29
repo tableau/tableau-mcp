@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../config.js';
@@ -43,10 +44,13 @@ export const listFieldsTool = new Tool({
         const published = response.data.publishedDatasources;
 
         if (published.length) {
-          return response;
+          return new Ok(response);
         }
 
-        throw new Error('No published datasources in response', { cause: response });
+        return new Err('No published datasources in response');
+      },
+      getErrorText: (error: string) => {
+        return error;
       },
     });
   },

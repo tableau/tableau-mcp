@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
@@ -98,9 +99,8 @@ Retrieves a list of published data sources from a specified Tableau site using t
           config.authConfig,
           requestId,
         );
-        return await restApi.datasourcesMethods.listDatasources(
-          restApi.siteId,
-          validatedFilter ?? '',
+        return new Ok(
+          await restApi.datasourcesMethods.listDatasources(restApi.siteId, validatedFilter ?? ''),
         );
       },
     });
