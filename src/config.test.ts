@@ -15,7 +15,6 @@ describe('Config', () => {
       SITE_NAME: undefined,
       PAT_NAME: undefined,
       PAT_VALUE: undefined,
-      JWT: undefined,
       USERNAME: undefined,
       PASSWORD: undefined,
       CONNECTED_APP_CLIENT_ID: undefined,
@@ -80,7 +79,6 @@ describe('Config', () => {
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
-      JWT: 'test-jwt',
       USERNAME: 'test-user',
       PASSWORD: 'test-password',
       CONNECTED_APP_CLIENT_ID: 'test-client-id',
@@ -95,47 +93,6 @@ describe('Config', () => {
       type: 'pat',
       patName: 'test-pat-name',
       patValue: 'test-pat-value',
-      siteName: 'test-site',
-    });
-  });
-
-  it('should configure JWT authentication when JWT is provided', () => {
-    process.env = {
-      ...process.env,
-      SERVER: 'test-server',
-      SITE_NAME: 'test-site',
-      JWT: 'test-jwt',
-    };
-
-    const config = new Config();
-    expect(config.authConfig).toEqual({
-      type: 'jwt',
-      jwt: 'test-jwt',
-      siteName: 'test-site',
-    });
-  });
-
-  it('should configure JWT authentication when multiple credentials are provided', () => {
-    process.env = {
-      ...process.env,
-      SERVER: 'test-server',
-      SITE_NAME: 'test-site',
-      PAT_NAME: 'test-pat-name',
-      PAT_VALUE: 'test-pat-value',
-      JWT: 'test-jwt',
-      USERNAME: 'test-user',
-      PASSWORD: 'test-password',
-      CONNECTED_APP_CLIENT_ID: 'test-client-id',
-      CONNECTED_APP_SECRET_ID: 'test-secret-id',
-      CONNECTED_APP_SECRET_VALUE: 'test-secret-value',
-      JWT_SCOPES: 'tableau:books:read',
-      AUTH_TYPE: 'jwt',
-    };
-
-    const config = new Config();
-    expect(config.authConfig).toEqual({
-      type: 'jwt',
-      jwt: 'test-jwt',
       siteName: 'test-site',
     });
   });
@@ -171,7 +128,6 @@ describe('Config', () => {
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
-      JWT: 'test-jwt',
       USERNAME: 'test-user',
       PASSWORD: 'test-password',
       CONNECTED_APP_CLIENT_ID: 'test-client-id',
@@ -218,7 +174,6 @@ describe('Config', () => {
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
-      JWT: 'test-jwt',
       USERNAME: 'test-user',
       PASSWORD: 'test-password',
       CONNECTED_APP_CLIENT_ID: 'test-client-id',

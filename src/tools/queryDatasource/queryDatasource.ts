@@ -3,12 +3,11 @@ import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
-import { Datasource, TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { Datasource, Query, TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Tool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
-import { DatasourceQuery } from './querySchemas.js';
 
 type Datasource = z.infer<typeof Datasource>;
 
@@ -17,22 +16,22 @@ export const queryDatasourceTool = new Tool({
   description: queryDatasourceToolDescription,
   paramsSchema: {
     datasourceLuid: z.string(),
-    datasourceQuery: DatasourceQuery,
+    query: Query,
   },
   annotations: {
     title: 'Query Datasource',
     readOnlyHint: true,
     openWorldHint: false,
   },
-  callback: async ({ datasourceLuid, datasourceQuery }): Promise<CallToolResult> => {
+  callback: async ({ datasourceLuid, query }): Promise<CallToolResult> => {
     const config = getConfig();
     return await queryDatasourceTool.logAndExecute({
-      args: { datasourceLuid, datasourceQuery },
+      args: { datasourceLuid, query },
       callback: async (requestId) => {
         const datasource: Datasource = { datasourceLuid };
         const options = {
           returnFormat: 'OBJECTS',
-          debug: false,
+          debug: true,
           disaggregate: false,
         } as const;
 
@@ -48,7 +47,7 @@ export const queryDatasourceTool = new Tool({
 
         const queryRequest = {
           datasource,
-          query: datasourceQuery,
+          query,
           options,
         };
 

@@ -16,7 +16,6 @@
         "SITE_NAME": "${config:tableau.mcp.SITE_NAME}",
         "PAT_NAME": "${config:tableau.mcp.PAT_NAME}",
         "PAT_VALUE": "${config:tableau.mcp.PAT_VALUE}",
-        "JWT": "${config:tableau.mcp.JWT}",
         "USERNAME": "${config:tableau.mcp.USERNAME}",
         "PASSWORD": "${config:tableau.mcp.PASSWORD}",
         "CONNECTED_APP_CLIENT_ID": "${config:tableau.mcp.CONNECTED_APP_CLIENT_ID}",

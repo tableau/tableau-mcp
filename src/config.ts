@@ -17,7 +17,6 @@ class Config {
       SERVER: server,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
-      JWT: jwt,
       USERNAME: username,
       PASSWORD: password,
       CONNECTED_APP_CLIENT_ID: clientId,
@@ -64,16 +63,6 @@ class Config {
         type: 'pat',
         patName,
         patValue,
-        siteName,
-      };
-
-      return;
-    }
-
-    if (jwt && (!authType || authType === 'jwt')) {
-      this.authConfig = {
-        type: 'jwt',
-        jwt,
         siteName,
       };
 

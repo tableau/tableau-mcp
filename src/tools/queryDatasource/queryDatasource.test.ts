@@ -33,6 +33,12 @@ const mockVdsResponses = vi.hoisted(() => ({
     errorCode: '400803',
     message: 'Unknown Field: Foobar.',
     datetime: '2024-06-19T17:51:36.4771244Z',
+    debug: {
+      details: {
+        detail:
+          'Error in query, Unknown Field: Foobar.',
+      },
+    },
   },
 }));
 
@@ -82,7 +88,7 @@ describe('queryDatasourceTool', () => {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
       },
       options: {
-        debug: false,
+        debug: true,
         disaggregate: false,
         returnFormat: 'OBJECTS',
       },
@@ -158,7 +164,7 @@ describe('queryDatasourceTool', () => {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
       },
       options: {
-        debug: false,
+        debug: true,
         disaggregate: false,
         returnFormat: 'OBJECTS',
       },
@@ -193,7 +199,7 @@ async function getToolResult(): Promise<CallToolResult> {
   return await queryDatasourceTool.callback(
     {
       datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
-      datasourceQuery: {
+      query: {
         fields: [
           { fieldCaption: 'Category' },
           { fieldCaption: 'Profit', function: 'SUM', sortDirection: 'DESC' },

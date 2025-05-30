@@ -50,9 +50,6 @@ const Function = z.enum([
   'TRUNC_MONTH',
   'TRUNC_WEEK',
   'TRUNC_DAY',
-  'AGG',
-  'NONE',
-  'UNSPECIFIED',
 ]);
 
 const FieldMetadata = z
@@ -103,34 +100,139 @@ const FieldBase = z.object({
   sortPriority: z.number().int().optional(),
 });
 
-const Field = z.union([
-  FieldBase,
-  FieldBase.and(z.object({ function: Function })),
-  FieldBase.and(z.object({ calculation: z.string() })),
+export const Field = z.union([
+  FieldBase.strict(),
+  FieldBase.extend({ function: Function }).strict(),
+  FieldBase.extend({ calculation: z.string() }).strict(),
 ]);
 
 const FilterField = z.union([
-  z.object({ fieldCaption: z.string() }),
-  z.object({ fieldCaption: z.string(), function: Function }),
-  z.object({ calculation: z.string() }),
+  z.object({ fieldCaption: z.string() }).strict(),
+  z.object({ fieldCaption: z.string(), function: Function }).strict(),
+  z.object({ calculation: z.string() }).strict(),
 ]);
 
-const Filter = z
-  .object({
-    field: FilterField,
-    filterType: z.enum([
-      'QUANTITATIVE_DATE',
-      'QUANTITATIVE_NUMERICAL',
-      'SET',
-      'MATCH',
-      'DATE',
-      'TOP',
-    ]),
-    context: z.boolean().optional().default(false),
-  })
-  .passthrough();
+const FilterBase = z.object({
+  field: FilterField,
+  context: z.boolean().optional().default(false),
+});
 
-export const Query = z.object({
+const SimpleFilterBase = z.object({
+  field: z.object({ fieldCaption: z.string() }).strict(),
+  context: z.boolean().optional().default(false),
+});
+
+const SetFilter = SimpleFilterBase.extend({
+  filterType: z.literal('SET'),
+  values: z.union([z.array(z.string()), z.array(z.number()), z.array(z.boolean())]),
+  exclude: z.boolean().optional().default(false),
+});
+
+const RelativeDateFilterBase = SimpleFilterBase.extend({
+  filterType: z.literal('DATE'),
+  periodType: z.enum(['MINUTES', 'HOURS', 'DAYS', 'WEEKS', 'MONTHS', 'QUARTERS', 'YEARS']),
+  anchorDate: z.string().optional(),
+  includeNulls: z.boolean().optional().default(false),
+});
+
+const RelativeDateFilter = z.discriminatedUnion('dateRangeType', [
+  RelativeDateFilterBase.extend({ dateRangeType: z.literal('CURRENT') }).strict(),
+  RelativeDateFilterBase.extend({ dateRangeType: z.literal('LAST') }).strict(),
+  RelativeDateFilterBase.extend({ dateRangeType: z.literal('NEXT') }).strict(),
+  RelativeDateFilterBase.extend({ dateRangeType: z.literal('TODATE') }).strict(),
+  RelativeDateFilterBase.extend({ dateRangeType: z.literal('LASTN'), rangeN: z.number() }).strict(),
+  RelativeDateFilterBase.extend({ dateRangeType: z.literal('NEXTN'), rangeN: z.number() }).strict(),
+]);
+
+const MatchFilterBase = SimpleFilterBase.extend({
+  filterType: z.literal('MATCH'),
+  startsWith: z.string().optional(),
+  endsWith: z.string().optional(),
+  contains: z.string().optional(),
+  exclude: z.boolean().optional().default(false),
+});
+
+const MatchFilter = z.union([
+  MatchFilterBase.extend({ startsWith: z.string() }).strict(),
+  MatchFilterBase.extend({ endsWith: z.string() }).strict(),
+  MatchFilterBase.extend({ contains: z.string() }).strict(),
+]);
+
+const QuantitativeNumericalFilterBase = FilterBase.extend({
+  filterType: z.literal('QUANTITATIVE_NUMERICAL'),
+});
+
+const QuantitativeNumericalFilter = z.discriminatedUnion('quantitativeFilterType', [
+  QuantitativeNumericalFilterBase.extend({
+    quantitativeFilterType: z.literal('RANGE'),
+    min: z.number(),
+    max: z.number(),
+    includeNulls: z.boolean().optional().default(false),
+  }).strict(),
+  QuantitativeNumericalFilterBase.extend({
+    quantitativeFilterType: z.literal('MIN'),
+    min: z.number(),
+    includeNulls: z.boolean().optional().default(false),
+  }).strict(),
+  QuantitativeNumericalFilterBase.extend({
+    quantitativeFilterType: z.literal('MAX'),
+    max: z.number(),
+    includeNulls: z.boolean().optional().default(false),
+  }).strict(),
+  QuantitativeNumericalFilterBase.extend({
+    quantitativeFilterType: z.literal('ONLY_NULL'),
+  }).strict(),
+  QuantitativeNumericalFilterBase.extend({
+    quantitativeFilterType: z.literal('ONLY_NON_NULL'),
+  }).strict(),
+]);
+
+const QuantitativeDateFilterBase = FilterBase.extend({
+  filterType: z.literal('QUANTITATIVE_DATE'),
+});
+
+const QuantitativeDateFilter = z.discriminatedUnion('quantitativeFilterType', [
+  QuantitativeDateFilterBase.extend({
+    quantitativeFilterType: z.literal('RANGE'),
+    minDate: z.string(),
+    maxDate: z.string(),
+    includeNulls: z.boolean().optional().default(false),
+  }).strict(),
+  QuantitativeDateFilterBase.extend({
+    quantitativeFilterType: z.literal('MIN'),
+    minDate: z.string(),
+    includeNulls: z.boolean().optional().default(false),
+  }).strict(),
+  QuantitativeDateFilterBase.extend({
+    quantitativeFilterType: z.literal('MAX'),
+    maxDate: z.string(),
+    includeNulls: z.boolean().optional().default(false),
+  }).strict(),
+  QuantitativeDateFilterBase.extend({
+    quantitativeFilterType: z.literal('ONLY_NULL'),
+  }).strict(),
+  QuantitativeDateFilterBase.extend({
+    quantitativeFilterType: z.literal('ONLY_NON_NULL'),
+  }).strict(),
+]);
+
+const TopNFilter = FilterBase.extend({
+  filterType: z.literal('TOP'),
+  howMany: z.number(),
+  fieldToMeasure: FilterField,
+  direction: z.enum(['TOP', 'BOTTOM']).optional().default('TOP'),
+});
+
+export const Filter = z.union([
+  SetFilter.strict(),
+  TopNFilter.strict(),
+  ...MatchFilter.options,
+  ...QuantitativeNumericalFilter.options,
+  ...QuantitativeDateFilter.options,
+  ...RelativeDateFilter.options,
+]);
+
+export const Query = z.strictObject({
   fields: z.array(Field),
   filters: z.array(Filter).optional(),
 });
