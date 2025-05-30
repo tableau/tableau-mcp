@@ -588,10 +588,10 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
   });
 });
 
-describe('RELATIVE_DATE Filter schema', () => {
-  it('accepts a valid RELATIVE_DATE filter (CURRENT)', () => {
+describe('DATE Filter schema', () => {
+  it('accepts a valid DATE filter (CURRENT)', () => {
     const data = {
-      filterType: 'RELATIVE_DATE',
+      filterType: 'DATE',
       field: { fieldCaption: 'Order Date' },
       periodType: 'YEARS',
       dateRangeType: 'CURRENT',
@@ -599,9 +599,9 @@ describe('RELATIVE_DATE Filter schema', () => {
     expect(() => Filter.parse(data)).not.toThrow();
   });
 
-  it('accepts a valid RELATIVE_DATE filter (LAST)', () => {
+  it('accepts a valid DATE filter (LAST)', () => {
     const data = {
-      filterType: 'RELATIVE_DATE',
+      filterType: 'DATE',
       field: { fieldCaption: 'Order Date' },
       periodType: 'MONTHS',
       dateRangeType: 'LAST',
@@ -609,9 +609,9 @@ describe('RELATIVE_DATE Filter schema', () => {
     expect(() => Filter.parse(data)).not.toThrow();
   });
 
-  it('accepts a valid RELATIVE_DATE filter (NEXT)', () => {
+  it('accepts a valid DATE filter (NEXT)', () => {
     const data = {
-      filterType: 'RELATIVE_DATE',
+      filterType: 'DATE',
       field: { fieldCaption: 'Order Date' },
       periodType: 'MONTHS',
       dateRangeType: 'NEXT',
@@ -619,9 +619,9 @@ describe('RELATIVE_DATE Filter schema', () => {
     expect(() => Filter.parse(data)).not.toThrow();
   });
 
-  it('accepts a valid RELATIVE_DATE filter (TODATE)', () => {
+  it('accepts a valid DATE filter (TODATE)', () => {
     const data = {
-      filterType: 'RELATIVE_DATE',
+      filterType: 'DATE',
       field: { fieldCaption: 'Order Date' },
       periodType: 'DAYS',
       dateRangeType: 'TODATE',
@@ -630,9 +630,9 @@ describe('RELATIVE_DATE Filter schema', () => {
     expect(() => Filter.parse(data)).not.toThrow();
   });
 
-  it('accepts a valid RELATIVE_DATE filter (LASTN)', () => {
+  it('accepts a valid DATE filter (LASTN)', () => {
     const data = {
-      filterType: 'RELATIVE_DATE',
+      filterType: 'DATE',
       field: { fieldCaption: 'Order Date' },
       periodType: 'MONTHS',
       dateRangeType: 'LASTN',
@@ -641,9 +641,9 @@ describe('RELATIVE_DATE Filter schema', () => {
     expect(() => Filter.parse(data)).not.toThrow();
   });
 
-  it('accepts a valid RELATIVE_DATE filter (NEXTN)', () => {
+  it('accepts a valid DATE filter (NEXTN)', () => {
     const data = {
-      filterType: 'RELATIVE_DATE',
+      filterType: 'DATE',
       field: { fieldCaption: 'Order Date' },
       periodType: 'MONTHS',
       dateRangeType: 'NEXTN',
@@ -652,27 +652,27 @@ describe('RELATIVE_DATE Filter schema', () => {
     expect(() => Filter.parse(data)).not.toThrow();
   });
 
-  it('rejects a RELATIVE_DATE filter missing periodType', () => {
+  it('rejects a DATE filter missing periodType', () => {
     const data = {
-      filterType: 'RELATIVE_DATE',
+      filterType: 'DATE',
       field: { fieldCaption: 'Order Date' },
       dateRangeType: 'CURRENT',
     };
     expect(() => Filter.parse(data)).toThrow();
   });
 
-  it('rejects a RELATIVE_DATE filter (TODATE) missing dateRangeType', () => {
+  it('rejects a DATE filter (TODATE) missing dateRangeType', () => {
     const data = {
-      filterType: 'RELATIVE_DATE',
+      filterType: 'DATE',
       field: { fieldCaption: 'Order Date' },
       periodType: 'DAYS',
     };
     expect(() => Filter.parse(data)).toThrow();
   });
 
-  it('rejects a RELATIVE_DATE filter (LASTN) missing rangeN', () => {
+  it('rejects a DATE filter (LASTN) missing rangeN', () => {
     const data = {
-      filterType: 'RELATIVE_DATE',
+      filterType: 'DATE',
       field: { fieldCaption: 'Order Date' },
       periodType: 'MONTHS',
       dateRangeType: 'LASTN',
@@ -680,9 +680,9 @@ describe('RELATIVE_DATE Filter schema', () => {
     expect(() => Filter.parse(data)).toThrow();
   });
 
-  it('rejects a RELATIVE_DATE filter (NEXTN) missing rangeN', () => {
+  it('rejects a DATE filter (NEXTN) missing rangeN', () => {
     const data = {
-      filterType: 'RELATIVE_DATE',
+      filterType: 'DATE',
       field: { fieldCaption: 'Order Date' },
       periodType: 'MONTHS',
       dateRangeType: 'NEXTN',
@@ -690,9 +690,9 @@ describe('RELATIVE_DATE Filter schema', () => {
     expect(() => Filter.parse(data)).toThrow();
   });
 
-  it('rejects a RELATIVE_DATE filter with rangeN (not NEXTN or LASTN)', () => {
+  it('rejects a DATE filter with rangeN (not NEXTN or LASTN)', () => {
     const data = {
-      filterType: 'RELATIVE_DATE',
+      filterType: 'DATE',
       field: { fieldCaption: 'Order Date' },
       periodType: 'MONTHS',
       dateRangeType: 'CURRENT',
@@ -701,9 +701,9 @@ describe('RELATIVE_DATE Filter schema', () => {
     expect(() => Filter.parse(data)).toThrow();
   });
 
-  it('rejects a RELATIVE_DATE filter with function', () => {
+  it('rejects a DATE filter with function', () => {
     const data = {
-      filterType: 'RELATIVE_DATE',
+      filterType: 'DATE',
       field: { fieldCaption: 'Order Date', function: 'SUM' },
       periodType: 'MONTHS',
       dateRangeType: 'NEXT',
@@ -712,9 +712,9 @@ describe('RELATIVE_DATE Filter schema', () => {
     expect(() => Filter.parse(data)).toThrow();
   });
 
-  it('rejects a RELATIVE_DATE filter with calculation', () => {
+  it('rejects a DATE filter with calculation', () => {
     const data = {
-      filterType: 'RELATIVE_DATE',
+      filterType: 'DATE',
       field: { fieldCaption: 'Order Date', calculation: 'SUM([Sales])' },
       periodType: 'MONTHS',
       dateRangeType: 'NEXT',

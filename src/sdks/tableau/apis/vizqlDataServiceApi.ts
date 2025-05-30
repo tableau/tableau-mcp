@@ -129,7 +129,7 @@ const SetFilter = SimpleFilterBase.extend({
 });
 
 const RelativeDateFilterBase = SimpleFilterBase.extend({
-  filterType: z.literal('RELATIVE_DATE'),
+  filterType: z.literal('DATE'),
   periodType: z.enum(['MINUTES', 'HOURS', 'DAYS', 'WEEKS', 'MONTHS', 'QUARTERS', 'YEARS']),
   anchorDate: z.string().optional(),
   includeNulls: z.boolean().optional().default(false),
