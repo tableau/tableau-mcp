@@ -5,6 +5,7 @@ import invariant from './utils/invariant.js';
 class Config {
   server: string;
   authConfig: AuthConfig;
+  datasourceCredentials: string;
   defaultLogLevel: string;
   disableLogMasking: boolean;
   includeTools: Array<ToolName>;
@@ -24,6 +25,7 @@ class Config {
       CONNECTED_APP_SECRET_VALUE: secretValue,
       JWT_SCOPES: scopes,
       AUTH_TYPE: authType,
+      DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
       INCLUDE_TOOLS: includeTools,
@@ -31,6 +33,7 @@ class Config {
     } = process.env;
 
     siteName = siteName ?? '';
+    this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
 

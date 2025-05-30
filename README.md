@@ -189,12 +189,13 @@ These config files will be used in tool configuration explained below.
 
 #### Optional Environment Variables
 
-| **Variable**          | **Description**                                                                                     | **Default**                        | **Note**                                                                 |
-| --------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ |
-| `DEFAULT_LOG_LEVEL`   | The default logging level of the server.                                                            | `debug`                            |                                                                          |
-| `DISABLE_LOG_MASKING` | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                          |
-| `INCLUDE_TOOLS`       | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts). |
-| `EXCLUDE_TOOLS`       | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                 |
+| **Variable**             | **Description**                                                                                     | **Default**                        | **Note**                                                                                                 |
+| ------------------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `DEFAULT_LOG_LEVEL`      | The default logging level of the server.                                                            | `debug`                            |                                                                                                          |
+| `DATASOURCE_CREDENTIALS` | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is: `{"ds-luid1":{"u":"username1","p":"password1"},"ds-luid2":{"u":"username2","p":"password2"}}` |
+| `DISABLE_LOG_MASKING`    | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                                          |
+| `INCLUDE_TOOLS`          | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                                 |
+| `EXCLUDE_TOOLS`          | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                                 |
 
 ### Running the MCP Inspector
 

@@ -3,11 +3,14 @@ import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
-import { TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { Datasource, TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Tool } from '../tool.js';
+import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
 import { DatasourceQuery } from './querySchemas.js';
+
+type Datasource = z.infer<typeof Datasource>;
 
 export const queryDatasourceTool = new Tool({
   name: 'query-datasource',
@@ -26,12 +29,22 @@ export const queryDatasourceTool = new Tool({
     return await queryDatasourceTool.logAndExecute({
       args: { datasourceLuid, datasourceQuery },
       callback: async (requestId) => {
-        const datasource = { datasourceLuid };
+        const datasource: Datasource = { datasourceLuid };
         const options = {
           returnFormat: 'OBJECTS',
           debug: false,
           disaggregate: false,
         } as const;
+
+        const credentials = getDatasourceCredentials(datasourceLuid);
+        if (credentials) {
+          datasource.connections = [
+            {
+              connectionUsername: credentials.username,
+              connectionPassword: credentials.password,
+            },
+          ];
+        }
 
         const queryRequest = {
           datasource,

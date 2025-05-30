@@ -1,8 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
+import { exportedForTesting as configExportedForTesting } from '../../config.js';
 import { server } from '../../server.js';
+import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
 import { queryDatasourceTool } from './queryDatasource.js';
+
+const { resetConfig } = configExportedForTesting;
+const { resetDatasourceCredentials } = datasourceCredentialsExportedForTesting;
 
 // Mock server.server.sendLoggingMessage since the transport won't be connected.
 vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
@@ -48,8 +53,15 @@ vi.mock('node:crypto', () => {
 });
 
 describe('queryDatasourceTool', () => {
+  const originalEnv = process.env;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    resetConfig();
+    resetDatasourceCredentials();
+    process.env = {
+      ...originalEnv,
+    };
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -68,6 +80,46 @@ describe('queryDatasourceTool', () => {
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
       datasource: {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+      },
+      options: {
+        debug: false,
+        disaggregate: false,
+        returnFormat: 'OBJECTS',
+      },
+      query: {
+        fields: [
+          {
+            fieldCaption: 'Category',
+          },
+          {
+            fieldCaption: 'Profit',
+            function: 'SUM',
+            sortDirection: 'DESC',
+          },
+        ],
+      },
+    });
+  });
+
+  it('should add datasource credentials to the request when provided', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+
+    process.env.DATASOURCE_CREDENTIALS = JSON.stringify({
+      '71db762b-6201-466b-93da-57cc0aec8ed9': { u: 'test-user', p: 'test-pass' },
+    });
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(false);
+
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
+      datasource: {
+        datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+        connections: [
+          {
+            connectionUsername: 'test-user',
+            connectionPassword: 'test-pass',
+          },
+        ],
       },
       options: {
         debug: false,

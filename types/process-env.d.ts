@@ -15,6 +15,7 @@ export interface ProcessEnvEx {
   DISABLE_LOG_MASKING: string | undefined;
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;
+  DATASOURCE_CREDENTIALS: string | undefined;
 }
 
 declare global {

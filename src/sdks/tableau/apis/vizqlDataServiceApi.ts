@@ -7,7 +7,7 @@ const Connection = z.object({
   connectionPassword: z.string(),
 });
 
-const Datasource = z.object({
+export const Datasource = z.object({
   datasourceLuid: z.string(),
   connections: z.array(Connection).optional(),
 });
