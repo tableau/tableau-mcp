@@ -26,7 +26,8 @@
         "DATASOURCE_CREDENTIALS": "${config:tableau.mcp.DATASOURCE_CREDENTIALS}",
         "DEFAULT_LOG_LEVEL": "${config:tableau.mcp.DEFAULT_LOG_LEVEL}",
         "INCLUDE_TOOLS": "${config:tableau.mcp.INCLUDE_TOOLS}",
-        "EXCLUDE_TOOLS": "${config:tableau.mcp.EXCLUDE_TOOLS}"
+        "EXCLUDE_TOOLS": "${config:tableau.mcp.EXCLUDE_TOOLS}",
+        "DISABLE_LOG_MASKING": "${config:tableau.mcp.DISABLE_LOG_MASKING}"
       },
       "args": ["build/index.js"],
       "sourceMaps": true,
