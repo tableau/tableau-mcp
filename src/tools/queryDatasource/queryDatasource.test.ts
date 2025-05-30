@@ -127,7 +127,7 @@ describe('queryDatasourceTool', () => {
         ],
       },
       options: {
-        debug: false,
+        debug: true,
         disaggregate: false,
         returnFormat: 'OBJECTS',
       },
