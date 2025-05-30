@@ -100,7 +100,7 @@ const FieldBase = z.object({
   sortPriority: z.number().int().optional(),
 });
 
-const Field = z.union([
+export const Field = z.union([
   FieldBase.strict(),
   FieldBase.extend({ function: Function }).strict(),
   FieldBase.extend({ calculation: z.string() }).strict(),
@@ -129,7 +129,7 @@ export const SetFilter = SimpleFilterBase.extend({
 });
 
 const RelativeDateFilterBase = SimpleFilterBase.extend({
-  filterType: z.literal('RELATIVE_DATE'),
+  filterType: z.literal('DATE'),
   periodType: z.enum(['MINUTES', 'HOURS', 'DAYS', 'WEEKS', 'MONTHS', 'QUARTERS', 'YEARS']),
   anchorDate: z.string().optional(),
   includeNulls: z.boolean().optional().default(false),

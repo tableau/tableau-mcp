@@ -28,6 +28,12 @@ const mockVdsResponses = vi.hoisted(() => ({
     errorCode: '400803',
     message: 'Unknown Field: Foobar.',
     datetime: '2024-06-19T17:51:36.4771244Z',
+    debug: {
+      details: {
+        detail:
+          'Error in query, Unknown Field: Foobar.',
+      },
+    },
   },
 }));
 
