@@ -41,6 +41,12 @@ describe('getDatasourceCredentials', () => {
       username: 'test-user',
       password: 'test-pass',
     });
+
+    // Call it again to ensure the cache is hit
+    expect(getDatasourceCredentials('test-luid')).toEqual({
+      username: 'test-user',
+      password: 'test-pass',
+    });
   });
 
   it('should return undefined for a non-existent datasource LUID', () => {
