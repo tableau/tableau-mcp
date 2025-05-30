@@ -200,11 +200,11 @@ This is a JSON-stringified version of the following object:
 ```js
 {
   "ds-luid1": [
-    { "luid": "ds1-connection-luid1", "u": "username1", "p": "password1" },
-    { "luid": "ds1-connection-luid2", "u": "username2", "p": "password2" }
+    { luid: "ds1-connection-luid1", u: "username1", p: "password1" },
+    { luid: "ds1-connection-luid2", u: "username2", p: "password2" }
   ],
   "ds-luid2": [
-    { "luid": "ds2-connection-luid1", "u": "username3", "p": "password3" }
+    { luid: "ds2-connection-luid1", u: "username3", p: "password3" }
   ]
 }
 ```
