@@ -35,8 +35,9 @@ export const getDatasourceCredentials = (
 
     const parsed = schema.parse(obj);
     credentialMap = new Map(Object.entries(parsed));
-    return credentialMap?.get(datasourceLuid);
   }
+
+  return credentialMap?.get(datasourceLuid);
 };
 
 export const exportedForTesting = {
