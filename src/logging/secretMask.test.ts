@@ -35,6 +35,54 @@ describe('secretMask', () => {
     });
   });
 
+  it('should mask secrets in datasource connections', () => {
+    const maskedRequest = maskRequest({
+      method: 'POST',
+      baseUrl: 'https://example.com',
+      url: '/api/v1/users',
+      headers: {},
+      data: {
+        datasource: {
+          connections: [
+            {
+              connectionLuid: 'ds1-connection-luid1',
+              connectionUsername: 'username1',
+              connectionPassword: 'password1',
+            },
+            {
+              connectionLuid: 'ds1-connection-luid2',
+              connectionUsername: 'username2',
+              connectionPassword: 'password2',
+            },
+          ],
+        },
+      },
+    });
+
+    expect(maskedRequest).toEqual({
+      method: 'POST',
+      baseUrl: 'https://example.com',
+      url: '/api/v1/users',
+      headers: {},
+      data: {
+        datasource: {
+          connections: [
+            {
+              connectionLuid: 'ds1-connection-luid1',
+              connectionUsername: '<redacted>',
+              connectionPassword: '<redacted>',
+            },
+            {
+              connectionLuid: 'ds1-connection-luid2',
+              connectionUsername: '<redacted>',
+              connectionPassword: '<redacted>',
+            },
+          ],
+        },
+      },
+    });
+  });
+
   it('should mask secrets in responses', () => {
     const maskedResponse = maskResponse({
       status: 200,
