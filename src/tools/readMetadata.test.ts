@@ -1,42 +1,47 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { server } from '../server.js';
-import { getGraphqlQuery, listFieldsTool } from './listFields.js';
+import { readMetadataTool } from './readMetadata.js';
 
 // Mock server.server.sendLoggingMessage since the transport won't be connected.
 vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
 
 const mockMetadataResponses = vi.hoisted(() => ({
   success: {
-    data: {
-      publishedDatasources: [
-        {
-          name: 'Test Datasource',
-          description: 'Test Description',
-          datasourceFilters: [{ field: { name: 'Filter1', description: 'Filter 1 Desc' } }],
-          fields: [
-            { name: 'Field1', description: 'Field 1 Desc' },
-            { name: 'Field2', description: 'Field 2 Desc' },
-          ],
-        },
-      ],
-    },
+    data: [
+      {
+        fieldName: 'Calculation_123456789',
+        fieldCaption: 'Profit Ratio',
+        dataType: 'REAL',
+        logicalTableId: '',
+      },
+      {
+        fieldName: 'Product Name',
+        fieldCaption: 'Product Name',
+        dataType: 'STRING',
+        logicalTableId: 'Orders_123456789',
+      },
+      {
+        fieldName: 'Quantity',
+        fieldCaption: 'Quantity',
+        dataType: 'INTEGER',
+        logicalTableId: 'Orders_123456789',
+      },
+    ],
   },
   error: {
-    data: {
-      publishedDatasources: [],
-    },
+    data: [],
   },
 }));
 
 const mocks = vi.hoisted(() => ({
-  mockGraphql: vi.fn(),
+  mockReadMetadata: vi.fn(),
 }));
 
 vi.mock('../restApiInstance.js', () => ({
   getNewRestApiInstanceAsync: vi.fn().mockResolvedValue({
-    metadataMethods: {
-      graphql: mocks.mockGraphql,
+    vizqlDataServiceMethods: {
+      readMetadata: mocks.mockReadMetadata,
     },
   }),
 }));
@@ -45,30 +50,34 @@ vi.mock('node:crypto', () => {
   return { randomUUID: vi.fn(() => '123e4567-e89b-12d3-a456-426614174000') };
 });
 
-describe('listFieldsTool', () => {
+describe('readMetadataTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('should create a tool instance with correct properties', () => {
-    expect(listFieldsTool.name).toBe('list-fields');
-    expect(listFieldsTool.description).toContain('Fetches field metadata');
-    expect(listFieldsTool.paramsSchema).toMatchObject({ datasourceLuid: expect.any(Object) });
+    expect(readMetadataTool.name).toBe('read-metadata');
+    expect(readMetadataTool.description).toEqual(expect.any(String))
+    expect(readMetadataTool.paramsSchema).toMatchObject({ datasourceLuid: expect.any(Object) });
   });
 
-  it('should successfully fetch and return field metadata', async () => {
-    mocks.mockGraphql.mockResolvedValue(mockMetadataResponses.success);
+  it('should successfully fetch and return metadata', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(mockMetadataResponses.success);
 
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    expect(JSON.parse(result.content[0].text as string)).toEqual(mockMetadataResponses.success);
-    expect(mocks.mockGraphql).toHaveBeenCalledWith(getGraphqlQuery('test-luid'));
+    expect(result.content[0].text).toEqual(JSON.stringify(mockMetadataResponses.success));
+    expect(mocks.mockReadMetadata).toHaveBeenCalledWith({
+      datasource: {
+        datasourceLuid: 'test-luid',
+      },
+    });
   });
 
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
-    mocks.mockGraphql.mockRejectedValue(new Error(errorMessage));
+    mocks.mockReadMetadata.mockRejectedValue(new Error(errorMessage));
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
@@ -79,7 +88,7 @@ describe('listFieldsTool', () => {
 });
 
 async function getToolResult(): Promise<CallToolResult> {
-  return await listFieldsTool.callback(
+  return await readMetadataTool.callback(
     { datasourceLuid: 'test-luid' },
     {
       signal: new AbortController().signal,

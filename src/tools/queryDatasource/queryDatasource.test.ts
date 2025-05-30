@@ -30,8 +30,7 @@ const mockVdsResponses = vi.hoisted(() => ({
     datetime: '2024-06-19T17:51:36.4771244Z',
     debug: {
       details: {
-        detail:
-          'Error in query, Unknown Field: Foobar.',
+        detail: 'Error in query, Unknown Field: Foobar.',
       },
     },
   },

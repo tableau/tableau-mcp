@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../config.js';
@@ -40,14 +40,7 @@ export const listFieldsTool = new Tool({
           config.authConfig,
           requestId,
         );
-        const response = await restApi.metadataMethods.graphql(query);
-        const published = response.data.publishedDatasources;
-
-        if (published.length) {
-          return new Ok(response);
-        }
-
-        return new Err('No published datasources in response');
+        return new Ok(await restApi.metadataMethods.graphql(query));
       },
       getErrorText: (error: string) => {
         return error;
