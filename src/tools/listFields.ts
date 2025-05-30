@@ -42,9 +42,6 @@ export const listFieldsTool = new Tool({
         );
         return new Ok(await restApi.metadataMethods.graphql(query));
       },
-      getErrorText: (error: string) => {
-        return error;
-      },
     });
   },
 });

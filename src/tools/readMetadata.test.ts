@@ -29,7 +29,7 @@ const mockMetadataResponses = vi.hoisted(() => ({
       },
     ],
   },
-  error: {
+  empty: {
     data: [],
   },
 }));
@@ -57,7 +57,7 @@ describe('readMetadataTool', () => {
 
   it('should create a tool instance with correct properties', () => {
     expect(readMetadataTool.name).toBe('read-metadata');
-    expect(readMetadataTool.description).toEqual(expect.any(String))
+    expect(readMetadataTool.description).toEqual(expect.any(String));
     expect(readMetadataTool.paramsSchema).toMatchObject({ datasourceLuid: expect.any(Object) });
   });
 
@@ -68,6 +68,20 @@ describe('readMetadataTool', () => {
 
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toEqual(JSON.stringify(mockMetadataResponses.success));
+    expect(mocks.mockReadMetadata).toHaveBeenCalledWith({
+      datasource: {
+        datasourceLuid: 'test-luid',
+      },
+    });
+  });
+
+  it('should successfully fetch and return empty list when no metadata is found', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(mockMetadataResponses.empty);
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toEqual(JSON.stringify(mockMetadataResponses.empty));
     expect(mocks.mockReadMetadata).toHaveBeenCalledWith({
       datasource: {
         datasourceLuid: 'test-luid',
