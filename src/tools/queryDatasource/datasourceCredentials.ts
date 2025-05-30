@@ -4,17 +4,27 @@ import { getConfig } from '../../config.js';
 
 const schema = z.record(
   z.string().nonempty(),
-  z
-    .object({ u: z.string().nonempty(), p: z.string().nonempty() })
-    .transform(({ u, p }) => ({ username: u, password: p })),
+  z.array(
+    z
+      .object({ luid: z.string().optional(), u: z.string().nonempty(), p: z.string().nonempty() })
+      .transform(({ luid, u, p }) => ({
+        connectionLuid: luid,
+        connectionUsername: u,
+        connectionPassword: p,
+      })),
+  ),
 );
 
-let credentialMap: Map<string, { username: string; password: string }> | undefined;
+type Connection = {
+  connectionLuid: string | undefined;
+  connectionUsername: string;
+  connectionPassword: string;
+};
+
+let credentialMap: Map<string, Array<Connection>> | undefined;
 let initialized = false;
 
-export const getDatasourceCredentials = (
-  datasourceLuid: string,
-): { username: string; password: string } | undefined => {
+export const getDatasourceCredentials = (datasourceLuid: string): Array<Connection> | undefined => {
   if (!initialized) {
     initialized = true;
 

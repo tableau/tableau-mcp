@@ -82,8 +82,8 @@ Several different authentication options are supported, but you only need to pro
 
 > 💡 When multiple credentials are provided, the order in which the below authentication methods are
 > listed is also the order of precedence used by the server. Provide the `AUTH_TYPE` environment
-> variable to specify which authentication method to use. Allowed values are `pat`,
-> `direct-trust`, and `username-password`.
+> variable to specify which authentication method to use. Allowed values are `pat`, `direct-trust`,
+> and `username-password`.
 
 ### Personal Access Token (PAT)
 
@@ -180,13 +180,39 @@ These config files will be used in tool configuration explained below.
 
 #### Optional Environment Variables
 
-| **Variable**             | **Description**                                                                                     | **Default**                        | **Note**                                                                                                 |
-| ------------------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `DEFAULT_LOG_LEVEL`      | The default logging level of the server.                                                            | `debug`                            |                                                                                                          |
-| `DATASOURCE_CREDENTIALS` | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is: `{"ds-luid1":{"u":"username1","p":"password1"},"ds-luid2":{"u":"username2","p":"password2"}}` |
-| `DISABLE_LOG_MASKING`    | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                                          |
-| `INCLUDE_TOOLS`          | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                                 |
-| `EXCLUDE_TOOLS`          | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                                 |
+| **Variable**             | **Description**                                                                                     | **Default**                        | **Note**                                                                                   |
+| ------------------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
+| `DEFAULT_LOG_LEVEL`      | The default logging level of the server.                                                            | `debug`                            |                                                                                            |
+| `DATASOURCE_CREDENTIALS` | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below. |
+| `DISABLE_LOG_MASKING`    | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                            |
+| `INCLUDE_TOOLS`          | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                   |
+| `EXCLUDE_TOOLS`          | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                   |
+
+##### DATASOURCE_CREDENTIALS
+
+The `DATASOURCE_CREDENTIALS` environment variable is a JSON string that includes usernames and
+passwords for any datasources that require them. The format is:
+
+`{"ds-luid1":[{"luid":"ds1-connection-luid1","u":"username1","p":"password1"},{"luid":"ds1-connection-luid2","u":"username2","p":"password2"}],"ds-luid2":[{"luid":"ds2-connection-luid1","u":"username3","p":"password3"}]}`
+
+This is a JSON-stringified version of the following object:
+
+```js
+{
+  "ds-luid1": [
+    { "luid": "ds1-connection-luid1", "u": "username1", "p": "password1" },
+    { "luid": "ds1-connection-luid2", "u": "username2", "p": "password2" }
+  ],
+  "ds-luid2": [
+    { "luid": "ds2-connection-luid1", "u": "username3", "p": "password3" }
+  ]
+}
+```
+
+The connection LUIDs can be determined using the
+[Query Data Source Connections REST API](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source_connections).
+Future work will include a tool to automate this process. For more information, see
+[Connect to your data source](https://help.tableau.com/current/api/vizql-data-service/en-us/docs/vds_create_queries.html#connect-to-your-data-source).
 
 ### Running the MCP Inspector
 

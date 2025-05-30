@@ -110,7 +110,9 @@ describe('queryDatasourceTool', () => {
     mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
 
     process.env.DATASOURCE_CREDENTIALS = JSON.stringify({
-      '71db762b-6201-466b-93da-57cc0aec8ed9': { u: 'test-user', p: 'test-pass' },
+      '71db762b-6201-466b-93da-57cc0aec8ed9': [
+        { luid: 'test-luid', u: 'test-user', p: 'test-pass' },
+      ],
     });
 
     const result = await getToolResult();
@@ -121,6 +123,7 @@ describe('queryDatasourceTool', () => {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
         connections: [
           {
+            connectionLuid: 'test-luid',
             connectionUsername: 'test-user',
             connectionPassword: 'test-pass',
           },

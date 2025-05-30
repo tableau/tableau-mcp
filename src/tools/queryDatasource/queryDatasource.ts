@@ -37,12 +37,7 @@ export const queryDatasourceTool = new Tool({
 
         const credentials = getDatasourceCredentials(datasourceLuid);
         if (credentials) {
-          datasource.connections = [
-            {
-              connectionUsername: credentials.username,
-              connectionPassword: credentials.password,
-            },
-          ];
+          datasource.connections = credentials;
         }
 
         const queryRequest = {
