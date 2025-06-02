@@ -33,9 +33,6 @@ Use GitHub Issues page to submit issues, enhancement requests and discuss ideas.
   -  If its a trivial change, go ahead and [send a Pull Request](#creating_a_pull_request) with the changes you have in mind.
   -  If not, [open an Issue](https://github.com/{tableau/tableau-mcp}/issues/new) to discuss the idea first.
 
-If you're new to our project and looking for some way to make your first contribution, look for
-Issues labelled `good first contribution`.
-
 # Contribution Checklist
 
 - [x] Clean, simple, well styled code
@@ -69,10 +66,6 @@ In order to accept your pull request, we need you to submit a CLA. You only need
 to do this once to work on any of Salesforce's open source projects.
 
 Complete your CLA here: <https://cla.salesforce.com/sign-cla>
-
-# Issues
-We use GitHub issues to track public bugs. Please ensure your description is
-clear and has sufficient instructions to be able to reproduce the issue.
 
 # Code of Conduct
 Please follow our [Code of Conduct](CODE_OF_CONDUCT.md).
