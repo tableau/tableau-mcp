@@ -10,6 +10,7 @@ export interface ProcessEnvEx {
   CONNECTED_APP_SECRET_VALUE: string | undefined;
   JWT_SCOPES: string | undefined;
   AUTH_TYPE: string | undefined;
+  DATASOURCE_CREDENTIALS: string | undefined;
   DEFAULT_LOG_LEVEL: string | undefined;
   DISABLE_LOG_MASKING: string | undefined;
   INCLUDE_TOOLS: string | undefined;

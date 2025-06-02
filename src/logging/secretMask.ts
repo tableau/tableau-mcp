@@ -24,6 +24,19 @@ export const maskRequest = (config: RequestInterceptorConfig): MaskedRequest => 
       maskedData.data.credentials = '<redacted>';
     }
 
+    if (Array.isArray(maskedData?.data?.datasource?.connections)) {
+      const connections = maskedData.data.datasource.connections as Array<{
+        connectionLuid: string;
+        connectionUsername: string;
+        connectionPassword: string;
+      }>;
+
+      connections.forEach((connection) => {
+        connection.connectionUsername = '<redacted>';
+        connection.connectionPassword = '<redacted>';
+      });
+    }
+
     if (maskedData.headers?.['X-Tableau-Auth']) {
       maskedData.headers['X-Tableau-Auth'] = '<redacted>';
     }

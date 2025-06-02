@@ -22,7 +22,7 @@ const mockMetadataResponses = vi.hoisted(() => ({
       ],
     },
   },
-  error: {
+  empty: {
     data: {
       publishedDatasources: [],
     },
@@ -66,14 +66,13 @@ describe('listFieldsTool', () => {
     expect(mocks.mockGraphql).toHaveBeenCalledWith(getGraphqlQuery('test-luid'));
   });
 
-  it('should return error when no published datasources are found', async () => {
-    mocks.mockGraphql.mockResolvedValue(mockMetadataResponses.error);
+  it('should successfully fetch and return empty list when no published datasources are found', async () => {
+    mocks.mockGraphql.mockResolvedValue(mockMetadataResponses.empty);
 
     const result = await getToolResult();
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text as string).toBe(
-      '{"requestId":"123e4567-e89b-12d3-a456-426614174000","error":"No published datasources in response"}',
-    );
+
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.content[0].text as string)).toEqual(mockMetadataResponses.empty);
     expect(mocks.mockGraphql).toHaveBeenCalledWith(getGraphqlQuery('test-luid'));
   });
 

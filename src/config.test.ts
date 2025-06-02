@@ -22,6 +22,7 @@ describe('Config', () => {
       CONNECTED_APP_SECRET_VALUE: undefined,
       JWT_SCOPES: undefined,
       AUTH_TYPE: undefined,
+      DATASOURCE_CREDENTIALS: undefined,
       DEFAULT_LOG_LEVEL: undefined,
       DISABLE_LOG_MASKING: undefined,
       INCLUDE_TOOLS: undefined,
