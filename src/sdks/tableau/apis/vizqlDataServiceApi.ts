@@ -50,6 +50,9 @@ export const Function = z.enum([
   'TRUNC_MONTH',
   'TRUNC_WEEK',
   'TRUNC_DAY',
+  'AGG',
+  'NONE',
+  'UNSPECIFIED',
 ]);
 
 const FieldMetadata = z
