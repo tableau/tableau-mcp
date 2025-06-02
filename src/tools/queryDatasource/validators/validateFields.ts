@@ -1,6 +1,11 @@
-import { DatasourceQuery } from '../queryDatasourceValidator.js';
+import { Err, Ok, Result } from 'ts-results-es';
 
-export function validateFields(fields: DatasourceQuery['fields']): void {
+import { FilterField, Query } from '../queryDatasourceValidator.js';
+
+type Fields = Query['fields'];
+type Field = Fields[number];
+
+export function validateFields(fields: Fields): void {
   {
     // You must query at least one field.
     if (fields.length === 0) {
@@ -12,7 +17,7 @@ export function validateFields(fields: DatasourceQuery['fields']): void {
 
   {
     // Field caption must be a non-empty string.
-    if (fields.some((field) => !field.fieldCaption)) {
+    if (fields.some(hasEmptyFieldCaption)) {
       throw new Error(`The query must not include any fields with an empty fieldCaption.`);
     }
   }
@@ -74,13 +79,9 @@ export function validateFields(fields: DatasourceQuery['fields']): void {
 
   {
     // A Field cannot contain both a Function and a Calculation.
-    const fieldsWithBothFunctionAndCalculation = fields.reduce<Array<string>>((acc, field) => {
-      if (field.function && field.calculation) {
-        acc.push(field.fieldCaption);
-      }
-
-      return acc;
-    }, []);
+    const fieldsWithBothFunctionAndCalculation = fields
+      .filter(hasFunctionAndCalculation)
+      .map((field) => field.fieldCaption);
 
     if (fieldsWithBothFunctionAndCalculation.length > 0) {
       throw new Error(
@@ -92,7 +93,7 @@ export function validateFields(fields: DatasourceQuery['fields']): void {
   {
     // The maxDecimalPlaces value must be greater or equal to 0.
     const fieldsWithNegativeMaxDecimalPlace = fields
-      .filter((field) => field.maxDecimalPlaces !== undefined && field.maxDecimalPlaces < 0)
+      .filter(hasNegativeMaxDecimalPlace)
       .map((field) => field.fieldCaption);
 
     if (fieldsWithNegativeMaxDecimalPlace.length > 0) {
@@ -101,4 +102,45 @@ export function validateFields(fields: DatasourceQuery['fields']): void {
       );
     }
   }
+}
+
+export function validateField(field: Field): Result<boolean, string> {
+  {
+    // Field caption must be a non-empty string.
+    if (hasEmptyFieldCaption(field)) {
+      return new Err(`The fieldCaption property must be a non-empty string.`);
+    }
+  }
+
+  {
+    // A Field cannot contain both a Function and a Calculation.
+    if (hasFunctionAndCalculation(field)) {
+      return new Err(
+        `The field "${field.fieldCaption}" must not contain both a function and a calculation.`,
+      );
+    }
+  }
+
+  {
+    // The maxDecimalPlaces value must be greater or equal to 0.
+    if (hasNegativeMaxDecimalPlace(field)) {
+      return new Err(
+        `The field "${field.fieldCaption}" must not have a maxDecimalPlaces value that is less than 0.`,
+      );
+    }
+
+    return new Ok(true);
+  }
+}
+
+export function hasEmptyFieldCaption(field: Field | FilterField): boolean {
+  return 'fieldCaption' in field && !field.fieldCaption;
+}
+
+export function hasFunctionAndCalculation(field: Field | FilterField): boolean {
+  return !!('function' in field && field.function && 'calculation' in field && field.calculation);
+}
+
+export function hasNegativeMaxDecimalPlace(field: Field): boolean {
+  return field.maxDecimalPlaces !== undefined && field.maxDecimalPlaces < 0;
 }
