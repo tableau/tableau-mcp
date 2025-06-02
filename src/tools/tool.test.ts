@@ -94,11 +94,11 @@ describe('Tool', () => {
     );
   });
 
-  it('should call argsValidator with provided args', () => {
+  it('should call argsValidator with provided args', async () => {
     const tool = new Tool(mockParams);
     const args = { param1: 'test' };
 
-    tool.logAndExecute({ args, callback: vi.fn() });
+    await tool.logAndExecute({ args, callback: vi.fn() });
 
     expect(mockParams.argsValidator).toHaveBeenCalledWith(args);
   });
