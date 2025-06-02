@@ -1,5 +1,3 @@
-import { Err, Ok, Result } from 'ts-results-es';
-
 import { FilterField, Query } from '../queryDatasourceValidator.js';
 
 type Fields = Query['fields'];
@@ -104,35 +102,6 @@ export function validateFields(fields: Fields): void {
   }
 }
 
-export function validateField(field: Field): Result<boolean, string> {
-  {
-    // Field caption must be a non-empty string.
-    if (hasEmptyFieldCaption(field)) {
-      return new Err(`The fieldCaption property must be a non-empty string.`);
-    }
-  }
-
-  {
-    // A Field cannot contain both a Function and a Calculation.
-    if (hasFunctionAndCalculation(field)) {
-      return new Err(
-        `The field "${field.fieldCaption}" must not contain both a function and a calculation.`,
-      );
-    }
-  }
-
-  {
-    // The maxDecimalPlaces value must be greater or equal to 0.
-    if (hasNegativeMaxDecimalPlace(field)) {
-      return new Err(
-        `The field "${field.fieldCaption}" must not have a maxDecimalPlaces value that is less than 0.`,
-      );
-    }
-
-    return new Ok(true);
-  }
-}
-
 export function hasEmptyFieldCaption(field: Field | FilterField): boolean {
   return 'fieldCaption' in field && !field.fieldCaption;
 }
@@ -141,6 +110,6 @@ export function hasFunctionAndCalculation(field: Field | FilterField): boolean {
   return !!('function' in field && field.function && 'calculation' in field && field.calculation);
 }
 
-export function hasNegativeMaxDecimalPlace(field: Field): boolean {
+function hasNegativeMaxDecimalPlace(field: Field): boolean {
   return field.maxDecimalPlaces !== undefined && field.maxDecimalPlaces < 0;
 }

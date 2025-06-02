@@ -90,13 +90,21 @@ export function validateFilters(filters: Query['filters']): void {
     {
       // Dates must be valid RFC 3339.
       const quantitativeDateFiltersWithInvalidDates = filters.filter((filter) => {
-        return (
-          filter.filterType === 'QUANTITATIVE_DATE' &&
-          ((filter.quantitativeFilterType === 'RANGE' &&
-            (isNaN(Date.parse(filter.minDate)) || isNaN(Date.parse(filter.maxDate)))) ||
-            (filter.quantitativeFilterType === 'MIN' && isNaN(Date.parse(filter.minDate))) ||
-            (filter.quantitativeFilterType === 'MAX' && isNaN(Date.parse(filter.maxDate))))
-        );
+        if (filter.filterType !== 'QUANTITATIVE_DATE') {
+          return false;
+        }
+
+        if (filter.quantitativeFilterType === 'RANGE') {
+          return isNaN(Date.parse(filter.minDate)) || isNaN(Date.parse(filter.maxDate));
+        }
+
+        if (filter.quantitativeFilterType === 'MIN') {
+          return isNaN(Date.parse(filter.minDate));
+        }
+
+        if (filter.quantitativeFilterType === 'MAX') {
+          return isNaN(Date.parse(filter.maxDate));
+        }
       });
 
       if (quantitativeDateFiltersWithInvalidDates.length > 0) {
@@ -128,6 +136,7 @@ export function validateFilters(filters: Query['filters']): void {
   {
     // Top N Filters
     {
+      // Field to measure must be valid.
       const topNFiltersWithInvalidFields = filters.reduce<Array<string>>((acc, filter) => {
         if (filter.filterType !== 'TOP') {
           return acc;
@@ -152,6 +161,7 @@ export function validateFilters(filters: Query['filters']): void {
   {
     // Match Filters
     {
+      // You must have at least one of startsWith, endsWith, or contains.
       const matchFiltersWithInvalidFields = filters.reduce<Array<string>>((acc, filter) => {
         if (filter.filterType !== 'MATCH') {
           return acc;
@@ -159,7 +169,7 @@ export function validateFilters(filters: Query['filters']): void {
 
         if (!filter.startsWith && !filter.endsWith && !filter.contains) {
           acc.push(
-            `The match filter for field "${filter.field.fieldCaption}" must include at least one of the following properties: startsWith, endsWith, or contains.`,
+            `The match filter for field "${filter.field.fieldCaption}" must include at least one of the following properties: startsWith, endsWith, or contains`,
           );
         }
 

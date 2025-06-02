@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { Filter, FilterField, TopNFilter } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { MatchFilter } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { validateFilters } from './validateFilters.js';
 
 describe('validateFilters', () => {
@@ -43,6 +43,22 @@ describe('validateFilters', () => {
     ).not.toThrow();
   });
 
+  it('should throw if any filter has an invalid field', () => {
+    expect(() =>
+      validateFilters([
+        {
+          field: { fieldCaption: '' },
+          filterType: 'SET',
+          values: ['A', 'B'],
+          context: false,
+          exclude: false,
+        },
+      ]),
+    ).toThrow(
+      'The query must not include filters with invalid fields. The following field errors occurred: The fieldCaption property must be a non-empty string.',
+    );
+  });
+
   it('should throw if there are multiple filters for the same field', () => {
     expect(() =>
       validateFilters([
@@ -62,6 +78,21 @@ describe('validateFilters', () => {
         },
       ]),
     ).toThrow('The query must not include multiple filters for the following fields: Category.');
+  });
+
+  it('should throw if a filter has a function and a calculation', () => {
+    const field = { fieldCaption: 'Category', function: 'SUM', calculation: 'SUM(Sales)' } as const;
+    expect(() =>
+      validateFilters([
+        {
+          field,
+          filterType: 'SET',
+          values: ['A', 'B'],
+        },
+      ]),
+    ).toThrow(
+      'The query must not include filters with invalid fields. The following field errors occurred: The field "Category" must not contain both a function and a calculation.',
+    );
   });
 
   it('should throw if there are multiple filters for multiple same fields', () => {
@@ -101,49 +132,158 @@ describe('validateFilters', () => {
     );
   });
 
-  it('should not throw for filters with different field types', () => {
-    const field1: z.infer<typeof FilterField> = {
-      fieldCaption: 'Category',
-      function: 'SUM',
-    };
-
-    const filter1: z.infer<typeof Filter> = {
-      field: field1,
-      filterType: 'SET',
-      values: ['A'],
-      context: false,
-      exclude: false,
-    };
-
-    const field2: z.infer<typeof FilterField> = {
-      fieldCaption: 'Region',
-    };
-
-    const filter2: z.infer<typeof Filter> = {
-      field: field2,
-      filterType: 'SET',
-      values: ['East'],
-      context: false,
-      exclude: false,
-    };
-
-    expect(() => validateFilters([filter1, filter2])).not.toThrow();
+  it('should throw if a Set Filter has a function', () => {
+    const field = { fieldCaption: 'Category', function: 'SUM' } as const;
+    expect(() =>
+      validateFilters([
+        {
+          field,
+          filterType: 'SET',
+          values: ['A', 'B'],
+          context: false,
+          exclude: false,
+        },
+      ]),
+    ).toThrow(
+      'The query must not include Set Filters, Match Filters, or Relative Date Filters with functions or calculations.',
+    );
   });
 
-  it('should not throw for filters where a calculation will be used to filter on', () => {
-    const field: z.infer<typeof FilterField> = {
-      calculation: 'SUM(Sales)',
+  it('should throw if a Set Filter has a calculation', () => {
+    const field = { fieldCaption: 'Category', calculation: 'SUM(Sales)' } as const;
+    expect(() =>
+      validateFilters([
+        {
+          field,
+          filterType: 'SET',
+          values: ['A', 'B'],
+          context: false,
+          exclude: false,
+        },
+      ]),
+    ).toThrow(
+      'The query must not include Set Filters, Match Filters, or Relative Date Filters with functions or calculations.',
+    );
+  });
+
+  it('should throw if a Set Filter has an empty values array', () => {
+    expect(() =>
+      validateFilters([
+        {
+          field: { fieldCaption: 'Category' },
+          filterType: 'SET',
+          values: [],
+          context: false,
+          exclude: false,
+        },
+      ]),
+    ).toThrow('The query must not include Set Filters with an empty values array.');
+  });
+
+  it('should throw if a Quantitative Date Filter has an invalid min date', () => {
+    expect(() =>
+      validateFilters([
+        {
+          field: { fieldCaption: 'Date' },
+          filterType: 'QUANTITATIVE_DATE',
+          minDate: 'invalid',
+          context: false,
+          includeNulls: false,
+          quantitativeFilterType: 'MIN',
+        },
+      ]),
+    ).toThrow('The query must not include Quantitative Date Filters with invalid dates.');
+  });
+
+  it('should throw if a Quantitative Date Filter has an invalid max date', () => {
+    expect(() =>
+      validateFilters([
+        {
+          field: { fieldCaption: 'Date' },
+          filterType: 'QUANTITATIVE_DATE',
+          maxDate: 'invalid',
+          context: false,
+          includeNulls: false,
+          quantitativeFilterType: 'MAX',
+        },
+      ]),
+    ).toThrow('The query must not include Quantitative Date Filters with invalid dates.');
+  });
+
+  it('should throw if a Quantitative Date Filter has an invalid min date', () => {
+    expect(() =>
+      validateFilters([
+        {
+          field: { fieldCaption: 'Date' },
+          filterType: 'QUANTITATIVE_DATE',
+          minDate: 'invalid',
+          maxDate: '2025-03-14',
+          context: false,
+          includeNulls: false,
+          quantitativeFilterType: 'RANGE',
+        },
+      ]),
+    ).toThrow('The query must not include Quantitative Date Filters with invalid dates.');
+  });
+
+  it('should throw if a Quantitative Date Filter has an invalid max date', () => {
+    expect(() =>
+      validateFilters([
+        {
+          field: { fieldCaption: 'Date' },
+          filterType: 'QUANTITATIVE_DATE',
+          minDate: '2025-03-14',
+          maxDate: 'invalid',
+          context: false,
+          includeNulls: false,
+          quantitativeFilterType: 'RANGE',
+        },
+      ]),
+    ).toThrow('The query must not include Quantitative Date Filters with invalid dates.');
+  });
+
+  it('should throw if a Relative Date Filter has an invalid anchor date', () => {
+    expect(() =>
+      validateFilters([
+        {
+          field: { fieldCaption: 'Date' },
+          filterType: 'DATE',
+          anchorDate: 'invalid',
+          context: false,
+          includeNulls: false,
+          dateRangeType: 'CURRENT',
+          periodType: 'DAYS',
+        },
+      ]),
+    ).toThrow('The query must not include Relative Date Filters with invalid anchor dates.');
+  });
+
+  it('should throw if a Top N Filter has an invalid field', () => {
+    expect(() =>
+      validateFilters([
+        {
+          field: { fieldCaption: 'State/Province' },
+          filterType: 'TOP',
+          howMany: 10,
+          context: false,
+          direction: 'TOP',
+          fieldToMeasure: { fieldCaption: '' },
+        },
+      ]),
+    ).toThrow(
+      'The query must not include Top N filters with invalid fields. The following field errors occurred: The fieldCaption property must be a non-empty string..',
+    );
+  });
+
+  it('should throw if a Match Filter has no startsWith, endsWith, or contains', () => {
+    // @ts-expect-error - This is a test for the type validator
+    const filter: z.infer<typeof MatchFilter> = {
+      field: { fieldCaption: 'Category' },
+      filterType: 'MATCH',
     };
 
-    const filter: z.infer<typeof TopNFilter> = {
-      field: field,
-      filterType: 'TOP',
-      howMany: 10,
-      fieldToMeasure: field,
-      direction: 'TOP',
-      context: false,
-    };
-
-    expect(() => validateFilters([filter])).not.toThrow();
+    expect(() => validateFilters([filter])).toThrow(
+      'The query must not include Match Filters with invalid fields. The following field errors occurred: The match filter for field "Category" must include at least one of the following properties: startsWith, endsWith, or contains.',
+    );
   });
 });
