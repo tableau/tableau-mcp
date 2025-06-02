@@ -94,16 +94,13 @@ export function validateFilters(filters: Query['filters']): void {
           return false;
         }
 
-        if (filter.quantitativeFilterType === 'RANGE') {
-          return isNaN(Date.parse(filter.minDate)) || isNaN(Date.parse(filter.maxDate));
-        }
-
-        if (filter.quantitativeFilterType === 'MIN') {
-          return isNaN(Date.parse(filter.minDate));
-        }
-
-        if (filter.quantitativeFilterType === 'MAX') {
-          return isNaN(Date.parse(filter.maxDate));
+        switch (filter.quantitativeFilterType) {
+          case 'RANGE':
+            return isNaN(Date.parse(filter.minDate)) || isNaN(Date.parse(filter.maxDate));
+          case 'MIN':
+            return isNaN(Date.parse(filter.minDate));
+          case 'MAX':
+            return isNaN(Date.parse(filter.maxDate));
         }
       });
 
@@ -152,7 +149,7 @@ export function validateFilters(filters: Query['filters']): void {
 
       if (topNFiltersWithInvalidFields.length > 0) {
         throw new Error(
-          `The query must not include Top N filters with invalid fields. The following field errors occurred: ${topNFiltersWithInvalidFields.join(', ')}.`,
+          `The query must not include Top N filters with invalid fields. The following field errors occurred: ${topNFiltersWithInvalidFields.join(', ')}`,
         );
       }
     }

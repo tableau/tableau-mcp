@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { FilterField, Query } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { validateDatasourceLuid } from '../validateDatasourceLuid.js';
 import { validateFields } from './validators/validateFields.js';
+import { validateFilters } from './validators/validateFilters.js';
 
 export type Query = z.infer<typeof Query>;
 export type FilterField = z.infer<typeof FilterField>;
@@ -16,6 +17,7 @@ export function validateQuery({
 }): void {
   validateDatasourceLuid({ datasourceLuid });
 
-  const { fields } = query;
+  const { fields, filters } = query;
   validateFields(fields);
+  validateFilters(filters);
 }

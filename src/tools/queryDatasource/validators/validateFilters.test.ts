@@ -180,7 +180,7 @@ describe('validateFilters', () => {
     ).toThrow('The query must not include Set Filters with an empty values array.');
   });
 
-  it('should throw if a Quantitative Date Filter has an invalid min date', () => {
+  it('should throw if a Quantitative Date Filter with type MIN has an invalid min date', () => {
     expect(() =>
       validateFilters([
         {
@@ -195,7 +195,7 @@ describe('validateFilters', () => {
     ).toThrow('The query must not include Quantitative Date Filters with invalid dates.');
   });
 
-  it('should throw if a Quantitative Date Filter has an invalid max date', () => {
+  it('should throw if a Quantitative Date Filter with type MAX has an invalid max date', () => {
     expect(() =>
       validateFilters([
         {
@@ -210,7 +210,7 @@ describe('validateFilters', () => {
     ).toThrow('The query must not include Quantitative Date Filters with invalid dates.');
   });
 
-  it('should throw if a Quantitative Date Filter has an invalid min date', () => {
+  it('should throw if a Quantitative Date Filter with type RANGE has an invalid min date', () => {
     expect(() =>
       validateFilters([
         {
@@ -226,7 +226,7 @@ describe('validateFilters', () => {
     ).toThrow('The query must not include Quantitative Date Filters with invalid dates.');
   });
 
-  it('should throw if a Quantitative Date Filter has an invalid max date', () => {
+  it('should throw if a Quantitative Date Filter with type RANGE has an invalid max date', () => {
     expect(() =>
       validateFilters([
         {
@@ -271,7 +271,7 @@ describe('validateFilters', () => {
         },
       ]),
     ).toThrow(
-      'The query must not include Top N filters with invalid fields. The following field errors occurred: The fieldCaption property must be a non-empty string..',
+      'The query must not include Top N filters with invalid fields. The following field errors occurred: The fieldCaption property must be a non-empty string.',
     );
   });
 
