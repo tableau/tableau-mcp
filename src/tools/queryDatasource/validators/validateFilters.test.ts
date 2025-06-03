@@ -22,6 +22,13 @@ describe('validateFilters', () => {
     ).not.toThrow();
   });
 
+  it('should throw if a filter is missing the field property', () => {
+    // @ts-expect-error - This is a test for the type validator
+    expect(() => validateFilters([{ filterType: 'SET', values: ['A', 'B'] }])).toThrow(
+      'The query must not include filters with invalid fields. The following field errors occurred: The filter must include a field property.',
+    );
+  });
+
   it('should not throw for multiple filters on different fields', () => {
     expect(() =>
       validateFilters([
@@ -81,9 +88,10 @@ describe('validateFilters', () => {
   });
 
   it('should throw if a filter has a function and a calculation', () => {
-    const field = { fieldCaption: 'Category', function: 'SUM', calculation: 'SUM(Sales)' } as const;
+    const field = { function: 'SUM', calculation: 'SUM(Sales)' } as const;
     expect(() =>
       validateFilters([
+        // @ts-expect-error - This is a test for the type validator
         {
           field,
           filterType: 'SET',
@@ -91,7 +99,23 @@ describe('validateFilters', () => {
         },
       ]),
     ).toThrow(
-      'The query must not include filters with invalid fields. The following field errors occurred: The field "Category" must not contain both a function and a calculation.',
+      'The query must not include filters with invalid fields. The following field errors occurred: The field must not contain both a function and a calculation.',
+    );
+  });
+
+  it('should throw if filter has a fieldCaption and a calculation', () => {
+    expect(() =>
+      validateFilters([
+        {
+          field: { fieldCaption: 'Category', calculation: 'SUM([Sales])' },
+          filterType: 'TOP',
+          howMany: 10,
+          direction: 'TOP',
+          fieldToMeasure: { fieldCaption: 'Sales', function: 'SUM' },
+        },
+      ]),
+    ).toThrow(
+      'The query must not include filters with invalid fields. The following field errors occurred: The field "Category" must not contain both a fieldCaption and a calculation.',
     );
   });
 
@@ -150,9 +174,10 @@ describe('validateFilters', () => {
   });
 
   it('should throw if a Set Filter has a calculation', () => {
-    const field = { fieldCaption: 'Category', calculation: 'SUM(Sales)' } as const;
+    const field = { calculation: 'SUM(Sales)' } as const;
     expect(() =>
       validateFilters([
+        // @ts-expect-error - This is a test for the type validator
         {
           field,
           filterType: 'SET',

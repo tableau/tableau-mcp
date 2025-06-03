@@ -11,6 +11,13 @@ describe('validateFields', () => {
     );
   });
 
+  it('should throw if field does not have a fieldCaption', () => {
+    // @ts-expect-error - This is a test for the type validator
+    expect(() => validateFields([{ calculation: 'SUM([Sales])' }])).toThrow(
+      'The query must not include any fields with an empty fieldCaption.',
+    );
+  });
+
   it('should throw if any field has an empty fieldCaption', () => {
     expect(() => validateFields([{ fieldCaption: '' }])).toThrow(
       'The query must not include any fields with an empty fieldCaption.',

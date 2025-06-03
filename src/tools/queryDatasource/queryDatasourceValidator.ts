@@ -20,4 +20,9 @@ export function validateQuery({
   const { fields, filters } = query;
   validateFields(fields);
   validateFilters(filters);
+
+  const result = Query.safeParse(query);
+  if (!result.success) {
+    throw new Error(`The query does not match the expected schema.`);
+  }
 }

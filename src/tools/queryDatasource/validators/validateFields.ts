@@ -102,12 +102,21 @@ export function validateFields(fields: Fields): void {
   }
 }
 
-export function hasEmptyFieldCaption(field: Field | FilterField): boolean {
-  return 'fieldCaption' in field && !field.fieldCaption;
+function hasEmptyFieldCaption(field: Field): boolean {
+  return !field.fieldCaption;
 }
 
 export function hasFunctionAndCalculation(field: Field | FilterField): boolean {
   return !!('function' in field && field.function && 'calculation' in field && field.calculation);
+}
+
+export function hasFieldCaptionAndCalculation(field: Field | FilterField): boolean {
+  return !!(
+    'fieldCaption' in field &&
+    field.fieldCaption &&
+    'calculation' in field &&
+    field.calculation
+  );
 }
 
 function hasNegativeMaxDecimalPlace(field: Field): boolean {

@@ -1,11 +1,17 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { FilterField, Query } from '../queryDatasourceValidator.js';
-import { hasEmptyFieldCaption, hasFunctionAndCalculation } from './validateFields.js';
+import { hasFieldCaptionAndCalculation, hasFunctionAndCalculation } from './validateFields.js';
 
 export function validateFilters(filters: Query['filters']): void {
   if (!filters) {
     return;
+  }
+
+  if (filters.some((filter) => !('field' in filter))) {
+    throw new Error(
+      `The query must not include filters with invalid fields. The following field errors occurred: The filter must include a field property.`,
+    );
   }
 
   {
@@ -191,6 +197,19 @@ function validateFilterField(field: FilterField): Result<void, string> {
   }
 
   {
+    // Field cannot have a fieldCaption and a Calculation.
+    if (hasFieldCaptionAndCalculation(field)) {
+      const fieldCaption = 'fieldCaption' in field ? `"${field.fieldCaption}" ` : '';
+      return new Err(
+        `The field ${fieldCaption} must not contain both a fieldCaption and a calculation.`.replace(
+          '  ',
+          ' ',
+        ),
+      );
+    }
+  }
+
+  {
     // A Field cannot contain both a Function and a Calculation.
     if (hasFunctionAndCalculation(field)) {
       const fieldCaption = 'fieldCaption' in field ? `"${field.fieldCaption}" ` : '';
@@ -204,4 +223,8 @@ function validateFilterField(field: FilterField): Result<void, string> {
   }
 
   return Ok.EMPTY;
+}
+
+function hasEmptyFieldCaption(field: FilterField): boolean {
+  return 'fieldCaption' in field && !field.fieldCaption;
 }
