@@ -143,8 +143,14 @@ const RelativeDateFilter = z.discriminatedUnion('dateRangeType', [
   RelativeDateFilterBase.extend({ dateRangeType: z.literal('LAST') }).strict(),
   RelativeDateFilterBase.extend({ dateRangeType: z.literal('NEXT') }).strict(),
   RelativeDateFilterBase.extend({ dateRangeType: z.literal('TODATE') }).strict(),
-  RelativeDateFilterBase.extend({ dateRangeType: z.literal('LASTN'), rangeN: z.number() }).strict(),
-  RelativeDateFilterBase.extend({ dateRangeType: z.literal('NEXTN'), rangeN: z.number() }).strict(),
+  RelativeDateFilterBase.extend({
+    dateRangeType: z.literal('LASTN'),
+    rangeN: z.number().int(),
+  }).strict(),
+  RelativeDateFilterBase.extend({
+    dateRangeType: z.literal('NEXTN'),
+    rangeN: z.number().int(),
+  }).strict(),
 ]);
 
 const MatchFilterBase = SimpleFilterBase.extend({
@@ -221,7 +227,7 @@ const QuantitativeDateFilter = z.discriminatedUnion('quantitativeFilterType', [
 
 export const TopNFilter = FilterBase.extend({
   filterType: z.literal('TOP'),
-  howMany: z.number(),
+  howMany: z.number().int(),
   fieldToMeasure: FilterField,
   direction: z.enum(['TOP', 'BOTTOM']).optional().default('TOP'),
 });
