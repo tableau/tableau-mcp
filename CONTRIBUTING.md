@@ -30,7 +30,7 @@ Use GitHub Issues page to submit issues, enhancement requests and discuss ideas.
 -  If you'd like to improve the tests, you want to make the documentation clearer, you have an
    alternative implementation of something that may have advantages over the way its currently
    done, or you have any other change, we would be happy to hear about it!
-  -  If its a trivial change, go ahead and [send a Pull Request](#creating-a-pull-request) with the changes you have in mind.
+  -  If it's a trivial change, go ahead and [send a Pull Request](#creating-a-pull-request) with the changes you have in mind.
   -  If not, [open an Issue](https://github.com/tableau/tableau-mcp/issues/new) to discuss the idea first.
 
 # Contribution Checklist
