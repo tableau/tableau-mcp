@@ -15,14 +15,18 @@ Claude, Cursor, etc.
 
 A clear and concise description of what was expected to happen.
 
-## Version
+## Versions
 
-Include the version (from
-[package.json](https://github.com/tableau/tableau-mcp/blob/main/package.json)) in which the bug was
-found.
+What version of Tableau does the issue reproduce on? See
+[Finding Your Tableau Version and Build Number](https://kb.tableau.com/HowTo?id=kA060000000LCkj).
 
-Please ensure the bug repros against the latest commit in the main branch at the time of opening the
-bug.
+2025.1
+
+What version of the Tableau MCP server does the issue reproduce on? Include the version from your
+local [package.json](https://github.com/tableau/tableau-mcp/blob/main/package.json). Please ensure
+the bug repros against the latest commit in the main branch at the time of opening the bug.
+
+1.0.0
 
 ## Steps to reproduce
 
