@@ -29,7 +29,7 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.10.2",
+    "@modelcontextprotocol/sdk": "^1.12.1",
     "@zodios/core": "^10.9.6",
     "jsonwebtoken": "^9.0.2",
     "ts-results-es": "^5.0.1",
