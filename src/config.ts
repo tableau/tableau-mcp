@@ -48,23 +48,17 @@ class Config {
     }
 
     invariant(server, 'The environment variable SERVER is not set');
+    invariant(patName, 'The environment variable PAT_NAME is not set');
+    invariant(patValue, 'The environment variable PAT_VALUE is not set');
 
     this.server = server;
 
-    if (patName && patValue) {
-      this.authConfig = {
-        type: 'pat',
-        patName,
-        patValue,
-        siteName,
-      };
-
-      return;
-    }
-
-    throw new Error(
-      'No authentication method could be determined. Ensure the environment variables are set.',
-    );
+    this.authConfig = {
+      type: 'pat',
+      patName,
+      patValue,
+      siteName,
+    };
   }
 }
 

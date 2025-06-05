@@ -36,16 +36,28 @@ describe('Config', () => {
     expect(() => new Config()).toThrow('The environment variable SERVER is not set');
   });
 
-  it('should throw error when no credentials are provided', () => {
+  it('should throw error when PAT_NAME is mising', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
       SITE_NAME: 'test-site',
+      PAT_NAME: undefined,
+      PAT_VALUE: 'test-pat-value',
     };
 
-    expect(() => new Config()).toThrow(
-      'No authentication method could be determined. Ensure the environment variables are set.',
-    );
+    expect(() => new Config()).toThrow('The environment variable PAT_NAME is not set');
+  });
+
+  it('should throw error when PAT_VALUE is mising', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'test-server',
+      SITE_NAME: 'test-site',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: undefined,
+    };
+
+    expect(() => new Config()).toThrow('The environment variable PAT_VALUE is not set');
   });
 
   it('should configure PAT authentication when PAT credentials are provided', () => {
