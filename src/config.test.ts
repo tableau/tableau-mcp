@@ -36,7 +36,7 @@ describe('Config', () => {
     expect(() => new Config()).toThrow('The environment variable SERVER is not set');
   });
 
-  it('should throw error when PAT_NAME is mising', () => {
+  it('should throw error when PAT_NAME is missing', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
@@ -48,7 +48,7 @@ describe('Config', () => {
     expect(() => new Config()).toThrow('The environment variable PAT_NAME is not set');
   });
 
-  it('should throw error when PAT_VALUE is mising', () => {
+  it('should throw error when PAT_VALUE is missing', () => {
     process.env = {
       ...process.env,
       SERVER: 'test-server',
