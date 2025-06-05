@@ -1,3 +1,8 @@
+**IMPORTANT: Please do not create a Pull Request without creating an issue first.**
+
+_Any change needs to be discussed before proceeding. Failure to do so may result in the rejection of
+the pull request._
+
 # Pull Request Template
 
 <!-- Thank you for your contribution! Please fill out the following template to help us review your pull
