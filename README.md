@@ -78,38 +78,8 @@ Tableau MCP works with both Tableau Server and Tableau cloud data with these pre
 Tableau MCP requires authentication in order to connect with your Tableau Server or Tableau Cloud
 site. This authenticated user must have access to the published data source(s) you plan to access.
 
-Several different authentication options are supported, but you only need to provide one.
-
-> 💡 When multiple credentials are provided, the order in which the below authentication methods are
-> listed is also the order of precedence used by the server. Provide the `AUTH_TYPE` environment
-> variable to specify which authentication method to use. Allowed values are `pat`, `direct-trust`,
-> and `username-password`.
-
-### Personal Access Token (PAT)
-
-This is probably the best choice for getting started. If you have a
-[personal access token](https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm),
-you can use it by setting the `PAT_NAME` and `PAT_VALUE` environment variables.
-
-### Connected App (Direct Trust)
-
-If you have a
-[Direct Trust Connected App](https://help.tableau.com/current/online/en-us/connected_apps_direct.htm#create-a-connected-app),
-you can provide its details and the MCP server will generate the JWT for you. Set these environment
-variables:
-
-| **Variable**                 | **Description**                                                                                                                  |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `USERNAME`                   | The username of the user you want to authenticate as.                                                                            |
-| `CONNECTED_APP_CLIENT_ID`    | The client ID of the connected app.                                                                                              |
-| `CONNECTED_APP_SECRET_ID`    | The secret ID of the connected app.                                                                                              |
-| `CONNECTED_APP_SECRET_VALUE` | The secret value of the connected app.                                                                                           |
-| `JWT_SCOPES`                 | The comma-separated scopes you want to add to the JWT in addition to `tableau:viz_data_service:read` and `tableau:content:read`. |
-
-### Username/Password
-
-If you have a username and password, you can use them by setting the `USERNAME` and `PASSWORD`
-environment variables.
+Provide your Tableau [Personal Access Token][pat] by setting the `PAT_NAME` and `PAT_VALUE`
+environment variables. See [Environment Variables](#environment-variables) for more information.
 
 ## Configuring AI Tools
 
@@ -172,11 +142,12 @@ These config files will be used in tool configuration explained below.
 
 #### Required Environment Variables
 
-| **Variable**  | **Description**                                                                                                              |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `SERVER`      | The URL of the Tableau server.                                                                                               |
-| `SITE_NAME`   | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site.            |
-| _Credentials_ | The credentials to use to authenticate to the Tableau server. See [Tableau Authentication](#tableau-authentication) section. |
+| **Variable** | **Description**                                                                                                   |
+| ------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `SERVER`     | The URL of the Tableau server.                                                                                    |
+| `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site. |
+| `PAT_NAME`   | The name of the Tableau [Personal Access Token][pat] to use.                                                      |
+| `PAT_VALUE`  | The value of the Tableau [Personal Access Token][pat] to use.                                                     |
 
 #### Optional Environment Variables
 
@@ -249,9 +220,13 @@ TODO
 
 ### Contributing
 
-We are following the [fork and pull model](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/getting-started/about-collaborative-development-models) where contributors will make their own fork of this repo, implement their changes, and then submit a pull request here.
+We are following the
+[fork and pull model](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/getting-started/about-collaborative-development-models)
+where contributors will make their own fork of this repo, implement their changes, and then submit a
+pull request here.
 
-Refer to the [Contribution Checklist](CONTRIBUTING.md#contribution-checklist) for more details on the steps.
+Refer to the [Contribution Checklist](CONTRIBUTING.md#contribution-checklist) for more details on
+the steps.
 
 ### Debugging
 
@@ -283,3 +258,4 @@ To set up local debugging with breakpoints:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources
 [meta]: https://help.tableau.com/current/api/metadata_api/en-us/index.html
 [vds]: https://help.tableau.com/current/api/vizql-data-service/en-us/index.html
+[pat]: https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm

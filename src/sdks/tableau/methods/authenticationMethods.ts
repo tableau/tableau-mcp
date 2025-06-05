@@ -1,6 +1,5 @@
 import { Zodios } from '@zodios/core';
 
-import { getJwt } from '../../../utils/getJwt.js';
 import { authenticationApis } from '../apis/authenticationApi.js';
 import { AuthConfig } from '../authConfig.js';
 import { Credentials } from '../types/credentials.js';
@@ -27,31 +26,10 @@ export default class AuthenticationMethods extends Methods<typeof authentication
           },
           ...(() => {
             switch (authConfig.type) {
-              case 'username-password':
-                return {
-                  name: authConfig.username,
-                  password: authConfig.password,
-                };
               case 'pat':
                 return {
                   personalAccessTokenName: authConfig.patName,
                   personalAccessTokenSecret: authConfig.patValue,
-                };
-              case 'jwt':
-                return {
-                  jwt: authConfig.jwt,
-                };
-              case 'direct-trust':
-                return {
-                  jwt: getJwt({
-                    username: authConfig.username,
-                    connectedApp: {
-                      clientId: authConfig.clientId,
-                      secretId: authConfig.secretId,
-                      secretValue: authConfig.secretValue,
-                    },
-                    scopes: authConfig.scopes,
-                  }),
                 };
             }
           })(),
