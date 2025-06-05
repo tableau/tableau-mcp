@@ -17,8 +17,9 @@ A clear and concise description of what was expected to happen.
 
 ## Version
 
-Bug found in version 1.x.y. (Version found in
-[package.json](https://github.com/tableau/tableau-mcp/blob/main/package.json)).
+Include the version (from
+[package.json](https://github.com/tableau/tableau-mcp/blob/main/package.json)) in which the bug was
+found.
 
 Please ensure the bug repros against the latest commit in the main branch at the time of opening the
 bug.
