@@ -40,7 +40,7 @@ describe('Tool', () => {
     const tool = new Tool(mockParams);
     const testArgs = { param1: 'test' };
 
-    tool.logInvocation('2', testArgs);
+    tool.logInvocation({ requestId: '2', args: testArgs });
 
     expect(spy).toHaveBeenCalledExactlyOnceWith({
       type: 'tool',
@@ -70,8 +70,11 @@ describe('Tool', () => {
     expect(result.content[0].type).toBe('text');
     expect(JSON.parse(result.content[0].text as string)).toEqual(successResult);
 
-    expect(spy).toHaveBeenCalledExactlyOnceWith('2', {
-      param1: 'test',
+    expect(spy).toHaveBeenCalledExactlyOnceWith({
+      requestId: '2',
+      args: {
+        param1: 'test',
+      },
     });
   });
 

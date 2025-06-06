@@ -51,7 +51,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.callback = callback;
   }
 
-  logInvocation(requestId: RequestId, args: unknown): void {
+  logInvocation({ requestId, args }: { requestId: RequestId; args: unknown }): void {
     log.debug(getToolLogMessage({ requestId, toolName: this.name, args }));
   }
 
@@ -72,7 +72,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     callback,
     getErrorText,
   }: LogAndExecuteParams<T, E, Args>): Promise<CallToolResult> {
-    this.logInvocation(requestId, args);
+    this.logInvocation({ requestId, args });
 
     if (args) {
       try {
