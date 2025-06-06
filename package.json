@@ -1,6 +1,6 @@
 {
   "name": "tableau-mcp",
-  "description": "A MCP server for Tableau, providing a suite of developer primitives, including tools, resources and prompts, that will make it easier for developers to build AI-applications that integrate with Tableau.",
+  "description": "A MCP server for Tableau, providing a suite of tools that will make it easier for developers to build AI-applications that integrate with Tableau.",
   "version": "0.1.0",
   "homepage": "https://github.com/tableau/tableau-mcp",
   "bugs": "https://github.com/tableau/tableau-mcp/issues",
