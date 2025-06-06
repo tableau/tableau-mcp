@@ -56,10 +56,9 @@ describe('log', () => {
     });
 
     it('should not change level if it is the same', () => {
-      const spy = vi.spyOn(server.server, 'sendLoggingMessage');
       setLogLevel('debug', { silent: true });
       setLogLevel('debug', { silent: true });
-      expect(spy).not.toHaveBeenCalled();
+      expect(server.server.sendLoggingMessage).not.toHaveBeenCalled();
     });
   });
 
