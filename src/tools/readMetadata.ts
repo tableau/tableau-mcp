@@ -20,16 +20,17 @@ export const readMetadataTool = new Tool({
     openWorldHint: false,
   },
   argsValidator: validateDatasourceLuid,
-  callback: async ({ datasourceLuid }): Promise<CallToolResult> => {
+  callback: async ({ datasourceLuid }, { requestId }): Promise<CallToolResult> => {
     const config = getConfig();
 
     return await readMetadataTool.logAndExecute({
+      requestId,
       args: { datasourceLuid },
-      callback: async (requestId) => {
+      callback: async () => {
         const restApi = await getNewRestApiInstanceAsync(
           config.server,
           config.authConfig,
-          requestId,
+          requestId.toString(),
         );
         return new Ok(
           await restApi.vizqlDataServiceMethods.readMetadata({

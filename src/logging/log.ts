@@ -1,4 +1,4 @@
-import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { server } from '../server.js';
 import { ToolName } from '../tools/toolName.js';
@@ -69,9 +69,18 @@ export const writeToStderr = (message: string): void => {
   process.stderr.write(message);
 };
 
-export const getToolLogMessage = (toolName: ToolName, args: unknown): LogMessage => {
+export const getToolLogMessage = ({
+  requestId,
+  toolName,
+  args,
+}: {
+  requestId: RequestId;
+  toolName: ToolName;
+  args: unknown;
+}): LogMessage => {
   return {
     type: 'tool',
+    requestId,
     tool: {
       name: toolName,
       ...(args !== undefined ? { args } : {}),

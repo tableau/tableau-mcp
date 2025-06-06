@@ -9,10 +9,6 @@ import { Tool } from './tool.js';
 // Mock server.server.sendLoggingMessage since the transport won't be connected.
 vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
 
-vi.mock('node:crypto', () => {
-  return { randomUUID: vi.fn(() => '123e4567-e89b-12d3-a456-426614174000') };
-});
-
 describe('Tool', () => {
   const mockParams = {
     name: 'list-fields',
@@ -44,10 +40,11 @@ describe('Tool', () => {
     const tool = new Tool(mockParams);
     const testArgs = { param1: 'test' };
 
-    tool.logInvocation(testArgs);
+    tool.logInvocation('2', testArgs);
 
     expect(spy).toHaveBeenCalledExactlyOnceWith({
       type: 'tool',
+      requestId: '2',
       tool: {
         name: 'list-fields',
         args: testArgs,
@@ -64,6 +61,7 @@ describe('Tool', () => {
 
     const spy = vi.spyOn(tool, 'logInvocation');
     const result = await tool.logAndExecute({
+      requestId: '2',
       args: { param1: 'test' },
       callback,
     });
@@ -72,7 +70,9 @@ describe('Tool', () => {
     expect(result.content[0].type).toBe('text');
     expect(JSON.parse(result.content[0].text as string)).toEqual(successResult);
 
-    expect(spy).toHaveBeenCalledExactlyOnceWith({ param1: 'test' });
+    expect(spy).toHaveBeenCalledExactlyOnceWith('2', {
+      param1: 'test',
+    });
   });
 
   it('should return error result when callback throws', async () => {
@@ -83,22 +83,25 @@ describe('Tool', () => {
     });
 
     const result = await tool.logAndExecute({
+      requestId: '2',
       args: { param1: 'test' },
       callback,
     });
 
     expect(result.isError).toBe(true);
     expect(result.content[0].type).toBe('text');
-    expect(result.content[0].text).toBe(
-      'requestId: 123e4567-e89b-12d3-a456-426614174000, error: Test error',
-    );
+    expect(result.content[0].text).toBe('requestId: 2, error: Test error');
   });
 
   it('should call argsValidator with provided args', async () => {
     const tool = new Tool(mockParams);
     const args = { param1: 'test' };
 
-    await tool.logAndExecute({ args, callback: vi.fn() });
+    await tool.logAndExecute({
+      requestId: '2',
+      args,
+      callback: vi.fn(),
+    });
 
     expect(mockParams.argsValidator).toHaveBeenCalledWith(args);
   });
@@ -121,14 +124,13 @@ describe('Tool', () => {
     });
 
     const result = await tool.logAndExecute({
+      requestId: '2',
       args: { param1: 'test' },
-      callback: (param1) => Promise.resolve(Ok(param1)),
+      callback: () => Promise.resolve(Ok('test')),
     });
 
     expect(result.isError).toBe(true);
     expect(result.content[0].type).toBe('text');
-    expect(result.content[0].text).toBe(
-      'requestId: 123e4567-e89b-12d3-a456-426614174000, error: Test error',
-    );
+    expect(result.content[0].text).toBe('requestId: 2, error: Test error');
   });
 });

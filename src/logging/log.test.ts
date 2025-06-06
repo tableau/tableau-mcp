@@ -95,10 +95,15 @@ describe('log', () => {
   describe('getToolLogMessage', () => {
     it('should create a tool log message with args', () => {
       const args = { param1: 'value1' };
-      const result = getToolLogMessage('list-fields', args);
+      const result = getToolLogMessage({
+        requestId: '2',
+        toolName: 'list-fields',
+        args,
+      });
 
       expect(result).toEqual({
         type: 'tool',
+        requestId: '2',
         tool: {
           name: 'list-fields',
           args,
@@ -107,10 +112,15 @@ describe('log', () => {
     });
 
     it('should create a tool log message without args', () => {
-      const result = getToolLogMessage('list-fields', undefined);
+      const result = getToolLogMessage({
+        requestId: '2',
+        toolName: 'list-fields',
+        args: undefined,
+      });
 
       expect(result).toEqual({
         type: 'tool',
+        requestId: '2',
         tool: {
           name: 'list-fields',
         },

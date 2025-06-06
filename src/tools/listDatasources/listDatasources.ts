@@ -86,16 +86,17 @@ Retrieves a list of published data sources from a specified Tableau site using t
     readOnlyHint: true,
     openWorldHint: false,
   },
-  callback: async ({ filter }): Promise<CallToolResult> => {
+  callback: async ({ filter }, { requestId }): Promise<CallToolResult> => {
     const config = getConfig();
     const validatedFilter = filter ? parseAndValidateFilterString(filter) : undefined;
     return await listDatasourcesTool.logAndExecute({
+      requestId,
       args: { filter },
-      callback: async (requestId) => {
+      callback: async () => {
         const restApi = await getNewRestApiInstanceAsync(
           config.server,
           config.authConfig,
-          requestId,
+          requestId.toString(),
         );
         return new Ok(
           await restApi.datasourcesMethods.listDatasources(restApi.siteId, validatedFilter ?? ''),

@@ -53,10 +53,6 @@ vi.mock('../../restApiInstance.js', () => ({
   }),
 }));
 
-vi.mock('node:crypto', () => {
-  return { randomUUID: vi.fn(() => '123e4567-e89b-12d3-a456-426614174000') };
-});
-
 describe('queryDatasourceTool', () => {
   const originalEnv = process.env;
 
@@ -156,7 +152,7 @@ describe('queryDatasourceTool', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toBe(
       JSON.stringify({
-        requestId: '123e4567-e89b-12d3-a456-426614174000',
+        requestId: 'test-request-id',
         ...mockVdsResponses.error,
         condition: 'Validation failed',
         details: "The incoming request isn't valid per the validation rules.",
@@ -192,9 +188,7 @@ describe('queryDatasourceTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toBe(
-      'requestId: 123e4567-e89b-12d3-a456-426614174000, error: API Error',
-    );
+    expect(result.content[0].text).toBe('requestId: test-request-id, error: API Error');
   });
 });
 

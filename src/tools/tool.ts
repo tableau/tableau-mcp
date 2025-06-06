@@ -1,7 +1,5 @@
-import { randomUUID } from 'node:crypto';
-
 import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 
@@ -23,9 +21,10 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
 };
 
 type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined> = {
+  requestId: RequestId;
   args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
-  callback: (requestId: string) => Promise<Result<T, E>>;
-  getErrorText?: (requestId: string, error: E) => string;
+  callback: () => Promise<Result<T, E>>;
+  getErrorText?: (error: E) => string;
 };
 
 export class Tool<Args extends ZodRawShape | undefined = undefined> {
@@ -52,8 +51,8 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.callback = callback;
   }
 
-  logInvocation(args: unknown): void {
-    log.debug(getToolLogMessage(this.name, args));
+  logInvocation(requestId: RequestId, args: unknown): void {
+    log.debug(getToolLogMessage({ requestId, toolName: this.name, args }));
   }
 
   // Overload for E = undefined (getErrorText omitted)
@@ -68,13 +67,12 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
 
   // Implementation
   async logAndExecute<T, E>({
+    requestId,
     args,
     callback,
     getErrorText,
   }: LogAndExecuteParams<T, E, Args>): Promise<CallToolResult> {
-    const requestId = randomUUID();
-
-    this.logInvocation(args);
+    this.logInvocation(requestId, args);
 
     if (args) {
       try {
@@ -85,7 +83,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     }
 
     try {
-      const result = await callback(requestId);
+      const result = await callback();
 
       if (result.isOk()) {
         return {
@@ -105,7 +103,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
           content: [
             {
               type: 'text',
-              text: getErrorText(requestId, result.error),
+              text: getErrorText(result.error),
             },
           ],
         };
@@ -118,7 +116,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   }
 }
 
-function getErrorResult(requestId: string, error: unknown): CallToolResult {
+function getErrorResult(requestId: RequestId, error: unknown): CallToolResult {
   return {
     isError: true,
     content: [
