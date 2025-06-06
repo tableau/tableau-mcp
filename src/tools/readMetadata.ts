@@ -30,7 +30,7 @@ export const readMetadataTool = new Tool({
         const restApi = await getNewRestApiInstanceAsync(
           config.server,
           config.authConfig,
-          requestId.toString(),
+          requestId,
         );
         return new Ok(
           await restApi.vizqlDataServiceMethods.readMetadata({

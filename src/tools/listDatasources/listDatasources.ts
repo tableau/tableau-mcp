@@ -96,7 +96,7 @@ Retrieves a list of published data sources from a specified Tableau site using t
         const restApi = await getNewRestApiInstanceAsync(
           config.server,
           config.authConfig,
-          requestId.toString(),
+          requestId,
         );
         return new Ok(
           await restApi.datasourcesMethods.listDatasources(restApi.siteId, validatedFilter ?? ''),

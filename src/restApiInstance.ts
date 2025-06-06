@@ -1,3 +1,5 @@
+import { RequestId } from '@modelcontextprotocol/sdk/types.js';
+
 import { isAxiosError } from '../node_modules/axios/index.js';
 import { getConfig } from './config.js';
 import { log, shouldLogWhenLevelIsAtLeast } from './logging/log.js';
@@ -20,7 +22,7 @@ import { getExceptionMessage } from './utils/getExceptionMessage.js';
 export const getNewRestApiInstanceAsync = async (
   host: string,
   authConfig: AuthConfig,
-  requestId: string,
+  requestId: RequestId,
 ): Promise<RestApi> => {
   const restApi = new RestApi(host, {
     requestInterceptor: [getRequestInterceptor(requestId), getRequestErrorInterceptor(requestId)],
@@ -35,7 +37,7 @@ export const getNewRestApiInstanceAsync = async (
 };
 
 export const getRequestInterceptor =
-  (requestId: string): RequestInterceptor =>
+  (requestId: RequestId): RequestInterceptor =>
   (request) => {
     request.headers['User-Agent'] = `${server.name}/${server.version}`;
     logRequest(request, requestId);
@@ -43,7 +45,7 @@ export const getRequestInterceptor =
   };
 
 export const getRequestErrorInterceptor =
-  (requestId: string): ErrorInterceptor =>
+  (requestId: RequestId): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.request) {
       log.error(
@@ -64,14 +66,14 @@ export const getRequestErrorInterceptor =
   };
 
 export const getResponseInterceptor =
-  (requestId: string): ResponseInterceptor =>
+  (requestId: RequestId): ResponseInterceptor =>
   (response) => {
     logResponse(response, requestId);
     return response;
   };
 
 export const getResponseErrorInterceptor =
-  (requestId: string): ErrorInterceptor =>
+  (requestId: RequestId): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.response) {
       log.error(
@@ -92,7 +94,7 @@ export const getResponseErrorInterceptor =
     );
   };
 
-function logRequest(request: RequestInterceptorConfig, requestId: string): void {
+function logRequest(request: RequestInterceptorConfig, requestId: RequestId): void {
   const config = getConfig();
   const maskedRequest = config.disableLogMasking ? request : maskRequest(request);
   const { baseUrl, url } = maskedRequest;
@@ -112,7 +114,7 @@ function logRequest(request: RequestInterceptorConfig, requestId: string): void 
   log.info(messageObj, 'rest-api');
 }
 
-function logResponse(response: ResponseInterceptorConfig, requestId: string): void {
+function logResponse(response: ResponseInterceptorConfig, requestId: RequestId): void {
   const config = getConfig();
   const maskedResponse = config.disableLogMasking ? response : maskResponse(response);
   const { baseUrl, url } = maskedResponse;

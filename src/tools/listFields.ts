@@ -41,7 +41,7 @@ export const listFieldsTool = new Tool({
         const restApi = await getNewRestApiInstanceAsync(
           config.server,
           config.authConfig,
-          requestId.toString(),
+          requestId,
         );
         return new Ok(await restApi.metadataMethods.graphql(query));
       },

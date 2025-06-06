@@ -52,7 +52,7 @@ export const queryDatasourceTool = new Tool({
         const restApi = await getNewRestApiInstanceAsync(
           config.server,
           config.authConfig,
-          requestId.toString(),
+          requestId,
         );
 
         return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
