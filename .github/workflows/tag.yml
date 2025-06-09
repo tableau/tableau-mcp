@@ -1,0 +1,15 @@
+name: 'tag'
+on:
+  push:
+    branches:
+      - main
+      - anyoung/versions
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: christophebedard/tag-version-commit@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version_assertion_command: 'grep -q "\"version\": \"$version\"" package.json'
