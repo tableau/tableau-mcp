@@ -1,12 +1,14 @@
 name: 'Tag for Release'
 on:
-  push:
+  pull_request:
+    types:
+      - closed
     branches:
       - main
-      - anyoung/versions
 
 jobs:
   tag:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -23,7 +25,7 @@ jobs:
           echo "package.json version: $version"
           echo "TAG=v$version" >> $GITHUB_ENV
 
-      - name: Push tag
+      - name: Push tag if not exists
         run: |
           if [ "$TAG" != "$LATEST" ]; then
             git config --local user.email "actions@github.com"
