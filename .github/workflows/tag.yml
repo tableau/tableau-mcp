@@ -16,8 +16,10 @@ jobs:
         id: tag
         run: |
           latest=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "")
+          echo "Current latest tag: $latest"
           echo "LATEST=$latest" >> $GITHUB_ENV
           version=$(grep -oP '"version": "\K[^"]+' package.json)
+          echo "package.json version: $version"
           echo "TAG=v$version" >> $GITHUB_ENV
 
       - name: Push tag
