@@ -13,5 +13,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           version_tag_prefix: 'v'
+          version_regex: '.+'
           version_assertion_command: 'grep -q "\"version\": \"$version\"" package.json'
           dry_run: true
