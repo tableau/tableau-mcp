@@ -210,11 +210,19 @@ Add the `tableau` MCP server to the `mcpServers` object in the config using `con
 
 ### Cursor
 
-TODO
+For Cursor, create a configuration file `.cursor/mcp.json` in your project directory (for project-specific access) or `~/.cursor/mcp.json` in your home directory (for global access across all projects).
+
+Add the `tableau` MCP server configuration using `config.example.json` or `config.docker.json` as a template. For more details, see the [Cursor MCP documentation](https://docs.cursor.com/context/model-context-protocol).
+
+Node: [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=tableau&config=eyJjb21tYW5kIjoibm9kZSAvZnVsbC1wYXRoLXRvLXRhYmxlYXUtbWNwL2J1aWxkL2luZGV4LmpzIiwiZW52Ijp7IlNFUlZFUiI6Imh0dHBzOi8vbXktdGFibGVhdS1zZXJ2ZXIuY29tIiwiU0lURV9OQU1FIjoiIiwiUEFUX05BTUUiOiIiLCJQQVRfVkFMVUUiOiIifX0%3D)
+
+Docker: [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=tableau&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIC0tZW52LWZpbGUgcGF0aC90by9lbnYubGlzdCB0YWJsZWF1LW1jcCJ9)
 
 ### VSCode
 
-TODO
+For VSCode, create a `.vscode/mcp.json` file in your workspace folder (for project-specific access) or add the server configuration to your user settings (for global access across all workspaces).
+
+Add the `tableau` MCP server configuration using `config.example.json` or `config.docker.json` as a template. For more details, see the [VSCode MCP documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
 
 ## Developers
 
