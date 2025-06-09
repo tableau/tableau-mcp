@@ -15,6 +15,9 @@ jobs:
       - name: Create tag
         id: tag
         run: |
+          git fetch --tags
+          git rev-list --tags --max-count=1
+          git describe --tags
           latest=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "")
           echo "Current latest tag: $latest"
           echo "LATEST=$latest" >> $GITHUB_ENV
