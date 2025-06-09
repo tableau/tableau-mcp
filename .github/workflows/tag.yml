@@ -1,4 +1,4 @@
-name: 'tag'
+name: 'Tag for Release'
 on:
   push:
     branches:
@@ -21,5 +21,5 @@ jobs:
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
-          git tag ${{ env.TAG }}
-          git push origin ${{ env.TAG }}
+          git tag $TAG
+          git push origin $TAG
