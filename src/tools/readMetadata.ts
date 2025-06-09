@@ -9,8 +9,7 @@ import { validateDatasourceLuid } from './validateDatasourceLuid.js';
 
 export const readMetadataTool = new Tool({
   name: 'read-metadata',
-  description:
-    `This tool wraps the read-metadata endpoint exposed by Tableau VizQL Data Service. It returns basic, high-level metadata for a specified data source.
+  description: `This tool wraps the read-metadata endpoint exposed by Tableau VizQL Data Service. It returns basic, high-level metadata for a specified data source.
     It strictly provides the following:
     {
       "fieldName": "string",

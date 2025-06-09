@@ -19,7 +19,7 @@ const graphqlResponse = z.object({
               z.object({
                 attribute: z.string(),
                 value: z.string(),
-              })
+              }),
             ),
             fullyQualifiedName: z.string(),
             __typename: z.string(),
