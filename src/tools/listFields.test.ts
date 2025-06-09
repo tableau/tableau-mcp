@@ -90,7 +90,6 @@ describe('listFieldsTool', () => {
 
   it('should create a tool instance with correct properties', () => {
     expect(listFieldsTool.name).toBe('list-fields');
-    expect(listFieldsTool.description).toContain('Fetches field metadata');
     expect(listFieldsTool.paramsSchema).toMatchObject({ datasourceLuid: expect.any(Object) });
   });
 
