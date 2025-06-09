@@ -4,6 +4,7 @@ on:
     branches:
       - main
       - anyoung/versions
+
 jobs:
   tag:
     runs-on: ubuntu-latest
@@ -14,12 +15,18 @@ jobs:
       - name: Create tag
         id: tag
         run: |
+          latest=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "")
+          echo "LATEST=$latest" >> $GITHUB_ENV
           version=$(grep -oP '"version": "\K[^"]+' package.json)
           echo "TAG=v$version" >> $GITHUB_ENV
 
       - name: Push tag
         run: |
-          git config --local user.email "actions@github.com"
-          git config --local user.name "GitHub Actions"
-          git tag $TAG
-          git push origin $TAG
+          if [ "$TAG" != "$LATEST" ]; then
+            git config --local user.email "actions@github.com"
+            git config --local user.name "GitHub Actions"
+            git tag $TAG
+            git push origin $TAG
+          else
+            echo "Tag $TAG already exists, skipping"
+          fi
