@@ -75,7 +75,7 @@ export const listFieldsTool = new Tool({
   description: `
     Fetches rich field metadata (name, description, inherited description, dataType, dataCategory, role, etc.) for the specified datasource via Tableau's Metadata API.
     This Returns a list of field dicts or an error message. In general this tool should be used for getting the metadata to ground the use of the query_datasource tool.
-    Note that not all fields,such as Hierarchy fields, can be used with the queryDatasource tool.
+    Note that not all fields, such as Hierarchy fields, can be used with the queryDatasource tool.
     `,
   paramsSchema: {
     datasourceLuid: z.string().nonempty(),
