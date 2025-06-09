@@ -10,7 +10,17 @@ import { validateDatasourceLuid } from './validateDatasourceLuid.js';
 export const readMetadataTool = new Tool({
   name: 'read-metadata',
   description:
-    'Requests metadata for the specified data source. The metadata provides information about the data fields, such as field names, data types, and descriptions.',
+    `This tool wraps the read-metadata endpoint exposed by Tableau VizQL Data Service. It returns basic, high-level metadata for a specified data source.
+    It strictly provides the following:
+    {
+      "fieldName": "string",
+      "fieldCaption": "string",
+      "dataType": "INTEGER",
+      "defaultAggregation": "SUM",
+      "logicalTableId": "string"
+    }
+    This tool is useful for getting a quick overview of the data source, but it does not provide the rich metadata that the list-fields tool provides.
+    `,
   paramsSchema: {
     datasourceLuid: z.string().nonempty(),
   },
