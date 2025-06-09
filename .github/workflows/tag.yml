@@ -8,11 +8,18 @@ jobs:
   tag:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: christophebedard/tag-version-commit@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          version_tag_prefix: 'v'
-          version_regex: '.+'
-          version_assertion_command: 'grep -q "\"version\": \"$version\"" package.json'
-          dry_run: true
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Create tag
+        id: tag
+        run: |
+          version=$(grep -oP '"version": "\K[^"]+' package.json)
+          echo "TAG=v$version" >> $GITHUB_ENV
+
+      - name: Push tag
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git tag ${{ env.TAG }}
+          git push origin ${{ env.TAG }}
