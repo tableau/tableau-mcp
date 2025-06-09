@@ -27,9 +27,9 @@
     "exec-perms": "shx chmod +x build/*.js",
     "test": "vitest",
     "coverage": "vitest run --coverage",
-    "version:major": "npm version major -m \"Bump version to %s\"",
-    "version:minor": "npm version minor -m \"Bump version to %s\"",
-    "version:patch": "npm version patch -m \"Bump version to %s\""
+    "version:major": "npm version major -m \"Bump version to %s\" --no-git-tag-version",
+    "version:minor": "npm version minor -m \"Bump version to %s\" --no-git-tag-version",
+    "version:patch": "npm version patch -m \"Bump version to %s\" --no-git-tag-version"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
