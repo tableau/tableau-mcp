@@ -72,7 +72,10 @@ function validateServer(server: string): void {
   try {
     const _ = new URL(server);
   } catch (error: unknown) {
-    throw new Error(`The environment variable SERVER is not a valid URL: ${server} -- ${error}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `The environment variable SERVER is not a valid URL: ${server} -- ${errorMessage}`,
+    );
   }
 }
 

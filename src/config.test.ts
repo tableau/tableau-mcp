@@ -54,7 +54,7 @@ describe('Config', () => {
     };
 
     expect(() => new Config()).toThrow(
-      'The environment variable SERVER is not a valid URL: https:// -- TypeError: Invalid URL',
+      'The environment variable SERVER is not a valid URL: https:// -- Invalid URL',
     );
   });
 
