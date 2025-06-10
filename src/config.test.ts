@@ -36,10 +36,32 @@ describe('Config', () => {
     expect(() => new Config()).toThrow('The environment variable SERVER is not set');
   });
 
+  it('should throw error when SERVER is not HTTPS', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'http://foo.com',
+    };
+
+    expect(() => new Config()).toThrow(
+      'The environment variable SERVER must start with "https://": http://foo.com',
+    );
+  });
+
+  it('should throw error when SERVER is not a valid URL', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'https://',
+    };
+
+    expect(() => new Config()).toThrow(
+      'The environment variable SERVER is not a valid URL: https:// -- TypeError: Invalid URL',
+    );
+  });
+
   it('should throw error when PAT_NAME is missing', () => {
     process.env = {
       ...process.env,
-      SERVER: 'test-server',
+      SERVER: 'https://test-server.com',
       SITE_NAME: 'test-site',
       PAT_NAME: undefined,
       PAT_VALUE: 'test-pat-value',
@@ -51,7 +73,7 @@ describe('Config', () => {
   it('should throw error when PAT_VALUE is missing', () => {
     process.env = {
       ...process.env,
-      SERVER: 'test-server',
+      SERVER: 'https://test-server.com',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: undefined,
@@ -63,7 +85,7 @@ describe('Config', () => {
   it('should configure PAT authentication when PAT credentials are provided', () => {
     process.env = {
       ...process.env,
-      SERVER: 'test-server',
+      SERVER: 'https://test-server.com',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
@@ -81,7 +103,7 @@ describe('Config', () => {
   it('should set default log level to debug when not specified', () => {
     process.env = {
       ...process.env,
-      SERVER: 'test-server',
+      SERVER: 'https://test-server.com',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
@@ -94,7 +116,7 @@ describe('Config', () => {
   it('should set custom log level when specified', () => {
     process.env = {
       ...process.env,
-      SERVER: 'test-server',
+      SERVER: 'https://test-server.com',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
@@ -108,7 +130,7 @@ describe('Config', () => {
   it('should set disableLogMasking to false by default', () => {
     process.env = {
       ...process.env,
-      SERVER: 'test-server',
+      SERVER: 'https://test-server.com',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
@@ -121,7 +143,7 @@ describe('Config', () => {
   it('should set disableLogMasking to true when specified', () => {
     process.env = {
       ...process.env,
-      SERVER: 'test-server',
+      SERVER: 'https://test-server.com',
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
@@ -136,7 +158,7 @@ describe('Config', () => {
     it('should set empty arrays for includeTools and excludeTools when not specified', () => {
       process.env = {
         ...process.env,
-        SERVER: 'test-server',
+        SERVER: 'https://test-server.com',
         SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
@@ -150,7 +172,7 @@ describe('Config', () => {
     it('should parse INCLUDE_TOOLS into an array of valid tool names', () => {
       process.env = {
         ...process.env,
-        SERVER: 'test-server',
+        SERVER: 'https://test-server.com',
         SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
@@ -164,7 +186,7 @@ describe('Config', () => {
     it('should parse EXCLUDE_TOOLS into an array of valid tool names', () => {
       process.env = {
         ...process.env,
-        SERVER: 'test-server',
+        SERVER: 'https://test-server.com',
         SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
@@ -178,7 +200,7 @@ describe('Config', () => {
     it('should filter out invalid tool names from INCLUDE_TOOLS', () => {
       process.env = {
         ...process.env,
-        SERVER: 'test-server',
+        SERVER: 'https://test-server.com',
         SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
@@ -192,7 +214,7 @@ describe('Config', () => {
     it('should filter out invalid tool names from EXCLUDE_TOOLS', () => {
       process.env = {
         ...process.env,
-        SERVER: 'test-server',
+        SERVER: 'https://test-server.com',
         SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
@@ -206,7 +228,7 @@ describe('Config', () => {
     it('should throw error when both INCLUDE_TOOLS and EXCLUDE_TOOLS are specified', () => {
       process.env = {
         ...process.env,
-        SERVER: 'test-server',
+        SERVER: 'https://test-server.com',
         SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
