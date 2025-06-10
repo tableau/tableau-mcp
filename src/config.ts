@@ -48,6 +48,8 @@ class Config {
     }
 
     invariant(server, 'The environment variable SERVER is not set');
+    validateServer(server);
+
     invariant(patName, 'The environment variable PAT_NAME is not set');
     invariant(patValue, 'The environment variable PAT_VALUE is not set');
 
@@ -59,6 +61,18 @@ class Config {
       patValue,
       siteName,
     };
+  }
+}
+
+function validateServer(server: string): void {
+  if (!server.startsWith('https://')) {
+    throw new Error(`The environment variable SERVER must start with "https://": ${server}`);
+  }
+
+  try {
+    const _ = new URL(server);
+  } catch (error: unknown) {
+    throw new Error(`The environment variable SERVER is not a valid URL: ${server} -- ${error}`);
   }
 }
 
