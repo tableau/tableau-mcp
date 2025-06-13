@@ -4,14 +4,12 @@ import {
   getDatasourceCredentials,
 } from './datasourceCredentials.js';
 
-const { resetConfig } = configExportedForTesting;
 const { resetDatasourceCredentials } = datasourceCredentialsExportedForTesting;
 
 describe('getDatasourceCredentials', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    resetConfig();
     resetDatasourceCredentials();
     process.env = {
       ...originalEnv,

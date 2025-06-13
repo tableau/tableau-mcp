@@ -7,13 +7,11 @@ import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
 
 const { Server } = serverExportedForTesting;
-const { resetConfig } = configExportedForTesting;
 
 describe('server', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    resetConfig();
     process.env = {
       ...originalEnv,
       INCLUDE_TOOLS: undefined,

@@ -1,12 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { exportedForTesting as configExportedForTesting } from '../../config.js';
 import { Server } from '../../server.js';
 import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
 import { getQueryDatasourceTool } from './queryDatasource.js';
 
-const { resetConfig } = configExportedForTesting;
 const { resetDatasourceCredentials } = datasourceCredentialsExportedForTesting;
 
 const mockVdsResponses = vi.hoisted(() => ({
@@ -55,7 +53,6 @@ describe('queryDatasourceTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetConfig();
     resetDatasourceCredentials();
     process.env = {
       ...originalEnv,
