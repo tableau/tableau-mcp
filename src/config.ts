@@ -1,8 +1,10 @@
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 import { isToolName, ToolName } from './tools/toolName.js';
+import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
 class Config {
+  transport: TransportName;
   server: string;
   authConfig: AuthConfig;
   datasourceCredentials: string;
@@ -14,6 +16,7 @@ class Config {
   constructor() {
     let { SITE_NAME: siteName } = process.env;
     const {
+      TRANSPORT: transport,
       SERVER: server,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
@@ -25,6 +28,7 @@ class Config {
     } = process.env;
 
     siteName = siteName ?? '';
+    this.transport = isTransport(transport) ? transport : 'stdio';
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
