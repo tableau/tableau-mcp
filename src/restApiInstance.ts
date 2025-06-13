@@ -16,19 +16,23 @@ import {
   ResponseInterceptorConfig,
 } from './sdks/tableau/interceptors.js';
 import RestApi from './sdks/tableau/restApi.js';
-import { server } from './server.js';
+import { Server } from './server.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 export const getNewRestApiInstanceAsync = async (
   host: string,
   authConfig: AuthConfig,
   requestId: RequestId,
+  server: Server,
 ): Promise<RestApi> => {
   const restApi = new RestApi(host, {
-    requestInterceptor: [getRequestInterceptor(requestId), getRequestErrorInterceptor(requestId)],
+    requestInterceptor: [
+      getRequestInterceptor(server, requestId),
+      getRequestErrorInterceptor(server, requestId),
+    ],
     responseInterceptor: [
-      getResponseInterceptor(requestId),
-      getResponseErrorInterceptor(requestId),
+      getResponseInterceptor(server, requestId),
+      getResponseErrorInterceptor(server, requestId),
     ],
   });
 
@@ -37,18 +41,19 @@ export const getNewRestApiInstanceAsync = async (
 };
 
 export const getRequestInterceptor =
-  (requestId: RequestId): RequestInterceptor =>
+  (server: Server, requestId: RequestId): RequestInterceptor =>
   (request) => {
     request.headers['User-Agent'] = `${server.name}/${server.version}`;
-    logRequest(request, requestId);
+    logRequest(server, request, requestId);
     return request;
   };
 
 export const getRequestErrorInterceptor =
-  (requestId: RequestId): ErrorInterceptor =>
+  (server: Server, requestId: RequestId): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.request) {
       log.error(
+        server,
         `Request ${requestId} failed with error: ${getExceptionMessage(error)}`,
         'rest-api',
       );
@@ -57,6 +62,7 @@ export const getRequestErrorInterceptor =
 
     const { request } = error;
     logRequest(
+      server,
       {
         baseUrl,
         ...getRequestInterceptorConfig(request),
@@ -66,17 +72,18 @@ export const getRequestErrorInterceptor =
   };
 
 export const getResponseInterceptor =
-  (requestId: RequestId): ResponseInterceptor =>
+  (server: Server, requestId: RequestId): ResponseInterceptor =>
   (response) => {
-    logResponse(response, requestId);
+    logResponse(server, response, requestId);
     return response;
   };
 
 export const getResponseErrorInterceptor =
-  (requestId: RequestId): ErrorInterceptor =>
+  (server: Server, requestId: RequestId): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.response) {
       log.error(
+        server,
         `Response from request ${requestId} failed with error: ${getExceptionMessage(error)}`,
         'rest-api',
       );
@@ -86,6 +93,7 @@ export const getResponseErrorInterceptor =
     // The type for the AxiosResponse headers is complex and not directly assignable to that of the Axios response interceptor's.
     const { response } = error as { response: AxiosResponseInterceptorConfig };
     logResponse(
+      server,
       {
         baseUrl,
         ...getResponseInterceptorConfig(response),
@@ -94,7 +102,7 @@ export const getResponseErrorInterceptor =
     );
   };
 
-function logRequest(request: RequestInterceptorConfig, requestId: RequestId): void {
+function logRequest(server: Server, request: RequestInterceptorConfig, requestId: RequestId): void {
   const config = getConfig();
   const maskedRequest = config.disableLogMasking ? request : maskRequest(request);
   const { baseUrl, url } = maskedRequest;
@@ -111,10 +119,14 @@ function logRequest(request: RequestInterceptorConfig, requestId: RequestId): vo
     }),
   } as const;
 
-  log.info(messageObj, 'rest-api');
+  log.info(server, messageObj, 'rest-api');
 }
 
-function logResponse(response: ResponseInterceptorConfig, requestId: RequestId): void {
+function logResponse(
+  server: Server,
+  response: ResponseInterceptorConfig,
+  requestId: RequestId,
+): void {
   const config = getConfig();
   const maskedResponse = config.disableLogMasking ? response : maskResponse(response);
   const { baseUrl, url } = maskedResponse;
@@ -130,5 +142,5 @@ function logResponse(response: ResponseInterceptorConfig, requestId: RequestId):
     }),
   } as const;
 
-  log.info(messageObj, 'rest-api');
+  log.info(server, messageObj, 'rest-api');
 }

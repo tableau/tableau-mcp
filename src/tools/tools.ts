@@ -1,6 +1,11 @@
-import { listDatasourcesTool } from './listDatasources/listDatasources.js';
-import { listFieldsTool } from './listFields.js';
-import { queryDatasourceTool } from './queryDatasource/queryDatasource.js';
-import { readMetadataTool } from './readMetadata.js';
+import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
+import { getListFieldsTool } from './listFields.js';
+import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
+import { getReadMetadataTool } from './readMetadata.js';
 
-export const tools = [listDatasourcesTool, listFieldsTool, queryDatasourceTool, readMetadataTool];
+export const toolFactories = [
+  getListDatasourcesTool,
+  getListFieldsTool,
+  getQueryDatasourceTool,
+  getReadMetadataTool,
+];

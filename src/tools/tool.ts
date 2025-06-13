@@ -4,6 +4,7 @@ import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 
 import { getToolLogMessage, log } from '../logging/log.js';
+import { Server } from '../server.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { ToolName } from './toolName.js';
 
@@ -12,6 +13,7 @@ type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args exte
   : never;
 
 export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
+  server: Server;
   name: ToolName;
   description: string;
   paramsSchema: Args;
@@ -28,6 +30,7 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
 };
 
 export class Tool<Args extends ZodRawShape | undefined = undefined> {
+  server: Server;
   name: ToolName;
   description: string;
   paramsSchema: Args;
@@ -36,6 +39,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   callback: ToolCallback<Args>;
 
   constructor({
+    server,
     name,
     description,
     paramsSchema,
@@ -43,6 +47,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     argsValidator,
     callback,
   }: ToolParams<Args>) {
+    this.server = server;
     this.name = name;
     this.description = description;
     this.paramsSchema = paramsSchema;
@@ -52,7 +57,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   }
 
   logInvocation({ requestId, args }: { requestId: RequestId; args: unknown }): void {
-    log.debug(getToolLogMessage({ requestId, toolName: this.name, args }));
+    log.debug(this.server, getToolLogMessage({ requestId, toolName: this.name, args }));
   }
 
   // Overload for E = undefined (getErrorText omitted)
