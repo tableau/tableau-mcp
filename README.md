@@ -39,6 +39,7 @@ The following MCP tools are currently implemented:
 | list-pulse-metrics-from-metric-ids                | List Pulse Metrics from Metric IDs ([Pulse API][pulse])                                               |
 | list-pulse-metric-subscriptions                   | List Pulse Metric Subscriptions for Current User ([Pulse API][pulse])                                 |
 | generate-pulse-metric-value-insight-bundle        | Generate Pulse Metric Value Insight Bundle ([Pulse API][pulse])                                       |
+| explore-in-tableau| Submit TDS content to Tableau's Explore in Tableau service for interactive authoring           |
 
 Note: The Tableau MCP project is currently in early development. As we continue to enhance and
 refine the implementation, the available functionality and tools may evolve. We welcome feedback and
@@ -193,6 +194,13 @@ These config files will be used in tool configuration explained below.
 | ------------ | ----------------------------------------------------------------------------------------------------------------- |
 | `SERVER`     | The URL of the Tableau server.                                                                                    |
 | `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site. |
+
+#### Additional Environment Variables for Explore in Tableau
+
+| **Variable**         | **Description**                                                              |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `IA_API_KEY`         | API key for JWT signing when using the explore-in-tableau tool.              |
+| `SALESFORCE_REGION`  | Salesforce region for API calls (defaults to 'us-east-1' if not provided).   |
 
 #### Optional Environment Variables
 

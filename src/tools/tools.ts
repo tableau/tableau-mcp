@@ -1,3 +1,4 @@
+import { exploreInTableauTool } from './exploreInTableau.js';
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
 import { getListFieldsTool } from './listFields.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './pulse/generateMetricValueInsightBundle/generatePulseMetricValueInsightBundleTool.js';
@@ -30,4 +31,5 @@ export const toolFactories = [
   getGetViewImageTool,
   getListWorkbooksTool,
   getListViewsTool,
+  exploreInTableauTool
 ];

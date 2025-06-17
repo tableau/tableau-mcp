@@ -14,6 +14,7 @@ export const toolNames = [
   'list-pulse-metrics-from-metric-ids',
   'list-pulse-metric-subscriptions',
   'generate-pulse-metric-value-insight-bundle',
+  'explore-in-tableau',
 ] as const;
 export type ToolName = (typeof toolNames)[number];
 
