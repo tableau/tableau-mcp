@@ -3,6 +3,7 @@ export const toolNames = [
   'list-fields',
   'query-datasource',
   'read-metadata',
+  'explore-in-tableau',
 ] as const;
 export type ToolName = (typeof toolNames)[number];
 

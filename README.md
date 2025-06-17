@@ -20,12 +20,13 @@ Key features:
 
 The following MCP tools are currently implemented:
 
-| **Variable**     | **Description**                                                                                |
-| ---------------- | ---------------------------------------------------------------------------------------------- |
-| list-datasources | Retrieves a list of published data sources from a specified Tableau site ([REST API][query])   |
-| list-fields      | Fetches field metadata (name, description) for the specified datasource ([Metadata API][meta]) |
-| query-datasource | Run a Tableau VizQL query ([VDS API][vds])                                                     |
-| read-metadata    | Requests metadata for the specified data source ([VDS API][vds])                               |
+| **Variable**      | **Description**                                                                                |
+| ----------------- | ---------------------------------------------------------------------------------------------- |
+| list-datasources  | Retrieves a list of published data sources from a specified Tableau site ([REST API][query])   |
+| list-fields       | Fetches field metadata (name, description) for the specified datasource ([Metadata API][meta]) |
+| query-datasource  | Run a Tableau VizQL query ([VDS API][vds])                                                     |
+| read-metadata     | Requests metadata for the specified data source ([VDS API][vds])                               |
+| explore-in-tableau| Submit TDS content to Tableau's Explore in Tableau service for interactive authoring           |
 
 Note: The Tableau MCP project is currently in early development. As we continue to enhance and
 refine the implementation, the available functionality and tools may evolve. We welcome feedback and
@@ -148,6 +149,13 @@ These config files will be used in tool configuration explained below.
 | `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site. |
 | `PAT_NAME`   | The name of the Tableau [Personal Access Token][pat] to use for authentication.                                   |
 | `PAT_VALUE`  | The value of the Tableau [Personal Access Token][pat] to use for authentication.                                  |
+
+#### Additional Environment Variables for Explore in Tableau
+
+| **Variable**         | **Description**                                                              |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `IA_API_KEY`         | API key for JWT signing when using the explore-in-tableau tool.              |
+| `SALESFORCE_REGION`  | Salesforce region for API calls (defaults to 'us-east-1' if not provided).   |
 
 #### Optional Environment Variables
 
