@@ -97,13 +97,12 @@ export const getResponseErrorInterceptor =
 function logRequest(request: RequestInterceptorConfig, requestId: RequestId): void {
   const config = getConfig();
   const maskedRequest = config.disableLogMasking ? request : maskRequest(request);
-  const { baseUrl, url } = maskedRequest;
-  const urlParts = [...baseUrl.split('/'), ...(url?.split('/') ?? [])].filter(Boolean);
+  const url = new URL(maskedRequest.url ?? '', maskedRequest.baseUrl);
   const messageObj = {
     type: 'request',
     requestId,
     method: maskedRequest.method,
-    url: urlParts.join('/'),
+    url: url.toString(),
     ...(shouldLogWhenLevelIsAtLeast('debug') && {
       headers: maskedRequest.headers,
       data: maskedRequest.data,
@@ -117,12 +116,11 @@ function logRequest(request: RequestInterceptorConfig, requestId: RequestId): vo
 function logResponse(response: ResponseInterceptorConfig, requestId: RequestId): void {
   const config = getConfig();
   const maskedResponse = config.disableLogMasking ? response : maskResponse(response);
-  const { baseUrl, url } = maskedResponse;
-  const urlParts = [...baseUrl.split('/'), ...(url?.split('/') ?? [])].filter(Boolean);
+  const url = new URL(maskedResponse.url ?? '', maskedResponse.baseUrl);
   const messageObj = {
     type: 'response',
     requestId,
-    url: urlParts.join('/'),
+    url: url.toString(),
     status: maskedResponse.status,
     ...(shouldLogWhenLevelIsAtLeast('debug') && {
       headers: maskedResponse.headers,
