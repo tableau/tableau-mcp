@@ -106,7 +106,7 @@ template. It should look similar to this:
       "args": ["/full-path-to-tableau-mcp/build/index.js"],
       "env": {
         "TRANSPORT": "stdio",
-        "HTTP_PORT": "",
+        "PORT": "",
         "SERVER": "https://my-tableau-server.com",
         "SITE_NAME": "",
         "PAT_NAME": "",
@@ -147,7 +147,7 @@ These config files will be used in tool configuration explained below.
 | **Variable** | **Description**                                                                                                   |
 | ------------ | ----------------------------------------------------------------------------------------------------------------- |
 | `TRANSPORT`  | The transport layer to use for the server. "stdio" or "http".                                                     |
-| `HTTP_PORT`  | The port to use for the HTTP server when `TRANSPORT`=http. Defaults to 3927.                                      |
+| `PORT`       | The port to use for the HTTP server when `TRANSPORT`=http. Defaults to 3927.                                      |
 | `SERVER`     | The URL of the Tableau server.                                                                                    |
 | `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site. |
 | `PAT_NAME`   | The name of the Tableau [Personal Access Token][pat] to use for authentication.                                   |

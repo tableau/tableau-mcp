@@ -5,7 +5,7 @@
       "args": ["build/index.js"],
       "env": {
         "TRANSPORT": "stdio",
-        "HTTP_PORT": "",
+        "PORT": "",
         "SERVER": "https://my-tableau-server.com",
         "SITE_NAME": "",
         "PAT_NAME": "",

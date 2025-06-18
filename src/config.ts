@@ -20,7 +20,7 @@ export class Config {
     let { SITE_NAME: siteName } = process.env;
     const {
       TRANSPORT: transport,
-      HTTP_PORT: httpPort,
+      PORT: httpPort,
       SERVER: server,
       SSL_KEY: sslKey,
       SSL_CERT: sslCert,
