@@ -76,7 +76,10 @@ describe('restApiInstance', () => {
           method: 'GET',
           url: expect.any(String),
         }),
-        'rest-api',
+        expect.objectContaining({
+          logger: 'rest-api',
+          requestId: mockRequestId,
+        }),
       );
     });
   });
@@ -104,7 +107,10 @@ describe('restApiInstance', () => {
           status: 200,
           url: expect.any(String),
         }),
-        'rest-api',
+        expect.objectContaining({
+          logger: 'rest-api',
+          requestId: mockRequestId,
+        }),
       );
     });
   });
@@ -127,7 +133,10 @@ describe('restApiInstance', () => {
       expect(log.error).toHaveBeenCalledWith(
         server,
         `Request ${mockRequestId} failed with error: ${JSON.stringify(mockError)}`,
-        'rest-api',
+        expect.objectContaining({
+          logger: 'rest-api',
+          requestId: mockRequestId,
+        }),
       );
     });
 
@@ -156,7 +165,10 @@ describe('restApiInstance', () => {
           method: 'GET',
           url: expect.any(String),
         }),
-        'rest-api',
+        expect.objectContaining({
+          logger: 'rest-api',
+          requestId: mockRequestId,
+        }),
       );
     });
 
@@ -178,7 +190,10 @@ describe('restApiInstance', () => {
       expect(log.error).toHaveBeenCalledWith(
         server,
         `Response from request ${mockRequestId} failed with error: ${JSON.stringify(mockError)}`,
-        'rest-api',
+        expect.objectContaining({
+          logger: 'rest-api',
+          requestId: mockRequestId,
+        }),
       );
     });
 
@@ -207,7 +222,10 @@ describe('restApiInstance', () => {
           url: expect.any(String),
           status: 500,
         }),
-        'rest-api',
+        expect.objectContaining({
+          logger: 'rest-api',
+          requestId: mockRequestId,
+        }),
       );
     });
   });
