@@ -19,7 +19,7 @@
     "build": "npm run :build && npm run exec-perms",
     "build:watch": "npm run :build -- --watch",
     "build:docker": "docker build -t tableau-mcp .",
-    "start:http": "node build/index.js",
+    "start": "node build/index.js",
     "lint": "npm exec eslint",
     "inspect": "npx @modelcontextprotocol/inspector --config config.json --server tableau",
     ":inspect:http": "npx @modelcontextprotocol/inspector --config config.http.json --server tableau",
