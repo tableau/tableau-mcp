@@ -23,7 +23,7 @@
     "lint": "npm exec eslint",
     "inspect": "npx @modelcontextprotocol/inspector --config config.json --server tableau",
     ":inspect:http": "npx @modelcontextprotocol/inspector --config config.http.json --server tableau",
-    "inspect:http": "run-p start:http :inspect:http",
+    "inspect:http": "run-p start :inspect:http",
     "inspect:docker": "npx @modelcontextprotocol/inspector --config config.docker.json --server tableau",
     "build:inspect": "npm run build && npm run inspect",
     "build:inspect:docker": "npm run build && npm run inspect:docker",
