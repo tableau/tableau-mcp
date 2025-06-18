@@ -19,7 +19,7 @@ import RestApi from './sdks/tableau/restApi.js';
 import { Server } from './server.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
-export const getNewRestApiInstanceAsync = async (
+const getNewRestApiInstanceAsync = async (
   host: string,
   authConfig: AuthConfig,
   requestId: RequestId,
@@ -38,6 +38,21 @@ export const getNewRestApiInstanceAsync = async (
 
   await restApi.signIn(authConfig);
   return restApi;
+};
+
+export const useRestApi = async <T>(
+  host: string,
+  authConfig: AuthConfig,
+  requestId: RequestId,
+  server: Server,
+  callback: (restApi: RestApi) => Promise<T>,
+): Promise<T> => {
+  const restApi = await getNewRestApiInstanceAsync(host, authConfig, requestId, server);
+  try {
+    return await callback(restApi);
+  } finally {
+    await restApi.signOut();
+  }
 };
 
 export const getRequestInterceptor =

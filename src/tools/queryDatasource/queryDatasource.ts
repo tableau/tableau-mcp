@@ -1,8 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
-import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
+import { useRestApi } from '../../restApiInstance.js';
 import { Datasource, Query, TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
@@ -54,14 +55,15 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             options,
           };
 
-          const restApi = await getNewRestApiInstanceAsync(
+          return await useRestApi(
             config.server,
             config.authConfig,
             requestId,
             server,
+            async (restApi) => {
+              return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+            },
           );
-
-          return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
         },
         getErrorText: (error: z.infer<typeof TableauError>) => {
           return JSON.stringify({ requestId, ...handleQueryDatasourceError(error) });

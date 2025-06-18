@@ -69,11 +69,15 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../restApiInstance.js', () => ({
-  getNewRestApiInstanceAsync: vi.fn().mockResolvedValue({
-    metadataMethods: {
-      graphql: mocks.mockGraphql,
-    },
-  }),
+  useRestApi: vi
+    .fn()
+    .mockImplementation(async (_host, _authConfig, _requestId, _server, callback) =>
+      callback({
+        metadataMethods: {
+          graphql: mocks.mockGraphql,
+        },
+      }),
+    ),
 }));
 
 describe('listFieldsTool', () => {
