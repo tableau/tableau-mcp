@@ -7,7 +7,9 @@ import {
   RequestInterceptor,
   ResponseInterceptor,
 } from './interceptors.js';
-import AuthenticationMethods from './methods/authenticationMethods.js';
+import AuthenticationMethods, {
+  AuthenticatedAuthenticationMethods,
+} from './methods/authenticationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
@@ -90,6 +92,13 @@ export default class RestApi {
     const authenticationMethods = new AuthenticationMethods(this._baseUrl);
     this._addInterceptors(this._baseUrl, authenticationMethods.interceptors);
     this._creds = await authenticationMethods.signIn(authConfig);
+  };
+
+  signOut = async (): Promise<void> => {
+    const authenticationMethods = new AuthenticatedAuthenticationMethods(this._baseUrl, this.creds);
+    this._addInterceptors(this._baseUrl, authenticationMethods.interceptors);
+    await authenticationMethods.signOut();
+    this._creds = undefined;
   };
 
   private _addInterceptors = (baseUrl: string, interceptors: AxiosInterceptor): void => {

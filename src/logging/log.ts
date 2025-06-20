@@ -55,7 +55,7 @@ export const log = {
   [level in LoggingLevel]: (
     server: Server,
     message: string | LogMessage,
-    logger: Logger,
+    { logger, requestId }: Partial<{ logger: Logger; requestId: RequestId }>,
   ) => Promise<void>;
 };
 
@@ -93,23 +93,39 @@ export const getToolLogMessage = ({
 };
 
 function getSendLoggingMessageFn(level: LoggingLevel) {
-  return async (server: Server, message: string | LogMessage, logger: Logger = server.name) => {
+  return async (
+    server: Server,
+    message: string | LogMessage,
+    { logger, requestId }: Partial<{ logger: Logger; requestId: RequestId }> = {
+      logger: server.name,
+    },
+  ) => {
     if (!shouldLogWhenLevelIsAtLeast(level)) {
       return;
     }
 
-    return server.server.sendLoggingMessage({
-      level,
-      logger,
-      message: JSON.stringify(
-        {
-          timestamp: new Date().toISOString(),
-          currentLogLevel,
-          message,
+    // server.sendNotification doesn't provide a way to provide the relatedRequestId
+    // so we're using server.notification directly.
+    return server.server.notification(
+      {
+        method: 'notifications/message',
+        params: {
+          level,
+          logger,
+          message: JSON.stringify(
+            {
+              timestamp: new Date().toISOString(),
+              currentLogLevel,
+              message,
+            },
+            null,
+            2,
+          ),
         },
-        null,
-        2,
-      ),
-    });
+      },
+      {
+        relatedRequestId: requestId,
+      },
+    );
   };
 }

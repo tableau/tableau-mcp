@@ -11,6 +11,8 @@ describe('Config', () => {
     vi.resetModules();
     process.env = {
       ...originalEnv,
+      TRANSPORT: undefined,
+      HTTP_PORT: undefined,
       SERVER: undefined,
       SITE_NAME: undefined,
       PAT_NAME: undefined,

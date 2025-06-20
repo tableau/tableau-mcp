@@ -28,7 +28,16 @@ const signInEndpoint = makeEndpoint({
   ],
 });
 
-const authenticationApi = makeApi([signInEndpoint]);
+const signOutEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/auth/signout',
+  alias: 'signOut',
+  description:
+    'Signs you out of the current session. This call invalidates the authentication token that is created by a call to Sign In.',
+  response: z.void(),
+});
+
+const authenticationApi = makeApi([signInEndpoint, signOutEndpoint]);
 export const authenticationApis = [
   ...authenticationApi,
 ] as const satisfies ZodiosEndpointDefinitions;

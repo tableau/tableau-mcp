@@ -3,7 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
-import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
+import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
 import { parseAndValidateFilterString } from './datasourcesFilterUtils.js';
@@ -98,14 +98,19 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
         requestId,
         args: { filter },
         callback: async () => {
-          const restApi = await getNewRestApiInstanceAsync(
-            config.server,
-            config.authConfig,
-            requestId,
-            server,
-          );
           return new Ok(
-            await restApi.datasourcesMethods.listDatasources(restApi.siteId, validatedFilter ?? ''),
+            await useRestApi(
+              config.server,
+              config.authConfig,
+              requestId,
+              server,
+              async (restApi) => {
+                return await restApi.datasourcesMethods.listDatasources(
+                  restApi.siteId,
+                  validatedFilter ?? '',
+                );
+              },
+            ),
           );
         },
       });

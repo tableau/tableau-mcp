@@ -8,6 +8,9 @@ import { Tool } from './tools/tool.js';
 import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
 
+export const serverName = pkg.name;
+export const serverVersion = pkg.version;
+
 export class Server extends McpServer {
   readonly name: string;
   readonly version: string;
@@ -15,8 +18,8 @@ export class Server extends McpServer {
   constructor() {
     super(
       {
-        name: pkg.name,
-        version: pkg.version,
+        name: serverName,
+        version: serverVersion,
       },
       {
         capabilities: {
@@ -26,8 +29,8 @@ export class Server extends McpServer {
       },
     );
 
-    this.name = pkg.name;
-    this.version = pkg.version;
+    this.name = serverName;
+    this.version = serverVersion;
   }
 
   registerTools = (): void => {

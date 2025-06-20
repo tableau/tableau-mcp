@@ -13,12 +13,16 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
-  getNewRestApiInstanceAsync: vi.fn().mockResolvedValue({
-    datasourcesMethods: {
-      listDatasources: mocks.mockListDatasources,
-    },
-    siteId: 'test-site-id',
-  }),
+  useRestApi: vi
+    .fn()
+    .mockImplementation(async (_host, _authConfig, _requestId, _server, callback) =>
+      callback({
+        datasourcesMethods: {
+          listDatasources: mocks.mockListDatasources,
+        },
+        siteId: 'test-site-id',
+      }),
+    ),
 }));
 
 describe('listDatasourcesTool', () => {

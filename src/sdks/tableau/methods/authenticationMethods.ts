@@ -3,6 +3,7 @@ import { Zodios } from '@zodios/core';
 import { authenticationApis } from '../apis/authenticationApi.js';
 import { AuthConfig } from '../authConfig.js';
 import { Credentials } from '../types/credentials.js';
+import AuthenticatedMethods from './authenticatedMethods.js';
 import Methods from './methods.js';
 
 /**
@@ -36,5 +37,19 @@ export default class AuthenticationMethods extends Methods<typeof authentication
         },
       })
     ).credentials;
+  };
+}
+
+export class AuthenticatedAuthenticationMethods extends AuthenticatedMethods<
+  typeof authenticationApis
+> {
+  constructor(baseUrl: string, creds: Credentials) {
+    super(new Zodios(baseUrl, authenticationApis), creds);
+  }
+
+  signOut = async (): Promise<void> => {
+    await this._apiClient.signOut(undefined, {
+      ...this.authHeader,
+    });
   };
 }
