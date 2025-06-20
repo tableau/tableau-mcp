@@ -8,7 +8,7 @@ import { workbookSchema } from '../types/workbook.js';
 
 const queryWorkbooksForSiteEndpoint = makeEndpoint({
   method: 'get',
-  path: `/sites/:siteId/workbooks?filter=projectName${encodeURIComponent(':eq:')}:projectName`,
+  path: `/sites/:siteId/workbooks`,
   alias: 'queryWorkbooksForSite',
   description: 'Returns the workbooks on a site.',
   response: z.object({

@@ -23,14 +23,13 @@ export default class WorkbookMethods extends AuthenticatedMethods<typeof workboo
    * Returns the workbooks on a site.
    *
    * @param {string} siteId - The Tableau site ID
-   * @param {string} projectName The name of the project by which to filter.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbooks_for_site
    */
-  queryWorkbooksForSite = async (siteId: string, projectName: string): Promise<Workbook[]> => {
+  queryWorkbooksForSite = async (siteId: string): Promise<Workbook[]> => {
     return (
       (
         await this._apiClient.queryWorkbooksForSite({
-          params: { siteId, projectName },
+          params: { siteId },
           ...this.authHeader,
         })
       ).workbooks.workbook ?? []

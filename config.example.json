@@ -8,6 +8,7 @@
         "PORT": "",
         "SERVER": "https://my-tableau-server.com",
         "SITE_NAME": "",
+        "SITE_ID": "",
         "PAT_NAME": "",
         "PAT_VALUE": "",
         "DATASOURCE_CREDENTIALS": "",

@@ -16,6 +16,7 @@
         "PORT": "${config:tableau.mcp.PORT}",
         "SERVER": "${config:tableau.mcp.SERVER}",
         "SITE_NAME": "${config:tableau.mcp.SITE_NAME}",
+        "SITE_ID": "${config:tableau.mcp.SITE_ID}",
         "PAT_NAME": "${config:tableau.mcp.PAT_NAME}",
         "PAT_VALUE": "${config:tableau.mcp.PAT_VALUE}",
         "DATASOURCE_CREDENTIALS": "${config:tableau.mcp.DATASOURCE_CREDENTIALS}",

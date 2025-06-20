@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { DataSourcesApiClient } from '../apis/datasourcesApi.js';
 import { WorkbookApiClient } from '../apis/workbookApi.js';
 import { dataSourceSchema } from '../types/dataSource.js';
+import { projectSchema } from '../types/project.js';
 import { workbookSchema } from '../types/workbook.js';
 
 type RequestOptions = ReturnType<NonNullable<ZodiosPlugin['request']>>;
@@ -15,18 +16,14 @@ export const multipartRequestSchema = z.object({ pathToFile: z.string() }).and(
     .object({
       contentDispositionName: z.literal('tableau_workbook'),
       asset: z.object({
-        workbook: workbookSchema
-          .partial()
-          .extend({ project: workbookSchema.shape.project.partial() }),
+        workbook: workbookSchema.partial().extend({ project: projectSchema.partial() }),
       }),
     })
     .or(
       z.object({
         contentDispositionName: z.literal('tableau_datasource'),
         asset: z.object({
-          datasource: dataSourceSchema
-            .partial()
-            .extend({ project: dataSourceSchema.shape.project.partial() }),
+          datasource: dataSourceSchema.partial().extend({ project: projectSchema.partial() }),
         }),
       }),
     ),

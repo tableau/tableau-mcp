@@ -6,7 +6,7 @@ export const workbookSchema = z.object({
   id: z.string(),
   name: z.string(),
   contentUrl: z.string(),
-  project: projectSchema,
+  project: projectSchema.optional(),
   showTabs: z.coerce.boolean(),
   connections: z.optional(
     z.object({
