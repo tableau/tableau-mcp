@@ -1,11 +1,19 @@
 import { ZodiosEndpointDefinitions, ZodiosInstance } from '@zodios/core';
 
+import { boundaryString } from '../plugins/postMultipartPlugin.js';
 import { Credentials } from '../types/credentials.js';
 import Methods from './methods.js';
 
 type AuthHeaders = {
   headers: {
     'X-Tableau-Auth': string;
+  };
+};
+
+type AuthAndMultipartRequestTypeHeaders = AuthHeaders & {
+  headers: {
+    'Content-Type': `multipart/mixed; boundary=${typeof boundaryString}`;
+    Accept: 'application/json';
   };
 };
 
@@ -29,6 +37,16 @@ export default abstract class AuthenticatedMethods<
     return {
       headers: {
         'X-Tableau-Auth': this._creds.token,
+      },
+    };
+  }
+
+  protected get authAndMultipartRequestHeaders(): AuthAndMultipartRequestTypeHeaders {
+    return {
+      headers: {
+        ...this.authHeader.headers,
+        'Content-Type': `multipart/mixed; boundary=${boundaryString}`,
+        Accept: 'application/json',
       },
     };
   }
