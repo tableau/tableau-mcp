@@ -15,7 +15,6 @@ describe('Config', () => {
       PORT: undefined,
       SERVER: undefined,
       SITE_NAME: undefined,
-      SITE_ID: undefined,
       PAT_NAME: undefined,
       PAT_VALUE: undefined,
       DATASOURCE_CREDENTIALS: undefined,

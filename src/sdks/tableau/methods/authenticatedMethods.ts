@@ -51,6 +51,10 @@ export default abstract class AuthenticatedMethods<
     };
   }
 
+  protected get creds(): Credentials {
+    return this._creds;
+  }
+
   constructor(apiClient: ZodiosInstance<T>, creds: Credentials) {
     super(apiClient);
     this._creds = creds;

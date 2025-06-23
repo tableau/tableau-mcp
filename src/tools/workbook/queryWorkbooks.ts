@@ -33,7 +33,7 @@ export const getQueryWorkbooksTool = (server: Server): Tool<typeof paramsSchema>
               requestId,
               server,
               async (restApi) => {
-                return await restApi.workbookMethods.queryWorkbooksForSite(config.siteId);
+                return await restApi.workbookMethods.queryWorkbooksForSite();
               },
             ),
           );
