@@ -20,6 +20,35 @@ export default class WorkbookMethods extends AuthenticatedMethods<typeof workboo
   }
 
   /**
+   * Returns information about the specified workbook, including information about views and tags.
+   *
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook
+   * @param {string} workbookId The ID of the workbook to return information for.
+   */
+  getWorkbook = async (workbookId: string): Promise<Workbook> => {
+    return (
+      await this._apiClient.getWorkbook({
+        params: { siteId: this.creds.site.id, workbookId },
+        ...this.authHeader,
+      })
+    ).workbook;
+  };
+
+  /**
+   * Returns an image of the specified view.
+   *
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_view_image
+   * @param {string} viewId The ID of the view to return an image for.
+   */
+  queryViewImage = async (viewId: string): Promise<string> => {
+    return await this._apiClient.queryViewImage({
+      params: { siteId: this.creds.site.id, viewId },
+      ...this.authHeader,
+      responseType: 'arraybuffer',
+    });
+  };
+
+  /**
    * Returns the workbooks on a site.
    *
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbooks_for_site

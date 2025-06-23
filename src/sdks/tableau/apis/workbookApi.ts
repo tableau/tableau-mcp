@@ -6,6 +6,23 @@ import { multipartRequestSchema } from '../plugins/postMultipartPlugin.js';
 import { restApiErrorSchema } from '../types/restApiError.js';
 import { workbookSchema } from '../types/workbook.js';
 
+const getWorkbookEndpoint = makeEndpoint({
+  method: 'get',
+  path: `/sites/:siteId/workbooks/:workbookId`,
+  alias: 'getWorkbook',
+  description:
+    'Returns information about the specified workbook, including information about views and tags.',
+  response: z.object({ workbook: workbookSchema }),
+});
+
+const queryViewImageEndpoint = makeEndpoint({
+  method: 'get',
+  path: `/sites/:siteId/views/:viewId/image?resolution=high`,
+  alias: 'queryViewImage',
+  description: 'Returns an image of the specified view.',
+  response: z.string(),
+});
+
 const queryWorkbooksForSiteEndpoint = makeEndpoint({
   method: 'get',
   path: `/sites/:siteId/workbooks`,
@@ -62,7 +79,9 @@ export function throwIfPublishFailed(e: unknown, workbookName: string): void {
 }
 
 const workbookApi = makeApi([
+  queryViewImageEndpoint,
   queryWorkbooksForSiteEndpoint,
+  getWorkbookEndpoint,
   deleteWorkbookEndpoint,
   publishWorkbookEndpoint,
 ]);

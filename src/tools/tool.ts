@@ -26,6 +26,7 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
   requestId: RequestId;
   args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
   callback: () => Promise<Result<T, E>>;
+  getSuccessResult?: (result: T) => CallToolResult;
   getErrorText?: (error: E) => string;
 };
 
@@ -75,6 +76,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     requestId,
     args,
     callback,
+    getSuccessResult: getSuccessCallToolResult,
     getErrorText,
   }: LogAndExecuteParams<T, E, Args>): Promise<CallToolResult> {
     this.logInvocation({ requestId, args });
@@ -91,6 +93,10 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       const result = await callback();
 
       if (result.isOk()) {
+        if (getSuccessCallToolResult) {
+          return getSuccessCallToolResult(result.value);
+        }
+
         return {
           isError: false,
           content: [

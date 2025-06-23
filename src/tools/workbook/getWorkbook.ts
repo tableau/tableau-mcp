@@ -1,30 +1,33 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
 
-const paramsSchema = {};
+const paramsSchema = {
+  workbookId: z.string(),
+};
 
-export const getQueryWorkbooksTool = (server: Server): Tool<typeof paramsSchema> => {
-  const queryWorkbooksTool = new Tool({
+export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> => {
+  const getWorkbookTool = new Tool({
     server,
-    name: 'query-workbooks',
-    description: `Retrieves information about the workbooks and views that are available on a Tableau site.`,
+    name: 'get-workbook',
+    description: `Returns information about the specified workbook, including information about views and tags.`,
     paramsSchema,
     annotations: {
-      title: 'Query Workbooks',
+      title: 'Get Workbook',
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (_, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ workbookId }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
 
-      return await queryWorkbooksTool.logAndExecute({
+      return await getWorkbookTool.logAndExecute({
         requestId,
-        args: {},
+        args: { workbookId },
         callback: async () => {
           return new Ok(
             await useRestApi(
@@ -33,7 +36,7 @@ export const getQueryWorkbooksTool = (server: Server): Tool<typeof paramsSchema>
               requestId,
               server,
               async (restApi) => {
-                return await restApi.workbookMethods.queryWorkbooksForSite();
+                return await restApi.workbookMethods.getWorkbook(workbookId);
               },
             ),
           );
@@ -42,5 +45,5 @@ export const getQueryWorkbooksTool = (server: Server): Tool<typeof paramsSchema>
     },
   });
 
-  return queryWorkbooksTool;
+  return getWorkbookTool;
 };

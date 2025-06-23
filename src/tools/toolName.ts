@@ -1,7 +1,9 @@
 export const toolNames = [
   'list-datasources',
   'list-fields',
+  'get-workbook',
   'query-datasource',
+  'query-view-image',
   'query-workbooks',
   'read-metadata',
 ] as const;
