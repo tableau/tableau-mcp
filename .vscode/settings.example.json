@@ -1,6 +1,6 @@
 {
   "tableau.mcp.TRANSPORT": "stdio",
-  "tableau.mcp.HTTP_PORT": "",
+  "tableau.mcp.PORT": "",
   "tableau.mcp.SERVER": "https://my-tableau-server.com",
   "tableau.mcp.SITE_NAME": "",
   "tableau.mcp.PAT_NAME": "",
