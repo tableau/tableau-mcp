@@ -3,6 +3,8 @@ export const toolNames = [
   'list-fields',
   'query-datasource',
   'read-metadata',
+  'search',
+  'fetch',
 ] as const;
 export type ToolName = (typeof toolNames)[number];
 

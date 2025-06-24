@@ -5,3 +5,4 @@ junit/
 coverage/
 config.json
 env.list
+env.chatgpt.list
