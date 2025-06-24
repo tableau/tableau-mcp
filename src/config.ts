@@ -79,18 +79,8 @@ function validateServer(server: string): void {
   }
 }
 
-let config: Config | undefined;
-export const getConfig = (): Config => {
-  if (!config) {
-    config = new Config();
-  }
-
-  return config;
-};
+export const getConfig = (): Config => new Config();
 
 export const exportedForTesting = {
   Config,
-  resetConfig: () => {
-    config = undefined;
-  },
 };

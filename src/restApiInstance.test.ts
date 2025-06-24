@@ -10,7 +10,7 @@ import {
 } from './restApiInstance.js';
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 import RestApi from './sdks/tableau/restApi.js';
-import { server } from './server.js';
+import { Server } from './server.js';
 
 vi.mock('./sdks/tableau/restApi.js', () => ({
   default: vi.fn().mockImplementation(() => ({
@@ -42,7 +42,12 @@ describe('restApiInstance', () => {
 
   describe('getNewRestApiInstanceAsync', () => {
     it('should create a new RestApi instance and sign in', async () => {
-      const restApi = await getNewRestApiInstanceAsync(mockHost, mockAuthConfig, mockRequestId);
+      const restApi = await getNewRestApiInstanceAsync(
+        mockHost,
+        mockAuthConfig,
+        mockRequestId,
+        new Server(),
+      );
 
       expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
       expect(restApi.signIn).toHaveBeenCalledWith(mockAuthConfig);
@@ -51,7 +56,8 @@ describe('restApiInstance', () => {
 
   describe('Request Interceptor', () => {
     it('should add User-Agent header and log request', () => {
-      const interceptor = getRequestInterceptor(mockRequestId);
+      const server = new Server();
+      const interceptor = getRequestInterceptor(server, mockRequestId);
       const mockRequest = {
         headers: {} as Record<string, string>,
         method: 'GET',
@@ -63,6 +69,7 @@ describe('restApiInstance', () => {
 
       expect(mockRequest.headers['User-Agent']).toBe(`${server.name}/${server.version}`);
       expect(log.info).toHaveBeenCalledWith(
+        server,
         expect.objectContaining({
           type: 'request',
           requestId: mockRequestId,
@@ -76,7 +83,8 @@ describe('restApiInstance', () => {
 
   describe('Response Interceptor', () => {
     it('should log response', () => {
-      const interceptor = getResponseInterceptor(mockRequestId);
+      const server = new Server();
+      const interceptor = getResponseInterceptor(server, mockRequestId);
       const mockResponse = {
         status: 200,
         url: '/api/test',
@@ -89,6 +97,7 @@ describe('restApiInstance', () => {
 
       expect(result).toBe(mockResponse);
       expect(log.info).toHaveBeenCalledWith(
+        server,
         expect.objectContaining({
           type: 'response',
           requestId: mockRequestId,
@@ -102,7 +111,8 @@ describe('restApiInstance', () => {
 
   describe('Error Handling', () => {
     it('should handle request errors', () => {
-      const errorInterceptor = getRequestErrorInterceptor(mockRequestId);
+      const server = new Server();
+      const errorInterceptor = getRequestErrorInterceptor(server, mockRequestId);
       const mockError = {
         request: {
           method: 'GET',
@@ -115,13 +125,15 @@ describe('restApiInstance', () => {
       errorInterceptor(mockError, mockHost);
 
       expect(log.error).toHaveBeenCalledWith(
+        server,
         `Request ${mockRequestId} failed with error: ${JSON.stringify(mockError)}`,
         'rest-api',
       );
     });
 
     it('should handle AxiosError request errors', () => {
-      const errorInterceptor = getRequestErrorInterceptor(mockRequestId);
+      const server = new Server();
+      const errorInterceptor = getRequestErrorInterceptor(server, mockRequestId);
       const mockError = {
         isAxiosError: true,
         request: {
@@ -137,6 +149,7 @@ describe('restApiInstance', () => {
       expect(log.info).toHaveBeenCalled();
 
       expect(log.info).toHaveBeenCalledWith(
+        server,
         expect.objectContaining({
           type: 'request',
           requestId: mockRequestId,
@@ -148,7 +161,8 @@ describe('restApiInstance', () => {
     });
 
     it('should handle response errors', () => {
-      const errorInterceptor = getResponseErrorInterceptor(mockRequestId);
+      const server = new Server();
+      const errorInterceptor = getResponseErrorInterceptor(server, mockRequestId);
       const mockError = {
         response: {
           status: 500,
@@ -162,13 +176,15 @@ describe('restApiInstance', () => {
       errorInterceptor(mockError, mockHost);
 
       expect(log.error).toHaveBeenCalledWith(
+        server,
         `Response from request ${mockRequestId} failed with error: ${JSON.stringify(mockError)}`,
         'rest-api',
       );
     });
 
     it('should handle AxiosError response errors', () => {
-      const errorInterceptor = getResponseErrorInterceptor(mockRequestId);
+      const server = new Server();
+      const errorInterceptor = getResponseErrorInterceptor(server, mockRequestId);
       const mockError = {
         isAxiosError: true,
         response: {
@@ -184,6 +200,7 @@ describe('restApiInstance', () => {
       errorInterceptor(mockError, mockHost);
 
       expect(log.info).toHaveBeenCalledWith(
+        server,
         expect.objectContaining({
           type: 'response',
           requestId: mockRequestId,
