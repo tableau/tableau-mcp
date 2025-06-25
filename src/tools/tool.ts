@@ -66,10 +66,12 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     params: Omit<LogAndExecuteParams<T, undefined, Args>, 'getErrorText'>,
   ): Promise<CallToolResult>;
 
-  // Overload for E != undefined (getErrorText required)
+  // Overload for E != undefined (getSuccessResult omitted)
   async logAndExecute<T, E>(
     params: Required<Omit<LogAndExecuteParams<T, E, Args>, 'getSuccessResult'>>,
   ): Promise<CallToolResult>;
+
+  // Overload for E != undefined (getErrorText required)
   async logAndExecute<T, E>(
     params: Required<LogAndExecuteParams<T, E, Args>>,
   ): Promise<CallToolResult>;
