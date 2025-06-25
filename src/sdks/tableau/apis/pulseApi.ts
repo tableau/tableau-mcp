@@ -1,7 +1,17 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions, ZodiosInstance } from '@zodios/core';
 import { z } from 'zod';
 
-import { metricSchema } from '../types/pulse.js';
+import { definitionSchema, metricSchema } from '../types/pulse.js';
+
+const listDefinitionsEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/pulse/definitions',
+  alias: 'listDefinitions',
+  description: 'Lists the metric definitions configured for a site.',
+  response: z.object({
+    definitions: z.array(definitionSchema),
+  }),
+});
 
 const listMetricsInDefinitionEndpoint = makeEndpoint({
   method: 'get',
@@ -13,7 +23,7 @@ const listMetricsInDefinitionEndpoint = makeEndpoint({
   }),
 });
 
-const pulseApi = makeApi([listMetricsInDefinitionEndpoint]);
+const pulseApi = makeApi([listDefinitionsEndpoint, listMetricsInDefinitionEndpoint]);
 export const pulseApis = [...pulseApi] as const satisfies ZodiosEndpointDefinitions;
 
 export type PulseApiClient = ZodiosInstance<typeof pulseApis>;

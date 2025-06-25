@@ -2,7 +2,7 @@ import { Zodios } from '@zodios/core';
 
 import { pulseApis } from '../apis/pulseApi.js';
 import { Credentials } from '../types/credentials.js';
-import { Metric } from '../types/pulse.js';
+import { Definition, Metric } from '../types/pulse.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 /**
@@ -16,6 +16,14 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
   constructor(baseUrl: string, creds: Credentials) {
     super(new Zodios(baseUrl, pulseApis), creds);
   }
+
+  listDefinitions = async (): Promise<Array<Definition>> => {
+    return (
+      await this._apiClient.listDefinitions({
+        ...this.authHeader,
+      })
+    ).definitions;
+  };
 
   listMetricsInDefinition = async (definitionId: string): Promise<Array<Metric>> => {
     return (

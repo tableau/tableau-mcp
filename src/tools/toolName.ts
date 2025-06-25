@@ -1,6 +1,8 @@
 export const toolNames = [
   'list-datasources',
   'list-fields',
+  'list-metric-definitions',
+  'list-metrics-in-definition',
   'get-workbook',
   'query-datasource',
   'query-view-data',
