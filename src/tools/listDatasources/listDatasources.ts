@@ -9,6 +9,7 @@ import { Tool } from '../tool.js';
 import { parseAndValidateFilterString } from './datasourcesFilterUtils.js';
 
 const paramsSchema = {
+  siteName: z.string(),
   filter: z.string().optional(),
 };
 
@@ -91,13 +92,14 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ siteName, filter }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
       const validatedFilter = filter ? parseAndValidateFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
         requestId,
-        args: { filter },
+        args: { siteName, filter },
         callback: async () => {
+          config.authConfig.siteName = siteName;
           return new Ok(
             await useRestApi(
               config.server,

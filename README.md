@@ -108,7 +108,6 @@ template. It should look similar to this:
         "TRANSPORT": "stdio",
         "PORT": "",
         "SERVER": "https://my-tableau-server.com",
-        "SITE_NAME": "",
         "PAT_NAME": "",
         "PAT_VALUE": "",
         ... etc
@@ -144,14 +143,13 @@ These config files will be used in tool configuration explained below.
 
 #### Required Environment Variables
 
-| **Variable** | **Description**                                                                                                   |
-| ------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `TRANSPORT`  | The transport layer to use for the server. "stdio" or "http".                                                     |
-| `PORT`       | The port to use for the HTTP server when `TRANSPORT`=http. Defaults to 3927.                                      |
-| `SERVER`     | The URL of the Tableau server.                                                                                    |
-| `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site. |
-| `PAT_NAME`   | The name of the Tableau [Personal Access Token][pat] to use for authentication.                                   |
-| `PAT_VALUE`  | The value of the Tableau [Personal Access Token][pat] to use for authentication.                                  |
+| **Variable** | **Description**                                                                  |
+| ------------ | -------------------------------------------------------------------------------- |
+| `TRANSPORT`  | The transport layer to use for the server. "stdio" or "http".                    |
+| `PORT`       | The port to use for the HTTP server when `TRANSPORT`=http. Defaults to 3927.     |
+| `SERVER`     | The URL of the Tableau server.                                                   |
+| `PAT_NAME`   | The name of the Tableau [Personal Access Token][pat] to use for authentication.  |
+| `PAT_VALUE`  | The value of the Tableau [Personal Access Token][pat] to use for authentication. |
 
 #### Optional Environment Variables
 

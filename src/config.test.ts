@@ -14,7 +14,6 @@ describe('Config', () => {
       TRANSPORT: undefined,
       PORT: undefined,
       SERVER: undefined,
-      SITE_NAME: undefined,
       PAT_NAME: undefined,
       PAT_VALUE: undefined,
       DATASOURCE_CREDENTIALS: undefined,
@@ -64,7 +63,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'https://test-server.com',
-      SITE_NAME: 'test-site',
       PAT_NAME: undefined,
       PAT_VALUE: 'test-pat-value',
     };
@@ -76,7 +74,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'https://test-server.com',
-      SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: undefined,
     };
@@ -88,7 +85,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'https://test-server.com',
-      SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
     };
@@ -98,7 +94,7 @@ describe('Config', () => {
       type: 'pat',
       patName: 'test-pat-name',
       patValue: 'test-pat-value',
-      siteName: 'test-site',
+      siteName: null,
     });
   });
 
@@ -106,7 +102,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'https://test-server.com',
-      SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
     };
@@ -119,7 +114,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'https://test-server.com',
-      SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
       DEFAULT_LOG_LEVEL: 'info',
@@ -133,7 +127,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'https://test-server.com',
-      SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
     };
@@ -146,7 +139,6 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'https://test-server.com',
-      SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
       DISABLE_LOG_MASKING: 'true',
@@ -161,7 +153,6 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         SERVER: 'https://test-server.com',
-        SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
       };
@@ -175,7 +166,6 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         SERVER: 'https://test-server.com',
-        SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
         INCLUDE_TOOLS: 'query-datasource,list-fields',
@@ -189,7 +179,6 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         SERVER: 'https://test-server.com',
-        SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
         EXCLUDE_TOOLS: 'query-datasource',
@@ -203,7 +192,6 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         SERVER: 'https://test-server.com',
-        SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
         INCLUDE_TOOLS: 'query-datasource,order-hamburgers',
@@ -217,7 +205,6 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         SERVER: 'https://test-server.com',
-        SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
         EXCLUDE_TOOLS: 'query-datasource,order-hamburgers',
@@ -231,7 +218,6 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         SERVER: 'https://test-server.com',
-        SITE_NAME: 'test-site',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
         INCLUDE_TOOLS: 'query-datasource',

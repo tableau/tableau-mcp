@@ -197,6 +197,7 @@ async function getToolResult(): Promise<CallToolResult> {
   const queryDatasourceTool = getQueryDatasourceTool(new Server());
   return await queryDatasourceTool.callback(
     {
+      siteName: 'test-site',
       datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
       query: {
         fields: [

@@ -1,12 +1,15 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
 
-const paramsSchema = {};
+const paramsSchema = {
+  siteName: z.string(),
+};
 
 export const getQueryWorkbooksTool = (server: Server): Tool<typeof paramsSchema> => {
   const queryWorkbooksTool = new Tool({
@@ -19,13 +22,15 @@ export const getQueryWorkbooksTool = (server: Server): Tool<typeof paramsSchema>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (_, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ siteName }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await queryWorkbooksTool.logAndExecute({
         requestId,
-        args: {},
+        args: { siteName },
         callback: async () => {
+          config.authConfig.siteName = siteName;
+
           return new Ok(
             await useRestApi(
               config.server,

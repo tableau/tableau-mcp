@@ -8,6 +8,7 @@ import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
 
 const paramsSchema = {
+  siteName: z.string(),
   workbookId: z.string(),
 };
 
@@ -22,13 +23,15 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ workbookId }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ siteName, workbookId }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getWorkbookTool.logAndExecute({
         requestId,
-        args: { workbookId },
+        args: { siteName, workbookId },
         callback: async () => {
+          config.authConfig.siteName = siteName;
+
           return new Ok(
             await useRestApi(
               config.server,

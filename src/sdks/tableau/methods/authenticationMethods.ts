@@ -23,7 +23,7 @@ export default class AuthenticationMethods extends Methods<typeof authentication
       await this._apiClient.signIn({
         credentials: {
           site: {
-            contentUrl: authConfig.siteName,
+            contentUrl: authConfig.siteName ?? '',
           },
           ...(() => {
             switch (authConfig.type) {

@@ -39,7 +39,10 @@ describe('listDatasourcesTool', () => {
 
   it('should successfully list datasources', async () => {
     mocks.mockListDatasources.mockResolvedValue(mockDatasources);
-    const result = await getToolResult({ filter: 'name:eq:Superstore' });
+    const result = await getToolResult({
+      siteName: 'test-site',
+      filter: 'name:eq:Superstore',
+    });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Superstore');
     expect(mocks.mockListDatasources).toHaveBeenCalledWith('test-site-id', 'name:eq:Superstore');
@@ -48,13 +51,19 @@ describe('listDatasourcesTool', () => {
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
     mocks.mockListDatasources.mockRejectedValue(new Error(errorMessage));
-    const result = await getToolResult({ filter: 'name:eq:Superstore' });
+    const result = await getToolResult({
+      siteName: 'test-site',
+      filter: 'name:eq:Superstore',
+    });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(errorMessage);
   });
 });
 
-async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
+async function getToolResult(params: {
+  siteName: string;
+  filter: string;
+}): Promise<CallToolResult> {
   const listDatasourcesTool = getListDatasourcesTool(new Server());
   return await listDatasourcesTool.callback(params, {
     signal: new AbortController().signal,
