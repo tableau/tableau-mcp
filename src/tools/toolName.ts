@@ -3,6 +3,7 @@ export const toolNames = [
   'list-fields',
   'get-workbook',
   'query-datasource',
+  'query-view-data',
   'query-view-image',
   'query-workbooks',
   'read-metadata',

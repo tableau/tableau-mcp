@@ -35,6 +35,19 @@ export default class WorkbookMethods extends AuthenticatedMethods<typeof workboo
   };
 
   /**
+   * Returns a specified view rendered as data in comma separated value (CSV) format.
+   *
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_view_data
+   * @param {string} viewId The ID of the view to return an image for.
+   */
+  queryViewData = async (viewId: string): Promise<string> => {
+    return await this._apiClient.queryViewData({
+      params: { siteId: this.creds.site.id, viewId },
+      ...this.authHeader,
+    });
+  };
+
+  /**
    * Returns an image of the specified view.
    *
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_view_image

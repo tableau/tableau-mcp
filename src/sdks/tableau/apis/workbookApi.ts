@@ -15,6 +15,14 @@ const getWorkbookEndpoint = makeEndpoint({
   response: z.object({ workbook: workbookSchema }),
 });
 
+const queryViewDataEndpoint = makeEndpoint({
+  method: 'get',
+  path: `/sites/:siteId/views/:viewId/data`,
+  alias: 'queryViewData',
+  description: 'Returns a specified view rendered as data in comma separated value (CSV) format.',
+  response: z.string(),
+});
+
 const queryViewImageEndpoint = makeEndpoint({
   method: 'get',
   path: `/sites/:siteId/views/:viewId/image?resolution=high`,
@@ -79,6 +87,7 @@ export function throwIfPublishFailed(e: unknown, workbookName: string): void {
 }
 
 const workbookApi = makeApi([
+  queryViewDataEndpoint,
   queryViewImageEndpoint,
   queryWorkbooksForSiteEndpoint,
   getWorkbookEndpoint,
