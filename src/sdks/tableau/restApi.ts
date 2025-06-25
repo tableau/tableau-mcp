@@ -13,6 +13,7 @@ import AuthenticationMethods, {
 import DatasourcesMethods from './methods/datasourcesMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
+import WorkbookMethods from './methods/workbookMethods.js';
 import { Credentials } from './types/credentials.js';
 
 /**
@@ -29,6 +30,7 @@ export default class RestApi {
   private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
   private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
+  private _workbookMethods?: WorkbookMethods;
   private static _version = '3.24';
 
   private _requestInterceptor?: [RequestInterceptor, ErrorInterceptor?];
@@ -86,6 +88,15 @@ export default class RestApi {
     }
 
     return this._vizqlDataServiceMethods;
+  }
+
+  get workbookMethods(): WorkbookMethods {
+    if (!this._workbookMethods) {
+      this._workbookMethods = new WorkbookMethods(this._baseUrl, this.creds);
+      this._addInterceptors(this._baseUrl, this._workbookMethods.interceptors);
+    }
+
+    return this._workbookMethods;
   }
 
   signIn = async (authConfig: AuthConfig): Promise<void> => {
