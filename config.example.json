@@ -7,7 +7,6 @@
         "TRANSPORT": "stdio",
         "PORT": "",
         "SERVER": "https://my-tableau-server.com",
-        "SITE_NAME": "",
         "PAT_NAME": "",
         "PAT_VALUE": "",
         "DATASOURCE_CREDENTIALS": "",

@@ -2,7 +2,6 @@
   "tableau.mcp.TRANSPORT": "stdio",
   "tableau.mcp.PORT": "",
   "tableau.mcp.SERVER": "https://my-tableau-server.com",
-  "tableau.mcp.SITE_NAME": "",
   "tableau.mcp.PAT_NAME": "",
   "tableau.mcp.PAT_VALUE": "",
   "tableau.mcp.DATASOURCE_CREDENTIALS": "",

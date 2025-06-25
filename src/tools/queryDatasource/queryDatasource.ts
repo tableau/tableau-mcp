@@ -14,6 +14,7 @@ import { queryDatasourceToolDescription } from './queryDescription.js';
 type Datasource = z.infer<typeof Datasource>;
 
 const paramsSchema = {
+  siteName: z.string(),
   datasourceLuid: z.string().nonempty(),
   query: Query,
 };
@@ -30,11 +31,14 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
       openWorldHint: false,
     },
     argsValidator: validateQuery,
-    callback: async ({ datasourceLuid, query }, { requestId }): Promise<CallToolResult> => {
+    callback: async (
+      { siteName, datasourceLuid, query },
+      { requestId },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       return await queryDatasourceTool.logAndExecute({
         requestId,
-        args: { datasourceLuid, query },
+        args: { siteName, datasourceLuid, query },
         callback: async () => {
           const datasource: Datasource = { datasourceLuid };
           const options = {
@@ -54,6 +58,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             options,
           };
 
+          config.authConfig.siteName = siteName;
           return await useRestApi(
             config.server,
             config.authConfig,

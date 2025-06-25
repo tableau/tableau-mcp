@@ -100,7 +100,7 @@ describe('readMetadataTool', () => {
 async function getToolResult(): Promise<CallToolResult> {
   const readMetadataTool = getReadMetadataTool(new Server());
   return await readMetadataTool.callback(
-    { datasourceLuid: 'test-luid' },
+    { siteName: 'test-site', datasourceLuid: 'test-luid' },
     {
       signal: new AbortController().signal,
       requestId: 'test-request-id',

@@ -124,7 +124,7 @@ describe('listFieldsTool', () => {
 async function getToolResult(): Promise<CallToolResult> {
   const listFieldsTool = getListFieldsTool(new Server());
   return await listFieldsTool.callback(
-    { datasourceLuid: 'test-luid' },
+    { siteName: 'test-site', datasourceLuid: 'test-luid' },
     {
       signal: new AbortController().signal,
       requestId: 'test-request-id',

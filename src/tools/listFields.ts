@@ -72,6 +72,7 @@ export const getGraphqlQuery = (datasourceLuid: string): string => `
   }`;
 
 const paramsSchema = {
+  siteName: z.string(),
   datasourceLuid: z.string().nonempty(),
 };
 
@@ -91,14 +92,17 @@ export const getListFieldsTool = (server: Server): Tool<typeof paramsSchema> => 
       openWorldHint: false,
     },
     argsValidator: validateDatasourceLuid,
-    callback: async ({ datasourceLuid }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ siteName, datasourceLuid }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
+      config.authConfig.siteName = siteName;
+
       const query = getGraphqlQuery(datasourceLuid);
 
       return await listFieldsTool.logAndExecute({
         requestId,
-        args: { datasourceLuid },
+        args: { siteName, datasourceLuid },
         callback: async () => {
+          config.authConfig.siteName = siteName;
           return new Ok(
             await useRestApi(
               config.server,
