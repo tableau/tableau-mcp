@@ -8,6 +8,7 @@ import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
 
 const paramsSchema = {
+  siteName: z.string(),
   viewId: z.string(),
 };
 
@@ -22,13 +23,15 @@ export const getQueryViewImageTool = (server: Server): Tool<typeof paramsSchema>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ viewId }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ siteName, viewId }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await queryViewImageTool.logAndExecute({
         requestId,
-        args: { viewId },
+        args: { siteName, viewId },
         callback: async () => {
+          config.authConfig.siteName = siteName;
+
           return new Ok(
             await useRestApi(
               config.server,

@@ -15,7 +15,6 @@
         "TRANSPORT": "${config:tableau.mcp.TRANSPORT}",
         "PORT": "${config:tableau.mcp.PORT}",
         "SERVER": "${config:tableau.mcp.SERVER}",
-        "SITE_NAME": "${config:tableau.mcp.SITE_NAME}",
         "PAT_NAME": "${config:tableau.mcp.PAT_NAME}",
         "PAT_VALUE": "${config:tableau.mcp.PAT_VALUE}",
         "DATASOURCE_CREDENTIALS": "${config:tableau.mcp.DATASOURCE_CREDENTIALS}",

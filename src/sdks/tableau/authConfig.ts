@@ -1,5 +1,5 @@
 export type AuthConfig = {
-  siteName: string;
+  siteName: string | null;
   type: 'pat';
   patName: string;
   patValue: string;

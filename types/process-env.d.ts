@@ -4,7 +4,6 @@ export interface ProcessEnvEx {
   SSL_CERT: string | undefined;
   PORT: string | undefined;
   SERVER: string | undefined;
-  SITE_NAME: string | undefined;
   PAT_NAME: string | undefined;
   PAT_VALUE: string | undefined;
   DATASOURCE_CREDENTIALS: string | undefined;

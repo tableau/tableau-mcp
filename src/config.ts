@@ -17,7 +17,6 @@ export class Config {
   excludeTools: Array<ToolName>;
 
   constructor() {
-    let { SITE_NAME: siteName } = process.env;
     const {
       TRANSPORT: transport,
       PORT: httpPort,
@@ -36,7 +35,6 @@ export class Config {
     const defaultPort = 3927;
     const httpPortNumber = parseInt(httpPort || defaultPort.toString(), 10);
 
-    siteName = siteName ?? '';
     this.transport = isTransport(transport) ? transport : 'stdio';
     this.httpPort = isNaN(httpPortNumber) ? defaultPort : httpPortNumber;
     this.sslKey = sslKey ?? '';
@@ -75,7 +73,7 @@ export class Config {
       type: 'pat',
       patName,
       patValue,
-      siteName,
+      siteName: null,
     };
   }
 }

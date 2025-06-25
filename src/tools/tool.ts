@@ -68,6 +68,9 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
 
   // Overload for E != undefined (getErrorText required)
   async logAndExecute<T, E>(
+    params: Required<Omit<LogAndExecuteParams<T, E, Args>, 'getSuccessResult'>>,
+  ): Promise<CallToolResult>;
+  async logAndExecute<T, E>(
     params: Required<LogAndExecuteParams<T, E, Args>>,
   ): Promise<CallToolResult>;
 
@@ -76,7 +79,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     requestId,
     args,
     callback,
-    getSuccessResult: getSuccessCallToolResult,
+    getSuccessResult,
     getErrorText,
   }: LogAndExecuteParams<T, E, Args>): Promise<CallToolResult> {
     this.logInvocation({ requestId, args });
@@ -93,8 +96,8 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       const result = await callback();
 
       if (result.isOk()) {
-        if (getSuccessCallToolResult) {
-          return getSuccessCallToolResult(result.value);
+        if (getSuccessResult) {
+          return getSuccessResult(result.value);
         }
 
         return {
