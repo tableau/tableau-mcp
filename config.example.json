@@ -11,7 +11,8 @@
         "DATASOURCE_CREDENTIALS": "",
         "DEFAULT_LOG_LEVEL": "debug",
         "INCLUDE_TOOLS": "",
-        "EXCLUDE_TOOLS": ""
+        "EXCLUDE_TOOLS": "",
+        "MAX_RESULT_LIMIT": ""
       }
     }
   }
