@@ -6,10 +6,17 @@ import { listDatasourcesTool } from './listDatasources.js';
 // Mock server.server.sendLoggingMessage since the transport won't be connected.
 vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
 
-const mockDatasources = [
-  { id: 'ds1', name: 'Superstore', project: { name: 'Samples', id: 'proj1' } },
-  { id: 'ds2', name: 'Finance', project: { name: 'Finance', id: 'proj2' } },
-];
+const mockDatasources = {
+  pagination: {
+    pageNumber: 1,
+    pageSize: 10,
+    totalAvailable: 2,
+  },
+  datasources: [
+    { id: 'ds1', name: 'Superstore', project: { name: 'Samples', id: 'proj1' } },
+    { id: 'ds2', name: 'Finance', project: { name: 'Finance', id: 'proj2' } },
+  ],
+};
 
 const mocks = vi.hoisted(() => ({
   mockListDatasources: vi.fn(),
@@ -40,7 +47,12 @@ describe('listDatasourcesTool', () => {
     const result = await getToolResult({ filter: 'name:eq:Superstore' });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Superstore');
-    expect(mocks.mockListDatasources).toHaveBeenCalledWith('test-site-id', 'name:eq:Superstore');
+    expect(mocks.mockListDatasources).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      filter: 'name:eq:Superstore',
+      pageSize: undefined,
+      pageNumber: undefined,
+    });
   });
 
   it('should handle API errors gracefully', async () => {

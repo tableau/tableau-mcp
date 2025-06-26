@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { Pagination } from './types/pagination.js';
+import { Pagination } from '../sdks/tableau/types/pagination.js';
 
 const pageConfigSchema = z
   .object({

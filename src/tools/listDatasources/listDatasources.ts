@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
-import { paginate } from '../../sdks/tableau/paginate.js';
+import { paginate } from '../../utils/paginate.js';
 import { Tool } from '../tool.js';
 import { parseAndValidateFilterString } from './datasourcesFilterUtils.js';
 
@@ -103,15 +103,15 @@ Retrieves a list of published data sources from a specified Tableau site using t
         );
 
         const datasources = await paginate({
-          pageConfig: { pageSize, limit },
+          pageConfig: { pageSize, limit: config.maxResultLimit ?? limit },
           getDataFn: async (pageConfig) => {
             const { pagination, datasources: data } =
-              await restApi.datasourcesMethods.listDatasources(
-                restApi.siteId,
-                validatedFilter ?? '',
-                pageConfig.pageSize,
-                pageConfig.pageNumber,
-              );
+              await restApi.datasourcesMethods.listDatasources({
+                siteId: restApi.siteId,
+                filter: validatedFilter ?? '',
+                pageSize: pageConfig.pageSize,
+                pageNumber: pageConfig.pageNumber,
+              });
 
             return { pagination, data };
           },

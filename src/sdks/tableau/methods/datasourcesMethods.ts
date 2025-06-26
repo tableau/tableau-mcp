@@ -17,12 +17,17 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
    * @param pageSize - The number of items to return in one response. The minimum is 1. The maximum is 1000. The default is 100.
    * @param pageNumber - The offset for paging. The default is 1.
    */
-  listDatasources = async (
-    siteId: string,
-    filter: string,
-    pageSize?: number,
-    pageNumber?: number,
-  ): Promise<{ pagination: Pagination; datasources: Datasource[] }> => {
+  listDatasources = async ({
+    siteId,
+    filter,
+    pageSize,
+    pageNumber,
+  }: {
+    siteId: string;
+    filter: string;
+    pageSize?: number;
+    pageNumber?: number;
+  }): Promise<{ pagination: Pagination; datasources: Datasource[] }> => {
     const response = await this._apiClient.listDatasources({
       params: { siteId },
       queries: { filter, pageSize, pageNumber },

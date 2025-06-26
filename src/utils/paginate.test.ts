@@ -1,5 +1,5 @@
+import type { Pagination } from '../sdks/tableau/types/pagination.js';
 import { paginate } from './paginate.js';
-import type { Pagination } from './types/pagination.js';
 
 describe('paginate', () => {
   beforeEach(() => {
