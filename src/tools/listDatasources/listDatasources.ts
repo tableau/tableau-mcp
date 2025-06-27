@@ -103,7 +103,12 @@ Retrieves a list of published data sources from a specified Tableau site using t
         );
 
         const datasources = await paginate({
-          pageConfig: { pageSize, limit: config.maxResultLimit ?? limit },
+          pageConfig: {
+            pageSize,
+            limit: config.maxResultLimit
+              ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+              : limit,
+          },
           getDataFn: async (pageConfig) => {
             const { pagination, datasources: data } =
               await restApi.datasourcesMethods.listDatasources({
