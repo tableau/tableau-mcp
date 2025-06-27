@@ -18,11 +18,8 @@ type PaginateArgs<T> = {
 };
 
 export async function paginate<T>({ pageConfig, getDataFn }: PaginateArgs<T>): Promise<Array<T>> {
-  pageConfigSchema.parse(pageConfig);
-
-  const { pageSize, limit } = pageConfig;
+  const { pageSize, limit } = pageConfigSchema.parse(pageConfig);
   const { pagination, data } = await getDataFn(pageConfig);
-
   const result = [...data];
 
   let { totalAvailable, pageNumber } = pagination;
@@ -34,7 +31,9 @@ export async function paginate<T>({ pageConfig, getDataFn }: PaginateArgs<T>): P
     });
 
     if (nextData.length === 0) {
-      throw new Error('No more data available');
+      throw new Error(
+        `No more data available. Last fetched page number: ${pageNumber}, Total available: ${totalAvailable}, Total fetched: ${result.length}`,
+      );
     }
 
     ({ totalAvailable, pageNumber } = nextPagination);

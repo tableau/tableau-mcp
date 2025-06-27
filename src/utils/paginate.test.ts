@@ -105,7 +105,9 @@ describe('paginate', () => {
         pageConfig: { pageSize: 2, pageNumber: 1 },
         getDataFn,
       }),
-    ).rejects.toThrow('No more data available');
+    ).rejects.toThrow(
+      'No more data available. Last fetched page number: 1, Total available: 10, Total fetched: 2',
+    );
 
     expect(getDataFn).toHaveBeenCalledTimes(2);
   });
