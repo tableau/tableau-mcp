@@ -26,6 +26,7 @@ The following MCP tools are currently implemented:
 | list-fields      | Fetches field metadata (name, description) for the specified datasource ([Metadata API][meta]) |
 | query-datasource | Run a Tableau VizQL query ([VDS API][vds])                                                     |
 | read-metadata    | Requests metadata for the specified data source ([VDS API][vds])                               |
+| list-flows       | Retrieves a list of published Prep flows from a specified Tableau site ([REST API][query])     |
 
 Note: The Tableau MCP project is currently in early development. As we continue to enhance and
 refine the implementation, the available functionality and tools may evolve. We welcome feedback and
