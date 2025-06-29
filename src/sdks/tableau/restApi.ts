@@ -12,6 +12,7 @@ import DatasourcesMethods from './methods/datasourcesMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
 import { Credentials } from './types/credentials.js';
+import FlowsMethods from './methods/flowsMethods.js';
 
 /**
  * Interface for the Tableau REST APIs
@@ -27,6 +28,7 @@ export default class RestApi {
   private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
   private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
+  private _flowsMethods?: FlowsMethods;
   private static _version = '3.24';
 
   private _requestInterceptor?: [RequestInterceptor, ErrorInterceptor?];
@@ -84,6 +86,14 @@ export default class RestApi {
     }
 
     return this._vizqlDataServiceMethods;
+  }
+
+  get flowsMethods(): FlowsMethods {
+    if (!this._flowsMethods) {
+      this._flowsMethods = new FlowsMethods(this._baseUrl, this.creds);
+      this._addInterceptors(this._baseUrl, this._flowsMethods.interceptors);
+    }
+    return this._flowsMethods;
   }
 
   signIn = async (authConfig: AuthConfig): Promise<void> => {
