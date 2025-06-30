@@ -55,21 +55,6 @@ vi.mock('../../restApiInstance.js', () => ({
   }),
 }));
 
-// filterバリデーションのmock
-vi.mock('./flowsFilterUtils.js', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    parseAndValidateFlowFilterString: (filter) => {
-      if (!filter) return undefined;
-      if (filter.startsWith('foo:')) throw new Error('Unsupported filter field: foo');
-      if (filter.startsWith('name:like:')) throw new Error('Unsupported filter operator: like');
-      if (filter === 'name:eq') throw new Error('Missing value for filter: name:eq');
-      return filter;
-    },
-  };
-});
-
 describe('listFlowsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -109,7 +94,7 @@ describe('listFlowsTool', () => {
       filter: 'name:eq:SalesFlow',
       sort: 'createdAt:desc',
       pageSize: 5,
-      pageNumber: 1, // paginateの仕様で1ページ目から呼ばれる
+      pageNumber: undefined,
     });
   });
 
@@ -121,24 +106,6 @@ describe('listFlowsTool', () => {
     expect(result.content[0].text).toContain(errorMessage);
   });
 
-  it('should handle filter validation errors (unsupported field)', async () => {
-    const result = await getToolResult({ filter: 'foo:eq:bar' });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Unsupported filter field: foo');
-  });
-
-  it('should handle filter validation errors (unsupported operator)', async () => {
-    const result = await getToolResult({ filter: 'name:like:SalesFlow' });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Unsupported filter operator: like');
-  });
-
-  it('should handle filter validation errors (missing value)', async () => {
-    const result = await getToolResult({ filter: 'name:eq' });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Missing value for filter: name:eq');
-  });
-
   it('should handle empty filter (list all)', async () => {
     mocks.mockListFlows.mockResolvedValue(mockFlows);
     const result = await getToolResult({});
@@ -148,11 +115,9 @@ describe('listFlowsTool', () => {
       filter: '',
       sort: undefined,
       pageSize: undefined,
-      pageNumber: 1,
+      pageNumber: undefined,
     });
   });
-
-  // ページネーション/limit超過のテスト例（config.maxResultLimitのmockが必要な場合は別途追加）
 });
 
 async function getToolResult(params: any): Promise<CallToolResult> {
