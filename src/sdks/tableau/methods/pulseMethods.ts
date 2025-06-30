@@ -1,13 +1,13 @@
 import { Zodios } from '@zodios/core';
 
+import { pulseApis } from '../apis/pulseApi.js';
+import { Credentials } from '../types/credentials.js';
 import {
-  pulseApis,
   PulseMetric,
   PulseMetricDefinition,
   PulseMetricDefinitionView,
   PulseMetricSubscription,
-} from '../apis/pulseApi.js';
-import { Credentials } from '../types/credentials.js';
+} from '../types/pulse.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis> {

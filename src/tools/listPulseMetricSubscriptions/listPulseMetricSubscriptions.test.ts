@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import type { PulseMetricSubscription } from '../../sdks/tableau/apis/pulseApi.js';
+import type { PulseMetricSubscription } from '../../sdks/tableau/types/pulse.js';
 import { server } from '../../server.js';
 import { listPulseMetricSubscriptionsTool } from './listPulseMetricSubscriptions.js';
 

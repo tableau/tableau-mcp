@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
-import { pulseMetricDefinitionViewEnum } from '../../sdks/tableau/apis/pulseApi.js';
+import { pulseMetricDefinitionViewEnum } from '../../sdks/tableau/types/pulse.js';
 import { Tool } from '../tool.js';
 
 export const listPulseMetricDefinitionsFromMetricDefinitionIdsTool = new Tool({

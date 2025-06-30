@@ -3,7 +3,7 @@ import {
   pulseMetricDefinitionViewEnum,
   pulseMetricSchema,
   pulseMetricSubscriptionSchema,
-} from './pulseApi.js';
+} from './pulse.js';
 
 describe('PulseMetricDefinition schema', () => {
   it('accepts a valid PulseMetricDefinition', () => {
