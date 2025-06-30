@@ -10,6 +10,7 @@ import {
 import AuthenticationMethods from './methods/authenticationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
+import PulseMethods from './methods/pulseMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
 import { Credentials } from './types/credentials.js';
 
@@ -27,6 +28,7 @@ export default class RestApi {
   private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
   private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
+  private _pulseMethods?: PulseMethods;
   private static _version = '3.24';
 
   private _requestInterceptor?: [RequestInterceptor, ErrorInterceptor?];
@@ -84,6 +86,16 @@ export default class RestApi {
     }
 
     return this._vizqlDataServiceMethods;
+  }
+
+  get pulseMethods(): PulseMethods {
+    if (!this._pulseMethods) {
+      const baseUrl = `${this._host}/api/-/`;
+      this._pulseMethods = new PulseMethods(baseUrl, this.creds);
+      this._addInterceptors(baseUrl, this._pulseMethods.interceptors);
+    }
+
+    return this._pulseMethods;
   }
 
   signIn = async (authConfig: AuthConfig): Promise<void> => {
