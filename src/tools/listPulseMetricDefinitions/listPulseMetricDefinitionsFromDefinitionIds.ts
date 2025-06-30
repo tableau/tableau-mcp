@@ -7,8 +7,8 @@ import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
 import { pulseMetricDefinitionViewEnum } from '../../sdks/tableau/types/pulse.js';
 import { Tool } from '../tool.js';
 
-export const listPulseMetricDefinitionsFromMetricDefinitionIdsTool = new Tool({
-  name: 'list-pulse-metric-definitions-from-metric-definition-ids',
+export const listPulseMetricDefinitionsFromDefinitionIdsTool = new Tool({
+  name: 'list-pulse-metric-definitions-from-definition-ids',
   description: `
 Retrieves a list of published Pulse Metric Definitions from a specified Tableau site using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metric Definitions on a site.
 
@@ -48,7 +48,7 @@ Retrieves a list of published Pulse Metric Definitions from a specified Tableau 
   },
   callback: async ({ view, metricDefinitionIds }, { requestId }): Promise<CallToolResult> => {
     const config = getConfig();
-    return await listPulseMetricDefinitionsFromMetricDefinitionIdsTool.logAndExecute({
+    return await listPulseMetricDefinitionsFromDefinitionIdsTool.logAndExecute({
       requestId,
       args: { metricDefinitionIds, view },
       callback: async () => {

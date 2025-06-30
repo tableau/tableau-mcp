@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import type { PulseMetricDefinition } from '../../sdks/tableau/types/pulse.js';
 import { server } from '../../server.js';
-import { listPulseMetricDefinitionsFromMetricDefinitionIdsTool } from './listPulseMetricDefinitionsFromMetricDefinitionIds.js';
+import { listPulseMetricDefinitionsFromDefinitionIdsTool } from './listPulseMetricDefinitionsFromDefinitionIds.js';
 
 // Mock server.server.sendLoggingMessage since the transport won't be connected.
 vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
@@ -41,19 +41,19 @@ vi.mock('../../restApiInstance.js', () => ({
   }),
 }));
 
-describe('listPulseMetricDefinitionsFromMetricDefinitionIdsTool', () => {
+describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('should create a tool instance with correct properties', () => {
-    expect(listPulseMetricDefinitionsFromMetricDefinitionIdsTool.name).toBe(
-      'list-pulse-metric-definitions-from-metric-definition-ids',
+    expect(listPulseMetricDefinitionsFromDefinitionIdsTool.name).toBe(
+      'list-pulse-metric-definitions-from-definition-ids',
     );
-    expect(listPulseMetricDefinitionsFromMetricDefinitionIdsTool.description).toContain(
+    expect(listPulseMetricDefinitionsFromDefinitionIdsTool.description).toContain(
       'Retrieves a list of published Pulse Metric Definitions',
     );
-    expect(listPulseMetricDefinitionsFromMetricDefinitionIdsTool.paramsSchema).toMatchObject({
+    expect(listPulseMetricDefinitionsFromDefinitionIdsTool.paramsSchema).toMatchObject({
       metricDefinitionIds: expect.any(Object),
       view: expect.any(Object),
     });
@@ -132,7 +132,7 @@ describe('listPulseMetricDefinitionsFromMetricDefinitionIdsTool', () => {
     mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockRejectedValue({
       errorCode: '-32602',
       message:
-        'Invalid arguments for tool list-pulse-metric-definitions-from-metric-definition-ids: Enumeration value must be one of: DEFINITION_VIEW_BASIC, DEFINITION_VIEW_FULL, DEFINITION_VIEW_DEFAULT "path": "view"',
+        'Invalid arguments for tool list-pulse-metric-definitions-from-definition-ids: Enumeration value must be one of: DEFINITION_VIEW_BASIC, DEFINITION_VIEW_FULL, DEFINITION_VIEW_DEFAULT "path": "view"',
     });
     // Intentionally passing invalid value for testing
     const result = await getToolResult({
@@ -150,7 +150,7 @@ describe('listPulseMetricDefinitionsFromMetricDefinitionIdsTool', () => {
   it('should return an error for missing metricDefinitionIds', async () => {
     mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockRejectedValue({
       errorCode: '-32602',
-      message: `MCP error -32602: MCP error -32602: Invalid arguments for tool list-pulse-metric-definitions-from-metric-definition-ids: [
+      message: `MCP error -32602: MCP error -32602: Invalid arguments for tool list-pulse-metric-definitions-from-definition-ids: [
         {
           "code": "too_small",
           "minimum": 1,
@@ -175,7 +175,7 @@ describe('listPulseMetricDefinitionsFromMetricDefinitionIdsTool', () => {
 it('should return an error for is metricDefinitionId is too small', async () => {
   mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockRejectedValue({
     errorCode: '-32602',
-    message: `MCP error -32602: MCP error -32602: Invalid arguments for tool list-pulse-metric-definitions-from-metric-definition-ids: [
+    message: `MCP error -32602: MCP error -32602: Invalid arguments for tool list-pulse-metric-definitions-from-definition-ids: [
       {
         "code": "too_small",
         "minimum": 36,
@@ -203,7 +203,7 @@ async function getToolResult(params: {
   metricDefinitionIds: string[];
   view?: 'DEFINITION_VIEW_BASIC' | 'DEFINITION_VIEW_FULL' | 'DEFINITION_VIEW_DEFAULT';
 }): Promise<CallToolResult> {
-  return await listPulseMetricDefinitionsFromMetricDefinitionIdsTool.callback(params, {
+  return await listPulseMetricDefinitionsFromDefinitionIdsTool.callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),
