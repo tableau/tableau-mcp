@@ -24,6 +24,7 @@ export default class RestApi {
   private _creds?: Credentials;
   private readonly _host: string;
   private readonly _baseUrl: string;
+  private readonly _baseUrlWithoutVersion: string;
 
   private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
@@ -43,6 +44,7 @@ export default class RestApi {
   ) {
     this._host = host;
     this._baseUrl = `${this._host}/api/${RestApi._version}`;
+    this._baseUrlWithoutVersion = `${this._host}/api/-`;
     this._requestInterceptor = options?.requestInterceptor;
     this._responseInterceptor = options?.responseInterceptor;
   }
@@ -90,9 +92,8 @@ export default class RestApi {
 
   get pulseMethods(): PulseMethods {
     if (!this._pulseMethods) {
-      const baseUrl = `${this._host}/api/-/`;
-      this._pulseMethods = new PulseMethods(baseUrl, this.creds);
-      this._addInterceptors(baseUrl, this._pulseMethods.interceptors);
+      this._pulseMethods = new PulseMethods(this._baseUrlWithoutVersion, this.creds);
+      this._addInterceptors(this._baseUrlWithoutVersion, this._pulseMethods.interceptors);
     }
 
     return this._pulseMethods;
