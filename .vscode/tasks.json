@@ -32,6 +32,13 @@
         }
       },
       "detail": "Run build:watch in background"
+    },
+    {
+      "label": "npm test",
+      "type": "npm",
+      "script": "test",
+      "group": "test",
+      "detail": "Run test"
     }
   ]
 }
