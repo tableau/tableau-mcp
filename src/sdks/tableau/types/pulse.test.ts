@@ -7,31 +7,17 @@ import {
 
 describe('PulseMetricDefinition schema', () => {
   it('accepts a valid PulseMetricDefinition', () => {
-    const data = {
-      metadata: { name: 'Test Metric', id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3' },
-      specification: { datasource: { id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11' } },
-      metrics: [
-        { id: 'CF32DDCC-362B-4869-9487-37DA4D152552', is_default: true, is_followed: false },
-        { id: 'CF32DDCC-362B-4869-9487-37DA4D152553', is_default: false, is_followed: true },
-      ],
-      total_metrics: 2,
-    };
+    const data = createValidPulseMetricDefinition();
     expect(() => pulseMetricDefinitionSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a PulseMetricDefinition with missing metadata', () => {
-    const data = {
-      specification: { datasource: { id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A12' } },
-      metrics: [],
-      total_metrics: 0,
-    };
+    const data = createValidPulseMetricDefinition({ metadata: undefined });
     expect(() => pulseMetricDefinitionSchema.parse(data)).toThrow();
   });
 
   it('rejects a PulseMetricDefinition with invalid metrics', () => {
-    const data = {
-      metadata: { name: 'Test Metric', id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C8' },
-      specification: { datasource: { id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A13' } },
+    const data = createValidPulseMetricDefinition({
       metrics: [
         {
           id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
@@ -40,7 +26,7 @@ describe('PulseMetricDefinition schema', () => {
         },
       ],
       total_metrics: 1,
-    };
+    });
     expect(() => pulseMetricDefinitionSchema.parse(data)).toThrow();
   });
 });
@@ -119,3 +105,70 @@ describe('PulseMetricSubscription schema', () => {
     expect(() => pulseMetricSubscriptionSchema.parse(data)).toThrow();
   });
 });
+
+function createValidPulseMetricDefinition(overrides = {}): any {
+  return {
+    metadata: {
+      name: 'Test Metric',
+      description: 'A test metric',
+      id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
+      schema_version: '1.0',
+      metric_version: 1,
+      definition_version: 1,
+      last_updated_user: { id: 'USER-1234' },
+    },
+    specification: {
+      datasource: { id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11' },
+      basic_specification: {
+        measure: { field: 'sales', aggregation: 'SUM' },
+        time_dimension: { field: 'order_date' },
+        filters: [
+          {
+            field: 'region',
+            operator: '=',
+            categorical_values: [{ string_value: 'West', bool_value: false, null_value: '' }],
+          },
+        ],
+      },
+      viz_state_specification: { viz_state_string: 'state' },
+      is_running_total: false,
+    },
+    extension_options: {
+      allowed_dimensions: ['region'],
+      allowed_granularities: ['day'],
+      offset_from_today: 0,
+    },
+    metrics: [
+      { id: 'CF32DDCC-362B-4869-9487-37DA4D152552', is_default: true, is_followed: false },
+      { id: 'CF32DDCC-362B-4869-9487-37DA4D152553', is_default: false, is_followed: true },
+    ],
+    total_metrics: 2,
+    representation_options: {
+      type: 'number',
+      number_units: { singular_noun: 'unit', plural_noun: 'units' },
+      sentiment_type: 'neutral',
+      row_level_id_field: { identifier_col: 'id' },
+      row_level_entity_names: { entity_name_singular: 'entity', entity_name_plural: 'entities' },
+      row_level_name_field: { name_col: 'name' },
+      currency_code: 'USD',
+    },
+    insights_options: {
+      settings: [{ type: 'trend', disabled: false }],
+    },
+    comparisons: {
+      comparisons: [{ compare_config: { comparison: 'previous_period' }, index: 0 }],
+    },
+    datasource_goals: [
+      {
+        basic_specification: {
+          measure: { field: 'sales', aggregation: 'SUM' },
+          time_dimension: { field: 'order_date' },
+          filters: [],
+        },
+        viz_state_specification: { viz_state_string: 'goal_state' },
+        minimum_granularity: 'day',
+      },
+    ],
+    ...overrides,
+  };
+}

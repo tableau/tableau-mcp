@@ -2,53 +2,48 @@ import { z } from 'zod';
 
 const pulseMetadataSchema = z.object({
   name: z.string(),
-  description: z.string().optional(),
+  description: z.string(),
   id: z.string(),
-  schema_version: z.string().optional(),
-  metric_version: z.number().optional(),
-  definition_version: z.number().optional(),
-  last_updated_user: z.object({ id: z.string() }).optional(),
-  nestedUser: z.object({ id: z.string() }).optional(),
+  schema_version: z.string(),
+  metric_version: z.number(),
+  definition_version: z.number(),
+  last_updated_user: z.object({ id: z.string() }),
 });
 
 const pulseDatasourceSchema = z.object({
   id: z.string(),
 });
 
-const pulseBasicSpecificationSchema = z
-  .object({
-    measure: z.object({ field: z.string(), aggregation: z.string() }),
-    time_dimension: z.object({ field: z.string() }),
-    filters: z.array(
-      z.object({
-        field: z.string(),
-        operator: z.string(),
-        categorical_values: z.array(
-          z.object({
-            string_value: z.string(),
-            bool_value: z.boolean(),
-            null_value: z.string(),
-          }),
-        ),
-      }),
-    ),
-  })
-  .optional();
+const pulseBasicSpecificationSchema = z.object({
+  measure: z.object({ field: z.string(), aggregation: z.string() }),
+  time_dimension: z.object({ field: z.string() }),
+  filters: z.array(
+    z.object({
+      field: z.string(),
+      operator: z.string(),
+      categorical_values: z.array(
+        z.object({
+          string_value: z.string(),
+          bool_value: z.boolean(),
+          null_value: z.string(),
+        }),
+      ),
+    }),
+  ),
+});
 
 const pulseSpecificationSchema = z.object({
   datasource: pulseDatasourceSchema,
   basic_specification: pulseBasicSpecificationSchema,
-  viz_state_specification: z.object({ viz_state_string: z.string() }).optional(),
-  is_running_total: z.boolean().optional(),
+  viz_state_specification: z.object({ viz_state_string: z.string() }),
+  is_running_total: z.boolean(),
 });
 
-export const pulseExtensionOptionsSchema = z
-  .object({
-    allowed_dimensions: z.array(z.string()),
-    allowed_granularities: z.array(z.string()),
-    offset_from_today: z.number(),
-  })
-  .optional();
+export const pulseExtensionOptionsSchema = z.object({
+  allowed_dimensions: z.array(z.string()),
+  allowed_granularities: z.array(z.string()),
+  offset_from_today: z.number(),
+});
 
 export const pulseMetricSchema = z.object({
   id: z.string(),
@@ -56,70 +51,42 @@ export const pulseMetricSchema = z.object({
   is_followed: z.boolean(),
 });
 
-export const pulseRepresentationOptionsSchema = z
-  .object({
-    type: z.string(),
-    number_units: z.object({
-      singular_noun: z.string(),
-      plural_noun: z.string(),
-    }),
-    sentiment_type: z.string(),
-    row_level_id_field: z.object({ identifier_col: z.string() }),
-    row_level_entity_names: z.object({
-      entity_name_singular: z.string(),
-      entity_name_plural: z.string(),
-    }),
-    row_level_name_field: z.object({ name_col: z.string() }),
-    currency_code: z.string(),
-    nestedNumberUnits: z.object({
-      singular_noun: z.string(),
-      plural_noun: z.string(),
-    }),
-    nestedRowLevelIDField: z.object({ identifier_col: z.string() }),
-    nestedRowLevelNameField: z.object({ name_col: z.string() }),
-    nestedRowLevelEntityNames: z.object({
-      entity_name_singular: z.string(),
-      entity_name_plural: z.string(),
-    }),
-  })
-  .optional();
+export const pulseRepresentationOptionsSchema = z.object({
+  type: z.string(),
+  number_units: z.object({
+    singular_noun: z.string(),
+    plural_noun: z.string(),
+  }),
+  sentiment_type: z.string(),
+  row_level_id_field: z.object({ identifier_col: z.string() }),
+  row_level_entity_names: z.object({
+    entity_name_singular: z.string(),
+    entity_name_plural: z.string(),
+  }),
+  row_level_name_field: z.object({ name_col: z.string() }),
+  currency_code: z.string(),
+});
 
-export const insightOptionsSchema = z
-  .object({
-    show_insights: z.boolean(),
-    settings: z.array(z.object({ type: z.string(), $ref: z.string(), disabled: z.boolean() })),
-    nestedInsightSetting: z.object({
-      type: z.string(),
-      $ref: z.string(),
-      disabled: z.boolean(),
-    }),
-  })
-  .optional();
+export const insightOptionsSchema = z.object({
+  settings: z.array(z.object({ type: z.string(), disabled: z.boolean() })),
+});
 
-export const comparisonSchema = z
-  .object({
-    comparisons: z.array(
-      z.object({
-        compare_config: z.object({ comparison: z.string() }),
-        index: z.number(),
-      }),
-    ),
-    nestedComparison: z.object({
+export const comparisonSchema = z.object({
+  comparisons: z.array(
+    z.object({
       compare_config: z.object({ comparison: z.string() }),
       index: z.number(),
     }),
-  })
-  .optional();
+  ),
+});
 
-export const datasourceGoalsSchema = z
-  .array(
-    z.object({
-      basic_specification: pulseBasicSpecificationSchema,
-      viz_state_specification: z.object({ viz_state_string: z.string() }),
-      minimum_granularity: z.string(),
-    }),
-  )
-  .optional();
+export const datasourceGoalsSchema = z.array(
+  z.object({
+    basic_specification: pulseBasicSpecificationSchema,
+    viz_state_specification: z.object({ viz_state_string: z.string() }),
+    minimum_granularity: z.string(),
+  }),
+);
 
 export const pulseMetricDefinitionSchema = z.object({
   metadata: pulseMetadataSchema,
