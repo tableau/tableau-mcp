@@ -9,7 +9,7 @@ import { Tool } from '../tool.js';
 export const listPulseMetricsFromMetricDefinitionIdTool = new Tool({
   name: 'list-pulse-metrics-from-metric-definition-id',
   description: `
-Retrieves a list of published Pulse Metrics from a Pulse Metric Definition on a specified Tableau site using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metrics for a specific Pulse Metric Definition on a site.
+Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metrics for a specific Pulse Metric Definition on the current site.
 
 **Parameters:**
 - \`pulseMetricDefinitionID\` (required): The ID of the Pulse Metric Definition to list metrics for.  It should be the ID of the Pulse Metric Definition, not the name.  Example: BBC908D8-29ED-48AB-A78E-ACF8A424C8C3
@@ -21,7 +21,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition on a 
     pulseMetricDefinitionID: z.string().length(36),
   },
   annotations: {
-    title: 'List Pulse Metrics',
+    title: 'List Pulse Metrics from Metric Definition ID',
     readOnlyHint: true,
     openWorldHint: false,
   },

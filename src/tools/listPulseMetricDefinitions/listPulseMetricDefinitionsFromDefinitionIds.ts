@@ -10,7 +10,7 @@ import { Tool } from '../tool.js';
 export const listPulseMetricDefinitionsFromDefinitionIdsTool = new Tool({
   name: 'list-pulse-metric-definitions-from-definition-ids',
   description: `
-Retrieves a list of published Pulse Metric Definitions from a specified Tableau site using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metric Definitions on a site.
+Retrieves a list of published Pulse Metric Definitions using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metric Definitions on the current site.
 
 **Parameters:**
 - \`view\` (optional): The range of metrics to return for a definition. The default is 'DEFINITION_VIEW_BASIC' if not specified.
@@ -42,7 +42,7 @@ Retrieves a list of published Pulse Metric Definitions from a specified Tableau 
     view: z.optional(z.enum(pulseMetricDefinitionViewEnum)),
   },
   annotations: {
-    title: 'List Pulse Metric Definitions From Metric Definition IDs',
+    title: 'List Pulse Metric Definitions from Metric Definition IDs',
     readOnlyHint: true,
     openWorldHint: false,
   },

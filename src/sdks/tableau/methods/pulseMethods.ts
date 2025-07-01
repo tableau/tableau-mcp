@@ -10,13 +10,20 @@ import {
 } from '../types/pulse.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
+/**
+ * Pulse methods of the Tableau Server REST API
+ *
+ * @export
+ * @class PulseMethods
+ * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm
+ */
 export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis> {
   constructor(baseUrl: string, creds: Credentials) {
     super(new Zodios(baseUrl, pulseApis), creds);
   }
 
   /**
-   * Returns a list of allpublished Pulse Metric Definitions.
+   * Returns a list of all published Pulse Metric Definitions.
    * @param view - The view of the definition to return. If not specified, the default view is returned.
    */
   listAllPulseMetricDefinitions = async (

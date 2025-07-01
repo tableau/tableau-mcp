@@ -8,15 +8,15 @@ import { Tool } from '../tool.js';
 export const listPulseMetricSubscriptionsTool = new Tool({
   name: 'list-pulse-metric-subscriptions',
   description: `
-Retrieves a list of published Pulse Metric Subscriptions for the current user on a specified Tableau site using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metric Subscriptions for the current user on a site.
+Retrieves a list of published Pulse Metric Subscriptions for the current user using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metric Subscriptions for the current user.
 
-**Example Usage:**
-- List all Pulse Metric Subscriptions for the current user on a site
+**Example Usage:**  
+- List all Pulse Metric Subscriptions for the current user on the current site
 - List all of my Pulse Metric Subscriptions
 `,
   paramsSchema: {},
   annotations: {
-    title: 'List Pulse Metric Subscriptions',
+    title: 'List Pulse Metric Subscriptions for Current User',
     readOnlyHint: true,
     openWorldHint: false,
   },

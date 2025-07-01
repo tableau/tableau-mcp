@@ -9,7 +9,7 @@ import { Tool } from '../tool.js';
 export const listPulseMetricsFromMetricIdsTool = new Tool({
   name: 'list-pulse-metrics-from-metric-ids',
   description: `
-Retrieves a list of published Pulse Metrics from a list of metric IDs on a specified Tableau site using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metrics for a list of metric IDs on a site.
+Retrieves a list of published Pulse Metrics from a list of metric IDs using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metrics for a list of metric IDs on the current site.
 
 **Parameters:**
 - \`metricIds\` (required): The list of Pulse Metric IDs to list metrics for.  It should be the list of metric IDs, not the names or metric definition ids.  Example: ['CF32DDCC-362B-4869-9487-37DA4D152552', 'CF32DDCC-362B-4869-9487-37DA4D152553']
@@ -19,7 +19,7 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs on a speci
 - List all Pulse Metrics from a list of Pulse Metric IDs
 
 **Note:**
-- This tool is recommended for use with list-pulse-metric-subscriptions.  If you need a valid datasource id, you may need to get it from the datasource_id field of the datasource object returned from list-datasources.
+- This tool is recommended for use with list-pulse-metric-subscriptions.  If you need a valid datasource id, you may need to get it from the datasource_id field of the datasource object returned from list-pulse-metric-definitions-from-definition-ids.
 `,
   paramsSchema: {
     metricIds: z.array(z.string().length(36)),
