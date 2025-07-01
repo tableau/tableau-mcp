@@ -14,22 +14,22 @@ const pulseDatasourceSchema = z.object({
   id: z.string(),
 });
 
+const pulseFilterSchema = z.object({
+  field: z.string(),
+  operator: z.string(),
+  categorical_values: z.array(
+    z.object({
+      string_value: z.string(),
+      bool_value: z.boolean(),
+      null_value: z.string(),
+    }),
+  ),
+});
+
 const pulseBasicSpecificationSchema = z.object({
   measure: z.object({ field: z.string(), aggregation: z.string() }),
   time_dimension: z.object({ field: z.string() }),
-  filters: z.array(
-    z.object({
-      field: z.string(),
-      operator: z.string(),
-      categorical_values: z.array(
-        z.object({
-          string_value: z.string(),
-          bool_value: z.boolean(),
-          null_value: z.string(),
-        }),
-      ),
-    }),
-  ),
+  filters: z.array(pulseFilterSchema),
 });
 
 const pulseSpecificationSchema = z.object({
