@@ -12,19 +12,15 @@ describe('PulseMetricDefinition schema', () => {
   });
 
   it('rejects a PulseMetricDefinition with missing metadata', () => {
+    // metadata is required
     const data = createValidPulseMetricDefinition({ metadata: undefined });
     expect(() => pulseMetricDefinitionSchema.parse(data)).toThrow();
   });
 
   it('rejects a PulseMetricDefinition with invalid metrics', () => {
     const data = createValidPulseMetricDefinition({
-      metrics: [
-        {
-          id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
-          is_default: 'yes', // is_default should be boolean
-          is_followed: false,
-        },
-      ],
+      // is_default should be boolean
+      metrics: [createValidPulseMetric({ is_default: 'yes' })],
       total_metrics: 1,
     });
     expect(() => pulseMetricDefinitionSchema.parse(data)).toThrow();
@@ -33,25 +29,19 @@ describe('PulseMetricDefinition schema', () => {
 
 describe('PulseMetric schema', () => {
   it('accepts a valid PulseMetric', () => {
-    const data = {
-      id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
-      is_default: true,
-      is_followed: false,
-    };
+    const data = createValidPulseMetric();
     expect(() => pulseMetricSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a PulseMetric with missing id', () => {
-    const data = { is_default: true, is_followed: false };
+    // id is required
+    const data = createValidPulseMetric({ id: undefined });
     expect(() => pulseMetricSchema.parse(data)).toThrow();
   });
 
   it('rejects a PulseMetric with non-boolean is_default', () => {
-    const data = {
-      id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
-      is_default: 'yes',
-      is_followed: false,
-    };
+    // is_default should be boolean
+    const data = createValidPulseMetric({ is_default: 'yes' });
     expect(() => pulseMetricSchema.parse(data)).toThrow();
   });
 });
@@ -76,6 +66,7 @@ describe('PulseMetricSubscription schema', () => {
   });
 
   it('rejects a PulseMetricSubscription with missing id', () => {
+    // id is required
     const data = {
       metric_id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
     };
@@ -83,6 +74,7 @@ describe('PulseMetricSubscription schema', () => {
   });
 
   it('rejects a PulseMetricSubscription with missing metric_id', () => {
+    // metric_id is required
     const data = {
       id: '2FDE35F3-602E-43D9-981A-A2A5AC1DE7BD',
     };
@@ -90,6 +82,7 @@ describe('PulseMetricSubscription schema', () => {
   });
 
   it('rejects a PulseMetricSubscription with non-string id', () => {
+    // id should be string
     const data = {
       id: 1234,
       metric_id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
@@ -98,6 +91,7 @@ describe('PulseMetricSubscription schema', () => {
   });
 
   it('rejects a PulseMetricSubscription with non-string metric_id', () => {
+    // metric_id should be string
     const data = {
       id: '2FDE35F3-602E-43D9-981A-A2A5AC1DE7BD',
       metric_id: 5678,
@@ -105,6 +99,30 @@ describe('PulseMetricSubscription schema', () => {
     expect(() => pulseMetricSubscriptionSchema.parse(data)).toThrow();
   });
 });
+
+function createValidPulseMetric(overrides = {}): any {
+  return {
+    id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
+    specification: {
+      filters: [
+        {
+          field: 'region',
+          operator: '=',
+          categorical_values: [{ string_value: 'West', bool_value: false, null_value: '' }],
+        },
+      ],
+      measurement_period: { granularity: 'day', range: 'last_30_days' },
+      comparison: { comparison: 'previous_period' },
+    },
+    definition_id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
+    is_default: true,
+    schema_version: '1.0',
+    metric_version: 1,
+    goals: { target: { value: 100 } },
+    is_followed: false,
+    ...overrides,
+  };
+}
 
 function createValidPulseMetricDefinition(overrides = {}): any {
   return {
@@ -139,8 +157,12 @@ function createValidPulseMetricDefinition(overrides = {}): any {
       offset_from_today: 0,
     },
     metrics: [
-      { id: 'CF32DDCC-362B-4869-9487-37DA4D152552', is_default: true, is_followed: false },
-      { id: 'CF32DDCC-362B-4869-9487-37DA4D152553', is_default: false, is_followed: true },
+      createValidPulseMetric(),
+      createValidPulseMetric({
+        id: 'CF32DDCC-362B-4869-9487-37DA4D152553',
+        is_default: false,
+        is_followed: true,
+      }),
     ],
     total_metrics: 2,
     representation_options: {

@@ -47,7 +47,19 @@ export const pulseExtensionOptionsSchema = z.object({
 
 export const pulseMetricSchema = z.object({
   id: z.string(),
+  specification: z.object({
+    filters: z.array(pulseFilterSchema),
+    measurement_period: z.object({
+      granularity: z.string(),
+      range: z.string(),
+    }),
+    comparison: z.object({ comparison: z.string() }),
+  }),
+  definition_id: z.string(),
   is_default: z.boolean(),
+  schema_version: z.string(),
+  metric_version: z.number(),
+  goals: z.object({ target: z.object({ value: z.number() }) }),
   is_followed: z.boolean(),
 });
 

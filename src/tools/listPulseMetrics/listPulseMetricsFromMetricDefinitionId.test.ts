@@ -8,8 +8,16 @@ import { listPulseMetricsFromMetricDefinitionIdTool } from './listPulseMetricsFr
 vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
 
 const mockPulseMetrics: PulseMetric[] = [
-  { id: 'CF32DDCC-362B-4869-9487-37DA4D152550', is_default: true, is_followed: false },
-  { id: 'CF32DDCC-362B-4869-9487-37DA4D152551', is_default: false, is_followed: true },
+  {
+    id: 'CF32DDCC-362B-4869-9487-37DA4D152550',
+    is_default: true,
+    is_followed: false,
+  } as PulseMetric,
+  {
+    id: 'CF32DDCC-362B-4869-9487-37DA4D152551',
+    is_default: false,
+    is_followed: true,
+  } as PulseMetric,
 ];
 
 const mocks = vi.hoisted(() => ({
