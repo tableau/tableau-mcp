@@ -14,6 +14,7 @@ describe('PulseMetricDefinition schema', () => {
         { id: 'CF32DDCC-362B-4869-9487-37DA4D152552', is_default: true, is_followed: false },
         { id: 'CF32DDCC-362B-4869-9487-37DA4D152553', is_default: false, is_followed: true },
       ],
+      total_metrics: 2,
     };
     expect(() => pulseMetricDefinitionSchema.parse(data)).not.toThrow();
   });
@@ -22,6 +23,7 @@ describe('PulseMetricDefinition schema', () => {
     const data = {
       specification: { datasource: { id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A12' } },
       metrics: [],
+      total_metrics: 0,
     };
     expect(() => pulseMetricDefinitionSchema.parse(data)).toThrow();
   });
@@ -33,10 +35,11 @@ describe('PulseMetricDefinition schema', () => {
       metrics: [
         {
           id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
-          is_default: 'yes',
+          is_default: 'yes', // is_default should be boolean
           is_followed: false,
         },
-      ], // is_default should be boolean
+      ],
+      total_metrics: 1,
     };
     expect(() => pulseMetricDefinitionSchema.parse(data)).toThrow();
   });
