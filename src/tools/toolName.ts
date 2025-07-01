@@ -3,6 +3,11 @@ export const toolNames = [
   'list-fields',
   'query-datasource',
   'read-metadata',
+  'list-all-pulse-metric-definitions',
+  'list-pulse-metric-definitions-from-definition-ids',
+  'list-pulse-metrics-from-metric-definition-id',
+  'list-pulse-metrics-from-metric-ids',
+  'list-pulse-metric-subscriptions',
 ] as const;
 export type ToolName = (typeof toolNames)[number];
 
