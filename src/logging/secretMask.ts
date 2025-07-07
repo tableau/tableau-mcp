@@ -40,9 +40,14 @@ export const maskRequest = (config: RequestInterceptorConfig): MaskedRequest => 
     if (maskedData.headers?.['X-Tableau-Auth']) {
       maskedData.headers['X-Tableau-Auth'] = '<redacted>';
     }
+
+    if (maskedData.params?.['user_id']) {
+      maskedData.params['user_id'] = '<redacted>';
+    }
   } else {
     delete maskedData.data;
     delete maskedData.headers;
+    delete maskedData.params;
   }
 
   return maskedData;
