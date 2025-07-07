@@ -2,10 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getConfig } from '../../config.js';
-import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
-import { pulseMetricDefinitionViewEnum } from '../../sdks/tableau/types/pulse.js';
-import { Tool } from '../tool.js';
+import { getConfig } from '../../../config.js';
+import { getNewRestApiInstanceAsync } from '../../../restApiInstance.js';
+import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse.js';
+import { Tool } from '../../tool.js';
 
 export const listAllPulseMetricDefinitionsTool = new Tool({
   name: 'list-all-pulse-metric-definitions',

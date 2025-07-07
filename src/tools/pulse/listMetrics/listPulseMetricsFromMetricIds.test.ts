@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import type { PulseMetric } from '../../sdks/tableau/types/pulse.js';
-import { server } from '../../server.js';
+import type { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
+import { server } from '../../../server.js';
 import { listPulseMetricsFromMetricIdsTool } from './listPulseMetricsFromMetricIds.js';
 
 // Mock server.server.sendLoggingMessage since the transport won't be connected.
@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
   mockListPulseMetricsFromMetricIds: vi.fn(),
 }));
 
-vi.mock('../../restApiInstance.js', () => ({
+vi.mock('../../../restApiInstance.js', () => ({
   getNewRestApiInstanceAsync: vi.fn().mockResolvedValue({
     pulseMethods: {
       listPulseMetricsFromMetricIds: mocks.mockListPulseMetricsFromMetricIds,

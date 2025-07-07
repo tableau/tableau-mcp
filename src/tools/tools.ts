@@ -1,10 +1,10 @@
 import { listDatasourcesTool } from './listDatasources/listDatasources.js';
 import { listFieldsTool } from './listFields.js';
-import { listAllPulseMetricDefinitionsTool } from './listPulseMetricDefinitions/listAllPulseMetricDefinitions.js';
-import { listPulseMetricDefinitionsFromDefinitionIdsTool } from './listPulseMetricDefinitions/listPulseMetricDefinitionsFromDefinitionIds.js';
-import { listPulseMetricsFromMetricDefinitionIdTool } from './listPulseMetrics/listPulseMetricsFromMetricDefinitionId.js';
-import { listPulseMetricsFromMetricIdsTool } from './listPulseMetrics/listPulseMetricsFromMetricIds.js';
-import { listPulseMetricSubscriptionsTool } from './listPulseMetricSubscriptions/listPulseMetricSubscriptions.js';
+import { listAllPulseMetricDefinitionsTool } from './pulse/listMetricDefinitions/listAllPulseMetricDefinitions.js';
+import { listPulseMetricDefinitionsFromDefinitionIdsTool } from './pulse/listMetricDefinitions/listPulseMetricDefinitionsFromDefinitionIds.js';
+import { listPulseMetricsFromMetricDefinitionIdTool } from './pulse/listMetrics/listPulseMetricsFromMetricDefinitionId.js';
+import { listPulseMetricsFromMetricIdsTool } from './pulse/listMetrics/listPulseMetricsFromMetricIds.js';
+import { listPulseMetricSubscriptionsTool } from './pulse/listMetricSubscriptions/listPulseMetricSubscriptions.js';
 import { queryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { readMetadataTool } from './readMetadata.js';
 
