@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { Server } from '../../server.js';
+import { Server } from '../../server/server.js';
 import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
 import { getQueryDatasourceTool } from './queryDatasource.js';
 

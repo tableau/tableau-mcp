@@ -16,7 +16,7 @@ import {
   ResponseInterceptorConfig,
 } from './sdks/tableau/interceptors.js';
 import RestApi from './sdks/tableau/restApi.js';
-import { Server } from './server.js';
+import { Server } from './server/server.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 const getNewRestApiInstanceAsync = async (

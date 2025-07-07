@@ -1,6 +1,6 @@
 import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../server.js';
+import { Server } from '../server/server.js';
 import { ToolName } from '../tools/toolName.js';
 type Logger = 'rest-api' | (string & {});
 type LogType = LoggingLevel | 'request' | 'response' | 'tool';

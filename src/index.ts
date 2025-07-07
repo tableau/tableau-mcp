@@ -10,7 +10,7 @@ import https from 'https';
 
 import { Config, getConfig } from './config.js';
 import { isLoggingLevel, log, setLogLevel, writeToStderr } from './logging/log.js';
-import { Server, serverName, serverVersion } from './server.js';
+import { Server, serverName, serverVersion } from './server/server.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 async function startServer(): Promise<void> {

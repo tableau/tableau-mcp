@@ -1,12 +1,12 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
-import pkg from '../package.json' with { type: 'json' };
-import { getConfig } from './config.js';
-import { setLogLevel } from './logging/log.js';
-import { Tool } from './tools/tool.js';
-import { toolNames } from './tools/toolName.js';
-import { toolFactories } from './tools/tools.js';
+import pkg from '../../package.json' with { type: 'json' };
+import { getConfig } from '../config.js';
+import { setLogLevel } from '../logging/log.js';
+import { Tool } from '../tools/tool.js';
+import { toolNames } from '../tools/toolName.js';
+import { toolFactories } from '../tools/tools.js';
 
 export const serverName = pkg.name;
 export const serverVersion = pkg.version;

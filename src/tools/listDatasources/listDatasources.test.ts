@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../../server.js';
+import { Server } from '../../server/server.js';
 import { getListDatasourcesTool } from './listDatasources.js';
 
 const mockDatasources = [

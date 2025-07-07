@@ -2,7 +2,7 @@ import {
   RequestInterceptorConfig,
   ResponseInterceptorConfig,
 } from '../sdks/tableau/interceptors.js';
-import { Server } from '../server.js';
+import { Server } from '../server/server.js';
 import { setLogLevel } from './log.js';
 import { maskRequest, maskResponse } from './secretMask.js';
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Server } from '../server.js';
+import { Server } from '../server/server.js';
 import {
   getToolLogMessage,
   isLoggingLevel,
