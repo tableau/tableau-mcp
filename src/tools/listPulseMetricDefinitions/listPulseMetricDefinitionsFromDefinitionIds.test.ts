@@ -51,7 +51,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
       'list-pulse-metric-definitions-from-definition-ids',
     );
     expect(listPulseMetricDefinitionsFromDefinitionIdsTool.description).toContain(
-      'Retrieves a list of published Pulse Metric Definitions',
+      'Retrieves a list of specific Pulse Metric Definitions',
     );
     expect(listPulseMetricDefinitionsFromDefinitionIdsTool.paramsSchema).toMatchObject({
       metricDefinitionIds: expect.any(Object),

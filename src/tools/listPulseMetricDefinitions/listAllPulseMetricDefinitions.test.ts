@@ -48,7 +48,7 @@ describe('listAllPulseMetricDefinitionsTool', () => {
   it('should create a tool instance with correct properties', () => {
     expect(listAllPulseMetricDefinitionsTool.name).toBe('list-all-pulse-metric-definitions');
     expect(listAllPulseMetricDefinitionsTool.description).toContain(
-      'Retrieves a list of published Pulse Metric Definitions',
+      'Retrieves a list of all published Pulse Metric Definitions',
     );
     expect(listAllPulseMetricDefinitionsTool.paramsSchema).toMatchObject({
       view: expect.any(Object),
