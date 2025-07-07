@@ -10,7 +10,7 @@ import { Tool } from '../tool.js';
 export const listAllPulseMetricDefinitionsTool = new Tool({
   name: 'list-all-pulse-metric-definitions',
   description: `
-Retrieves a list of published Pulse Metric Definitions using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metric Definitions on the current site.
+Retrieves a list of all published Pulse Metric Definitions using the Tableau REST API.  Use this tool when a user requests to list all Tableau Pulse Metric Definitions on the current site.
 
 **Parameters:**
 - \`view\` (optional): The range of metrics to return for a definition. The default is 'DEFINITION_VIEW_BASIC' if not specified.
@@ -24,12 +24,12 @@ Retrieves a list of published Pulse Metric Definitions using the Tableau REST AP
     view: 'DEFINITION_VIEW_DEFAULT'
 - List all Pulse Metric Definitions on the current site with the full view:
     view: 'DEFINITION_VIEW_FULL'
-    In the response you will only get up to 5 metrics, so if you want to see more you need to use the list-pulse-metrics tool.
+    In the response you will only get up to 5 metrics, so if you want to see more you need to retrieve all the Pulse Metrics from another tool.
 - List all Pulse Metric Definitions on the current site with the basic view:
     view: 'DEFINITION_VIEW_BASIC'
 - See all metrics for my Pulse Metric Definitions:
     view: 'DEFINITION_VIEW_FULL'
-    In the response you will only get up to 5 metrics, so if you want to see more you need to use the list-pulse-metrics tool.
+    In the response you will only get up to 5 metrics, so if you want to see more you need to retrieve all the Pulse Metrics from another tool.
 `,
   paramsSchema: {
     view: z.optional(z.enum(pulseMetricDefinitionViewEnum)),

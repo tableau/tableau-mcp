@@ -13,6 +13,11 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
 **Example Usage:**  
 - List all Pulse Metric Subscriptions for the current user on the current site
 - List all of my Pulse Metric Subscriptions
+
+**Note:**
+- This tool does not directly provide information about Pulse Metric Definitions.  If you need to know information about Pulse Metric Defintiions associated with your subscriptions you need to:
+  1. Retrieve Pulse Metrics from the metric ids returned in the Pulse Metric Subscriptions.
+  2. Retrieve Pulse Metric Definitions from the metric definition id returned in the Pulse Metrics.
 `,
   paramsSchema: {},
   annotations: {

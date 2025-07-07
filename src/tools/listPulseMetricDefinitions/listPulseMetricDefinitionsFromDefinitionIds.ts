@@ -10,16 +10,18 @@ import { Tool } from '../tool.js';
 export const listPulseMetricDefinitionsFromDefinitionIdsTool = new Tool({
   name: 'list-pulse-metric-definitions-from-definition-ids',
   description: `
-Retrieves a list of published Pulse Metric Definitions using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metric Definitions on the current site.
+Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API from a list of metric definition IDs.  Use this tool when a user requests information about specific Pulse Metric Definitions on the current site.
 
 **Parameters:**
+- \`metricDefinitionIds\` (required): A list of metric definition IDs to retrieve.
 - \`view\` (optional): The range of metrics to return for a definition. The default is 'DEFINITION_VIEW_BASIC' if not specified.
   - \`DEFINITION_VIEW_BASIC\` - Return only the specified metric definition.
   - \`DEFINITION_VIEW_FULL\` - Return the metric definition and the specified number of metrics.
   - \`DEFINITION_VIEW_DEFAULT\` - Return the metric definition and the default metric.
-- \`metricDefinitionIds\` (required): A list of metric definition IDs to retrieve.
 
 **Example Usage:**
+- Can you show me details about Pulse Metric Definition with id 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3'
+    metricDefinitionIds: ['BBC908D8-29ED-48AB-A78E-ACF8A424C8C3']
 - List Pulse Metric Definitions from a list of metric definition IDs:
     metricDefinitionIds: ['BBC908D8-29ED-48AB-A78E-ACF8A424C8C3', 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C4']
 - List these Pulse Metric Definitions with the default view:
@@ -28,14 +30,14 @@ Retrieves a list of published Pulse Metric Definitions using the Tableau REST AP
 - List these Pulse Metric Definitions with the full view:
     metricDefinitionIds: ['BBC908D8-29ED-48AB-A78E-ACF8A424C8C3', 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C4'],
     view: 'DEFINITION_VIEW_FULL',
-    In the response you will only get up to 5 metrics, so if you want to see more you need to use the list-pulse-metrics tool.
+    In the response you will only get up to 5 metrics, so if you want to see more you need to retrieve all the Pulse Metrics from another tool.
 - List these Pulse Metric Definitions with the basic view:
     metricDefinitionIds: ['BBC908D8-29ED-48AB-A78E-ACF8A424C8C3', 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C4'],
     view: 'DEFINITION_VIEW_BASIC'
 - See all metrics for these Pulse Metric Definitions with the full view:
     metricDefinitionIds: ['BBC908D8-29ED-48AB-A78E-ACF8A424C8C3', 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C4'],
     view: 'DEFINITION_VIEW_FULL'
-    In the response you will only get up to 5 metrics, so if you want to see more you need to use the list-pulse-metrics tool.
+    In the response you will only get up to 5 metrics, so if you want to see more you need to retrieve all the Pulse Metrics from another tool.
 `,
   paramsSchema: {
     metricDefinitionIds: z.array(z.string().length(36)).min(1),
