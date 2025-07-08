@@ -91,24 +91,25 @@ export const getListFieldsTool = (server: Server): Tool<typeof paramsSchema> => 
       openWorldHint: false,
     },
     argsValidator: validateDatasourceLuid,
-    callback: async ({ datasourceLuid }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ datasourceLuid }, { requestId, authInfo }): Promise<CallToolResult> => {
       const config = getConfig();
       const query = getGraphqlQuery(datasourceLuid);
 
       return await listFieldsTool.logAndExecute({
         requestId,
+        authInfo,
         args: { datasourceLuid },
         callback: async () => {
           return new Ok(
-            await useRestApi(
-              config.server,
-              config.authConfig,
+            await useRestApi({
+              config,
               requestId,
               server,
-              async (restApi) => {
+              accessToken: authInfo?.token,
+              callback: async (restApi) => {
                 return await restApi.metadataMethods.graphql(query);
               },
-            ),
+            }),
           );
         },
       });

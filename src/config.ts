@@ -1,25 +1,30 @@
-import { AuthConfig } from './sdks/tableau/authConfig.js';
 import { isToolName, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
 export class Config {
   transport: TransportName;
+  auth: 'pat' | 'oauth';
   httpPort: number;
   sslKey: string;
   sslCert: string;
   server: string;
-  authConfig: AuthConfig;
+  siteName: string;
+  patName: string;
+  patValue: string;
   datasourceCredentials: string;
   defaultLogLevel: string;
   disableLogMasking: boolean;
+  oauthIssuer: string;
+  redirectUri: string;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
 
   constructor() {
-    let { SITE_NAME: siteName } = process.env;
+    const { SITE_NAME: siteName } = process.env;
     const {
       TRANSPORT: transport,
+      AUTH: auth,
       PORT: httpPort,
       SERVER: server,
       SSL_KEY: sslKey,
@@ -29,6 +34,8 @@ export class Config {
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
+      OAUTH_ISSUER: oauthIssuer,
+      REDIRECT_URI: redirectUri,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
     } = process.env;
@@ -36,7 +43,8 @@ export class Config {
     const defaultPort = 3927;
     const httpPortNumber = parseInt(httpPort || defaultPort.toString(), 10);
 
-    siteName = siteName ?? '';
+    this.siteName = siteName ?? '';
+    this.auth = auth === 'pat' ? 'pat' : 'oauth';
     this.transport = isTransport(transport) ? transport : 'stdio';
     this.httpPort = isNaN(httpPortNumber) ? defaultPort : httpPortNumber;
     this.sslKey = sslKey ?? '';
@@ -44,6 +52,8 @@ export class Config {
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
+    this.oauthIssuer = oauthIssuer ?? '';
+    this.redirectUri = redirectUri ?? '';
 
     this.includeTools = includeTools
       ? includeTools
@@ -66,17 +76,19 @@ export class Config {
     invariant(server, 'The environment variable SERVER is not set');
     validateServer(server);
 
-    invariant(patName, 'The environment variable PAT_NAME is not set');
-    invariant(patValue, 'The environment variable PAT_VALUE is not set');
+    if (this.auth === 'pat') {
+      invariant(patName, 'The environment variable PAT_NAME is not set');
+      invariant(patValue, 'The environment variable PAT_VALUE is not set');
+    }
+
+    if (this.auth === 'oauth') {
+      invariant(oauthIssuer, 'The environment variable OAUTH_ISSUER is not set');
+      invariant(redirectUri, 'The environment variable REDIRECT_URI is not set');
+    }
 
     this.server = server;
-
-    this.authConfig = {
-      type: 'pat',
-      patName,
-      patValue,
-      siteName,
-    };
+    this.patName = patName ?? '';
+    this.patValue = patValue ?? '';
   }
 }
 

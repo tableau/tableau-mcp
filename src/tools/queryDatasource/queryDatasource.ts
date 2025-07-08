@@ -30,10 +30,14 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
       openWorldHint: false,
     },
     argsValidator: validateQuery,
-    callback: async ({ datasourceLuid, query }, { requestId }): Promise<CallToolResult> => {
+    callback: async (
+      { datasourceLuid, query },
+      { requestId, authInfo },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       return await queryDatasourceTool.logAndExecute({
         requestId,
+        authInfo,
         args: { datasourceLuid, query },
         callback: async () => {
           const datasource: Datasource = { datasourceLuid };
@@ -54,15 +58,15 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             options,
           };
 
-          return await useRestApi(
-            config.server,
-            config.authConfig,
+          return await useRestApi({
+            config,
             requestId,
             server,
-            async (restApi) => {
+            accessToken: authInfo?.token,
+            callback: async (restApi) => {
               return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
             },
-          );
+          });
         },
         getErrorText: (error: z.infer<typeof TableauError>) => {
           return JSON.stringify({ requestId, ...handleQueryDatasourceError(error) });

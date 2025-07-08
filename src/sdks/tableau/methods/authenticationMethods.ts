@@ -3,7 +3,7 @@ import { Zodios } from '@zodios/core';
 import { authenticationApis } from '../apis/authenticationApi.js';
 import { AuthConfig } from '../authConfig.js';
 import { Credentials } from '../types/credentials.js';
-import AuthenticatedMethods from './authenticatedMethods.js';
+import AuthenticatedMethods, { Auth } from './authenticatedMethods.js';
 import Methods from './methods.js';
 
 /**
@@ -19,6 +19,10 @@ export default class AuthenticationMethods extends Methods<typeof authentication
   }
 
   signIn = async (authConfig: AuthConfig): Promise<Credentials> => {
+    if (authConfig.type === 'accessToken') {
+      throw new Error('Access token authentication is not supported');
+    }
+
     return (
       await this._apiClient.signIn({
         credentials: {
@@ -43,8 +47,8 @@ export default class AuthenticationMethods extends Methods<typeof authentication
 export class AuthenticatedAuthenticationMethods extends AuthenticatedMethods<
   typeof authenticationApis
 > {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, authenticationApis), creds);
+  constructor(baseUrl: string, auth: Auth) {
+    super(new Zodios(baseUrl, authenticationApis), auth);
   }
 
   signOut = async (): Promise<void> => {

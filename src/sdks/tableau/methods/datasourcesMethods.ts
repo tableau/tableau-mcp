@@ -1,12 +1,11 @@
 import { Zodios } from '@zodios/core';
 
 import { Datasource, datasourcesApis } from '../apis/datasourcesApi.js';
-import { Credentials } from '../types/credentials.js';
-import AuthenticatedMethods from './authenticatedMethods.js';
+import AuthenticatedMethods, { Auth } from './authenticatedMethods.js';
 
 export default class DatasourcesMethods extends AuthenticatedMethods<typeof datasourcesApis> {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, datasourcesApis), creds);
+  constructor(baseUrl: string, auth: Auth) {
+    super(new Zodios(baseUrl, datasourcesApis), auth);
   }
 
   /**

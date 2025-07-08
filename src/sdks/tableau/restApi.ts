@@ -7,13 +7,13 @@ import {
   RequestInterceptor,
   ResponseInterceptor,
 } from './interceptors.js';
+import { Auth } from './methods/authenticatedMethods.js';
 import AuthenticationMethods, {
   AuthenticatedAuthenticationMethods,
 } from './methods/authenticationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
-import { Credentials } from './types/credentials.js';
 
 /**
  * Interface for the Tableau REST APIs
@@ -22,7 +22,7 @@ import { Credentials } from './types/credentials.js';
  * @class RestApi
  */
 export default class RestApi {
-  private _creds?: Credentials;
+  private _auth?: Auth;
   private readonly _host: string;
   private readonly _baseUrl: string;
 
@@ -47,21 +47,34 @@ export default class RestApi {
     this._responseInterceptor = options?.responseInterceptor;
   }
 
-  private get creds(): Credentials {
-    if (!this._creds) {
+  private get auth(): Auth {
+    if (!this._auth) {
       throw new Error('No credentials found. Authenticate by calling signIn() first.');
     }
 
-    return this._creds;
+    return this._auth;
+  }
+
+  set accessToken(accessToken: string) {
+    this._auth = { type: 'accessToken', accessToken };
   }
 
   get siteId(): string {
-    return this.creds.site.id;
+    if (this.auth.type === 'accessToken') {
+      const parts = this.auth.accessToken.split('|');
+      if (parts.length > 2) {
+        return parts[2];
+      }
+
+      throw new Error('Could not determine site ID. Access token must have 3 parts.');
+    }
+
+    return this.auth.creds.site.id;
   }
 
   get datasourcesMethods(): DatasourcesMethods {
     if (!this._datasourcesMethods) {
-      this._datasourcesMethods = new DatasourcesMethods(this._baseUrl, this.creds);
+      this._datasourcesMethods = new DatasourcesMethods(this._baseUrl, this.auth);
       this._addInterceptors(this._baseUrl, this._datasourcesMethods.interceptors);
     }
 
@@ -71,7 +84,7 @@ export default class RestApi {
   get metadataMethods(): MetadataMethods {
     if (!this._metadataMethods) {
       const baseUrl = `${this._host}/api/metadata`;
-      this._metadataMethods = new MetadataMethods(baseUrl, this.creds);
+      this._metadataMethods = new MetadataMethods(baseUrl, this.auth);
       this._addInterceptors(baseUrl, this._metadataMethods.interceptors);
     }
 
@@ -81,7 +94,7 @@ export default class RestApi {
   get vizqlDataServiceMethods(): VizqlDataServiceMethods {
     if (!this._vizqlDataServiceMethods) {
       const baseUrl = `${this._host}/api/v1/vizql-data-service`;
-      this._vizqlDataServiceMethods = new VizqlDataServiceMethods(baseUrl, this.creds);
+      this._vizqlDataServiceMethods = new VizqlDataServiceMethods(baseUrl, this.auth);
       this._addInterceptors(baseUrl, this._vizqlDataServiceMethods.interceptors);
     }
 
@@ -91,14 +104,14 @@ export default class RestApi {
   signIn = async (authConfig: AuthConfig): Promise<void> => {
     const authenticationMethods = new AuthenticationMethods(this._baseUrl);
     this._addInterceptors(this._baseUrl, authenticationMethods.interceptors);
-    this._creds = await authenticationMethods.signIn(authConfig);
+    this._auth = { type: 'credentials', creds: await authenticationMethods.signIn(authConfig) };
   };
 
   signOut = async (): Promise<void> => {
-    const authenticationMethods = new AuthenticatedAuthenticationMethods(this._baseUrl, this.creds);
+    const authenticationMethods = new AuthenticatedAuthenticationMethods(this._baseUrl, this.auth);
     this._addInterceptors(this._baseUrl, authenticationMethods.interceptors);
     await authenticationMethods.signOut();
-    this._creds = undefined;
+    this._auth = undefined;
   };
 
   private _addInterceptors = (baseUrl: string, interceptors: AxiosInterceptor): void => {

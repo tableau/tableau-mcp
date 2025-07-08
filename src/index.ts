@@ -2,6 +2,7 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import cors from 'cors';
 import dotenv from 'dotenv';
 import express, { Request, Response } from 'express';
 import fs, { existsSync } from 'fs';
@@ -10,6 +11,12 @@ import https from 'https';
 
 import { Config, getConfig } from './config.js';
 import { isLoggingLevel, log, setLogLevel, writeToStderr } from './logging/log.js';
+import {
+  rateLimitMiddleware,
+  requestSizeLimit,
+  validateProtocolVersion,
+} from './server/middleware.js';
+import { OAuthProvider } from './server/oauth.js';
 import { Server, serverName, serverVersion } from './server/server.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
@@ -53,11 +60,37 @@ try {
 
 async function startExpressServer(config: Config, logLevel: LoggingLevel): Promise<string> {
   const app = express();
+
   app.use(express.json());
+  app.use(express.urlencoded());
+
+  app.use(
+    cors({
+      origin: true,
+      credentials: true,
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'Cache-Control',
+        'Accept',
+        'MCP-Protocol-Version',
+      ],
+      exposedHeaders: ['mcp-session-id', 'x-session-id'],
+    }),
+  );
+
+  const oauthProvider = new OAuthProvider();
+  oauthProvider.setupRoutes(app);
+
+  const mcpMiddleware = [
+    oauthProvider.authMiddleware(),
+    rateLimitMiddleware(60000, 100), // 100 requests per minute
+    validateProtocolVersion,
+    requestSizeLimit(10 * 1024 * 1024), // 10MB max
+  ];
 
   const path = serverName;
-
-  app.post(`/${path}`, async (req: Request, res: Response) => {
+  app.post(`/${path}`, ...mcpMiddleware, async (req: Request, res: Response) => {
     try {
       const server = new Server();
       const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
@@ -91,7 +124,7 @@ async function startExpressServer(config: Config, logLevel: LoggingLevel): Promi
     }
   });
 
-  app.get(`/${path}`, async (_req: Request, res: Response) => {
+  app.get(`/${path}`, ...mcpMiddleware, async (_req: Request, res: Response) => {
     res.writeHead(405).end(
       JSON.stringify({
         jsonrpc: '2.0',
@@ -104,7 +137,7 @@ async function startExpressServer(config: Config, logLevel: LoggingLevel): Promi
     );
   });
 
-  app.delete(`/${path}`, async (_req: Request, res: Response) => {
+  app.delete(`/${path}`, ...mcpMiddleware, async (_req: Request, res: Response) => {
     res.writeHead(405).end(
       JSON.stringify({
         jsonrpc: '2.0',

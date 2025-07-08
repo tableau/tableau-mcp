@@ -1,10 +1,9 @@
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { isAxiosError } from '../node_modules/axios/index.js';
-import { getConfig } from './config.js';
+import { Config, getConfig } from './config.js';
 import { log, shouldLogWhenLevelIsAtLeast } from './logging/log.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
-import { AuthConfig } from './sdks/tableau/authConfig.js';
 import {
   AxiosResponseInterceptorConfig,
   ErrorInterceptor,
@@ -17,15 +16,16 @@ import {
 } from './sdks/tableau/interceptors.js';
 import RestApi from './sdks/tableau/restApi.js';
 import { Server } from './server/server.js';
+import { userAgent } from './server/userAgent.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 const getNewRestApiInstanceAsync = async (
-  host: string,
-  authConfig: AuthConfig,
+  config: Config,
   requestId: RequestId,
   server: Server,
+  accessToken?: string,
 ): Promise<RestApi> => {
-  const restApi = new RestApi(host, {
+  const restApi = new RestApi(config.server, {
     requestInterceptor: [
       getRequestInterceptor(server, requestId),
       getRequestErrorInterceptor(server, requestId),
@@ -36,18 +36,34 @@ const getNewRestApiInstanceAsync = async (
     ],
   });
 
-  await restApi.signIn(authConfig);
+  if (config.auth === 'pat') {
+    await restApi.signIn({
+      type: 'pat',
+      patName: config.patName,
+      patValue: config.patValue,
+      siteName: config.siteName,
+    });
+  } else {
+    restApi.accessToken = accessToken ?? '';
+  }
+
   return restApi;
 };
 
-export const useRestApi = async <T>(
-  host: string,
-  authConfig: AuthConfig,
-  requestId: RequestId,
-  server: Server,
-  callback: (restApi: RestApi) => Promise<T>,
-): Promise<T> => {
-  const restApi = await getNewRestApiInstanceAsync(host, authConfig, requestId, server);
+export const useRestApi = async <T>({
+  config,
+  requestId,
+  server,
+  callback,
+  accessToken,
+}: {
+  config: Config;
+  requestId: RequestId;
+  server: Server;
+  callback: (restApi: RestApi) => Promise<T>;
+  accessToken?: string;
+}): Promise<T> => {
+  const restApi = await getNewRestApiInstanceAsync(config, requestId, server, accessToken);
   try {
     return await callback(restApi);
   } finally {
@@ -58,7 +74,7 @@ export const useRestApi = async <T>(
 export const getRequestInterceptor =
   (server: Server, requestId: RequestId): RequestInterceptor =>
   (request) => {
-    request.headers['User-Agent'] = `${server.name}/${server.version}`;
+    request.headers['User-Agent'] = userAgent;
     logRequest(server, request, requestId);
     return request;
   };

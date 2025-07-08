@@ -10,14 +10,13 @@ import {
   TableauError,
   vizqlDataServiceApis,
 } from '../apis/vizqlDataServiceApi.js';
-import { Credentials } from '../types/credentials.js';
-import AuthenticatedMethods from './authenticatedMethods.js';
+import AuthenticatedMethods, { Auth } from './authenticatedMethods.js';
 
 export default class VizqlDataServiceMethods extends AuthenticatedMethods<
   typeof vizqlDataServiceApis
 > {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, vizqlDataServiceApis), creds);
+  constructor(baseUrl: string, auth: Auth) {
+    super(new Zodios(baseUrl, vizqlDataServiceApis), auth);
   }
 
   queryDatasource = async (

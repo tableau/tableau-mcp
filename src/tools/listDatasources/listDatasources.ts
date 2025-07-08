@@ -91,26 +91,27 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ filter }, { requestId, authInfo }): Promise<CallToolResult> => {
       const config = getConfig();
       const validatedFilter = filter ? parseAndValidateFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
         requestId,
+        authInfo,
         args: { filter },
         callback: async () => {
           return new Ok(
-            await useRestApi(
-              config.server,
-              config.authConfig,
+            await useRestApi({
+              config,
               requestId,
               server,
-              async (restApi) => {
+              accessToken: authInfo?.token,
+              callback: async (restApi) => {
                 return await restApi.datasourcesMethods.listDatasources(
                   restApi.siteId,
                   validatedFilter ?? '',
                 );
               },
-            ),
+            }),
           );
         },
       });

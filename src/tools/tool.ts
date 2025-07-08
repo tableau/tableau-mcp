@@ -1,3 +1,4 @@
+import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { Result } from 'ts-results-es';
@@ -24,6 +25,7 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
 
 type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined> = {
   requestId: RequestId;
+  authInfo: AuthInfo | undefined;
   args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
   callback: () => Promise<Result<T, E>>;
   getErrorText?: (error: E) => string;
