@@ -656,7 +656,7 @@ export class OAuthProvider {
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setExpirationTime(new Date().getTime() + tokens.expires_in * 1000)
+      .setExpirationTime(Date.now() + tokens.expires_in * 1000)
       .setAudience('tableau-mcp-server')
       .setIssuer(this.config.oauthIssuer)
       .sign(this.jwtSecret);
