@@ -16,6 +16,7 @@ export class Config {
   defaultLogLevel: string;
   disableLogMasking: boolean;
   oauthIssuer: string;
+  jwtSecret: string;
   redirectUri: string;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
@@ -35,6 +36,7 @@ export class Config {
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
       OAUTH_ISSUER: oauthIssuer,
+      JWT_SECRET: jwtSecret,
       REDIRECT_URI: redirectUri,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
@@ -53,6 +55,7 @@ export class Config {
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
     this.oauthIssuer = oauthIssuer ?? '';
+    this.jwtSecret = jwtSecret ?? '';
     this.redirectUri = redirectUri ?? '';
 
     this.includeTools = includeTools
@@ -83,6 +86,7 @@ export class Config {
 
     if (this.auth === 'oauth') {
       invariant(oauthIssuer, 'The environment variable OAUTH_ISSUER is not set');
+      invariant(jwtSecret, 'The environment variable JWT_SECRET is not set');
       invariant(redirectUri, 'The environment variable REDIRECT_URI is not set');
     }
 

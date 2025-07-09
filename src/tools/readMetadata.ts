@@ -47,7 +47,7 @@ export const getReadMetadataTool = (server: Server): Tool<typeof paramsSchema> =
               config,
               requestId,
               server,
-              accessToken: authInfo?.token,
+              accessToken: authInfo?.extra?.accessToken as string,
               callback: async (restApi) => {
                 return await restApi.vizqlDataServiceMethods.readMetadata({
                   datasource: {

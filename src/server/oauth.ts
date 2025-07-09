@@ -1,6 +1,7 @@
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { createHash, randomBytes } from 'crypto';
 import express from 'express';
+import { jwtVerify, SignJWT } from 'jose';
 
 import { getConfig } from '../config.js';
 import { userAgent } from './userAgent.js';
@@ -23,11 +24,13 @@ interface AuthorizationCode {
   clientId: string;
   redirectUri: string;
   codeChallenge: string;
+  userId: string;
   code: string;
   expiresAt: number;
 }
 
 interface RefreshTokenData {
+  userId: string;
   clientId: string;
   tokens: { accessToken: string; refreshToken: string };
   expiresAt: number;
@@ -56,7 +59,7 @@ interface RefreshTokenData {
  * - Time-limited authorization codes
  */
 export class OAuthProvider {
-  //private readonly jwtSecret: Uint8Array;
+  private readonly jwtSecret: Uint8Array;
   private readonly config = getConfig();
   private readonly pendingAuthorizations = new Map<string, PendingAuthorization>();
   private readonly authorizationCodes = new Map<string, AuthorizationCode>();
@@ -66,7 +69,7 @@ export class OAuthProvider {
   private readonly REFRESH_TOKEN_TIMEOUT_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
   constructor() {
-    //this.jwtSecret = new TextEncoder().encode(config.JWT_SECRET);
+    this.jwtSecret = new TextEncoder().encode(this.config.jwtSecret);
   }
 
   /**
@@ -85,25 +88,24 @@ export class OAuthProvider {
    */
   async verifyAccessToken(token: string, _req?: express.Request): Promise<AuthInfo> {
     try {
-      // const { payload } = await jwtVerify(token, this.jwtSecret, {
-      //   audience: 'tableau-mcp',
-      //   issuer: this.config.server,
-      // });
+      const { payload } = await jwtVerify(token, this.jwtSecret, {
+        audience: 'tableau-mcp-server',
+        issuer: this.config.oauthIssuer,
+      });
 
       return {
-        token: token,
+        token,
         clientId: 'mcp-client',
         scopes: ['read'],
-        //expiresAt: payload.exp,
-        expiresAt: 0,
+        expiresAt: payload.exp,
         extra: {
-          //userId: payload.sub,
-          //accessToken: payload.ccess_token,
-          //refreshToken: payload.refresh_token,
+          userId: payload.sub,
+          accessToken: payload.tableau_access_token,
+          refreshToken: payload.tableau_refresh_token,
         },
       };
     } catch {
-      // Auto-refresh logic would go here
+      // TODO: Auto-refresh logic would go here
       throw new Error('Invalid or expired access token');
     }
   }
@@ -476,18 +478,20 @@ export class OAuthProvider {
 
           // Generate tokens
           const refreshTokenId = randomBytes(32).toString('hex');
+          const accessToken = await this.createAccessToken(authCode.userId, tokens);
           this.refreshTokens.set(refreshTokenId, {
+            userId: authCode.userId,
             clientId: authCode.clientId,
-            tokens: tokens,
+            tokens,
             expiresAt: Date.now() + this.REFRESH_TOKEN_TIMEOUT_MS,
           });
 
           this.authorizationCodes.delete(code);
 
           res.json({
-            access_token: tokens.access_token,
+            access_token: accessToken,
             token_type: 'Bearer',
-            expires_in: 86400, // 24 hours to match token expiry
+            expires_in: tokens.expires_in,
             refresh_token: refreshTokenId,
             scope: 'read',
           });
@@ -597,7 +601,8 @@ export class OAuthProvider {
         // }
 
         //const userInfo = (await userResponse.json()) as { name: string };
-        //const userId = userInfo.name;
+        // TODO: Get user ID from Tableau Server
+        const userId = randomBytes(32).toString('hex');
 
         // Generate authorization code
         const authorizationCode = randomBytes(32).toString('hex');
@@ -605,6 +610,7 @@ export class OAuthProvider {
           clientId: pendingAuth.clientId,
           redirectUri: pendingAuth.redirectUri,
           codeChallenge: pendingAuth.codeChallenge,
+          userId,
           code: code as string,
           expiresAt: Date.now() + this.AUTHORIZATION_CODE_TIMEOUT_MS,
         });
@@ -640,30 +646,20 @@ export class OAuthProvider {
    * @returns Signed JWT token for MCP authentication
    */
   private async createAccessToken(
-    code: string,
-    actualCallbackUri: string,
-    codeVerifier: string,
-  ): Promise<any> {
-    const response = await fetch(`https://${this.config.server}/oauth2/v1/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': userAgent,
-      },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: actualCallbackUri,
-        code_verifier: codeVerifier,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to exchange authorization code: ${response.status} - ${errorText}`);
-    }
-
-    return await response.json();
+    userId: string,
+    tokens: { access_token: string; refresh_token: string; expires_in: number },
+  ): Promise<string> {
+    return await new SignJWT({
+      sub: userId,
+      tableau_access_token: tokens.access_token,
+      tableau_refresh_token: tokens.refresh_token,
+    })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt()
+      .setExpirationTime(new Date().getTime() + tokens.expires_in * 1000)
+      .setAudience('tableau-mcp-server')
+      .setIssuer(this.config.oauthIssuer)
+      .sign(this.jwtSecret);
   }
 
   /**
@@ -706,9 +702,6 @@ export class OAuthProvider {
       code_verifier: codeVerifier,
     });
 
-    console.log(tokenUrl);
-    console.log(body.toString());
-
     const response = await fetch(tokenUrl, {
       method: 'POST',
       headers: {
@@ -720,9 +713,6 @@ export class OAuthProvider {
 
     if (!response.ok) {
       const errorText = await response.text();
-      for (const [key, value] of response.headers.entries()) {
-        console.log(`${key}: ${value}`);
-      }
       throw new Error(`Failed to exchange authorization code: ${response.status} - ${errorText}`);
     }
 
