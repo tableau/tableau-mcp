@@ -1,6 +1,5 @@
 import { ZodObject } from 'zod';
 
-import { exportedForTesting as configExportedForTesting } from './config.js';
 import { exportedForTesting as serverExportedForTesting } from './server.js';
 import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
 import { toolNames } from './tools/toolName.js';

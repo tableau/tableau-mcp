@@ -15,6 +15,7 @@ export class Config {
   disableLogMasking: boolean;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
+  maxResultLimit: number | null;
 
   constructor() {
     let { SITE_NAME: siteName } = process.env;
@@ -31,6 +32,7 @@ export class Config {
       DISABLE_LOG_MASKING: disableLogMasking,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
+      MAX_RESULT_LIMIT: maxResultLimit,
     } = process.env;
 
     const defaultPort = 3927;
@@ -44,6 +46,10 @@ export class Config {
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
+
+    const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
+    this.maxResultLimit =
+      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
 
     this.includeTools = includeTools
       ? includeTools
