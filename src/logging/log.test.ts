@@ -1,8 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { server } from '../server.js';
+import { Server } from '../server.js';
 import {
-  defaultLogLevel,
   getToolLogMessage,
   isLoggingLevel,
   log,
@@ -11,15 +10,6 @@ import {
   writeToStderr,
 } from './log.js';
 
-vi.mock('../server.js', () => ({
-  server: {
-    name: 'test-server',
-    server: {
-      sendLoggingMessage: vi.fn(),
-    },
-  },
-}));
-
 describe('log', () => {
   const originalEnv = process.env.TABLEAU_MCP_TEST;
 
@@ -27,11 +17,6 @@ describe('log', () => {
     vi.clearAllMocks();
 
     process.env.TABLEAU_MCP_TEST = originalEnv;
-    setLogLevel(defaultLogLevel, { silent: true });
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   describe('isLoggingLevel', () => {
@@ -50,21 +35,22 @@ describe('log', () => {
 
   describe('setLogLevel', () => {
     it('should set the log level', () => {
-      setLogLevel('error', { silent: true });
+      setLogLevel(new Server(), 'error', { silent: true });
       expect(shouldLogWhenLevelIsAtLeast('error')).toBe(true);
       expect(shouldLogWhenLevelIsAtLeast('debug')).toBe(false);
     });
 
     it('should not change level if it is the same', () => {
-      setLogLevel('debug', { silent: true });
-      setLogLevel('debug', { silent: true });
+      const server = new Server();
+      setLogLevel(server, 'debug', { silent: true });
+      setLogLevel(server, 'debug', { silent: true });
       expect(server.server.sendLoggingMessage).not.toHaveBeenCalled();
     });
   });
 
   describe('shouldLogWhenLevelIsAtLeast', () => {
     it('should return true for levels at or above current level', () => {
-      setLogLevel('warning', { silent: true });
+      setLogLevel(new Server(), 'warning', { silent: true });
       expect(shouldLogWhenLevelIsAtLeast('warning')).toBe(true);
       expect(shouldLogWhenLevelIsAtLeast('error')).toBe(true);
       expect(shouldLogWhenLevelIsAtLeast('info')).toBe(false);
@@ -129,9 +115,10 @@ describe('log', () => {
 
   describe('log functions', () => {
     it('should send logging message when level is appropriate', async () => {
-      setLogLevel('info', { silent: true });
+      const server = new Server();
+      setLogLevel(server, 'info', { silent: true });
 
-      await log.info('test message', 'test-logger');
+      await log.info(server, 'test message', 'test-logger');
 
       expect(server.server.sendLoggingMessage).toHaveBeenCalledWith({
         level: 'info',
@@ -141,17 +128,19 @@ describe('log', () => {
     });
 
     it('should not send logging message when level is below current level', async () => {
-      setLogLevel('warning', { silent: true });
+      const server = new Server();
+      setLogLevel(server, 'warning', { silent: true });
 
-      await log.debug('test message', 'test-logger');
+      await log.debug(server, 'test message', 'test-logger');
 
       expect(server.server.sendLoggingMessage).not.toHaveBeenCalled();
     });
 
     it('should use server name as default logger', async () => {
-      setLogLevel('info', { silent: true });
+      const server = new Server();
+      setLogLevel(server, 'info', { silent: true });
 
-      await log.info('test message');
+      await log.info(server, 'test message');
 
       expect(server.server.sendLoggingMessage).toHaveBeenCalledWith({
         level: 'info',
@@ -161,14 +150,15 @@ describe('log', () => {
     });
 
     it('should handle LogMessage objects', async () => {
-      setLogLevel('info', { silent: true });
+      const server = new Server();
+      setLogLevel(server, 'info', { silent: true });
       const logMessage = {
         type: 'request',
         method: 'GET',
         path: '/test',
       } as const;
 
-      await log.info(logMessage, 'test-logger');
+      await log.info(server, logMessage, 'test-logger');
 
       expect(server.server.sendLoggingMessage).toHaveBeenCalledWith({
         level: 'info',

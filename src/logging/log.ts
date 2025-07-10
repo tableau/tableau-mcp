@@ -1,6 +1,6 @@
 import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
-import { server } from '../server.js';
+import { Server } from '../server.js';
 import { ToolName } from '../tools/toolName.js';
 type Logger = 'rest-api' | (string & {});
 type LogType = LoggingLevel | 'request' | 'response' | 'tool';
@@ -20,14 +20,14 @@ const loggingLevels = [
   'emergency',
 ] as const;
 
-export const defaultLogLevel: LoggingLevel = 'debug';
-let currentLogLevel: LoggingLevel = defaultLogLevel;
+let currentLogLevel: LoggingLevel = 'debug';
 
 export function isLoggingLevel(level: unknown): level is LoggingLevel {
   return !!loggingLevels.find((l) => l === level);
 }
 
 export const setLogLevel = (
+  server: Server,
   level: LoggingLevel,
   { silent = false }: { silent?: boolean } = {},
 ): void => {
@@ -38,7 +38,7 @@ export const setLogLevel = (
   currentLogLevel = level;
 
   if (!silent) {
-    log.notice(`Logging level set to: ${level}`);
+    log.notice(server, `Logging level set to: ${level}`);
   }
 };
 
@@ -52,7 +52,11 @@ export const log = {
   alert: getSendLoggingMessageFn('alert'),
   emergency: getSendLoggingMessageFn('emergency'),
 } satisfies {
-  [level in LoggingLevel]: (message: string | LogMessage, logger: Logger) => Promise<void>;
+  [level in LoggingLevel]: (
+    server: Server,
+    message: string | LogMessage,
+    logger: Logger,
+  ) => Promise<void>;
 };
 
 export const shouldLogWhenLevelIsAtLeast = (level = currentLogLevel): boolean => {
@@ -89,7 +93,7 @@ export const getToolLogMessage = ({
 };
 
 function getSendLoggingMessageFn(level: LoggingLevel) {
-  return async (message: string | LogMessage, logger: Logger = server.name) => {
+  return async (server: Server, message: string | LogMessage, logger: Logger = server.name) => {
     if (!shouldLogWhenLevelIsAtLeast(level)) {
       return;
     }

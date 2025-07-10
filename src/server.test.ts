@@ -1,19 +1,16 @@
 import { ZodObject } from 'zod';
 
-import { exportedForTesting as configExportedForTesting } from './config.js';
 import { exportedForTesting as serverExportedForTesting } from './server.js';
-import { queryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
+import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
 import { toolNames } from './tools/toolName.js';
-import { tools } from './tools/tools.js';
+import { toolFactories } from './tools/tools.js';
 
 const { Server } = serverExportedForTesting;
-const { resetConfig } = configExportedForTesting;
 
 describe('server', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    resetConfig();
     process.env = {
       ...originalEnv,
       INCLUDE_TOOLS: undefined,
@@ -29,13 +26,14 @@ describe('server', () => {
     const server = getServer();
     server.registerTools();
 
+    const tools = toolFactories.map((tool) => tool(server));
     for (const tool of tools) {
       expect(server.tool).toHaveBeenCalledWith(
         tool.name,
         tool.description,
-        tool.paramsSchema,
-        tool.annotations,
-        tool.callback,
+        expect.any(Object),
+        expect.any(Object),
+        expect.any(Function),
       );
     }
   });
@@ -45,15 +43,14 @@ describe('server', () => {
     const server = getServer();
     server.registerTools();
 
-    for (const tool of [queryDatasourceTool]) {
-      expect(server.tool).toHaveBeenCalledWith(
-        tool.name,
-        tool.description,
-        tool.paramsSchema,
-        tool.annotations,
-        tool.callback,
-      );
-    }
+    const tool = getQueryDatasourceTool(server);
+    expect(server.tool).toHaveBeenCalledWith(
+      tool.name,
+      tool.description,
+      expect.any(Object),
+      expect.any(Object),
+      expect.any(Function),
+    );
   });
 
   it('should register tools filtered by excludeTools', async () => {
@@ -61,22 +58,23 @@ describe('server', () => {
     const server = getServer();
     server.registerTools();
 
+    const tools = toolFactories.map((tool) => tool(server));
     for (const tool of tools) {
       if (tool.name === 'query-datasource') {
         expect(server.tool).not.toHaveBeenCalledWith(
           tool.name,
           tool.description,
-          tool.paramsSchema,
-          tool.annotations,
-          tool.callback,
+          expect.any(Object),
+          expect.any(Object),
+          expect.any(Function),
         );
       } else {
         expect(server.tool).toHaveBeenCalledWith(
           tool.name,
           tool.description,
-          tool.paramsSchema,
-          tool.annotations,
-          tool.callback,
+          expect.any(Object),
+          expect.any(Object),
+          expect.any(Function),
         );
       }
     }

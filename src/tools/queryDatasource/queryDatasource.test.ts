@@ -1,16 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { exportedForTesting as configExportedForTesting } from '../../config.js';
-import { server } from '../../server.js';
+import { Server } from '../../server.js';
 import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
-import { queryDatasourceTool } from './queryDatasource.js';
+import { getQueryDatasourceTool } from './queryDatasource.js';
 
-const { resetConfig } = configExportedForTesting;
 const { resetDatasourceCredentials } = datasourceCredentialsExportedForTesting;
-
-// Mock server.server.sendLoggingMessage since the transport won't be connected.
-vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
 
 const mockVdsResponses = vi.hoisted(() => ({
   success: {
@@ -58,7 +53,6 @@ describe('queryDatasourceTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetConfig();
     resetDatasourceCredentials();
     process.env = {
       ...originalEnv,
@@ -66,6 +60,7 @@ describe('queryDatasourceTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
+    const queryDatasourceTool = getQueryDatasourceTool(new Server());
     expect(queryDatasourceTool.name).toBe('query-datasource');
     expect(queryDatasourceTool.description).toEqual(expect.any(String));
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
@@ -193,6 +188,7 @@ describe('queryDatasourceTool', () => {
 });
 
 async function getToolResult(): Promise<CallToolResult> {
+  const queryDatasourceTool = getQueryDatasourceTool(new Server());
   return await queryDatasourceTool.callback(
     {
       datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',

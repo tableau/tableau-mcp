@@ -1,11 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import type { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
-import { server } from '../../../server.js';
-import { listPulseMetricsFromMetricIdsTool } from './listPulseMetricsFromMetricIds.js';
-
-// Mock server.server.sendLoggingMessage since the transport won't be connected.
-vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
+import { Server } from '../../../server.js';
+import { getListPulseMetricsFromMetricIdsTool } from './listPulseMetricsFromMetricIds.js';
 
 const mockPulseMetrics: PulseMetric[] = [
   {
@@ -38,6 +35,7 @@ describe('listPulseMetricsFromMetricIdsTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
+    const listPulseMetricsFromMetricIdsTool = getListPulseMetricsFromMetricIdsTool(new Server());
     expect(listPulseMetricsFromMetricIdsTool.name).toBe('list-pulse-metrics-from-metric-ids');
     expect(listPulseMetricsFromMetricIdsTool.description).toContain(
       'Retrieves a list of published Pulse Metrics from a list of metric IDs',
@@ -88,6 +86,7 @@ describe('listPulseMetricsFromMetricIdsTool', () => {
 });
 
 async function getToolResult(params: { metricIds: string[] }): Promise<CallToolResult> {
+  const listPulseMetricsFromMetricIdsTool = getListPulseMetricsFromMetricIdsTool(new Server());
   return await listPulseMetricsFromMetricIdsTool.callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',

@@ -3,14 +3,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { log } from '../logging/log.js';
-import { server } from '../server.js';
+import { Server } from '../server.js';
 import { Tool } from './tool.js';
-
-// Mock server.server.sendLoggingMessage since the transport won't be connected.
-vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
 
 describe('Tool', () => {
   const mockParams = {
+    server: new Server(),
     name: 'list-fields',
     description: 'A test tool',
     paramsSchema: {
@@ -42,7 +40,8 @@ describe('Tool', () => {
 
     tool.logInvocation({ requestId: '2', args: testArgs });
 
-    expect(spy).toHaveBeenCalledExactlyOnceWith({
+    const server = expect.any(Object);
+    expect(spy).toHaveBeenCalledExactlyOnceWith(server, {
       type: 'tool',
       requestId: '2',
       tool: {
@@ -111,6 +110,7 @@ describe('Tool', () => {
 
   it('should return error result when argsValidator throws', async () => {
     const tool = new Tool({
+      server: new Server(),
       name: 'list-fields',
       description: 'test',
       paramsSchema: z.object({ param1: z.string() }).shape,

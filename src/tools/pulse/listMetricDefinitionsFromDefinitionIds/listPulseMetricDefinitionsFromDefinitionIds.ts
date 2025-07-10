@@ -5,11 +5,21 @@ import { z } from 'zod';
 import { getConfig } from '../../../config.js';
 import { getNewRestApiInstanceAsync } from '../../../restApiInstance.js';
 import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse.js';
+import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
 
-export const listPulseMetricDefinitionsFromDefinitionIdsTool = new Tool({
-  name: 'list-pulse-metric-definitions-from-definition-ids',
-  description: `
+const paramsSchema = {
+  metricDefinitionIds: z.array(z.string().length(36)).min(1),
+  view: z.optional(z.enum(pulseMetricDefinitionViewEnum)),
+};
+
+export const getListPulseMetricDefinitionsFromDefinitionIdsTool = (
+  server: Server,
+): Tool<typeof paramsSchema> => {
+  const listPulseMetricDefinitionsFromDefinitionIdsTool = new Tool({
+    server,
+    name: 'list-pulse-metric-definitions-from-definition-ids',
+    description: `
 Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API from a list of metric definition IDs.  Use this tool when a user requests information about specific Pulse Metric Definitions on the current site.
 
 **Parameters:**
@@ -39,33 +49,34 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
     view: 'DEFINITION_VIEW_FULL'
     In the response you will only get up to 5 metrics, so if you want to see more you need to retrieve all the Pulse Metrics from another tool.
 `,
-  paramsSchema: {
-    metricDefinitionIds: z.array(z.string().length(36)).min(1),
-    view: z.optional(z.enum(pulseMetricDefinitionViewEnum)),
-  },
-  annotations: {
-    title: 'List Pulse Metric Definitions from Metric Definition IDs',
-    readOnlyHint: true,
-    openWorldHint: false,
-  },
-  callback: async ({ view, metricDefinitionIds }, { requestId }): Promise<CallToolResult> => {
-    const config = getConfig();
-    return await listPulseMetricDefinitionsFromDefinitionIdsTool.logAndExecute({
-      requestId,
-      args: { metricDefinitionIds, view },
-      callback: async () => {
-        const restApi = await getNewRestApiInstanceAsync(
-          config.server,
-          config.authConfig,
-          requestId,
-        );
-        return new Ok(
-          await restApi.pulseMethods.listPulseMetricDefinitionsFromMetricDefinitionIds(
-            metricDefinitionIds,
-            view,
-          ),
-        );
-      },
-    });
-  },
-});
+    paramsSchema,
+    annotations: {
+      title: 'List Pulse Metric Definitions from Metric Definition IDs',
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
+    callback: async ({ view, metricDefinitionIds }, { requestId }): Promise<CallToolResult> => {
+      const config = getConfig();
+      return await listPulseMetricDefinitionsFromDefinitionIdsTool.logAndExecute({
+        requestId,
+        args: { metricDefinitionIds, view },
+        callback: async () => {
+          const restApi = await getNewRestApiInstanceAsync(
+            config.server,
+            config.authConfig,
+            requestId,
+            server,
+          );
+          return new Ok(
+            await restApi.pulseMethods.listPulseMetricDefinitionsFromMetricDefinitionIds(
+              metricDefinitionIds,
+              view,
+            ),
+          );
+        },
+      });
+    },
+  });
+
+  return listPulseMetricDefinitionsFromDefinitionIdsTool;
+};
