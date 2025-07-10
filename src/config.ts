@@ -1,8 +1,13 @@
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 import { isToolName, ToolName } from './tools/toolName.js';
+import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
-class Config {
+export class Config {
+  transport: TransportName;
+  httpPort: number;
+  sslKey: string;
+  sslCert: string;
   server: string;
   authConfig: AuthConfig;
   datasourceCredentials: string;
@@ -15,7 +20,11 @@ class Config {
   constructor() {
     let { SITE_NAME: siteName } = process.env;
     const {
+      TRANSPORT: transport,
+      HTTP_PORT: httpPort,
       SERVER: server,
+      SSL_KEY: sslKey,
+      SSL_CERT: sslCert,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
@@ -26,7 +35,14 @@ class Config {
       MAX_RESULT_LIMIT: maxResultLimit,
     } = process.env;
 
+    const defaultPort = 3927;
+    const httpPortNumber = parseInt(httpPort || defaultPort.toString(), 10);
+
     siteName = siteName ?? '';
+    this.transport = isTransport(transport) ? transport : 'stdio';
+    this.httpPort = isNaN(httpPortNumber) ? defaultPort : httpPortNumber;
+    this.sslKey = sslKey ?? '';
+    this.sslCert = sslCert ?? '';
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';

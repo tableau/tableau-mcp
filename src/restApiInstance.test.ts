@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { log } from './logging/log.js';
 import {
-  getNewRestApiInstanceAsync,
   getRequestErrorInterceptor,
   getRequestInterceptor,
   getResponseErrorInterceptor,
   getResponseInterceptor,
+  useRestApi,
 } from './restApiInstance.js';
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 import RestApi from './sdks/tableau/restApi.js';
@@ -15,6 +15,7 @@ import { Server } from './server.js';
 vi.mock('./sdks/tableau/restApi.js', () => ({
   default: vi.fn().mockImplementation(() => ({
     signIn: vi.fn().mockResolvedValue(undefined),
+    signOut: vi.fn().mockResolvedValue(undefined),
   })),
 }));
 
@@ -40,13 +41,14 @@ describe('restApiInstance', () => {
     vi.clearAllMocks();
   });
 
-  describe('getNewRestApiInstanceAsync', () => {
+  describe('useRestApi', () => {
     it('should create a new RestApi instance and sign in', async () => {
-      const restApi = await getNewRestApiInstanceAsync(
+      const restApi = await useRestApi(
         mockHost,
         mockAuthConfig,
         mockRequestId,
         new Server(),
+        (restApi) => Promise.resolve(restApi),
       );
 
       expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
@@ -76,7 +78,10 @@ describe('restApiInstance', () => {
           method: 'GET',
           url: expect.any(String),
         }),
-        'rest-api',
+        expect.objectContaining({
+          logger: 'rest-api',
+          requestId: mockRequestId,
+        }),
       );
     });
   });
@@ -104,7 +109,10 @@ describe('restApiInstance', () => {
           status: 200,
           url: expect.any(String),
         }),
-        'rest-api',
+        expect.objectContaining({
+          logger: 'rest-api',
+          requestId: mockRequestId,
+        }),
       );
     });
   });
@@ -127,7 +135,10 @@ describe('restApiInstance', () => {
       expect(log.error).toHaveBeenCalledWith(
         server,
         `Request ${mockRequestId} failed with error: ${JSON.stringify(mockError)}`,
-        'rest-api',
+        expect.objectContaining({
+          logger: 'rest-api',
+          requestId: mockRequestId,
+        }),
       );
     });
 
@@ -156,7 +167,10 @@ describe('restApiInstance', () => {
           method: 'GET',
           url: expect.any(String),
         }),
-        'rest-api',
+        expect.objectContaining({
+          logger: 'rest-api',
+          requestId: mockRequestId,
+        }),
       );
     });
 
@@ -178,7 +192,10 @@ describe('restApiInstance', () => {
       expect(log.error).toHaveBeenCalledWith(
         server,
         `Response from request ${mockRequestId} failed with error: ${JSON.stringify(mockError)}`,
-        'rest-api',
+        expect.objectContaining({
+          logger: 'rest-api',
+          requestId: mockRequestId,
+        }),
       );
     });
 
@@ -207,7 +224,10 @@ describe('restApiInstance', () => {
           url: expect.any(String),
           status: 500,
         }),
-        'rest-api',
+        expect.objectContaining({
+          logger: 'rest-api',
+          requestId: mockRequestId,
+        }),
       );
     });
   });
