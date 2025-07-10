@@ -34,8 +34,8 @@ request! -->
 
 ## Checklist
 
-- [ ] I have updated the version in the package.json file either manually or by using
-      `npm run version:minor` for a minor version bump, for example.
+- [ ] I have updated the version in the package.json file by using `npm run version`.
+      For example, use `npm run version:patch` for a patch version bump.
 - [ ] I have made any necessary changes to the documentation
 - [ ] I have added tests that prove my fix is effective or that my feature works
 - [ ] New and existing unit tests pass locally with my changes

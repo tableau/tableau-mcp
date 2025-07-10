@@ -5,11 +5,14 @@ import { z } from 'zod';
 import { getConfig } from '../../config.js';
 import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
+import { paginate } from '../../utils/paginate.js';
 import { Tool } from '../tool.js';
 import { parseAndValidateFilterString } from './datasourcesFilterUtils.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
+  pageSize: z.number().gt(0).optional(),
+  limit: z.number().gt(0).optional(),
 };
 
 export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -91,12 +94,12 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ filter, pageSize, limit }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
       const validatedFilter = filter ? parseAndValidateFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
         requestId,
-        args: { filter },
+        args: { filter, pageSize, limit },
         callback: async () => {
           const restApi = await getNewRestApiInstanceAsync(
             config.server,
@@ -104,9 +107,28 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
             requestId,
             server,
           );
-          return new Ok(
-            await restApi.datasourcesMethods.listDatasources(restApi.siteId, validatedFilter ?? ''),
-          );
+
+          const datasources = await paginate({
+            pageConfig: {
+              pageSize,
+              limit: config.maxResultLimit
+                ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                : limit,
+            },
+            getDataFn: async (pageConfig) => {
+              const { pagination, datasources: data } =
+                await restApi.datasourcesMethods.listDatasources({
+                  siteId: restApi.siteId,
+                  filter: validatedFilter ?? '',
+                  pageSize: pageConfig.pageSize,
+                  pageNumber: pageConfig.pageNumber,
+                });
+
+              return { pagination, data };
+            },
+          });
+
+          return new Ok(datasources);
         },
       });
     },

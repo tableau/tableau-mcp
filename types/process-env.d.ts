@@ -8,6 +8,7 @@ export interface ProcessEnvEx {
   DISABLE_LOG_MASKING: string | undefined;
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;
+  MAX_RESULT_LIMIT: string | undefined;
 }
 
 declare global {

@@ -10,6 +10,7 @@ class Config {
   disableLogMasking: boolean;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
+  maxResultLimit: number | null;
 
   constructor() {
     let { SITE_NAME: siteName } = process.env;
@@ -22,12 +23,17 @@ class Config {
       DISABLE_LOG_MASKING: disableLogMasking,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
+      MAX_RESULT_LIMIT: maxResultLimit,
     } = process.env;
 
     siteName = siteName ?? '';
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
+
+    const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
+    this.maxResultLimit =
+      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
 
     this.includeTools = includeTools
       ? includeTools

@@ -7,6 +7,10 @@ import { setLogLevel } from './log.js';
 import { maskRequest, maskResponse } from './secretMask.js';
 
 describe('secretMask', () => {
+  beforeEach(() => {
+    setLogLevel(new Server(), 'debug', { silent: true });
+  });
+
   it('should mask secrets in requests', () => {
     const maskedRequest = maskRequest({
       method: 'POST',
@@ -176,5 +180,53 @@ describe('secretMask', () => {
 
     const maskedResponse = maskResponse(response);
     expect(maskedResponse).toEqual(response);
+  });
+
+  it('should mask user_id in params in requests', () => {
+    const maskedRequest = maskRequest({
+      method: 'POST',
+      baseUrl: 'https://example.com',
+      url: '/api/v1/users',
+      headers: {},
+      params: {
+        user_id: 'secret-user-id',
+        other_param: 'not-secret',
+      },
+      data: {},
+    });
+
+    expect(maskedRequest).toEqual({
+      method: 'POST',
+      baseUrl: 'https://example.com',
+      url: '/api/v1/users',
+      headers: {},
+      params: {
+        user_id: '<redacted>',
+        other_param: 'not-secret',
+      },
+      data: {},
+    });
+  });
+
+  it('should not include params in the request if the log level is not debug', () => {
+    setLogLevel(new Server(), 'info', { silent: true });
+
+    const maskedRequest = maskRequest({
+      method: 'POST',
+      baseUrl: 'https://example.com',
+      url: '/api/v1/users',
+      headers: {},
+      params: {
+        user_id: 'secret-user-id',
+        other_param: 'not-secret',
+      },
+      data: {},
+    });
+
+    expect(maskedRequest).toEqual({
+      method: 'POST',
+      baseUrl: 'https://example.com',
+      url: '/api/v1/users',
+    });
   });
 });

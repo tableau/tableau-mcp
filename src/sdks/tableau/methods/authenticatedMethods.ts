@@ -33,6 +33,13 @@ export default abstract class AuthenticatedMethods<
     };
   }
 
+  protected get userId(): string {
+    if (!this._creds) {
+      throw new Error('Authenticate by calling signIn() first');
+    }
+    return this._creds.user.id;
+  }
+
   constructor(apiClient: ZodiosInstance<T>, creds: Credentials) {
     super(apiClient);
     this._creds = creds;

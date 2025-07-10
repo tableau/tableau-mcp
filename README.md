@@ -15,17 +15,23 @@ Key features:
   [VizQL Data Service (VDS) API](https://help.tableau.com/current/api/vizql-data-service/en-us/index.html)
 - Supports collecting data source metadata (columns with descriptions) through the Tableau
   [Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/docs/meta_api_start.html)
+- Supports access to Pulse Metric and Pulse Metric Definitions through the [Pulse API][pulse]
 - Usable by AI tools which support MCP Tools (e.g., Claude Desktop, Cursor and others)
 - Works with any published data source on either Tableau Cloud or Tableau Server
 
 The following MCP tools are currently implemented:
 
-| **Variable**     | **Description**                                                                                |
-| ---------------- | ---------------------------------------------------------------------------------------------- |
-| list-datasources | Retrieves a list of published data sources from a specified Tableau site ([REST API][query])   |
-| list-fields      | Fetches field metadata (name, description) for the specified datasource ([Metadata API][meta]) |
-| query-datasource | Run a Tableau VizQL query ([VDS API][vds])                                                     |
-| read-metadata    | Requests metadata for the specified data source ([VDS API][vds])                               |
+| **Variable**                                      | **Description**                                                                                |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| list-datasources                                  | Retrieves a list of published data sources from a specified Tableau site ([REST API][query])   |
+| list-fields                                       | Fetches field metadata (name, description) for the specified datasource ([Metadata API][meta]) |
+| query-datasource                                  | Run a Tableau VizQL query ([VDS API][vds])                                                     |
+| read-metadata                                     | Requests metadata for the specified data source ([VDS API][vds])                               |
+| list-all-pulse-metric-definitions                 | List All Pulse Metric Definitions ([Pulse API][pulse])                                         |
+| list-pulse-metric-definitions-from-definition-ids | List Pulse Metric Definitions from Metric Definition IDs ([Pulse API][pulse])                  |
+| list-pulse-metrics-from-metric-definition-id      | List Pulse Metrics from Metric Definition ID ([Pulse API][pulse])                              |
+| list-pulse-metrics-from-metric-ids                | List Pulse Metrics from Metric IDs ([Pulse API][pulse])                                        |
+| list-pulse-metric-subscriptions                   | List Pulse Metric Subscriptions for Current User ([Pulse API][pulse])                          |
 
 Note: The Tableau MCP project is currently in early development. As we continue to enhance and
 refine the implementation, the available functionality and tools may evolve. We welcome feedback and
@@ -72,6 +78,7 @@ Tableau MCP works with both Tableau Server and Tableau cloud data with these pre
   [enable it](https://help.tableau.com/current/server-linux/en-us/cli_configuration-set_tsm.htm#featuresvizqldataservicedeploywithtsm))
 - Metadata API must be enabled (Tableau Server users may need to
   [enable it](https://help.tableau.com/current/api/metadata_api/en-us/docs/meta_api_start.html#enable-the-tableau-metadata-api-for-tableau-server))
+- You may need to [enable Tableau Pulse](https://help.tableau.com/current/online/en-us/pulse_set_up.htm) on your Tableau Cloud site to use [Pulse API][pulse] tools (Tableau Server is unable to use Tableau Pulse)
 
 ## Tableau Authentication
 
@@ -158,6 +165,7 @@ These config files will be used in tool configuration explained below.
 | `DISABLE_LOG_MASKING`    | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                            |
 | `INCLUDE_TOOLS`          | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                   |
 | `EXCLUDE_TOOLS`          | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                   |
+| `MAX_RESULT_LIMIT`       | If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.  | Empty string (_no limit_)          | A positive number.                                                                         |
 
 ##### DATASOURCE_CREDENTIALS
 
@@ -210,19 +218,28 @@ Add the `tableau` MCP server to the `mcpServers` object in the config using `con
 
 ### Cursor
 
-For Cursor, create a configuration file `.cursor/mcp.json` in your project directory (for project-specific access) or `~/.cursor/mcp.json` in your home directory (for global access across all projects).
+For Cursor, create a configuration file `.cursor/mcp.json` in your project directory (for
+project-specific access) or `~/.cursor/mcp.json` in your home directory (for global access across
+all projects).
 
-Add the `tableau` MCP server configuration using `config.example.json` or `config.docker.json` as a template. For more details, see the [Cursor MCP documentation](https://docs.cursor.com/context/model-context-protocol).
+Add the `tableau` MCP server configuration using `config.example.json` or `config.docker.json` as a
+template. For more details, see the
+[Cursor MCP documentation](https://docs.cursor.com/context/model-context-protocol).
 
-Node: [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=tableau&config=eyJjb21tYW5kIjoibm9kZSAvZnVsbC1wYXRoLXRvLXRhYmxlYXUtbWNwL2J1aWxkL2luZGV4LmpzIiwiZW52Ijp7IlNFUlZFUiI6Imh0dHBzOi8vbXktdGFibGVhdS1zZXJ2ZXIuY29tIiwiU0lURV9OQU1FIjoiIiwiUEFUX05BTUUiOiIiLCJQQVRfVkFMVUUiOiIifX0%3D)
+Node:
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=tableau&config=eyJjb21tYW5kIjoibm9kZSAvZnVsbC1wYXRoLXRvLXRhYmxlYXUtbWNwL2J1aWxkL2luZGV4LmpzIiwiZW52Ijp7IlNFUlZFUiI6Imh0dHBzOi8vbXktdGFibGVhdS1zZXJ2ZXIuY29tIiwiU0lURV9OQU1FIjoiIiwiUEFUX05BTUUiOiIiLCJQQVRfVkFMVUUiOiIifX0%3D)
 
-Docker: [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=tableau&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIC0tZW52LWZpbGUgcGF0aC90by9lbnYubGlzdCB0YWJsZWF1LW1jcCJ9)
+Docker:
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=tableau&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIC0tZW52LWZpbGUgcGF0aC90by9lbnYubGlzdCB0YWJsZWF1LW1jcCJ9)
 
 ### VSCode
 
-For VSCode, create a `.vscode/mcp.json` file in your workspace folder (for project-specific access) or add the server configuration to your user settings (for global access across all workspaces).
+For VSCode, create a `.vscode/mcp.json` file in your workspace folder (for project-specific access)
+or add the server configuration to your user settings (for global access across all workspaces).
 
-Add the `tableau` MCP server configuration using `config.example.json` or `config.docker.json` as a template. For more details, see the [VSCode MCP documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
+Add the `tableau` MCP server configuration using `config.example.json` or `config.docker.json` as a
+template. For more details, see the
+[VSCode MCP documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
 
 ## Developers
 
@@ -267,3 +284,4 @@ To set up local debugging with breakpoints:
 [meta]: https://help.tableau.com/current/api/metadata_api/en-us/index.html
 [vds]: https://help.tableau.com/current/api/vizql-data-service/en-us/index.html
 [pat]: https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm
+[pulse]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm

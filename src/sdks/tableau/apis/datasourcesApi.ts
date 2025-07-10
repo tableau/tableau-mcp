@@ -1,6 +1,8 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { paginationSchema } from '../types/pagination.js';
+
 const projectSchema = z.object({
   name: z.string(),
   id: z.string(),
@@ -31,8 +33,22 @@ const listDatasourcesRestEndpoint = makeEndpoint({
       schema: z.string().optional(),
       description: 'Filter string in the format field:operator:value (e.g., name:eq:Project Views)',
     },
+    {
+      name: 'pageSize',
+      type: 'Query',
+      schema: z.number().optional(),
+      description:
+        'The number of items to return in one response. The minimum is 1. The maximum is 1000. The default is 100.',
+    },
+    {
+      name: 'pageNumber',
+      type: 'Query',
+      schema: z.number().optional(),
+      description: 'The offset for paging. The default is 1.',
+    },
   ],
   response: z.object({
+    pagination: paginationSchema,
     datasources: z.object({
       datasource: z.optional(z.array(dataSourceSchema)),
     }),

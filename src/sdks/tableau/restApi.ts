@@ -10,6 +10,7 @@ import {
 import AuthenticationMethods from './methods/authenticationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
+import PulseMethods from './methods/pulseMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
 import { Credentials } from './types/credentials.js';
 
@@ -23,10 +24,12 @@ export default class RestApi {
   private _creds?: Credentials;
   private readonly _host: string;
   private readonly _baseUrl: string;
+  private readonly _baseUrlWithoutVersion: string;
 
   private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
   private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
+  private _pulseMethods?: PulseMethods;
   private static _version = '3.24';
 
   private _requestInterceptor?: [RequestInterceptor, ErrorInterceptor?];
@@ -41,6 +44,7 @@ export default class RestApi {
   ) {
     this._host = host;
     this._baseUrl = `${this._host}/api/${RestApi._version}`;
+    this._baseUrlWithoutVersion = `${this._host}/api/-`;
     this._requestInterceptor = options?.requestInterceptor;
     this._responseInterceptor = options?.responseInterceptor;
   }
@@ -84,6 +88,15 @@ export default class RestApi {
     }
 
     return this._vizqlDataServiceMethods;
+  }
+
+  get pulseMethods(): PulseMethods {
+    if (!this._pulseMethods) {
+      this._pulseMethods = new PulseMethods(this._baseUrlWithoutVersion, this.creds);
+      this._addInterceptors(this._baseUrlWithoutVersion, this._pulseMethods.interceptors);
+    }
+
+    return this._pulseMethods;
   }
 
   signIn = async (authConfig: AuthConfig): Promise<void> => {
