@@ -1,4 +1,3 @@
-import { exportedForTesting as configExportedForTesting } from '../../config.js';
 import {
   exportedForTesting as datasourceCredentialsExportedForTesting,
   getDatasourceCredentials,
