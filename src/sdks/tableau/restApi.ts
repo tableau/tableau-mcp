@@ -13,6 +13,7 @@ import AuthenticationMethods, {
 } from './methods/authenticationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
+import ServerMethods from './methods/serverMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
 
 /**
@@ -28,6 +29,7 @@ export default class RestApi {
 
   private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
+  private _serverMethods?: ServerMethods;
   private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
   private static _version = '3.24';
 
@@ -89,6 +91,15 @@ export default class RestApi {
     }
 
     return this._metadataMethods;
+  }
+
+  get serverMethods(): ServerMethods {
+    if (!this._serverMethods) {
+      this._serverMethods = new ServerMethods(this._baseUrl, this.auth);
+      this._addInterceptors(this._baseUrl, this._serverMethods.interceptors);
+    }
+
+    return this._serverMethods;
   }
 
   get vizqlDataServiceMethods(): VizqlDataServiceMethods {

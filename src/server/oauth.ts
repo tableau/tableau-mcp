@@ -4,6 +4,7 @@ import express from 'express';
 import { jwtVerify, SignJWT } from 'jose';
 
 import { getConfig } from '../config.js';
+import RestApi from '../sdks/tableau/restApi.js';
 import { userAgent } from './userAgent.js';
 
 export interface AuthenticatedRequest extends express.Request {
@@ -24,7 +25,6 @@ interface AuthorizationCode {
   clientId: string;
   redirectUri: string;
   codeChallenge: string;
-  userId: string;
   code: string;
   expiresAt: number;
 }
@@ -476,11 +476,15 @@ export class OAuthProvider {
             authCode.codeChallenge,
           );
 
+          const restApi = new RestApi(this.config.server);
+          restApi.accessToken = tokens.access_token;
+          const session = await restApi.serverMethods.getCurrentServerSession();
+
           // Generate tokens
           const refreshTokenId = randomBytes(32).toString('hex');
-          const accessToken = await this.createAccessToken(authCode.userId, tokens);
+          const accessToken = await this.createAccessToken(session.user.id, tokens);
           this.refreshTokens.set(refreshTokenId, {
-            userId: authCode.userId,
+            userId: session.user.id,
             clientId: authCode.clientId,
             tokens,
             expiresAt: Date.now() + this.REFRESH_TOKEN_TIMEOUT_MS,
@@ -587,30 +591,12 @@ export class OAuthProvider {
           return;
         }
 
-        // Get user info
-        // TODO: Sign in to REST API and get user ID
-        // const userResponse = await fetch('/api/v1/me', {
-        //   headers: {
-        //     Authorization: `Bearer ${tokens.access_token}`,
-        //     'User-Agent': this.config.USER_AGENT,
-        //   },
-        // });
-
-        // if (!userResponse.ok) {
-        //   throw new Error('Failed to get user info');
-        // }
-
-        //const userInfo = (await userResponse.json()) as { name: string };
-        // TODO: Get user ID from Tableau Server
-        const userId = randomBytes(32).toString('hex');
-
         // Generate authorization code
         const authorizationCode = randomBytes(32).toString('hex');
         this.authorizationCodes.set(authorizationCode, {
           clientId: pendingAuth.clientId,
           redirectUri: pendingAuth.redirectUri,
           codeChallenge: pendingAuth.codeChallenge,
-          userId,
           code: code as string,
           expiresAt: Date.now() + this.AUTHORIZATION_CODE_TIMEOUT_MS,
         });
