@@ -38,7 +38,7 @@ contributions to help shape the future of this project.
 Follow these steps to install Tableau MCP for the first time:
 
 1. Clone the repository
-2. Install [Node.js](https://nodejs.org/en/download) (tested with 22.15.0 LTS)
+2. Install [Node.js >= 22.7.5](https://nodejs.org/en/download) (tested with 22.15.0 LTS)
 3. `npm install`
 4. `npm run build`
 
