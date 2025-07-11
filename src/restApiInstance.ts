@@ -67,7 +67,9 @@ export const useRestApi = async <T>({
   try {
     return await callback(restApi);
   } finally {
-    await restApi.signOut();
+    if (config.auth === 'pat') {
+      await restApi.signOut();
+    }
   }
 };
 
