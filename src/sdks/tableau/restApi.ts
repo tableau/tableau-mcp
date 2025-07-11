@@ -63,7 +63,7 @@ export default class RestApi {
 
   setCredentials(accessToken: string, userId: string): void {
     const parts = accessToken.split('|');
-    if (parts.length > 2) {
+    if (parts.length < 3) {
       throw new Error('Could not determine site ID. Access token must have 3 parts.');
     }
 
