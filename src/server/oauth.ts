@@ -25,14 +25,15 @@ interface AuthorizationCode {
   clientId: string;
   redirectUri: string;
   codeChallenge: string;
-  code: string;
+  userId: string;
+  tokens: { accessToken: string; refreshToken: string; expiresIn: number };
   expiresAt: number;
 }
 
 interface RefreshTokenData {
   userId: string;
   clientId: string;
-  tokens: { accessToken: string; refreshToken: string };
+  tokens: { accessToken: string; refreshToken: string; expiresIn: number };
   expiresAt: number;
 }
 
@@ -230,7 +231,7 @@ export class OAuthProvider {
      */
     app.get('/.well-known/oauth-protected-resource', (req, res) => {
       res.json({
-        resource: this.config.server,
+        resource: `${req.protocol}://${req.get('host')}`,
         authorization_servers: [`${req.protocol}://${req.get('host')}`],
         bearer_methods_supported: ['header'],
       });
@@ -469,24 +470,13 @@ export class OAuthProvider {
             return;
           }
 
-          const tokens = await this.exchangeAuthorizationCode(
-            authCode.code,
-            this.config.redirectUri,
-            '{B3838D73-E2A1-430C-A5AB-A52793B2B95A}',
-            authCode.codeChallenge,
-          );
-
-          const restApi = new RestApi(this.config.server);
-          restApi.accessToken = tokens.access_token;
-          const session = await restApi.serverMethods.getCurrentServerSession();
-
           // Generate tokens
           const refreshTokenId = randomBytes(32).toString('hex');
-          const accessToken = await this.createAccessToken(session.user.id, tokens);
+          const accessToken = await this.createAccessToken(authCode.userId, authCode.tokens);
           this.refreshTokens.set(refreshTokenId, {
-            userId: session.user.id,
+            userId: authCode.userId,
             clientId: authCode.clientId,
-            tokens,
+            tokens: authCode.tokens,
             expiresAt: Date.now() + this.REFRESH_TOKEN_TIMEOUT_MS,
           });
 
@@ -495,7 +485,7 @@ export class OAuthProvider {
           res.json({
             access_token: accessToken,
             token_type: 'Bearer',
-            expires_in: tokens.expires_in,
+            expires_in: authCode.tokens.expiresIn,
             refresh_token: refreshTokenId,
             scope: 'read',
           });
@@ -591,13 +581,30 @@ export class OAuthProvider {
           return;
         }
 
+        const tokens = await this.exchangeAuthorizationCode(
+          code as string,
+          this.config.redirectUri,
+          '{B3838D73-E2A1-430C-A5AB-A52793B2B95A}',
+          pendingAuth.codeChallenge,
+        );
+
+        const restApi = new RestApi(this.config.server);
+        restApi.accessToken = tokens.access_token;
+        const session = await restApi.serverMethods.getCurrentServerSession();
+        const userId = session.user.id;
+
         // Generate authorization code
         const authorizationCode = randomBytes(32).toString('hex');
         this.authorizationCodes.set(authorizationCode, {
           clientId: pendingAuth.clientId,
           redirectUri: pendingAuth.redirectUri,
           codeChallenge: pendingAuth.codeChallenge,
-          code: code as string,
+          userId,
+          tokens: {
+            accessToken: tokens.access_token,
+            refreshToken: tokens.refresh_token,
+            expiresIn: tokens.expires_in,
+          },
           expiresAt: Date.now() + this.AUTHORIZATION_CODE_TIMEOUT_MS,
         });
 
@@ -633,16 +640,16 @@ export class OAuthProvider {
    */
   private async createAccessToken(
     userId: string,
-    tokens: { access_token: string; refresh_token: string; expires_in: number },
+    tokens: { accessToken: string; refreshToken: string; expiresIn: number },
   ): Promise<string> {
     return await new SignJWT({
       sub: userId,
-      tableau_access_token: tokens.access_token,
-      tableau_refresh_token: tokens.refresh_token,
+      tableau_access_token: tokens.accessToken,
+      tableau_refresh_token: tokens.refreshToken,
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setExpirationTime(Date.now() + tokens.expires_in * 1000)
+      .setExpirationTime(Date.now() + tokens.expiresIn * 1000)
       .setAudience('tableau-mcp-server')
       .setIssuer(this.config.oauthIssuer)
       .sign(this.jwtSecret);
