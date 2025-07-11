@@ -7,11 +7,17 @@ import { getConfig } from '../config.js';
 import RestApi from '../sdks/tableau/restApi.js';
 import { userAgent } from './userAgent.js';
 
-export interface AuthenticatedRequest extends express.Request {
+type AuthenticatedRequest = express.Request & {
   auth?: AuthInfo;
-}
+};
 
-interface PendingAuthorization {
+type Tokens = {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+};
+
+type PendingAuthorization = {
   clientId: string;
   redirectUri: string;
   codeChallenge: string;
@@ -19,23 +25,23 @@ interface PendingAuthorization {
   state: string;
   scope: string;
   tableauState: string;
-}
+};
 
-interface AuthorizationCode {
+type AuthorizationCode = {
   clientId: string;
   redirectUri: string;
   codeChallenge: string;
   userId: string;
-  tokens: { accessToken: string; refreshToken: string; expiresIn: number };
+  tokens: Tokens;
   expiresAt: number;
-}
+};
 
-interface RefreshTokenData {
+type RefreshTokenData = {
   userId: string;
   clientId: string;
-  tokens: { accessToken: string; refreshToken: string; expiresIn: number };
+  tokens: Tokens;
   expiresAt: number;
-}
+};
 
 /**
  * OAuth 2.1 Provider
@@ -66,48 +72,15 @@ export class OAuthProvider {
   private readonly authorizationCodes = new Map<string, AuthorizationCode>();
   private readonly refreshTokens = new Map<string, RefreshTokenData>();
 
+  private readonly jwtAudience: string;
+  private readonly jwtIssuer: string;
   private readonly AUTHORIZATION_CODE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
   private readonly REFRESH_TOKEN_TIMEOUT_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
   constructor() {
     this.jwtSecret = new TextEncoder().encode(this.config.jwtSecret);
-  }
-
-  /**
-   * Verifies JWT access token and extracts credentials
-   *
-   * @remarks
-   * MCP OAuth Step 8: Authenticated MCP Request
-   *
-   * Validates JWT signature and expiration.
-   * Extracts access/refresh tokens for API calls.
-   *
-   * @param token - JWT access token from Authorization header
-   * @param req - Express request object (optional)
-   * @returns AuthInfo with user details and tokens
-   */
-  async verifyAccessToken(token: string, _req?: express.Request): Promise<AuthInfo> {
-    try {
-      const { payload } = await jwtVerify(token, this.jwtSecret, {
-        audience: 'tableau-mcp-server',
-        issuer: this.config.oauthIssuer,
-      });
-
-      return {
-        token,
-        clientId: 'mcp-client',
-        scopes: ['read'],
-        expiresAt: payload.exp,
-        extra: {
-          userId: payload.sub,
-          accessToken: payload.tableau_access_token,
-          refreshToken: payload.tableau_refresh_token,
-        },
-      };
-    } catch {
-      // TODO: Auto-refresh logic would go here
-      throw new Error('Invalid or expired access token');
-    }
+    this.jwtAudience = 'tableau-mcp-server';
+    this.jwtIssuer = this.config.oauthIssuer;
   }
 
   /**
@@ -163,7 +136,7 @@ export class OAuthProvider {
       const token = authHeader.slice(7);
 
       try {
-        req.auth = await this.verifyAccessToken(token, req);
+        req.auth = await this.verifyAccessToken(token);
         next();
       } catch {
         // For SSE requests (GET), provide proper SSE error response
@@ -420,6 +393,93 @@ export class OAuthProvider {
     });
 
     /**
+     * OAuth Callback Handler
+     *
+     * @remarks
+     * MCP OAuth Step 6: OAuth Callback
+     *
+     * Receives callback from after user authorization.
+     * Exchanges code for tokens, generates MCP authorization
+     * code, and redirects back to client with code.
+     */
+    app.get('/Callback', async (req, res) => {
+      const { code, state, error } = req.query;
+
+      if (error) {
+        res.status(400).json({
+          error: 'access_denied',
+          error_description: 'User denied authorization',
+        });
+        return;
+      }
+
+      if (!code || !state) {
+        res.status(400).json({
+          error: 'invalid_request',
+          error_description: 'Missing code or state parameter',
+        });
+        return;
+      }
+
+      try {
+        // Parse state to get auth key and Tableau state
+        const [authKey, tableauState] = (state as string).split(':');
+        const pendingAuth = this.pendingAuthorizations.get(authKey);
+
+        if (!pendingAuth || pendingAuth.tableauState !== tableauState) {
+          res.status(400).json({
+            error: 'invalid_request',
+            error_description: `Invalid state parameter.`,
+          });
+          return;
+        }
+
+        const tokens = await this.exchangeAuthorizationCode(
+          code as string,
+          this.config.redirectUri,
+          '{B3838D73-E2A1-430C-A5AB-A52793B2B95A}',
+          pendingAuth.codeChallenge,
+        );
+
+        const restApi = new RestApi(this.config.server);
+        restApi.accessToken = tokens.access_token;
+        const session = await restApi.serverMethods.getCurrentServerSession();
+        const userId = session.user.id;
+
+        // Generate authorization code
+        const authorizationCode = randomBytes(32).toString('hex');
+        this.authorizationCodes.set(authorizationCode, {
+          clientId: pendingAuth.clientId,
+          redirectUri: pendingAuth.redirectUri,
+          codeChallenge: pendingAuth.codeChallenge,
+          userId,
+          tokens: {
+            accessToken: tokens.access_token,
+            refreshToken: tokens.refresh_token,
+            expiresIn: tokens.expires_in,
+          },
+          expiresAt: Date.now() + this.AUTHORIZATION_CODE_TIMEOUT_MS,
+        });
+
+        // Clean up
+        this.pendingAuthorizations.delete(authKey);
+
+        // Redirect back to client with authorization code
+        const redirectUrl = new URL(pendingAuth.redirectUri);
+        redirectUrl.searchParams.set('code', authorizationCode);
+        redirectUrl.searchParams.set('state', pendingAuth.state);
+
+        res.redirect(redirectUrl.toString());
+      } catch (error) {
+        console.error('OAuth callback error:', error);
+        res.status(500).json({
+          error: 'server_error',
+          error_description: 'Internal server error during authorization',
+        });
+      }
+    });
+
+    /**
      * OAuth 2.1 Token Endpoint
      *
      * @remarks
@@ -530,93 +590,42 @@ export class OAuthProvider {
         return;
       }
     });
+  }
 
-    /**
-     * OAuth Callback Handler
-     *
-     * @remarks
-     * MCP OAuth Step 6: OAuth Callback
-     *
-     * Receives callback from after user authorization.
-     * Exchanges code for tokens, generates MCP authorization
-     * code, and redirects back to client with code.
-     */
-    app.get('/Callback', async (req, res) => {
-      const { code, state, error } = req.query;
+  /**
+   * Verifies JWT access token and extracts credentials
+   *
+   * @remarks
+   * MCP OAuth Step 8: Authenticated MCP Request
+   *
+   * Validates JWT signature and expiration.
+   * Extracts access/refresh tokens for API calls.
+   *
+   * @param token - JWT access token from Authorization header
+   * @returns AuthInfo with user details and tokens
+   */
+  async verifyAccessToken(token: string): Promise<AuthInfo> {
+    try {
+      const { payload } = await jwtVerify(token, this.jwtSecret, {
+        audience: this.jwtAudience,
+        issuer: this.jwtIssuer,
+      });
 
-      if (error) {
-        res.status(400).json({
-          error: 'access_denied',
-          error_description: 'User denied authorization',
-        });
-        return;
-      }
-
-      if (!code || !state) {
-        res.status(400).json({
-          error: 'invalid_request',
-          error_description: 'Missing code or state parameter',
-        });
-        return;
-      }
-
-      try {
-        // Parse state to get auth key and Tableau state
-        const [authKey, tableauState] = (state as string).split(':');
-        const pendingAuth = this.pendingAuthorizations.get(authKey);
-
-        if (!pendingAuth || pendingAuth.tableauState !== tableauState) {
-          res.status(400).json({
-            error: 'invalid_request',
-            error_description: `Invalid state parameter.`,
-          });
-          return;
-        }
-
-        const tokens = await this.exchangeAuthorizationCode(
-          code as string,
-          this.config.redirectUri,
-          '{B3838D73-E2A1-430C-A5AB-A52793B2B95A}',
-          pendingAuth.codeChallenge,
-        );
-
-        const restApi = new RestApi(this.config.server);
-        restApi.accessToken = tokens.access_token;
-        const session = await restApi.serverMethods.getCurrentServerSession();
-        const userId = session.user.id;
-
-        // Generate authorization code
-        const authorizationCode = randomBytes(32).toString('hex');
-        this.authorizationCodes.set(authorizationCode, {
-          clientId: pendingAuth.clientId,
-          redirectUri: pendingAuth.redirectUri,
-          codeChallenge: pendingAuth.codeChallenge,
-          userId,
-          tokens: {
-            accessToken: tokens.access_token,
-            refreshToken: tokens.refresh_token,
-            expiresIn: tokens.expires_in,
-          },
-          expiresAt: Date.now() + this.AUTHORIZATION_CODE_TIMEOUT_MS,
-        });
-
-        // Clean up
-        this.pendingAuthorizations.delete(authKey);
-
-        // Redirect back to client with authorization code
-        const redirectUrl = new URL(pendingAuth.redirectUri);
-        redirectUrl.searchParams.set('code', authorizationCode);
-        redirectUrl.searchParams.set('state', pendingAuth.state);
-
-        res.redirect(redirectUrl.toString());
-      } catch (error) {
-        console.error('OAuth callback error:', error);
-        res.status(500).json({
-          error: 'server_error',
-          error_description: 'Internal server error during authorization',
-        });
-      }
-    });
+      return {
+        token,
+        clientId: 'mcp-client',
+        scopes: ['read'],
+        expiresAt: payload.exp,
+        extra: {
+          userId: payload.sub,
+          accessToken: payload.tableau_access_token,
+          refreshToken: payload.tableau_refresh_token,
+        },
+      };
+    } catch {
+      // TODO: Auto-refresh logic would go here
+      throw new Error('Invalid or expired access token');
+    }
   }
 
   /**
@@ -630,10 +639,7 @@ export class OAuthProvider {
    * @param tokens - access and refresh tokens
    * @returns Signed JWT token for MCP authentication
    */
-  private async createAccessToken(
-    userId: string,
-    tokens: { accessToken: string; refreshToken: string; expiresIn: number },
-  ): Promise<string> {
+  private async createAccessToken(userId: string, tokens: Tokens): Promise<string> {
     return await new SignJWT({
       sub: userId,
       tableau_access_token: tokens.accessToken,
@@ -642,8 +648,8 @@ export class OAuthProvider {
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
       .setExpirationTime(Date.now() + tokens.expiresIn * 1000)
-      .setAudience('tableau-mcp-server')
-      .setIssuer(this.config.oauthIssuer)
+      .setAudience(this.jwtAudience)
+      .setIssuer(this.jwtIssuer)
       .sign(this.jwtSecret);
   }
 
