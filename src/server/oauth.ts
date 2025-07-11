@@ -78,7 +78,6 @@ export class OAuthProvider {
    *
    * @remarks
    * MCP OAuth Step 8: Authenticated MCP Request
-   * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization#authenticated-requests
    *
    * Validates JWT signature and expiration.
    * Extracts access/refresh tokens for API calls.
@@ -116,7 +115,6 @@ export class OAuthProvider {
    *
    * @remarks
    * MCP OAuth Step 1: Initial Request (401 Unauthorized)
-   * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization#initial-request
    *
    * This middleware checks for Bearer token authorization.
    * If no token is present, returns 401 with WWW-Authenticate header
@@ -197,7 +195,6 @@ export class OAuthProvider {
      *
      * @remarks
      * MCP OAuth Step 3: Authorization Server Metadata
-     * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization#authorization-server-metadata
      *
      * Returns metadata about the authorization server including
      * available endpoints, supported flows, and capabilities.
@@ -223,7 +220,6 @@ export class OAuthProvider {
      *
      * @remarks
      * MCP OAuth Step 2: Resource Metadata Discovery
-     * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization#metadata-discovery
      *
      * Returns metadata about the protected resource and its
      * authorization servers. Client discovers this URL from
@@ -242,7 +238,6 @@ export class OAuthProvider {
      *
      * @remarks
      * MCP OAuth Step 4: Dynamic Client Registration (Optional)
-     * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization#client-registration
      *
      * Allows clients to dynamically register with the authorization
      * server. For public clients (like desktop apps), no client
@@ -317,7 +312,6 @@ export class OAuthProvider {
      *
      * @remarks
      * MCP OAuth Step 5: Authorization Request with PKCE
-     * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization#authorization-request
      *
      * Handles authorization requests with PKCE parameters.
      * Validates request, stores pending authorization, and
@@ -430,7 +424,6 @@ export class OAuthProvider {
      *
      * @remarks
      * MCP OAuth Step 7: Token Exchange with PKCE Verification
-     * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization#token-exchange
      *
      * Exchanges authorization code for access token.
      * Verifies PKCE code_verifier matches the original challenge.
@@ -543,7 +536,6 @@ export class OAuthProvider {
      *
      * @remarks
      * MCP OAuth Step 6: OAuth Callback
-     * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization#callback
      *
      * Receives callback from after user authorization.
      * Exchanges code for tokens, generates MCP authorization
