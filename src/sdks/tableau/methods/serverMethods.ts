@@ -1,11 +1,12 @@
 import { Zodios } from '@zodios/core';
 
 import { serverApis, Session } from '../apis/serverApi.js';
-import AuthenticatedMethods, { Auth } from './authenticatedMethods.js';
+import { Credentials } from '../types/credentials.js';
+import AuthenticatedMethods from './authenticatedMethods.js';
 
 export default class ServerMethods extends AuthenticatedMethods<typeof serverApis> {
-  constructor(baseUrl: string, auth: Auth) {
-    super(new Zodios(baseUrl, serverApis), auth);
+  constructor(baseUrl: string, creds: Credentials) {
+    super(new Zodios(baseUrl, serverApis), creds);
   }
 
   /**

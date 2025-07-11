@@ -9,16 +9,6 @@ type AuthHeaders = {
   };
 };
 
-export type Auth =
-  | {
-      type: 'credentials';
-      creds: Credentials;
-    }
-  | {
-      type: 'accessToken';
-      accessToken: string;
-    };
-
 /**
  * Base abstract class for any methods classes that require authentication.
  *
@@ -29,30 +19,30 @@ export type Auth =
 export default abstract class AuthenticatedMethods<
   T extends ZodiosEndpointDefinitions,
 > extends Methods<T> {
-  private _auth: Auth;
+  private _creds: Credentials;
 
   protected get authHeader(): AuthHeaders {
-    if (this._auth.type === 'accessToken') {
-      return {
-        headers: {
-          'X-Tableau-Auth': this._auth.accessToken,
-        },
-      };
-    }
-
-    if (!this._auth.creds) {
+    if (!this._creds) {
       throw new Error('Authenticate by calling signIn() first');
     }
 
     return {
       headers: {
-        'X-Tableau-Auth': this._auth.creds.token,
+        'X-Tableau-Auth': this._creds.token,
       },
     };
   }
 
-  constructor(apiClient: ZodiosInstance<T>, auth: Auth) {
+  protected get userId(): string {
+    if (!this._creds) {
+      throw new Error('Authenticate by calling signIn() first');
+    }
+
+    return this._creds.user.id;
+  }
+
+  constructor(apiClient: ZodiosInstance<T>, creds: Credentials) {
     super(apiClient);
-    this._auth = auth;
+    this._creds = creds;
   }
 }

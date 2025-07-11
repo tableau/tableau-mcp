@@ -23,7 +23,7 @@ const getNewRestApiInstanceAsync = async (
   config: Config,
   requestId: RequestId,
   server: Server,
-  accessToken?: string,
+  authInfo?: { accessToken?: string; userId?: string },
 ): Promise<RestApi> => {
   const restApi = new RestApi(config.server, {
     requestInterceptor: [
@@ -44,7 +44,7 @@ const getNewRestApiInstanceAsync = async (
       siteName: config.siteName,
     });
   } else {
-    restApi.accessToken = accessToken ?? '';
+    restApi.setCredentials(authInfo?.accessToken ?? '', authInfo?.userId ?? '');
   }
 
   return restApi;
@@ -55,15 +55,15 @@ export const useRestApi = async <T>({
   requestId,
   server,
   callback,
-  accessToken,
+  authInfo,
 }: {
   config: Config;
   requestId: RequestId;
   server: Server;
   callback: (restApi: RestApi) => Promise<T>;
-  accessToken?: string;
+  authInfo?: { accessToken?: string; userId?: string };
 }): Promise<T> => {
-  const restApi = await getNewRestApiInstanceAsync(config, requestId, server, accessToken);
+  const restApi = await getNewRestApiInstanceAsync(config, requestId, server, authInfo);
   try {
     return await callback(restApi);
   } finally {

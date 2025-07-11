@@ -62,7 +62,10 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             config,
             requestId,
             server,
-            accessToken: authInfo?.extra?.accessToken as string,
+            authInfo: {
+              accessToken: authInfo?.extra?.accessToken as string,
+              userId: authInfo?.extra?.userId as string,
+            },
             callback: async (restApi) => {
               return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
             },

@@ -20,6 +20,7 @@ export class Config {
   redirectUri: string;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
+  maxResultLimit: number | null;
 
   constructor() {
     const { SITE_NAME: siteName } = process.env;
@@ -40,13 +41,14 @@ export class Config {
       REDIRECT_URI: redirectUri,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
+      MAX_RESULT_LIMIT: maxResultLimit,
     } = process.env;
 
     const defaultPort = 3927;
     const httpPortNumber = parseInt(httpPort || defaultPort.toString(), 10);
 
     this.siteName = siteName ?? '';
-    this.auth = auth === 'pat' ? 'pat' : 'oauth';
+    this.auth = auth === 'oauth' ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : 'stdio';
     this.httpPort = isNaN(httpPortNumber) ? defaultPort : httpPortNumber;
     this.sslKey = sslKey ?? '';
@@ -57,6 +59,10 @@ export class Config {
     this.oauthIssuer = oauthIssuer ?? '';
     this.jwtSecret = jwtSecret ?? '';
     this.redirectUri = redirectUri ?? '';
+
+    const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
+    this.maxResultLimit =
+      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
 
     this.includeTools = includeTools
       ? includeTools

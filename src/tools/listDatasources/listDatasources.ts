@@ -5,11 +5,14 @@ import { z } from 'zod';
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server/server.js';
+import { paginate } from '../../utils/paginate.js';
 import { Tool } from '../tool.js';
 import { parseAndValidateFilterString } from './datasourcesFilterUtils.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
+  pageSize: z.number().gt(0).optional(),
+  limit: z.number().gt(0).optional(),
 };
 
 export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -91,25 +94,48 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter }, { requestId, authInfo }): Promise<CallToolResult> => {
+    callback: async (
+      { filter, pageSize, limit },
+      { requestId, authInfo },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       const validatedFilter = filter ? parseAndValidateFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
         requestId,
         authInfo,
-        args: { filter },
+        args: { filter, pageSize, limit },
         callback: async () => {
           return new Ok(
             await useRestApi({
               config,
               requestId,
               server,
-              accessToken: authInfo?.extra?.accessToken as string,
+              authInfo: {
+                accessToken: authInfo?.extra?.accessToken as string,
+                userId: authInfo?.extra?.userId as string,
+              },
               callback: async (restApi) => {
-                return await restApi.datasourcesMethods.listDatasources(
-                  restApi.siteId,
-                  validatedFilter ?? '',
-                );
+                const datasources = await paginate({
+                  pageConfig: {
+                    pageSize,
+                    limit: config.maxResultLimit
+                      ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                      : limit,
+                  },
+                  getDataFn: async (pageConfig) => {
+                    const { pagination, datasources: data } =
+                      await restApi.datasourcesMethods.listDatasources({
+                        siteId: restApi.siteId,
+                        filter: validatedFilter ?? '',
+                        pageSize: pageConfig.pageSize,
+                        pageNumber: pageConfig.pageNumber,
+                      });
+
+                    return { pagination, data };
+                  },
+                });
+
+                return datasources;
               },
             }),
           );

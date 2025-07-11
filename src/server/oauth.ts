@@ -442,7 +442,7 @@ export class OAuthProvider {
         );
 
         const restApi = new RestApi(this.config.server);
-        restApi.accessToken = tokens.access_token;
+        restApi.setCredentials(tokens.access_token, tokens.user_id);
         const session = await restApi.serverMethods.getCurrentServerSession();
         const userId = session.user.id;
 

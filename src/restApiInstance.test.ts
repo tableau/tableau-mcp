@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { getConfig } from './config.js';
 import { log } from './logging/log.js';
 import {
   getRequestErrorInterceptor,
@@ -11,6 +12,7 @@ import {
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 import RestApi from './sdks/tableau/restApi.js';
 import { Server } from './server/server.js';
+import { userAgent } from './server/userAgent.js';
 
 vi.mock('./sdks/tableau/restApi.js', () => ({
   default: vi.fn().mockImplementation(() => ({
@@ -28,14 +30,15 @@ vi.mock('./logging/log.js', () => ({
 }));
 
 describe('restApiInstance', () => {
-  const mockHost = 'https://test.tableau.com';
+  const mockHost = 'https://my-tableau-server.com';
   const mockAuthConfig: AuthConfig = {
     type: 'pat',
-    patName: 'test-token',
-    patValue: 'test-secret',
-    siteName: 'test-site',
+    patName: 'sponge',
+    patValue: 'bob',
+    siteName: 'tc25',
   };
   const mockRequestId = 'test-request-id';
+  const mockConfig = getConfig();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -43,13 +46,12 @@ describe('restApiInstance', () => {
 
   describe('useRestApi', () => {
     it('should create a new RestApi instance and sign in', async () => {
-      const restApi = await useRestApi(
-        mockHost,
-        mockAuthConfig,
-        mockRequestId,
-        new Server(),
-        (restApi) => Promise.resolve(restApi),
-      );
+      const restApi = await useRestApi({
+        config: mockConfig,
+        requestId: mockRequestId,
+        server: new Server(),
+        callback: (restApi) => Promise.resolve(restApi),
+      });
 
       expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
       expect(restApi.signIn).toHaveBeenCalledWith(mockAuthConfig);
@@ -69,7 +71,7 @@ describe('restApiInstance', () => {
 
       interceptor(mockRequest);
 
-      expect(mockRequest.headers['User-Agent']).toBe(`${server.name}/${server.version}`);
+      expect(mockRequest.headers['User-Agent']).toBe(userAgent);
       expect(log.info).toHaveBeenCalledWith(
         server,
         expect.objectContaining({

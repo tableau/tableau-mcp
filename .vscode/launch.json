@@ -22,6 +22,7 @@
         "DEFAULT_LOG_LEVEL": "${config:tableau.mcp.DEFAULT_LOG_LEVEL}",
         "INCLUDE_TOOLS": "${config:tableau.mcp.INCLUDE_TOOLS}",
         "EXCLUDE_TOOLS": "${config:tableau.mcp.EXCLUDE_TOOLS}",
+        "MAX_RESULT_LIMIT": "${config:tableau.mcp.MAX_RESULT_LIMIT}",
         "DISABLE_LOG_MASKING": "${config:tableau.mcp.DISABLE_LOG_MASKING}"
       },
       "args": ["build/index.js"],

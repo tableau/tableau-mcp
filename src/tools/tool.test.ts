@@ -61,6 +61,7 @@ describe('Tool', () => {
     const spy = vi.spyOn(tool, 'logInvocation');
     const result = await tool.logAndExecute({
       requestId: '2',
+      authInfo: undefined,
       args: { param1: 'test' },
       callback,
     });
@@ -86,6 +87,7 @@ describe('Tool', () => {
 
     const result = await tool.logAndExecute({
       requestId: '2',
+      authInfo: undefined,
       args: { param1: 'test' },
       callback,
     });
@@ -101,6 +103,7 @@ describe('Tool', () => {
 
     await tool.logAndExecute({
       requestId: '2',
+      authInfo: undefined,
       args,
       callback: vi.fn(),
     });
@@ -128,6 +131,7 @@ describe('Tool', () => {
 
     const result = await tool.logAndExecute({
       requestId: '2',
+      authInfo: undefined,
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok('test')),
     });
