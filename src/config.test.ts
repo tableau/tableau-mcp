@@ -22,6 +22,7 @@ describe('Config', () => {
       DISABLE_LOG_MASKING: undefined,
       INCLUDE_TOOLS: undefined,
       EXCLUDE_TOOLS: undefined,
+      MAX_RESULT_LIMIT: undefined,
     };
   });
 
@@ -154,6 +155,61 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.disableLogMasking).toBe(true);
+  });
+
+  it('should set maxResultLimit to null when not specified', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'https://test-server.com',
+      SITE_NAME: 'test-site',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: 'test-pat-value',
+    };
+
+    const config = new Config();
+    expect(config.maxResultLimit).toBe(null);
+  });
+
+  it('should set maxResultLimit to null when specified as a non-number', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'https://test-server.com',
+      SITE_NAME: 'test-site',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: 'test-pat-value',
+      MAX_RESULT_LIMIT: 'abc',
+    };
+
+    const config = new Config();
+    expect(config.maxResultLimit).toBe(null);
+  });
+
+  it('should set maxResultLimit to null when specified as a negative number', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'https://test-server.com',
+      SITE_NAME: 'test-site',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: 'test-pat-value',
+      MAX_RESULT_LIMIT: '-100',
+    };
+
+    const config = new Config();
+    expect(config.maxResultLimit).toBe(null);
+  });
+
+  it('should set maxResultLimit to the specified value when specified', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'https://test-server.com',
+      SITE_NAME: 'test-site',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: 'test-pat-value',
+      MAX_RESULT_LIMIT: '100',
+    };
+
+    const config = new Config();
+    expect(config.maxResultLimit).toBe(100);
   });
 
   describe('Tool filtering', () => {
