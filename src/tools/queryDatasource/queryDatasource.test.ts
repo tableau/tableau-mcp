@@ -190,6 +190,312 @@ describe('queryDatasourceTool', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toBe('requestId: test-request-id, error: API Error');
   });
+
+  describe('Filter Validation', () => {
+    it('should return validation error for SET filter with invalid values and suggest fuzzy matches when main query returns empty', async () => {
+      // Mock main query to return empty results (triggering validation)
+      mocks.mockQueryDatasource
+        .mockResolvedValueOnce(new Ok({ data: [] }))
+        // Mock validation query to return existing values
+        .mockResolvedValueOnce(
+          new Ok({
+            data: [
+              { DistinctValues: 'East' },
+              { DistinctValues: 'West' },
+              { DistinctValues: 'North' },
+              { DistinctValues: 'South' },
+              { DistinctValues: 'Central' },
+            ],
+          })
+        );
+
+      const result = await queryDatasourceTool.callback(
+        {
+          datasourceLuid: 'test-datasource-luid',
+          query: {
+            fields: [{ fieldCaption: 'Sales', function: 'SUM' }],
+            filters: [
+              {
+                field: { fieldCaption: 'Region' },
+                filterType: 'SET',
+                values: ['East', 'Wast'], // 'Wast' is a typo for 'West'
+              },
+            ],
+          },
+        },
+        {
+          signal: new AbortController().signal,
+          requestId: 'test-request-id',
+          sendNotification: vi.fn(),
+          sendRequest: vi.fn(),
+        }
+      );
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.content[0].text).toContain('Filter validation failed for field "Region"');
+        expect(result.content[0].text).toContain('Wast');
+        expect(result.content[0].text).toContain('Did you mean:');
+        expect(result.content[0].text).toContain('West'); // Should suggest fuzzy match
+        expect(result.content[0].text).toContain('evaluate whether you included the wrong filter value');
+      }
+
+      // Should call main query first, then validation query
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return validation error for MATCH filter with invalid pattern and suggest similar values when main query returns empty', async () => {
+      // Mock main query to return empty results (triggering validation)
+      mocks.mockQueryDatasource
+        .mockResolvedValueOnce(new Ok({ data: [] }))
+        // Mock validation query to return sample values that don't match exactly but are similar
+        .mockResolvedValueOnce(
+          new Ok({
+            data: [
+              { SampleValues: 'John Doe' },
+              { SampleValues: 'Jane Smith' },
+              { SampleValues: 'Bob Wilson' },
+              { SampleValues: 'Alice Brown' },
+              { SampleValues: 'Charlie Davis' },
+            ],
+          })
+        );
+
+      const result = await queryDatasourceTool.callback(
+        {
+          datasourceLuid: 'test-datasource-luid',
+          query: {
+            fields: [{ fieldCaption: 'Sales', function: 'SUM' }],
+            filters: [
+              {
+                field: { fieldCaption: 'Customer Name' },
+                filterType: 'MATCH',
+                startsWith: 'Jon', // Similar to 'John' but no exact matches
+              },
+            ],
+          },
+        },
+        {
+          signal: new AbortController().signal,
+          requestId: 'test-request-id',
+          sendNotification: vi.fn(),
+          sendRequest: vi.fn(),
+        }
+      );
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        expect(result.content[0].text).toContain('Filter validation failed for field "Customer Name"');
+        expect(result.content[0].text).toContain('starts with "Jon"');
+        expect(result.content[0].text).toContain('Similar values in this field:');
+        expect(result.content[0].text).toContain('John Doe'); // Should suggest similar value
+        expect(result.content[0].text).toContain('evaluate whether you included the wrong filter value');
+      }
+
+      // Should call main query first, then validation query
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return main query results when query has data (no validation triggered)', async () => {
+      const mockMainQueryResult = {
+        data: [
+          { Region: 'East', 'SUM(Sales)': 100000 },
+          { Region: 'West', 'SUM(Sales)': 150000 },
+        ],
+      };
+
+      // Mock main query to return data (validation won't be triggered)
+      mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
+
+      const result = await queryDatasourceTool.callback(
+        {
+          datasourceLuid: 'test-datasource-luid',
+          query: {
+            fields: [
+              { fieldCaption: 'Region' },
+              { fieldCaption: 'Sales', function: 'SUM' },
+            ],
+            filters: [
+              {
+                field: { fieldCaption: 'Region' },
+                filterType: 'SET',
+                values: ['East', 'West'],
+              },
+            ],
+          },
+        },
+        {
+          signal: new AbortController().signal,
+          requestId: 'test-request-id',
+          sendNotification: vi.fn(),
+          sendRequest: vi.fn(),
+        }
+      );
+
+      expect(result.isError).toBe(false);
+      if (!result.isError) {
+        expect(JSON.parse(result.content[0].text as string)).toEqual(mockMainQueryResult);
+      }
+
+      // Should only call the main query (validation not triggered)
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return main query results when no SET/MATCH filters are present', async () => {
+      const mockMainQueryResult = {
+        data: [
+          { Region: 'East', 'SUM(Sales)': 100000 },
+        ],
+      };
+
+      // Mock main query only
+      mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
+
+      const result = await queryDatasourceTool.callback(
+        {
+          datasourceLuid: 'test-datasource-luid',
+          query: {
+            fields: [
+              { fieldCaption: 'Region' },
+              { fieldCaption: 'Sales', function: 'SUM' },
+            ],
+            filters: [
+              {
+                field: { fieldCaption: 'Sales' },
+                filterType: 'QUANTITATIVE_NUMERICAL',
+                quantitativeFilterType: 'MIN',
+                min: 1000,
+              },
+            ],
+          },
+        },
+        {
+          signal: new AbortController().signal,
+          requestId: 'test-request-id',
+          sendNotification: vi.fn(),
+          sendRequest: vi.fn(),
+        }
+      );
+
+      expect(result.isError).toBe(false);
+      if (!result.isError) {
+        expect(JSON.parse(result.content[0].text as string)).toEqual(mockMainQueryResult);
+      }
+
+      // Should only call the main query (no validation needed)
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return main query results when validation query fails gracefully', async () => {
+      const mockMainQueryResult = {
+        data: [],
+      };
+
+      // Mock main query to return empty (triggering validation), then validation to fail
+      mocks.mockQueryDatasource
+        .mockResolvedValueOnce(new Ok(mockMainQueryResult))
+        .mockResolvedValueOnce(new Err({ errorCode: '404934', message: 'Field not found' }));
+
+      const result = await queryDatasourceTool.callback(
+        {
+          datasourceLuid: 'test-datasource-luid',
+          query: {
+            fields: [
+              { fieldCaption: 'Region' },
+              { fieldCaption: 'Sales', function: 'SUM' },
+            ],
+            filters: [
+              {
+                field: { fieldCaption: 'Region' },
+                filterType: 'SET',
+                values: ['East'],
+              },
+            ],
+          },
+        },
+        {
+          signal: new AbortController().signal,
+          requestId: 'test-request-id',
+          sendNotification: vi.fn(),
+          sendRequest: vi.fn(),
+        }
+      );
+
+      expect(result.isError).toBe(false);
+      if (!result.isError) {
+        expect(JSON.parse(result.content[0].text as string)).toEqual(mockMainQueryResult);
+      }
+
+      // Should call main query and validation query (which fails gracefully)
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return multiple validation errors when multiple filters fail and main query returns empty', async () => {
+      // Mock main query to return empty results (triggering validation)
+      mocks.mockQueryDatasource
+        .mockResolvedValueOnce(new Ok({ data: [] }))
+        // Mock first validation query (Region field)
+        .mockResolvedValueOnce(
+          new Ok({
+            data: [
+              { DistinctValues: 'East' },
+              { DistinctValues: 'West' },
+              { DistinctValues: 'North' },
+              { DistinctValues: 'South' },
+            ],
+          })
+        )
+        // Mock second validation query (Category field)
+        .mockResolvedValueOnce(
+          new Ok({
+            data: [
+              { DistinctValues: 'Electronics' },
+              { DistinctValues: 'Furniture' },
+              { DistinctValues: 'Office Supplies' },
+            ],
+          })
+        );
+
+      const result = await queryDatasourceTool.callback(
+        {
+          datasourceLuid: 'test-datasource-luid',
+          query: {
+            fields: [{ fieldCaption: 'Sales', function: 'SUM' }],
+            filters: [
+              {
+                field: { fieldCaption: 'Region' },
+                filterType: 'SET',
+                values: ['InvalidRegion'],
+              },
+              {
+                field: { fieldCaption: 'Category' },
+                filterType: 'SET',
+                values: ['InvalidCategory'],
+              },
+            ],
+          },
+        },
+        {
+          signal: new AbortController().signal,
+          requestId: 'test-request-id',
+          sendNotification: vi.fn(),
+          sendRequest: vi.fn(),
+        }
+      );
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        const errorText = result.content[0].text as string;
+        expect(errorText).toContain('Filter validation failed for field "Region"');
+        expect(errorText).toContain('Filter validation failed for field "Category"');
+        expect(errorText).toContain('InvalidRegion');
+        expect(errorText).toContain('InvalidCategory');
+      }
+
+      // Should call main query first, then both validation queries
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(3);
+    });
+  });
 });
 
 async function getToolResult(): Promise<CallToolResult> {

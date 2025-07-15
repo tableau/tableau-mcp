@@ -8,6 +8,7 @@ import { Tool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { validateQuery } from './queryDatasourceValidator.js';
+import { validateFilterValues } from './validators/validateFilterValues.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
 
 type Datasource = z.infer<typeof Datasource>;
@@ -43,19 +44,35 @@ export const queryDatasourceTool = new Tool({
           datasource.connections = credentials;
         }
 
-        const queryRequest = {
-          datasource,
-          query,
-          options,
-        };
-
         const restApi = await getNewRestApiInstanceAsync(
           config.server,
           config.authConfig,
           requestId,
         );
 
-        return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+        const queryRequest = {
+          datasource,
+          query,
+          options,
+        };
+
+        const queryDatasourceResponse = await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+        if (queryDatasourceResponse.isOk() && queryDatasourceResponse.value.data?.length === 0) {
+          // Validate SET and MATCH filter values before executing the main query
+          const filterValidationResult = await validateFilterValues(
+            query,
+            restApi.vizqlDataServiceMethods,
+            datasource
+          );
+
+          if (filterValidationResult.isErr()) {
+            const errors = filterValidationResult.error;
+            const errorMessage = errors.map(error => error.message).join('\n\n');
+            throw new Error(errorMessage);
+          }
+        }
+
+        return queryDatasourceResponse;
       },
       getErrorText: (error: z.infer<typeof TableauError>) => {
         return JSON.stringify({ requestId, ...handleQueryDatasourceError(error) });
