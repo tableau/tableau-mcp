@@ -4,79 +4,88 @@ import { z } from 'zod';
 import { getConfig } from '../../config.js';
 import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
 import { Datasource, Query, TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { validateQuery } from './queryDatasourceValidator.js';
-import { validateFilterValues } from './validators/validateFilterValues.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
+import { validateFilterValues } from './validators/validateFilterValues.js';
 
 type Datasource = z.infer<typeof Datasource>;
 
-export const queryDatasourceTool = new Tool({
-  name: 'query-datasource',
-  description: queryDatasourceToolDescription,
-  paramsSchema: {
-    datasourceLuid: z.string().nonempty(),
-    query: Query,
-  },
-  annotations: {
-    title: 'Query Datasource',
-    readOnlyHint: true,
-    openWorldHint: false,
-  },
-  argsValidator: validateQuery,
-  callback: async ({ datasourceLuid, query }, { requestId }): Promise<CallToolResult> => {
-    const config = getConfig();
-    return await queryDatasourceTool.logAndExecute({
-      requestId,
-      args: { datasourceLuid, query },
-      callback: async () => {
-        const datasource: Datasource = { datasourceLuid };
-        const options = {
-          returnFormat: 'OBJECTS',
-          debug: true,
-          disaggregate: false,
-        } as const;
+const paramsSchema = {
+  datasourceLuid: z.string().nonempty(),
+  query: Query,
+};
 
-        const credentials = getDatasourceCredentials(datasourceLuid);
-        if (credentials) {
-          datasource.connections = credentials;
-        }
+export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema> => {
+  const queryDatasourceTool = new Tool({
+    server,
+    name: 'query-datasource',
+    description: queryDatasourceToolDescription,
+    paramsSchema,
+    annotations: {
+      title: 'Query Datasource',
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
+    argsValidator: validateQuery,
+    callback: async ({ datasourceLuid, query }, { requestId }): Promise<CallToolResult> => {
+      const config = getConfig();
+      return await queryDatasourceTool.logAndExecute({
+        requestId,
+        args: { datasourceLuid, query },
+        callback: async () => {
+          const datasource: Datasource = { datasourceLuid };
+          const options = {
+            returnFormat: 'OBJECTS',
+            debug: true,
+            disaggregate: false,
+          } as const;
 
-        const restApi = await getNewRestApiInstanceAsync(
-          config.server,
-          config.authConfig,
-          requestId,
-        );
+          const credentials = getDatasourceCredentials(datasourceLuid);
+          if (credentials) {
+            datasource.connections = credentials;
+          }
 
-        const queryRequest = {
-          datasource,
-          query,
-          options,
-        };
-
-        const queryDatasourceResponse = await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
-        if (queryDatasourceResponse.isOk() && queryDatasourceResponse.value.data?.length === 0) {
-          // Validate SET and MATCH filter values before executing the main query
-          const filterValidationResult = await validateFilterValues(
+          const queryRequest = {
+            datasource,
             query,
-            restApi.vizqlDataServiceMethods,
-            datasource
+            options,
+          };
+
+          const restApi = await getNewRestApiInstanceAsync(
+            config.server,
+            config.authConfig,
+            requestId,
+            server,
           );
 
-          if (filterValidationResult.isErr()) {
-            const errors = filterValidationResult.error;
-            const errorMessage = errors.map(error => error.message).join('\n\n');
-            throw new Error(errorMessage);
-          }
-        }
+          const queryDatasourceResponse =
+            await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+          if (queryDatasourceResponse.isOk() && queryDatasourceResponse.value.data?.length === 0) {
+            const filterValidationResult = await validateFilterValues(
+              query,
+              restApi.vizqlDataServiceMethods,
+              datasource,
+            );
 
-        return queryDatasourceResponse;
-      },
-      getErrorText: (error: z.infer<typeof TableauError>) => {
-        return JSON.stringify({ requestId, ...handleQueryDatasourceError(error) });
-      },
-    });
-  },
-});
+            if (filterValidationResult.isErr()) {
+              const errors = filterValidationResult.error;
+              const errorMessage = errors.map((error) => error.message).join('\n\n');
+              throw new Error(errorMessage);
+            }
+          }
+
+          return queryDatasourceResponse;
+        },
+        getErrorText: (error: z.infer<typeof TableauError>) => {
+          return JSON.stringify({ requestId, ...handleQueryDatasourceError(error) });
+        },
+      });
+    },
+  });
+
+  return queryDatasourceTool;
+};

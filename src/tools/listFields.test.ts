@@ -1,10 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { server } from '../server.js';
-import { getGraphqlQuery, listFieldsTool } from './listFields.js';
-
-// Mock server.server.sendLoggingMessage since the transport won't be connected.
-vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
+import { Server } from '../server.js';
+import { getGraphqlQuery, getListFieldsTool } from './listFields.js';
 
 const mockMetadataResponses = vi.hoisted(() => ({
   success: {
@@ -85,6 +82,7 @@ describe('listFieldsTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
+    const listFieldsTool = getListFieldsTool(new Server());
     expect(listFieldsTool.name).toBe('list-fields');
     expect(listFieldsTool.paramsSchema).toMatchObject({ datasourceLuid: expect.any(Object) });
   });
@@ -120,6 +118,7 @@ describe('listFieldsTool', () => {
 });
 
 async function getToolResult(): Promise<CallToolResult> {
+  const listFieldsTool = getListFieldsTool(new Server());
   return await listFieldsTool.callback(
     { datasourceLuid: 'test-luid' },
     {

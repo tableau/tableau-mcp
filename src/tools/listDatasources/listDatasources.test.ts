@@ -1,10 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { server } from '../../server.js';
-import { listDatasourcesTool } from './listDatasources.js';
-
-// Mock server.server.sendLoggingMessage since the transport won't be connected.
-vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
+import { Server } from '../../server.js';
+import { getListDatasourcesTool } from './listDatasources.js';
 
 const mockDatasources = {
   pagination: {
@@ -37,6 +34,7 @@ describe('listDatasourcesTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
+    const listDatasourcesTool = getListDatasourcesTool(new Server());
     expect(listDatasourcesTool.name).toBe('list-datasources');
     expect(listDatasourcesTool.description).toContain('Retrieves a list of published data sources');
     expect(listDatasourcesTool.paramsSchema).toMatchObject({ filter: expect.any(Object) });
@@ -65,6 +63,7 @@ describe('listDatasourcesTool', () => {
 });
 
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
+  const listDatasourcesTool = getListDatasourcesTool(new Server());
   return await listDatasourcesTool.callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',

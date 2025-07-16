@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { getConfig } from '../config.js';
 import { getNewRestApiInstanceAsync } from '../restApiInstance.js';
+import { Server } from '../server.js';
 import { Tool } from './tool.js';
 import { validateDatasourceLuid } from './validateDatasourceLuid.js';
 
@@ -70,37 +71,45 @@ export const getGraphqlQuery = (datasourceLuid: string): string => `
     }
   }`;
 
-export const listFieldsTool = new Tool({
-  name: 'list-fields',
-  description: `
+const paramsSchema = {
+  datasourceLuid: z.string().nonempty(),
+};
+
+export const getListFieldsTool = (server: Server): Tool<typeof paramsSchema> => {
+  const listFieldsTool = new Tool({
+    server,
+    name: 'list-fields',
+    description: `
     Fetches rich field metadata (name, description, inherited description, dataType, dataCategory, role, etc.) for the specified datasource via Tableau's Metadata API.
     This Returns a list of field dicts or an error message. In general this tool should be used for getting the metadata to ground the use of the query_datasource tool.
     Note that not all fields, such as Hierarchy fields, can be used with the queryDatasource tool.
     `,
-  paramsSchema: {
-    datasourceLuid: z.string().nonempty(),
-  },
-  annotations: {
-    title: 'List Fields',
-    readOnlyHint: true,
-    openWorldHint: false,
-  },
-  argsValidator: validateDatasourceLuid,
-  callback: async ({ datasourceLuid }, { requestId }): Promise<CallToolResult> => {
-    const config = getConfig();
-    const query = getGraphqlQuery(datasourceLuid);
+    paramsSchema,
+    annotations: {
+      title: 'List Fields',
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
+    argsValidator: validateDatasourceLuid,
+    callback: async ({ datasourceLuid }, { requestId }): Promise<CallToolResult> => {
+      const config = getConfig();
+      const query = getGraphqlQuery(datasourceLuid);
 
-    return await listFieldsTool.logAndExecute({
-      requestId,
-      args: { datasourceLuid },
-      callback: async () => {
-        const restApi = await getNewRestApiInstanceAsync(
-          config.server,
-          config.authConfig,
-          requestId,
-        );
-        return new Ok(await restApi.metadataMethods.graphql(query));
-      },
-    });
-  },
-});
+      return await listFieldsTool.logAndExecute({
+        requestId,
+        args: { datasourceLuid },
+        callback: async () => {
+          const restApi = await getNewRestApiInstanceAsync(
+            config.server,
+            config.authConfig,
+            requestId,
+            server,
+          );
+          return new Ok(await restApi.metadataMethods.graphql(query));
+        },
+      });
+    },
+  });
+
+  return listFieldsTool;
+};

@@ -1,17 +1,14 @@
-import { exportedForTesting as configExportedForTesting } from '../../config.js';
 import {
   exportedForTesting as datasourceCredentialsExportedForTesting,
   getDatasourceCredentials,
 } from './datasourceCredentials.js';
 
-const { resetConfig } = configExportedForTesting;
 const { resetDatasourceCredentials } = datasourceCredentialsExportedForTesting;
 
 describe('getDatasourceCredentials', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    resetConfig();
     resetDatasourceCredentials();
     process.env = {
       ...originalEnv,

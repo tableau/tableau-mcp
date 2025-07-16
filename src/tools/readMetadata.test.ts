@@ -1,10 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { server } from '../server.js';
-import { readMetadataTool } from './readMetadata.js';
-
-// Mock server.server.sendLoggingMessage since the transport won't be connected.
-vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
+import { Server } from '../server.js';
+import { getReadMetadataTool } from './readMetadata.js';
 
 const mockMetadataResponses = vi.hoisted(() => ({
   success: {
@@ -52,6 +49,7 @@ describe('readMetadataTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
+    const readMetadataTool = getReadMetadataTool(new Server());
     expect(readMetadataTool.name).toBe('read-metadata');
     expect(readMetadataTool.description).toEqual(expect.any(String));
     expect(readMetadataTool.paramsSchema).toMatchObject({ datasourceLuid: expect.any(Object) });
@@ -96,6 +94,7 @@ describe('readMetadataTool', () => {
 });
 
 async function getToolResult(): Promise<CallToolResult> {
+  const readMetadataTool = getReadMetadataTool(new Server());
   return await readMetadataTool.callback(
     { datasourceLuid: 'test-luid' },
     {

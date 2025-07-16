@@ -4,11 +4,18 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { getNewRestApiInstanceAsync } from '../../../restApiInstance.js';
+import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
 
-export const listPulseMetricsFromMetricIdsTool = new Tool({
-  name: 'list-pulse-metrics-from-metric-ids',
-  description: `
+const paramsSchema = {
+  metricIds: z.array(z.string().length(36)),
+};
+
+export const getListPulseMetricsFromMetricIdsTool = (server: Server): Tool<typeof paramsSchema> => {
+  const listPulseMetricsFromMetricIdsTool = new Tool({
+    server,
+    name: 'list-pulse-metrics-from-metric-ids',
+    description: `
 Retrieves a list of published Pulse Metrics from a list of metric IDs using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metrics for a list of metric IDs on the current site.
 
 **Parameters:**
@@ -23,27 +30,29 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
 - 00000000-0000-0000-0000-000000000000 is not a valid datasource id.
 - If you need a valid datasource id, you may need to retrieve the Pulse Metric Definition for the Pulse Metric which should have a valid datasource information.
 `,
-  paramsSchema: {
-    metricIds: z.array(z.string().length(36)),
-  },
-  annotations: {
-    title: 'List Pulse Metrics from Metric IDs',
-    readOnlyHint: true,
-    openWorldHint: false,
-  },
-  callback: async ({ metricIds }, { requestId }): Promise<CallToolResult> => {
-    const config = getConfig();
-    return await listPulseMetricsFromMetricIdsTool.logAndExecute({
-      requestId,
-      args: { metricIds },
-      callback: async () => {
-        const restApi = await getNewRestApiInstanceAsync(
-          config.server,
-          config.authConfig,
-          requestId,
-        );
-        return new Ok(await restApi.pulseMethods.listPulseMetricsFromMetricIds(metricIds));
-      },
-    });
-  },
-});
+    paramsSchema,
+    annotations: {
+      title: 'List Pulse Metrics from Metric IDs',
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
+    callback: async ({ metricIds }, { requestId }): Promise<CallToolResult> => {
+      const config = getConfig();
+      return await listPulseMetricsFromMetricIdsTool.logAndExecute({
+        requestId,
+        args: { metricIds },
+        callback: async () => {
+          const restApi = await getNewRestApiInstanceAsync(
+            config.server,
+            config.authConfig,
+            requestId,
+            server,
+          );
+          return new Ok(await restApi.pulseMethods.listPulseMetricsFromMetricIds(metricIds));
+        },
+      });
+    },
+  });
+
+  return listPulseMetricsFromMetricIdsTool;
+};

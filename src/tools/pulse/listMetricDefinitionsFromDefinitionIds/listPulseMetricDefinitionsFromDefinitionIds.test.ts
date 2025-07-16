@@ -1,11 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import type { PulseMetricDefinition } from '../../../sdks/tableau/types/pulse.js';
-import { server } from '../../../server.js';
-import { listPulseMetricDefinitionsFromDefinitionIdsTool } from './listPulseMetricDefinitionsFromDefinitionIds.js';
-
-// Mock server.server.sendLoggingMessage since the transport won't be connected.
-vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
+import { Server } from '../../../server.js';
+import { getListPulseMetricDefinitionsFromDefinitionIdsTool } from './listPulseMetricDefinitionsFromDefinitionIds.js';
 
 const mockPulseMetricDefinitions: PulseMetricDefinition[] = [
   {
@@ -47,6 +44,8 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
+    const listPulseMetricDefinitionsFromDefinitionIdsTool =
+      getListPulseMetricDefinitionsFromDefinitionIdsTool(new Server());
     expect(listPulseMetricDefinitionsFromDefinitionIdsTool.name).toBe(
       'list-pulse-metric-definitions-from-definition-ids',
     );
@@ -203,6 +202,8 @@ async function getToolResult(params: {
   metricDefinitionIds: string[];
   view?: 'DEFINITION_VIEW_BASIC' | 'DEFINITION_VIEW_FULL' | 'DEFINITION_VIEW_DEFAULT';
 }): Promise<CallToolResult> {
+  const listPulseMetricDefinitionsFromDefinitionIdsTool =
+    getListPulseMetricDefinitionsFromDefinitionIdsTool(new Server());
   return await listPulseMetricDefinitionsFromDefinitionIdsTool.callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',

@@ -1,16 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { exportedForTesting as configExportedForTesting } from '../../config.js';
-import { server } from '../../server.js';
+import { Server } from '../../server.js';
 import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
-import { queryDatasourceTool } from './queryDatasource.js';
+import { getQueryDatasourceTool } from './queryDatasource.js';
 
-const { resetConfig } = configExportedForTesting;
 const { resetDatasourceCredentials } = datasourceCredentialsExportedForTesting;
-
-// Mock server.server.sendLoggingMessage since the transport won't be connected.
-vi.spyOn(server.server, 'sendLoggingMessage').mockImplementation(vi.fn());
 
 const mockVdsResponses = vi.hoisted(() => ({
   success: {
@@ -58,7 +53,6 @@ describe('queryDatasourceTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetConfig();
     resetDatasourceCredentials();
     process.env = {
       ...originalEnv,
@@ -66,6 +60,7 @@ describe('queryDatasourceTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
+    const queryDatasourceTool = getQueryDatasourceTool(new Server());
     expect(queryDatasourceTool.name).toBe('query-datasource');
     expect(queryDatasourceTool.description).toEqual(expect.any(String));
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
@@ -206,9 +201,9 @@ describe('queryDatasourceTool', () => {
               { DistinctValues: 'South' },
               { DistinctValues: 'Central' },
             ],
-          })
+          }),
         );
-
+      const queryDatasourceTool = getQueryDatasourceTool(new Server());
       const result = await queryDatasourceTool.callback(
         {
           datasourceLuid: 'test-datasource-luid',
@@ -228,7 +223,7 @@ describe('queryDatasourceTool', () => {
           requestId: 'test-request-id',
           sendNotification: vi.fn(),
           sendRequest: vi.fn(),
-        }
+        },
       );
 
       expect(result.isError).toBe(true);
@@ -237,7 +232,9 @@ describe('queryDatasourceTool', () => {
         expect(result.content[0].text).toContain('Wast');
         expect(result.content[0].text).toContain('Did you mean:');
         expect(result.content[0].text).toContain('West'); // Should suggest fuzzy match
-        expect(result.content[0].text).toContain('evaluate whether you included the wrong filter value');
+        expect(result.content[0].text).toContain(
+          'evaluate whether you included the wrong filter value',
+        );
       }
 
       // Should call main query first, then validation query
@@ -258,9 +255,9 @@ describe('queryDatasourceTool', () => {
               { SampleValues: 'Alice Brown' },
               { SampleValues: 'Charlie Davis' },
             ],
-          })
+          }),
         );
-
+      const queryDatasourceTool = getQueryDatasourceTool(new Server());
       const result = await queryDatasourceTool.callback(
         {
           datasourceLuid: 'test-datasource-luid',
@@ -280,16 +277,20 @@ describe('queryDatasourceTool', () => {
           requestId: 'test-request-id',
           sendNotification: vi.fn(),
           sendRequest: vi.fn(),
-        }
+        },
       );
 
       expect(result.isError).toBe(true);
       if (result.isError) {
-        expect(result.content[0].text).toContain('Filter validation failed for field "Customer Name"');
+        expect(result.content[0].text).toContain(
+          'Filter validation failed for field "Customer Name"',
+        );
         expect(result.content[0].text).toContain('starts with "Jon"');
         expect(result.content[0].text).toContain('Similar values in this field:');
         expect(result.content[0].text).toContain('John Doe'); // Should suggest similar value
-        expect(result.content[0].text).toContain('evaluate whether you included the wrong filter value');
+        expect(result.content[0].text).toContain(
+          'evaluate whether you included the wrong filter value',
+        );
       }
 
       // Should call main query first, then validation query
@@ -307,14 +308,12 @@ describe('queryDatasourceTool', () => {
       // Mock main query to return data (validation won't be triggered)
       mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
 
+      const queryDatasourceTool = getQueryDatasourceTool(new Server());
       const result = await queryDatasourceTool.callback(
         {
           datasourceLuid: 'test-datasource-luid',
           query: {
-            fields: [
-              { fieldCaption: 'Region' },
-              { fieldCaption: 'Sales', function: 'SUM' },
-            ],
+            fields: [{ fieldCaption: 'Region' }, { fieldCaption: 'Sales', function: 'SUM' }],
             filters: [
               {
                 field: { fieldCaption: 'Region' },
@@ -329,7 +328,7 @@ describe('queryDatasourceTool', () => {
           requestId: 'test-request-id',
           sendNotification: vi.fn(),
           sendRequest: vi.fn(),
-        }
+        },
       );
 
       expect(result.isError).toBe(false);
@@ -343,22 +342,18 @@ describe('queryDatasourceTool', () => {
 
     it('should return main query results when no SET/MATCH filters are present', async () => {
       const mockMainQueryResult = {
-        data: [
-          { Region: 'East', 'SUM(Sales)': 100000 },
-        ],
+        data: [{ Region: 'East', 'SUM(Sales)': 100000 }],
       };
 
       // Mock main query only
       mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
 
+      const queryDatasourceTool = getQueryDatasourceTool(new Server());
       const result = await queryDatasourceTool.callback(
         {
           datasourceLuid: 'test-datasource-luid',
           query: {
-            fields: [
-              { fieldCaption: 'Region' },
-              { fieldCaption: 'Sales', function: 'SUM' },
-            ],
+            fields: [{ fieldCaption: 'Region' }, { fieldCaption: 'Sales', function: 'SUM' }],
             filters: [
               {
                 field: { fieldCaption: 'Sales' },
@@ -374,7 +369,7 @@ describe('queryDatasourceTool', () => {
           requestId: 'test-request-id',
           sendNotification: vi.fn(),
           sendRequest: vi.fn(),
-        }
+        },
       );
 
       expect(result.isError).toBe(false);
@@ -396,14 +391,12 @@ describe('queryDatasourceTool', () => {
         .mockResolvedValueOnce(new Ok(mockMainQueryResult))
         .mockResolvedValueOnce(new Err({ errorCode: '404934', message: 'Field not found' }));
 
+      const queryDatasourceTool = getQueryDatasourceTool(new Server());
       const result = await queryDatasourceTool.callback(
         {
           datasourceLuid: 'test-datasource-luid',
           query: {
-            fields: [
-              { fieldCaption: 'Region' },
-              { fieldCaption: 'Sales', function: 'SUM' },
-            ],
+            fields: [{ fieldCaption: 'Region' }, { fieldCaption: 'Sales', function: 'SUM' }],
             filters: [
               {
                 field: { fieldCaption: 'Region' },
@@ -418,7 +411,7 @@ describe('queryDatasourceTool', () => {
           requestId: 'test-request-id',
           sendNotification: vi.fn(),
           sendRequest: vi.fn(),
-        }
+        },
       );
 
       expect(result.isError).toBe(false);
@@ -443,7 +436,7 @@ describe('queryDatasourceTool', () => {
               { DistinctValues: 'North' },
               { DistinctValues: 'South' },
             ],
-          })
+          }),
         )
         // Mock second validation query (Category field)
         .mockResolvedValueOnce(
@@ -453,9 +446,10 @@ describe('queryDatasourceTool', () => {
               { DistinctValues: 'Furniture' },
               { DistinctValues: 'Office Supplies' },
             ],
-          })
+          }),
         );
 
+      const queryDatasourceTool = getQueryDatasourceTool(new Server());
       const result = await queryDatasourceTool.callback(
         {
           datasourceLuid: 'test-datasource-luid',
@@ -480,7 +474,7 @@ describe('queryDatasourceTool', () => {
           requestId: 'test-request-id',
           sendNotification: vi.fn(),
           sendRequest: vi.fn(),
-        }
+        },
       );
 
       expect(result.isError).toBe(true);
@@ -499,6 +493,7 @@ describe('queryDatasourceTool', () => {
 });
 
 async function getToolResult(): Promise<CallToolResult> {
+  const queryDatasourceTool = getQueryDatasourceTool(new Server());
   return await queryDatasourceTool.callback(
     {
       datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
