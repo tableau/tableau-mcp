@@ -36,15 +36,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../restApiInstance.js', () => ({
-  useRestApi: vi
-    .fn()
-    .mockImplementation(async (_host, _authConfig, _requestId, _server, callback) =>
-      callback({
-        vizqlDataServiceMethods: {
-          readMetadata: mocks.mockReadMetadata,
-        },
-      }),
-    ),
+  useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
+    callback({
+      vizqlDataServiceMethods: {
+        readMetadata: mocks.mockReadMetadata,
+      },
+    }),
+  ),
 }));
 
 describe('readMetadataTool', () => {

@@ -1,10 +1,9 @@
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { isAxiosError } from '../node_modules/axios/index.js';
-import { getConfig } from './config.js';
+import { Config, getConfig } from './config.js';
 import { log, shouldLogWhenLevelIsAtLeast } from './logging/log.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
-import { AuthConfig } from './sdks/tableau/authConfig.js';
 import {
   AxiosResponseInterceptorConfig,
   ErrorInterceptor,
@@ -20,12 +19,11 @@ import { Server } from './server.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 const getNewRestApiInstanceAsync = async (
-  host: string,
-  authConfig: AuthConfig,
+  config: Config,
   requestId: RequestId,
   server: Server,
 ): Promise<RestApi> => {
-  const restApi = new RestApi(host, {
+  const restApi = new RestApi(config.server, {
     requestInterceptor: [
       getRequestInterceptor(server, requestId),
       getRequestErrorInterceptor(server, requestId),
@@ -36,18 +34,22 @@ const getNewRestApiInstanceAsync = async (
     ],
   });
 
-  await restApi.signIn(authConfig);
+  await restApi.signIn(config.authConfig);
   return restApi;
 };
 
-export const useRestApi = async <T>(
-  host: string,
-  authConfig: AuthConfig,
-  requestId: RequestId,
-  server: Server,
-  callback: (restApi: RestApi) => Promise<T>,
-): Promise<T> => {
-  const restApi = await getNewRestApiInstanceAsync(host, authConfig, requestId, server);
+export const useRestApi = async <T>({
+  config,
+  requestId,
+  server,
+  callback,
+}: {
+  config: Config;
+  requestId: RequestId;
+  server: Server;
+  callback: (restApi: RestApi) => Promise<T>;
+}): Promise<T> => {
+  const restApi = await getNewRestApiInstanceAsync(config, requestId, server);
   try {
     return await callback(restApi);
   } finally {

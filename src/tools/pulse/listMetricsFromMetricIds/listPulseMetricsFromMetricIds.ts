@@ -43,15 +43,14 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
         args: { metricIds },
         callback: async () => {
           return new Ok(
-            await useRestApi(
-              config.server,
-              config.authConfig,
+            await useRestApi({
+              config,
               requestId,
               server,
-              async (restApi) => {
+              callback: async (restApi) => {
                 return await restApi.pulseMethods.listPulseMetricsFromMetricIds(metricIds);
               },
-            ),
+            }),
           );
         },
       });
