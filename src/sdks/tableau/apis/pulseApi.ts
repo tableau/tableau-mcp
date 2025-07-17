@@ -111,10 +111,10 @@ const listPulseMetricSubscriptionsForCurrentUserRestEndpoint = makeEndpoint({
   }),
 });
 
-const generatePulseMetricBundleRestEndpoint = makeEndpoint({
+const generatePulseMetricValueInsightBundleRestEndpoint = makeEndpoint({
   method: 'post',
   path: '/pulse/insights/ban',
-  alias: 'generatePulseMetricBundle',
+  alias: 'generatePulseMetricValueInsightBundle',
   description: 'Generates a bundle for the current aggregated value for the Pulse metric.',
   parameters: [
     {
@@ -127,7 +127,7 @@ const generatePulseMetricBundleRestEndpoint = makeEndpoint({
 });
 
 const pulseApi = makeApi([
-  generatePulseMetricBundleRestEndpoint,
+  generatePulseMetricValueInsightBundleRestEndpoint,
   listAllPulseMetricDefinitionsRestEndpoint,
   listPulseMetricDefinitionsFromMetricDefinitionIdsRestEndpoint,
   listPulseMetricsFromMetricDefinitionIdRestEndpoint,

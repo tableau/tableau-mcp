@@ -1,6 +1,6 @@
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
 import { getListFieldsTool } from './listFields.js';
-import { getGeneratePulseMetricBundleTool } from './pulse/geneateMetricBundle/generatePulseMetricBundleTool.js';
+import { getGeneratePulseMetricValueInsightBundleTool } from './pulse/geneateMetricValueInsightBundle/generatePulseMetricValueInsightBundleTool.js';
 import { getListAllPulseMetricDefinitionsTool } from './pulse/listAllMetricDefinitions/listAllPulseMetricDefinitions.js';
 import { getListPulseMetricDefinitionsFromDefinitionIdsTool } from './pulse/listMetricDefinitionsFromDefinitionIds/listPulseMetricDefinitionsFromDefinitionIds.js';
 import { getListPulseMetricsFromMetricDefinitionIdTool } from './pulse/listMetricsFromMetricDefinitionId/listPulseMetricsFromMetricDefinitionId.js';
@@ -19,5 +19,5 @@ export const toolFactories = [
   getListPulseMetricsFromMetricDefinitionIdTool,
   getListPulseMetricsFromMetricIdsTool,
   getListPulseMetricSubscriptionsTool,
-  getGeneratePulseMetricBundleTool,
+  getGeneratePulseMetricValueInsightBundleTool,
 ];

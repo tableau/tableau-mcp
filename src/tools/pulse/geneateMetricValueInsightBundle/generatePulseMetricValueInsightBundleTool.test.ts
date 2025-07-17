@@ -1,20 +1,20 @@
 import { Server } from '../../../server.js';
-import { getGeneratePulseMetricBundleTool } from './generatePulseMetricBundleTool.js';
+import { getGeneratePulseMetricValueInsightBundleTool } from './generatePulseMetricValueInsightBundleTool.js';
 
 const mocks = vi.hoisted(() => ({
-  mockGeneratePulseMetricBundle: vi.fn(),
+  mockGeneratePulseMetricValueInsightBundle: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
   getNewRestApiInstanceAsync: vi.fn().mockResolvedValue({
     pulseMethods: {
-      generatePulseMetricBundle: mocks.mockGeneratePulseMetricBundle,
+      generatePulseMetricValueInsightBundle: mocks.mockGeneratePulseMetricValueInsightBundle,
     },
   }),
 }));
 
-describe('getGeneratePulseMetricBundleTool', () => {
-  const tool = getGeneratePulseMetricBundleTool(new Server());
+describe('getGeneratePulseMetricValueInsightBundleTool', () => {
+  const tool = getGeneratePulseMetricValueInsightBundleTool(new Server());
 
   const bundleRequest = {
     bundle_request: {
@@ -90,10 +90,10 @@ describe('getGeneratePulseMetricBundleTool', () => {
     vi.clearAllMocks();
   });
 
-  it('should call generatePulseMetricBundle and return Ok result', async () => {
-    mocks.mockGeneratePulseMetricBundle.mockResolvedValue('bundle-result');
+  it('should call generatePulseMetricValueInsightBundle and return Ok result', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue('bundle-result');
     const result = await tool.callback({ bundleRequest }, { requestId: 'req-1' });
-    expect(mocks.mockGeneratePulseMetricBundle).toHaveBeenCalledWith(bundleRequest);
+    expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(bundleRequest);
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('bundle-result');
   });

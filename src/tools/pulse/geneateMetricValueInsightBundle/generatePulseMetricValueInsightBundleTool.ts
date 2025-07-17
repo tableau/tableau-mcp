@@ -11,10 +11,10 @@ const paramsSchema = {
   bundleRequest: pulseBundleRequestSchema,
 };
 
-export const getGeneratePulseMetricBundleTool = (server: Server): Tool<typeof paramsSchema> => {
-  const generatePulseMetricBundleTool = new Tool({
+export const getGeneratePulseMetricValueInsightBundleTool = (server: Server): Tool<typeof paramsSchema> => {
+  const generatePulseMetricValueInsightBundleTool = new Tool({
     server,
-    name: 'generate-pulse-metric-bundle',
+    name: 'generate-pulse-metric-value-insight-bundle',
     description: `
 Generate a bundle for the current aggregated value for Pulse Metric using Tableau REST API.  You need the full information of the Pulse Metric and Pulse Metric Definition to use this tool.
 
@@ -111,7 +111,7 @@ Generate a bundle for the current aggregated value for Pulse Metric using Tablea
     },
     callback: async ({ bundleRequest }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
-      return await generatePulseMetricBundleTool.logAndExecute({
+      return await generatePulseMetricValueInsightBundleTool.logAndExecute({
         requestId,
         args: { bundleRequest },
         callback: async () => {
@@ -121,11 +121,11 @@ Generate a bundle for the current aggregated value for Pulse Metric using Tablea
             requestId,
             server,
           );
-          return new Ok(await restApi.pulseMethods.generatePulseMetricBundle(bundleRequest));
+          return new Ok(await restApi.pulseMethods.generatePulseMetricValueInsightBundle(bundleRequest));
         },
       });
     },
   });
 
-  return generatePulseMetricBundleTool;
+  return generatePulseMetricValueInsightBundleTool;
 };

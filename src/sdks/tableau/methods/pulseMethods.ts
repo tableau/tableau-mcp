@@ -95,10 +95,10 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
    * Returns the generated bundle of the current aggregate value for the Pulse metric.
    * @param bundleRequest - The request to generate a bundle for.
    */
-  generatePulseMetricBundle = async (
+  generatePulseMetricValueInsightBundle = async (
     bundleRequest: z.infer<typeof pulseBundleRequestSchema>,
   ): Promise<z.infer<typeof pulseBundleResponseSchema>> => {
-    const response = await this._apiClient.generatePulseMetricBundle(bundleRequest);
+    const response = await this._apiClient.generatePulseMetricValueInsightBundle(bundleRequest);
     return response ?? {};
   };
 }

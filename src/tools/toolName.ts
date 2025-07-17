@@ -8,7 +8,7 @@ export const toolNames = [
   'list-pulse-metrics-from-metric-definition-id',
   'list-pulse-metrics-from-metric-ids',
   'list-pulse-metric-subscriptions',
-  'generate-pulse-metric-bundle',
+  'generate-pulse-metric-value-insight-bundle',
 ] as const;
 export type ToolName = (typeof toolNames)[number];
 
