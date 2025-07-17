@@ -103,7 +103,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     vi.clearAllMocks();
   });
 
-  it('should call generatePulseMetricValueInsightBundle and return Ok result', async () => {
+  it('should call generatePulseMetricValueInsightBundle without bundleType and return Ok result', async () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(mockBundleRequestResponse);
     const result = await tool.callback(
       { bundleRequest },
@@ -114,11 +114,57 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
         sendRequest: vi.fn(),
       },
     );
-    expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(bundleRequest);
+    expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(
+      bundleRequest,
+      'ban',
+    );
     expect(result.isError).toBe(false);
     const parsedValue = JSON.parse(result.content[0].text as string);
     expect(parsedValue).toEqual(mockBundleRequestResponse);
   });
+
+  it('should call generatePulseMetricValueInsightBundle with bundleType and return Ok result', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(mockBundleRequestResponse);
+    const result = await tool.callback(
+      { bundleRequest, bundleType: 'springboard' },
+      {
+        signal: new AbortController().signal,
+        requestId: 'test-request-id',
+        sendNotification: vi.fn(),
+        sendRequest: vi.fn(),
+      },
+    );
+    expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(
+      bundleRequest,
+      'springboard',
+    );
+    expect(result.isError).toBe(false);
+    const parsedValue = JSON.parse(result.content[0].text as string);
+    expect(parsedValue).toEqual(mockBundleRequestResponse);
+  });
+
+  it.each(['ban', 'springboard', 'basic', 'detail'] as const)(
+    'should call generatePulseMetricValueInsightBundle with bundleType "%s" and return Ok result',
+    async (bundleType) => {
+      mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(mockBundleRequestResponse);
+      const result = await tool.callback(
+        { bundleRequest, bundleType },
+        {
+          signal: new AbortController().signal,
+          requestId: 'test-request-id',
+          sendNotification: vi.fn(),
+          sendRequest: vi.fn(),
+        },
+      );
+      expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(
+        bundleRequest,
+        bundleType,
+      );
+      expect(result.isError).toBe(false);
+      const parsedValue = JSON.parse(result.content[0].text as string);
+      expect(parsedValue).toEqual(mockBundleRequestResponse);
+    },
+  );
 
   it('should have correct tool properties', () => {
     expect(tool.name).toBe('generate-pulse-metric-value-insight-bundle');

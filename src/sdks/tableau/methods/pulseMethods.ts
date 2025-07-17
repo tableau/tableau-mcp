@@ -6,6 +6,7 @@ import { Credentials } from '../types/credentials.js';
 import {
   pulseBundleRequestSchema,
   pulseBundleResponseSchema,
+  PulseInsightBundleType,
   PulseMetric,
   PulseMetricDefinition,
   PulseMetricDefinitionView,
@@ -97,10 +98,11 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
    */
   generatePulseMetricValueInsightBundle = async (
     bundleRequest: z.infer<typeof pulseBundleRequestSchema>,
+    bundleType: PulseInsightBundleType,
   ): Promise<z.infer<typeof pulseBundleResponseSchema>> => {
     const response = await this._apiClient.generatePulseMetricValueInsightBundle(
       { bundle_request: bundleRequest.bundle_request },
-      { ...this.authHeader },
+      { params: { bundle_type: bundleType }, ...this.authHeader },
     );
     return response ?? {};
   };

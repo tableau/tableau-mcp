@@ -1,14 +1,19 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import z from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { getNewRestApiInstanceAsync } from '../../../restApiInstance.js';
-import { pulseBundleRequestSchema } from '../../../sdks/tableau/types/pulse.js';
+import {
+  pulseBundleRequestSchema,
+  pulseInsightBundleTypeEnum,
+} from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
 
 const paramsSchema = {
   bundleRequest: pulseBundleRequestSchema,
+  bundleType: z.optional(z.enum(pulseInsightBundleTypeEnum)),
 };
 
 export const getGeneratePulseMetricValueInsightBundleTool = (
@@ -19,7 +24,6 @@ export const getGeneratePulseMetricValueInsightBundleTool = (
     name: 'generate-pulse-metric-value-insight-bundle',
     description: `
 Generate an insight bundle for the current aggregated value for Pulse Metric using Tableau REST API.  You need the full information of the Pulse Metric and Pulse Metric Definition to use this tool.
-Sometimes users will just ask for the ban for a Pulse Metric, which is also what this tool gets.  A ban in this context is the current aggregated value for a metric, period over period change, and the highest ranked insight for each filterable dimension of the metric.
 
 **Parameters:**
 - \`bundleRequest\` (required): The request to generate a bundle for.  Most of the information comes from data returned from other tools that retrieve Pulse Metric and Pulse Metric Definition information.  When creating the bundleRequest, you will need to set options using the following values:
@@ -27,6 +31,11 @@ Sometimes users will just ask for the ban for a Pulse Metric, which is also what
     - time_zone: 'UTC'
     - language: 'LANGUAGE_EN_US'
     - locale: 'LOCALE_EN_US'
+- \`bundleType\` (optional): The type of bundle to generate.  The default is 'ban'.
+  - 'ban' - Return a basic insight bundle with the current aggregated value for the Pulse Metric, period over period change, and the highest ranked insight for each filterable dimension of the metric.
+  - 'springboard' - Return a springboard insight bundle with the current value, period over period change, and the highest ranked insight for the metric.
+  - 'basic' - Similar to a springboard insight, but data is focused on the dimensions of a metric that are low bandwidth because they have small value sets. It shows the current value, period over period change, and the highest ranked insight for the metric for that data.
+  - 'detail' - Shows insights on performance over time of the metric, a summary visualization of metric highs and lows and trends, breakdowns of top contributors for each filterable dimension of the metric, and followup insights based on the top ranked insights not already presented.
 
 **Example Usage:**
 - Generate an insight bundle for the current aggregated value for the Pulse metric:
@@ -114,11 +123,11 @@ Sometimes users will just ask for the ban for a Pulse Metric, which is also what
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ bundleRequest }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ bundleRequest, bundleType }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
       return await generatePulseMetricValueInsightBundleTool.logAndExecute({
         requestId,
-        args: { bundleRequest },
+        args: { bundleRequest, bundleType },
         callback: async () => {
           const restApi = await getNewRestApiInstanceAsync(
             config.server,
@@ -127,7 +136,10 @@ Sometimes users will just ask for the ban for a Pulse Metric, which is also what
             server,
           );
           return new Ok(
-            await restApi.pulseMethods.generatePulseMetricValueInsightBundle(bundleRequest),
+            await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
+              bundleRequest,
+              bundleType ?? 'ban',
+            ),
           );
         },
       });

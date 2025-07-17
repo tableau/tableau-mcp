@@ -339,6 +339,9 @@ export const pulseBundleResponseSchema = z.object({
   }),
 });
 
+export const pulseInsightBundleTypeEnum = ['ban', 'springboard', 'basic', 'detail'] as const;
+export type PulseInsightBundleType = (typeof pulseInsightBundleTypeEnum)[number];
+
 export const pulseMetricDefinitionViewEnum = [
   'DEFINITION_VIEW_BASIC',
   'DEFINITION_VIEW_FULL',

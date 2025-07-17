@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   pulseBundleRequestSchema,
   pulseBundleResponseSchema,
+  pulseInsightBundleTypeEnum,
   pulseMetricDefinitionSchema,
   pulseMetricDefinitionViewEnum,
   pulseMetricSchema,
@@ -113,7 +114,7 @@ const listPulseMetricSubscriptionsForCurrentUserRestEndpoint = makeEndpoint({
 
 const generatePulseMetricValueInsightBundleRestEndpoint = makeEndpoint({
   method: 'post',
-  path: '/pulse/insights/ban',
+  path: '/pulse/insights/:bundle_type',
   alias: 'generatePulseMetricValueInsightBundle',
   description: 'Generates a bundle for the current aggregated value for the Pulse metric.',
   parameters: [
@@ -121,6 +122,11 @@ const generatePulseMetricValueInsightBundleRestEndpoint = makeEndpoint({
       name: 'bundle_request',
       type: 'Body',
       schema: pulseBundleRequestSchema,
+    },
+    {
+      name: 'bundle_type',
+      type: 'Path',
+      schema: z.enum(pulseInsightBundleTypeEnum),
     },
   ],
   response: pulseBundleResponseSchema,
