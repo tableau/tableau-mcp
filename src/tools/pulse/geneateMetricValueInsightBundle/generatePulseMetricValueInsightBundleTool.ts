@@ -108,7 +108,7 @@ Sometimes users will just ask for the ban for a Pulse Metric, which is also what
 `,
     paramsSchema,
     annotations: {
-      title: 'Generate Pulse Metric Bundle',
+      title: 'Generate Pulse Metric Value Insight Bundle',
       readOnlyHint: true,
       openWorldHint: false,
     },
