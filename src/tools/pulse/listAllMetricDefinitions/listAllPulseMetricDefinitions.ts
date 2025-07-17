@@ -3,7 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { getNewRestApiInstanceAsync } from '../../../restApiInstance.js';
+import { useRestApi } from '../../../restApiInstance.js';
 import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
@@ -50,13 +50,17 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
         requestId,
         args: { view },
         callback: async () => {
-          const restApi = await getNewRestApiInstanceAsync(
-            config.server,
-            config.authConfig,
-            requestId,
-            server,
+          return new Ok(
+            await useRestApi(
+              config.server,
+              config.authConfig,
+              requestId,
+              server,
+              async (restApi) => {
+                return await restApi.pulseMethods.listAllPulseMetricDefinitions(view);
+              },
+            ),
           );
-          return new Ok(await restApi.pulseMethods.listAllPulseMetricDefinitions(view));
         },
       });
     },

@@ -3,7 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
-import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
+import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { paginate } from '../../utils/paginate.js';
 import { Tool } from '../tool.js';
@@ -101,34 +101,37 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
         requestId,
         args: { filter, pageSize, limit },
         callback: async () => {
-          const restApi = await getNewRestApiInstanceAsync(
-            config.server,
-            config.authConfig,
-            requestId,
-            server,
-          );
+          return new Ok(
+            await useRestApi(
+              config.server,
+              config.authConfig,
+              requestId,
+              server,
+              async (restApi) => {
+                const datasources = await paginate({
+                  pageConfig: {
+                    pageSize,
+                    limit: config.maxResultLimit
+                      ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                      : limit,
+                  },
+                  getDataFn: async (pageConfig) => {
+                    const { pagination, datasources: data } =
+                      await restApi.datasourcesMethods.listDatasources({
+                        siteId: restApi.siteId,
+                        filter: validatedFilter ?? '',
+                        pageSize: pageConfig.pageSize,
+                        pageNumber: pageConfig.pageNumber,
+                      });
 
-          const datasources = await paginate({
-            pageConfig: {
-              pageSize,
-              limit: config.maxResultLimit
-                ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
-                : limit,
-            },
-            getDataFn: async (pageConfig) => {
-              const { pagination, datasources: data } =
-                await restApi.datasourcesMethods.listDatasources({
-                  siteId: restApi.siteId,
-                  filter: validatedFilter ?? '',
-                  pageSize: pageConfig.pageSize,
-                  pageNumber: pageConfig.pageNumber,
+                    return { pagination, data };
+                  },
                 });
 
-              return { pagination, data };
-            },
-          });
-
-          return new Ok(datasources);
+                return datasources;
+              },
+            ),
+          );
         },
       });
     },
