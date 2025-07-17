@@ -2,6 +2,7 @@ import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
 import {
+  pulseBundleRequestSchema,
   pulseMetricDefinitionSchema,
   pulseMetricDefinitionViewEnum,
   pulseMetricSchema,
@@ -109,7 +110,25 @@ const listPulseMetricSubscriptionsForCurrentUserRestEndpoint = makeEndpoint({
   }),
 });
 
+const getPulseMetricBundleRestEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/pulse/metrics%3Abundle',
+  alias: 'getPulseMetricBundle',
+  description: 'Returns a bundle of Pulse Metrics for a list of metric IDs.',
+  parameters: [
+    {
+      name: 'bundle_request',
+      type: 'Body',
+      schema: pulseBundleRequestSchema,
+    },
+  ],
+  response: z.object({
+    bundle_response: z.object({}),
+  }),
+});
+
 const pulseApi = makeApi([
+  getPulseMetricBundleRestEndpoint,
   listAllPulseMetricDefinitionsRestEndpoint,
   listPulseMetricDefinitionsFromMetricDefinitionIdsRestEndpoint,
   listPulseMetricsFromMetricDefinitionIdRestEndpoint,

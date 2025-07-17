@@ -45,21 +45,27 @@ export const pulseExtensionOptionsSchema = z.object({
   offset_from_today: z.number(),
 });
 
+export const pulseMetricSpecificationSchema = z.object({
+  filters: z.array(pulseFilterSchema),
+  measurement_period: z.object({
+    granularity: z.string(),
+    range: z.string(),
+  }),
+  comparison: z.object({ comparison: z.string() }),
+});
+
+export const pulseGoalsSchema = z.object({
+  target: z.object({ value: z.number() }),
+});
+
 export const pulseMetricSchema = z.object({
   id: z.string(),
-  specification: z.object({
-    filters: z.array(pulseFilterSchema),
-    measurement_period: z.object({
-      granularity: z.string(),
-      range: z.string(),
-    }),
-    comparison: z.object({ comparison: z.string() }),
-  }),
+  specification: pulseMetricSpecificationSchema,
   definition_id: z.string(),
   is_default: z.boolean(),
   schema_version: z.string(),
   metric_version: z.number(),
-  goals: z.object({ target: z.object({ value: z.number() }) }),
+  goals: pulseGoalsSchema,
   is_followed: z.boolean(),
 });
 
@@ -115,6 +121,183 @@ export const pulseMetricDefinitionSchema = z.object({
 export const pulseMetricSubscriptionSchema = z.object({
   id: z.string(),
   metric_id: z.string(),
+});
+
+// prettier-ignore
+export const languageEnumSchema = z.enum([
+  "LANGUAGE_UNSPECIFIED",
+  "LANGUAGE_DE_DE",
+  "LANGUAGE_EN_US",
+  "LANGUAGE_EN_GB",
+  "LANGUAGE_ES_ES",
+  "LANGUAGE_FR_FR",
+  "LANGUAGE_FR_CA",
+  "LANGUAGE_GA_IE",
+  "LANGUAGE_IT_IT",
+  "LANGUAGE_JA_JP",
+  "LANGUAGE_KO_KR",
+  "LANGUAGE_NL_NL",
+  "LANGUAGE_PT_BR",
+  "LANGUAGE_SV_SE",
+  "LANGUAGE_TH_TH",
+  "LANGUAGE_ZH_CN",
+  "LANGUAGE_ZH_TW",
+]);
+export type LanguageEnumType = z.infer<typeof languageEnumSchema>;
+
+// prettier-ignore
+export const localeEnumSchema = z.enum([
+  "LOCALE_UNSPECIFIED",
+  "LOCALE_AR_AE",
+  "LOCALE_AR_BH",
+  "LOCALE_AR_DZ",
+  "LOCALE_AR_EG",
+  "LOCALE_AR_IQ",
+  "LOCALE_AR_JO",
+  "LOCALE_AR_KW",
+  "LOCALE_AR_LB",
+  "LOCALE_AR_LY",
+  "LOCALE_AR_MA",
+  "LOCALE_AR_OM",
+  "LOCALE_AR_QA",
+  "LOCALE_AR_SA",
+  "LOCALE_AR_SD",
+  "LOCALE_AR_SY",
+  "LOCALE_AR_TN",
+  "LOCALE_AR_YE",
+  "LOCALE_BE_BY",
+  "LOCALE_BG_BG",
+  "LOCALE_CA_ES",
+  "LOCALE_CS_CZ",
+  "LOCALE_DA_DK",
+  "LOCALE_DE_AT",
+  "LOCALE_DE_CH",
+  "LOCALE_DE_DE",
+  "LOCALE_DE_LU",
+  "LOCALE_EL_CY",
+  "LOCALE_EL_GR",
+  "LOCALE_EN_AU",
+  "LOCALE_EN_CA",
+  "LOCALE_EN_GB",
+  "LOCALE_EN_IE",
+  "LOCALE_EN_IN",
+  "LOCALE_EN_MT",
+  "LOCALE_EN_NZ",
+  "LOCALE_EN_PH",
+  "LOCALE_EN_SG",
+  "LOCALE_EN_US",
+  "LOCALE_EN_ZA",
+  "LOCALE_ES_AR",
+  "LOCALE_ES_BO",
+  "LOCALE_ES_CL",
+  "LOCALE_ES_CO",
+  "LOCALE_ES_CR",
+  "LOCALE_ES_DO",
+  "LOCALE_ES_EC",
+  "LOCALE_ES_ES",
+  "LOCALE_ES_GT",
+  "LOCALE_ES_HN",
+  "LOCALE_ES_MX",
+  "LOCALE_ES_NI",
+  "LOCALE_ES_PA",
+  "LOCALE_ES_PE",
+  "LOCALE_ES_PR",
+  "LOCALE_ES_PY",
+  "LOCALE_ES_SV",
+  "LOCALE_ES_US",
+  "LOCALE_ES_UY",
+  "LOCALE_ES_VE",
+  "LOCALE_ET_EE",
+  "LOCALE_FI_FI",
+  "LOCALE_FR_BE",
+  "LOCALE_FR_CA",
+  "LOCALE_FR_CH",
+  "LOCALE_FR_FR",
+  "LOCALE_FR_LU",
+  "LOCALE_GA_IE",
+  "LOCALE_HE_IL",
+  "LOCALE_HI_IN",
+  "LOCALE_HR_HR",
+  "LOCALE_HU_HU",
+  "LOCALE_ID_ID",
+  "LOCALE_IN_ID",
+  "LOCALE_IS_IS",
+  "LOCALE_IT_CH",
+  "LOCALE_IT_IT",
+  "LOCALE_IW_IL",
+  "LOCALE_JA_JP",
+  "LOCALE_KO_KR",
+  "LOCALE_LT_LT",
+  "LOCALE_LV_LV",
+  "LOCALE_MK_MK",
+  "LOCALE_MS_MY",
+  "LOCALE_MT_MT",
+  "LOCALE_NL_BE",
+  "LOCALE_NL_NL",
+  "LOCALE_NB_NO",
+  "LOCALE_NO_NO",
+  "LOCALE_PL_PL",
+  "LOCALE_PT_BR",
+  "LOCALE_PT_PT",
+  "LOCALE_RO_RO",
+  "LOCALE_RU_RU",
+  "LOCALE_SK_SK",
+  "LOCALE_SL_SI",
+  "LOCALE_SQ_AL",
+  "LOCALE_SR_BA",
+  "LOCALE_SR_ME",
+  "LOCALE_SR_RS",
+  "LOCALE_SV_SE",
+  "LOCALE_TH_TH",
+  "LOCALE_TR_TR",
+  "LOCALE_UK_UA",
+  "LOCALE_VI_VN",
+  "LOCALE_ZH_CN",
+  "LOCALE_ZH_HK",
+  "LOCALE_ZH_SG",
+  "LOCALE_ZH_TW",
+]);
+export type LocaleEnumType = z.infer<typeof localeEnumSchema>;
+
+// prettier-ignore
+export const outputFormatEnumSchema = z.enum([
+  "OUTPUT_FORMAT_UNSPECIFIED",
+  "OUTPUT_FORMAT_HTML",
+  "OUTPUT_FORMAT_TEXT",
+]);
+export type OutputFormatEnumType = z.infer<typeof outputFormatEnumSchema>;
+
+export const pulseBundleRequestSchema = z.object({
+  bundle_request: z.object({
+    version: z.number(),
+    options: z.object({
+      output_format: outputFormatEnumSchema,
+      time_zone: z.string(),
+      language: languageEnumSchema,
+      locale: localeEnumSchema,
+    }),
+    input: z.object({
+      metadata: z.object({
+        name: z.string().nonempty(),
+        metric_id: z.string().nonempty(),
+        definition_id: z.string().nonempty(),
+      }),
+      metric: z.object({
+        definition: z.object({
+          datasource: z.object({
+            id: z.string(),
+          }),
+          basic_specification: pulseBasicSpecificationSchema,
+          is_running_total: z.boolean(),
+        }),
+        metric_specification: pulseMetricSpecificationSchema,
+        extension_options: pulseExtensionOptionsSchema,
+        representation_options: pulseRepresentationOptionsSchema,
+        insights_options: insightOptionsSchema,
+        goals: pulseGoalsSchema,
+      }),
+    }),
+  }),
 });
 
 export const pulseMetricDefinitionViewEnum = [
