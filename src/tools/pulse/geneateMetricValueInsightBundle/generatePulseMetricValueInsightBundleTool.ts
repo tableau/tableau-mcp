@@ -18,7 +18,8 @@ export const getGeneratePulseMetricValueInsightBundleTool = (
     server,
     name: 'generate-pulse-metric-value-insight-bundle',
     description: `
-Generate a bundle for the current aggregated value for Pulse Metric using Tableau REST API.  You need the full information of the Pulse Metric and Pulse Metric Definition to use this tool.
+Generate an insight bundle for the current aggregated value for Pulse Metric using Tableau REST API.  You need the full information of the Pulse Metric and Pulse Metric Definition to use this tool.
+Sometimes users will just ask for the ban for a Pulse Metric, which is also what this tool gets.  A ban in this context is the current aggregated value for a metric, period over period change, and the highest ranked insight for each filterable dimension of the metric.
 
 **Parameters:**
 - \`bundleRequest\` (required): The request to generate a bundle for.  Most of the information comes from data returned from other tools that retrieve Pulse Metric and Pulse Metric Definition information.  When creating the bundleRequest, you will need to set options using the following values:
@@ -28,7 +29,7 @@ Generate a bundle for the current aggregated value for Pulse Metric using Tablea
     - locale: 'LOCALE_EN_US'
 
 **Example Usage:**
-- Generate a bundle for the current aggregated value for the Pulse metric:
+- Generate an insight bundle for the current aggregated value for the Pulse metric:
     bundleRequest: {
       bundle_request: {
         version: 1,
