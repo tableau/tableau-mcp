@@ -129,16 +129,18 @@ describe('validateFilterValues', () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result.error).toHaveLength(1);
-    expect(result.error[0].field).toBe('Region');
-    expect(result.error[0].invalidValues).toEqual(['Wast']);
-    expect(result.error[0].sampleValues).toContain('West'); // Should contain fuzzy match
-    expect(result.error[0].message).toContain('Filter validation failed for field "Region"');
-    expect(result.error[0].message).toContain('Wast');
-    expect(result.error[0].message).toContain('Did you mean:');
-    expect(result.error[0].message).toContain(
-      'evaluate whether you included the wrong filter value',
-    );
+    if (result.isErr()) {
+      expect(result.error).toHaveLength(1);
+      expect(result.error[0].field).toBe('Region');
+      expect(result.error[0].invalidValues).toEqual(['Wast']);
+      expect(result.error[0].sampleValues).toContain('West'); // Should contain fuzzy match
+      expect(result.error[0].message).toContain('Filter validation failed for field "Region"');
+      expect(result.error[0].message).toContain('Wast');
+      expect(result.error[0].message).toContain('Did you mean:');
+      expect(result.error[0].message).toContain(
+        'evaluate whether you included the wrong filter value',
+      );
+    }
   });
 
   it('should return error for SET filter with completely invalid values', async () => {
@@ -176,16 +178,18 @@ describe('validateFilterValues', () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result.error).toHaveLength(1);
-    expect(result.error[0].field).toBe('Region');
-    expect(result.error[0].invalidValues).toEqual(['InvalidRegion']);
-    expect(result.error[0].sampleValues).toHaveLength(5); // Should fallback to random samples when no fuzzy matches
-    expect(result.error[0].message).toContain('Filter validation failed for field "Region"');
-    expect(result.error[0].message).toContain('InvalidRegion');
-    expect(result.error[0].message).toContain('Did you mean:');
-    expect(result.error[0].message).toContain(
-      'evaluate whether you included the wrong filter value',
-    );
+    if (result.isErr()) {
+      expect(result.error).toHaveLength(1);
+      expect(result.error[0].field).toBe('Region');
+      expect(result.error[0].invalidValues).toEqual(['InvalidRegion']);
+      expect(result.error[0].sampleValues).toHaveLength(5); // Should fallback to random samples when no fuzzy matches
+      expect(result.error[0].message).toContain('Filter validation failed for field "Region"');
+      expect(result.error[0].message).toContain('InvalidRegion');
+      expect(result.error[0].message).toContain('Did you mean:');
+      expect(result.error[0].message).toContain(
+        'evaluate whether you included the wrong filter value',
+      );
+    }
   });
 
   it('should validate MATCH filter with valid pattern', async () => {
@@ -259,16 +263,20 @@ describe('validateFilterValues', () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result.error).toHaveLength(1);
-    expect(result.error[0].field).toBe('Customer Name');
-    expect(result.error[0].invalidValues).toEqual(['starts with "Jon"']);
-    expect(result.error[0].sampleValues).toContain('John Doe'); // Should contain similar value
-    expect(result.error[0].message).toContain('Filter validation failed for field "Customer Name"');
-    expect(result.error[0].message).toContain('starts with "Jon"');
-    expect(result.error[0].message).toContain('Similar values in this field:');
-    expect(result.error[0].message).toContain(
-      'evaluate whether you included the wrong filter value',
-    );
+    if (result.isErr()) {
+      expect(result.error).toHaveLength(1);
+      expect(result.error[0].field).toBe('Customer Name');
+      expect(result.error[0].invalidValues).toEqual(['starts with "Jon"']);
+      expect(result.error[0].sampleValues).toContain('John Doe'); // Should contain similar value
+      expect(result.error[0].message).toContain(
+        'Filter validation failed for field "Customer Name"',
+      );
+      expect(result.error[0].message).toContain('starts with "Jon"');
+      expect(result.error[0].message).toContain('Similar values in this field:');
+      expect(result.error[0].message).toContain(
+        'evaluate whether you included the wrong filter value',
+      );
+    }
   });
 
   it('should return error for MATCH filter with completely invalid pattern', async () => {
@@ -306,16 +314,20 @@ describe('validateFilterValues', () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result.error).toHaveLength(1);
-    expect(result.error[0].field).toBe('Customer Name');
-    expect(result.error[0].invalidValues).toEqual(['starts with "XYZ123"']);
-    expect(result.error[0].sampleValues).toHaveLength(5); // Should fallback to random samples
-    expect(result.error[0].message).toContain('Filter validation failed for field "Customer Name"');
-    expect(result.error[0].message).toContain('starts with "XYZ123"');
-    expect(result.error[0].message).toContain('Similar values in this field:');
-    expect(result.error[0].message).toContain(
-      'evaluate whether you included the wrong filter value',
-    );
+    if (result.isErr()) {
+      expect(result.error).toHaveLength(1);
+      expect(result.error[0].field).toBe('Customer Name');
+      expect(result.error[0].invalidValues).toEqual(['starts with "XYZ123"']);
+      expect(result.error[0].sampleValues).toHaveLength(5); // Should fallback to random samples
+      expect(result.error[0].message).toContain(
+        'Filter validation failed for field "Customer Name"',
+      );
+      expect(result.error[0].message).toContain('starts with "XYZ123"');
+      expect(result.error[0].message).toContain('Similar values in this field:');
+      expect(result.error[0].message).toContain(
+        'evaluate whether you included the wrong filter value',
+      );
+    }
   });
 
   it('should handle complex MATCH filter with multiple patterns', async () => {
@@ -402,11 +414,13 @@ describe('validateFilterValues', () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result.error).toHaveLength(2);
-    expect(result.error[0].field).toBe('Region');
-    expect(result.error[0].sampleValues).toContain('West'); // Should suggest 'West' for 'Wast'
-    expect(result.error[1].field).toBe('Category');
-    expect(result.error[1].sampleValues).toContain('Electronics'); // Should suggest 'Electronics' for 'Electronicss'
+    if (result.isErr()) {
+      expect(result.error).toHaveLength(2);
+      expect(result.error[0].field).toBe('Region');
+      expect(result.error[0].sampleValues).toContain('West'); // Should suggest 'West' for 'Wast'
+      expect(result.error[1].field).toBe('Category');
+      expect(result.error[1].sampleValues).toContain('Electronics'); // Should suggest 'Electronics' for 'Electronicss'
+    }
   });
 
   it('should handle validation query errors gracefully', async () => {
@@ -494,12 +508,14 @@ describe('validateFilterValues', () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result.error).toHaveLength(1);
-    expect(result.error[0].field).toBe('Category');
-    expect(result.error[0].invalidValues).toEqual(['Electronis']);
-    expect(result.error[0].sampleValues).toContain('Electronics'); // Should suggest the closest match
-    expect(result.error[0].message).toContain('Did you mean:');
-    expect(result.error[0].message).toContain('Electronics');
+    if (result.isErr()) {
+      expect(result.error).toHaveLength(1);
+      expect(result.error[0].field).toBe('Category');
+      expect(result.error[0].invalidValues).toEqual(['Electronis']);
+      expect(result.error[0].sampleValues).toContain('Electronics'); // Should suggest the closest match
+      expect(result.error[0].message).toContain('Did you mean:');
+      expect(result.error[0].message).toContain('Electronics');
+    }
   });
 
   it('should use random sampling when no fuzzy matches are found for SET filters', async () => {
@@ -538,17 +554,19 @@ describe('validateFilterValues', () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result.error).toHaveLength(1);
-    expect(result.error[0].field).toBe('Region');
-    expect(result.error[0].invalidValues).toEqual(['XYZ123']);
-    // Should have 5 random samples since no fuzzy matches found
-    expect(result.error[0].sampleValues).toHaveLength(5);
-    // Should contain valid region values (random sampling fallback)
-    const validRegions = ['East', 'West', 'North', 'South', 'Central', 'Northeast', 'Southwest'];
-    result.error[0].sampleValues.forEach((sample) => {
-      expect(validRegions).toContain(sample);
-    });
-    expect(result.error[0].message).toContain('Did you mean:');
+    if (result.isErr()) {
+      expect(result.error).toHaveLength(1);
+      expect(result.error[0].field).toBe('Region');
+      expect(result.error[0].invalidValues).toEqual(['XYZ123']);
+      // Should have 5 random samples since no fuzzy matches found
+      expect(result.error[0].sampleValues).toHaveLength(5);
+      // Should contain valid region values (random sampling fallback)
+      const validRegions = ['East', 'West', 'North', 'South', 'Central', 'Northeast', 'Southwest'];
+      result.error[0].sampleValues.forEach((sample) => {
+        expect(validRegions).toContain(sample);
+      });
+      expect(result.error[0].message).toContain('Did you mean:');
+    }
   });
 
   it('should use random sampling when array is smaller than requested count', async () => {
@@ -584,14 +602,16 @@ describe('validateFilterValues', () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result.error).toHaveLength(1);
-    expect(result.error[0].field).toBe('Status');
-    expect(result.error[0].invalidValues).toEqual(['InvalidStatus']);
-    // Should return all 3 available values since array is smaller than requested count
-    expect(result.error[0].sampleValues).toHaveLength(3);
-    expect(result.error[0].sampleValues).toEqual(
-      expect.arrayContaining(['Active', 'Inactive', 'Pending']),
-    );
+    if (result.isErr()) {
+      expect(result.error).toHaveLength(1);
+      expect(result.error[0].field).toBe('Status');
+      expect(result.error[0].invalidValues).toEqual(['InvalidStatus']);
+      // Should return all 3 available values since array is smaller than requested count
+      expect(result.error[0].sampleValues).toHaveLength(3);
+      expect(result.error[0].sampleValues).toEqual(
+        expect.arrayContaining(['Active', 'Inactive', 'Pending']),
+      );
+    }
   });
 
   it('should combine fuzzy matches with random sampling when not enough fuzzy matches are found', async () => {
@@ -630,17 +650,19 @@ describe('validateFilterValues', () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result.error).toHaveLength(1);
-    expect(result.error[0].field).toBe('Product');
-    expect(result.error[0].invalidValues).toEqual(['Chair', 'XYZ999']);
-    // Should have fuzzy match for 'Chair' plus random samples to fill up to 5
-    expect(result.error[0].sampleValues).toHaveLength(5);
-    expect(result.error[0].sampleValues).toContain('Chairs'); // Fuzzy match for 'Chair'
-    // Should also contain other random samples
-    const allProducts = ['Chairs', 'Table', 'Desk', 'Bookshelf', 'Cabinet', 'Sofa', 'Bed'];
-    result.error[0].sampleValues.forEach((sample) => {
-      expect(allProducts).toContain(sample);
-    });
+    if (result.isErr()) {
+      expect(result.error).toHaveLength(1);
+      expect(result.error[0].field).toBe('Product');
+      expect(result.error[0].invalidValues).toEqual(['Chair', 'XYZ999']);
+      // Should have fuzzy match for 'Chair' plus random samples to fill up to 5
+      expect(result.error[0].sampleValues).toHaveLength(5);
+      expect(result.error[0].sampleValues).toContain('Chairs'); // Fuzzy match for 'Chair'
+      // Should also contain other random samples
+      const allProducts = ['Chairs', 'Table', 'Desk', 'Bookshelf', 'Cabinet', 'Sofa', 'Bed'];
+      result.error[0].sampleValues.forEach((sample) => {
+        expect(allProducts).toContain(sample);
+      });
+    }
   });
 
   it('should use random sampling for MATCH filters when no similar values are found', async () => {
@@ -678,22 +700,24 @@ describe('validateFilterValues', () => {
     );
 
     expect(result.isErr()).toBe(true);
-    expect(result.error).toHaveLength(1);
-    expect(result.error[0].field).toBe('Customer Name');
-    expect(result.error[0].invalidValues).toEqual(['starts with "XYZ"']);
-    // Should fall back to random sampling since no similar values found
-    expect(result.error[0].sampleValues).toHaveLength(5);
-    const allCustomers = [
-      'Alice Johnson',
-      'Bob Smith',
-      'Carol Williams',
-      'David Brown',
-      'Emily Davis',
-      'Frank Miller',
-    ];
-    result.error[0].sampleValues.forEach((sample) => {
-      expect(allCustomers).toContain(sample);
-    });
-    expect(result.error[0].message).toContain('Similar values in this field:');
+    if (result.isErr()) {
+      expect(result.error).toHaveLength(1);
+      expect(result.error[0].field).toBe('Customer Name');
+      expect(result.error[0].invalidValues).toEqual(['starts with "XYZ"']);
+      // Should fall back to random sampling since no similar values found
+      expect(result.error[0].sampleValues).toHaveLength(5);
+      const allCustomers = [
+        'Alice Johnson',
+        'Bob Smith',
+        'Carol Williams',
+        'David Brown',
+        'Emily Davis',
+        'Frank Miller',
+      ];
+      result.error[0].sampleValues.forEach((sample) => {
+        expect(allCustomers).toContain(sample);
+      });
+      expect(result.error[0].message).toContain('Similar values in this field:');
+    }
   });
 });
