@@ -2,6 +2,7 @@ import { Err, Ok } from 'ts-results-es';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
+import { Server } from '../../../server.js';
 import { Query } from '../queryDatasourceValidator.js';
 import { validateFilterValues } from './validateFilterValues.js';
 
@@ -24,7 +25,12 @@ describe('validateFilterValues', () => {
       fields: [{ fieldCaption: 'Sales' }],
     };
 
-    const result = await validateFilterValues(query, mockVizqlDataServiceMethods, mockDatasource);
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
 
     expect(result.isOk()).toBe(true);
   });
@@ -42,7 +48,12 @@ describe('validateFilterValues', () => {
       ],
     };
 
-    const result = await validateFilterValues(query, mockVizqlDataServiceMethods, mockDatasource);
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
 
     expect(result.isOk()).toBe(true);
   });
@@ -60,7 +71,9 @@ describe('validateFilterValues', () => {
     };
 
     // Mock successful query returning existing values
-    (mockVizqlDataServiceMethods.queryDatasource as any).mockResolvedValue(
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
       new Ok({
         data: [
           { DistinctValues: 'East' },
@@ -71,7 +84,12 @@ describe('validateFilterValues', () => {
       }),
     );
 
-    const result = await validateFilterValues(query, mockVizqlDataServiceMethods, mockDatasource);
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
 
     expect(result.isOk()).toBe(true);
   });
@@ -89,7 +107,9 @@ describe('validateFilterValues', () => {
     };
 
     // Mock successful query returning existing values
-    (mockVizqlDataServiceMethods.queryDatasource as any).mockResolvedValue(
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
       new Ok({
         data: [
           { DistinctValues: 'East' },
@@ -101,21 +121,24 @@ describe('validateFilterValues', () => {
       }),
     );
 
-    const result = await validateFilterValues(query, mockVizqlDataServiceMethods, mockDatasource);
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
 
     expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error).toHaveLength(1);
-      expect(result.error[0].field).toBe('Region');
-      expect(result.error[0].invalidValues).toEqual(['Wast']);
-      expect(result.error[0].sampleValues).toContain('West'); // Should contain fuzzy match
-      expect(result.error[0].message).toContain('Filter validation failed for field "Region"');
-      expect(result.error[0].message).toContain('Wast');
-      expect(result.error[0].message).toContain('Did you mean:');
-      expect(result.error[0].message).toContain(
-        'evaluate whether you included the wrong filter value',
-      );
-    }
+    expect(result.error).toHaveLength(1);
+    expect(result.error[0].field).toBe('Region');
+    expect(result.error[0].invalidValues).toEqual(['Wast']);
+    expect(result.error[0].sampleValues).toContain('West'); // Should contain fuzzy match
+    expect(result.error[0].message).toContain('Filter validation failed for field "Region"');
+    expect(result.error[0].message).toContain('Wast');
+    expect(result.error[0].message).toContain('Did you mean:');
+    expect(result.error[0].message).toContain(
+      'evaluate whether you included the wrong filter value',
+    );
   });
 
   it('should return error for SET filter with completely invalid values', async () => {
@@ -131,7 +154,9 @@ describe('validateFilterValues', () => {
     };
 
     // Mock successful query returning existing values
-    (mockVizqlDataServiceMethods.queryDatasource as any).mockResolvedValue(
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
       new Ok({
         data: [
           { DistinctValues: 'East' },
@@ -143,21 +168,24 @@ describe('validateFilterValues', () => {
       }),
     );
 
-    const result = await validateFilterValues(query, mockVizqlDataServiceMethods, mockDatasource);
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
 
     expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error).toHaveLength(1);
-      expect(result.error[0].field).toBe('Region');
-      expect(result.error[0].invalidValues).toEqual(['InvalidRegion']);
-      expect(result.error[0].sampleValues).toHaveLength(5); // Should fallback to random samples when no fuzzy matches
-      expect(result.error[0].message).toContain('Filter validation failed for field "Region"');
-      expect(result.error[0].message).toContain('InvalidRegion');
-      expect(result.error[0].message).toContain('Did you mean:');
-      expect(result.error[0].message).toContain(
-        'evaluate whether you included the wrong filter value',
-      );
-    }
+    expect(result.error).toHaveLength(1);
+    expect(result.error[0].field).toBe('Region');
+    expect(result.error[0].invalidValues).toEqual(['InvalidRegion']);
+    expect(result.error[0].sampleValues).toHaveLength(5); // Should fallback to random samples when no fuzzy matches
+    expect(result.error[0].message).toContain('Filter validation failed for field "Region"');
+    expect(result.error[0].message).toContain('InvalidRegion');
+    expect(result.error[0].message).toContain('Did you mean:');
+    expect(result.error[0].message).toContain(
+      'evaluate whether you included the wrong filter value',
+    );
   });
 
   it('should validate MATCH filter with valid pattern', async () => {
@@ -173,7 +201,9 @@ describe('validateFilterValues', () => {
     };
 
     // Mock successful query returning sample values
-    (mockVizqlDataServiceMethods.queryDatasource as any).mockResolvedValue(
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
       new Ok({
         data: [
           { SampleValues: 'John Doe' },
@@ -184,7 +214,12 @@ describe('validateFilterValues', () => {
       }),
     );
 
-    const result = await validateFilterValues(query, mockVizqlDataServiceMethods, mockDatasource);
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
 
     expect(result.isOk()).toBe(true);
   });
@@ -202,7 +237,9 @@ describe('validateFilterValues', () => {
     };
 
     // Mock successful query returning sample values that don't match exactly but are similar
-    (mockVizqlDataServiceMethods.queryDatasource as any).mockResolvedValue(
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
       new Ok({
         data: [
           { SampleValues: 'John Doe' },
@@ -214,23 +251,24 @@ describe('validateFilterValues', () => {
       }),
     );
 
-    const result = await validateFilterValues(query, mockVizqlDataServiceMethods, mockDatasource);
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
 
     expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error).toHaveLength(1);
-      expect(result.error[0].field).toBe('Customer Name');
-      expect(result.error[0].invalidValues).toEqual(['starts with "Jon"']);
-      expect(result.error[0].sampleValues).toContain('John Doe'); // Should contain similar value
-      expect(result.error[0].message).toContain(
-        'Filter validation failed for field "Customer Name"',
-      );
-      expect(result.error[0].message).toContain('starts with "Jon"');
-      expect(result.error[0].message).toContain('Similar values in this field:');
-      expect(result.error[0].message).toContain(
-        'evaluate whether you included the wrong filter value',
-      );
-    }
+    expect(result.error).toHaveLength(1);
+    expect(result.error[0].field).toBe('Customer Name');
+    expect(result.error[0].invalidValues).toEqual(['starts with "Jon"']);
+    expect(result.error[0].sampleValues).toContain('John Doe'); // Should contain similar value
+    expect(result.error[0].message).toContain('Filter validation failed for field "Customer Name"');
+    expect(result.error[0].message).toContain('starts with "Jon"');
+    expect(result.error[0].message).toContain('Similar values in this field:');
+    expect(result.error[0].message).toContain(
+      'evaluate whether you included the wrong filter value',
+    );
   });
 
   it('should return error for MATCH filter with completely invalid pattern', async () => {
@@ -246,7 +284,9 @@ describe('validateFilterValues', () => {
     };
 
     // Mock successful query returning sample values that don't match
-    (mockVizqlDataServiceMethods.queryDatasource as any).mockResolvedValue(
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
       new Ok({
         data: [
           { SampleValues: 'John Doe' },
@@ -258,23 +298,24 @@ describe('validateFilterValues', () => {
       }),
     );
 
-    const result = await validateFilterValues(query, mockVizqlDataServiceMethods, mockDatasource);
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
 
     expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error).toHaveLength(1);
-      expect(result.error[0].field).toBe('Customer Name');
-      expect(result.error[0].invalidValues).toEqual(['starts with "XYZ123"']);
-      expect(result.error[0].sampleValues).toHaveLength(5); // Should fallback to random samples
-      expect(result.error[0].message).toContain(
-        'Filter validation failed for field "Customer Name"',
-      );
-      expect(result.error[0].message).toContain('starts with "XYZ123"');
-      expect(result.error[0].message).toContain('Similar values in this field:');
-      expect(result.error[0].message).toContain(
-        'evaluate whether you included the wrong filter value',
-      );
-    }
+    expect(result.error).toHaveLength(1);
+    expect(result.error[0].field).toBe('Customer Name');
+    expect(result.error[0].invalidValues).toEqual(['starts with "XYZ123"']);
+    expect(result.error[0].sampleValues).toHaveLength(5); // Should fallback to random samples
+    expect(result.error[0].message).toContain('Filter validation failed for field "Customer Name"');
+    expect(result.error[0].message).toContain('starts with "XYZ123"');
+    expect(result.error[0].message).toContain('Similar values in this field:');
+    expect(result.error[0].message).toContain(
+      'evaluate whether you included the wrong filter value',
+    );
   });
 
   it('should handle complex MATCH filter with multiple patterns', async () => {
@@ -291,7 +332,9 @@ describe('validateFilterValues', () => {
     };
 
     // Mock successful query returning sample values
-    (mockVizqlDataServiceMethods.queryDatasource as any).mockResolvedValue(
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
       new Ok({
         data: [
           { SampleValues: 'Apple MacBook Pro' },
@@ -302,7 +345,12 @@ describe('validateFilterValues', () => {
       }),
     );
 
-    const result = await validateFilterValues(query, mockVizqlDataServiceMethods, mockDatasource);
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
 
     expect(result.isOk()).toBe(true);
   });
@@ -325,7 +373,7 @@ describe('validateFilterValues', () => {
     };
 
     // Mock successful queries returning existing values
-    (mockVizqlDataServiceMethods.queryDatasource as any)
+    (mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce(
         new Ok({
           data: [
@@ -346,16 +394,19 @@ describe('validateFilterValues', () => {
         }),
       );
 
-    const result = await validateFilterValues(query, mockVizqlDataServiceMethods, mockDatasource);
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
 
     expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error).toHaveLength(2);
-      expect(result.error[0].field).toBe('Region');
-      expect(result.error[0].sampleValues).toContain('West'); // Should suggest 'West' for 'Wast'
-      expect(result.error[1].field).toBe('Category');
-      expect(result.error[1].sampleValues).toContain('Electronics'); // Should suggest 'Electronics' for 'Electronicss'
-    }
+    expect(result.error).toHaveLength(2);
+    expect(result.error[0].field).toBe('Region');
+    expect(result.error[0].sampleValues).toContain('West'); // Should suggest 'West' for 'Wast'
+    expect(result.error[1].field).toBe('Category');
+    expect(result.error[1].sampleValues).toContain('Electronics'); // Should suggest 'Electronics' for 'Electronicss'
   });
 
   it('should handle validation query errors gracefully', async () => {
@@ -371,11 +422,16 @@ describe('validateFilterValues', () => {
     };
 
     // Mock failed query
-    (mockVizqlDataServiceMethods.queryDatasource as any).mockResolvedValue(
-      new Err({ errorCode: '404934', message: 'Field not found' }),
-    );
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(new Err({ errorCode: '404934', message: 'Field not found' }));
 
-    const result = await validateFilterValues(query, mockVizqlDataServiceMethods, mockDatasource);
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
 
     // Should return Ok when validation query fails (graceful degradation)
     expect(result.isOk()).toBe(true);
@@ -393,7 +449,12 @@ describe('validateFilterValues', () => {
       ],
     };
 
-    const result = await validateFilterValues(query, mockVizqlDataServiceMethods, mockDatasource);
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
 
     expect(result.isOk()).toBe(true);
     expect(mockVizqlDataServiceMethods.queryDatasource).not.toHaveBeenCalled();
@@ -406,13 +467,14 @@ describe('validateFilterValues', () => {
         {
           field: { fieldCaption: 'Category' },
           filterType: 'SET',
-          values: ['Electronis'], // Missing 'c' from 'Electronics'
+          values: ['Electronis'], // Close typo for 'Electronics'
         },
       ],
     };
 
-    // Mock successful query returning existing values
-    (mockVizqlDataServiceMethods.queryDatasource as any).mockResolvedValue(
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
       new Ok({
         data: [
           { DistinctValues: 'Electronics' },
@@ -424,16 +486,214 @@ describe('validateFilterValues', () => {
       }),
     );
 
-    const result = await validateFilterValues(query, mockVizqlDataServiceMethods, mockDatasource);
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
 
     expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error).toHaveLength(1);
-      expect(result.error[0].field).toBe('Category');
-      expect(result.error[0].invalidValues).toEqual(['Electronis']);
-      expect(result.error[0].sampleValues).toContain('Electronics'); // Should suggest the closest match
-      expect(result.error[0].message).toContain('Did you mean:');
-      expect(result.error[0].message).toContain('Electronics');
-    }
+    expect(result.error).toHaveLength(1);
+    expect(result.error[0].field).toBe('Category');
+    expect(result.error[0].invalidValues).toEqual(['Electronis']);
+    expect(result.error[0].sampleValues).toContain('Electronics'); // Should suggest the closest match
+    expect(result.error[0].message).toContain('Did you mean:');
+    expect(result.error[0].message).toContain('Electronics');
+  });
+
+  it('should use random sampling when no fuzzy matches are found for SET filters', async () => {
+    const query: Query = {
+      fields: [{ fieldCaption: 'Region' }],
+      filters: [
+        {
+          field: { fieldCaption: 'Region' },
+          filterType: 'SET',
+          values: ['XYZ123'], // Very different from any real values
+        },
+      ],
+    };
+
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
+      new Ok({
+        data: [
+          { DistinctValues: 'East' },
+          { DistinctValues: 'West' },
+          { DistinctValues: 'North' },
+          { DistinctValues: 'South' },
+          { DistinctValues: 'Central' },
+          { DistinctValues: 'Northeast' },
+          { DistinctValues: 'Southwest' },
+        ],
+      }),
+    );
+
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
+
+    expect(result.isErr()).toBe(true);
+    expect(result.error).toHaveLength(1);
+    expect(result.error[0].field).toBe('Region');
+    expect(result.error[0].invalidValues).toEqual(['XYZ123']);
+    // Should have 5 random samples since no fuzzy matches found
+    expect(result.error[0].sampleValues).toHaveLength(5);
+    // Should contain valid region values (random sampling fallback)
+    const validRegions = ['East', 'West', 'North', 'South', 'Central', 'Northeast', 'Southwest'];
+    result.error[0].sampleValues.forEach((sample) => {
+      expect(validRegions).toContain(sample);
+    });
+    expect(result.error[0].message).toContain('Did you mean:');
+  });
+
+  it('should use random sampling when array is smaller than requested count', async () => {
+    const query: Query = {
+      fields: [{ fieldCaption: 'Status' }],
+      filters: [
+        {
+          field: { fieldCaption: 'Status' },
+          filterType: 'SET',
+          values: ['InvalidStatus'],
+        },
+      ],
+    };
+
+    // Mock with only 3 values, but getFuzzyMatches will try to get up to 5
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
+      new Ok({
+        data: [
+          { DistinctValues: 'Active' },
+          { DistinctValues: 'Inactive' },
+          { DistinctValues: 'Pending' },
+        ],
+      }),
+    );
+
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
+
+    expect(result.isErr()).toBe(true);
+    expect(result.error).toHaveLength(1);
+    expect(result.error[0].field).toBe('Status');
+    expect(result.error[0].invalidValues).toEqual(['InvalidStatus']);
+    // Should return all 3 available values since array is smaller than requested count
+    expect(result.error[0].sampleValues).toHaveLength(3);
+    expect(result.error[0].sampleValues).toEqual(
+      expect.arrayContaining(['Active', 'Inactive', 'Pending']),
+    );
+  });
+
+  it('should combine fuzzy matches with random sampling when not enough fuzzy matches are found', async () => {
+    const query: Query = {
+      fields: [{ fieldCaption: 'Product' }],
+      filters: [
+        {
+          field: { fieldCaption: 'Product' },
+          filterType: 'SET',
+          values: ['Chair', 'XYZ999'], // 'Chair' has fuzzy match, 'XYZ999' doesn't
+        },
+      ],
+    };
+
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
+      new Ok({
+        data: [
+          { DistinctValues: 'Chairs' }, // Close match for 'Chair'
+          { DistinctValues: 'Table' },
+          { DistinctValues: 'Desk' },
+          { DistinctValues: 'Bookshelf' },
+          { DistinctValues: 'Cabinet' },
+          { DistinctValues: 'Sofa' },
+          { DistinctValues: 'Bed' },
+        ],
+      }),
+    );
+
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
+
+    expect(result.isErr()).toBe(true);
+    expect(result.error).toHaveLength(1);
+    expect(result.error[0].field).toBe('Product');
+    expect(result.error[0].invalidValues).toEqual(['Chair', 'XYZ999']);
+    // Should have fuzzy match for 'Chair' plus random samples to fill up to 5
+    expect(result.error[0].sampleValues).toHaveLength(5);
+    expect(result.error[0].sampleValues).toContain('Chairs'); // Fuzzy match for 'Chair'
+    // Should also contain other random samples
+    const allProducts = ['Chairs', 'Table', 'Desk', 'Bookshelf', 'Cabinet', 'Sofa', 'Bed'];
+    result.error[0].sampleValues.forEach((sample) => {
+      expect(allProducts).toContain(sample);
+    });
+  });
+
+  it('should use random sampling for MATCH filters when no similar values are found', async () => {
+    const query: Query = {
+      fields: [{ fieldCaption: 'Customer Name' }],
+      filters: [
+        {
+          field: { fieldCaption: 'Customer Name' },
+          filterType: 'MATCH',
+          startsWith: 'XYZ', // No customer names start with XYZ
+        },
+      ],
+    };
+
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
+      new Ok({
+        data: [
+          { SampleValues: 'Alice Johnson' },
+          { SampleValues: 'Bob Smith' },
+          { SampleValues: 'Carol Williams' },
+          { SampleValues: 'David Brown' },
+          { SampleValues: 'Emily Davis' },
+          { SampleValues: 'Frank Miller' },
+        ],
+      }),
+    );
+
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
+
+    expect(result.isErr()).toBe(true);
+    expect(result.error).toHaveLength(1);
+    expect(result.error[0].field).toBe('Customer Name');
+    expect(result.error[0].invalidValues).toEqual(['starts with "XYZ"']);
+    // Should fall back to random sampling since no similar values found
+    expect(result.error[0].sampleValues).toHaveLength(5);
+    const allCustomers = [
+      'Alice Johnson',
+      'Bob Smith',
+      'Carol Williams',
+      'David Brown',
+      'Emily Davis',
+      'Frank Miller',
+    ];
+    result.error[0].sampleValues.forEach((sample) => {
+      expect(allCustomers).toContain(sample);
+    });
+    expect(result.error[0].message).toContain('Similar values in this field:');
   });
 });

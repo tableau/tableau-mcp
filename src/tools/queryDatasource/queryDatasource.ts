@@ -66,6 +66,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
           if (queryDatasourceResponse.isOk() && queryDatasourceResponse.value.data?.length === 0) {
             const filterValidationResult = await validateFilterValues(
+              server,
               query,
               restApi.vizqlDataServiceMethods,
               datasource,

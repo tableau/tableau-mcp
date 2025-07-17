@@ -1,17 +1,18 @@
-import * as levenshtein from 'fast-levenshtein';
+import levenshtein from 'fast-levenshtein';
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
+import { log } from '../../../logging/log.js';
 import {
   Datasource,
-  Filter,
+  MatchFilter,
   Query as QueryType,
   QueryRequest,
+  SetFilter,
 } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
+import { Server } from '../../../server.js';
 import { Query } from '../queryDatasourceValidator.js';
-
-type Filter = z.infer<typeof Filter>;
 
 interface FilterValidationError {
   field: string;
@@ -25,6 +26,7 @@ interface FilterValidationError {
  * Returns fuzzy matched sample values from the field if validation fails.
  */
 export async function validateFilterValues(
+  server: Server,
   query: Query,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: z.infer<typeof Datasource>,
@@ -41,7 +43,7 @@ export async function validateFilterValues(
       (filter.filterType === 'SET' || filter.filterType === 'MATCH') &&
       'fieldCaption' in filter.field &&
       filter.field.fieldCaption,
-  );
+  ) as Array<z.infer<typeof MatchFilter> | z.infer<typeof SetFilter>>;
 
   if (filtersToValidate.length === 0) {
     return Ok.EMPTY;
@@ -49,7 +51,7 @@ export async function validateFilterValues(
 
   // Validate each filter
   for (const filter of filtersToValidate) {
-    const fieldCaption = (filter.field as any).fieldCaption;
+    const fieldCaption = filter.field.fieldCaption;
 
     try {
       if (filter.filterType === 'SET') {
@@ -76,7 +78,7 @@ export async function validateFilterValues(
     } catch (error) {
       // If validation query fails, we'll let the original query proceed
       // This ensures we don't block valid queries due to validation issues
-      console.warn(`Filter validation failed for field ${fieldCaption}:`, error);
+      log.warning(server, `Filter value validation failed for field ${fieldCaption}: ${error}`);
     }
   }
 
@@ -91,7 +93,7 @@ export async function validateFilterValues(
  * Validates a SET filter by checking if all values exist in the target field
  */
 async function validateSetFilter(
-  filter: Filter & { filterType: 'SET' },
+  filter: z.infer<typeof SetFilter> & { filterType: 'SET' },
   fieldCaption: string,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: z.infer<typeof Datasource>,
@@ -113,7 +115,7 @@ async function validateSetFilter(
     query: distinctValuesQuery,
     options: {
       returnFormat: 'OBJECTS',
-      debug: false,
+      debug: true,
       disaggregate: false,
     },
   };
@@ -127,7 +129,9 @@ async function validateSetFilter(
 
   const data = result.value.data || [];
   const existingValues = new Set(
-    data.map((row: any) => String(row.DistinctValues || row[fieldCaption] || '')),
+    (data as Record<string, unknown>[]).map((row) =>
+      String(row.DistinctValues || row[fieldCaption] || ''),
+    ),
   );
 
   // Check which filter values don't exist in the field
@@ -159,7 +163,7 @@ async function validateSetFilter(
  * Validates a MATCH filter by checking if the pattern matches any values in the target field
  */
 async function validateMatchFilter(
-  filter: Filter & { filterType: 'MATCH' },
+  filter: z.infer<typeof MatchFilter> & { filterType: 'MATCH' },
   fieldCaption: string,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: z.infer<typeof Datasource>,
@@ -179,7 +183,7 @@ async function validateMatchFilter(
     query: sampleValuesQuery,
     options: {
       returnFormat: 'OBJECTS',
-      debug: false,
+      debug: true,
       disaggregate: false,
     },
   };
@@ -192,7 +196,9 @@ async function validateMatchFilter(
   }
 
   const data = result.value.data || [];
-  const fieldValues = data.map((row: any) => String(row.SampleValues || row[fieldCaption] || ''));
+  const fieldValues = (data as Record<string, unknown>[]).map((row: any) =>
+    String(row.SampleValues || row[fieldCaption] || ''),
+  );
 
   // Check if any values match the pattern
   const hasMatch = fieldValues.some((value) => {
@@ -217,7 +223,7 @@ async function validateMatchFilter(
 
     const suggestions = similarValues.length > 0 ? similarValues : getRandomSample(fieldValues, 5);
 
-    const patterns = [];
+    const patterns: Array<string> = [];
     if (filter.startsWith) patterns.push(`starts with "${filter.startsWith}"`);
     if (filter.endsWith) patterns.push(`ends with "${filter.endsWith}"`);
     if (filter.contains) patterns.push(`contains "${filter.contains}"`);

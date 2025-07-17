@@ -227,15 +227,13 @@ describe('queryDatasourceTool', () => {
       );
 
       expect(result.isError).toBe(true);
-      if (result.isError) {
-        expect(result.content[0].text).toContain('Filter validation failed for field "Region"');
-        expect(result.content[0].text).toContain('Wast');
-        expect(result.content[0].text).toContain('Did you mean:');
-        expect(result.content[0].text).toContain('West'); // Should suggest fuzzy match
-        expect(result.content[0].text).toContain(
-          'evaluate whether you included the wrong filter value',
-        );
-      }
+      expect(result.content[0].text).toContain('Filter validation failed for field "Region"');
+      expect(result.content[0].text).toContain('Wast');
+      expect(result.content[0].text).toContain('Did you mean:');
+      expect(result.content[0].text).toContain('West'); // Should suggest fuzzy match
+      expect(result.content[0].text).toContain(
+        'evaluate whether you included the wrong filter value',
+      );
 
       // Should call main query first, then validation query
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
@@ -281,17 +279,15 @@ describe('queryDatasourceTool', () => {
       );
 
       expect(result.isError).toBe(true);
-      if (result.isError) {
-        expect(result.content[0].text).toContain(
-          'Filter validation failed for field "Customer Name"',
-        );
-        expect(result.content[0].text).toContain('starts with "Jon"');
-        expect(result.content[0].text).toContain('Similar values in this field:');
-        expect(result.content[0].text).toContain('John Doe'); // Should suggest similar value
-        expect(result.content[0].text).toContain(
-          'evaluate whether you included the wrong filter value',
-        );
-      }
+      expect(result.content[0].text).toContain(
+        'Filter validation failed for field "Customer Name"',
+      );
+      expect(result.content[0].text).toContain('starts with "Jon"');
+      expect(result.content[0].text).toContain('Similar values in this field:');
+      expect(result.content[0].text).toContain('John Doe'); // Should suggest similar value
+      expect(result.content[0].text).toContain(
+        'evaluate whether you included the wrong filter value',
+      );
 
       // Should call main query first, then validation query
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
@@ -373,9 +369,7 @@ describe('queryDatasourceTool', () => {
       );
 
       expect(result.isError).toBe(false);
-      if (!result.isError) {
-        expect(JSON.parse(result.content[0].text as string)).toEqual(mockMainQueryResult);
-      }
+      expect(JSON.parse(result.content[0].text as string)).toEqual(mockMainQueryResult);
 
       // Should only call the main query (no validation needed)
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
@@ -415,9 +409,7 @@ describe('queryDatasourceTool', () => {
       );
 
       expect(result.isError).toBe(false);
-      if (!result.isError) {
-        expect(JSON.parse(result.content[0].text as string)).toEqual(mockMainQueryResult);
-      }
+      expect(JSON.parse(result.content[0].text as string)).toEqual(mockMainQueryResult);
 
       // Should call main query and validation query (which fails gracefully)
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
@@ -478,13 +470,11 @@ describe('queryDatasourceTool', () => {
       );
 
       expect(result.isError).toBe(true);
-      if (result.isError) {
-        const errorText = result.content[0].text as string;
-        expect(errorText).toContain('Filter validation failed for field "Region"');
-        expect(errorText).toContain('Filter validation failed for field "Category"');
-        expect(errorText).toContain('InvalidRegion');
-        expect(errorText).toContain('InvalidCategory');
-      }
+      const errorText = result.content[0].text as string;
+      expect(errorText).toContain('Filter validation failed for field "Region"');
+      expect(errorText).toContain('Filter validation failed for field "Category"');
+      expect(errorText).toContain('InvalidRegion');
+      expect(errorText).toContain('InvalidCategory');
 
       // Should call main query first, then both validation queries
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(3);
