@@ -119,4 +119,44 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     const parsedValue = JSON.parse(result.content[0].text as string);
     expect(parsedValue).toEqual(mockBundleRequestResponse);
   });
+
+  it('should have correct tool properties', () => {
+    expect(tool.name).toBe('generate-pulse-metric-value-insight-bundle');
+    expect(tool.description).toContain(
+      'Generate an insight bundle for the current aggregated value',
+    );
+    expect(tool.paramsSchema).toMatchObject({
+      bundleRequest: expect.any(Object),
+    });
+  });
+
+  it('should handle API errors gracefully', async () => {
+    const errorMessage = 'API Error';
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockRejectedValue(new Error(errorMessage));
+    const result = await tool.callback(
+      { bundleRequest },
+      {
+        signal: new AbortController().signal,
+        requestId: 'test-request-id',
+        sendNotification: vi.fn(),
+        sendRequest: vi.fn(),
+      },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain(errorMessage);
+  });
+
+  it('should return an error for missing bundleRequest', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockRejectedValue(
+      new Error('bundleRequest is required'),
+    );
+    const result = await tool.callback({} as any, {
+      signal: new AbortController().signal,
+      requestId: 'test-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('bundleRequest');
+  });
 });
