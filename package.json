@@ -16,7 +16,7 @@
   },
   "scripts": {
     ":build": "npx rimraf ./build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap",
-    "build": "npm run :build && npm run exec-perms",
+    "build": "npm run :build && npm run exec-perms && npx @anthropic-ai/dxt pack",
     "build:watch": "npm run :build -- --watch",
     "build:docker": "docker build -t tableau-mcp .",
     "lint": "npm exec eslint",

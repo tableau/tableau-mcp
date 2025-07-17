@@ -1,0 +1,69 @@
+{
+  "dxt_version": "0.1",
+  "name": "tableau-mcp",
+  "version": "1.3.0",
+  "description": "An MCP server for Tableau, providing a suite of tools that will make it easier for developers to build AI-applications that integrate with Tableau.",
+  "author": {
+    "name": "Tableau",
+    "url": "https://github.com/tableau/tableau-mcp"
+  },
+  "homepage": "https://github.com/tableau/tableau-mcp",
+  "server": {
+    "type": "node",
+    "entry_point": "build/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/build/index.js"
+      ],
+      "env": {
+        "SERVER": "${user_config.server}",
+        "SITE_NAME": "${user_config.site_name}",
+        "PAT_NAME": "${user_config.pat_name}",
+        "PAT_VALUE": "${user_config.pat_value}"
+      }
+    }
+  },
+  "tools": [
+    { "name": "list-datasources" },
+    { "name": "list-fields" },
+    { "name": "query-datasource" },
+    { "name": "read-metadata" },
+    { "name": "list-all-pulse-metric-definitions" },
+    { "name": "list-pulse-metric-definitions-from-definition-ids" },
+    { "name": "list-pulse-metrics-from-metric-definition-id" },
+    { "name": "list-pulse-metrics-from-metric-ids" },
+    { "name": "list-pulse-metric-subscriptions" }
+  ],
+  "user_config": {
+    "server": {
+      "type": "string",
+      "title": "Server",
+      "description": "The URL of the Tableau server.",
+      "required": true,
+      "sensitive": false
+    },
+    "site_name": {
+      "type": "string",
+      "title": "Site Name",
+      "description": "The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site.",
+      "required": true,
+      "sensitive": false
+    },
+    "pat_name": {
+      "type": "string",
+      "title": "PAT Name",
+      "description": "The name of the Personal Access Token (PAT) to use for authentication.",
+      "required": true,
+      "sensitive": false
+    },
+    "pat_value": {
+      "type": "string",
+      "title": "PAT Value",
+      "description": "The value of the Personal Access Token (PAT) to use for authentication.",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "license": "Apache-2.0"
+}
