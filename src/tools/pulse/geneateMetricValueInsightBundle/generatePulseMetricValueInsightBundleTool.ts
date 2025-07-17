@@ -58,7 +58,9 @@ Sometimes users will just ask for the ban for a Pulse Metric, which is also what
                 time_dimension: {
                   field: 'Order Date',
                 },
+                filters: [],
               },
+              is_running_total: false,
             },
             metric_specification: {
               filters: [],
