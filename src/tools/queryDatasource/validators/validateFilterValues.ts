@@ -58,29 +58,17 @@ export async function validateFilterValues(
 
     try {
       if (filter.filterType === 'SET') {
-        const result = await validateSetFilter(
-          filter,
-          fieldCaption,
-          vizqlDataServiceMethods,
-          datasource,
-        );
+        const result = await validateSetFilter(filter, vizqlDataServiceMethods, datasource);
         if (result.isErr()) {
           validationErrors.push(result.error);
         }
       } else if (filter.filterType === 'MATCH') {
-        const result = await validateMatchFilter(
-          filter,
-          fieldCaption,
-          vizqlDataServiceMethods,
-          datasource,
-        );
+        const result = await validateMatchFilter(filter, vizqlDataServiceMethods, datasource);
         if (result.isErr()) {
           validationErrors.push(result.error);
         }
       }
     } catch (error) {
-      // If validation query fails, we'll let the original query proceed
-      // This ensures we don't block valid queries due to validation issues
       log.warning(server, `Filter value validation failed for field ${fieldCaption}: ${error}`);
     }
   }
@@ -97,10 +85,10 @@ export async function validateFilterValues(
  */
 async function validateSetFilter(
   filter: SetFilter,
-  fieldCaption: string,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: z.infer<typeof Datasource>,
 ): Promise<Result<void, FilterValidationError>> {
+  const fieldCaption = filter.field.fieldCaption;
   const filterValues = filter.values.map((v) => String(v));
 
   // Query to get distinct values from the field
@@ -167,10 +155,11 @@ async function validateSetFilter(
  */
 async function validateMatchFilter(
   filter: MatchFilter,
-  fieldCaption: string,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: z.infer<typeof Datasource>,
 ): Promise<Result<void, FilterValidationError>> {
+  const fieldCaption = filter.field.fieldCaption;
+
   // Query to get a sample of values from the field
   const sampleValuesQuery: z.infer<typeof QueryType> = {
     fields: [
