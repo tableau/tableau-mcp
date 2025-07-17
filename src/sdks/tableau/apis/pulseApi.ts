@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import {
   pulseBundleRequestSchema,
+  pulseBundleResponseSchema,
   pulseMetricDefinitionSchema,
   pulseMetricDefinitionViewEnum,
   pulseMetricSchema,
@@ -110,11 +111,11 @@ const listPulseMetricSubscriptionsForCurrentUserRestEndpoint = makeEndpoint({
   }),
 });
 
-const getPulseMetricBundleRestEndpoint = makeEndpoint({
+const generatePulseMetricBundleRestEndpoint = makeEndpoint({
   method: 'post',
-  path: '/pulse/metrics%3Abundle',
-  alias: 'getPulseMetricBundle',
-  description: 'Returns a bundle of Pulse Metrics for a list of metric IDs.',
+  path: '/pulse/insights/ban',
+  alias: 'generatePulseMetricBundle',
+  description: 'Generates a bundle for the current aggregated value for the Pulse metric.',
   parameters: [
     {
       name: 'bundle_request',
@@ -122,13 +123,11 @@ const getPulseMetricBundleRestEndpoint = makeEndpoint({
       schema: pulseBundleRequestSchema,
     },
   ],
-  response: z.object({
-    bundle_response: z.object({}),
-  }),
+  response: pulseBundleResponseSchema,
 });
 
 const pulseApi = makeApi([
-  getPulseMetricBundleRestEndpoint,
+  generatePulseMetricBundleRestEndpoint,
   listAllPulseMetricDefinitionsRestEndpoint,
   listPulseMetricDefinitionsFromMetricDefinitionIdsRestEndpoint,
   listPulseMetricsFromMetricDefinitionIdRestEndpoint,

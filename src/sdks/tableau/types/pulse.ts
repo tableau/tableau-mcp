@@ -300,6 +300,10 @@ export const pulseBundleRequestSchema = z.object({
   }),
 });
 
+export const pulseBundleResponseSchema = z.object({
+  bundle_response: z.object({}),
+});
+
 export const pulseMetricDefinitionViewEnum = [
   'DEFINITION_VIEW_BASIC',
   'DEFINITION_VIEW_FULL',
