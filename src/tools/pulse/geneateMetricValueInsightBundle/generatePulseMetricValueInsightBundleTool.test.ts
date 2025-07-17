@@ -86,15 +86,26 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     },
   };
 
+  const mockBundleRequestResponse = {
+    bundle_response: {
+      result: {
+        insight_groups: [],
+        has_errors: false,
+        characterization: 'CHARACTERIZATION_UNSPECIFIED',
+      },
+    },
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('should call generatePulseMetricValueInsightBundle and return Ok result', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue('bundle-result');
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(mockBundleRequestResponse);
     const result = await tool.callback({ bundleRequest }, { requestId: 'req-1' });
     expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(bundleRequest);
     expect(result.isError).toBe(false);
-    expect(result.content[0].text).toContain('bundle-result');
+    const parsedValue = JSON.parse(result.content[0].text as string);
+    expect(parsedValue).toEqual(mockBundleRequestResponse);
   });
 });
