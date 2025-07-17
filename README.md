@@ -102,10 +102,14 @@ are stored in one file rather than in each AI tool's config section.
 
 ### Environment Variables
 
+All environment variables specified in a `.env` file will be avabilable to the MCP server. Creating
+a `.env` file is not required though since environment variables can also be provided by AI tools
+via the MCP configuration or to the Docker container via the `env.list` file.
+
 Depending on your desired mode, create your environment configuration as follows:
 
-For **running locally**, create an `mcpServers` JSON snippet using `config.example.json` as a
-template. It should look similar to this:
+For **running locally**, create an `mcpServers` JSON snippet using `config.stdio.json` or
+`config.http.json` as a template. For stdio transport, it should look similar to this:
 
 ```json
 {
@@ -201,26 +205,29 @@ Future work will include a tool to automate this process. For more information, 
 
 ### Running the MCP Inspector
 
-The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a helpful tool to confirm
-your configuration is correct and to explore Tableau MCP capabilities.
+The [MCP Inspector][mcp-inspector] is a helpful tool to confirm your configuration is correct and to
+explore Tableau MCP capabilities.
 
-Create a `config.json` file in the root of the project using `config.example.json` as a template.
-(Docker users can skip this step.)
+- Docker users should create an `env.list` file using `env.example.list` as a template.
+- Non-Docker users should create a `config.json` file in the root of the project using
+  `config.stdio.json` as a template.
 
-After building the project and setting the environment variables in the `env.list` file, you can
-start the MCP Inspector using either of the following commands:
+After building the project and setting the environment variables, you can start the MCP Inspector
+using one of the following commands:
 
-| **Command**              | **Description**                                                                                                              |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `npm run inspect`        | Start the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) which runs the server locally using Node.js.    |
-| `npm run inspect:docker` | Start the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) which runs the server using a Docker container. |
+| **Command**                   | **Transport** | **Description**                                                                                     |
+| ----------------------------- | ------------- | --------------------------------------------------------------------------------------------------- |
+| `npm run inspect`             | STDIO         | Start the [MCP Inspector][mcp-inspector] which runs the server locally using Node.js.               |
+| `npm run inspect:docker`      | STDIO         | Start the [MCP Inspector][mcp-inspector] which runs the server using a Docker container.            |
+| `npm run inspect:http`        | HTTP          | Start the [MCP Inspector][mcp-inspector] which runs the server using Express.                       |
+| `npm run inspect:docker:http` | HTTP          | Start the [MCP Inspector][mcp-inspector] which runs the server using Express in a Docker container. |
 
 ### Claude Desktop
 
 For Claude, open the settings dialog, select the **Developer** section, and click **Edit Config**.
 
-Add the `tableau` MCP server to the `mcpServers` object in the config using `config.example.json` or
-`config.docker.json` as a template.
+Add the `tableau` MCP server to the `mcpServers` object in the config using `config.stdio.json`,
+`config.http.json`, or `config.docker.json` as a template.
 
 ### Cursor
 
@@ -228,23 +235,22 @@ For Cursor, create a configuration file `.cursor/mcp.json` in your project direc
 project-specific access) or `~/.cursor/mcp.json` in your home directory (for global access across
 all projects).
 
-Add the `tableau` MCP server configuration using `config.example.json` or `config.docker.json` as a
-template. For more details, see the
+Add the `tableau` MCP server configuration using `config.stdio.json`, `config.http.json`, or
+`config.docker.json` as a template. For more details, see the
 [Cursor MCP documentation](https://docs.cursor.com/context/model-context-protocol).
 
-Node:
-[![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=tableau&config=eyJjb21tYW5kIjoibm9kZSAvZnVsbC1wYXRoLXRvLXRhYmxlYXUtbWNwL2J1aWxkL2luZGV4LmpzIiwiZW52Ijp7IlNFUlZFUiI6Imh0dHBzOi8vbXktdGFibGVhdS1zZXJ2ZXIuY29tIiwiU0lURV9OQU1FIjoiIiwiUEFUX05BTUUiOiIiLCJQQVRfVkFMVUUiOiIifX0%3D)
-
-Docker:
-[![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=tableau&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIC0tZW52LWZpbGUgcGF0aC90by9lbnYubGlzdCB0YWJsZWF1LW1jcCJ9)
+| Type   | Install link                                                                                                                                                                                                                                                                                                                                  |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node   | [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=tableau&config=eyJjb21tYW5kIjoibm9kZSAvZnVsbC1wYXRoLXRvLXRhYmxlYXUtbWNwL2J1aWxkL2luZGV4LmpzIiwiZW52Ijp7IlNFUlZFUiI6Imh0dHBzOi8vbXktdGFibGVhdS1zZXJ2ZXIuY29tIiwiU0lURV9OQU1FIjoiIiwiUEFUX05BTUUiOiIiLCJQQVRfVkFMVUUiOiIifX0%3D) |
+| Docker | [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=tableau&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIC0tZW52LWZpbGUgcGF0aC90by9lbnYubGlzdCB0YWJsZWF1LW1jcCJ9)                                                                                                               |
 
 ### VSCode
 
 For VSCode, create a `.vscode/mcp.json` file in your workspace folder (for project-specific access)
 or add the server configuration to your user settings (for global access across all workspaces).
 
-Add the `tableau` MCP server configuration using `config.example.json` or `config.docker.json` as a
-template. For more details, see the
+Add the `tableau` MCP server configuration using `config.stdio.json`, `config.http.json`, or
+`config.docker.json` as a template. For more details, see the
 [VSCode MCP documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
 
 ## Developers
@@ -291,4 +297,5 @@ To set up local debugging with breakpoints:
 [vds]: https://help.tableau.com/current/api/vizql-data-service/en-us/index.html
 [pat]: https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm
 [pulse]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm
+[mcp-inspector]: https://github.com/modelcontextprotocol/inspector
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
