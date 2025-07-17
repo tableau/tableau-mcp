@@ -19,9 +19,9 @@ const pulseFilterSchema = z.object({
   operator: z.string(),
   categorical_values: z.array(
     z.object({
-      string_value: z.string(),
-      bool_value: z.boolean(),
-      null_value: z.string(),
+      string_value: z.string().optional(),
+      bool_value: z.boolean().optional(),
+      null_value: z.string().optional(),
     }),
   ),
 });

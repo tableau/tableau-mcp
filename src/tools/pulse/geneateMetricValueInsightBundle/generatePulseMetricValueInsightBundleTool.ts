@@ -11,7 +11,9 @@ const paramsSchema = {
   bundleRequest: pulseBundleRequestSchema,
 };
 
-export const getGeneratePulseMetricValueInsightBundleTool = (server: Server): Tool<typeof paramsSchema> => {
+export const getGeneratePulseMetricValueInsightBundleTool = (
+  server: Server,
+): Tool<typeof paramsSchema> => {
   const generatePulseMetricValueInsightBundleTool = new Tool({
     server,
     name: 'generate-pulse-metric-value-insight-bundle',
@@ -121,7 +123,9 @@ Generate a bundle for the current aggregated value for Pulse Metric using Tablea
             requestId,
             server,
           );
-          return new Ok(await restApi.pulseMethods.generatePulseMetricValueInsightBundle(bundleRequest));
+          return new Ok(
+            await restApi.pulseMethods.generatePulseMetricValueInsightBundle(bundleRequest),
+          );
         },
       });
     },
