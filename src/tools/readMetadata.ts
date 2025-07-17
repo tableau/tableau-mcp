@@ -42,19 +42,18 @@ export const getReadMetadataTool = (server: Server): Tool<typeof paramsSchema> =
         args: { datasourceLuid },
         callback: async () => {
           return new Ok(
-            await useRestApi(
-              config.server,
-              config.authConfig,
+            await useRestApi({
+              config,
               requestId,
               server,
-              async (restApi) => {
+              callback: async (restApi) => {
                 return await restApi.vizqlDataServiceMethods.readMetadata({
                   datasource: {
                     datasourceLuid,
                   },
                 });
               },
-            ),
+            }),
           );
         },
       });

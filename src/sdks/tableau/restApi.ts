@@ -28,6 +28,8 @@ export default class RestApi {
   private readonly _baseUrl: string;
   private readonly _baseUrlWithoutVersion: string;
 
+  private _authenticationMethods?: AuthenticationMethods;
+  private _authenticatedAuthenticationMethods?: AuthenticatedAuthenticationMethods;
   private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
   private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
@@ -61,6 +63,25 @@ export default class RestApi {
 
   get siteId(): string {
     return this.creds.site.id;
+  }
+
+  private get authenticationMethods(): AuthenticationMethods {
+    if (!this._authenticationMethods) {
+      this._authenticationMethods = new AuthenticationMethods(this._baseUrl);
+      this._addInterceptors(this._baseUrl, this._authenticationMethods.interceptors);
+    }
+    return this._authenticationMethods;
+  }
+
+  private get authenticatedAuthenticationMethods(): AuthenticatedAuthenticationMethods {
+    if (!this._authenticatedAuthenticationMethods) {
+      this._authenticatedAuthenticationMethods = new AuthenticatedAuthenticationMethods(
+        this._baseUrl,
+        this.creds,
+      );
+      this._addInterceptors(this._baseUrl, this._authenticatedAuthenticationMethods.interceptors);
+    }
+    return this._authenticatedAuthenticationMethods;
   }
 
   get datasourcesMethods(): DatasourcesMethods {
@@ -102,15 +123,11 @@ export default class RestApi {
   }
 
   signIn = async (authConfig: AuthConfig): Promise<void> => {
-    const authenticationMethods = new AuthenticationMethods(this._baseUrl);
-    this._addInterceptors(this._baseUrl, authenticationMethods.interceptors);
-    this._creds = await authenticationMethods.signIn(authConfig);
+    this._creds = await this.authenticationMethods.signIn(authConfig);
   };
 
   signOut = async (): Promise<void> => {
-    const authenticationMethods = new AuthenticatedAuthenticationMethods(this._baseUrl, this.creds);
-    this._addInterceptors(this._baseUrl, authenticationMethods.interceptors);
-    await authenticationMethods.signOut();
+    await this.authenticatedAuthenticationMethods.signOut();
     this._creds = undefined;
   };
 

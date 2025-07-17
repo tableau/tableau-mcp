@@ -54,15 +54,14 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             options,
           };
 
-          return await useRestApi(
-            config.server,
-            config.authConfig,
+          return await useRestApi({
+            config,
             requestId,
             server,
-            async (restApi) => {
+            callback: async (restApi) => {
               return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
             },
-          );
+          });
         },
         getErrorText: (error: z.infer<typeof TableauError>) => {
           return JSON.stringify({ requestId, ...handleQueryDatasourceError(error) });

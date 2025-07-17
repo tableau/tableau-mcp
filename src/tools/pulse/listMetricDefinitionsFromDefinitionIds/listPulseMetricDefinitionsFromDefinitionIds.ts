@@ -62,18 +62,17 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
         args: { metricDefinitionIds, view },
         callback: async () => {
           return new Ok(
-            await useRestApi(
-              config.server,
-              config.authConfig,
+            await useRestApi({
+              config,
               requestId,
               server,
-              async (restApi) => {
+              callback: async (restApi) => {
                 return await restApi.pulseMethods.listPulseMetricDefinitionsFromMetricDefinitionIds(
                   metricDefinitionIds,
                   view,
                 );
               },
-            ),
+            }),
           );
         },
       });

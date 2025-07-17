@@ -37,15 +37,14 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
         args: {},
         callback: async () => {
           return new Ok(
-            await useRestApi(
-              config.server,
-              config.authConfig,
+            await useRestApi({
+              config,
               requestId,
               server,
-              async (restApi) => {
+              callback: async (restApi) => {
                 return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
               },
-            ),
+            }),
           );
         },
       });
