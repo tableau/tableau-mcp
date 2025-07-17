@@ -98,7 +98,10 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
   generatePulseMetricValueInsightBundle = async (
     bundleRequest: z.infer<typeof pulseBundleRequestSchema>,
   ): Promise<z.infer<typeof pulseBundleResponseSchema>> => {
-    const response = await this._apiClient.generatePulseMetricValueInsightBundle(bundleRequest);
+    const response = await this._apiClient.generatePulseMetricValueInsightBundle(
+      { bundle_request: bundleRequest.bundle_request },
+      { ...this.authHeader },
+    );
     return response ?? {};
   };
 }
