@@ -38,7 +38,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
   - 'detail' - Shows insights on performance over time of the metric, a summary visualization of metric highs and lows and trends, breakdowns of top contributors for each filterable dimension of the metric, and followup insights based on the top ranked insights not already presented.
 
 **Example Usage:**
-- Generate an insight bundle for the current aggregated value for the Pulse metric:
+- Generate the default insight bundle for the Pulse metric:
     bundleRequest: {
       bundle_request: {
         version: 1,
@@ -116,6 +116,19 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
           },
         },
       },
+    },
+- Generate the ban insight bundle for the Pulse metric:
+    bundleType: 'ban',
+    bundleRequest: (See default example above)
+- Generate the springboard insight bundle for the Pulse metric:
+    bundleType: 'springboard',
+    bundleRequest: (See default example above)
+- Generate the basic insight bundle for the Pulse metric:
+    bundleType: 'basic',
+    bundleRequest: (See default example above)
+- Generate the detail insight bundle for the Pulse metric:
+    bundleType: 'detail',
+    bundleRequest: (See default example above)
 `,
     paramsSchema,
     annotations: {
