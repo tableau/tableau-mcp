@@ -78,8 +78,8 @@ export const pulseRepresentationOptionsSchema = z.object({
   sentiment_type: z.string(),
   row_level_id_field: z.object({ identifier_col: z.string() }),
   row_level_entity_names: z.object({
-    entity_name_singular: z.string(),
-    entity_name_plural: z.string(),
+    entity_name_singular: z.string().optional(),
+    entity_name_plural: z.string().optional(),
   }),
   row_level_name_field: z.object({ name_col: z.string() }),
   currency_code: z.string(),

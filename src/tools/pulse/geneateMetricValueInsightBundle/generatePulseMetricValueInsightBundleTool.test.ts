@@ -24,7 +24,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
         time_zone: 'UTC',
         language: 'LANGUAGE_EN_US',
         locale: 'LOCALE_EN_US',
-      },
+      } as const,
       input: {
         metadata: {
           name: 'Pulse Metric',
@@ -37,7 +37,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
             basic_specification: {
               measure: { field: 'Sales', aggregation: 'AGGREGATION_SUM' },
               time_dimension: { field: 'Order Date' },
+              filters: [],
             },
+            is_running_total: false,
           },
           metric_specification: {
             filters: [],
@@ -60,6 +62,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
               singular_noun: 'unit',
               plural_noun: 'units',
             },
+            sentiment_type: 'SENTIMENT_TYPE_UNSPECIFIED',
             row_level_id_field: {
               identifier_col: 'Order ID',
               identifier_label: '',
@@ -102,7 +105,15 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
 
   it('should call generatePulseMetricValueInsightBundle and return Ok result', async () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(mockBundleRequestResponse);
-    const result = await tool.callback({ bundleRequest }, { requestId: 'req-1' });
+    const result = await tool.callback(
+      { bundleRequest },
+      {
+        signal: new AbortController().signal,
+        requestId: 'test-request-id',
+        sendNotification: vi.fn(),
+        sendRequest: vi.fn(),
+      },
+    );
     expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(bundleRequest);
     expect(result.isError).toBe(false);
     const parsedValue = JSON.parse(result.content[0].text as string);
