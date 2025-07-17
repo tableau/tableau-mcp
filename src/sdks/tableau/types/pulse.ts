@@ -55,7 +55,7 @@ export const pulseMetricSpecificationSchema = z.object({
 });
 
 export const pulseGoalsSchema = z.object({
-  target: z.object({ value: z.number() }),
+  target: z.object({ value: z.number() }).optional(),
 });
 
 export const pulseMetricSchema = z.object({
@@ -65,7 +65,7 @@ export const pulseMetricSchema = z.object({
   is_default: z.boolean(),
   schema_version: z.string(),
   metric_version: z.number(),
-  goals: pulseGoalsSchema,
+  goals: pulseGoalsSchema.optional(),
   is_followed: z.boolean(),
 });
 
@@ -294,7 +294,7 @@ export const pulseBundleRequestSchema = z.object({
         extension_options: pulseExtensionOptionsSchema,
         representation_options: pulseRepresentationOptionsSchema,
         insights_options: insightOptionsSchema,
-        goals: pulseGoalsSchema,
+        goals: pulseGoalsSchema.optional(),
       }),
     }),
   }),
