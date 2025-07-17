@@ -14,6 +14,9 @@ import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServ
 import { Server } from '../../../server.js';
 import { Query } from '../queryDatasourceValidator.js';
 
+type MatchFilter = z.infer<typeof MatchFilter>;
+type SetFilter = z.infer<typeof SetFilter>;
+
 interface FilterValidationError {
   field: string;
   invalidValues: string[];
@@ -43,7 +46,7 @@ export async function validateFilterValues(
       (filter.filterType === 'SET' || filter.filterType === 'MATCH') &&
       'fieldCaption' in filter.field &&
       filter.field.fieldCaption,
-  ) as Array<z.infer<typeof MatchFilter> | z.infer<typeof SetFilter>>;
+  ) as Array<MatchFilter | SetFilter>;
 
   if (filtersToValidate.length === 0) {
     return Ok.EMPTY;
@@ -93,7 +96,7 @@ export async function validateFilterValues(
  * Validates a SET filter by checking if all values exist in the target field
  */
 async function validateSetFilter(
-  filter: z.infer<typeof SetFilter> & { filterType: 'SET' },
+  filter: SetFilter,
   fieldCaption: string,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: z.infer<typeof Datasource>,
@@ -163,7 +166,7 @@ async function validateSetFilter(
  * Validates a MATCH filter by checking if the pattern matches any values in the target field
  */
 async function validateMatchFilter(
-  filter: z.infer<typeof MatchFilter> & { filterType: 'MATCH' },
+  filter: MatchFilter,
   fieldCaption: string,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: z.infer<typeof Datasource>,

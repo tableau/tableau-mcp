@@ -33,7 +33,6 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "@types/fast-levenshtein": "^0.0.1",
     "@zodios/core": "^10.9.6",
     "fast-levenshtein": "^3.0.0",
     "ts-results-es": "^5.0.1",
@@ -44,6 +43,7 @@
     "@eslint/js": "^9.25.1",
     "@modelcontextprotocol/inspector": "^0.14.3",
     "@types/eslint__js": "^8.42.3",
+    "@types/fast-levenshtein": "^0.0.1",
     "@types/node": "^22.15.3",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
