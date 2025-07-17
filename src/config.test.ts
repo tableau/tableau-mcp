@@ -12,7 +12,8 @@ describe('Config', () => {
     process.env = {
       ...originalEnv,
       TRANSPORT: undefined,
-      HTTP_PORT: undefined,
+      HTTP_PORT_ENV_VAR_NAME: undefined,
+      PORT: undefined,
       SERVER: undefined,
       SITE_NAME: undefined,
       PAT_NAME: undefined,
@@ -295,6 +296,60 @@ describe('Config', () => {
       };
 
       expect(() => new Config()).toThrow('Cannot specify both INCLUDE_TOOLS and EXCLUDE_TOOLS');
+    });
+  });
+
+  describe('HTTP port parsing', () => {
+    it('should set httpPort to 3927 when HTTP_PORT_ENV_VAR_NAME and PORT are not set', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'https://test-server.com',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+      };
+
+      const config = new Config();
+      expect(config.httpPort).toBe(3927);
+    });
+
+    it('should set httpPort to the value of PORT when set', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'https://test-server.com',
+        PORT: '8080',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+      };
+
+      const config = new Config();
+      expect(config.httpPort).toBe(8080);
+    });
+
+    it('should set httpPort to the value of HTTP_PORT_ENV_VAR_NAME when set', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'https://test-server.com',
+        HTTP_PORT_ENV_VAR_NAME: 'CUSTOM_PORT',
+        CUSTOM_PORT: '41664',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+      };
+
+      const config = new Config();
+      expect(config.httpPort).toBe(41664);
+    });
+
+    it('should set httpPort to 3927 when HTTP_PORT_ENV_VAR_NAME is set and custom port is not set', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'https://test-server.com',
+        HTTP_PORT_ENV_VAR_NAME: 'CUSTOM_PORT',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+      };
+
+      const config = new Config();
+      expect(config.httpPort).toBe(3927);
     });
   });
 });

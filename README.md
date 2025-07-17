@@ -78,7 +78,9 @@ Tableau MCP works with both Tableau Server and Tableau cloud data with these pre
   [enable it](https://help.tableau.com/current/server-linux/en-us/cli_configuration-set_tsm.htm#featuresvizqldataservicedeploywithtsm))
 - Metadata API must be enabled (Tableau Server users may need to
   [enable it](https://help.tableau.com/current/api/metadata_api/en-us/docs/meta_api_start.html#enable-the-tableau-metadata-api-for-tableau-server))
-- You may need to [enable Tableau Pulse](https://help.tableau.com/current/online/en-us/pulse_set_up.htm) on your Tableau Cloud site to use [Pulse API][pulse] tools (Tableau Server is unable to use Tableau Pulse)
+- You may need to
+  [enable Tableau Pulse](https://help.tableau.com/current/online/en-us/pulse_set_up.htm) on your
+  Tableau Cloud site to use [Pulse API][pulse] tools (Tableau Server is unable to use Tableau Pulse)
 
 ## Tableau Authentication
 
@@ -113,7 +115,6 @@ template. It should look similar to this:
       "args": ["/full-path-to-tableau-mcp/build/index.js"],
       "env": {
         "TRANSPORT": "stdio",
-        "HTTP_PORT": "",
         "SERVER": "https://my-tableau-server.com",
         "SITE_NAME": "",
         "PAT_NAME": "",
@@ -153,8 +154,7 @@ These config files will be used in tool configuration explained below.
 
 | **Variable** | **Description**                                                                                                   |
 | ------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `TRANSPORT`  | The transport layer to use for the server. "stdio" or "http".                                                     |
-| `HTTP_PORT`  | The port to use for the HTTP server when `TRANSPORT`=http. Defaults to 3927.                                      |
+| `TRANSPORT`  | The MCP transport type to use for the server. "stdio" or "http". See [Transports][mcp-transport] for details.     |
 | `SERVER`     | The URL of the Tableau server.                                                                                    |
 | `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site. |
 | `PAT_NAME`   | The name of the Tableau [Personal Access Token][pat] to use for authentication.                                   |
@@ -162,14 +162,16 @@ These config files will be used in tool configuration explained below.
 
 #### Optional Environment Variables
 
-| **Variable**             | **Description**                                                                                     | **Default**                        | **Note**                                                                                   |
-| ------------------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| `DEFAULT_LOG_LEVEL`      | The default logging level of the server.                                                            | `debug`                            |                                                                                            |
-| `DATASOURCE_CREDENTIALS` | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below. |
-| `DISABLE_LOG_MASKING`    | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                            |
-| `INCLUDE_TOOLS`          | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                   |
-| `EXCLUDE_TOOLS`          | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                   |
-| `MAX_RESULT_LIMIT`       | If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.  | Empty string (_no limit_)          | A positive number.                                                                         |
+| **Variable**                      | **Description**                                                                                     | **Default**                        | **Note**                                                                                   |
+| --------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
+| `DEFAULT_LOG_LEVEL`               | The default logging level of the server.                                                            | `debug`                            |                                                                                            |
+| `DATASOURCE_CREDENTIALS`          | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below. |
+| `DISABLE_LOG_MASKING`             | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                            |
+| `INCLUDE_TOOLS`                   | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                   |
+| `EXCLUDE_TOOLS`                   | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                   |
+| `MAX_RESULT_LIMIT`                | If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.  | Empty string (_no limit_)          | A positive number.                                                                         |
+| `HTTP_PORT_ENV_VAR_NAME`          | The environment variable name to use for the HTTP server port when `TRANSPORT`=http.                | `PORT`                             |                                                                                            |
+| _Value of HTTP_PORT_ENV_VAR_NAME_ | The port to use for the HTTP server when `TRANSPORT`=http.                                          | 3927                               |                                                                                            |
 
 ##### DATASOURCE_CREDENTIALS
 
@@ -289,3 +291,4 @@ To set up local debugging with breakpoints:
 [vds]: https://help.tableau.com/current/api/vizql-data-service/en-us/index.html
 [pat]: https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm
 [pulse]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm
+[mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports

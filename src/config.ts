@@ -21,7 +21,7 @@ export class Config {
     let { SITE_NAME: siteName } = process.env;
     const {
       TRANSPORT: transport,
-      HTTP_PORT: httpPort,
+      HTTP_PORT_ENV_VAR_NAME: httpPortEnvVarName,
       SERVER: server,
       SSL_KEY: sslKey,
       SSL_CERT: sslCert,
@@ -36,7 +36,8 @@ export class Config {
     } = process.env;
 
     const defaultPort = 3927;
-    const httpPortNumber = parseInt(httpPort || defaultPort.toString(), 10);
+    const httpPort = process.env[httpPortEnvVarName?.trim() || 'PORT'] || defaultPort.toString();
+    const httpPortNumber = parseInt(httpPort, 10);
 
     siteName = siteName ?? '';
     this.transport = isTransport(transport) ? transport : 'stdio';
