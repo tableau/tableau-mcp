@@ -19,7 +19,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src'],
-      exclude: ['src/sdks/**/*', ...coverageConfigDefaults.exclude],
+      exclude: ['src/sdks/**/*', 'src/server/**/*', ...coverageConfigDefaults.exclude],
       reporter: ['text', 'cobertura'],
       reportsDirectory: './coverage/unit',
     },
