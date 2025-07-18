@@ -24,11 +24,11 @@ export class Config {
     let { SITE_NAME: siteName } = process.env;
     const {
       TRANSPORT: transport,
-      HTTP_PORT_ENV_VAR_NAME: httpPortEnvVarName,
       SERVER: server,
       SSL_KEY: sslKey,
       SSL_CERT: sslCert,
       CORS_ORIGIN_CONFIG: corsOriginConfig,
+      HTTP_PORT_ENV_VAR_NAME: httpPortEnvVarName,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
@@ -112,8 +112,8 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
     return true;
   }
 
-  if (['true', 'false'].includes(corsOriginConfig)) {
-    return corsOriginConfig === 'true';
+  if (corsOriginConfig.match(/^true|false$/i)) {
+    return corsOriginConfig.toLowerCase() === 'true';
   }
 
   if (corsOriginConfig === '*') {
