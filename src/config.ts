@@ -123,7 +123,7 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
   if (corsOriginConfig.startsWith('[') && corsOriginConfig.endsWith(']')) {
     try {
       const origins = JSON.parse(corsOriginConfig) as Array<string>;
-      return origins.map((origin) => new URL(origin).origin).filter((o) => o);
+      return origins.map((origin) => new URL(origin).origin);
     } catch {
       throw new Error(
         `The environment variable CORS_ORIGIN_CONFIG is not a valid array of URLs: ${corsOriginConfig}`,
