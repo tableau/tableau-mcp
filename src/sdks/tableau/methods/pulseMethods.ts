@@ -1,8 +1,12 @@
 import { Zodios } from '@zodios/core';
+import z from 'zod';
 
 import { pulseApis } from '../apis/pulseApi.js';
 import { Credentials } from '../types/credentials.js';
 import {
+  pulseBundleRequestSchema,
+  pulseBundleResponseSchema,
+  PulseInsightBundleType,
   PulseMetric,
   PulseMetricDefinition,
   PulseMetricDefinitionView,
@@ -86,5 +90,20 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
       ...this.authHeader,
     });
     return response.subscriptions ?? [];
+  };
+
+  /**
+   * Returns the generated bundle of the current aggregate value for the Pulse metric.
+   * @param bundleRequest - The request to generate a bundle for.
+   */
+  generatePulseMetricValueInsightBundle = async (
+    bundleRequest: z.infer<typeof pulseBundleRequestSchema>,
+    bundleType: PulseInsightBundleType,
+  ): Promise<z.infer<typeof pulseBundleResponseSchema>> => {
+    const response = await this._apiClient.generatePulseMetricValueInsightBundle(
+      { bundle_request: bundleRequest.bundle_request },
+      { params: { bundle_type: bundleType }, ...this.authHeader },
+    );
+    return response ?? {};
   };
 }
