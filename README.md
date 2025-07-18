@@ -15,7 +15,8 @@ Key features:
   [VizQL Data Service (VDS) API](https://help.tableau.com/current/api/vizql-data-service/en-us/index.html)
 - Supports collecting data source metadata (columns with descriptions) through the Tableau
   [Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/docs/meta_api_start.html)
-- Supports access to Pulse Metric, Pulse Metric Definitions, Pulse Subscriptions, and Pulse Metric Value Insight Bundle through the [Pulse API][pulse]
+- Supports access to Pulse Metric, Pulse Metric Definitions, Pulse Subscriptions, and Pulse Metric
+  Value Insight Bundle through the [Pulse API][pulse]
 - Usable by AI tools which support MCP Tools (e.g., Claude Desktop, Cursor and others)
 - Works with any published data source on either Tableau Cloud or Tableau Server
 
@@ -79,7 +80,9 @@ Tableau MCP works with both Tableau Server and Tableau cloud data with these pre
   [enable it](https://help.tableau.com/current/server-linux/en-us/cli_configuration-set_tsm.htm#featuresvizqldataservicedeploywithtsm))
 - Metadata API must be enabled (Tableau Server users may need to
   [enable it](https://help.tableau.com/current/api/metadata_api/en-us/docs/meta_api_start.html#enable-the-tableau-metadata-api-for-tableau-server))
-- You may need to [enable Tableau Pulse](https://help.tableau.com/current/online/en-us/pulse_set_up.htm) on your Tableau Cloud site to use [Pulse API][pulse] tools (Tableau Server is unable to use Tableau Pulse)
+- You may need to
+  [enable Tableau Pulse](https://help.tableau.com/current/online/en-us/pulse_set_up.htm) on your
+  Tableau Cloud site to use [Pulse API][pulse] tools (Tableau Server is unable to use Tableau Pulse)
 
 ## Tableau Authentication
 
@@ -101,10 +104,15 @@ are stored in one file rather than in each AI tool's config section.
 
 ### Environment Variables
 
+All environment variables specified in a `.env` file will be available to the MCP server. Creating a
+`.env` file is not required though since environment variables can also be provided by AI tools via
+their MCP configuration or to the Docker container running the MCP server via `env.list` file.
+
 Depending on your desired mode, create your environment configuration as follows:
 
-For **running locally**, create an `mcpServers` JSON snippet using `config.example.json` as a
-template. It should look similar to this:
+For **running locally**, create an `mcpServers` JSON snippet using `config.stdio.json` or
+`config.http.json` as a template, depending on your desired transport type. For `stdio` transport,
+it should look similar to this:
 
 ```json
 {
@@ -113,6 +121,7 @@ template. It should look similar to this:
       "command": "node",
       "args": ["/full-path-to-tableau-mcp/build/index.js"],
       "env": {
+        "TRANSPORT": "stdio",
         "SERVER": "https://my-tableau-server.com",
         "SITE_NAME": "",
         "PAT_NAME": "",
@@ -159,14 +168,28 @@ These config files will be used in tool configuration explained below.
 
 #### Optional Environment Variables
 
-| **Variable**             | **Description**                                                                                     | **Default**                        | **Note**                                                                                   |
-| ------------------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| `DEFAULT_LOG_LEVEL`      | The default logging level of the server.                                                            | `debug`                            |                                                                                            |
-| `DATASOURCE_CREDENTIALS` | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below. |
-| `DISABLE_LOG_MASKING`    | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                            |
-| `INCLUDE_TOOLS`          | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                   |
-| `EXCLUDE_TOOLS`          | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                   |
-| `MAX_RESULT_LIMIT`       | If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.  | Empty string (_no limit_)          | A positive number.                                                                         |
+| **Variable**             | **Description**                                                                                     | **Default**                        | **Note**                                                                                                                                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRANSPORT`              | The MCP transport type to use for the server.                                                       | `stdio`                            | Possible values are `stdio` or `http`. For `http`, see [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
+| `DEFAULT_LOG_LEVEL`      | The default logging level of the server.                                                            | `debug`                            |                                                                                                                                                                                             |
+| `DATASOURCE_CREDENTIALS` | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
+| `DISABLE_LOG_MASKING`    | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                                                                                                                             |
+| `INCLUDE_TOOLS`          | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                                                                                                                    |
+| `EXCLUDE_TOOLS`          | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                                                                                                                    |
+| `MAX_RESULT_LIMIT`       | If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.  | Empty string (_no limit_)          | A positive number.                                                                                                                                                                          |
+
+#### HTTP Server Configuration
+
+When `TRANSPORT` is `http`, below are the additional, optional environment variables that can be
+used to configure the HTTP server.
+
+| **Variable**                      | **Description**                                                  | **Default** | **Notes**                                                                                                               |
+| --------------------------------- | ---------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `HTTP_PORT_ENV_VAR_NAME`          | The environment variable name to use for the HTTP server port.   | `PORT`      |                                                                                                                         |
+| _Value of HTTP_PORT_ENV_VAR_NAME_ | The port to use for the HTTP server.                             | 3927        |                                                                                                                         |
+| `SSL_KEY`                         | The path to the SSL key file to use for the HTTP server.         |             |                                                                                                                         |
+| `SSL_CERT`                        | The path to the SSL certificate file to use for the HTTP server. |             |                                                                                                                         |
+| `CORS_ORIGIN_CONFIG`              | The origin or origins to allow CORS requests from.               | `true`      | Acceptable values include `true`, `false`, `*`, or a URL or array of URLs. See [cors config options][cors] for details. |
 
 ##### DATASOURCE_CREDENTIALS
 
@@ -196,26 +219,31 @@ Future work will include a tool to automate this process. For more information, 
 
 ### Running the MCP Inspector
 
-The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a helpful tool to confirm
-your configuration is correct and to explore Tableau MCP capabilities.
+The [MCP Inspector][mcp-inspector] is a helpful tool to confirm your configuration is correct and to
+explore Tableau MCP capabilities.
 
-Create a `config.json` file in the root of the project using `config.example.json` as a template.
-(Docker users can skip this step.)
+- Non-Docker users using `stdio` transport should create a `config.json` file in the root of the
+  project using `config.stdio.json` as a template.
+- Non-Docker users using `http` transport should create a `.env` file in the root of the project
+  using `env.example.list` as a template.
+- Docker users should create an `env.list` file using `env.example.list` as a template.
 
-After building the project and setting the environment variables in the `env.list` file, you can
-start the MCP Inspector using either of the following commands:
+After building the project and setting the environment variables, you can start the MCP Inspector
+using one of the following commands:
 
-| **Command**              | **Description**                                                                                                              |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `npm run inspect`        | Start the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) which runs the server locally using Node.js.    |
-| `npm run inspect:docker` | Start the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) which runs the server using a Docker container. |
+| **Command**                   | **Transport** | **Description**                                                                                   |
+| ----------------------------- | ------------- | ------------------------------------------------------------------------------------------------- |
+| `npm run inspect`             | `stdio`       | Start the MCP Inspector which runs the server locally using Node.js.                              |
+| `npm run inspect:docker`      | `stdio`       | Start the MCP Inspector which runs the server within a Docker container using Node.js.            |
+| `npm run inspect:http`        | `http`        | Start the MCP Inspector which runs the server locally using [Express][express].                   |
+| `npm run inspect:docker:http` | `http`        | Start the MCP Inspector which runs the server within a Docker container using [Express][express]. |
 
 ### Claude Desktop
 
 For Claude, open the settings dialog, select the **Developer** section, and click **Edit Config**.
 
-Add the `tableau` MCP server to the `mcpServers` object in the config using `config.example.json` or
-`config.docker.json` as a template.
+Add the `tableau` MCP server to the `mcpServers` object in the config using `config.stdio.json`,
+`config.http.json`, or `config.docker.json` as a template.
 
 ### Cursor
 
@@ -223,23 +251,22 @@ For Cursor, create a configuration file `.cursor/mcp.json` in your project direc
 project-specific access) or `~/.cursor/mcp.json` in your home directory (for global access across
 all projects).
 
-Add the `tableau` MCP server configuration using `config.example.json` or `config.docker.json` as a
-template. For more details, see the
+Add the `tableau` MCP server configuration using `config.stdio.json`, `config.http.json`, or
+`config.docker.json` as a template. For more details, see the
 [Cursor MCP documentation](https://docs.cursor.com/context/model-context-protocol).
 
-Node:
-[![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=tableau&config=eyJjb21tYW5kIjoibm9kZSAvZnVsbC1wYXRoLXRvLXRhYmxlYXUtbWNwL2J1aWxkL2luZGV4LmpzIiwiZW52Ijp7IlNFUlZFUiI6Imh0dHBzOi8vbXktdGFibGVhdS1zZXJ2ZXIuY29tIiwiU0lURV9OQU1FIjoiIiwiUEFUX05BTUUiOiIiLCJQQVRfVkFMVUUiOiIifX0%3D)
-
-Docker:
-[![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=tableau&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIC0tZW52LWZpbGUgcGF0aC90by9lbnYubGlzdCB0YWJsZWF1LW1jcCJ9)
+| Type   | Install link                                                                                                                                                                                                                                                                                                                                  |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node   | [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=tableau&config=eyJjb21tYW5kIjoibm9kZSAvZnVsbC1wYXRoLXRvLXRhYmxlYXUtbWNwL2J1aWxkL2luZGV4LmpzIiwiZW52Ijp7IlNFUlZFUiI6Imh0dHBzOi8vbXktdGFibGVhdS1zZXJ2ZXIuY29tIiwiU0lURV9OQU1FIjoiIiwiUEFUX05BTUUiOiIiLCJQQVRfVkFMVUUiOiIifX0%3D) |
+| Docker | [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/install-mcp?name=tableau&config=eyJjb21tYW5kIjoiZG9ja2VyIHJ1biAtaSAtLXJtIC0tZW52LWZpbGUgcGF0aC90by9lbnYubGlzdCB0YWJsZWF1LW1jcCJ9)                                                                                                               |
 
 ### VSCode
 
 For VSCode, create a `.vscode/mcp.json` file in your workspace folder (for project-specific access)
 or add the server configuration to your user settings (for global access across all workspaces).
 
-Add the `tableau` MCP server configuration using `config.example.json` or `config.docker.json` as a
-template. For more details, see the
+Add the `tableau` MCP server configuration using `config.stdio.json`, `config.http.json`, or
+`config.docker.json` as a template. For more details, see the
 [VSCode MCP documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers).
 
 ## Developers
@@ -286,3 +313,7 @@ To set up local debugging with breakpoints:
 [vds]: https://help.tableau.com/current/api/vizql-data-service/en-us/index.html
 [pat]: https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm
 [pulse]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm
+[mcp-inspector]: https://github.com/modelcontextprotocol/inspector
+[mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
+[express]: https://expressjs.com/
+[cors]: https://expressjs.com/en/resources/middleware/cors.html#configuration-options

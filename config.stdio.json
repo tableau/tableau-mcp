@@ -4,6 +4,7 @@
       "command": "node",
       "args": ["build/index.js"],
       "env": {
+        "TRANSPORT": "stdio",
         "SERVER": "https://my-tableau-server.com",
         "SITE_NAME": "",
         "PAT_NAME": "",
