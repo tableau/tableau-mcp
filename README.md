@@ -111,7 +111,8 @@ their MCP configuration or to the Docker container running the MCP server via `e
 Depending on your desired mode, create your environment configuration as follows:
 
 For **running locally**, create an `mcpServers` JSON snippet using `config.stdio.json` or
-`config.http.json` as a template. For stdio transport, it should look similar to this:
+`config.http.json` as a template, depending on your desired transport type. For `stdio` transport,
+it should look similar to this:
 
 ```json
 {
