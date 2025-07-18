@@ -104,9 +104,9 @@ are stored in one file rather than in each AI tool's config section.
 
 ### Environment Variables
 
-All environment variables specified in a `.env` file will be avabilable to the MCP server. Creating
-a `.env` file is not required though since environment variables can also be provided by AI tools
-via their MCP configuration or to the Docker container running the MCP server via `env.list` file.
+All environment variables specified in a `.env` file will be available to the MCP server. Creating a
+`.env` file is not required though since environment variables can also be provided by AI tools via
+their MCP configuration or to the Docker container running the MCP server via `env.list` file.
 
 Depending on your desired mode, create your environment configuration as follows:
 
