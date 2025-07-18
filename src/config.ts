@@ -6,12 +6,12 @@ import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
 export class Config {
+  server: string;
   transport: TransportName;
-  httpPort: number;
   sslKey: string;
   sslCert: string;
+  httpPort: number;
   corsOriginConfig: CorsOptions['origin'];
-  server: string;
   authConfig: AuthConfig;
   datasourceCredentials: string;
   defaultLogLevel: string;
@@ -23,12 +23,12 @@ export class Config {
   constructor() {
     let { SITE_NAME: siteName } = process.env;
     const {
-      TRANSPORT: transport,
       SERVER: server,
+      TRANSPORT: transport,
       SSL_KEY: sslKey,
       SSL_CERT: sslCert,
-      CORS_ORIGIN_CONFIG: corsOriginConfig,
       HTTP_PORT_ENV_VAR_NAME: httpPortEnvVarName,
+      CORS_ORIGIN_CONFIG: corsOriginConfig,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
@@ -45,9 +45,9 @@ export class Config {
 
     siteName = siteName ?? '';
     this.transport = isTransport(transport) ? transport : 'stdio';
-    this.httpPort = isNaN(httpPortNumber) ? defaultPort : httpPortNumber;
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
+    this.httpPort = isNaN(httpPortNumber) ? defaultPort : httpPortNumber;
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
