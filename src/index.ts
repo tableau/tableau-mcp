@@ -17,16 +17,20 @@ async function startServer(): Promise<void> {
   switch (config.transport) {
     case 'stdio': {
       const server = new Server();
-      const transport = new StdioServerTransport();
       server.registerTools();
       server.registerRequestHandlers();
+
+      const transport = new StdioServerTransport();
       await server.connect(transport);
+
       setLogLevel(server, logLevel);
       log.info(server, `${server.name} v${server.version} running on stdio`);
       break;
     }
     case 'http': {
       const { url } = await startExpressServer({ basePath: serverName, config, logLevel });
+
+      // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
       console.log(
         `${serverName} v${serverVersion} stateless streamable HTTP server available at ${url}`,
       );
