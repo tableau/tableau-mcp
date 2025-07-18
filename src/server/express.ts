@@ -1,5 +1,6 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import cors from 'cors';
 import express, { Request, Response } from 'express';
 import fs, { existsSync } from 'fs';
 import http from 'http';
@@ -19,7 +20,24 @@ export async function startExpressServer({
   logLevel: LoggingLevel;
 }): Promise<{ url: string }> {
   const app = express();
+
   app.use(express.json());
+  app.use(express.urlencoded());
+
+  app.use(
+    cors({
+      origin: config.corsOriginConfig,
+      credentials: true,
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'Cache-Control',
+        'Accept',
+        'MCP-Protocol-Version',
+      ],
+      exposedHeaders: ['mcp-session-id', 'x-session-id'],
+    }),
+  );
 
   const path = `/${basePath}`;
   app.post(path, createMcpServer);

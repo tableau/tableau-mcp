@@ -182,12 +182,13 @@ These config files will be used in tool configuration explained below.
 When `TRANSPORT` is `http`, below are the additional, optional environment variables that can be
 used to configure the HTTP server.
 
-| **Variable**                      | **Description**                                                  | **Default** |
-| --------------------------------- | ---------------------------------------------------------------- | ----------- |
-| `HTTP_PORT_ENV_VAR_NAME`          | The environment variable name to use for the HTTP server port.   | `PORT`      |
-| _Value of HTTP_PORT_ENV_VAR_NAME_ | The port to use for the HTTP server.                             | 3927        |
-| `SSL_KEY`                         | The path to the SSL key file to use for the HTTP server.         |             |
-| `SSL_CERT`                        | The path to the SSL certificate file to use for the HTTP server. |             |
+| **Variable**                      | **Description**                                                  | **Default** | **Notes**                                                                                                               |
+| --------------------------------- | ---------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `HTTP_PORT_ENV_VAR_NAME`          | The environment variable name to use for the HTTP server port.   | `PORT`      |                                                                                                                         |
+| _Value of HTTP_PORT_ENV_VAR_NAME_ | The port to use for the HTTP server.                             | 3927        |                                                                                                                         |
+| `SSL_KEY`                         | The path to the SSL key file to use for the HTTP server.         |             |                                                                                                                         |
+| `SSL_CERT`                        | The path to the SSL certificate file to use for the HTTP server. |             |                                                                                                                         |
+| `CORS_ORIGIN_CONFIG`              | The origin or origins to allow CORS requests from.               | `true`      | Acceptable values include `true`, `false`, `*`, or a URL or array of URLs. See [cors config options][cors] for details. |
 
 ##### DATASOURCE_CREDENTIALS
 
@@ -314,3 +315,4 @@ To set up local debugging with breakpoints:
 [mcp-inspector]: https://github.com/modelcontextprotocol/inspector
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [express]: https://expressjs.com/
+[cors]: https://expressjs.com/en/resources/middleware/cors.html#configuration-options

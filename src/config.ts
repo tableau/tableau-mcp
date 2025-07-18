@@ -1,3 +1,5 @@
+import { CorsOptions } from 'cors';
+
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 import { isToolName, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
@@ -8,6 +10,7 @@ export class Config {
   httpPort: number;
   sslKey: string;
   sslCert: string;
+  corsOriginConfig: CorsOptions['origin'];
   server: string;
   authConfig: AuthConfig;
   datasourceCredentials: string;
@@ -25,6 +28,7 @@ export class Config {
       SERVER: server,
       SSL_KEY: sslKey,
       SSL_CERT: sslCert,
+      CORS_ORIGIN_CONFIG: corsOriginConfig,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
@@ -44,6 +48,7 @@ export class Config {
     this.httpPort = isNaN(httpPortNumber) ? defaultPort : httpPortNumber;
     this.sslKey = sslKey ?? '';
     this.sslCert = sslCert ?? '';
+    this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
@@ -98,6 +103,39 @@ function validateServer(server: string): void {
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(
       `The environment variable SERVER is not a valid URL: ${server} -- ${errorMessage}`,
+    );
+  }
+}
+
+function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
+  if (!corsOriginConfig) {
+    return true;
+  }
+
+  if (['true', 'false'].includes(corsOriginConfig)) {
+    return corsOriginConfig === 'true';
+  }
+
+  if (corsOriginConfig === '*') {
+    return '*';
+  }
+
+  if (corsOriginConfig.startsWith('[') && corsOriginConfig.endsWith(']')) {
+    try {
+      const origins = JSON.parse(corsOriginConfig) as Array<string>;
+      return origins.map((origin) => new URL(origin).origin).filter((o) => o);
+    } catch {
+      throw new Error(
+        `The environment variable CORS_ORIGIN_CONFIG is not a valid array of URLs: ${corsOriginConfig}`,
+      );
+    }
+  }
+
+  try {
+    return new URL(corsOriginConfig).origin;
+  } catch {
+    throw new Error(
+      `The environment variable CORS_ORIGIN_CONFIG is not a valid URL: ${corsOriginConfig}`,
     );
   }
 }

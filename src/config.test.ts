@@ -14,6 +14,7 @@ describe('Config', () => {
       TRANSPORT: undefined,
       HTTP_PORT_ENV_VAR_NAME: undefined,
       PORT: undefined,
+      CORS_ORIGIN_CONFIG: undefined,
       SERVER: undefined,
       SITE_NAME: undefined,
       PAT_NAME: undefined,
@@ -377,6 +378,113 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.httpPort).toBe(3927);
+    });
+  });
+
+  describe('CORS origin config parsing', () => {
+    it('should set corsOriginConfig to true when CORS_ORIGIN_CONFIG is not set', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'https://test-server.com',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+      };
+
+      const config = new Config();
+      expect(config.corsOriginConfig).toBe(true);
+    });
+
+    it('should set corsOriginConfig to true when CORS_ORIGIN_CONFIG is "true"', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'https://test-server.com',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+        CORS_ORIGIN_CONFIG: 'true',
+      };
+
+      const config = new Config();
+      expect(config.corsOriginConfig).toBe(true);
+    });
+
+    it('should set corsOriginConfig to "*" when CORS_ORIGIN_CONFIG is "*"', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'https://test-server.com',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+        CORS_ORIGIN_CONFIG: '*',
+      };
+
+      const config = new Config();
+      expect(config.corsOriginConfig).toBe('*');
+    });
+
+    it('should set corsOriginConfig to false when CORS_ORIGIN_CONFIG is "false"', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'https://test-server.com',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+        CORS_ORIGIN_CONFIG: 'false',
+      };
+
+      const config = new Config();
+      expect(config.corsOriginConfig).toBe(false);
+    });
+
+    it('should set corsOriginConfig to the specified origin when CORS_ORIGIN_CONFIG is a valid URL', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'https://test-server.com',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+        CORS_ORIGIN_CONFIG: 'https://example.com:8080',
+      };
+
+      const config = new Config();
+      expect(config.corsOriginConfig).toBe('https://example.com:8080');
+    });
+
+    it('should set corsOriginConfig to the specified origins when CORS_ORIGIN_CONFIG is an array of URLs', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'https://test-server.com',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+        CORS_ORIGIN_CONFIG: '["https://example.com", "https://example.org"]',
+      };
+
+      const config = new Config();
+      expect(config.corsOriginConfig).toEqual(['https://example.com', 'https://example.org']);
+    });
+
+    it('should throw error when CORS_ORIGIN_CONFIG is not a valid URL', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'https://test-server.com',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+        CORS_ORIGIN_CONFIG: 'invalid',
+      };
+
+      expect(() => new Config()).toThrow(
+        'The environment variable CORS_ORIGIN_CONFIG is not a valid URL: invalid',
+      );
+    });
+
+    it('should throw error when CORS_ORIGIN_CONFIG is not a valid array of URLs', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'https://test-server.com',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+        CORS_ORIGIN_CONFIG: '["https://example.com", "invalid"]',
+      };
+
+      expect(() => new Config()).toThrow(
+        'The environment variable CORS_ORIGIN_CONFIG is not a valid array of URLs: ["https://example.com", "invalid"]',
+      );
     });
   });
 });
