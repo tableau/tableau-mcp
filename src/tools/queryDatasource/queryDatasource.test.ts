@@ -41,11 +41,15 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
-  getNewRestApiInstanceAsync: vi.fn().mockResolvedValue({
-    vizqlDataServiceMethods: {
-      queryDatasource: mocks.mockQueryDatasource,
-    },
-  }),
+  useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
+    callback({
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+      vizqlDataServiceMethods: {
+        queryDatasource: mocks.mockQueryDatasource,
+      },
+    }),
+  ),
 }));
 
 describe('queryDatasourceTool', () => {

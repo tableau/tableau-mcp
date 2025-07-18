@@ -30,11 +30,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
-  getNewRestApiInstanceAsync: vi.fn().mockResolvedValue({
-    pulseMethods: {
-      listAllPulseMetricDefinitions: mocks.mockListAllPulseMetricDefinitions,
-    },
-  }),
+  useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
+    callback({
+      pulseMethods: {
+        listAllPulseMetricDefinitions: mocks.mockListAllPulseMetricDefinitions,
+      },
+    }),
+  ),
 }));
 
 describe('listAllPulseMetricDefinitionsTool', () => {

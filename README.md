@@ -15,7 +15,7 @@ Key features:
   [VizQL Data Service (VDS) API](https://help.tableau.com/current/api/vizql-data-service/en-us/index.html)
 - Supports collecting data source metadata (columns with descriptions) through the Tableau
   [Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/docs/meta_api_start.html)
-- Supports access to Pulse Metric and Pulse Metric Definitions through the [Pulse API][pulse]
+- Supports access to Pulse Metric, Pulse Metric Definitions, Pulse Subscriptions, and Pulse Metric Value Insight Bundle through the [Pulse API][pulse]
 - Usable by AI tools which support MCP Tools (e.g., Claude Desktop, Cursor and others)
 - Works with any published data source on either Tableau Cloud or Tableau Server
 
@@ -32,6 +32,7 @@ The following MCP tools are currently implemented:
 | list-pulse-metrics-from-metric-definition-id      | List Pulse Metrics from Metric Definition ID ([Pulse API][pulse])                              |
 | list-pulse-metrics-from-metric-ids                | List Pulse Metrics from Metric IDs ([Pulse API][pulse])                                        |
 | list-pulse-metric-subscriptions                   | List Pulse Metric Subscriptions for Current User ([Pulse API][pulse])                          |
+| generate-pulse-metric-value-insight-bundle        | Generate Pulse Metric Value Insight Bundle ([Pulse API][pulse])                                |
 
 Note: The Tableau MCP project is currently in early development. As we continue to enhance and
 refine the implementation, the available functionality and tools may evolve. We welcome feedback and

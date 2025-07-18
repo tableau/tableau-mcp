@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../config.js';
-import { getNewRestApiInstanceAsync } from '../../../restApiInstance.js';
+import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
 
@@ -36,13 +36,16 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
         requestId,
         args: {},
         callback: async () => {
-          const restApi = await getNewRestApiInstanceAsync(
-            config.server,
-            config.authConfig,
-            requestId,
-            server,
+          return new Ok(
+            await useRestApi({
+              config,
+              requestId,
+              server,
+              callback: async (restApi) => {
+                return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
+              },
+            }),
           );
-          return new Ok(await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser());
         },
       });
     },

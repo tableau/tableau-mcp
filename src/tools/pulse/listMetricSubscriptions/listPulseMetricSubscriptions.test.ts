@@ -14,12 +14,14 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
-  getNewRestApiInstanceAsync: vi.fn().mockResolvedValue({
-    pulseMethods: {
-      listPulseMetricSubscriptionsForCurrentUser:
-        mocks.mockListPulseMetricSubscriptionsForCurrentUser,
-    },
-  }),
+  useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
+    callback({
+      pulseMethods: {
+        listPulseMetricSubscriptionsForCurrentUser:
+          mocks.mockListPulseMetricSubscriptionsForCurrentUser,
+      },
+    }),
+  ),
 }));
 
 describe('listPulseMetricSubscriptionsTool', () => {

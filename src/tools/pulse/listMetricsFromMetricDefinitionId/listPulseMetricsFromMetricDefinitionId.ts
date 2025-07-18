@@ -3,7 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { getNewRestApiInstanceAsync } from '../../../restApiInstance.js';
+import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
 
@@ -38,16 +38,17 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
         requestId,
         args: { pulseMetricDefinitionID },
         callback: async () => {
-          const restApi = await getNewRestApiInstanceAsync(
-            config.server,
-            config.authConfig,
-            requestId,
-            server,
-          );
           return new Ok(
-            await restApi.pulseMethods.listPulseMetricsFromMetricDefinitionId(
-              pulseMetricDefinitionID,
-            ),
+            await useRestApi({
+              config,
+              requestId,
+              server,
+              callback: async (restApi) => {
+                return await restApi.pulseMethods.listPulseMetricsFromMetricDefinitionId(
+                  pulseMetricDefinitionID,
+                );
+              },
+            }),
           );
         },
       });
