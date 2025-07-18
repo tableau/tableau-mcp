@@ -9,6 +9,7 @@ import https from 'https';
 import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
+import { rateLimitMiddleware, requestSizeLimit } from './middleware.js';
 
 export async function startExpressServer({
   basePath,
@@ -39,10 +40,15 @@ export async function startExpressServer({
     }),
   );
 
+  const middleware = [
+    rateLimitMiddleware({ windowMs: 60000, maxRequestsInWindow: 100 }), // 100 requests per minute
+    requestSizeLimit({ maxSize: 10 * 1024 * 1024 }), // 10MB max
+  ];
+
   const path = `/${basePath}`;
-  app.post(path, createMcpServer);
-  app.get(path, methodNotAllowed);
-  app.delete(path, methodNotAllowed);
+  app.post(path, ...middleware, createMcpServer);
+  app.get(path, ...middleware, methodNotAllowed);
+  app.delete(path, ...middleware, methodNotAllowed);
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
