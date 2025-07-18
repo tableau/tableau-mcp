@@ -720,4 +720,76 @@ describe('validateFilterValues', () => {
       expect(result.error[0].message).toContain('Similar values in this field:');
     }
   });
+
+  it('should use fuzzy sampling for MATCH filters with startsWith, endsWith and contains', async () => {
+    const query: Query = {
+      fields: [{ fieldCaption: 'State/Province' }],
+      filters: [
+        {
+          field: { fieldCaption: 'State/Province' },
+          filterType: 'MATCH',
+          startsWith: 'Mi',
+          endsWith: 'ti',
+          contains: 'ss',
+        },
+      ],
+    };
+
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
+      new Ok({
+        data: [
+          { SampleValues: 'Alaska' },
+          { SampleValues: 'California' },
+          { SampleValues: 'Florida' },
+          { SampleValues: 'Georgia' },
+          { SampleValues: 'Hawaii' },
+          { SampleValues: 'Illinois' },
+          { SampleValues: 'Indiana' },
+          { SampleValues: 'Iowa' },
+          { SampleValues: 'Kansas' },
+          { SampleValues: 'Kentucky' },
+          { SampleValues: 'Louisiana' },
+          { SampleValues: 'Maine' },
+          { SampleValues: 'Maryland' },
+          { SampleValues: 'Massachusetts' },
+          { SampleValues: 'Michsigani' },
+          { SampleValues: 'Minnesota' },
+          { SampleValues: 'Mississippi' },
+          { SampleValues: 'Missouri' },
+        ],
+      }),
+    );
+
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error).toHaveLength(1);
+      expect(result.error[0].field).toBe('State/Province');
+      expect(result.error[0].invalidValues).toEqual([
+        'starts with "Mi"',
+        'ends with "ti"',
+        'contains "ss"',
+      ]);
+      expect(result.error[0].sampleValues).toHaveLength(5);
+      const fuzzyMatchStates = [
+        'Massachusetts',
+        'Michsigani',
+        'Minnesota',
+        'Mississippi',
+        'Missouri',
+      ];
+      result.error[0].sampleValues.forEach((sample) => {
+        expect(fuzzyMatchStates).toContain(sample);
+      });
+      expect(result.error[0].message).toContain('Similar values in this field:');
+    }
+  });
 });
