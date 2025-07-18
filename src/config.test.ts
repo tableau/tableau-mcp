@@ -300,7 +300,7 @@ describe('Config', () => {
   });
 
   describe('HTTP port parsing', () => {
-    it('should set httpPort to 3927 when HTTP_PORT_ENV_VAR_NAME and PORT are not set', () => {
+    it('should set httpPort to default when HTTP_PORT_ENV_VAR_NAME and PORT are not set', () => {
       process.env = {
         ...process.env,
         SERVER: 'https://test-server.com',
@@ -325,7 +325,7 @@ describe('Config', () => {
       expect(config.httpPort).toBe(8080);
     });
 
-    it('should set httpPort to the value of HTTP_PORT_ENV_VAR_NAME when set', () => {
+    it('should set httpPort to the value of the environment variable specified by HTTP_PORT_ENV_VAR_NAME when set', () => {
       process.env = {
         ...process.env,
         SERVER: 'https://test-server.com',
@@ -339,11 +339,38 @@ describe('Config', () => {
       expect(config.httpPort).toBe(41664);
     });
 
-    it('should set httpPort to 3927 when HTTP_PORT_ENV_VAR_NAME is set and custom port is not set', () => {
+    it('should set httpPort to default when HTTP_PORT_ENV_VAR_NAME is set and custom port is not set', () => {
       process.env = {
         ...process.env,
         SERVER: 'https://test-server.com',
         HTTP_PORT_ENV_VAR_NAME: 'CUSTOM_PORT',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+      };
+
+      const config = new Config();
+      expect(config.httpPort).toBe(3927);
+    });
+
+    it('should set httpPort to default when PORT is set to an invalid value', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'https://test-server.com',
+        PORT: 'invalid',
+        PAT_NAME: 'test-pat-name',
+        PAT_VALUE: 'test-pat-value',
+      };
+
+      const config = new Config();
+      expect(config.httpPort).toBe(3927);
+    });
+
+    it('should set httpPort to default when HTTP_PORT_ENV_VAR_NAME is set and custom port is invalid', () => {
+      process.env = {
+        ...process.env,
+        SERVER: 'https://test-server.com',
+        HTTP_PORT_ENV_VAR_NAME: 'CUSTOM_PORT',
+        CUSTOM_PORT: 'invalid',
         PAT_NAME: 'test-pat-name',
         PAT_VALUE: 'test-pat-value',
       };
