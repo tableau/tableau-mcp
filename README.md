@@ -159,24 +159,24 @@ These config files will be used in tool configuration explained below.
 
 #### Required Environment Variables
 
-| **Variable** | **Description**                                                                                                                                                                        |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TRANSPORT`  | The MCP transport type to use for the server. See [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
-| `SERVER`     | The URL of the Tableau server.                                                                                                                                                         |
-| `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site.                                                                      |
-| `PAT_NAME`   | The name of the Tableau [Personal Access Token][pat] to use for authentication.                                                                                                        |
-| `PAT_VALUE`  | The value of the Tableau [Personal Access Token][pat] to use for authentication.                                                                                                       |
+| **Variable** | **Description**                                                                                                   |
+| ------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `SERVER`     | The URL of the Tableau server.                                                                                    |
+| `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site. |
+| `PAT_NAME`   | The name of the Tableau [Personal Access Token][pat] to use for authentication.                                   |
+| `PAT_VALUE`  | The value of the Tableau [Personal Access Token][pat] to use for authentication.                                  |
 
 #### Optional Environment Variables
 
-| **Variable**             | **Description**                                                                                     | **Default**                        | **Note**                                                                                   |
-| ------------------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| `DEFAULT_LOG_LEVEL`      | The default logging level of the server.                                                            | `debug`                            |                                                                                            |
-| `DATASOURCE_CREDENTIALS` | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below. |
-| `DISABLE_LOG_MASKING`    | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                            |
-| `INCLUDE_TOOLS`          | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                   |
-| `EXCLUDE_TOOLS`          | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                   |
-| `MAX_RESULT_LIMIT`       | If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.  | Empty string (_no limit_)          | A positive number.                                                                         |
+| **Variable**             | **Description**                                                                                     | **Default**                        | **Note**                                                                                                                                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRANSPORT`              | The MCP transport type to use for the server.                                                       | `stdio`                            | Possible values are `stdio` or `http`. For `http`, see [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
+| `DEFAULT_LOG_LEVEL`      | The default logging level of the server.                                                            | `debug`                            |                                                                                                                                                                                             |
+| `DATASOURCE_CREDENTIALS` | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
+| `DISABLE_LOG_MASKING`    | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                                                                                                                             |
+| `INCLUDE_TOOLS`          | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                                                                                                                    |
+| `EXCLUDE_TOOLS`          | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                                                                                                                    |
+| `MAX_RESULT_LIMIT`       | If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.  | Empty string (_no limit_)          | A positive number.                                                                                                                                                                          |
 
 #### HTTP Server Configuration
 
