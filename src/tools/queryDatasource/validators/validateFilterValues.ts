@@ -254,7 +254,7 @@ function getRandomSample<T>(array: T[], count: number): T[] {
 /**
  * Finds the closest matches to invalid filter values using fuzzy matching
  */
-function getFuzzyMatches(
+export function getFuzzyMatches(
   invalidValues: string[],
   existingValues: string[],
   maxDistance: number = 3,

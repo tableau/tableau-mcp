@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
 import { Server } from '../../../server.js';
 import { Query } from '../queryDatasourceValidator.js';
-import { validateFilterValues } from './validateFilterValues.js';
+import { getFuzzyMatches, validateFilterValues } from './validateFilterValues.js';
 
 // Mock the VizqlDataServiceMethods
 const mockVizqlDataServiceMethods = {
@@ -719,5 +719,78 @@ describe('validateFilterValues', () => {
       });
       expect(result.error[0].message).toContain('Similar values in this field:');
     }
+  });
+
+  it('getFuzzyMatches should return the best suggestions for multiple invalid values (limit 1 per invalid value)', () => {
+    const invalidValues = ['zzzzz', 'xxxxx', 'wwwww', 'qqqqq', 'yyyyy', 'blast', 'cance'];
+    const existingValues = [
+      'aaaaa',
+      'aaaaw',
+      'aaaax',
+      'aaaaz',
+      'bbbbq',
+      'bbbbz',
+      'hhhhh',
+      'iiiii',
+      'chance',
+      'cancel',
+      'blood',
+      'blade',
+      'rhyme',
+    ];
+    const maxDistance = 5;
+    const maxSuggestions = 5;
+    const result = getFuzzyMatches(invalidValues, existingValues, maxDistance, maxSuggestions);
+    expect(result).toEqual(['chance', 'blade', 'aaaaw', 'aaaax', 'aaaaz']);
+  });
+
+  it('getFuzzyMatches should return the best suggestions for multiple invalid values (limit 2 per invalid value)', () => {
+    const invalidValues = ['zzz', 'xxx', 'blast', 'cance'];
+    const existingValues = [
+      'aaa',
+      'bbb',
+      'ccc',
+      'ddd',
+      'eee',
+      'hhh',
+      'iii',
+      'change',
+      'chance',
+      'rhyme',
+      'cancel',
+      'black',
+      'blood',
+      'blade',
+      'blank',
+    ];
+    const maxDistance = 3;
+    const maxSuggestions = 5;
+    const result = getFuzzyMatches(invalidValues, existingValues, maxDistance, maxSuggestions);
+    expect(result).toEqual(['chance', 'cancel', 'black', 'blade', 'aaa']);
+  });
+
+  it('getFuzzyMatches should return random suggestions when not enough fuzzy matches are found', () => {
+    const invalidValues = ['zzzzz', 'xxxxx', 'wwwww', 'qqqqq', 'yyyyy'];
+    const existingValues = [
+      'aaaaa',
+      'bbbbb',
+      'ccccc',
+      'ddddd',
+      'eeeee',
+      '12346789',
+      '32132167890',
+      '12312312031',
+    ];
+    const maxDistance = 5;
+    const maxSuggestions = 6;
+    const result = getFuzzyMatches(
+      invalidValues,
+      existingValues,
+      maxDistance,
+      maxSuggestions,
+      true,
+    );
+    expect(result.slice(0, 5)).toEqual(['aaaaa', 'bbbbb', 'ccccc', 'ddddd', 'eeeee']);
+    expect(['12346789', '32132167890', '12312312031']).toContain(result[5]);
   });
 });
