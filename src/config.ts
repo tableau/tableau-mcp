@@ -46,9 +46,9 @@ export class Config {
     siteName = siteName ?? '';
     this.transport = isTransport(transport) ? transport : 'stdio';
     this.httpPort = isNaN(httpPortNumber) ? defaultPort : httpPortNumber;
-    this.sslKey = sslKey ?? '';
-    this.sslCert = sslCert ?? '';
-    this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig ?? '');
+    this.sslKey = sslKey?.trim() ?? '';
+    this.sslCert = sslCert?.trim() ?? '';
+    this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
