@@ -21,6 +21,7 @@ describe('Config', () => {
       TRANSPORT: undefined,
       HTTP_PORT_ENV_VAR_NAME: undefined,
       PORT: undefined,
+      CUSTOM_PORT: undefined,
       CORS_ORIGIN_CONFIG: undefined,
       SERVER: undefined,
       SITE_NAME: undefined,
