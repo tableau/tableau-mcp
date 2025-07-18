@@ -15,7 +15,8 @@ Key features:
   [VizQL Data Service (VDS) API](https://help.tableau.com/current/api/vizql-data-service/en-us/index.html)
 - Supports collecting data source metadata (columns with descriptions) through the Tableau
   [Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/docs/meta_api_start.html)
-- Supports access to Pulse Metric, Pulse Metric Definitions, Pulse Subscriptions, and Pulse Metric Value Insight Bundle through the [Pulse API][pulse]
+- Supports access to Pulse Metric, Pulse Metric Definitions, Pulse Subscriptions, and Pulse Metric
+  Value Insight Bundle through the [Pulse API][pulse]
 - Usable by AI tools which support MCP Tools (e.g., Claude Desktop, Cursor and others)
 - Works with any published data source on either Tableau Cloud or Tableau Server
 
@@ -105,7 +106,7 @@ are stored in one file rather than in each AI tool's config section.
 
 All environment variables specified in a `.env` file will be avabilable to the MCP server. Creating
 a `.env` file is not required though since environment variables can also be provided by AI tools
-via the MCP configuration or to the Docker container via the `env.list` file.
+via their MCP configuration or to the Docker container running the MCP server via `env.list` file.
 
 Depending on your desired mode, create your environment configuration as follows:
 
@@ -157,26 +158,36 @@ These config files will be used in tool configuration explained below.
 
 #### Required Environment Variables
 
-| **Variable** | **Description**                                                                                                   |
-| ------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `TRANSPORT`  | The MCP transport type to use for the server. "stdio" or "http". See [Transports][mcp-transport] for details.     |
-| `SERVER`     | The URL of the Tableau server.                                                                                    |
-| `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site. |
-| `PAT_NAME`   | The name of the Tableau [Personal Access Token][pat] to use for authentication.                                   |
-| `PAT_VALUE`  | The value of the Tableau [Personal Access Token][pat] to use for authentication.                                  |
+| **Variable** | **Description**                                                                                                                                                                        |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRANSPORT`  | The MCP transport type to use for the server. See [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
+| `SERVER`     | The URL of the Tableau server.                                                                                                                                                         |
+| `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site.                                                                      |
+| `PAT_NAME`   | The name of the Tableau [Personal Access Token][pat] to use for authentication.                                                                                                        |
+| `PAT_VALUE`  | The value of the Tableau [Personal Access Token][pat] to use for authentication.                                                                                                       |
 
 #### Optional Environment Variables
 
-| **Variable**                      | **Description**                                                                                     | **Default**                        | **Note**                                                                                   |
-| --------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| `DEFAULT_LOG_LEVEL`               | The default logging level of the server.                                                            | `debug`                            |                                                                                            |
-| `DATASOURCE_CREDENTIALS`          | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below. |
-| `DISABLE_LOG_MASKING`             | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                            |
-| `INCLUDE_TOOLS`                   | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                   |
-| `EXCLUDE_TOOLS`                   | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                   |
-| `MAX_RESULT_LIMIT`                | If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.  | Empty string (_no limit_)          | A positive number.                                                                         |
-| `HTTP_PORT_ENV_VAR_NAME`          | The environment variable name to use for the HTTP server port when `TRANSPORT`=http.                | `PORT`                             |                                                                                            |
-| _Value of HTTP_PORT_ENV_VAR_NAME_ | The port to use for the HTTP server when `TRANSPORT`=http.                                          | 3927                               |                                                                                            |
+| **Variable**             | **Description**                                                                                     | **Default**                        | **Note**                                                                                   |
+| ------------------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
+| `DEFAULT_LOG_LEVEL`      | The default logging level of the server.                                                            | `debug`                            |                                                                                            |
+| `DATASOURCE_CREDENTIALS` | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below. |
+| `DISABLE_LOG_MASKING`    | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                            |
+| `INCLUDE_TOOLS`          | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                   |
+| `EXCLUDE_TOOLS`          | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                   |
+| `MAX_RESULT_LIMIT`       | If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.  | Empty string (_no limit_)          | A positive number.                                                                         |
+
+#### HTTP Server Configuration
+
+When `TRANSPORT` is `http`, below are the additional, optional environment variables that can be
+used to configure the HTTP server.
+
+| **Variable**                      | **Description**                                                  | **Default** |
+| --------------------------------- | ---------------------------------------------------------------- | ----------- |
+| `HTTP_PORT_ENV_VAR_NAME`          | The environment variable name to use for the HTTP server port.   | `PORT`      |
+| _Value of HTTP_PORT_ENV_VAR_NAME_ | The port to use for the HTTP server.                             | 3927        |
+| `SSL_KEY`                         | The path to the SSL key file to use for the HTTP server.         |             |
+| `SSL_CERT`                        | The path to the SSL certificate file to use for the HTTP server. |             |
 
 ##### DATASOURCE_CREDENTIALS
 
@@ -209,19 +220,21 @@ Future work will include a tool to automate this process. For more information, 
 The [MCP Inspector][mcp-inspector] is a helpful tool to confirm your configuration is correct and to
 explore Tableau MCP capabilities.
 
+- Non-Docker users using `stdio` transport should create a `config.json` file in the root of the
+  project using `config.stdio.json` as a template.
+- Non-Docker users using `http` transport should create a `.env` file in the root of the project
+  using `env.example.list` as a template.
 - Docker users should create an `env.list` file using `env.example.list` as a template.
-- Non-Docker users should create a `config.json` file in the root of the project using
-  `config.stdio.json` as a template.
 
 After building the project and setting the environment variables, you can start the MCP Inspector
 using one of the following commands:
 
-| **Command**                   | **Transport** | **Description**                                                                                     |
-| ----------------------------- | ------------- | --------------------------------------------------------------------------------------------------- |
-| `npm run inspect`             | STDIO         | Start the [MCP Inspector][mcp-inspector] which runs the server locally using Node.js.               |
-| `npm run inspect:docker`      | STDIO         | Start the [MCP Inspector][mcp-inspector] which runs the server using a Docker container.            |
-| `npm run inspect:http`        | HTTP          | Start the [MCP Inspector][mcp-inspector] which runs the server using Express.                       |
-| `npm run inspect:docker:http` | HTTP          | Start the [MCP Inspector][mcp-inspector] which runs the server using Express in a Docker container. |
+| **Command**                   | **Transport** | **Description**                                                                                   |
+| ----------------------------- | ------------- | ------------------------------------------------------------------------------------------------- |
+| `npm run inspect`             | `stdio`       | Start the MCP Inspector which runs the server locally using Node.js.                              |
+| `npm run inspect:docker`      | `stdio`       | Start the MCP Inspector which runs the server within a Docker container using Node.js.            |
+| `npm run inspect:http`        | `http`        | Start the MCP Inspector which runs the server locally using [Express][express].                   |
+| `npm run inspect:docker:http` | `http`        | Start the MCP Inspector which runs the server within a Docker container using [Express][express]. |
 
 ### Claude Desktop
 
@@ -300,3 +313,4 @@ To set up local debugging with breakpoints:
 [pulse]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm
 [mcp-inspector]: https://github.com/modelcontextprotocol/inspector
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
+[express]: https://expressjs.com/
