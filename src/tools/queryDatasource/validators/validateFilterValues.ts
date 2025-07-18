@@ -135,6 +135,7 @@ async function validateSetFilter(
       Array.from(existingValues),
       3, // max edit distance
       5, // max suggestions
+      true, // include random suggestions
     );
 
     const message = `Filter validation failed for field "${fieldCaption}". The following values were not found: ${invalidValues.join(', ')}. Did you mean: ${suggestedValues.join(', ')}? Please evaluate whether you included the wrong filter value or if you are trying to filter on the wrong field entirely.`;
@@ -258,33 +259,79 @@ function getFuzzyMatches(
   existingValues: string[],
   maxDistance: number = 3,
   maxSuggestions: number = 5,
+  includeRandomSuggestions: boolean = false,
 ): string[] {
-  const suggestions = new Set<string>();
+  const suggestions: Array<{
+    invalidValue: string;
+    suggestionForInvalidValue: string;
+    distance: number;
+  }> = [];
 
-  for (const invalidValue of invalidValues) {
-    // Find existing values within the specified edit distance
-    const matches = existingValues
-      .map((existingValue) => ({
-        value: existingValue,
+  for (const existingValue of existingValues) {
+    const matches = invalidValues
+      .map((invalidValue) => ({
+        value: invalidValue,
         distance: levenshtein.get(invalidValue, existingValue),
       }))
       .filter((match) => match.distance <= maxDistance)
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, Math.ceil(maxSuggestions / invalidValues.length))
-      .map((match) => match.value);
-
-    matches.forEach((match) => suggestions.add(match));
+      .sort((a, b) => a.distance - b.distance);
+    if (matches.length > 0) {
+      const bestMatch = matches[0];
+      suggestions.push({
+        invalidValue: bestMatch.value,
+        suggestionForInvalidValue: existingValue,
+        distance: bestMatch.distance,
+      });
+    }
   }
 
-  // If we don't have enough suggestions, fill with random samples
-  if (suggestions.size < maxSuggestions) {
-    const remaining = maxSuggestions - suggestions.size;
+  // now that we have all the suggestions, sort them by distance.
+  suggestions.sort((a, b) => a.distance - b.distance);
+
+  // pick the best suggestions, but prevent having too many suggestions for the same invalid value.
+  const toReturn: Array<string> = [];
+  const suggestionLimitPerInvalidValue = Math.ceil(maxSuggestions / invalidValues.length);
+  // create and initialize a suggestion counter for each invalid value.
+  const invalidValueSuggestionCounter: Map<string, number> = new Map();
+  for (const invalidValue of invalidValues) {
+    invalidValueSuggestionCounter.set(invalidValue, 0);
+  }
+
+  for (const { invalidValue, suggestionForInvalidValue } of suggestions) {
+    if (toReturn.length === maxSuggestions) {
+      break;
+    }
+
+    if (invalidValueSuggestionCounter.get(invalidValue) === suggestionLimitPerInvalidValue) {
+      continue;
+    }
+
+    toReturn.push(suggestionForInvalidValue);
+    invalidValueSuggestionCounter.set(
+      invalidValue,
+      invalidValueSuggestionCounter.get(invalidValue)! + 1,
+    );
+  }
+
+  // If we don't have enough suggestions, include more suggestions (ignoring the suggestion limit per invalid value).
+  for (const { suggestionForInvalidValue } of suggestions) {
+    if (toReturn.length === maxSuggestions) {
+      break;
+    } else if (toReturn.includes(suggestionForInvalidValue)) {
+      continue;
+    }
+    toReturn.push(suggestionForInvalidValue);
+  }
+
+  // If we still don't have enough suggestions, fill with random samples
+  if (toReturn.length < maxSuggestions && includeRandomSuggestions) {
+    const remaining = maxSuggestions - toReturn.length;
     const randomSamples = getRandomSample(
-      existingValues.filter((v) => !suggestions.has(v)),
+      existingValues.filter((v) => !toReturn.includes(v)),
       remaining,
     );
-    randomSamples.forEach((sample) => suggestions.add(sample));
+    randomSamples.forEach((sample) => toReturn.push(sample));
   }
 
-  return Array.from(suggestions).slice(0, maxSuggestions);
+  return toReturn;
 }
