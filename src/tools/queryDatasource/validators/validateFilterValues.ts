@@ -225,17 +225,20 @@ async function validateMatchFilter(
             })()
           : true;
 
-        const fuzzyContainsMatch =
-          filter.contains && lowerValue.length >= filter.contains.length
-            ? (() => {
-                const pattern = filter.contains!.toLowerCase();
-                const len = pattern.length;
-                const dynamicDistance = Math.min(2, Math.floor(len / 2));
+        const fuzzyContainsMatch = filter.contains
+          ? (() => {
+              const pattern = filter.contains!.toLowerCase();
+              const len = pattern.length;
+              const dynamicDistance = Math.min(2, Math.floor(len / 2));
+              if (lowerValue.length >= len) {
                 return Array.from({ length: lowerValue.length - len + 1 }, (_, i) =>
                   levenshtein.get(pattern, lowerValue.slice(i, i + len)),
                 ).some((dist) => dist <= dynamicDistance);
-              })()
-            : true;
+              } else {
+                return levenshtein.get(pattern, lowerValue) <= dynamicDistance;
+              }
+            })()
+          : true;
         return fuzzyStartMatch && fuzzyEndMatch && fuzzyContainsMatch;
       }),
     );
