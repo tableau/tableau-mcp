@@ -10,6 +10,7 @@ import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { validateQuery } from './queryDatasourceValidator.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
+import { validateFilterValues } from './validators/validateFilterValues.js';
 
 type Datasource = z.infer<typeof Datasource>;
 
@@ -59,7 +60,27 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             requestId,
             server,
             callback: async (restApi) => {
-              return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+              const queryDatasourceResponse =
+                await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+              if (
+                queryDatasourceResponse.isOk() &&
+                queryDatasourceResponse.value.data?.length === 0
+              ) {
+                const filterValidationResult = await validateFilterValues(
+                  server,
+                  query,
+                  restApi.vizqlDataServiceMethods,
+                  datasource,
+                );
+
+                if (filterValidationResult.isErr()) {
+                  const errors = filterValidationResult.error;
+                  const errorMessage = errors.map((error) => error.message).join('\n\n');
+                  throw new Error(errorMessage);
+                }
+              }
+
+              return queryDatasourceResponse;
             },
           });
         },
