@@ -16,9 +16,10 @@
   },
   "scripts": {
     ":build": "npx rimraf ./build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap",
-    "build": "npm run :build && npm run exec-perms && npx @anthropic-ai/dxt pack",
+    "build": "npm run :build && npm run exec-perms",
     "build:watch": "npm run :build -- --watch",
     "build:docker": "docker build -t tableau-mcp .",
+    "build:dxt": "npx @anthropic-ai/dxt pack",
     "lint": "npm exec eslint",
     "inspect": "npx @modelcontextprotocol/inspector --config config.json --server tableau",
     "inspect:docker": "npx @modelcontextprotocol/inspector --config config.docker.json --server tableau",
@@ -32,6 +33,7 @@
     "version:patch": "npm version patch --no-git-tag-version"
   },
   "dependencies": {
+    "@anthropic-ai/dxt": "^0.2.5",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@zodios/core": "^10.9.6",
     "ts-results-es": "^5.0.1",

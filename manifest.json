@@ -21,7 +21,7 @@
         "SITE_NAME": "${user_config.site_name}",
         "PAT_NAME": "${user_config.pat_name}",
         "PAT_VALUE": "${user_config.pat_value}",
-        "DEFAULT_LOG_LEVEL": "debug"
+        "DEFAULT_LOG_LEVEL": "info"
       }
     }
   },
