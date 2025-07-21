@@ -37,7 +37,6 @@ export default abstract class AuthenticatedMethods<
     if (!this._creds) {
       throw new Error('Authenticate by calling signIn() first');
     }
-
     return this._creds.user.id;
   }
 

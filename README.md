@@ -122,7 +122,6 @@ it should look similar to this:
       "args": ["/full-path-to-tableau-mcp/build/index.js"],
       "env": {
         "TRANSPORT": "stdio",
-        "PORT": "",
         "SERVER": "https://my-tableau-server.com",
         "SITE_NAME": "",
         "PAT_NAME": "",

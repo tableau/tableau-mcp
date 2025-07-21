@@ -37,6 +37,7 @@ async function startServer(): Promise<void> {
       break;
     }
   }
+
   if (config.disableLogMasking) {
     writeToStderr('Log masking is disabled!');
   }

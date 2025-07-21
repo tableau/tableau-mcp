@@ -13,7 +13,6 @@
       "outFiles": ["${workspaceFolder}/**/build/**/*.js"],
       "env": {
         "TRANSPORT": "${config:tableau.mcp.TRANSPORT}",
-        "PORT": "${config:tableau.mcp.PORT}",
         "SERVER": "${config:tableau.mcp.SERVER}",
         "SITE_NAME": "${config:tableau.mcp.SITE_NAME}",
         "PAT_NAME": "${config:tableau.mcp.PAT_NAME}",

@@ -26,7 +26,9 @@ export default class AuthenticationMethods extends Methods<typeof authentication
    */
   signIn = async (authConfig: AuthConfig): Promise<Credentials> => {
     if (authConfig.type === 'accessToken') {
-      throw new Error('Access token authentication is not supported');
+      throw new Error(
+        'Do not use this method to authenticate with an access token, just provide it directly using RestApi.setCredentials()',
+      );
     }
 
     return (
