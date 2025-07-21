@@ -2,7 +2,7 @@ import { AuthConfig } from './sdks/tableau/authConfig.js';
 import { isToolName, ToolName } from './tools/toolName.js';
 import invariant from './utils/invariant.js';
 
-class Config {
+export class Config {
   server: string;
   authConfig: AuthConfig;
   datasourceCredentials: string;

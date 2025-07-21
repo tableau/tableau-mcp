@@ -3,6 +3,7 @@ import { Zodios } from '@zodios/core';
 import { authenticationApis } from '../apis/authenticationApi.js';
 import { AuthConfig } from '../authConfig.js';
 import { Credentials } from '../types/credentials.js';
+import AuthenticatedMethods from './authenticatedMethods.js';
 import Methods from './methods.js';
 
 /**
@@ -10,13 +11,19 @@ import Methods from './methods.js';
  *
  * @export
  * @class AuthenticationMethods
- * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#sign_in
+ * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm
  */
 export default class AuthenticationMethods extends Methods<typeof authenticationApis> {
   constructor(baseUrl: string) {
     super(new Zodios(baseUrl, authenticationApis));
   }
 
+  /**
+   * Signs you in as a user on the specified site on Tableau Server or Tableau Cloud.
+   *
+   * @param {AuthConfig} authConfig - The authentication configuration
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#sign_in
+   */
   signIn = async (authConfig: AuthConfig): Promise<Credentials> => {
     return (
       await this._apiClient.signIn({
@@ -36,5 +43,31 @@ export default class AuthenticationMethods extends Methods<typeof authentication
         },
       })
     ).credentials;
+  };
+}
+
+/**
+ * Authentication methods of the Tableau Server REST API that assume the user is already authenticated
+ *
+ * @export
+ * @class AuthenticatedAuthenticationMethods
+ * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm
+ */
+export class AuthenticatedAuthenticationMethods extends AuthenticatedMethods<
+  typeof authenticationApis
+> {
+  constructor(baseUrl: string, creds: Credentials) {
+    super(new Zodios(baseUrl, authenticationApis), creds);
+  }
+
+  /**
+   * Signs you out of the current session. This call invalidates the authentication token that is created by a call to Sign In.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#sign_out
+   *
+   */
+  signOut = async (): Promise<void> => {
+    await this._apiClient.signOut(undefined, {
+      ...this.authHeader,
+    });
   };
 }

@@ -202,30 +202,57 @@ async function validateMatchFilter(
   });
 
   if (!hasMatch) {
-    // Find values that are similar to the pattern
-    const patternString = filter.startsWith || filter.endsWith || filter.contains || '';
-    const similarValues = fieldValues
-      .map((value) => ({
-        value,
-        distance: levenshtein.get(patternString.toLowerCase(), value.toLowerCase()),
-      }))
-      .filter((match) => match.distance <= 5) // Allow up to 5 character differences
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, 5)
-      .map((match) => match.value);
+    const similarValues = new Set(
+      fieldValues.filter((value) => {
+        const lowerValue = value.toLowerCase();
 
-    const suggestions = similarValues.length > 0 ? similarValues : getRandomSample(fieldValues, 5);
+        const fuzzyStartMatch = filter.startsWith
+          ? (() => {
+              const pattern = filter.startsWith!.toLowerCase();
+              const len = pattern.length;
+              const dynamicDistance = Math.min(2, Math.floor(len / 2));
+              const startSlice = lowerValue.slice(0, len);
+              return levenshtein.get(pattern, startSlice) <= dynamicDistance;
+            })()
+          : true;
 
-    const patterns: Array<string> = [];
-    if (filter.startsWith) patterns.push(`starts with "${filter.startsWith}"`);
-    if (filter.endsWith) patterns.push(`ends with "${filter.endsWith}"`);
-    if (filter.contains) patterns.push(`contains "${filter.contains}"`);
+        const fuzzyEndMatch = filter.endsWith
+          ? (() => {
+              const pattern = filter.endsWith!.toLowerCase();
+              const len = pattern.length;
+              const dynamicDistance = Math.min(2, Math.floor(len / 2));
+              const endSlice = lowerValue.slice(-len);
+              return levenshtein.get(pattern, endSlice) <= dynamicDistance;
+            })()
+          : true;
 
-    const message = `Filter validation failed for field "${fieldCaption}". No values found that ${patterns.join(' and ')}. Similar values in this field: ${suggestions.join(', ')}. Please evaluate whether you included the wrong filter value or if you are trying to filter on the wrong field entirely.`;
+        const fuzzyContainsMatch =
+          filter.contains && lowerValue.length >= filter.contains.length
+            ? (() => {
+                const pattern = filter.contains!.toLowerCase();
+                const len = pattern.length;
+                const dynamicDistance = Math.min(2, Math.floor(len / 2));
+                return Array.from({ length: lowerValue.length - len + 1 }, (_, i) =>
+                  levenshtein.get(pattern, lowerValue.slice(i, i + len)),
+                ).some((dist) => dist <= dynamicDistance);
+              })()
+            : true;
+        return fuzzyStartMatch && fuzzyEndMatch && fuzzyContainsMatch;
+      }),
+    );
+
+    const suggestions = ensureMinimumSuggestions(similarValues, 5, fieldValues);
+
+    const patternDescriptions: Array<string> = [];
+    if (filter.startsWith) patternDescriptions.push(`starts with "${filter.startsWith}"`);
+    if (filter.endsWith) patternDescriptions.push(`ends with "${filter.endsWith}"`);
+    if (filter.contains) patternDescriptions.push(`contains "${filter.contains}"`);
+
+    const message = `Filter validation failed for field "${fieldCaption}". No values found that ${patternDescriptions.join(' and ')}. Similar values in this field: ${suggestions.join(', ')}. Please evaluate whether you included the wrong filter value or if you are trying to filter on the wrong field entirely.`;
 
     return new Err({
       field: fieldCaption,
-      invalidValues: patterns,
+      invalidValues: patternDescriptions,
       sampleValues: suggestions,
       message,
     });
@@ -334,4 +361,21 @@ export function getFuzzyMatches(
   }
 
   return toReturn;
+}
+
+function ensureMinimumSuggestions(
+  suggestions: Set<string>,
+  maxSuggestions: number,
+  existingValues: Array<string>,
+): string[] {
+  if (suggestions.size < maxSuggestions) {
+    const remaining = maxSuggestions - suggestions.size;
+    const randomSamples = getRandomSample(
+      existingValues.filter((v) => !suggestions.has(v)),
+      remaining,
+    );
+    randomSamples.forEach((sample) => suggestions.add(sample));
+  }
+
+  return Array.from(suggestions).slice(0, maxSuggestions);
 }

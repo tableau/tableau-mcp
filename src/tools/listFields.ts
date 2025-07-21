@@ -3,7 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../config.js';
-import { getNewRestApiInstanceAsync } from '../restApiInstance.js';
+import { useRestApi } from '../restApiInstance.js';
 import { Server } from '../server.js';
 import { Tool } from './tool.js';
 import { validateDatasourceLuid } from './validateDatasourceLuid.js';
@@ -99,13 +99,16 @@ export const getListFieldsTool = (server: Server): Tool<typeof paramsSchema> => 
         requestId,
         args: { datasourceLuid },
         callback: async () => {
-          const restApi = await getNewRestApiInstanceAsync(
-            config.server,
-            config.authConfig,
-            requestId,
-            server,
+          return new Ok(
+            await useRestApi({
+              config,
+              requestId,
+              server,
+              callback: async (restApi) => {
+                return await restApi.metadataMethods.graphql(query);
+              },
+            }),
           );
-          return new Ok(await restApi.metadataMethods.graphql(query));
         },
       });
     },

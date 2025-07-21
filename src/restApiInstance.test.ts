@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { getConfig } from './config.js';
 import { log } from './logging/log.js';
 import {
-  getNewRestApiInstanceAsync,
   getRequestErrorInterceptor,
   getRequestInterceptor,
   getResponseErrorInterceptor,
   getResponseInterceptor,
+  useRestApi,
 } from './restApiInstance.js';
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 import RestApi from './sdks/tableau/restApi.js';
@@ -15,6 +16,7 @@ import { Server } from './server.js';
 vi.mock('./sdks/tableau/restApi.js', () => ({
   default: vi.fn().mockImplementation(() => ({
     signIn: vi.fn().mockResolvedValue(undefined),
+    signOut: vi.fn().mockResolvedValue(undefined),
   })),
 }));
 
@@ -27,27 +29,28 @@ vi.mock('./logging/log.js', () => ({
 }));
 
 describe('restApiInstance', () => {
-  const mockHost = 'https://test.tableau.com';
+  const mockHost = 'https://my-tableau-server.com';
   const mockAuthConfig: AuthConfig = {
     type: 'pat',
-    patName: 'test-token',
-    patValue: 'test-secret',
-    siteName: 'test-site',
+    patName: 'sponge',
+    patValue: 'bob',
+    siteName: 'tc25',
   };
   const mockRequestId = 'test-request-id';
+  const mockConfig = getConfig();
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  describe('getNewRestApiInstanceAsync', () => {
+  describe('useRestApi', () => {
     it('should create a new RestApi instance and sign in', async () => {
-      const restApi = await getNewRestApiInstanceAsync(
-        mockHost,
-        mockAuthConfig,
-        mockRequestId,
-        new Server(),
-      );
+      const restApi = await useRestApi({
+        config: mockConfig,
+        requestId: mockRequestId,
+        server: new Server(),
+        callback: (restApi) => Promise.resolve(restApi),
+      });
 
       expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
       expect(restApi.signIn).toHaveBeenCalledWith(mockAuthConfig);

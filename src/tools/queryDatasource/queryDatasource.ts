@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
-import { getNewRestApiInstanceAsync } from '../../restApiInstance.js';
+import { useRestApi } from '../../restApiInstance.js';
 import { Datasource, Query, TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
@@ -55,31 +55,34 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             options,
           };
 
-          const restApi = await getNewRestApiInstanceAsync(
-            config.server,
-            config.authConfig,
+          return await useRestApi({
+            config,
             requestId,
             server,
-          );
+            callback: async (restApi) => {
+              const queryDatasourceResponse =
+                await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+              if (
+                queryDatasourceResponse.isOk() &&
+                queryDatasourceResponse.value.data?.length === 0
+              ) {
+                const filterValidationResult = await validateFilterValues(
+                  server,
+                  query,
+                  restApi.vizqlDataServiceMethods,
+                  datasource,
+                );
 
-          const queryDatasourceResponse =
-            await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
-          if (queryDatasourceResponse.isOk() && queryDatasourceResponse.value.data?.length === 0) {
-            const filterValidationResult = await validateFilterValues(
-              server,
-              query,
-              restApi.vizqlDataServiceMethods,
-              datasource,
-            );
+                if (filterValidationResult.isErr()) {
+                  const errors = filterValidationResult.error;
+                  const errorMessage = errors.map((error) => error.message).join('\n\n');
+                  throw new Error(errorMessage);
+                }
+              }
 
-            if (filterValidationResult.isErr()) {
-              const errors = filterValidationResult.error;
-              const errorMessage = errors.map((error) => error.message).join('\n\n');
-              throw new Error(errorMessage);
-            }
-          }
-
-          return queryDatasourceResponse;
+              return queryDatasourceResponse;
+            },
+          });
         },
         getErrorText: (error: z.infer<typeof TableauError>) => {
           return JSON.stringify({ requestId, ...handleQueryDatasourceError(error) });
