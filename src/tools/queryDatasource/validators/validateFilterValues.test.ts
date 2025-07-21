@@ -865,4 +865,58 @@ describe('validateFilterValues', () => {
       expect(result.error[0].message).toContain('Similar values in this field:');
     }
   });
+
+  it('should handle MATCH contains filter when pattern is longer than field values using direct fuzzy matching', async () => {
+    const query: Query = {
+      fields: [{ fieldCaption: 'Category' }],
+      filters: [
+        {
+          field: { fieldCaption: 'Category' },
+          filterType: 'MATCH',
+          contains: 'Electronics',
+        },
+      ],
+    };
+
+    (
+      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
+      new Ok({
+        data: [
+          { SampleValues: 'Electrontic' },
+          { SampleValues: 'Tech' },
+          { SampleValues: 'Phone' },
+          { SampleValues: 'Electronic' },
+          { SampleValues: 'Books' },
+          { SampleValues: 'Furniture' },
+          { SampleValues: 'Electronicz' },
+          { SampleValues: 'Electronicc' },
+          { SampleValues: 'Electronis' },
+        ],
+      }),
+    );
+
+    const result = await validateFilterValues(
+      new Server(),
+      query,
+      mockVizqlDataServiceMethods,
+      mockDatasource,
+    );
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error).toHaveLength(1);
+      expect(result.error[0].field).toBe('Category');
+      expect(result.error[0].invalidValues).toEqual(['contains "Electronics"']);
+      expect(result.error[0].sampleValues).toHaveLength(5);
+      expect(result.error[0].sampleValues).toContain('Electrontic');
+      expect(result.error[0].sampleValues).toContain('Electronic');
+      expect(result.error[0].sampleValues).toContain('Electronicz');
+      expect(result.error[0].sampleValues).toContain('Electronicc');
+      expect(result.error[0].sampleValues).toContain('Electronis');
+      expect(result.error[0].message).toContain('Filter validation failed for field "Category"');
+      expect(result.error[0].message).toContain('contains "Electronics"');
+      expect(result.error[0].message).toContain('Similar values in this field:');
+    }
+  });
 });
