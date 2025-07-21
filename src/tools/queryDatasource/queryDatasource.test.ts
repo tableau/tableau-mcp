@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { Server } from '../../server/server.js';
+import { Server } from '../../server.js';
 import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
 import { getQueryDatasourceTool } from './queryDatasource.js';
 
@@ -41,17 +41,15 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
-  useRestApi: vi
-    .fn()
-    .mockImplementation(async (_host, _authConfig, _requestId, _server, callback) =>
-      callback({
-        signIn: vi.fn(),
-        signOut: vi.fn(),
-        vizqlDataServiceMethods: {
-          queryDatasource: mocks.mockQueryDatasource,
-        },
-      }),
-    ),
+  useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
+    callback({
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+      vizqlDataServiceMethods: {
+        queryDatasource: mocks.mockQueryDatasource,
+      },
+    }),
+  ),
 }));
 
 describe('queryDatasourceTool', () => {

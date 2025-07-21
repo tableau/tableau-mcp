@@ -5,7 +5,7 @@ import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 
 import { getToolLogMessage, log } from '../logging/log.js';
-import { Server } from '../server/server.js';
+import { Server } from '../server.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { ToolName } from './toolName.js';
 

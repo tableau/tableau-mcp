@@ -1,6 +1,6 @@
 import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../server/server.js';
+import { Server } from '../server.js';
 import { ToolName } from '../tools/toolName.js';
 type Logger = 'rest-api' | (string & {});
 type LogType = LoggingLevel | 'request' | 'response' | 'tool';
@@ -42,6 +42,8 @@ export const setLogLevel = (
   }
 };
 
+type LogMethodOptions = Partial<{ logger: Logger; requestId: RequestId }>;
+
 export const log = {
   debug: getSendLoggingMessageFn('debug'),
   info: getSendLoggingMessageFn('info'),
@@ -55,7 +57,7 @@ export const log = {
   [level in LoggingLevel]: (
     server: Server,
     message: string | LogMessage,
-    { logger, requestId }: Partial<{ logger: Logger; requestId: RequestId }>,
+    { logger, requestId }: LogMethodOptions,
   ) => Promise<void>;
 };
 
@@ -96,7 +98,7 @@ function getSendLoggingMessageFn(level: LoggingLevel) {
   return async (
     server: Server,
     message: string | LogMessage,
-    { logger, requestId }: Partial<{ logger: Logger; requestId: RequestId }> = {
+    { logger, requestId }: LogMethodOptions = {
       logger: server.name,
     },
   ) => {

@@ -3,7 +3,7 @@ import { Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { Server } from '../../../server/server.js';
+import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
 
 const paramsSchema = {};

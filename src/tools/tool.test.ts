@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { log } from '../logging/log.js';
-import { Server } from '../server/server.js';
+import { Server } from '../server.js';
 import { Tool } from './tool.js';
 
 describe('Tool', () => {

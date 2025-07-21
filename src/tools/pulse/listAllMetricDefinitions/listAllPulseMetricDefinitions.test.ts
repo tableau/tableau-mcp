@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import type { PulseMetricDefinition } from '../../../sdks/tableau/types/pulse.js';
-import { Server } from '../../../server/server.js';
+import { Server } from '../../../server.js';
 import { getListAllPulseMetricDefinitionsTool } from './listAllPulseMetricDefinitions.js';
 
 const mockPulseMetricDefinitions: PulseMetricDefinition[] = [
@@ -30,16 +30,14 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
-  useRestApi: vi
-    .fn()
-    .mockImplementation(async (_host, _authConfig, _requestId, _server, callback) =>
-      callback({
-        pulseMethods: {
-          listAllPulseMetricDefinitions: mocks.mockListAllPulseMetricDefinitions,
-        },
-        siteId: 'test-site-id',
-      }),
-    ),
+  useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
+    callback({
+      pulseMethods: {
+        listAllPulseMetricDefinitions: mocks.mockListAllPulseMetricDefinitions,
+      },
+      siteId: 'test-site-id',
+    }),
+  ),
 }));
 
 describe('listAllPulseMetricDefinitionsTool', () => {

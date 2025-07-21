@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse.js';
-import { Server } from '../../../server/server.js';
+import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
 
 const paramsSchema = {

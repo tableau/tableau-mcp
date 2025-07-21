@@ -11,7 +11,7 @@ import {
 } from './restApiInstance.js';
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 import RestApi from './sdks/tableau/restApi.js';
-import { Server } from './server/server.js';
+import { Server } from './server.js';
 import { userAgent } from './server/userAgent.js';
 
 vi.mock('./sdks/tableau/restApi.js', () => ({

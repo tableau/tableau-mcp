@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../server/server.js';
+import { Server } from '../server.js';
 import { getGraphqlQuery, getListFieldsTool } from './listFields.js';
 
 const mockMetadataResponses = vi.hoisted(() => ({
@@ -69,15 +69,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../restApiInstance.js', () => ({
-  useRestApi: vi
-    .fn()
-    .mockImplementation(async (_host, _authConfig, _requestId, _server, callback) =>
-      callback({
-        metadataMethods: {
-          graphql: mocks.mockGraphql,
-        },
-      }),
-    ),
+  useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
+    callback({
+      metadataMethods: {
+        graphql: mocks.mockGraphql,
+      },
+    }),
+  ),
 }));
 
 describe('listFieldsTool', () => {

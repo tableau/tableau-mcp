@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { getConfig } from '../config.js';
 import { useRestApi } from '../restApiInstance.js';
-import { Server } from '../server/server.js';
+import { Server } from '../server.js';
 import { Tool } from './tool.js';
 import { validateDatasourceLuid } from './validateDatasourceLuid.js';
 

@@ -4,7 +4,7 @@ vi.stubEnv('PAT_NAME', 'sponge');
 vi.stubEnv('PAT_VALUE', 'bob');
 vi.stubEnv('TABLEAU_MCP_TEST', 'true');
 
-vi.mock('./server/server.js', async (importOriginal) => ({
+vi.mock('./server.js', async (importOriginal) => ({
   ...(await importOriginal()),
   Server: vi.fn().mockImplementation(() => ({
     name: 'test-server',

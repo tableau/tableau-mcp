@@ -2,7 +2,8 @@ export interface ProcessEnvEx {
   TRANSPORT: string | undefined;
   SSL_KEY: string | undefined;
   SSL_CERT: string | undefined;
-  PORT: string | undefined;
+  HTTP_PORT_ENV_VAR_NAME: string | undefined;
+  CORS_ORIGIN_CONFIG: string | undefined;
   SERVER: string | undefined;
   SITE_NAME: string | undefined;
   PAT_NAME: string | undefined;
