@@ -135,15 +135,19 @@ async function validateSetFilter(
       Array.from(existingValues),
       3, // max edit distance
       5, // max suggestions
-      true, // include random suggestions
     );
 
-    const message = `Filter validation failed for field "${fieldCaption}". The following values were not found: ${invalidValues.join(', ')}. Did you mean: ${suggestedValues.join(', ')}? Please evaluate whether you included the wrong filter value or if you are trying to filter on the wrong field entirely.`;
+    let message = `Filter validation failed for field "${fieldCaption}". The following values were not found: ${invalidValues.join(', ')}.`;
+    if (suggestedValues.length > 0) {
+      message += ` Did you mean: ${suggestedValues.join(', ')}?`;
+    }
+    message +=
+      ' Please evaluate whether you included the wrong filter value or if you are trying to filter on the wrong field entirely.';
 
     return new Err({
       field: fieldCaption,
       invalidValues,
-      sampleValues: suggestedValues, // Now contains fuzzy matches instead of random samples
+      sampleValues: suggestedValues,
       message,
     });
   }
@@ -297,7 +301,6 @@ export function getFuzzyMatches(
   existingValues: string[],
   maxDistance: number = 3,
   maxSuggestions: number = 5,
-  includeRandomSuggestions: boolean = false,
 ): string[] {
   const suggestions: Array<{
     invalidValue: string;
@@ -361,32 +364,5 @@ export function getFuzzyMatches(
     toReturn.push(suggestionForInvalidValue);
   }
 
-  // If we still don't have enough suggestions, fill with random samples
-  if (toReturn.length < maxSuggestions && includeRandomSuggestions) {
-    const remaining = maxSuggestions - toReturn.length;
-    const randomSamples = getRandomSample(
-      existingValues.filter((v) => !toReturn.includes(v)),
-      remaining,
-    );
-    randomSamples.forEach((sample) => toReturn.push(sample));
-  }
-
   return toReturn;
-}
-
-function ensureMinimumSuggestions(
-  suggestions: Set<string>,
-  maxSuggestions: number,
-  existingValues: Array<string>,
-): string[] {
-  if (suggestions.size < maxSuggestions) {
-    const remaining = maxSuggestions - suggestions.size;
-    const randomSamples = getRandomSample(
-      existingValues.filter((v) => !suggestions.has(v)),
-      remaining,
-    );
-    randomSamples.forEach((sample) => suggestions.add(sample));
-  }
-
-  return Array.from(suggestions).slice(0, maxSuggestions);
 }
