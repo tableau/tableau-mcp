@@ -329,7 +329,7 @@ describe('queryDatasourceTool', () => {
     });
 
     it('should not run SET/MATCH filters validation when DISABLE_DATASOURCE_QUERY_FILTER_VALIDATION environment variable is true', async () => {
-      process.env.DISABLE_DATASOURCE_QUERY_FILTER_VALIDATION = 'true';
+      process.env.DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION = 'true';
 
       const mockMainQueryResult = {
         data: [{ Region: 'East', 'SUM(Sales)': 100000 }],

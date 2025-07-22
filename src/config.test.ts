@@ -33,7 +33,7 @@ describe('Config', () => {
       INCLUDE_TOOLS: undefined,
       EXCLUDE_TOOLS: undefined,
       MAX_RESULT_LIMIT: undefined,
-      DISABLE_DATASOURCE_QUERY_FILTER_VALIDATION: undefined,
+      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: undefined,
     };
   });
 
@@ -206,7 +206,7 @@ describe('Config', () => {
     };
 
     const config = new Config();
-    expect(config.disableDatasourceQueryFilterValidation).toBe(false);
+    expect(config.disableQueryDatasourceFilterValidation).toBe(false);
   });
 
   it('should set disableDatasourceQueryFilterValidation to true when specified', () => {
@@ -216,11 +216,11 @@ describe('Config', () => {
       SITE_NAME: 'test-site',
       PAT_NAME: 'test-pat-name',
       PAT_VALUE: 'test-pat-value',
-      DISABLE_DATASOURCE_QUERY_FILTER_VALIDATION: 'true',
+      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: 'true',
     };
 
     const config = new Config();
-    expect(config.disableDatasourceQueryFilterValidation).toBe(true);
+    expect(config.disableQueryDatasourceFilterValidation).toBe(true);
   });
 
   it('should default transport to stdio when not specified', () => {
