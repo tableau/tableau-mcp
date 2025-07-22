@@ -347,7 +347,7 @@ export class OAuthProvider {
         redirectUri,
         codeChallenge,
         codeChallengeMethod,
-        state,
+        state: state ?? '',
         scope,
         tableauState,
       });
