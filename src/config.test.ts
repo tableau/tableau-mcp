@@ -199,10 +199,7 @@ describe('Config', () => {
   it('should set disableQueryDatasourceFilterValidation to false by default', () => {
     process.env = {
       ...process.env,
-      SERVER: 'https://test-server.com',
-      SITE_NAME: 'test-site',
-      PAT_NAME: 'test-pat-name',
-      PAT_VALUE: 'test-pat-value',
+      ...defaultEnvVars,
     };
 
     const config = new Config();
@@ -212,10 +209,7 @@ describe('Config', () => {
   it('should set disableQueryDatasourceFilterValidation to true when specified', () => {
     process.env = {
       ...process.env,
-      SERVER: 'https://test-server.com',
-      SITE_NAME: 'test-site',
-      PAT_NAME: 'test-pat-name',
-      PAT_VALUE: 'test-pat-value',
+      ...defaultEnvVars,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: 'true',
     };
 

@@ -206,47 +206,53 @@ async function validateMatchFilter(
   });
 
   if (!hasMatch) {
-    const similarValues = new Set(
-      fieldValues.filter((value) => {
-        const lowerValue = value.toLowerCase();
+    const similarValues = new Set<string>();
 
-        const fuzzyStartMatch = filter.startsWith
-          ? (() => {
-              const pattern = filter.startsWith!.toLowerCase();
-              const len = pattern.length;
-              const dynamicDistance = Math.min(2, Math.floor(len / 2));
-              const startSlice = lowerValue.slice(0, len);
-              return levenshtein.get(pattern, startSlice) <= dynamicDistance;
-            })()
-          : true;
+    // Find up to 5 similar values to avoid processing all field values
+    for (const value of fieldValues) {
+      if (similarValues.size >= 5) break;
 
-        const fuzzyEndMatch = filter.endsWith
-          ? (() => {
-              const pattern = filter.endsWith!.toLowerCase();
-              const len = pattern.length;
-              const dynamicDistance = Math.min(2, Math.floor(len / 2));
-              const endSlice = lowerValue.slice(-len);
-              return levenshtein.get(pattern, endSlice) <= dynamicDistance;
-            })()
-          : true;
+      const lowerValue = value.toLowerCase();
 
-        const fuzzyContainsMatch = filter.contains
-          ? (() => {
-              const pattern = filter.contains!.toLowerCase();
-              const len = pattern.length;
-              const dynamicDistance = Math.min(2, Math.floor(len / 2));
-              if (lowerValue.length >= len) {
-                return Array.from({ length: lowerValue.length - len + 1 }, (_, i) =>
-                  levenshtein.get(pattern, lowerValue.slice(i, i + len)),
-                ).some((dist) => dist <= dynamicDistance);
-              } else {
-                return levenshtein.get(pattern, lowerValue) <= dynamicDistance;
-              }
-            })()
-          : true;
-        return fuzzyStartMatch && fuzzyEndMatch && fuzzyContainsMatch;
-      }),
-    );
+      const fuzzyStartMatch = filter.startsWith
+        ? (() => {
+            const pattern = filter.startsWith!.toLowerCase();
+            const len = pattern.length;
+            const dynamicDistance = Math.min(2, Math.floor(len / 2));
+            const startSlice = lowerValue.slice(0, len);
+            return levenshtein.get(pattern, startSlice) <= dynamicDistance;
+          })()
+        : true;
+
+      const fuzzyEndMatch = filter.endsWith
+        ? (() => {
+            const pattern = filter.endsWith!.toLowerCase();
+            const len = pattern.length;
+            const dynamicDistance = Math.min(2, Math.floor(len / 2));
+            const endSlice = lowerValue.slice(-len);
+            return levenshtein.get(pattern, endSlice) <= dynamicDistance;
+          })()
+        : true;
+
+      const fuzzyContainsMatch = filter.contains
+        ? (() => {
+            const pattern = filter.contains!.toLowerCase();
+            const len = pattern.length;
+            const dynamicDistance = Math.min(2, Math.floor(len / 2));
+            if (lowerValue.length >= len) {
+              return Array.from({ length: lowerValue.length - len + 1 }, (_, i) =>
+                levenshtein.get(pattern, lowerValue.slice(i, i + len)),
+              ).some((dist) => dist <= dynamicDistance);
+            } else {
+              return levenshtein.get(pattern, lowerValue) <= dynamicDistance;
+            }
+          })()
+        : true;
+
+      if (fuzzyStartMatch && fuzzyEndMatch && fuzzyContainsMatch) {
+        similarValues.add(value);
+      }
+    }
 
     const suggestions = Array.from(similarValues).slice(0, 5);
 
@@ -295,7 +301,7 @@ export function getFuzzyMatches(
     const matches = invalidValues
       .map((invalidValue) => ({
         value: invalidValue,
-        distance: levenshtein.get(invalidValue, existingValue),
+        distance: levenshtein.get(invalidValue.toLowerCase(), existingValue.toLowerCase()),
       }))
       .filter((match) => match.distance <= maxDistance)
       .sort((a, b) => a.distance - b.distance);
