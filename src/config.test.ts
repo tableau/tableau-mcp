@@ -221,6 +221,8 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.disableDatasourceQueryFilterValidation).toBe(true);
+  });
+
   it('should default transport to stdio when not specified', () => {
     process.env = {
       ...process.env,
