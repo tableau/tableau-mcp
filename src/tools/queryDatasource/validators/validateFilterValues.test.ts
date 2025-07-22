@@ -682,6 +682,4 @@ describe('validateFilterValues', () => {
       expect(result.error[0].message).toContain('Similar values in this field:');
     }
   });
-
-
 });
