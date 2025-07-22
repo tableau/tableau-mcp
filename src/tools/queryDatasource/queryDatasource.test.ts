@@ -191,10 +191,9 @@ describe('queryDatasourceTool', () => {
   });
 
   describe('Filter Validation', () => {
-    it('should return validation error for SET filter with invalid values and suggest fuzzy matches when main query returns empty', async () => {
+    it('should return validation error for SET filter with invalid values and suggest fuzzy matches', async () => {
       // Mock main query to return empty results (triggering validation)
       mocks.mockQueryDatasource
-        .mockResolvedValueOnce(new Ok({ data: [] }))
         // Mock validation query to return existing values
         .mockResolvedValueOnce(
           new Ok({
@@ -235,18 +234,14 @@ describe('queryDatasourceTool', () => {
       expect(result.content[0].text).toContain('Wast');
       expect(result.content[0].text).toContain('Did you mean:');
       expect(result.content[0].text).toContain('West'); // Should suggest fuzzy match
-      expect(result.content[0].text).toContain(
-        'evaluate whether you included the wrong filter value',
-      );
 
-      // Should call main query first, then validation query
-      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
+      // Should call only the validation query & error on invalid values
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
     });
 
-    it('should return validation error for MATCH filter with invalid pattern and suggest similar values when main query returns empty', async () => {
+    it('should return validation error for MATCH filter with invalid pattern and suggest similar values', async () => {
       // Mock main query to return empty results (triggering validation)
       mocks.mockQueryDatasource
-        .mockResolvedValueOnce(new Ok({ data: [] }))
         // Mock validation query to return sample values that don't match exactly but are similar
         .mockResolvedValueOnce(
           new Ok({
@@ -289,54 +284,8 @@ describe('queryDatasourceTool', () => {
       expect(result.content[0].text).toContain('starts with "Jon"');
       expect(result.content[0].text).toContain('Similar values in this field:');
       expect(result.content[0].text).toContain('John Doe'); // Should suggest similar value
-      expect(result.content[0].text).toContain(
-        'evaluate whether you included the wrong filter value',
-      );
 
       // Should call main query first, then validation query
-      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
-    });
-
-    it('should return main query results when query has data (no validation triggered)', async () => {
-      const mockMainQueryResult = {
-        data: [
-          { Region: 'East', 'SUM(Sales)': 100000 },
-          { Region: 'West', 'SUM(Sales)': 150000 },
-        ],
-      };
-
-      // Mock main query to return data (validation won't be triggered)
-      mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
-
-      const queryDatasourceTool = getQueryDatasourceTool(new Server());
-      const result = await queryDatasourceTool.callback(
-        {
-          datasourceLuid: 'test-datasource-luid',
-          query: {
-            fields: [{ fieldCaption: 'Region' }, { fieldCaption: 'Sales', function: 'SUM' }],
-            filters: [
-              {
-                field: { fieldCaption: 'Region' },
-                filterType: 'SET',
-                values: ['East', 'West'],
-              },
-            ],
-          },
-        },
-        {
-          signal: new AbortController().signal,
-          requestId: 'test-request-id',
-          sendNotification: vi.fn(),
-          sendRequest: vi.fn(),
-        },
-      );
-
-      expect(result.isError).toBe(false);
-      if (!result.isError) {
-        expect(JSON.parse(result.content[0].text as string)).toEqual(mockMainQueryResult);
-      }
-
-      // Should only call the main query (validation not triggered)
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
     });
 
@@ -379,15 +328,15 @@ describe('queryDatasourceTool', () => {
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
     });
 
-    it('should return main query results when validation query fails gracefully', async () => {
+    it('should not run SET/MATCH filters validation when DISABLE_DATASOURCE_QUERY_FILTER_VALIDATION environment variable is true', async () => {
+      process.env.DISABLE_DATASOURCE_QUERY_FILTER_VALIDATION = 'true';
+
       const mockMainQueryResult = {
-        data: [],
+        data: [{ Region: 'East', 'SUM(Sales)': 100000 }],
       };
 
-      // Mock main query to return empty (triggering validation), then validation to fail
-      mocks.mockQueryDatasource
-        .mockResolvedValueOnce(new Ok(mockMainQueryResult))
-        .mockResolvedValueOnce(new Err({ errorCode: '404934', message: 'Field not found' }));
+      // Mock main query only
+      mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
 
       const queryDatasourceTool = getQueryDatasourceTool(new Server());
       const result = await queryDatasourceTool.callback(
@@ -397,9 +346,10 @@ describe('queryDatasourceTool', () => {
             fields: [{ fieldCaption: 'Region' }, { fieldCaption: 'Sales', function: 'SUM' }],
             filters: [
               {
-                field: { fieldCaption: 'Region' },
-                filterType: 'SET',
-                values: ['East'],
+                field: { fieldCaption: 'Sales' },
+                filterType: 'QUANTITATIVE_NUMERICAL',
+                quantitativeFilterType: 'MIN',
+                min: 1000,
               },
             ],
           },
@@ -415,14 +365,13 @@ describe('queryDatasourceTool', () => {
       expect(result.isError).toBe(false);
       expect(JSON.parse(result.content[0].text as string)).toEqual(mockMainQueryResult);
 
-      // Should call main query and validation query (which fails gracefully)
-      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
+      // Should only call the main query (no validation needed)
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
     });
 
-    it('should return multiple validation errors when multiple filters fail and main query returns empty', async () => {
+    it('should return multiple validation errors when multiple filters fail', async () => {
       // Mock main query to return empty results (triggering validation)
       mocks.mockQueryDatasource
-        .mockResolvedValueOnce(new Ok({ data: [] }))
         // Mock first validation query (Region field)
         .mockResolvedValueOnce(
           new Ok({
@@ -481,7 +430,7 @@ describe('queryDatasourceTool', () => {
       expect(errorText).toContain('InvalidCategory');
 
       // Should call main query first, then both validation queries
-      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(3);
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
     });
   });
 });

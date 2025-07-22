@@ -244,14 +244,22 @@ async function validateMatchFilter(
       }),
     );
 
-    const suggestions = ensureMinimumSuggestions(similarValues, 5, fieldValues);
+    const suggestions = Array.from(similarValues).slice(0, 5);
 
     const patternDescriptions: Array<string> = [];
     if (filter.startsWith) patternDescriptions.push(`starts with "${filter.startsWith}"`);
     if (filter.endsWith) patternDescriptions.push(`ends with "${filter.endsWith}"`);
     if (filter.contains) patternDescriptions.push(`contains "${filter.contains}"`);
+    const similarValuesString =
+      similarValues.size > 0
+        ? `Similar values in this field: ${Array.from(similarValues).join(', ')}.`
+        : '';
 
-    const message = `Filter validation failed for field "${fieldCaption}". No values found that ${patternDescriptions.join(' and ')}. Similar values in this field: ${suggestions.join(', ')}. Please evaluate whether you included the wrong filter value or if you are trying to filter on the wrong field entirely.`;
+    const message =
+      `Filter validation failed for field "${fieldCaption}". ` +
+      `No values found that ${patternDescriptions.join(' and ')}. ` +
+      `${similarValuesString} ` +
+      `Please evaluate whether you included the wrong filter value or if you are trying to filter on the wrong field entirely.`;
 
     return new Err({
       field: fieldCaption,

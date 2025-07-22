@@ -60,12 +60,8 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             requestId,
             server,
             callback: async (restApi) => {
-              const queryDatasourceResponse =
-                await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
-              if (
-                queryDatasourceResponse.isOk() &&
-                queryDatasourceResponse.value.data?.length === 0
-              ) {
+              if (!config.disableDatasourceQueryFilterValidation) {
+                // Validate filters values for SET and MATCH filters
                 const filterValidationResult = await validateFilterValues(
                   server,
                   query,
@@ -80,7 +76,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
                 }
               }
 
-              return queryDatasourceResponse;
+              return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
             },
           });
         },

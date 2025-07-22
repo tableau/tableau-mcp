@@ -44,7 +44,7 @@ describe('log', () => {
       const server = new Server();
       setLogLevel(server, 'debug', { silent: true });
       setLogLevel(server, 'debug', { silent: true });
-      expect(server.server.sendLoggingMessage).not.toHaveBeenCalled();
+      expect(server.server.notification).not.toHaveBeenCalled();
     });
   });
 
@@ -118,22 +118,30 @@ describe('log', () => {
       const server = new Server();
       setLogLevel(server, 'info', { silent: true });
 
-      await log.info(server, 'test message', 'test-logger');
+      await log.info(server, 'test message', { logger: 'test-logger' });
 
-      expect(server.server.sendLoggingMessage).toHaveBeenCalledWith({
-        level: 'info',
-        logger: 'test-logger',
-        message: expect.stringContaining('test message'),
-      });
+      expect(server.server.notification).toHaveBeenCalledWith(
+        {
+          method: 'notifications/message',
+          params: {
+            level: 'info',
+            logger: 'test-logger',
+            message: expect.stringContaining('test message'),
+          },
+        },
+        {
+          relatedRequestId: undefined,
+        },
+      );
     });
 
     it('should not send logging message when level is below current level', async () => {
       const server = new Server();
       setLogLevel(server, 'warning', { silent: true });
 
-      await log.debug(server, 'test message', 'test-logger');
+      await log.debug(server, 'test message', { logger: 'test-logger' });
 
-      expect(server.server.sendLoggingMessage).not.toHaveBeenCalled();
+      expect(server.server.notification).not.toHaveBeenCalled();
     });
 
     it('should use server name as default logger', async () => {
@@ -142,11 +150,19 @@ describe('log', () => {
 
       await log.info(server, 'test message');
 
-      expect(server.server.sendLoggingMessage).toHaveBeenCalledWith({
-        level: 'info',
-        logger: 'test-server',
-        message: expect.stringContaining('test message'),
-      });
+      expect(server.server.notification).toHaveBeenCalledWith(
+        {
+          method: 'notifications/message',
+          params: {
+            level: 'info',
+            logger: 'test-server',
+            message: expect.stringContaining('test message'),
+          },
+        },
+        {
+          relatedRequestId: undefined,
+        },
+      );
     });
 
     it('should handle LogMessage objects', async () => {
@@ -158,13 +174,21 @@ describe('log', () => {
         path: '/test',
       } as const;
 
-      await log.info(server, logMessage, 'test-logger');
+      await log.info(server, logMessage, { logger: 'test-logger' });
 
-      expect(server.server.sendLoggingMessage).toHaveBeenCalledWith({
-        level: 'info',
-        logger: 'test-logger',
-        message: expect.any(String),
-      });
+      expect(server.server.notification).toHaveBeenCalledWith(
+        {
+          method: 'notifications/message',
+          params: {
+            level: 'info',
+            logger: 'test-logger',
+            message: expect.any(String),
+          },
+        },
+        {
+          relatedRequestId: undefined,
+        },
+      );
     });
   });
 });

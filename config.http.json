@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "tableau": {
+      "type": "streamable-http",
+      "url": "http://localhost:3927/tableau-mcp"
+    }
+  }
+}

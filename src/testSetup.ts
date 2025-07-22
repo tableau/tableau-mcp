@@ -9,7 +9,7 @@ vi.mock('./server.js', async (importOriginal) => ({
   Server: vi.fn().mockImplementation(() => ({
     name: 'test-server',
     server: {
-      sendLoggingMessage: vi.fn(),
+      notification: vi.fn(),
     },
   })),
 }));
