@@ -69,11 +69,10 @@ export const getRequestErrorInterceptor =
   (server: Server, requestId: RequestId): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.request) {
-      log.error(
-        server,
-        `Request ${requestId} failed with error: ${getExceptionMessage(error)}`,
-        'rest-api',
-      );
+      log.error(server, `Request ${requestId} failed with error: ${getExceptionMessage(error)}`, {
+        logger: 'rest-api',
+        requestId,
+      });
       return;
     }
 
@@ -102,7 +101,7 @@ export const getResponseErrorInterceptor =
       log.error(
         server,
         `Response from request ${requestId} failed with error: ${getExceptionMessage(error)}`,
-        'rest-api',
+        { logger: 'rest-api', requestId },
       );
       return;
     }
@@ -135,7 +134,7 @@ function logRequest(server: Server, request: RequestInterceptorConfig, requestId
     }),
   } as const;
 
-  log.info(server, messageObj, 'rest-api');
+  log.info(server, messageObj, { logger: 'rest-api', requestId });
 }
 
 function logResponse(
@@ -157,5 +156,5 @@ function logResponse(
     }),
   } as const;
 
-  log.info(server, messageObj, 'rest-api');
+  log.info(server, messageObj, { logger: 'rest-api', requestId });
 }

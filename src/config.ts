@@ -1,9 +1,17 @@
+import { CorsOptions } from 'cors';
+
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 import { isToolName, ToolName } from './tools/toolName.js';
+import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
 export class Config {
   server: string;
+  transport: TransportName;
+  sslKey: string;
+  sslCert: string;
+  httpPort: number;
+  corsOriginConfig: CorsOptions['origin'];
   authConfig: AuthConfig;
   datasourceCredentials: string;
   defaultLogLevel: string;
@@ -17,6 +25,11 @@ export class Config {
     let { SITE_NAME: siteName } = process.env;
     const {
       SERVER: server,
+      TRANSPORT: transport,
+      SSL_KEY: sslKey,
+      SSL_CERT: sslCert,
+      HTTP_PORT_ENV_VAR_NAME: httpPortEnvVarName,
+      CORS_ORIGIN_CONFIG: corsOriginConfig,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
@@ -28,7 +41,16 @@ export class Config {
       DISABLE_DATASOURCE_QUERY_FILTER_VALIDATION: disableDatasourceQueryFilterValidation,
     } = process.env;
 
+    const defaultPort = 3927;
+    const httpPort = process.env[httpPortEnvVarName?.trim() || 'PORT'] || defaultPort.toString();
+    const httpPortNumber = parseInt(httpPort, 10);
+
     siteName = siteName ?? '';
+    this.transport = isTransport(transport) ? transport : 'stdio';
+    this.sslKey = sslKey?.trim() ?? '';
+    this.sslCert = sslCert?.trim() ?? '';
+    this.httpPort = isNaN(httpPortNumber) ? defaultPort : httpPortNumber;
+    this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
@@ -84,6 +106,39 @@ function validateServer(server: string): void {
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(
       `The environment variable SERVER is not a valid URL: ${server} -- ${errorMessage}`,
+    );
+  }
+}
+
+function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
+  if (!corsOriginConfig) {
+    return true;
+  }
+
+  if (corsOriginConfig.match(/^true|false$/i)) {
+    return corsOriginConfig.toLowerCase() === 'true';
+  }
+
+  if (corsOriginConfig === '*') {
+    return '*';
+  }
+
+  if (corsOriginConfig.startsWith('[') && corsOriginConfig.endsWith(']')) {
+    try {
+      const origins = JSON.parse(corsOriginConfig) as Array<string>;
+      return origins.map((origin) => new URL(origin).origin);
+    } catch {
+      throw new Error(
+        `The environment variable CORS_ORIGIN_CONFIG is not a valid array of URLs: ${corsOriginConfig}`,
+      );
+    }
+  }
+
+  try {
+    return new URL(corsOriginConfig).origin;
+  } catch {
+    throw new Error(
+      `The environment variable CORS_ORIGIN_CONFIG is not a valid URL: ${corsOriginConfig}`,
     );
   }
 }
