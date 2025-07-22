@@ -9,6 +9,7 @@ import RestApi from '../../sdks/tableau/restApi.js';
 import { userAgent } from '../userAgent.js';
 import {
   callbackSchema,
+  mcpAccessTokenSchema,
   mcpAuthorizeSchema,
   mcpTokenSchema,
   TableauAccessToken,
@@ -19,7 +20,7 @@ import {
   AuthorizationCode,
   PendingAuthorization,
   RefreshTokenData,
-  Tokens,
+  UserAndTokens,
 } from './types.js';
 
 const TABLEAU_CLIENT_ID = '{E93A0E88-C2F8-4431-B805-11E9957FB03F}';
@@ -75,7 +76,7 @@ export class OAuthProvider {
    *
    * @returns Express middleware function
    */
-  authMiddleware() {
+  get authMiddleware() {
     return async (
       req: AuthenticatedRequest,
       res: express.Response,
@@ -114,11 +115,9 @@ export class OAuthProvider {
       }
 
       const token = authHeader.slice(7);
+      const result = await this.verifyAccessToken(token);
 
-      try {
-        req.auth = await this.verifyAccessToken(token);
-        next();
-      } catch {
+      if (result.isErr()) {
         // For SSE requests (GET), provide proper SSE error response
         if (req.method === 'GET' && req.headers.accept?.includes('text/event-stream')) {
           res.writeHead(401, {
@@ -127,18 +126,19 @@ export class OAuthProvider {
             Connection: 'keep-alive',
           });
           res.write('event: error\n');
-          res.write(
-            'data: {"error": "invalid_token", "error_description": "Invalid or expired access token"}\n\n',
-          );
+          res.write(`data: {"error": "invalid_token", "error_description": "${result.error}"}\n\n`);
           res.end();
           return;
         }
 
         res.status(401).json({
           error: 'invalid_token',
-          error_description: 'Invalid or expired access token',
+          error_description: result.error,
         });
+        return;
       }
+      req.auth = result.value;
+      next();
     };
   }
 
@@ -433,7 +433,6 @@ export class OAuthProvider {
         const restApi = new RestApi(this.config.server);
         restApi.setCredentials(accessToken, 'unknown user id');
         const session = await restApi.serverMethods.getCurrentServerSession();
-        const userId = session.user.id;
 
         // Generate authorization code
         const authorizationCode = randomBytes(32).toString('hex');
@@ -441,7 +440,7 @@ export class OAuthProvider {
           clientId: pendingAuth.clientId,
           redirectUri: pendingAuth.redirectUri,
           codeChallenge: pendingAuth.codeChallenge,
-          userId,
+          user: session.user,
           tokens: {
             accessToken,
             refreshToken,
@@ -517,9 +516,9 @@ export class OAuthProvider {
 
           // Generate tokens
           const refreshTokenId = randomBytes(32).toString('hex');
-          const accessToken = await this.createAccessToken(authCode.userId, authCode.tokens);
+          const accessToken = await this.createAccessToken(authCode);
           this.refreshTokens.set(refreshTokenId, {
-            userId: authCode.userId,
+            user: authCode.user,
             clientId: authCode.clientId,
             tokens: authCode.tokens,
             expiresAt: Date.now() + this.config.refreshTokenTimeoutMs,
@@ -552,7 +551,7 @@ export class OAuthProvider {
           // * Should we just always refresh the Tableau tokens when the MCP access token is refreshed?
           // * Should we configure the lifetime of the MCP access token to be shorter than the Tableau tokens?
           // * Is the expiration time of the Tableau tokens configurable for Server?
-          const accessToken = await this.createAccessToken(tokenData.userId, tokenData.tokens);
+          const accessToken = await this.createAccessToken(tokenData);
 
           res.json({
             access_token: accessToken,
@@ -585,24 +584,33 @@ export class OAuthProvider {
    * @param token - JWT access token from Authorization header
    * @returns AuthInfo with user details and tokens
    */
-  async verifyAccessToken(token: string): Promise<AuthInfo> {
+  async verifyAccessToken(token: string): Promise<Result<AuthInfo, string>> {
     try {
       const { payload } = await jwtVerify(token, this.jwtSecret, {
         audience: this.jwtAudience,
         issuer: this.jwtIssuer,
       });
 
-      return {
+      const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
+      if (!mcpAccessToken.success) {
+        return Err(
+          `Invalid access token: ${mcpAccessToken.error.errors.map((e) => e.message).join(', ')}`,
+        );
+      }
+
+      const { tableauAccessToken, tableauRefreshToken, sub } = mcpAccessToken.data;
+
+      return Ok({
         token,
         clientId: 'mcp-client',
         scopes: ['read'],
         expiresAt: payload.exp,
         extra: {
-          userId: payload.sub,
-          accessToken: payload.tableau_access_token,
-          refreshToken: payload.tableau_refresh_token,
+          userId: sub,
+          accessToken: tableauAccessToken,
+          refreshToken: tableauRefreshToken,
         },
-      };
+      });
     } catch {
       // TODO: Auto-refresh logic would go here
       throw new Error('Invalid or expired access token');
@@ -616,19 +624,18 @@ export class OAuthProvider {
    * Part of MCP OAuth Step 7: Token Exchange
    * JWT contains tokens for making API calls
    *
-   * @param userId - username
-   * @param tokens - access and refresh tokens
+   * @param tokenData - token data
    * @returns Signed JWT token for MCP authentication
    */
-  private async createAccessToken(userId: string, tokens: Tokens): Promise<string> {
+  private async createAccessToken(tokenData: UserAndTokens): Promise<string> {
     return await new SignJWT({
-      sub: userId,
-      tableau_access_token: tokens.accessToken,
-      tableau_refresh_token: tokens.refreshToken,
+      sub: tokenData.user.name,
+      tableauAccessToken: tokenData.tokens.accessToken,
+      tableauRefreshToken: tokenData.tokens.refreshToken,
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setExpirationTime(Date.now() + (tokens.expiresIn - 30 * 60) * 1000) // 30 minutes before expiration
+      .setExpirationTime(Date.now() + (tokenData.tokens.expiresIn - 30 * 60) * 1000) // 30 minutes before expiration
       .setAudience(this.jwtAudience)
       .setIssuer(this.jwtIssuer)
       .sign(this.jwtSecret);

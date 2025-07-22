@@ -44,7 +44,7 @@ export async function startExpressServer({
   const oauthProvider = new OAuthProvider();
   oauthProvider.setupRoutes(app);
 
-  const middleware = [oauthProvider.authMiddleware(), validateProtocolVersion];
+  const middleware = [oauthProvider.authMiddleware, validateProtocolVersion];
 
   const path = `/${basePath}`;
   app.post(path, ...middleware, createMcpServer);

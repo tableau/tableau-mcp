@@ -5,3 +5,5 @@ export const userSchema = z.object({
   name: z.string(),
   // Add other fields as needed
 });
+
+export type User = z.infer<typeof userSchema>;

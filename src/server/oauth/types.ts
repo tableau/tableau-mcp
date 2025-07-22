@@ -1,6 +1,8 @@
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import express from 'express';
 
+import { User } from '../../sdks/tableau/types/user.js';
+
 export type AuthenticatedRequest = express.Request & {
   auth?: AuthInfo;
 };
@@ -21,18 +23,19 @@ export type PendingAuthorization = {
   tableauState: string;
 };
 
-export type AuthorizationCode = {
+export type UserAndTokens = {
+  user: User;
+  tokens: Tokens;
+};
+
+export type AuthorizationCode = UserAndTokens & {
   clientId: string;
   redirectUri: string;
   codeChallenge: string;
-  userId: string;
-  tokens: Tokens;
   expiresAt: number;
 };
 
-export type RefreshTokenData = {
-  userId: string;
+export type RefreshTokenData = UserAndTokens & {
   clientId: string;
-  tokens: Tokens;
   expiresAt: number;
 };

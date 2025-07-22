@@ -86,3 +86,11 @@ export const tableauAccessTokenSchema = z
   }));
 
 export type TableauAccessToken = z.infer<typeof tableauAccessTokenSchema>;
+
+export const mcpAccessTokenSchema = z.object({
+  sub: requiredString('sub'),
+  tableauAccessToken: requiredString('tableauAccessToken'),
+  tableauRefreshToken: requiredString('tableauRefreshToken'),
+});
+
+export type McpAccessToken = z.infer<typeof mcpAccessTokenSchema>;
