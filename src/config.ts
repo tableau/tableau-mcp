@@ -21,6 +21,8 @@ export class Config {
   oauthIssuer: string;
   jwtSecret: string;
   redirectUri: string;
+  authzCodeTimeoutMs: number;
+  refreshTokenTimeoutMs: number;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
   maxResultLimit: number | null;
@@ -41,23 +43,21 @@ export class Config {
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
       OAUTH_ISSUER: oauthIssuer,
-      JWT_SECRET: jwtSecret,
-      REDIRECT_URI: redirectUri,
+      OAUTH_JWT_SECRET: jwtSecret,
+      OAUTH_REDIRECT_URI: redirectUri,
+      OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
+      OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
       MAX_RESULT_LIMIT: maxResultLimit,
     } = process.env;
-
-    const defaultPort = 3927;
-    const httpPort = process.env[httpPortEnvVarName?.trim() || 'PORT'] || defaultPort.toString();
-    const httpPortNumber = parseInt(httpPort, 10);
 
     this.siteName = siteName ?? '';
     this.auth = auth === 'oauth' ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : 'stdio';
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
-    this.httpPort = isNaN(httpPortNumber) ? defaultPort : httpPortNumber;
+    this.httpPort = parseNumber(process.env[httpPortEnvVarName?.trim() || 'PORT'], 3927);
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
@@ -65,6 +65,8 @@ export class Config {
     this.oauthIssuer = oauthIssuer ?? '';
     this.jwtSecret = jwtSecret ?? '';
     this.redirectUri = redirectUri ?? '';
+    this.authzCodeTimeoutMs = parseNumber(authzCodeTimeoutMs, 10 * 60 * 1000); // 10 minutes
+    this.refreshTokenTimeoutMs = parseNumber(refreshTokenTimeoutMs, 30 * 24 * 60 * 60 * 1000); // 30 days
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =
@@ -154,6 +156,15 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
       `The environment variable CORS_ORIGIN_CONFIG is not a valid URL: ${corsOriginConfig}`,
     );
   }
+}
+
+function parseNumber(value: string | undefined, defaultValue: number): number {
+  if (!value) {
+    return defaultValue;
+  }
+
+  const number = parseInt(value, 10);
+  return isNaN(number) ? defaultValue : number;
 }
 
 export const getConfig = (): Config => new Config();

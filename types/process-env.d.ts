@@ -14,6 +14,9 @@ export interface ProcessEnvEx {
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
+  OAUTH_ISSUER: string | undefined;
+  OAUTH_JWT_SECRET: string | undefined;
+  OAUTH_REDIRECT_URI: string | undefined;
 }
 
 declare global {

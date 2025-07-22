@@ -56,8 +56,6 @@ export class OAuthProvider {
 
   private readonly jwtAudience: string;
   private readonly jwtIssuer: string;
-  private readonly AUTHORIZATION_CODE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-  private readonly REFRESH_TOKEN_TIMEOUT_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
   constructor() {
     this.jwtSecret = new TextEncoder().encode(this.config.jwtSecret);
@@ -354,10 +352,7 @@ export class OAuthProvider {
       });
 
       // Clean up expired authorizations
-      setTimeout(
-        () => this.pendingAuthorizations.delete(authKey),
-        this.AUTHORIZATION_CODE_TIMEOUT_MS,
-      );
+      setTimeout(() => this.pendingAuthorizations.delete(authKey), this.config.authzCodeTimeoutMs);
 
       // Redirect to Tableau OAuth
       const tableauCodeChallenge = this.generateCodeChallenge(codeChallenge);
@@ -452,7 +447,7 @@ export class OAuthProvider {
             refreshToken,
             expiresIn,
           },
-          expiresAt: Date.now() + this.AUTHORIZATION_CODE_TIMEOUT_MS,
+          expiresAt: Date.now() + this.config.authzCodeTimeoutMs,
         });
 
         // Clean up
@@ -527,7 +522,7 @@ export class OAuthProvider {
             userId: authCode.userId,
             clientId: authCode.clientId,
             tokens: authCode.tokens,
-            expiresAt: Date.now() + this.REFRESH_TOKEN_TIMEOUT_MS,
+            expiresAt: Date.now() + this.config.refreshTokenTimeoutMs,
           });
 
           this.authorizationCodes.delete(code);
