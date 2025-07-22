@@ -60,7 +60,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             requestId,
             server,
             callback: async (restApi) => {
-              if (!config.disableDatasourceQueryFilterValidation) {
+              if (!config.disableQueryDatasourceFilterValidation) {
                 // Validate filters values for SET and MATCH filters
                 const filterValidationResult = await validateFilterValues(
                   server,
