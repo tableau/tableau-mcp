@@ -137,12 +137,17 @@ async function validateSetFilter(
       5, // max suggestions
     );
 
-    const message = `Filter validation failed for field "${fieldCaption}". The following values were not found: ${invalidValues.join(', ')}. Did you mean: ${suggestedValues.join(', ')}? Please evaluate whether you included the wrong filter value or if you are trying to filter on the wrong field entirely.`;
+    let message = `Filter validation failed for field "${fieldCaption}". The following values were not found: ${invalidValues.join(', ')}.`;
+    if (suggestedValues.length > 0) {
+      message += ` Did you mean: ${suggestedValues.join(', ')}?`;
+    }
+    message +=
+      ' Please evaluate whether you included the wrong filter value or if you are trying to filter on the wrong field entirely.';
 
     return new Err({
       field: fieldCaption,
       invalidValues,
-      sampleValues: suggestedValues, // Now contains fuzzy matches instead of random samples
+      sampleValues: suggestedValues,
       message,
     });
   }
@@ -272,65 +277,75 @@ async function validateMatchFilter(
 }
 
 /**
- * Gets a random sample of values from an array
- */
-function getRandomSample<T>(array: T[], count: number): T[] {
-  if (array.length <= count) {
-    return array;
-  }
-
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-
-  return shuffled.slice(0, count);
-}
-
-/**
  * Finds the closest matches to invalid filter values using fuzzy matching
  */
-function getFuzzyMatches(
+export function getFuzzyMatches(
   invalidValues: string[],
   existingValues: string[],
   maxDistance: number = 3,
   maxSuggestions: number = 5,
 ): string[] {
-  const suggestions = new Set<string>();
+  const suggestions: Array<{
+    invalidValue: string;
+    suggestionForInvalidValue: string;
+    distance: number;
+  }> = [];
 
-  for (const invalidValue of invalidValues) {
-    // Find existing values within the specified edit distance
-    const matches = existingValues
-      .map((existingValue) => ({
-        value: existingValue,
+  for (const existingValue of existingValues) {
+    const matches = invalidValues
+      .map((invalidValue) => ({
+        value: invalidValue,
         distance: levenshtein.get(invalidValue, existingValue),
       }))
       .filter((match) => match.distance <= maxDistance)
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, Math.ceil(maxSuggestions / invalidValues.length))
-      .map((match) => match.value);
-
-    matches.forEach((match) => suggestions.add(match));
+      .sort((a, b) => a.distance - b.distance);
+    if (matches.length > 0) {
+      const bestMatch = matches[0];
+      suggestions.push({
+        invalidValue: bestMatch.value,
+        suggestionForInvalidValue: existingValue,
+        distance: bestMatch.distance,
+      });
+    }
   }
 
-  // If we don't have enough suggestions, fill with random samples
-  return ensureMinimumSuggestions(suggestions, maxSuggestions, existingValues);
-}
+  // now that we have all the suggestions, sort them by distance.
+  suggestions.sort((a, b) => a.distance - b.distance);
 
-function ensureMinimumSuggestions(
-  suggestions: Set<string>,
-  maxSuggestions: number,
-  existingValues: Array<string>,
-): string[] {
-  if (suggestions.size < maxSuggestions) {
-    const remaining = maxSuggestions - suggestions.size;
-    const randomSamples = getRandomSample(
-      existingValues.filter((v) => !suggestions.has(v)),
-      remaining,
+  // pick the best suggestions, but prevent having too many suggestions for the same invalid value.
+  const toReturn: Array<string> = [];
+  const suggestionLimitPerInvalidValue = Math.ceil(maxSuggestions / invalidValues.length);
+  // create and initialize a suggestion counter for each invalid value.
+  const invalidValueSuggestionCounter: Map<string, number> = new Map();
+  for (const invalidValue of invalidValues) {
+    invalidValueSuggestionCounter.set(invalidValue, 0);
+  }
+
+  for (const { invalidValue, suggestionForInvalidValue } of suggestions) {
+    if (toReturn.length === maxSuggestions) {
+      break;
+    }
+
+    if (invalidValueSuggestionCounter.get(invalidValue) === suggestionLimitPerInvalidValue) {
+      continue;
+    }
+
+    toReturn.push(suggestionForInvalidValue);
+    invalidValueSuggestionCounter.set(
+      invalidValue,
+      invalidValueSuggestionCounter.get(invalidValue)! + 1,
     );
-    randomSamples.forEach((sample) => suggestions.add(sample));
   }
 
-  return Array.from(suggestions).slice(0, maxSuggestions);
+  // If we don't have enough suggestions, include more suggestions (ignoring the suggestion limit per invalid value).
+  for (const { suggestionForInvalidValue } of suggestions) {
+    if (toReturn.length === maxSuggestions) {
+      break;
+    } else if (toReturn.includes(suggestionForInvalidValue)) {
+      continue;
+    }
+    toReturn.push(suggestionForInvalidValue);
+  }
+
+  return toReturn;
 }

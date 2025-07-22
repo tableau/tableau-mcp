@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
 import { Server } from '../../../server.js';
 import { Query } from '../queryDatasourceValidator.js';
-import { validateFilterValues } from './validateFilterValues.js';
+import { getFuzzyMatches, validateFilterValues } from './validateFilterValues.js';
 
 // Mock the VizqlDataServiceMethods
 const mockVizqlDataServiceMethods = {
@@ -182,10 +182,10 @@ describe('validateFilterValues', () => {
       expect(result.error).toHaveLength(1);
       expect(result.error[0].field).toBe('Region');
       expect(result.error[0].invalidValues).toEqual(['InvalidRegion']);
-      expect(result.error[0].sampleValues).toHaveLength(5); // Should fallback to random samples when no fuzzy matches
+      expect(result.error[0].sampleValues).toHaveLength(0);
       expect(result.error[0].message).toContain('Filter validation failed for field "Region"');
       expect(result.error[0].message).toContain('InvalidRegion');
-      expect(result.error[0].message).toContain('Did you mean:');
+      expect(result.error[0].message).not.toContain('Did you mean:');
       expect(result.error[0].message).toContain(
         'evaluate whether you included the wrong filter value',
       );
@@ -467,70 +467,19 @@ describe('validateFilterValues', () => {
     }
   });
 
-  it('should use random sampling when no fuzzy matches are found for SET filters', async () => {
-    const query: Query = {
-      fields: [{ fieldCaption: 'Region' }],
-      filters: [
-        {
-          field: { fieldCaption: 'Region' },
-          filterType: 'SET',
-          values: ['XYZ123'], // Very different from any real values
-        },
-      ],
-    };
-
-    (
-      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
-    ).mockResolvedValue(
-      new Ok({
-        data: [
-          { DistinctValues: 'East' },
-          { DistinctValues: 'West' },
-          { DistinctValues: 'North' },
-          { DistinctValues: 'South' },
-          { DistinctValues: 'Central' },
-          { DistinctValues: 'Northeast' },
-          { DistinctValues: 'Southwest' },
-        ],
-      }),
-    );
-
-    const result = await validateFilterValues(
-      new Server(),
-      query,
-      mockVizqlDataServiceMethods,
-      mockDatasource,
-    );
-
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error).toHaveLength(1);
-      expect(result.error[0].field).toBe('Region');
-      expect(result.error[0].invalidValues).toEqual(['XYZ123']);
-      // Should have 5 random samples since no fuzzy matches found
-      expect(result.error[0].sampleValues).toHaveLength(5);
-      // Should contain valid region values (random sampling fallback)
-      const validRegions = ['East', 'West', 'North', 'South', 'Central', 'Northeast', 'Southwest'];
-      result.error[0].sampleValues.forEach((sample) => {
-        expect(validRegions).toContain(sample);
-      });
-      expect(result.error[0].message).toContain('Did you mean:');
-    }
-  });
-
-  it('should use random sampling when array is smaller than requested count', async () => {
+  it('should only return 2 matches despite maxSuggestions being larger', async () => {
     const query: Query = {
       fields: [{ fieldCaption: 'Status' }],
       filters: [
         {
           field: { fieldCaption: 'Status' },
           filterType: 'SET',
-          values: ['InvalidStatus'],
+          values: ['inactive'],
         },
       ],
     };
 
-    // Mock with only 3 values, but getFuzzyMatches will try to get up to 5
+    // Mock with only 3 values, but maxSuggestions is 5
     (
       mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
     ).mockResolvedValue(
@@ -554,64 +503,58 @@ describe('validateFilterValues', () => {
     if (result.isErr()) {
       expect(result.error).toHaveLength(1);
       expect(result.error[0].field).toBe('Status');
-      expect(result.error[0].invalidValues).toEqual(['InvalidStatus']);
-      // Should return all 3 available values since array is smaller than requested count
-      expect(result.error[0].sampleValues).toHaveLength(3);
-      expect(result.error[0].sampleValues).toEqual(
-        expect.arrayContaining(['Active', 'Inactive', 'Pending']),
-      );
+      expect(result.error[0].invalidValues).toEqual(['inactive']);
+      expect(result.error[0].sampleValues).toHaveLength(2);
+      expect(result.error[0].sampleValues).toEqual(['Inactive', 'Active']);
     }
   });
 
-  it('should combine fuzzy matches with random sampling when not enough fuzzy matches are found', async () => {
-    const query: Query = {
-      fields: [{ fieldCaption: 'Product' }],
-      filters: [
-        {
-          field: { fieldCaption: 'Product' },
-          filterType: 'SET',
-          values: ['Chair', 'XYZ999'], // 'Chair' has fuzzy match, 'XYZ999' doesn't
-        },
-      ],
-    };
+  it('getFuzzyMatches should return the best suggestions for multiple invalid values (limit 1 per invalid value)', () => {
+    const invalidValues = ['zzzzz', 'xxxxx', 'wwwww', 'qqqqq', 'yyyyy', 'blast', 'cance'];
+    const existingValues = [
+      'aaaaa',
+      'aaaaw',
+      'aaaax',
+      'aaaaz',
+      'bbbbq',
+      'bbbbz',
+      'hhhhh',
+      'iiiii',
+      'chance',
+      'cancel',
+      'blood',
+      'blade',
+      'rhyme',
+    ];
+    const maxDistance = 5;
+    const maxSuggestions = 5;
+    const result = getFuzzyMatches(invalidValues, existingValues, maxDistance, maxSuggestions);
+    expect(result).toEqual(['chance', 'blade', 'aaaaw', 'aaaax', 'aaaaz']);
+  });
 
-    (
-      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
-    ).mockResolvedValue(
-      new Ok({
-        data: [
-          { DistinctValues: 'Chairs' }, // Close match for 'Chair'
-          { DistinctValues: 'Table' },
-          { DistinctValues: 'Desk' },
-          { DistinctValues: 'Bookshelf' },
-          { DistinctValues: 'Cabinet' },
-          { DistinctValues: 'Sofa' },
-          { DistinctValues: 'Bed' },
-        ],
-      }),
-    );
-
-    const result = await validateFilterValues(
-      new Server(),
-      query,
-      mockVizqlDataServiceMethods,
-      mockDatasource,
-    );
-
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error).toHaveLength(1);
-      expect(result.error[0].field).toBe('Product');
-      expect(result.error[0].invalidValues).toEqual(['Chair', 'XYZ999']);
-      // Should have fuzzy match for 'Chair' plus random samples to fill up to 5
-      expect(result.error[0].sampleValues).toHaveLength(5);
-      expect(result.error[0].sampleValues).toContain('Chairs'); // Fuzzy match for 'Chair'
-      // Should also contain other random samples
-      const allProducts = ['Chairs', 'Table', 'Desk', 'Bookshelf', 'Cabinet', 'Sofa', 'Bed'];
-      result.error[0].sampleValues.forEach((sample) => {
-        expect(allProducts).toContain(sample);
-      });
-    }
+  it('getFuzzyMatches should return the best suggestions for multiple invalid values (limit 2 per invalid value)', () => {
+    const invalidValues = ['zzz', 'xxx', 'blast', 'cance'];
+    const existingValues = [
+      'aaa',
+      'bbb',
+      'ccc',
+      'ddd',
+      'eee',
+      'hhh',
+      'iii',
+      'change',
+      'chance',
+      'rhyme',
+      'cancel',
+      'black',
+      'blood',
+      'blade',
+      'blank',
+    ];
+    const maxDistance = 3;
+    const maxSuggestions = 5;
+    const result = getFuzzyMatches(invalidValues, existingValues, maxDistance, maxSuggestions);
+    expect(result).toEqual(['chance', 'cancel', 'black', 'blade', 'aaa']);
   });
 
   it('should use fuzzy sampling for MATCH filters with startsWith, endsWith and contains', async () => {
