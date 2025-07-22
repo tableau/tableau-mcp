@@ -1,7 +1,7 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import cors from 'cors';
-import express, { Request, Response } from 'express';
+import express, { Request, RequestHandler, Response } from 'express';
 import fs, { existsSync } from 'fs';
 import http from 'http';
 import https from 'https';
@@ -41,10 +41,13 @@ export async function startExpressServer({
     }),
   );
 
-  const oauthProvider = new OAuthProvider();
-  oauthProvider.setupRoutes(app);
-
-  const middleware = [oauthProvider.authMiddleware, validateProtocolVersion];
+  const middleware: Array<RequestHandler> = [];
+  if (config.oauthEnabled) {
+    const oauthProvider = new OAuthProvider();
+    oauthProvider.setupRoutes(app);
+    middleware.push(oauthProvider.authMiddleware);
+    middleware.push(validateProtocolVersion);
+  }
 
   const path = `/${basePath}`;
   app.post(path, ...middleware, createMcpServer);

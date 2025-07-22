@@ -19,6 +19,7 @@ export class Config {
   defaultLogLevel: string;
   disableLogMasking: boolean;
   oauthIssuer: string;
+  oauthEnabled: boolean;
   jwtSecret: string;
   redirectUri: string;
   authzCodeTimeoutMs: number;
@@ -67,6 +68,11 @@ export class Config {
     this.redirectUri = redirectUri ?? '';
     this.authzCodeTimeoutMs = parseNumber(authzCodeTimeoutMs, 10 * 60 * 1000); // 10 minutes
     this.refreshTokenTimeoutMs = parseNumber(refreshTokenTimeoutMs, 30 * 24 * 60 * 60 * 1000); // 30 days
+    this.oauthEnabled = !!this.oauthIssuer;
+
+    if (!this.oauthEnabled && this.auth === 'oauth') {
+      throw new Error('When auth is "oauth", OAUTH_ISSUER must be set');
+    }
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =
