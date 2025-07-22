@@ -4,6 +4,7 @@ import { Ok } from 'ts-results-es';
 import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
+import { getTableauAuthInfo } from '../../../server/oauth/schemas.js';
 import { Tool } from '../../tool.js';
 
 const paramsSchema = {};
@@ -42,10 +43,7 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
               config,
               requestId,
               server,
-              authInfo: {
-                accessToken: authInfo?.extra?.accessToken as string,
-                userId: authInfo?.extra?.userId as string,
-              },
+              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
               },

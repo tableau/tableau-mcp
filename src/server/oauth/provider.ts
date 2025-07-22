@@ -14,6 +14,7 @@ import {
   mcpTokenSchema,
   TableauAccessToken,
   tableauAccessTokenSchema,
+  TableauAuthInfo,
 } from './schemas.js';
 import {
   AuthenticatedRequest,
@@ -599,17 +600,18 @@ export class OAuthProvider {
       }
 
       const { tableauAccessToken, tableauRefreshToken, sub } = mcpAccessToken.data;
+      const authInfo: TableauAuthInfo = {
+        userId: sub,
+        accessToken: tableauAccessToken,
+        refreshToken: tableauRefreshToken,
+      };
 
       return Ok({
         token,
         clientId: 'mcp-client',
         scopes: ['read'],
         expiresAt: payload.exp,
-        extra: {
-          userId: sub,
-          accessToken: tableauAccessToken,
-          refreshToken: tableauRefreshToken,
-        },
+        extra: authInfo,
       });
     } catch {
       // TODO: Auto-refresh logic would go here

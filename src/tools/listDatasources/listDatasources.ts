@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/schemas.js';
 import { paginate } from '../../utils/paginate.js';
 import { Tool } from '../tool.js';
 import { parseAndValidateFilterString } from './datasourcesFilterUtils.js';
@@ -109,10 +110,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
             config,
             requestId,
             server,
-            authInfo: {
-              accessToken: authInfo?.extra?.accessToken as string,
-              userId: authInfo?.extra?.userId as string,
-            },
+            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               const datasources = await paginate({
                 pageConfig: {

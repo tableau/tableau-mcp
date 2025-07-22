@@ -16,6 +16,7 @@ import {
 } from './sdks/tableau/interceptors.js';
 import RestApi from './sdks/tableau/restApi.js';
 import { Server } from './server.js';
+import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { userAgent } from './server/userAgent.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
@@ -61,7 +62,7 @@ export const useRestApi = async <T>({
   requestId: RequestId;
   server: Server;
   callback: (restApi: RestApi) => Promise<T>;
-  authInfo?: { accessToken?: string; userId?: string };
+  authInfo?: TableauAuthInfo;
 }): Promise<T> => {
   const restApi = await getNewRestApiInstanceAsync(config, requestId, server, authInfo);
   try {

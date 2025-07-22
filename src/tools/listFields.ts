@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getConfig } from '../config.js';
 import { useRestApi } from '../restApiInstance.js';
 import { Server } from '../server.js';
+import { getTableauAuthInfo } from '../server/oauth/schemas.js';
 import { Tool } from './tool.js';
 import { validateDatasourceLuid } from './validateDatasourceLuid.js';
 
@@ -105,10 +106,7 @@ export const getListFieldsTool = (server: Server): Tool<typeof paramsSchema> => 
               config,
               requestId,
               server,
-              authInfo: {
-                accessToken: authInfo?.extra?.accessToken as string,
-                userId: authInfo?.extra?.userId as string,
-              },
+              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 return await restApi.metadataMethods.graphql(query);
               },

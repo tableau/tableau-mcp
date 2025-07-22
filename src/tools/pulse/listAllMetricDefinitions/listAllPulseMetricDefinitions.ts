@@ -6,6 +6,7 @@ import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { getTableauAuthInfo } from '../../../server/oauth/schemas.js';
 import { Tool } from '../../tool.js';
 
 const paramsSchema = {
@@ -56,10 +57,7 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
               config,
               requestId,
               server,
-              authInfo: {
-                accessToken: authInfo?.extra?.accessToken as string,
-                userId: authInfo?.extra?.userId as string,
-              },
+              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 return await restApi.pulseMethods.listAllPulseMetricDefinitions(view);
               },

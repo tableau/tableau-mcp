@@ -1,3 +1,4 @@
+import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { z } from 'zod';
 
 const requiredString = (property: string): z.ZodString =>
@@ -94,3 +95,26 @@ export const mcpAccessTokenSchema = z.object({
 });
 
 export type McpAccessToken = z.infer<typeof mcpAccessTokenSchema>;
+
+export const tableauAuthInfoSchema = z
+  .object({
+    userId: z.string(),
+    accessToken: z.string(),
+    refreshToken: z.string(),
+  })
+  .partial();
+
+export type TableauAuthInfo = z.infer<typeof tableauAuthInfoSchema>;
+
+export const getTableauAuthInfo = (authInfo: AuthInfo | undefined): TableauAuthInfo | undefined => {
+  if (!authInfo) {
+    return;
+  }
+
+  const tableauAuthInfo = tableauAuthInfoSchema.safeParse(authInfo.extra);
+  if (!tableauAuthInfo.success) {
+    return;
+  }
+
+  return tableauAuthInfo.data;
+};

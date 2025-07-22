@@ -5,6 +5,7 @@ import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Datasource, Query, TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/schemas.js';
 import { Tool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
@@ -62,10 +63,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             config,
             requestId,
             server,
-            authInfo: {
-              accessToken: authInfo?.extra?.accessToken as string,
-              userId: authInfo?.extra?.userId as string,
-            },
+            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
             },

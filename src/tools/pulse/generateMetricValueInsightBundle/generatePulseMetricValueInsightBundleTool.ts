@@ -9,6 +9,7 @@ import {
   pulseInsightBundleTypeEnum,
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { getTableauAuthInfo } from '../../../server/oauth/schemas.js';
 import { Tool } from '../../tool.js';
 
 const paramsSchema = {
@@ -151,10 +152,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               config,
               requestId,
               server,
-              authInfo: {
-                accessToken: authInfo?.extra?.accessToken as string,
-                userId: authInfo?.extra?.userId as string,
-              },
+              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) =>
                 await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
                   bundleRequest,
