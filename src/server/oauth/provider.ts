@@ -6,42 +6,13 @@ import { jwtVerify, SignJWT } from 'jose';
 import { getConfig } from '../../config.js';
 import RestApi from '../../sdks/tableau/restApi.js';
 import { userAgent } from '../userAgent.js';
-
-type AuthenticatedRequest = express.Request & {
-  auth?: AuthInfo;
-};
-
-type Tokens = {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-};
-
-type PendingAuthorization = {
-  clientId: string;
-  redirectUri: string;
-  codeChallenge: string;
-  codeChallengeMethod: string;
-  state: string;
-  scope: string;
-  tableauState: string;
-};
-
-type AuthorizationCode = {
-  clientId: string;
-  redirectUri: string;
-  codeChallenge: string;
-  userId: string;
-  tokens: Tokens;
-  expiresAt: number;
-};
-
-type RefreshTokenData = {
-  userId: string;
-  clientId: string;
-  tokens: Tokens;
-  expiresAt: number;
-};
+import {
+  AuthenticatedRequest,
+  AuthorizationCode,
+  PendingAuthorization,
+  RefreshTokenData,
+  Tokens,
+} from './types.js';
 
 /**
  * OAuth 2.1 Provider
