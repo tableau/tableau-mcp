@@ -105,6 +105,10 @@ export const getListFieldsTool = (server: Server): Tool<typeof paramsSchema> => 
               config,
               requestId,
               server,
+              authInfo: {
+                accessToken: authInfo?.extra?.accessToken as string,
+                userId: authInfo?.extra?.userId as string,
+              },
               callback: async (restApi) => {
                 return await restApi.metadataMethods.graphql(query);
               },

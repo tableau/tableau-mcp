@@ -151,6 +151,10 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               config,
               requestId,
               server,
+              authInfo: {
+                accessToken: authInfo?.extra?.accessToken as string,
+                userId: authInfo?.extra?.userId as string,
+              },
               callback: async (restApi) =>
                 await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
                   bundleRequest,
