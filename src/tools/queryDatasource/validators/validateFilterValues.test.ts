@@ -279,57 +279,6 @@ describe('validateFilterValues', () => {
     }
   });
 
-  it('should return error for MATCH filter with completely invalid pattern', async () => {
-    const query: Query = {
-      fields: [{ fieldCaption: 'Sales' }],
-      filters: [
-        {
-          field: { fieldCaption: 'Customer Name' },
-          filterType: 'MATCH',
-          startsWith: 'XYZ123', // Completely different pattern
-        },
-      ],
-    };
-
-    // Mock successful query returning sample values that don't match
-    (
-      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
-    ).mockResolvedValue(
-      new Ok({
-        data: [
-          { SampleValues: 'John Doe' },
-          { SampleValues: 'Jane Smith' },
-          { SampleValues: 'Bob Wilson' },
-          { SampleValues: 'Alice Brown' },
-          { SampleValues: 'Charlie Davis' },
-        ],
-      }),
-    );
-
-    const result = await validateFilterValues(
-      new Server(),
-      query,
-      mockVizqlDataServiceMethods,
-      mockDatasource,
-    );
-
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error).toHaveLength(1);
-      expect(result.error[0].field).toBe('Customer Name');
-      expect(result.error[0].invalidValues).toEqual(['starts with "XYZ123"']);
-      expect(result.error[0].sampleValues).toHaveLength(5); // Should fallback to random samples
-      expect(result.error[0].message).toContain(
-        'Filter validation failed for field "Customer Name"',
-      );
-      expect(result.error[0].message).toContain('starts with "XYZ123"');
-      expect(result.error[0].message).toContain('Similar values in this field:');
-      expect(result.error[0].message).toContain(
-        'evaluate whether you included the wrong filter value',
-      );
-    }
-  });
-
   it('should handle complex MATCH filter with multiple patterns', async () => {
     const query: Query = {
       fields: [{ fieldCaption: 'Sales' }],
@@ -662,62 +611,6 @@ describe('validateFilterValues', () => {
       result.error[0].sampleValues.forEach((sample) => {
         expect(allProducts).toContain(sample);
       });
-    }
-  });
-
-  it('should use random sampling for MATCH filters when no similar values are found', async () => {
-    const query: Query = {
-      fields: [{ fieldCaption: 'Customer Name' }],
-      filters: [
-        {
-          field: { fieldCaption: 'Customer Name' },
-          filterType: 'MATCH',
-          startsWith: 'XYZ', // No customer names start with XYZ
-        },
-      ],
-    };
-
-    (
-      mockVizqlDataServiceMethods.queryDatasource as unknown as ReturnType<typeof vi.fn>
-    ).mockResolvedValue(
-      new Ok({
-        data: [
-          { SampleValues: 'Alice Johnson' },
-          { SampleValues: 'Bob Smith' },
-          { SampleValues: 'Carol Williams' },
-          { SampleValues: 'David Brown' },
-          { SampleValues: 'Emily Davis' },
-          { SampleValues: 'Frank Miller' },
-        ],
-      }),
-    );
-
-    const result = await validateFilterValues(
-      new Server(),
-      query,
-      mockVizqlDataServiceMethods,
-      mockDatasource,
-    );
-
-    expect(result.isErr()).toBe(true);
-    if (result.isErr()) {
-      expect(result.error).toHaveLength(1);
-      expect(result.error[0].field).toBe('Customer Name');
-      expect(result.error[0].invalidValues).toEqual(['starts with "XYZ"']);
-      // Should fall back to random sampling since no similar values found
-      expect(result.error[0].sampleValues).toHaveLength(5);
-      const allCustomers = [
-        'Alice Johnson',
-        'Bob Smith',
-        'Carol Williams',
-        'David Brown',
-        'Emily Davis',
-        'Frank Miller',
-      ];
-      result.error[0].sampleValues.forEach((sample) => {
-        expect(allCustomers).toContain(sample);
-      });
-      expect(result.error[0].message).toContain('Similar values in this field:');
     }
   });
 

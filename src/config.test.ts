@@ -21,6 +21,7 @@ describe('Config', () => {
       INCLUDE_TOOLS: undefined,
       EXCLUDE_TOOLS: undefined,
       MAX_RESULT_LIMIT: undefined,
+      DISABLE_DATASOURCE_QUERY_FILTER_VALIDATION: undefined,
     };
   });
 
@@ -208,6 +209,33 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.maxResultLimit).toBe(100);
+  });
+
+  it('should set disableDatasourceQueryFilterValidation to false by default', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'https://test-server.com',
+      SITE_NAME: 'test-site',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: 'test-pat-value',
+    };
+
+    const config = new Config();
+    expect(config.disableDatasourceQueryFilterValidation).toBe(false);
+  });
+
+  it('should set disableDatasourceQueryFilterValidation to true when specified', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'https://test-server.com',
+      SITE_NAME: 'test-site',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: 'test-pat-value',
+      DISABLE_DATASOURCE_QUERY_FILTER_VALIDATION: 'true',
+    };
+
+    const config = new Config();
+    expect(config.disableDatasourceQueryFilterValidation).toBe(true);
   });
 
   describe('Tool filtering', () => {
