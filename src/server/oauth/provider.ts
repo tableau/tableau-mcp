@@ -6,6 +6,7 @@ import { jwtVerify, SignJWT } from 'jose';
 import { getConfig } from '../../config.js';
 import RestApi from '../../sdks/tableau/restApi.js';
 import { userAgent } from '../userAgent.js';
+import { mcpAuthorizeSchema } from './schemas.js';
 import {
   AuthenticatedRequest,
   AuthorizationCode,
@@ -262,26 +263,27 @@ export class OAuthProvider {
      * redirects to OAuth for user consent.
      */
     app.get('/oauth/authorize', (req, res) => {
-      const {
-        client_id,
-        redirect_uri,
-        response_type,
-        code_challenge,
-        code_challenge_method,
-        state,
-        scope = 'read',
-      } = req.query;
+      const result = mcpAuthorizeSchema.safeParse(req.query);
 
-      // Validate parameters
-      if (!client_id || !redirect_uri || !code_challenge) {
+      if (!result.success) {
         res.status(400).json({
           error: 'invalid_request',
-          error_description: 'Missing required parameters',
+          error_description: result.error.errors.map((e) => e.message).join(', '),
         });
         return;
       }
 
-      if (response_type !== 'code') {
+      const {
+        clientId,
+        redirectUri,
+        responseType,
+        codeChallenge,
+        codeChallengeMethod,
+        state,
+        scope = 'read',
+      } = result.data;
+
+      if (responseType !== 'code') {
         res.status(400).json({
           error: 'unsupported_response_type',
           error_description: 'Only authorization code flow is supported',
@@ -289,7 +291,7 @@ export class OAuthProvider {
         return;
       }
 
-      if (code_challenge_method !== 'S256') {
+      if (codeChallengeMethod !== 'S256') {
         res.status(400).json({
           error: 'invalid_request',
           error_description: 'Only S256 code challenge method is supported',
@@ -299,7 +301,7 @@ export class OAuthProvider {
 
       // Validate redirect URI using security rules (for public clients)
       try {
-        const url = new URL(redirect_uri as string);
+        const url = new URL(redirectUri);
 
         // Allow HTTPS URLs
         if (url.protocol === 'https:') {
@@ -332,12 +334,12 @@ export class OAuthProvider {
       const authKey = randomBytes(32).toString('hex');
 
       this.pendingAuthorizations.set(authKey, {
-        clientId: client_id as string,
-        redirectUri: redirect_uri as string,
-        codeChallenge: code_challenge as string,
-        codeChallengeMethod: code_challenge_method as string,
-        state: state as string,
-        scope: scope as string,
+        clientId,
+        redirectUri,
+        codeChallenge,
+        codeChallengeMethod,
+        state,
+        scope,
         tableauState,
       });
 
@@ -348,11 +350,11 @@ export class OAuthProvider {
       );
 
       // Redirect to OAuth
-      const codeChallenge = this.generateCodeChallenge(code_challenge as string);
+      const tableauCodeChallenge = this.generateCodeChallenge(codeChallenge);
       const oauthUrl = new URL(`${this.config.server}/oauth2/v1/auth`);
       oauthUrl.searchParams.set('client_id', '{B3838D73-E2A1-430C-A5AB-A52793B2B95A}');
-      oauthUrl.searchParams.set('code_challenge', codeChallenge);
-      oauthUrl.searchParams.set('code_challenge_method', code_challenge_method as string);
+      oauthUrl.searchParams.set('code_challenge', tableauCodeChallenge);
+      oauthUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
       oauthUrl.searchParams.set('response_type', 'code');
       oauthUrl.searchParams.set('redirect_uri', this.config.redirectUri);
       oauthUrl.searchParams.set('state', `${authKey}:${tableauState}`);
