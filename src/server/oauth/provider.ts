@@ -23,6 +23,7 @@ import {
 } from './types.js';
 
 const TABLEAU_CLIENT_ID = '{E93A0E88-C2F8-4431-B805-11E9957FB03F}';
+const DEVICE_ID = '8FA5479C-56EE-407F-A040-F14FD7E80157';
 
 /**
  * OAuth 2.1 Provider
@@ -367,7 +368,7 @@ export class OAuthProvider {
       oauthUrl.searchParams.set('response_type', 'code');
       oauthUrl.searchParams.set('redirect_uri', this.config.redirectUri);
       oauthUrl.searchParams.set('state', `${authKey}:${tableauState}`);
-      oauthUrl.searchParams.set('device_id', 'tableau-mcp');
+      oauthUrl.searchParams.set('device_id', DEVICE_ID);
       oauthUrl.searchParams.set('device_name', 'tableau-mcp');
       oauthUrl.searchParams.set('client_type', `tableau-mcp`);
 
