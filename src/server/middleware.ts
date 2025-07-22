@@ -15,7 +15,6 @@ export function validateProtocolVersion(req: Request, res: Response, next: NextF
   // Check supported versions
   const supportedVersions = ['2025-06-18', '2025-03-26', '2024-11-05'];
   if (!supportedVersions.includes(version as string)) {
-    //logger.warn('Unsupported protocol version', { version });
     res.status(400).json({
       jsonrpc: '2.0',
       error: {
