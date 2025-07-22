@@ -2,11 +2,18 @@ import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { createHash, randomBytes } from 'crypto';
 import express from 'express';
 import { jwtVerify, SignJWT } from 'jose';
+import { Err, Ok, Result } from 'ts-results-es';
 
 import { getConfig } from '../../config.js';
 import RestApi from '../../sdks/tableau/restApi.js';
 import { userAgent } from '../userAgent.js';
-import { mcpAuthorizeSchema } from './schemas.js';
+import {
+  callbackSchema,
+  mcpAuthorizeSchema,
+  mcpTokenSchema,
+  TableauAccessToken,
+  tableauAccessTokenSchema,
+} from './schemas.js';
 import {
   AuthenticatedRequest,
   AuthorizationCode,
@@ -14,6 +21,8 @@ import {
   RefreshTokenData,
   Tokens,
 } from './types.js';
+
+const TABLEAU_CLIENT_ID = '{E93A0E88-C2F8-4431-B805-11E9957FB03F}';
 
 /**
  * OAuth 2.1 Provider
@@ -349,10 +358,10 @@ export class OAuthProvider {
         this.AUTHORIZATION_CODE_TIMEOUT_MS,
       );
 
-      // Redirect to OAuth
+      // Redirect to Tableau OAuth
       const tableauCodeChallenge = this.generateCodeChallenge(codeChallenge);
       const oauthUrl = new URL(`${this.config.server}/oauth2/v1/auth`);
-      oauthUrl.searchParams.set('client_id', '{B3838D73-E2A1-430C-A5AB-A52793B2B95A}');
+      oauthUrl.searchParams.set('client_id', TABLEAU_CLIENT_ID);
       oauthUrl.searchParams.set('code_challenge', tableauCodeChallenge);
       oauthUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
       oauthUrl.searchParams.set('response_type', 'code');
@@ -376,8 +385,17 @@ export class OAuthProvider {
      * code, and redirects back to client with code.
      */
     app.get('/Callback', async (req, res) => {
-      const { code, state, error } = req.query;
+      const result = callbackSchema.safeParse(req.query);
 
+      if (!result.success) {
+        res.status(400).json({
+          error: 'invalid_request',
+          error_description: result.error.errors.map((e) => e.message).join(', '),
+        });
+        return;
+      }
+
+      const { code, state, error } = result.data;
       if (error) {
         res.status(400).json({
           error: 'access_denied',
@@ -386,36 +404,38 @@ export class OAuthProvider {
         return;
       }
 
-      if (!code || !state) {
-        res.status(400).json({
-          error: 'invalid_request',
-          error_description: 'Missing code or state parameter',
-        });
-        return;
-      }
-
       try {
         // Parse state to get auth key and Tableau state
-        const [authKey, tableauState] = (state as string).split(':');
+        const [authKey, tableauState] = state.split(':');
         const pendingAuth = this.pendingAuthorizations.get(authKey);
 
         if (!pendingAuth || pendingAuth.tableauState !== tableauState) {
           res.status(400).json({
             error: 'invalid_request',
-            error_description: `Invalid state parameter.`,
+            error_description: 'Invalid state parameter',
           });
           return;
         }
 
-        const tokens = await this.exchangeAuthorizationCode(
-          code as string,
+        const tokensResult = await this.exchangeAuthorizationCode(
+          code,
           this.config.redirectUri,
-          '{B3838D73-E2A1-430C-A5AB-A52793B2B95A}',
+          TABLEAU_CLIENT_ID,
           pendingAuth.codeChallenge,
         );
 
+        if (tokensResult.isErr()) {
+          res.status(400).json({
+            error: 'invalid_request',
+            error_description: tokensResult.error,
+          });
+          return;
+        }
+
+        const { accessToken, refreshToken, expiresIn } = tokensResult.value;
+
         const restApi = new RestApi(this.config.server);
-        restApi.setCredentials(tokens.access_token, 'unknown user id');
+        restApi.setCredentials(accessToken, 'unknown user id');
         const session = await restApi.serverMethods.getCurrentServerSession();
         const userId = session.user.id;
 
@@ -427,9 +447,9 @@ export class OAuthProvider {
           codeChallenge: pendingAuth.codeChallenge,
           userId,
           tokens: {
-            accessToken: tokens.access_token,
-            refreshToken: tokens.refresh_token,
-            expiresIn: tokens.expires_in,
+            accessToken,
+            refreshToken,
+            expiresIn,
           },
           expiresAt: Date.now() + this.AUTHORIZATION_CODE_TIMEOUT_MS,
         });
@@ -463,19 +483,22 @@ export class OAuthProvider {
      * Returns JWT containing tokens for API access.
      */
     app.post('/oauth/token', async (req, res) => {
-      const { grant_type, code, redirect_uri, code_verifier, client_id, refresh_token } = req.body;
+      const result = mcpTokenSchema.safeParse(req.body);
+
+      if (!result.success) {
+        res.status(400).json({
+          error: 'invalid_request',
+          error_description: result.error.errors.map((e) => e.message).join(', '),
+        });
+        return;
+      }
+
+      const { grantType } = result.data;
 
       try {
-        if (grant_type === 'authorization_code') {
+        if (grantType === 'authorization_code') {
           // Handle authorization code exchange
-          if (!code || !redirect_uri || !code_verifier || !client_id) {
-            res.status(400).json({
-              error: 'invalid_request',
-              error_description: 'Missing required parameters',
-            });
-            return;
-          }
-
+          const { code, codeVerifier } = result.data;
           const authCode = this.authorizationCodes.get(code);
           if (!authCode || authCode.expiresAt < Date.now()) {
             this.authorizationCodes.delete(code);
@@ -487,7 +510,7 @@ export class OAuthProvider {
           }
 
           // Verify PKCE
-          const challengeFromVerifier = this.generateCodeChallenge(code_verifier);
+          const challengeFromVerifier = this.generateCodeChallenge(codeVerifier);
           if (challengeFromVerifier !== authCode.codeChallenge) {
             res.status(400).json({
               error: 'invalid_grant',
@@ -516,19 +539,12 @@ export class OAuthProvider {
             scope: 'read',
           });
           return;
-        } else if (grant_type === 'refresh_token') {
+        } else {
           // Handle refresh token
-          if (!refresh_token) {
-            res.status(400).json({
-              error: 'invalid_request',
-              error_description: 'Missing refresh token',
-            });
-            return;
-          }
-
-          const tokenData = this.refreshTokens.get(refresh_token);
+          const { refreshToken } = result.data;
+          const tokenData = this.refreshTokens.get(refreshToken);
           if (!tokenData || tokenData.expiresAt < Date.now()) {
-            this.refreshTokens.delete(refresh_token);
+            this.refreshTokens.delete(refreshToken);
             res.status(400).json({
               error: 'invalid_grant',
               error_description: 'Invalid or expired refresh token',
@@ -547,13 +563,6 @@ export class OAuthProvider {
             token_type: 'Bearer',
             expires_in: tokenData.tokens.expiresIn,
             scope: 'read',
-          });
-          return;
-        } else {
-          res.status(400).json({
-            error: 'unsupported_grant_type',
-            error_description:
-              'Only authorization_code and refresh_token grant types are supported',
           });
           return;
         }
@@ -659,7 +668,7 @@ export class OAuthProvider {
     redirectUri: string,
     clientId: string,
     codeVerifier: string,
-  ): Promise<any> {
+  ): Promise<Result<TableauAccessToken, string>> {
     const tokenUrl = `${this.config.server}/oauth2/v1/token`;
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -680,9 +689,14 @@ export class OAuthProvider {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Failed to exchange authorization code: ${response.status} - ${errorText}`);
+      return Err(`Failed to exchange authorization code: ${response.status} - ${errorText}`);
     }
 
-    return await response.json();
+    const result = tableauAccessTokenSchema.safeParse(await response.json());
+    return result.success
+      ? Ok(result.data)
+      : Err(
+          `Invalid response from Tableau OAuth: ${result.error.errors.map((e) => e.message).join(', ')}`,
+        );
   }
 }
