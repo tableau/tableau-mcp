@@ -277,23 +277,6 @@ async function validateMatchFilter(
 }
 
 /**
- * Gets a random sample of values from an array
- */
-function getRandomSample<T>(array: T[], count: number): T[] {
-  if (array.length <= count) {
-    return array;
-  }
-
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-
-  return shuffled.slice(0, count);
-}
-
-/**
  * Finds the closest matches to invalid filter values using fuzzy matching
  */
 export function getFuzzyMatches(
