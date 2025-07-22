@@ -12,7 +12,7 @@ export const mcpAuthorizeSchema = z
     response_type: requiredString('response_type'),
     code_challenge: requiredString('code_challenge'),
     code_challenge_method: requiredString('code_challenge_method'),
-    state: requiredString('state'),
+    state: z.string().optional(),
     scope: z.string().optional(),
   })
   .transform((data) => ({
