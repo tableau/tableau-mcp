@@ -196,7 +196,7 @@ describe('Config', () => {
     expect(config.maxResultLimit).toBe(100);
   });
 
-  it('should set disableDatasourceQueryFilterValidation to false by default', () => {
+  it('should set disableQueryDatasourceFilterValidation to false by default', () => {
     process.env = {
       ...process.env,
       SERVER: 'https://test-server.com',
@@ -209,7 +209,7 @@ describe('Config', () => {
     expect(config.disableQueryDatasourceFilterValidation).toBe(false);
   });
 
-  it('should set disableDatasourceQueryFilterValidation to true when specified', () => {
+  it('should set disableQueryDatasourceFilterValidation to true when specified', () => {
     process.env = {
       ...process.env,
       SERVER: 'https://test-server.com',
