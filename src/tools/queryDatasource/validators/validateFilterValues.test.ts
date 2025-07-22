@@ -467,7 +467,7 @@ describe('validateFilterValues', () => {
     }
   });
 
-  it('should only return 1 match despite maxSuggestions being larger', async () => {
+  it('should only return 2 matches despite maxSuggestions being larger', async () => {
     const query: Query = {
       fields: [{ fieldCaption: 'Status' }],
       filters: [
