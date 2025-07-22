@@ -9,6 +9,8 @@ import https from 'https';
 import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
+import { validateProtocolVersion } from './middleware.js';
+import { OAuthProvider } from './oauth/provider.js';
 
 export async function startExpressServer({
   basePath,
@@ -39,10 +41,15 @@ export async function startExpressServer({
     }),
   );
 
+  const oauthProvider = new OAuthProvider();
+  oauthProvider.setupRoutes(app);
+
+  const middleware = [oauthProvider.authMiddleware(), validateProtocolVersion];
+
   const path = `/${basePath}`;
-  app.post(path, createMcpServer);
-  app.get(path, methodNotAllowed);
-  app.delete(path, methodNotAllowed);
+  app.post(path, ...middleware, createMcpServer);
+  app.get(path, ...middleware, methodNotAllowed);
+  app.delete(path, ...middleware, methodNotAllowed);
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {

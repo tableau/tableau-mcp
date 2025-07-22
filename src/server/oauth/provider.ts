@@ -3,9 +3,9 @@ import { createHash, randomBytes } from 'crypto';
 import express from 'express';
 import { jwtVerify, SignJWT } from 'jose';
 
-import { getConfig } from '../config.js';
-import RestApi from '../sdks/tableau/restApi.js';
-import { userAgent } from './userAgent.js';
+import { getConfig } from '../../config.js';
+import RestApi from '../../sdks/tableau/restApi.js';
+import { userAgent } from '../userAgent.js';
 
 type AuthenticatedRequest = express.Request & {
   auth?: AuthInfo;
@@ -490,7 +490,7 @@ export class OAuthProvider {
      * Returns JWT containing tokens for API access.
      */
     app.post('/oauth/token', async (req, res) => {
-      const { grant_type, code, redirect_uri, code_verifier, client_id } = req.body;
+      const { grant_type, code, redirect_uri, code_verifier, client_id, refresh_token } = req.body;
 
       try {
         if (grant_type === 'authorization_code') {
@@ -544,34 +544,37 @@ export class OAuthProvider {
           });
           return;
         } else if (grant_type === 'refresh_token') {
-          // // Handle refresh token
-          // if (!refresh_token) {
-          //   res.status(400).json({
-          //     error: 'invalid_request',
-          //     error_description: 'Missing refresh token',
-          //   });
-          //   return;
-          // }
+          // Handle refresh token
+          if (!refresh_token) {
+            res.status(400).json({
+              error: 'invalid_request',
+              error_description: 'Missing refresh token',
+            });
+            return;
+          }
 
-          // const tokenData = this.refreshTokens.get(refresh_token);
-          // if (!tokenData || tokenData.expiresAt < Date.now()) {
-          //   this.refreshTokens.delete(refresh_token);
-          //   res.status(400).json({
-          //     error: 'invalid_grant',
-          //     error_description: 'Invalid or expired refresh token',
-          //   });
-          //   return;
-          // }
+          const tokenData = this.refreshTokens.get(refresh_token);
+          if (!tokenData || tokenData.expiresAt < Date.now()) {
+            this.refreshTokens.delete(refresh_token);
+            res.status(400).json({
+              error: 'invalid_grant',
+              error_description: 'Invalid or expired refresh token',
+            });
+            return;
+          }
 
-          // // TODO: Refresh tokens if needed
-          // const accessToken = await this.createAccessToken(tokenData.userId, tokenData.tokens);
+          // TODO: Refresh tokens if needed
+          // * Should we just always refresh the Tableau tokens when the MCP access token is refreshed?
+          // * Should we configure the lifetime of the MCP access token to be shorter than the Tableau tokens?
+          // * Is the expiration time of the Tableau tokens configurable for Server?
+          const accessToken = await this.createAccessToken(tokenData.userId, tokenData.tokens);
 
-          // res.json({
-          //   access_token: accessToken,
-          //   token_type: 'Bearer',
-          //   expires_in: 86400, // 24 hours to match token expiry
-          //   scope: 'read',
-          // });
+          res.json({
+            access_token: accessToken,
+            token_type: 'Bearer',
+            expires_in: tokenData.tokens.expiresIn,
+            scope: 'read',
+          });
           return;
         } else {
           res.status(400).json({
@@ -647,7 +650,7 @@ export class OAuthProvider {
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setExpirationTime(Date.now() + tokens.expiresIn * 1000)
+      .setExpirationTime(Date.now() + (tokens.expiresIn - 30 * 60) * 1000) // 30 minutes before expiration
       .setAudience(this.jwtAudience)
       .setIssuer(this.jwtIssuer)
       .sign(this.jwtSecret);
