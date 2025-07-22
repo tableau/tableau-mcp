@@ -177,6 +177,7 @@ These config files will be used in tool configuration explained below.
 | `INCLUDE_TOOLS`          | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                                                                                                                    |
 | `EXCLUDE_TOOLS`          | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                                                                                                                    |
 | `MAX_RESULT_LIMIT`       | If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.  | Empty string (_no limit_)          | A positive number.                                                                                                                                                                          |
+| `DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION` | Disable validation of SET and MATCH filter values in query-datasource tool. | `false` | When `true`, skips validation that checks if filter values exist in the target field. |
 
 #### HTTP Server Configuration
 
