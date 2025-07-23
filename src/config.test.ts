@@ -398,7 +398,7 @@ describe('Config', () => {
     });
   });
 
-  describe('CORS origin config parsi', () => {
+  describe('CORS origin config parsing', () => {
     it('should set corsOriginConfig to true when CORS_ORIGIN_CONFIG is not set', () => {
       process.env = {
         ...process.env,
