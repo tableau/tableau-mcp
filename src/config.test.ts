@@ -36,6 +36,7 @@ describe('Config', () => {
       OAUTH_ISSUER: undefined,
       OAUTH_REDIRECT_URI: undefined,
       OAUTH_JWT_SECRET: undefined,
+      OAUTH_ACCESS_TOKEN_TIMEOUT_MS: undefined,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: undefined,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: undefined,
     };
@@ -497,6 +498,7 @@ describe('Config', () => {
 
     const defaultOAuthTimeoutMs = {
       authzCodeTimeoutMs: 10 * 60 * 1000,
+      accessTokenTimeoutMs: 24 * 60 * 60 * 1000,
       refreshTokenTimeoutMs: 30 * 24 * 60 * 60 * 1000,
     };
 
@@ -559,6 +561,20 @@ describe('Config', () => {
       expect(config.oauth).toEqual({
         ...defaultOAuthConfig,
         authzCodeTimeoutMs: 5678,
+      });
+    });
+
+    it('should set accessTokenTimeoutMs to the specified value when OAUTH_ACCESS_TOKEN_TIMEOUT_MS is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_ACCESS_TOKEN_TIMEOUT_MS: '1234',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        accessTokenTimeoutMs: 1234,
       });
     });
 
