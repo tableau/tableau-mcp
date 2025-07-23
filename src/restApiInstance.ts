@@ -193,7 +193,7 @@ function logResponse(
 
 function getConnectedAppUsername(config: Config, authInfo: TableauAuthInfo | undefined): string {
   return authInfo?.username
-    ? config.connectedAppUsername.replace('{OAUTH_USERNAME}', authInfo.username)
+    ? config.connectedAppUsername.replaceAll('{OAUTH_USERNAME}', authInfo.username)
     : config.connectedAppUsername;
 }
 
@@ -202,7 +202,7 @@ function getConnectedAppJwtAdditionalPayload(
   authInfo: TableauAuthInfo | undefined,
 ): Record<string, unknown> {
   const json = authInfo?.username
-    ? config.connectedAppJwtAdditionalPayload.replace('{OAUTH_USERNAME}', authInfo.username)
+    ? config.connectedAppJwtAdditionalPayload.replaceAll('{OAUTH_USERNAME}', authInfo.username)
     : config.connectedAppJwtAdditionalPayload;
 
   return JSON.parse(json);
