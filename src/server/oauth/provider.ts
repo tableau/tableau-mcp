@@ -13,6 +13,7 @@ import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import {
   callbackSchema,
   mcpAccessTokenSchema,
+  mcpAccessTokenSubOnlySchema,
   mcpAuthorizeSchema,
   mcpTokenSchema,
   TableauAuthInfo,
@@ -626,25 +627,39 @@ export class OAuthProvider {
         return new Err('Invalid or expired access token');
       }
 
-      const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
-      if (!mcpAccessToken.success) {
-        return Err(
-          `Invalid access token: ${mcpAccessToken.error.errors.map((e) => e.message).join(', ')}`,
-        );
+      let authInfo: TableauAuthInfo;
+      if (this.config.auth === 'oauth') {
+        const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
+        if (!mcpAccessToken.success) {
+          return Err(
+            `Invalid access token: ${mcpAccessToken.error.errors.map((e) => e.message).join(', ')}`,
+          );
+        }
+
+        const { tableauAccessToken, tableauRefreshToken, tableauExpiresAt, sub } =
+          mcpAccessToken.data;
+
+        if (Date.now() > tableauExpiresAt) {
+          return new Err('Invalid or expired access token');
+        }
+
+        authInfo = {
+          userId: sub,
+          accessToken: tableauAccessToken,
+          refreshToken: tableauRefreshToken,
+        };
+      } else {
+        const mcpAccessToken = mcpAccessTokenSubOnlySchema.safeParse(payload);
+        if (!mcpAccessToken.success) {
+          return Err(
+            `Invalid access token: ${mcpAccessToken.error.errors.map((e) => e.message).join(', ')}`,
+          );
+        }
+
+        authInfo = {
+          userId: mcpAccessToken.data.sub,
+        };
       }
-
-      const { tableauAccessToken, tableauRefreshToken, tableauExpiresAt, sub } =
-        mcpAccessToken.data;
-
-      if (Date.now() > tableauExpiresAt) {
-        return new Err('Invalid or expired access token');
-      }
-
-      const authInfo: TableauAuthInfo = {
-        userId: sub,
-        accessToken: tableauAccessToken,
-        refreshToken: tableauRefreshToken,
-      };
 
       return Ok({
         token,
@@ -671,9 +686,13 @@ export class OAuthProvider {
   private async createAccessToken(tokenData: UserAndTokens): Promise<string> {
     return await new SignJWT({
       sub: tokenData.user.name,
-      tableauAccessToken: tokenData.tokens.accessToken,
-      tableauRefreshToken: tokenData.tokens.refreshToken,
-      tableauExpiresAt: Date.now() + tokenData.tokens.expiresInSeconds * 1000,
+      ...(this.config.auth === 'oauth'
+        ? {
+            tableauAccessToken: tokenData.tokens.accessToken,
+            tableauRefreshToken: tokenData.tokens.refreshToken,
+            tableauExpiresAt: Date.now() + tokenData.tokens.expiresInSeconds * 1000,
+          }
+        : {}),
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()

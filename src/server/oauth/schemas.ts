@@ -71,6 +71,10 @@ export const callbackSchema = z.object({
   error: z.string().optional(),
 });
 
+export const mcpAccessTokenSubOnlySchema = z.object({
+  sub: requiredString('sub'),
+});
+
 export const mcpAccessTokenSchema = z.object({
   sub: requiredString('sub'),
   tableauAccessToken: requiredString('tableauAccessToken'),
@@ -79,6 +83,7 @@ export const mcpAccessTokenSchema = z.object({
 });
 
 export type McpAccessToken = z.infer<typeof mcpAccessTokenSchema>;
+export type McpAccessTokenSubOnly = z.infer<typeof mcpAccessTokenSubOnlySchema>;
 
 export const tableauAuthInfoSchema = z
   .object({
