@@ -103,7 +103,7 @@ export class OAuthProvider {
           return;
         }
 
-        const baseUrl = `https://${req.get('host')}`;
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
         res
           .status(401)
           .header(
@@ -183,7 +183,7 @@ export class OAuthProvider {
      */
     app.get('/.well-known/oauth-protected-resource', (req, res) => {
       res.json({
-        resource: `${req.protocol}://${req.get('host')}`,
+        resource: `${req.protocol}://${req.get('host')}/`,
         authorization_servers: [`${req.protocol}://${req.get('host')}`],
         bearer_methods_supported: ['header'],
       });
