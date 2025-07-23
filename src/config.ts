@@ -22,7 +22,7 @@ export class Config {
   connectedAppClientId: string;
   connectedAppSecretId: string;
   connectedAppSecretValue: string;
-  connectedAppAdditionalPayload: string;
+  connectedAppJwtAdditionalPayload: string;
   datasourceCredentials: string;
   defaultLogLevel: string;
   disableLogMasking: boolean;
@@ -54,7 +54,7 @@ export class Config {
       CONNECTED_APP_CLIENT_ID: clientId,
       CONNECTED_APP_SECRET_ID: secretId,
       CONNECTED_APP_SECRET_VALUE: secretValue,
-      CONNECTED_APP_ADDITIONAL_PAYLOAD: connectedAppAdditionalPayload,
+      CONNECTED_APP_JWT_ADDITIONAL_PAYLOAD: connectedAppJwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
@@ -137,7 +137,7 @@ export class Config {
     this.connectedAppClientId = clientId ?? '';
     this.connectedAppSecretId = secretId ?? '';
     this.connectedAppSecretValue = secretValue ?? '';
-    this.connectedAppAdditionalPayload = connectedAppAdditionalPayload ?? '{}';
+    this.connectedAppJwtAdditionalPayload = connectedAppJwtAdditionalPayload ?? '{}';
   }
 }
 
