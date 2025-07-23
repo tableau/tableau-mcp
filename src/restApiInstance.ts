@@ -44,6 +44,17 @@ const getNewRestApiInstanceAsync = async (
       patValue: config.patValue,
       siteName: config.siteName,
     });
+  } else if (config.auth === 'direct-trust') {
+    await restApi.signIn({
+      type: 'direct-trust',
+      siteName: config.siteName,
+      username: getConnectedAppUsername(config, authInfo),
+      clientId: config.connectedAppClientId,
+      secretId: config.connectedAppSecretId,
+      secretValue: config.connectedAppSecretValue,
+      scopes: ['tableau:viz_data_service:read', 'tableau:content:read'],
+      additionalPayload: getConnectedAppAdditionalPayload(config, authInfo),
+    });
   } else {
     if (!authInfo?.accessToken || !authInfo?.userId) {
       throw new Error('Auth info is required when not signing in first.');
@@ -178,4 +189,21 @@ function logResponse(
   } as const;
 
   log.info(server, messageObj, { logger: 'rest-api', requestId });
+}
+
+function getConnectedAppUsername(config: Config, authInfo: TableauAuthInfo | undefined): string {
+  return authInfo?.username
+    ? config.connectedAppUsername.replace('{OAUTH_USERNAME}', authInfo.username)
+    : config.connectedAppUsername;
+}
+
+function getConnectedAppAdditionalPayload(
+  config: Config,
+  authInfo: TableauAuthInfo | undefined,
+): Record<string, unknown> {
+  const json = authInfo?.username
+    ? config.connectedAppAdditionalPayload.replace('{OAUTH_USERNAME}', authInfo.username)
+    : config.connectedAppAdditionalPayload;
+
+  return JSON.parse(json);
 }

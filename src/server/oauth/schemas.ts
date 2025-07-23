@@ -73,6 +73,7 @@ export const callbackSchema = z.object({
 
 export const mcpAccessTokenSchema = z.object({
   sub: requiredString('sub'),
+  tableauUserId: requiredString('tableauUserId'),
   tableauAccessToken: requiredString('tableauAccessToken'),
   tableauRefreshToken: requiredString('tableauRefreshToken'),
 });
@@ -81,6 +82,7 @@ export type McpAccessToken = z.infer<typeof mcpAccessTokenSchema>;
 
 export const tableauAuthInfoSchema = z
   .object({
+    username: z.string(),
     userId: z.string(),
     accessToken: z.string(),
     refreshToken: z.string(),

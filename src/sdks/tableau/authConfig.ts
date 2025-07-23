@@ -1,11 +1,22 @@
-export type AuthConfig =
+export type AuthConfig = {
+  siteName: string;
+} & (
   | {
-      siteName: string;
       type: 'pat';
       patName: string;
       patValue: string;
     }
   | {
+      type: 'direct-trust';
+      username: string;
+      clientId: string;
+      secretId: string;
+      secretValue: string;
+      scopes: string[];
+      additionalPayload?: Record<string, unknown>;
+    }
+  | {
       type: 'accessToken';
       accessToken: string;
-    };
+    }
+);

@@ -4,8 +4,11 @@ import { isToolName, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
+const authTypes = ['pat', 'oauth', 'direct-trust'] as const;
+type AuthType = (typeof authTypes)[number];
+
 export class Config {
-  auth: 'pat' | 'oauth';
+  auth: AuthType;
   server: string;
   transport: TransportName;
   sslKey: string;
@@ -15,6 +18,11 @@ export class Config {
   siteName: string;
   patName: string;
   patValue: string;
+  connectedAppUsername: string;
+  connectedAppClientId: string;
+  connectedAppSecretId: string;
+  connectedAppSecretValue: string;
+  connectedAppAdditionalPayload: string;
   datasourceCredentials: string;
   defaultLogLevel: string;
   disableLogMasking: boolean;
@@ -42,6 +50,11 @@ export class Config {
       CORS_ORIGIN_CONFIG: corsOriginConfig,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
+      CONNECTED_APP_USERNAME: connectedAppUsername,
+      CONNECTED_APP_CLIENT_ID: clientId,
+      CONNECTED_APP_SECRET_ID: secretId,
+      CONNECTED_APP_SECRET_VALUE: secretValue,
+      CONNECTED_APP_ADDITIONAL_PAYLOAD: connectedAppAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
@@ -56,7 +69,7 @@ export class Config {
     } = process.env;
 
     this.siteName = siteName ?? '';
-    this.auth = auth === 'oauth' ? 'oauth' : 'pat';
+    this.auth = authTypes.find((type) => type === auth) ?? 'pat';
     this.transport = isTransport(transport) ? transport : 'stdio';
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
@@ -110,11 +123,21 @@ export class Config {
     if (this.auth === 'pat') {
       invariant(patName, 'The environment variable PAT_NAME is not set');
       invariant(patValue, 'The environment variable PAT_VALUE is not set');
+    } else if (this.auth === 'direct-trust') {
+      invariant(connectedAppUsername, 'The environment variable CONNECTED_APP_USERNAME is not set');
+      invariant(clientId, 'The environment variable CONNECTED_APP_CLIENT_ID is not set');
+      invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
+      invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
     }
 
     this.server = server;
     this.patName = patName ?? '';
     this.patValue = patValue ?? '';
+    this.connectedAppUsername = connectedAppUsername ?? '';
+    this.connectedAppClientId = clientId ?? '';
+    this.connectedAppSecretId = secretId ?? '';
+    this.connectedAppSecretValue = secretValue ?? '';
+    this.connectedAppAdditionalPayload = connectedAppAdditionalPayload ?? '{}';
   }
 }
 

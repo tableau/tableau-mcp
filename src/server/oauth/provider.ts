@@ -603,9 +603,10 @@ export class OAuthProvider {
         );
       }
 
-      const { tableauAccessToken, tableauRefreshToken, sub } = mcpAccessToken.data;
+      const { tableauAccessToken, tableauRefreshToken, tableauUserId, sub } = mcpAccessToken.data;
       const authInfo: TableauAuthInfo = {
-        userId: sub,
+        username: sub,
+        userId: tableauUserId,
         accessToken: tableauAccessToken,
         refreshToken: tableauRefreshToken,
       };
@@ -636,6 +637,7 @@ export class OAuthProvider {
   private async createAccessToken(tokenData: UserAndTokens): Promise<string> {
     return await new SignJWT({
       sub: tokenData.user.name,
+      tableauUserId: tokenData.user.id,
       tableauAccessToken: tokenData.tokens.accessToken,
       tableauRefreshToken: tokenData.tokens.refreshToken,
     })
