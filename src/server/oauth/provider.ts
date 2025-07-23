@@ -4,16 +4,17 @@ import express from 'express';
 import { jwtVerify, SignJWT } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
 
+import { isAxiosError } from '../../../node_modules/axios/index.js';
 import { getConfig } from '../../config.js';
 import RestApi from '../../sdks/tableau/restApi.js';
-import { userAgent } from '../userAgent.js';
+import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
+import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
+import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import {
   callbackSchema,
   mcpAccessTokenSchema,
   mcpAuthorizeSchema,
   mcpTokenSchema,
-  TableauAccessToken,
-  tableauAccessTokenSchema,
   TableauAuthInfo,
 } from './schemas.js';
 import {
@@ -674,34 +675,23 @@ export class OAuthProvider {
     clientId: string,
     codeVerifier: string,
   ): Promise<Result<TableauAccessToken, string>> {
-    const tokenUrl = `${this.config.server}/oauth2/v1/token`;
-    const body = new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: redirectUri,
-      client_id: clientId,
-      code_verifier: codeVerifier,
-    });
+    try {
+      const result = await getTokenResult(this.config.server, {
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: redirectUri,
+        client_id: clientId,
+        code_verifier: codeVerifier,
+      });
 
-    const response = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': userAgent,
-      },
-      body,
-    });
+      return Ok(result);
+    } catch (error) {
+      if (!isAxiosError(error) || !error.response) {
+        return Err(`Failed to exchange authorization code: ${getExceptionMessage(error)}`);
+      }
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return Err(`Failed to exchange authorization code: ${response.status} - ${errorText}`);
+      const errorText = JSON.stringify(error.response.data);
+      return Err(`Failed to exchange authorization code: ${error.response.status} - ${errorText}`);
     }
-
-    const result = tableauAccessTokenSchema.safeParse(await response.json());
-    return result.success
-      ? Ok(result.data)
-      : Err(
-          `Invalid response from Tableau OAuth: ${result.error.errors.map((e) => e.message).join(', ')}`,
-        );
   }
 }

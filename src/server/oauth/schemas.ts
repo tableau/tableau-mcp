@@ -1,10 +1,7 @@
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { z } from 'zod';
 
-const requiredString = (property: string): z.ZodString =>
-  z
-    .string({ message: `${property} is required` })
-    .nonempty({ message: `${property} must be non-empty` });
+import { requiredString } from '../../utils/requiredStrings.js';
 
 export const mcpAuthorizeSchema = z
   .object({
@@ -73,20 +70,6 @@ export const callbackSchema = z.object({
   state: requiredString('state'),
   error: z.string().optional(),
 });
-
-export const tableauAccessTokenSchema = z
-  .object({
-    access_token: requiredString('access_token'),
-    expires_in: z.number().int().positive(),
-    refresh_token: requiredString('refresh_token'),
-  })
-  .transform((data) => ({
-    accessToken: data.access_token,
-    expiresIn: data.expires_in,
-    refreshToken: data.refresh_token,
-  }));
-
-export type TableauAccessToken = z.infer<typeof tableauAccessTokenSchema>;
 
 export const mcpAccessTokenSchema = z.object({
   sub: requiredString('sub'),
