@@ -196,13 +196,13 @@ used to configure the HTTP server.
 
 When a URL for `OAUTH_ISSUER` is provided, the following environment variables apply:
 
-| **Variable**                          | **Description**                                     | **Default**               | **Notes**                                                |
-| ------------------------------------- | --------------------------------------------------- | ------------------------- | -------------------------------------------------------- |
-| `OAUTH_ISSUER`                        | The issuer of the OAuth server.                     |                           | For testing, use `http://127.0.0.1:3927`                 |
-| `OAUTH_REDIRECT_URI`                  | The redirect URI for the OAuth flow.                | `{OAUTH_ISSUER}/Callback` |                                                          |
-| `OAUTH_JWT_SECRET`                    | The symmetric secret to sign the access token with. |                           | Required. See [jose SignJWT docs][sign-jwt] for details. |
-| `OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS` | The timeout for the OAuth authorization codes.      | _10 seconds_              |                                                          |
-| `OAUTH_REFRESH_TOKEN_TIMEOUT_MS`      | The timeout for the OAuth refresh tokens.           | _30 days_                 |                                                          |
+| **Variable**                          | **Description**                                     | **Default**               | **Notes**                                                               |
+| ------------------------------------- | --------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------- |
+| `OAUTH_ISSUER`                        | The issuer of the OAuth server.                     |                           | Required if `AUTH` is `oauth`. For testing, use `http://127.0.0.1:3927` |
+| `OAUTH_REDIRECT_URI`                  | The redirect URI for the OAuth flow.                | `{OAUTH_ISSUER}/Callback` |                                                                         |
+| `OAUTH_JWT_SECRET`                    | The symmetric secret to sign the access token with. |                           | Required. See [jose SignJWT docs][sign-jwt] for details.                |
+| `OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS` | The timeout for the OAuth authorization codes.      | _10 seconds_              |                                                                         |
+| `OAUTH_REFRESH_TOKEN_TIMEOUT_MS`      | The timeout for the OAuth refresh tokens.           | _30 days_                 |                                                                         |
 
 ##### DATASOURCE_CREDENTIALS
 
