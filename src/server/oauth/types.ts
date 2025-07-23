@@ -10,7 +10,7 @@ export type AuthenticatedRequest = express.Request & {
 export type Tokens = {
   accessToken: string;
   refreshToken: string;
-  expiresIn: number;
+  expiresInSeconds: number;
 };
 
 export type PendingAuthorization = {

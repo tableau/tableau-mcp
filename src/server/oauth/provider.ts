@@ -433,7 +433,7 @@ export class OAuthProvider {
           return;
         }
 
-        const { accessToken, refreshToken, expiresIn } = tokensResult.value;
+        const { accessToken, refreshToken, expiresInSeconds } = tokensResult.value;
 
         const restApi = new RestApi(this.config.server);
         restApi.setCredentials(accessToken, 'unknown user id');
@@ -449,7 +449,7 @@ export class OAuthProvider {
           tokens: {
             accessToken,
             refreshToken,
-            expiresIn,
+            expiresInSeconds,
           },
           expiresAt: Date.now() + this.config.oauth.authzCodeTimeoutMs,
         });
@@ -534,7 +534,7 @@ export class OAuthProvider {
           res.json({
             access_token: accessToken,
             token_type: 'Bearer',
-            expires_in: authCode.tokens.expiresIn,
+            expires_in: this.config.oauth.accessTokenTimeoutMs / 1000,
             refresh_token: refreshTokenId,
             scope: 'read',
           });
@@ -553,16 +553,39 @@ export class OAuthProvider {
             return;
           }
 
-          // TODO: Refresh tokens if needed
-          // * Should we just always refresh the Tableau tokens when the MCP access token is refreshed?
-          // * Should we configure the lifetime of the MCP access token to be shorter than the Tableau tokens?
-          // * Is the expiration time of the Tableau tokens configurable for Server?
-          const accessToken = await this.createAccessToken(tokenData);
+          const { refreshToken: tableauRefreshToken } = tokenData.tokens;
+
+          const tokensResult = await this.exchangeRefreshToken(
+            tableauRefreshToken,
+            TABLEAU_CLIENT_ID,
+          );
+
+          let accessToken: string;
+          if (tokensResult.isErr()) {
+            // If the refresh token exchange fails, reuse the existing Tableau access token
+            // which may nor may not be expired.
+            accessToken = await this.createAccessToken(tokenData);
+          } else {
+            const {
+              accessToken: newTableauAccessToken,
+              refreshToken: newTableauRefreshToken,
+              expiresInSeconds,
+            } = tokensResult.value;
+
+            accessToken = await this.createAccessToken({
+              user: tokenData.user,
+              tokens: {
+                accessToken: newTableauAccessToken,
+                refreshToken: newTableauRefreshToken,
+                expiresInSeconds,
+              },
+            });
+          }
 
           res.json({
             access_token: accessToken,
             token_type: 'Bearer',
-            expires_in: tokenData.tokens.expiresIn,
+            expires_in: this.config.oauth.accessTokenTimeoutMs / 1000,
             scope: 'read',
           });
           return;
@@ -610,7 +633,13 @@ export class OAuthProvider {
         );
       }
 
-      const { tableauAccessToken, tableauRefreshToken, sub } = mcpAccessToken.data;
+      const { tableauAccessToken, tableauRefreshToken, tableauExpiresAt, sub } =
+        mcpAccessToken.data;
+
+      if (Date.now() > tableauExpiresAt) {
+        return new Err('Invalid or expired access token');
+      }
+
       const authInfo: TableauAuthInfo = {
         userId: sub,
         accessToken: tableauAccessToken,
@@ -644,6 +673,7 @@ export class OAuthProvider {
       sub: tokenData.user.name,
       tableauAccessToken: tokenData.tokens.accessToken,
       tableauRefreshToken: tokenData.tokens.refreshToken,
+      tableauExpiresAt: Date.now() + tokenData.tokens.expiresInSeconds * 1000,
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
@@ -701,6 +731,29 @@ export class OAuthProvider {
 
       const errorText = JSON.stringify(error.response.data);
       return Err(`Failed to exchange authorization code: ${error.response.status} - ${errorText}`);
+    }
+  }
+
+  private async exchangeRefreshToken(
+    refreshToken: string,
+    clientId: string,
+  ): Promise<Result<TableauAccessToken, string>> {
+    try {
+      const result = await getTokenResult(this.config.server, {
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: clientId,
+        site_namespace: '',
+      });
+
+      return Ok(result);
+    } catch (error) {
+      if (!isAxiosError(error) || !error.response) {
+        return Err(`Failed to exchange refresh token: ${getExceptionMessage(error)}`);
+      }
+
+      const errorText = JSON.stringify(error.response.data);
+      return Err(`Failed to exchange refresh token: ${error.response.status} - ${errorText}`);
     }
   }
 }

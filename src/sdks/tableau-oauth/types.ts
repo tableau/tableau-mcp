@@ -2,23 +2,31 @@ import { z } from 'zod';
 
 import { requiredString } from '../../utils/requiredStrings.js';
 
-export const tableauAccessTokenRequestSchema = z.object({
-  grant_type: z.enum(['authorization_code', 'refresh_token']),
-  code: z.string(),
-  code_verifier: z.string(),
-  redirect_uri: z.string(),
-  client_id: z.string(),
-});
+export const tableauAccessTokenRequestSchema = z.discriminatedUnion('grant_type', [
+  z.object({
+    grant_type: z.literal('authorization_code'),
+    code: z.string(),
+    code_verifier: z.string(),
+    redirect_uri: z.string(),
+    client_id: z.string(),
+  }),
+  z.object({
+    grant_type: z.literal('refresh_token'),
+    client_id: z.string(),
+    refresh_token: z.string(),
+    site_namespace: z.string(),
+  }),
+]);
 
 export const tableauAccessTokenResponseSchema = z
   .object({
     access_token: requiredString('access_token'),
-    expires_in: z.number().int().positive(),
+    expires_in: z.number().int().nonnegative(),
     refresh_token: requiredString('refresh_token'),
   })
   .transform((data) => ({
     accessToken: data.access_token,
-    expiresIn: data.expires_in,
+    expiresInSeconds: data.expires_in,
     refreshToken: data.refresh_token,
   }));
 
