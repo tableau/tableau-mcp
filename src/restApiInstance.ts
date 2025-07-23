@@ -24,7 +24,7 @@ const getNewRestApiInstanceAsync = async (
   config: Config,
   requestId: RequestId,
   server: Server,
-  authInfo?: { accessToken?: string; userId?: string },
+  authInfo?: TableauAuthInfo,
 ): Promise<RestApi> => {
   const restApi = new RestApi(config.server, {
     requestInterceptor: [
@@ -45,7 +45,11 @@ const getNewRestApiInstanceAsync = async (
       siteName: config.siteName,
     });
   } else {
-    restApi.setCredentials(authInfo?.accessToken ?? '', authInfo?.userId ?? '');
+    if (!authInfo?.accessToken || !authInfo?.userId) {
+      throw new Error('Auth info is required when not signing in first.');
+    }
+
+    restApi.setCredentials(authInfo.accessToken, authInfo.userId);
   }
 
   return restApi;
