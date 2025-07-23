@@ -63,6 +63,10 @@ describe('queryDatasourceTool', () => {
     };
   });
 
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
   it('should create a tool instance with correct properties', () => {
     const queryDatasourceTool = getQueryDatasourceTool(new Server());
     expect(queryDatasourceTool.name).toBe('query-datasource');
@@ -230,10 +234,11 @@ describe('queryDatasourceTool', () => {
       );
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Filter validation failed for field "Region"');
-      expect(result.content[0].text).toContain('Wast');
-      expect(result.content[0].text).toContain('Did you mean:');
-      expect(result.content[0].text).toContain('West'); // Should suggest fuzzy match
+      const errorResponse = JSON.parse(result.content[0].text as string);
+      expect(errorResponse.message).toContain('Filter validation failed for field "Region"');
+      expect(errorResponse.message).toContain('Wast');
+      expect(errorResponse.message).toContain('Did you mean:');
+      expect(errorResponse.message).toContain('West'); // Should suggest fuzzy match
 
       // Should call only the validation query & error on invalid values
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
@@ -278,12 +283,11 @@ describe('queryDatasourceTool', () => {
       );
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain(
-        'Filter validation failed for field "Customer Name"',
-      );
-      expect(result.content[0].text).toContain('starts with "Jon"');
-      expect(result.content[0].text).toContain('Similar values in this field:');
-      expect(result.content[0].text).toContain('John Doe'); // Should suggest similar value
+      const errorResponse = JSON.parse(result.content[0].text as string);
+      expect(errorResponse.message).toContain('Filter validation failed for field "Customer Name"');
+      expect(errorResponse.message).toContain('starts with "Jon"');
+      expect(errorResponse.message).toContain('Similar values in this field:');
+      expect(errorResponse.message).toContain('John Doe'); // Should suggest similar value
 
       // Should call main query first, then validation query
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
@@ -328,7 +332,7 @@ describe('queryDatasourceTool', () => {
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
     });
 
-    it('should not run SET/MATCH filters validation when DISABLE_DATASOURCE_QUERY_FILTER_VALIDATION environment variable is true', async () => {
+    it('should not run SET/MATCH filters validation when DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION environment variable is true', async () => {
       process.env.DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION = 'true';
 
       const mockMainQueryResult = {
@@ -423,11 +427,11 @@ describe('queryDatasourceTool', () => {
       );
 
       expect(result.isError).toBe(true);
-      const errorText = result.content[0].text as string;
-      expect(errorText).toContain('Filter validation failed for field "Region"');
-      expect(errorText).toContain('Filter validation failed for field "Category"');
-      expect(errorText).toContain('InvalidRegion');
-      expect(errorText).toContain('InvalidCategory');
+      const errorResponse = JSON.parse(result.content[0].text as string);
+      expect(errorResponse.message).toContain('Filter validation failed for field "Region"');
+      expect(errorResponse.message).toContain('Filter validation failed for field "Category"');
+      expect(errorResponse.message).toContain('InvalidRegion');
+      expect(errorResponse.message).toContain('InvalidCategory');
 
       // Should call main query first, then both validation queries
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);

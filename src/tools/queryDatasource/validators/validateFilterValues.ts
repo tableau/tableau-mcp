@@ -254,8 +254,6 @@ async function validateMatchFilter(
       }
     }
 
-    const suggestions = Array.from(similarValues).slice(0, 5);
-
     const patternDescriptions: Array<string> = [];
     if (filter.startsWith) patternDescriptions.push(`starts with "${filter.startsWith}"`);
     if (filter.endsWith) patternDescriptions.push(`ends with "${filter.endsWith}"`);
@@ -274,7 +272,7 @@ async function validateMatchFilter(
     return new Err({
       field: fieldCaption,
       invalidValues: patternDescriptions,
-      sampleValues: suggestions,
+      sampleValues: Array.from(similarValues),
       message,
     });
   }

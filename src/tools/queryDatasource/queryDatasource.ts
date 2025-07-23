@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
@@ -18,6 +19,16 @@ const paramsSchema = {
   datasourceLuid: z.string().nonempty(),
   query: Query,
 };
+
+export type QueryDatasourceError =
+  | {
+      type: 'filter-validation';
+      message: string;
+    }
+  | {
+      type: 'tableau-error';
+      error: z.infer<typeof TableauError>;
+    };
 
 export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema> => {
   const queryDatasourceTool = new Tool({
@@ -72,16 +83,38 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
                 if (filterValidationResult.isErr()) {
                   const errors = filterValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join('\n\n');
-                  throw new Error(errorMessage);
+                  return new Err({
+                    type: 'filter-validation',
+                    message: errorMessage,
+                  } as QueryDatasourceError);
                 }
               }
 
-              return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+              const result = await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+              if (result.isErr()) {
+                return new Err({
+                  type: 'tableau-error',
+                  error: result.error,
+                } as QueryDatasourceError);
+              }
+              return result;
             },
           });
         },
-        getErrorText: (error: z.infer<typeof TableauError>) => {
-          return JSON.stringify({ requestId, ...handleQueryDatasourceError(error) });
+        getErrorText: (error: QueryDatasourceError) => {
+          switch (error.type) {
+            case 'filter-validation':
+              return JSON.stringify({
+                requestId,
+                errorType: 'validation',
+                message: error.message,
+              });
+            case 'tableau-error':
+              return JSON.stringify({
+                requestId,
+                ...handleQueryDatasourceError(error.error),
+              });
+          }
         },
       });
     },
