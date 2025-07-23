@@ -5,6 +5,7 @@ import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
 const MINUTES_10_MS = 10 * 60 * 1000;
+const HOURS_1_MS = 60 * 60 * 1000;
 const HOURS_24_MS = 24 * 60 * 60 * 1000;
 const DAYS_30_MS = 30 * 24 * 60 * 60 * 1000;
 const YEARS_1_MS = 365.25 * 24 * 60 * 60 * 1000;
@@ -84,6 +85,7 @@ export class Config {
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
         defaultValue: MINUTES_10_MS,
         minValue: 0,
+        maxValue: HOURS_1_MS,
       }),
       accessTokenTimeoutMs: parseNumber(accessTokenTimeoutMs, {
         defaultValue: HOURS_24_MS,
@@ -205,7 +207,7 @@ function parseNumber(
     return defaultValue;
   }
 
-  const number = parseInt(value, 10);
+  const number = parseFloat(value);
   return isNaN(number) ||
     (minValue !== undefined && number < minValue) ||
     (maxValue !== undefined && number > maxValue)
@@ -217,4 +219,5 @@ export const getConfig = (): Config => new Config();
 
 export const exportedForTesting = {
   Config,
+  parseNumber,
 };
