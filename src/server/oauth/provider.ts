@@ -544,6 +544,7 @@ export class OAuthProvider {
           const { refreshToken } = result.data;
           const tokenData = this.refreshTokens.get(refreshToken);
           if (!tokenData || tokenData.expiresAt < Date.now()) {
+            // Refresh token is expired
             this.refreshTokens.delete(refreshToken);
             res.status(400).json({
               error: 'invalid_grant',
@@ -596,6 +597,12 @@ export class OAuthProvider {
         issuer: this.jwtIssuer,
       });
 
+      if (payload.exp && payload.exp < Date.now()) {
+        // https://github.com/modelcontextprotocol/inspector/issues/608
+        // MCP Inspector Not Using Refresh Token for Token Validation
+        return new Err('Invalid or expired access token');
+      }
+
       const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
       if (!mcpAccessToken.success) {
         return Err(
@@ -618,8 +625,7 @@ export class OAuthProvider {
         extra: authInfo,
       });
     } catch {
-      // TODO: Auto-refresh logic would go here
-      throw new Error('Invalid or expired access token');
+      return new Err('Invalid or expired access token');
     }
   }
 
@@ -641,7 +647,7 @@ export class OAuthProvider {
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setExpirationTime(Date.now() + (tokenData.tokens.expiresIn - 30 * 60) * 1000) // 30 minutes before expiration
+      .setExpirationTime(Date.now() + this.config.oauth.accessTokenTimeoutMs)
       .setAudience(this.jwtAudience)
       .setIssuer(this.jwtIssuer)
       .sign(this.jwtSecret);

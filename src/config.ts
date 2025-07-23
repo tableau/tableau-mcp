@@ -4,6 +4,11 @@ import { isToolName, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
+const MINUTES_10_MS = 10 * 60 * 1000;
+const HOURS_24_MS = 24 * 60 * 60 * 1000;
+const DAYS_30_MS = 30 * 24 * 60 * 60 * 1000;
+const YEARS_1_MS = 365.25 * 24 * 60 * 60 * 1000;
+
 export class Config {
   auth: 'pat' | 'oauth';
   server: string;
@@ -27,6 +32,7 @@ export class Config {
     redirectUri: string;
     jwtSecret: string;
     authzCodeTimeoutMs: number;
+    accessTokenTimeoutMs: number;
     refreshTokenTimeoutMs: number;
   };
 
@@ -49,6 +55,7 @@ export class Config {
       OAUTH_JWT_SECRET: jwtSecret,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
+      OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
@@ -60,7 +67,11 @@ export class Config {
     this.transport = isTransport(transport) ? transport : 'stdio';
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
-    this.httpPort = parseNumber(process.env[httpPortEnvVarName?.trim() || 'PORT'], 3927);
+    this.httpPort = parseNumber(process.env[httpPortEnvVarName?.trim() || 'PORT'], {
+      defaultValue: 3927,
+      minValue: 1,
+      maxValue: 65535,
+    });
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
@@ -70,8 +81,20 @@ export class Config {
       issuer: oauthIssuer ?? '',
       redirectUri: redirectUri ?? (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
       jwtSecret: jwtSecret ?? '',
-      authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, 10 * 60 * 1000), // 10 minutes
-      refreshTokenTimeoutMs: parseNumber(refreshTokenTimeoutMs, 30 * 24 * 60 * 60 * 1000), // 30 days
+      authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
+        defaultValue: MINUTES_10_MS,
+        minValue: 0,
+      }),
+      accessTokenTimeoutMs: parseNumber(accessTokenTimeoutMs, {
+        defaultValue: HOURS_24_MS,
+        minValue: 0,
+        maxValue: DAYS_30_MS,
+      }),
+      refreshTokenTimeoutMs: parseNumber(refreshTokenTimeoutMs, {
+        defaultValue: DAYS_30_MS,
+        minValue: 0,
+        maxValue: YEARS_1_MS,
+      }),
     };
 
     if (this.oauth.enabled) {
@@ -166,13 +189,28 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
   }
 }
 
-function parseNumber(value: string | undefined, defaultValue: number): number {
+function parseNumber(
+  value: string | undefined,
+  {
+    defaultValue,
+    minValue,
+    maxValue,
+  }: { defaultValue: number; minValue?: number; maxValue?: number } = {
+    defaultValue: 0,
+    minValue: Number.NEGATIVE_INFINITY,
+    maxValue: Number.POSITIVE_INFINITY,
+  },
+): number {
   if (!value) {
     return defaultValue;
   }
 
   const number = parseInt(value, 10);
-  return isNaN(number) || number < 0 ? defaultValue : number;
+  return isNaN(number) ||
+    (minValue !== undefined && number < minValue) ||
+    (maxValue !== undefined && number > maxValue)
+    ? defaultValue
+    : number;
 }
 
 export const getConfig = (): Config => new Config();
