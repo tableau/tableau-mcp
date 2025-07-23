@@ -201,8 +201,9 @@ When a URL for `OAUTH_ISSUER` is provided, the following environment variables a
 | `OAUTH_ISSUER`                        | The issuer of the OAuth server.                     |                           | Required if `AUTH` is `oauth`. For testing, use `http://127.0.0.1:3927` |
 | `OAUTH_REDIRECT_URI`                  | The redirect URI for the OAuth flow.                | `{OAUTH_ISSUER}/Callback` |                                                                         |
 | `OAUTH_JWT_SECRET`                    | The symmetric secret to sign the access token with. |                           | Required. See [jose SignJWT docs][sign-jwt] for details.                |
-| `OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS` | The timeout for the OAuth authorization codes.      | _10 seconds_              |                                                                         |
-| `OAUTH_REFRESH_TOKEN_TIMEOUT_MS`      | The timeout for the OAuth refresh tokens.           | _30 days_                 |                                                                         |
+| `OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS` | The timeout for the OAuth authorization codes.      | _10 seconds_              | Max: 1 hour.                                                            |
+| `OAUTH_ACCESS_TOKEN_TIMEOUT_MS`       | The timeout for the OAuth access tokens.            | _24 hours_                | Max: 30 days.                                                           |
+| `OAUTH_REFRESH_TOKEN_TIMEOUT_MS`      | The timeout for the OAuth refresh tokens.           | _30 days_                 | Max: 1 year.                                                            |
 
 ##### DATASOURCE_CREDENTIALS
 
