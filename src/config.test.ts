@@ -33,6 +33,11 @@ describe('Config', () => {
       INCLUDE_TOOLS: undefined,
       EXCLUDE_TOOLS: undefined,
       MAX_RESULT_LIMIT: undefined,
+      OAUTH_ISSUER: undefined,
+      OAUTH_REDIRECT_URI: undefined,
+      OAUTH_JWT_SECRET: undefined,
+      OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: undefined,
+      OAUTH_REFRESH_TOKEN_TIMEOUT_MS: undefined,
     };
   });
 
@@ -281,7 +286,49 @@ describe('Config', () => {
     });
   });
 
-  describe('HTTP port parsing', () => {
+  describe('HTTP server config parsing', () => {
+    it('should set sslKey to default when SSL_KEY is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.sslKey).toBe('');
+    });
+
+    it('should set sslKey to the specified value when SSL_KEY is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        SSL_KEY: 'path/to/ssl-key.pem',
+      };
+
+      const config = new Config();
+      expect(config.sslKey).toBe('path/to/ssl-key.pem');
+    });
+
+    it('should set sslCert to default when SSL_CERT is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.sslCert).toBe('');
+    });
+
+    it('should set sslCert to the specified value when SSL_CERT is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        SSL_CERT: 'path/to/ssl-cert.pem',
+      };
+
+      const config = new Config();
+      expect(config.sslCert).toBe('path/to/ssl-cert.pem');
+    });
+
     it('should set httpPort to default when HTTP_PORT_ENV_VAR_NAME and PORT are not set', () => {
       process.env = {
         ...process.env,
@@ -438,6 +485,137 @@ describe('Config', () => {
       expect(() => new Config()).toThrow(
         'The environment variable CORS_ORIGIN_CONFIG is not a valid array of URLs: ["https://example.com", "invalid"]',
       );
+    });
+  });
+
+  describe('OAuth configuration', () => {
+    const defaultOAuthEnvVars = {
+      ...defaultEnvVars,
+      OAUTH_ISSUER: 'https://example.com',
+      OAUTH_JWT_SECRET: 'test-jwt-secret',
+    } as const;
+
+    const defaultOAuthTimeoutMs = {
+      authzCodeTimeoutMs: 10 * 60 * 1000,
+      refreshTokenTimeoutMs: 30 * 24 * 60 * 60 * 1000,
+    };
+
+    const defaultOAuthConfig = {
+      enabled: true,
+      issuer: defaultOAuthEnvVars.OAUTH_ISSUER,
+      redirectUri: `${defaultOAuthEnvVars.OAUTH_ISSUER}/Callback`,
+      jwtSecret: 'test-jwt-secret',
+      ...defaultOAuthTimeoutMs,
+    } as const;
+
+    it('should default to disabled', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        enabled: false,
+        issuer: '',
+        redirectUri: '',
+        jwtSecret: '',
+        ...defaultOAuthTimeoutMs,
+      });
+    });
+
+    it('should enable OAuth when OAUTH_ISSUER is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual(defaultOAuthConfig);
+    });
+
+    it('should set redirectUri to the specified value when OAUTH_REDIRECT_URI is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_REDIRECT_URI: 'https://example.com/CustomCallback',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        redirectUri: 'https://example.com/CustomCallback',
+      });
+    });
+
+    it('should set authzCodeTimeoutMs to the specified value when OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: '5678',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        authzCodeTimeoutMs: 5678,
+      });
+    });
+
+    it('should set refreshTokenTimeoutMs to the specified value when OAUTH_REFRESH_TOKEN_TIMEOUT_MS is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_REFRESH_TOKEN_TIMEOUT_MS: '1234',
+      };
+
+      const config = new Config();
+      expect(config.oauth.refreshTokenTimeoutMs).toBe(1234);
+    });
+
+    it('should throw error when OAUTH_REDIRECT_URI is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_REDIRECT_URI: '',
+      };
+
+      expect(() => new Config()).toThrow('The environment variable OAUTH_REDIRECT_URI is not set');
+    });
+
+    it('should throw error when OAUTH_JWT_SECRET is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_JWT_SECRET: '',
+      };
+
+      expect(() => new Config()).toThrow('The environment variable OAUTH_JWT_SECRET is not set');
+    });
+
+    it('should throw error when AUTH is "oauth" and OAUTH_ISSUER is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        AUTH: 'oauth',
+        OAUTH_ISSUER: '',
+      };
+
+      expect(() => new Config()).toThrow('When auth is "oauth", OAUTH_ISSUER must be set');
+    });
+
+    it('should allow PAT_NAME and PAT_VALUE to be empty when AUTH is "oauth"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        PAT_NAME: undefined,
+        PAT_VALUE: undefined,
+        AUTH: 'oauth',
+      };
+
+      const config = new Config();
+      expect(config.patName).toBe('');
+      expect(config.patValue).toBe('');
     });
   });
 });

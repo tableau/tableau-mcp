@@ -163,16 +163,17 @@ These config files will be used in tool configuration explained below.
 | ------------ | ----------------------------------------------------------------------------------------------------------------- |
 | `SERVER`     | The URL of the Tableau server.                                                                                    |
 | `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site. |
-| `PAT_NAME`   | The name of the Tableau [Personal Access Token][pat] to use for authentication.                                   |
-| `PAT_VALUE`  | The value of the Tableau [Personal Access Token][pat] to use for authentication.                                  |
 
 #### Optional Environment Variables
 
 | **Variable**             | **Description**                                                                                     | **Default**                        | **Note**                                                                                                                                                                                    |
 | ------------------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `TRANSPORT`              | The MCP transport type to use for the server.                                                       | `stdio`                            | Possible values are `stdio` or `http`. For `http`, see [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
+| `AUTH`                   | The authentication method to use by the server.                                                     | `pat`                              | Possible values are `pat` or `oauth`. When `oauth`, `OAUTH_ISSUER` must also be provided. See [OAUTH2 Configuration](#oauth2-configuration) below for additional variables.                 |
+| `PAT_NAME`               | The name of the Tableau [Personal Access Token][pat] to use for authentication.                     |                                    | Required if `AUTH` is `pat`.                                                                                                                                                                |
+| `PAT_VALUE`              | The value of the Tableau [Personal Access Token][pat] to use for authentication.                    |                                    | Required if `AUTH` is `pat`.                                                                                                                                                                |
 | `DEFAULT_LOG_LEVEL`      | The default logging level of the server.                                                            | `debug`                            |                                                                                                                                                                                             |
-| `DATASOURCE_CREDENTIALS` | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
+| `DATASOURCE_CREDENTIALS` | A JSON string that includes usernames and passwords for any datasources that require them.          |                                    | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
 | `DISABLE_LOG_MASKING`    | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                                                                                                                             |
 | `INCLUDE_TOOLS`          | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                                                                                                                    |
 | `EXCLUDE_TOOLS`          | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                                                                                                                    |
@@ -190,6 +191,18 @@ used to configure the HTTP server.
 | `SSL_KEY`                         | The path to the SSL key file to use for the HTTP server.         |             |                                                                                                                         |
 | `SSL_CERT`                        | The path to the SSL certificate file to use for the HTTP server. |             |                                                                                                                         |
 | `CORS_ORIGIN_CONFIG`              | The origin or origins to allow CORS requests from.               | `true`      | Acceptable values include `true`, `false`, `*`, or a URL or array of URLs. See [cors config options][cors] for details. |
+
+#### OAUTH2 Configuration
+
+When a URL for `OAUTH_ISSUER` is provided, the following environment variables apply:
+
+| **Variable**                          | **Description**                                     | **Default**               | **Notes**                                                |
+| ------------------------------------- | --------------------------------------------------- | ------------------------- | -------------------------------------------------------- |
+| `OAUTH_ISSUER`                        | The issuer of the OAuth server.                     |                           | For testing, use `http://127.0.0.1:3927`                 |
+| `OAUTH_REDIRECT_URI`                  | The redirect URI for the OAuth flow.                | `{OAUTH_ISSUER}/Callback` |                                                          |
+| `OAUTH_JWT_SECRET`                    | The symmetric secret to sign the access token with. |                           | Required. See [jose SignJWT docs][sign-jwt] for details. |
+| `OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS` | The timeout for the OAuth authorization codes.      | _10 seconds_              |                                                          |
+| `OAUTH_REFRESH_TOKEN_TIMEOUT_MS`      | The timeout for the OAuth refresh tokens.           | _30 days_                 |                                                          |
 
 ##### DATASOURCE_CREDENTIALS
 
@@ -317,3 +330,4 @@ To set up local debugging with breakpoints:
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [express]: https://expressjs.com/
 [cors]: https://expressjs.com/en/resources/middleware/cors.html#configuration-options
+[sign-jwt]: https://github.com/panva/jose/blob/main/docs/jwt/sign/classes/SignJWT.md#examples

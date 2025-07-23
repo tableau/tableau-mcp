@@ -61,9 +61,9 @@ export class OAuthProvider {
   private readonly jwtIssuer: string;
 
   constructor() {
-    this.jwtSecret = new TextEncoder().encode(this.config.jwtSecret);
+    this.jwtSecret = new TextEncoder().encode(this.config.oauth.jwtSecret);
     this.jwtAudience = 'tableau-mcp-server';
-    this.jwtIssuer = this.config.oauthIssuer;
+    this.jwtIssuer = this.config.oauth.issuer;
   }
 
   /**
@@ -155,7 +155,7 @@ export class OAuthProvider {
      * available endpoints, supported flows, and capabilities.
      */
     app.get('/.well-known/oauth-authorization-server', (req, res) => {
-      const origin = this.config.oauthIssuer;
+      const origin = this.config.oauth.issuer;
       res.json({
         issuer: origin,
         authorization_endpoint: `${origin}/oauth/authorize`,
@@ -354,7 +354,10 @@ export class OAuthProvider {
       });
 
       // Clean up expired authorizations
-      setTimeout(() => this.pendingAuthorizations.delete(authKey), this.config.authzCodeTimeoutMs);
+      setTimeout(
+        () => this.pendingAuthorizations.delete(authKey),
+        this.config.oauth.authzCodeTimeoutMs,
+      );
 
       // Redirect to Tableau OAuth
       const tableauCodeChallenge = this.generateCodeChallenge(codeChallenge);
@@ -363,7 +366,7 @@ export class OAuthProvider {
       oauthUrl.searchParams.set('code_challenge', tableauCodeChallenge);
       oauthUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
       oauthUrl.searchParams.set('response_type', 'code');
-      oauthUrl.searchParams.set('redirect_uri', this.config.redirectUri);
+      oauthUrl.searchParams.set('redirect_uri', this.config.oauth.redirectUri);
       oauthUrl.searchParams.set('state', `${authKey}:${tableauState}`);
       oauthUrl.searchParams.set('device_id', DEVICE_ID);
       oauthUrl.searchParams.set('device_name', 'tableau-mcp');
@@ -417,7 +420,7 @@ export class OAuthProvider {
 
         const tokensResult = await this.exchangeAuthorizationCode(
           code,
-          this.config.redirectUri,
+          this.config.oauth.redirectUri,
           TABLEAU_CLIENT_ID,
           pendingAuth.codeChallenge,
         );
@@ -448,7 +451,7 @@ export class OAuthProvider {
             refreshToken,
             expiresIn,
           },
-          expiresAt: Date.now() + this.config.authzCodeTimeoutMs,
+          expiresAt: Date.now() + this.config.oauth.authzCodeTimeoutMs,
         });
 
         // Clean up
@@ -523,7 +526,7 @@ export class OAuthProvider {
             user: authCode.user,
             clientId: authCode.clientId,
             tokens: authCode.tokens,
-            expiresAt: Date.now() + this.config.refreshTokenTimeoutMs,
+            expiresAt: Date.now() + this.config.oauth.refreshTokenTimeoutMs,
           });
 
           this.authorizationCodes.delete(code);

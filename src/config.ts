@@ -18,15 +18,17 @@ export class Config {
   datasourceCredentials: string;
   defaultLogLevel: string;
   disableLogMasking: boolean;
-  oauthIssuer: string;
-  oauthEnabled: boolean;
-  jwtSecret: string;
-  redirectUri: string;
-  authzCodeTimeoutMs: number;
-  refreshTokenTimeoutMs: number;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
   maxResultLimit: number | null;
+  oauth: {
+    enabled: boolean;
+    issuer: string;
+    redirectUri: string;
+    jwtSecret: string;
+    authzCodeTimeoutMs: number;
+    refreshTokenTimeoutMs: number;
+  };
 
   constructor() {
     const {
@@ -63,14 +65,20 @@ export class Config {
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
-    this.oauthIssuer = oauthIssuer ?? '';
-    this.jwtSecret = jwtSecret ?? '';
-    this.redirectUri = redirectUri ?? '';
-    this.authzCodeTimeoutMs = parseNumber(authzCodeTimeoutMs, 10 * 60 * 1000); // 10 minutes
-    this.refreshTokenTimeoutMs = parseNumber(refreshTokenTimeoutMs, 30 * 24 * 60 * 60 * 1000); // 30 days
-    this.oauthEnabled = !!this.oauthIssuer;
+    this.oauth = {
+      enabled: !!oauthIssuer,
+      issuer: oauthIssuer ?? '',
+      redirectUri: redirectUri ?? (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
+      jwtSecret: jwtSecret ?? '',
+      authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, 10 * 60 * 1000), // 10 minutes
+      refreshTokenTimeoutMs: parseNumber(refreshTokenTimeoutMs, 30 * 24 * 60 * 60 * 1000), // 30 days
+    };
 
-    if (!this.oauthEnabled && this.auth === 'oauth') {
+    if (this.oauth.enabled) {
+      invariant(this.oauth.issuer, 'The environment variable OAUTH_ISSUER is not set');
+      invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
+      invariant(this.oauth.jwtSecret, 'The environment variable OAUTH_JWT_SECRET is not set');
+    } else if (this.auth === 'oauth') {
       throw new Error('When auth is "oauth", OAUTH_ISSUER must be set');
     }
 
@@ -102,12 +110,6 @@ export class Config {
     if (this.auth === 'pat') {
       invariant(patName, 'The environment variable PAT_NAME is not set');
       invariant(patValue, 'The environment variable PAT_VALUE is not set');
-    }
-
-    if (this.auth === 'oauth') {
-      invariant(oauthIssuer, 'The environment variable OAUTH_ISSUER is not set');
-      invariant(jwtSecret, 'The environment variable JWT_SECRET is not set');
-      invariant(redirectUri, 'The environment variable REDIRECT_URI is not set');
     }
 
     this.server = server;
@@ -170,7 +172,7 @@ function parseNumber(value: string | undefined, defaultValue: number): number {
   }
 
   const number = parseInt(value, 10);
-  return isNaN(number) ? defaultValue : number;
+  return isNaN(number) || number < 0 ? defaultValue : number;
 }
 
 export const getConfig = (): Config => new Config();

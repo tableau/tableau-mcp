@@ -42,7 +42,7 @@ export async function startExpressServer({
   );
 
   const middleware: Array<RequestHandler> = [];
-  if (config.oauthEnabled) {
+  if (config.oauth.enabled) {
     const oauthProvider = new OAuthProvider();
     oauthProvider.setupRoutes(app);
     middleware.push(oauthProvider.authMiddleware);
