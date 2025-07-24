@@ -646,6 +646,27 @@ describe('Config', () => {
       expect(() => new Config()).toThrow('When auth is "oauth", OAUTH_ISSUER must be set');
     });
 
+    it('should default transport to http OAUTH_ISSUER is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        TRANSPORT: undefined,
+      };
+
+      const config = new Config();
+      expect(config.transport).toBe('http');
+    });
+
+    it('should throw error when transport is stdio and auth is "oauth"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        TRANSPORT: 'stdio',
+      };
+
+      expect(() => new Config()).toThrow('TRANSPORT must be "http" when OAUTH_ISSUER is set');
+    });
+
     it('should allow PAT_NAME and PAT_VALUE to be empty when AUTH is "oauth"', () => {
       process.env = {
         ...process.env,
