@@ -89,8 +89,13 @@ Tableau MCP works with both Tableau Server and Tableau cloud data with these pre
 Tableau MCP requires authentication in order to connect with your Tableau Server or Tableau Cloud
 site. This authenticated user must have access to the published data source(s) you plan to access.
 
-Provide your Tableau [Personal Access Token][pat] by setting the `PAT_NAME` and `PAT_VALUE`
-environment variables. See [Environment Variables](#environment-variables) for more information.
+There are several ways to authenticate to Tableau. See
+[Environment Variables](#environment-variables) for more information.:
+
+1. Provide your Tableau [Personal Access Token][pat] by setting the `PAT_NAME` and `PAT_VALUE`
+   environment variables.
+2. Use Tableau OAuth by setting the `AUTH` environment variable to `oauth`. See
+   [OAuth Configuration](#oauth-configuration) for additional required configuration.
 
 ## Configuring AI Tools
 
@@ -195,8 +200,8 @@ used to configure the HTTP server.
 
 #### OAuth Configuration
 
-When a URL for `OAUTH_ISSUER` is provided, the following environment variables apply or have
-additional meaning:
+When a URL for `OAUTH_ISSUER` is provided, the MCP server will require logging in via Tableau OAuth
+to access. The following environment variables will also apply or have additional meaning:
 
 | **Variable**                          | **Description**                                     | **Default**               | **Notes**                                                                                                                                                                     |
 | ------------------------------------- | --------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
