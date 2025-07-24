@@ -26,6 +26,7 @@ export class Config {
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
   maxResultLimit: number | null;
+  disableQueryDatasourceFilterValidation: boolean;
   oauth: {
     enabled: boolean;
     issuer: string;
@@ -58,6 +59,7 @@ export class Config {
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
       MAX_RESULT_LIMIT: maxResultLimit,
+      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
     } = process.env;
 
     this.siteName = siteName ?? '';
@@ -74,6 +76,7 @@ export class Config {
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
+    this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
     this.oauth = {
       enabled: !!oauthIssuer,
       issuer: oauthIssuer ?? '',

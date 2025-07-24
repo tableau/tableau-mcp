@@ -93,6 +93,8 @@ export const TableauError = z
   .partial()
   .passthrough();
 
+export type TableauError = z.infer<typeof TableauError>;
+
 const SortDirection = z.enum(['ASC', 'DESC']);
 
 const FieldBase = z.object({
@@ -269,6 +271,8 @@ export const QueryOutput = z
   })
   .partial()
   .passthrough();
+
+export type QueryOutput = z.infer<typeof QueryOutput>;
 
 const vizqlDataServiceApi = makeApi([
   {

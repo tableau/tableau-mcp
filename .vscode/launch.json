@@ -22,7 +22,8 @@
         "INCLUDE_TOOLS": "${config:tableau.mcp.INCLUDE_TOOLS}",
         "EXCLUDE_TOOLS": "${config:tableau.mcp.EXCLUDE_TOOLS}",
         "MAX_RESULT_LIMIT": "${config:tableau.mcp.MAX_RESULT_LIMIT}",
-        "DISABLE_LOG_MASKING": "${config:tableau.mcp.DISABLE_LOG_MASKING}"
+        "DISABLE_LOG_MASKING": "${config:tableau.mcp.DISABLE_LOG_MASKING}",
+        "DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION": "${config:tableau.mcp.DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION}"
       },
       "args": ["build/index.js"],
       "sourceMaps": true,

@@ -33,6 +33,7 @@ describe('Config', () => {
       INCLUDE_TOOLS: undefined,
       EXCLUDE_TOOLS: undefined,
       MAX_RESULT_LIMIT: undefined,
+      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: undefined,
       OAUTH_ISSUER: undefined,
       OAUTH_REDIRECT_URI: undefined,
       OAUTH_JWT_SECRET: undefined,
@@ -195,6 +196,27 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.maxResultLimit).toBe(100);
+  });
+
+  it('should set disableQueryDatasourceFilterValidation to false by default', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+    };
+
+    const config = new Config();
+    expect(config.disableQueryDatasourceFilterValidation).toBe(false);
+  });
+
+  it('should set disableQueryDatasourceFilterValidation to true when specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: 'true',
+    };
+
+    const config = new Config();
+    expect(config.disableQueryDatasourceFilterValidation).toBe(true);
   });
 
   it('should default transport to stdio when not specified', () => {
