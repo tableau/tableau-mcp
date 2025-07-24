@@ -535,7 +535,7 @@ export class OAuthProvider {
           res.json({
             access_token: accessToken,
             token_type: 'Bearer',
-            expires_in: authCode.tokens.expiresInSeconds,
+            expires_in: this.config.oauth.accessTokenTimeoutMs / 1000,
             refresh_token: refreshTokenId,
             scope: 'read',
           });
@@ -563,7 +563,7 @@ export class OAuthProvider {
           res.json({
             access_token: accessToken,
             token_type: 'Bearer',
-            expires_in: tokenData.tokens.expiresInSeconds,
+            expires_in: this.config.oauth.accessTokenTimeoutMs / 1000,
             scope: 'read',
           });
           return;
