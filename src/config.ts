@@ -77,7 +77,7 @@ export class Config {
     this.oauth = {
       enabled: !!oauthIssuer,
       issuer: oauthIssuer ?? '',
-      redirectUri: redirectUri ?? (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
+      redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
       jwtSecret: jwtSecret ?? '',
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
         defaultValue: TEN_MINUTES_IN_MS,
