@@ -548,6 +548,20 @@ describe('Config', () => {
       });
     });
 
+    it('should set redirectUri to the default value when OAUTH_REDIRECT_URI is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_REDIRECT_URI: '',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        redirectUri: `${defaultOAuthEnvVars.OAUTH_ISSUER}/Callback`,
+      });
+    });
+
     it('should set authzCodeTimeoutMs to the specified value when OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS is set', () => {
       process.env = {
         ...process.env,
@@ -571,16 +585,6 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.oauth.refreshTokenTimeoutMs).toBe(1234);
-    });
-
-    it('should throw error when OAUTH_REDIRECT_URI is not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        OAUTH_REDIRECT_URI: '',
-      };
-
-      expect(() => new Config()).toThrow('The environment variable OAUTH_REDIRECT_URI is not set');
     });
 
     it('should throw error when OAUTH_JWT_SECRET is not set', () => {
