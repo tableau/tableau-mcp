@@ -159,10 +159,10 @@ These config files will be used in tool configuration explained below.
 
 #### Required Environment Variables
 
-| **Variable** | **Description**                                                                                                   |
-| ------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `SERVER`     | The URL of the Tableau server.                                                                                    |
-| `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site. |
+| **Variable** | **Description**                                                                                                                    |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `SERVER`     | The URL of the Tableau server. For Tableau Cloud, specify your site's specific pod e.g. `https://prod-useast-c.online.tableau.com` |
+| `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site.                  |
 
 #### Optional Environment Variables
 
@@ -194,15 +194,17 @@ used to configure the HTTP server.
 
 #### OAuth Configuration
 
-When a URL for `OAUTH_ISSUER` is provided, the following environment variables apply:
+When a URL for `OAUTH_ISSUER` is provided, the following environment variables apply or have
+additional meaning:
 
-| **Variable**                          | **Description**                                     | **Default**               | **Notes**                                                               |
-| ------------------------------------- | --------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------- |
-| `OAUTH_ISSUER`                        | The issuer of the OAuth server.                     |                           | Required if `AUTH` is `oauth`. For testing, use `http://127.0.0.1:3927` |
-| `OAUTH_REDIRECT_URI`                  | The redirect URI for the OAuth flow.                | `{OAUTH_ISSUER}/Callback` |                                                                         |
-| `OAUTH_JWT_SECRET`                    | The symmetric secret to sign the access token with. |                           | Required. See [jose SignJWT docs][sign-jwt] for details.                |
-| `OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS` | The timeout for the OAuth authorization codes.      | _10 seconds_              | Max: 1 hour.                                                            |
-| `OAUTH_REFRESH_TOKEN_TIMEOUT_MS`      | The timeout for the OAuth refresh tokens.           | _30 days_                 | Max: 1 year.                                                            |
+| **Variable**                          | **Description**                                     | **Default**               | **Notes**                                                                                                                                                                     |
+| ------------------------------------- | --------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OAUTH_ISSUER`                        | The issuer of the OAuth server.                     |                           | Required if `AUTH` is `oauth`. For testing, use `http://127.0.0.1:3927`                                                                                                       |
+| `SITE_NAME`                           | The target Tableau site for OAuth.                  |                           | If not provided, users will see the site picker if they have access to multiple sites. Choosing a site from a pod different from the one specified in `SERVER` will not work. |
+| `OAUTH_REDIRECT_URI`                  | The redirect URI for the OAuth flow.                | `{OAUTH_ISSUER}/Callback` |                                                                                                                                                                               |
+| `OAUTH_JWT_SECRET`                    | The symmetric secret to sign the access token with. |                           | Required. See [jose SignJWT docs][sign-jwt] for details.                                                                                                                      |
+| `OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS` | The timeout for the OAuth authorization codes.      | _10 seconds_              | Max: 1 hour.                                                                                                                                                                  |
+| `OAUTH_REFRESH_TOKEN_TIMEOUT_MS`      | The timeout for the OAuth refresh tokens.           | _30 days_                 | Max: 1 year.                                                                                                                                                                  |
 
 ##### DATASOURCE_CREDENTIALS
 
