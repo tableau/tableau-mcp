@@ -202,11 +202,8 @@ export class OAuthProvider {
     app.post('/oauth/register', express.json(), (req, res) => {
       const { redirect_uris } = req.body;
 
-      // Validate redirect URIs if provided
-      let validatedRedirectUris = []; //this.config.validRedirectUris;
-
+      const validatedRedirectUris = [];
       if (redirect_uris && Array.isArray(redirect_uris)) {
-        validatedRedirectUris = [];
         for (const uri of redirect_uris) {
           if (typeof uri !== 'string') {
             res.status(400).json({
@@ -220,19 +217,17 @@ export class OAuthProvider {
           try {
             const url = new URL(uri);
 
-            // Allow HTTPS URLs
             if (url.protocol === 'https:') {
+              // Allow HTTPS URLs
               validatedRedirectUris.push(uri);
-            }
-            // Allow HTTP only for localhost
-            else if (
+            } else if (
               url.protocol === 'http:' &&
               (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
             ) {
+              // Allow HTTP only for localhost
               validatedRedirectUris.push(uri);
-            }
-            // Allow custom schemes
-            else if (url.protocol.match(/^[a-zA-Z][a-zA-Z0-9+.-]*:$/)) {
+            } else if (url.protocol.match(/^[a-zA-Z][a-zA-Z0-9+.-]*:$/)) {
+              // Allow custom schemes
               validatedRedirectUris.push(uri);
             } else {
               res.status(400).json({
