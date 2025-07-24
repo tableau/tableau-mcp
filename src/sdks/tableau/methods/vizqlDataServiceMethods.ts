@@ -22,7 +22,7 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
 
   queryDatasource = async (
     queryRequest: z.infer<typeof QueryRequest>,
-  ): Promise<Result<z.infer<typeof QueryOutput>, z.infer<typeof TableauError>>> => {
+  ): Promise<Result<QueryOutput, TableauError>> => {
     try {
       return Ok(await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader }));
     } catch (error) {
