@@ -64,7 +64,6 @@ export class Config {
 
     this.siteName = siteName ?? '';
     this.auth = auth === 'oauth' ? 'oauth' : 'pat';
-    this.transport = isTransport(transport) ? transport : 'stdio';
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
     this.httpPort = parseNumber(process.env[httpPortEnvVarName?.trim() || 'PORT'], {
@@ -94,10 +93,16 @@ export class Config {
       }),
     };
 
+    this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
+
     if (this.oauth.enabled) {
       invariant(this.oauth.issuer, 'The environment variable OAUTH_ISSUER is not set');
       invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
       invariant(this.oauth.jwtSecret, 'The environment variable OAUTH_JWT_SECRET is not set');
+
+      if (this.transport === 'stdio') {
+        throw new Error('TRANSPORT must be "http" when OAUTH_ISSUER is set');
+      }
     } else if (this.auth === 'oauth') {
       throw new Error('When auth is "oauth", OAUTH_ISSUER must be set');
     }
