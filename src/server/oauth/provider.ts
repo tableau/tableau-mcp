@@ -13,6 +13,7 @@ import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import {
   callbackSchema,
   mcpAccessTokenSchema,
+  mcpAccessTokenSubOnlySchema,
   mcpAuthorizeSchema,
   mcpTokenSchema,
   TableauAuthInfo,
@@ -102,7 +103,7 @@ export class OAuthProvider {
           return;
         }
 
-        const baseUrl = `https://${req.get('host')}`;
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
         res
           .status(401)
           .header(
@@ -182,7 +183,7 @@ export class OAuthProvider {
      */
     app.get('/.well-known/oauth-protected-resource', (req, res) => {
       res.json({
-        resource: `${req.protocol}://${req.get('host')}`,
+        resource: `${req.protocol}://${req.get('host')}/`,
         authorization_servers: [`${req.protocol}://${req.get('host')}`],
         bearer_methods_supported: ['header'],
       });
@@ -433,7 +434,7 @@ export class OAuthProvider {
           return;
         }
 
-        const { accessToken, refreshToken, expiresIn } = tokensResult.value;
+        const { accessToken, refreshToken, expiresInSeconds } = tokensResult.value;
 
         const restApi = new RestApi(this.config.server);
         restApi.setCredentials(accessToken, 'unknown user id');
@@ -449,7 +450,7 @@ export class OAuthProvider {
           tokens: {
             accessToken,
             refreshToken,
-            expiresIn,
+            expiresInSeconds,
           },
           expiresAt: Date.now() + this.config.oauth.authzCodeTimeoutMs,
         });
@@ -534,7 +535,7 @@ export class OAuthProvider {
           res.json({
             access_token: accessToken,
             token_type: 'Bearer',
-            expires_in: authCode.tokens.expiresIn,
+            expires_in: authCode.tokens.expiresInSeconds,
             refresh_token: refreshTokenId,
             scope: 'read',
           });
@@ -562,7 +563,7 @@ export class OAuthProvider {
           res.json({
             access_token: accessToken,
             token_type: 'Bearer',
-            expires_in: tokenData.tokens.expiresIn,
+            expires_in: tokenData.tokens.expiresInSeconds,
             scope: 'read',
           });
           return;
@@ -603,19 +604,34 @@ export class OAuthProvider {
         return new Err('Invalid or expired access token');
       }
 
-      const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
-      if (!mcpAccessToken.success) {
-        return Err(
-          `Invalid access token: ${mcpAccessToken.error.errors.map((e) => e.message).join(', ')}`,
-        );
-      }
+      let authInfo: TableauAuthInfo;
+      if (this.config.auth === 'oauth') {
+        const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
+        if (!mcpAccessToken.success) {
+          return Err(
+            `Invalid access token: ${mcpAccessToken.error.errors.map((e) => e.message).join(', ')}`,
+          );
+        }
 
-      const { tableauAccessToken, tableauRefreshToken, sub } = mcpAccessToken.data;
-      const authInfo: TableauAuthInfo = {
-        userId: sub,
-        accessToken: tableauAccessToken,
-        refreshToken: tableauRefreshToken,
-      };
+        const { tableauAccessToken, tableauRefreshToken, sub } = mcpAccessToken.data;
+
+        authInfo = {
+          userId: sub,
+          accessToken: tableauAccessToken,
+          refreshToken: tableauRefreshToken,
+        };
+      } else {
+        const mcpAccessToken = mcpAccessTokenSubOnlySchema.safeParse(payload);
+        if (!mcpAccessToken.success) {
+          return Err(
+            `Invalid access token: ${mcpAccessToken.error.errors.map((e) => e.message).join(', ')}`,
+          );
+        }
+
+        authInfo = {
+          userId: mcpAccessToken.data.sub,
+        };
+      }
 
       return Ok({
         token,
@@ -642,8 +658,12 @@ export class OAuthProvider {
   private async createAccessToken(tokenData: UserAndTokens): Promise<string> {
     return await new SignJWT({
       sub: tokenData.user.name,
-      tableauAccessToken: tokenData.tokens.accessToken,
-      tableauRefreshToken: tokenData.tokens.refreshToken,
+      ...(this.config.auth === 'oauth'
+        ? {
+            tableauAccessToken: tokenData.tokens.accessToken,
+            tableauRefreshToken: tokenData.tokens.refreshToken,
+          }
+        : {}),
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
