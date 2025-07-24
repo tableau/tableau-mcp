@@ -1,10 +1,7 @@
 /* v8 ignore start -- Exhaustive tests have limited value for this file */
 
-import { z } from 'zod';
-
 import { TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 
-type TableauError = z.infer<typeof TableauError>;
 type TableauErrorDetail = TableauError & Partial<{ condition: string; details: string }>;
 
 /**

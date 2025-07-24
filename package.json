@@ -1,7 +1,7 @@
 {
   "name": "tableau-mcp",
   "description": "A MCP server for Tableau, providing a suite of tools that will make it easier for developers to build AI-applications that integrate with Tableau.",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "homepage": "https://github.com/tableau/tableau-mcp",
   "bugs": "https://github.com/tableau/tableau-mcp/issues",
   "author": "Tableau",
@@ -41,6 +41,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@zodios/core": "^10.9.6",
+    "fast-levenshtein": "^3.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
@@ -54,6 +55,7 @@
     "@modelcontextprotocol/inspector": "^0.16.1",
     "@types/cors": "^2.8.19",
     "@types/eslint__js": "^8.42.3",
+    "@types/fast-levenshtein": "^0.0.1",
     "@types/express": "^5.0.3",
     "@types/node": "^22.15.3",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
