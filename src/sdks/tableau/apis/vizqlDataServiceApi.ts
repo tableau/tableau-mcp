@@ -275,7 +275,7 @@ const vizqlDataServiceApi = makeApi([
     method: 'post',
     path: '/query-datasource',
     alias: 'queryDatasource',
-    description: `Queries a specific data source and returns the resulting data.`,
+    description: 'Queries a specific data source and returns the resulting data.',
     requestFormat: 'json',
     parameters: [
       {
@@ -296,7 +296,8 @@ const vizqlDataServiceApi = makeApi([
     method: 'post',
     path: '/read-metadata',
     alias: 'readMetadata',
-    description: `Requests metadata for a specific data source. The metadata provides information about the data fields, such as field names, data types, and descriptions.`,
+    description:
+      'Requests metadata for a specific data source. The metadata provides information about the data fields, such as field names, data types, and descriptions.',
     requestFormat: 'json',
     parameters: [
       {
@@ -311,7 +312,7 @@ const vizqlDataServiceApi = makeApi([
     method: 'get',
     path: '/simple-request',
     alias: 'simpleRequest',
-    description: `Sends a request that can be used for testing or doing a health check.`,
+    description: 'Sends a request that can be used for testing or doing a health check.',
     requestFormat: 'json',
     response: z.string(),
   },

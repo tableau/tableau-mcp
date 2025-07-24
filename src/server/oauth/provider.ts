@@ -372,7 +372,7 @@ export class OAuthProvider {
       oauthUrl.searchParams.set('device_id', DEVICE_ID);
       oauthUrl.searchParams.set('target_site', this.config.siteName);
       oauthUrl.searchParams.set('device_name', 'tableau-mcp');
-      oauthUrl.searchParams.set('client_type', `tableau-mcp`);
+      oauthUrl.searchParams.set('client_type', 'tableau-mcp');
 
       res.redirect(oauthUrl.toString());
     });
