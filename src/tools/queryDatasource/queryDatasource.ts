@@ -4,7 +4,12 @@ import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
-import { Datasource, Query, TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import {
+  Datasource,
+  Query,
+  QueryOutput,
+  TableauError,
+} from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
@@ -44,7 +49,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
     argsValidator: validateQuery,
     callback: async ({ datasourceLuid, query }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
-      return await queryDatasourceTool.logAndExecute({
+      return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
         args: { datasourceLuid, query },
         callback: async () => {
@@ -86,7 +91,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
                   return new Err({
                     type: 'filter-validation',
                     message: errorMessage,
-                  } as QueryDatasourceError);
+                  });
                 }
               }
 
@@ -95,7 +100,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
                 return new Err({
                   type: 'tableau-error',
                   error: result.error,
-                } as QueryDatasourceError);
+                });
               }
               return result;
             },
