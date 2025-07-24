@@ -4,11 +4,11 @@ import { isToolName, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
-const MINUTES_10_MS = 10 * 60 * 1000;
-const HOURS_1_MS = 60 * 60 * 1000;
-const HOURS_24_MS = 24 * 60 * 60 * 1000;
-const DAYS_30_MS = 30 * 24 * 60 * 60 * 1000;
-const YEARS_1_MS = 365.25 * 24 * 60 * 60 * 1000;
+const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+const ONE_HOUR_IN_MS = 60 * 60 * 1000;
+const TWENTY_FOUR_HOURS_IN_MS = 24 * 60 * 60 * 1000;
+const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
+const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
 export class Config {
   auth: 'pat' | 'oauth';
@@ -83,19 +83,19 @@ export class Config {
       redirectUri: redirectUri ?? (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
       jwtSecret: jwtSecret ?? '',
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
-        defaultValue: MINUTES_10_MS,
+        defaultValue: TEN_MINUTES_IN_MS,
         minValue: 0,
-        maxValue: HOURS_1_MS,
+        maxValue: ONE_HOUR_IN_MS,
       }),
       accessTokenTimeoutMs: parseNumber(accessTokenTimeoutMs, {
-        defaultValue: HOURS_24_MS,
+        defaultValue: TWENTY_FOUR_HOURS_IN_MS,
         minValue: 0,
-        maxValue: DAYS_30_MS,
+        maxValue: THIRTY_DAYS_IN_MS,
       }),
       refreshTokenTimeoutMs: parseNumber(refreshTokenTimeoutMs, {
-        defaultValue: DAYS_30_MS,
+        defaultValue: THIRTY_DAYS_IN_MS,
         minValue: 0,
-        maxValue: YEARS_1_MS,
+        maxValue: ONE_YEAR_IN_MS,
       }),
     };
 
