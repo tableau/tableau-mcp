@@ -4,6 +4,11 @@ import { isToolName, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
+const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+const ONE_HOUR_IN_MS = 60 * 60 * 1000;
+const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
+const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
+
 export class Config {
   auth: 'pat' | 'oauth';
   server: string;
@@ -60,7 +65,11 @@ export class Config {
     this.transport = isTransport(transport) ? transport : 'stdio';
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
-    this.httpPort = parseNumber(process.env[httpPortEnvVarName?.trim() || 'PORT'], 3927);
+    this.httpPort = parseNumber(process.env[httpPortEnvVarName?.trim() || 'PORT'], {
+      defaultValue: 3927,
+      minValue: 1,
+      maxValue: 65535,
+    });
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
@@ -70,8 +79,16 @@ export class Config {
       issuer: oauthIssuer ?? '',
       redirectUri: redirectUri ?? (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
       jwtSecret: jwtSecret ?? '',
-      authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, 10 * 60 * 1000), // 10 minutes
-      refreshTokenTimeoutMs: parseNumber(refreshTokenTimeoutMs, 30 * 24 * 60 * 60 * 1000), // 30 days
+      authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
+        defaultValue: TEN_MINUTES_IN_MS,
+        minValue: 0,
+        maxValue: ONE_HOUR_IN_MS,
+      }),
+      refreshTokenTimeoutMs: parseNumber(refreshTokenTimeoutMs, {
+        defaultValue: THIRTY_DAYS_IN_MS,
+        minValue: 0,
+        maxValue: ONE_YEAR_IN_MS,
+      }),
     };
 
     if (this.oauth.enabled) {
@@ -166,17 +183,33 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
   }
 }
 
-function parseNumber(value: string | undefined, defaultValue: number): number {
+function parseNumber(
+  value: string | undefined,
+  {
+    defaultValue,
+    minValue,
+    maxValue,
+  }: { defaultValue: number; minValue?: number; maxValue?: number } = {
+    defaultValue: 0,
+    minValue: Number.NEGATIVE_INFINITY,
+    maxValue: Number.POSITIVE_INFINITY,
+  },
+): number {
   if (!value) {
     return defaultValue;
   }
 
-  const number = parseInt(value, 10);
-  return isNaN(number) || number < 0 ? defaultValue : number;
+  const number = parseFloat(value);
+  return isNaN(number) ||
+    (minValue !== undefined && number < minValue) ||
+    (maxValue !== undefined && number > maxValue)
+    ? defaultValue
+    : number;
 }
 
 export const getConfig = (): Config => new Config();
 
 export const exportedForTesting = {
   Config,
+  parseNumber,
 };
