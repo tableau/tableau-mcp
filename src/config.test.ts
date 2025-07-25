@@ -51,6 +51,7 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: undefined,
+      SITE_NAME: 'test-site',
     };
 
     expect(() => new Config()).toThrow('The environment variable SERVER is not set');
@@ -60,6 +61,7 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'http://foo.com',
+      SITE_NAME: 'test-site',
     };
 
     expect(() => new Config()).toThrow(
@@ -71,6 +73,7 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'https://',
+      SITE_NAME: 'test-site',
     };
 
     expect(() => new Config()).toThrow(
@@ -112,6 +115,15 @@ describe('Config', () => {
     expect(config.patName).toBe('test-pat-name');
     expect(config.patValue).toBe('test-pat-value');
     expect(config.siteName).toBe('test-site');
+  });
+
+  it('should throw error when SITE_NAME is missing', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'https://test-server.com',
+    };
+
+    expect(() => new Config()).toThrow('The environment variable SITE_NAME is not set');
   });
 
   it('should set default log level to debug when not specified', () => {
@@ -679,6 +691,18 @@ describe('Config', () => {
       const config = new Config();
       expect(config.patName).toBe('');
       expect(config.patValue).toBe('');
+    });
+
+    it('should allow SITE_NAME to be empty when AUTH is "oauth"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        AUTH: 'oauth',
+        SITE_NAME: '',
+      };
+
+      const config = new Config();
+      expect(config.siteName).toBe('');
     });
   });
 
