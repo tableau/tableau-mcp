@@ -107,6 +107,10 @@ export class Config {
       throw new Error('When auth is "oauth", OAUTH_ISSUER must be set');
     }
 
+    if (this.auth !== 'oauth') {
+      invariant(this.siteName, 'The environment variable SITE_NAME is not set');
+    }
+
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =
       isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
