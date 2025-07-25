@@ -434,7 +434,22 @@ export class OAuthProvider {
 
         const restApi = new RestApi(this.config.server);
         restApi.setCredentials(accessToken, 'unknown user id');
-        const session = await restApi.serverMethods.getCurrentServerSession();
+        const sessionResult = await restApi.serverMethods.getCurrentServerSession();
+        if (sessionResult.isErr()) {
+          if (sessionResult.error.type === 'unauthorized') {
+            res.status(401).json({
+              error: 'unauthorized',
+              error_description: `Unable to get the Tableau server session. Ensure the site is from the pod ${this.config.server}. Error: ${JSON.stringify(sessionResult.error)}`,
+            });
+          } else {
+            res.status(500).json({
+              error: 'server_error',
+              error_description:
+                'Internal server error during authorization. Unable to get the Tableau server session. Contact your administrator.',
+            });
+          }
+          return;
+        }
 
         // Generate authorization code
         const authorizationCode = randomBytes(32).toString('hex');
@@ -442,7 +457,7 @@ export class OAuthProvider {
           clientId: pendingAuth.clientId,
           redirectUri: pendingAuth.redirectUri,
           codeChallenge: pendingAuth.codeChallenge,
-          user: session.user,
+          user: sessionResult.value.user,
           tokens: {
             accessToken,
             refreshToken,
@@ -464,7 +479,8 @@ export class OAuthProvider {
         console.error('OAuth callback error:', error);
         res.status(500).json({
           error: 'server_error',
-          error_description: 'Internal server error during authorization',
+          error_description:
+            'Internal server error during authorization. Contact your administrator.',
         });
       }
     });
