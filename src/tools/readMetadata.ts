@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getConfig } from '../config.js';
 import { useRestApi } from '../restApiInstance.js';
 import { Server } from '../server.js';
+import { getTableauAuthInfo } from '../server/oauth/schemas.js';
 import { Tool } from './tool.js';
 import { validateDatasourceLuid } from './validateDatasourceLuid.js';
 
@@ -34,11 +35,12 @@ export const getReadMetadataTool = (server: Server): Tool<typeof paramsSchema> =
       openWorldHint: false,
     },
     argsValidator: validateDatasourceLuid,
-    callback: async ({ datasourceLuid }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ datasourceLuid }, { requestId, authInfo }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await readMetadataTool.logAndExecute({
         requestId,
+        authInfo,
         args: { datasourceLuid },
         callback: async () => {
           return new Ok(
@@ -46,6 +48,7 @@ export const getReadMetadataTool = (server: Server): Tool<typeof paramsSchema> =
               config,
               requestId,
               server,
+              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 return await restApi.vizqlDataServiceMethods.readMetadata({
                   datasource: {

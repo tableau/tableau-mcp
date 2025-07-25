@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { exportedForTesting } from './config.js';
 
 describe('Config', () => {
-  const { Config } = exportedForTesting;
+  const { Config, parseNumber } = exportedForTesting;
 
   const originalEnv = process.env;
 
@@ -34,6 +34,11 @@ describe('Config', () => {
       EXCLUDE_TOOLS: undefined,
       MAX_RESULT_LIMIT: undefined,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: undefined,
+      OAUTH_ISSUER: undefined,
+      OAUTH_REDIRECT_URI: undefined,
+      OAUTH_JWT_SECRET: undefined,
+      OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: undefined,
+      OAUTH_REFRESH_TOKEN_TIMEOUT_MS: undefined,
     };
   });
 
@@ -45,6 +50,7 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: undefined,
+      SITE_NAME: 'test-site',
     };
 
     expect(() => new Config()).toThrow('The environment variable SERVER is not set');
@@ -54,6 +60,7 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'http://foo.com',
+      SITE_NAME: 'test-site',
     };
 
     expect(() => new Config()).toThrow(
@@ -65,6 +72,7 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'https://',
+      SITE_NAME: 'test-site',
     };
 
     expect(() => new Config()).toThrow(
@@ -103,12 +111,18 @@ describe('Config', () => {
     };
 
     const config = new Config();
-    expect(config.authConfig).toEqual({
-      type: 'pat',
-      patName: 'test-pat-name',
-      patValue: 'test-pat-value',
-      siteName: 'test-site',
-    });
+    expect(config.patName).toBe('test-pat-name');
+    expect(config.patValue).toBe('test-pat-value');
+    expect(config.siteName).toBe('test-site');
+  });
+
+  it('should throw error when SITE_NAME is missing', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'https://test-server.com',
+    };
+
+    expect(() => new Config()).toThrow('The environment variable SITE_NAME is not set');
   });
 
   it('should set default log level to debug when not specified', () => {
@@ -306,7 +320,49 @@ describe('Config', () => {
     });
   });
 
-  describe('HTTP port parsing', () => {
+  describe('HTTP server config parsing', () => {
+    it('should set sslKey to default when SSL_KEY is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.sslKey).toBe('');
+    });
+
+    it('should set sslKey to the specified value when SSL_KEY is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        SSL_KEY: 'path/to/ssl-key.pem',
+      };
+
+      const config = new Config();
+      expect(config.sslKey).toBe('path/to/ssl-key.pem');
+    });
+
+    it('should set sslCert to default when SSL_CERT is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.sslCert).toBe('');
+    });
+
+    it('should set sslCert to the specified value when SSL_CERT is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        SSL_CERT: 'path/to/ssl-cert.pem',
+      };
+
+      const config = new Config();
+      expect(config.sslCert).toBe('path/to/ssl-cert.pem');
+    });
+
     it('should set httpPort to default when HTTP_PORT_ENV_VAR_NAME and PORT are not set', () => {
       process.env = {
         ...process.env,
@@ -463,6 +519,271 @@ describe('Config', () => {
       expect(() => new Config()).toThrow(
         'The environment variable CORS_ORIGIN_CONFIG is not a valid array of URLs: ["https://example.com", "invalid"]',
       );
+    });
+  });
+
+  describe('OAuth configuration', () => {
+    const defaultOAuthEnvVars = {
+      ...defaultEnvVars,
+      OAUTH_ISSUER: 'https://example.com',
+      OAUTH_JWT_SECRET: 'test-jwt-secret',
+    } as const;
+
+    const defaultOAuthTimeoutMs = {
+      authzCodeTimeoutMs: 10 * 60 * 1000,
+      refreshTokenTimeoutMs: 30 * 24 * 60 * 60 * 1000,
+    };
+
+    const defaultOAuthConfig = {
+      enabled: true,
+      issuer: defaultOAuthEnvVars.OAUTH_ISSUER,
+      redirectUri: `${defaultOAuthEnvVars.OAUTH_ISSUER}/Callback`,
+      jwtSecret: 'test-jwt-secret',
+      ...defaultOAuthTimeoutMs,
+    } as const;
+
+    it('should default to disabled', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        enabled: false,
+        issuer: '',
+        redirectUri: '',
+        jwtSecret: '',
+        ...defaultOAuthTimeoutMs,
+      });
+    });
+
+    it('should enable OAuth when OAUTH_ISSUER is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual(defaultOAuthConfig);
+    });
+
+    it('should set redirectUri to the specified value when OAUTH_REDIRECT_URI is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_REDIRECT_URI: 'https://example.com/CustomCallback',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        redirectUri: 'https://example.com/CustomCallback',
+      });
+    });
+
+    it('should set redirectUri to the default value when OAUTH_REDIRECT_URI is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_REDIRECT_URI: '',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        redirectUri: `${defaultOAuthEnvVars.OAUTH_ISSUER}/Callback`,
+      });
+    });
+
+    it('should set authzCodeTimeoutMs to the specified value when OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: '5678',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        authzCodeTimeoutMs: 5678,
+      });
+    });
+
+    it('should set refreshTokenTimeoutMs to the specified value when OAUTH_REFRESH_TOKEN_TIMEOUT_MS is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_REFRESH_TOKEN_TIMEOUT_MS: '1234',
+      };
+
+      const config = new Config();
+      expect(config.oauth.refreshTokenTimeoutMs).toBe(1234);
+    });
+
+    it('should throw error when OAUTH_JWT_SECRET is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_JWT_SECRET: '',
+      };
+
+      expect(() => new Config()).toThrow('The environment variable OAUTH_JWT_SECRET is not set');
+    });
+
+    it('should throw error when AUTH is "oauth" and OAUTH_ISSUER is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        AUTH: 'oauth',
+        OAUTH_ISSUER: '',
+      };
+
+      expect(() => new Config()).toThrow('When auth is "oauth", OAUTH_ISSUER must be set');
+    });
+
+    it('should default transport to http OAUTH_ISSUER is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        TRANSPORT: undefined,
+      };
+
+      const config = new Config();
+      expect(config.transport).toBe('http');
+    });
+
+    it('should throw error when transport is stdio and auth is "oauth"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        TRANSPORT: 'stdio',
+      };
+
+      expect(() => new Config()).toThrow('TRANSPORT must be "http" when OAUTH_ISSUER is set');
+    });
+
+    it('should allow PAT_NAME and PAT_VALUE to be empty when AUTH is "oauth"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        PAT_NAME: undefined,
+        PAT_VALUE: undefined,
+        AUTH: 'oauth',
+      };
+
+      const config = new Config();
+      expect(config.patName).toBe('');
+      expect(config.patValue).toBe('');
+    });
+
+    it('should allow SITE_NAME to be empty when AUTH is "oauth"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        AUTH: 'oauth',
+        SITE_NAME: '',
+      };
+
+      const config = new Config();
+      expect(config.siteName).toBe('');
+    });
+  });
+
+  describe('parseNumber', () => {
+    it('should return defaultValue when value is undefined', () => {
+      const result = parseNumber(undefined, { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is empty string', () => {
+      const result = parseNumber('', { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is whitespace', () => {
+      const result = parseNumber('   ', { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is not a number', () => {
+      const result = parseNumber('abc', { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is NaN', () => {
+      const result = parseNumber('NaN', { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should parse valid integer string', () => {
+      const result = parseNumber('123', { defaultValue: 42 });
+      expect(result).toBe(123);
+    });
+
+    it('should parse valid integer string with leading zeros', () => {
+      const result = parseNumber('007', { defaultValue: 42 });
+      expect(result).toBe(7);
+    });
+
+    it('should parse valid integer string with whitespace', () => {
+      const result = parseNumber('  456  ', { defaultValue: 42 });
+      expect(result).toBe(456);
+    });
+
+    it('should parse valid decimal string', () => {
+      const result = parseNumber('123.45', { defaultValue: 42 });
+      expect(result).toBe(123.45);
+    });
+
+    it('should parse valid decimal string with whitespace', () => {
+      const result = parseNumber('  123.45  ', { defaultValue: 42 });
+      expect(result).toBe(123.45);
+    });
+
+    it('should return defaultValue when value is below minValue', () => {
+      const result = parseNumber('5', { defaultValue: 42, minValue: 10 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is above maxValue', () => {
+      const result = parseNumber('100', { defaultValue: 42, maxValue: 50 });
+      expect(result).toBe(42);
+    });
+
+    it('should parse valid number when within minValue and maxValue range', () => {
+      const result = parseNumber('25', { defaultValue: 42, minValue: 10, maxValue: 50 });
+      expect(result).toBe(25);
+    });
+
+    it('should parse valid number when value equals minValue', () => {
+      const result = parseNumber('10', { defaultValue: 42, minValue: 10, maxValue: 50 });
+      expect(result).toBe(10);
+    });
+
+    it('should parse valid number when value equals maxValue', () => {
+      const result = parseNumber('50', { defaultValue: 42, minValue: 10, maxValue: 50 });
+      expect(result).toBe(50);
+    });
+
+    it('should use default options when no options provided', () => {
+      const result = parseNumber('123');
+      expect(result).toBe(123);
+    });
+
+    it('should use default defaultValue of 0 when no options provided', () => {
+      const result = parseNumber('abc');
+      expect(result).toBe(0);
+    });
+
+    it('should handle negative numbers with appropriate minValue', () => {
+      const result = parseNumber('-5', { defaultValue: 42, minValue: -10 });
+      expect(result).toBe(-5);
+    });
+
+    it('should return defaultValue for negative numbers when minValue is 0', () => {
+      const result = parseNumber('-5', { defaultValue: 42, minValue: 0 });
+      expect(result).toBe(42);
     });
   });
 });
