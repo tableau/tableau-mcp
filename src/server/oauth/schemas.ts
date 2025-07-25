@@ -79,6 +79,7 @@ export const mcpAccessTokenSchema = z.object({
   sub: requiredString('sub'),
   tableauAccessToken: requiredString('tableauAccessToken'),
   tableauRefreshToken: requiredString('tableauRefreshToken'),
+  tableauExpiresAt: z.number().int().nonnegative(),
 });
 
 export type McpAccessToken = z.infer<typeof mcpAccessTokenSchema>;
