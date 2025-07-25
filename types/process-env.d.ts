@@ -19,6 +19,7 @@ export interface ProcessEnvEx {
   OAUTH_JWT_SECRET: string | undefined;
   OAUTH_REDIRECT_URI: string | undefined;
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: string | undefined;
+  OAUTH_ACCESS_TOKEN_TIMEOUT_MS: string | undefined;
   OAUTH_REFRESH_TOKEN_TIMEOUT_MS: string | undefined;
 }
 
