@@ -1,9 +1,8 @@
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import express from 'express';
 import { jwtVerify, SignJWT } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
-import { v4 as uuidv4 } from 'uuid';
 
 import { isAxiosError } from '../../../node_modules/axios/index.js';
 import { getConfig } from '../../config.js';
@@ -337,7 +336,7 @@ export class OAuthProvider {
       const tableauState = randomBytes(32).toString('hex');
       const authKey = randomBytes(32).toString('hex');
 
-      const tableauClientId = uuidv4();
+      const tableauClientId = randomUUID();
       this.pendingAuthorizations.set(authKey, {
         clientId,
         redirectUri,
@@ -364,7 +363,7 @@ export class OAuthProvider {
       oauthUrl.searchParams.set('response_type', 'code');
       oauthUrl.searchParams.set('redirect_uri', this.config.oauth.redirectUri);
       oauthUrl.searchParams.set('state', `${authKey}:${tableauState}`);
-      oauthUrl.searchParams.set('device_id', uuidv4());
+      oauthUrl.searchParams.set('device_id', randomUUID());
       oauthUrl.searchParams.set('target_site', this.config.siteName);
       oauthUrl.searchParams.set('device_name', this.getDeviceName(redirectUri, state ?? ''));
       oauthUrl.searchParams.set('client_type', 'tableau-mcp');
