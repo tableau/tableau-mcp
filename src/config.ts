@@ -4,6 +4,12 @@ import { isToolName, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
+const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+const ONE_HOUR_IN_MS = 60 * 60 * 1000;
+const TWENTY_FOUR_HOURS_IN_MS = 24 * 60 * 60 * 1000;
+const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
+const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
+
 const authTypes = ['pat', 'oauth', 'direct-trust'] as const;
 type AuthType = (typeof authTypes)[number];
 
@@ -29,12 +35,14 @@ export class Config {
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
   maxResultLimit: number | null;
+  disableQueryDatasourceFilterValidation: boolean;
   oauth: {
     enabled: boolean;
     issuer: string;
     redirectUri: string;
     jwtSecret: string;
     authzCodeTimeoutMs: number;
+    accessTokenTimeoutMs: number;
     refreshTokenTimeoutMs: number;
   };
 
@@ -62,37 +70,66 @@ export class Config {
       OAUTH_JWT_SECRET: jwtSecret,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
+      OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
       MAX_RESULT_LIMIT: maxResultLimit,
+      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
     } = process.env;
 
     this.siteName = siteName ?? '';
     this.auth = authTypes.find((type) => type === auth) ?? 'pat';
-    this.transport = isTransport(transport) ? transport : 'stdio';
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
-    this.httpPort = parseNumber(process.env[httpPortEnvVarName?.trim() || 'PORT'], 3927);
+    this.httpPort = parseNumber(process.env[httpPortEnvVarName?.trim() || 'PORT'], {
+      defaultValue: 3927,
+      minValue: 1,
+      maxValue: 65535,
+    });
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
+    this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
     this.oauth = {
       enabled: !!oauthIssuer,
       issuer: oauthIssuer ?? '',
-      redirectUri: redirectUri ?? (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
+      redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
       jwtSecret: jwtSecret ?? '',
-      authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, 10 * 60 * 1000), // 10 minutes
-      refreshTokenTimeoutMs: parseNumber(refreshTokenTimeoutMs, 30 * 24 * 60 * 60 * 1000), // 30 days
+      authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
+        defaultValue: TEN_MINUTES_IN_MS,
+        minValue: 0,
+        maxValue: ONE_HOUR_IN_MS,
+      }),
+      accessTokenTimeoutMs: parseNumber(accessTokenTimeoutMs, {
+        defaultValue: TWENTY_FOUR_HOURS_IN_MS,
+        minValue: 0,
+        maxValue: THIRTY_DAYS_IN_MS,
+      }),
+      refreshTokenTimeoutMs: parseNumber(refreshTokenTimeoutMs, {
+        defaultValue: THIRTY_DAYS_IN_MS,
+        minValue: 0,
+        maxValue: ONE_YEAR_IN_MS,
+      }),
     };
+
+    this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
 
     if (this.oauth.enabled) {
       invariant(this.oauth.issuer, 'The environment variable OAUTH_ISSUER is not set');
       invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
       invariant(this.oauth.jwtSecret, 'The environment variable OAUTH_JWT_SECRET is not set');
+
+      if (this.transport === 'stdio') {
+        throw new Error('TRANSPORT must be "http" when OAUTH_ISSUER is set');
+      }
     } else if (this.auth === 'oauth') {
       throw new Error('When auth is "oauth", OAUTH_ISSUER must be set');
+    }
+
+    if (this.auth !== 'oauth') {
+      invariant(this.siteName, 'The environment variable SITE_NAME is not set');
     }
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
@@ -189,17 +226,33 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
   }
 }
 
-function parseNumber(value: string | undefined, defaultValue: number): number {
+function parseNumber(
+  value: string | undefined,
+  {
+    defaultValue,
+    minValue,
+    maxValue,
+  }: { defaultValue: number; minValue?: number; maxValue?: number } = {
+    defaultValue: 0,
+    minValue: Number.NEGATIVE_INFINITY,
+    maxValue: Number.POSITIVE_INFINITY,
+  },
+): number {
   if (!value) {
     return defaultValue;
   }
 
-  const number = parseInt(value, 10);
-  return isNaN(number) || number < 0 ? defaultValue : number;
+  const number = parseFloat(value);
+  return isNaN(number) ||
+    (minValue !== undefined && number < minValue) ||
+    (maxValue !== undefined && number > maxValue)
+    ? defaultValue
+    : number;
 }
 
 export const getConfig = (): Config => new Config();
 
 export const exportedForTesting = {
   Config,
+  parseNumber,
 };

@@ -15,6 +15,18 @@ const getCurrentServerSessionEndpoint = makeEndpoint({
   alias: 'getCurrentServerSession',
   description: 'Returns details of the current session of Tableau Server.',
   response: z.object({ session: sessionSchema }),
+  errors: [
+    {
+      status: 401,
+      schema: z.object({
+        error: z.object({
+          code: z.string(),
+          summary: z.string(),
+          detail: z.string(),
+        }),
+      }),
+    },
+  ],
 });
 
 export type Session = z.infer<typeof sessionSchema>;

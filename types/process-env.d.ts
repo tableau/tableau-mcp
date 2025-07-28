@@ -14,10 +14,12 @@ export interface ProcessEnvEx {
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
+  DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: string | undefined;
   OAUTH_ISSUER: string | undefined;
   OAUTH_JWT_SECRET: string | undefined;
   OAUTH_REDIRECT_URI: string | undefined;
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: string | undefined;
+  OAUTH_ACCESS_TOKEN_TIMEOUT_MS: string | undefined;
   OAUTH_REFRESH_TOKEN_TIMEOUT_MS: string | undefined;
 }
 

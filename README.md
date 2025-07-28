@@ -89,8 +89,13 @@ Tableau MCP works with both Tableau Server and Tableau cloud data with these pre
 Tableau MCP requires authentication in order to connect with your Tableau Server or Tableau Cloud
 site. This authenticated user must have access to the published data source(s) you plan to access.
 
-Provide your Tableau [Personal Access Token][pat] by setting the `PAT_NAME` and `PAT_VALUE`
-environment variables. See [Environment Variables](#environment-variables) for more information.
+There are several ways to authenticate to Tableau. See
+[Environment Variables](#environment-variables) for more information.:
+
+1. Provide your Tableau [Personal Access Token][pat] by setting the `PAT_NAME` and `PAT_VALUE`
+   environment variables.
+2. Use Tableau OAuth by setting the `AUTH` environment variable to `oauth`. See
+   [OAuth Configuration](#oauth-configuration) for additional required configuration.
 
 ## Configuring AI Tools
 
@@ -159,25 +164,26 @@ These config files will be used in tool configuration explained below.
 
 #### Required Environment Variables
 
-| **Variable** | **Description**                                                                                                   |
-| ------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `SERVER`     | The URL of the Tableau server.                                                                                    |
-| `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site. |
+| **Variable** | **Description**                                                                                                                    |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `SERVER`     | The URL of the Tableau server. For Tableau Cloud, specify your site's specific pod e.g. `https://prod-useast-c.online.tableau.com` |
+| `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site.                  |
 
 #### Optional Environment Variables
 
-| **Variable**             | **Description**                                                                                     | **Default**                        | **Note**                                                                                                                                                                                    |
-| ------------------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TRANSPORT`              | The MCP transport type to use for the server.                                                       | `stdio`                            | Possible values are `stdio` or `http`. For `http`, see [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
-| `AUTH`                   | The authentication method to use by the server.                                                     | `pat`                              | Possible values are `pat` or `oauth`. When `oauth`, `OAUTH_ISSUER` must also be provided. See [OAuth Configuration](#oauth-configuration) below for additional variables.                   |
-| `PAT_NAME`               | The name of the Tableau [Personal Access Token][pat] to use for authentication.                     |                                    | Required if `AUTH` is `pat`.                                                                                                                                                                |
-| `PAT_VALUE`              | The value of the Tableau [Personal Access Token][pat] to use for authentication.                    |                                    | Required if `AUTH` is `pat`.                                                                                                                                                                |
-| `DEFAULT_LOG_LEVEL`      | The default logging level of the server.                                                            | `debug`                            |                                                                                                                                                                                             |
-| `DATASOURCE_CREDENTIALS` | A JSON string that includes usernames and passwords for any datasources that require them.          |                                    | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
-| `DISABLE_LOG_MASKING`    | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                                                                                                                             |
-| `INCLUDE_TOOLS`          | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                                                                                                                    |
-| `EXCLUDE_TOOLS`          | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                                                                                                                    |
-| `MAX_RESULT_LIMIT`       | If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.  | Empty string (_no limit_)          | A positive number.                                                                                                                                                                          |
+| **Variable**                                 | **Description**                                                                                     | **Default**                        | **Note**                                                                                                                                                                                    |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRANSPORT`                                  | The MCP transport type to use for the server.                                                       | `stdio`                            | Possible values are `stdio` or `http`. For `http`, see [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
+| `AUTH`                                       | The authentication method to use by the server.                                                     | `pat`                              | Possible values are `pat` or `oauth`. When `oauth`, `OAUTH_ISSUER` must also be provided. See [OAuth Configuration](#oauth-configuration) below for additional variables.                   |
+| `PAT_NAME`                                   | The name of the Tableau [Personal Access Token][pat] to use for authentication.                     |                                    | Required if `AUTH` is `pat`.                                                                                                                                                                |
+| `PAT_VALUE`                                  | The value of the Tableau [Personal Access Token][pat] to use for authentication.                    |                                    | Required if `AUTH` is `pat`.                                                                                                                                                                |
+| `DEFAULT_LOG_LEVEL`                          | The default logging level of the server.                                                            | `debug`                            |                                                                                                                                                                                             |
+| `DATASOURCE_CREDENTIALS`                     | A JSON string that includes usernames and passwords for any datasources that require them.          |                                    | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
+| `DISABLE_LOG_MASKING`                        | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                                                                                                                             |
+| `INCLUDE_TOOLS`                              | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                                                                                                                    |
+| `EXCLUDE_TOOLS`                              | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                                                                                                                    |
+| `MAX_RESULT_LIMIT`                           | If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.  | Empty string (_no limit_)          | A positive number.                                                                                                                                                                          |
+| `DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION` | Disable validation of SET and MATCH filter values in query-datasource tool.                         | `false`                            | When `true`, skips validation that checks if filter values exist in the target field.                                                                                                       |
 
 #### HTTP Server Configuration
 
@@ -194,15 +200,19 @@ used to configure the HTTP server.
 
 #### OAuth Configuration
 
-When a URL for `OAUTH_ISSUER` is provided, the following environment variables apply:
+When a URL for `OAUTH_ISSUER` is provided, the MCP server will require logging in via Tableau OAuth
+to access. The following environment variables will also apply or have additional meaning:
 
-| **Variable**                          | **Description**                                     | **Default**               | **Notes**                                                               |
-| ------------------------------------- | --------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------- |
-| `OAUTH_ISSUER`                        | The issuer of the OAuth server.                     |                           | Required if `AUTH` is `oauth`. For testing, use `http://127.0.0.1:3927` |
-| `OAUTH_REDIRECT_URI`                  | The redirect URI for the OAuth flow.                | `{OAUTH_ISSUER}/Callback` |                                                                         |
-| `OAUTH_JWT_SECRET`                    | The symmetric secret to sign the access token with. |                           | Required. See [jose SignJWT docs][sign-jwt] for details.                |
-| `OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS` | The timeout for the OAuth authorization codes.      | _10 seconds_              |                                                                         |
-| `OAUTH_REFRESH_TOKEN_TIMEOUT_MS`      | The timeout for the OAuth refresh tokens.           | _30 days_                 |                                                                         |
+| **Variable**                          | **Description**                                     | **Default**               | **Notes**                                                                                                                                                                                                |
+| ------------------------------------- | --------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OAUTH_ISSUER`                        | The issuer of the OAuth server.                     |                           | Required if `AUTH` is `oauth`. For testing, use `http://127.0.0.1:3927`                                                                                                                                  |
+| `TRANSPORT`                           | The MCP transport type to use for the server.       | `http`                    | Must be `http` when OAuth is enabled. Also defaults to `http` if not provided.                                                                                                                           |
+| `SITE_NAME`                           | The target Tableau site for OAuth.                  |                           | Not required if `AUTH` is `oauth` and users will see the site picker if they have access to multiple sites. Choosing a site from a Cloud pod different from the one specified in `SERVER` will not work. |
+| `OAUTH_REDIRECT_URI`                  | The redirect URI for the OAuth flow.                | `{OAUTH_ISSUER}/Callback` |                                                                                                                                                                                                          |
+| `OAUTH_JWT_SECRET`                    | The symmetric secret to sign the access token with. |                           | Required. See [jose SignJWT docs][sign-jwt] for details.                                                                                                                                                 |
+| `OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS` | The timeout for the OAuth authorization codes.      | _10 seconds_              | Max: 1 hour.                                                                                                                                                                                             |
+| `OAUTH_ACCESS_TOKEN_TIMEOUT_MS`       | The timeout for the OAuth access tokens.            | _24 hours_                | Max: 30 days.                                                                                                                                                                                            |
+| `OAUTH_REFRESH_TOKEN_TIMEOUT_MS`      | The timeout for the OAuth refresh tokens.           | _30 days_                 | Max: 1 year.                                                                                                                                                                                             |
 
 ##### DATASOURCE_CREDENTIALS
 

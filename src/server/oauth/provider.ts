@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'crypto';
 import express from 'express';
 import { jwtVerify, SignJWT } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
+import { v4 as uuidv4 } from 'uuid';
 
 import { isAxiosError } from '../../../node_modules/axios/index.js';
 import { getConfig } from '../../config.js';
@@ -13,6 +14,7 @@ import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import {
   callbackSchema,
   mcpAccessTokenSchema,
+  mcpAccessTokenUserOnlySchema,
   mcpAuthorizeSchema,
   mcpTokenSchema,
   TableauAuthInfo,
@@ -24,9 +26,6 @@ import {
   RefreshTokenData,
   UserAndTokens,
 } from './types.js';
-
-const TABLEAU_CLIENT_ID = '{E93A0E88-C2F8-4431-B805-11E9957FB03F}';
-const DEVICE_ID = '8FA5479C-56EE-407F-A040-F14FD7E80157';
 
 /**
  * OAuth 2.1 Provider
@@ -102,7 +101,7 @@ export class OAuthProvider {
           return;
         }
 
-        const baseUrl = `https://${req.get('host')}`;
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
         res
           .status(401)
           .header(
@@ -182,7 +181,7 @@ export class OAuthProvider {
      */
     app.get('/.well-known/oauth-protected-resource', (req, res) => {
       res.json({
-        resource: `${req.protocol}://${req.get('host')}`,
+        resource: `${req.protocol}://${req.get('host')}/`,
         authorization_servers: [`${req.protocol}://${req.get('host')}`],
         bearer_methods_supported: ['header'],
       });
@@ -201,11 +200,8 @@ export class OAuthProvider {
     app.post('/oauth/register', express.json(), (req, res) => {
       const { redirect_uris } = req.body;
 
-      // Validate redirect URIs if provided
-      let validatedRedirectUris = []; //this.config.validRedirectUris;
-
+      const validatedRedirectUris = [];
       if (redirect_uris && Array.isArray(redirect_uris)) {
-        validatedRedirectUris = [];
         for (const uri of redirect_uris) {
           if (typeof uri !== 'string') {
             res.status(400).json({
@@ -219,19 +215,17 @@ export class OAuthProvider {
           try {
             const url = new URL(uri);
 
-            // Allow HTTPS URLs
             if (url.protocol === 'https:') {
+              // Allow HTTPS URLs
               validatedRedirectUris.push(uri);
-            }
-            // Allow HTTP only for localhost
-            else if (
+            } else if (
               url.protocol === 'http:' &&
               (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
             ) {
+              // Allow HTTP only for localhost
               validatedRedirectUris.push(uri);
-            }
-            // Allow custom schemes
-            else if (url.protocol.match(/^[a-zA-Z][a-zA-Z0-9+.-]*:$/)) {
+            } else if (url.protocol.match(/^[a-zA-Z][a-zA-Z0-9+.-]*:$/)) {
+              // Allow custom schemes
               validatedRedirectUris.push(uri);
             } else {
               res.status(400).json({
@@ -343,6 +337,7 @@ export class OAuthProvider {
       const tableauState = randomBytes(32).toString('hex');
       const authKey = randomBytes(32).toString('hex');
 
+      const tableauClientId = uuidv4();
       this.pendingAuthorizations.set(authKey, {
         clientId,
         redirectUri,
@@ -351,6 +346,7 @@ export class OAuthProvider {
         state: state ?? '',
         scope,
         tableauState,
+        tableauClientId,
       });
 
       // Clean up expired authorizations
@@ -362,15 +358,16 @@ export class OAuthProvider {
       // Redirect to Tableau OAuth
       const tableauCodeChallenge = this.generateCodeChallenge(codeChallenge);
       const oauthUrl = new URL(`${this.config.server}/oauth2/v1/auth`);
-      oauthUrl.searchParams.set('client_id', TABLEAU_CLIENT_ID);
+      oauthUrl.searchParams.set('client_id', tableauClientId);
       oauthUrl.searchParams.set('code_challenge', tableauCodeChallenge);
       oauthUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
       oauthUrl.searchParams.set('response_type', 'code');
       oauthUrl.searchParams.set('redirect_uri', this.config.oauth.redirectUri);
       oauthUrl.searchParams.set('state', `${authKey}:${tableauState}`);
-      oauthUrl.searchParams.set('device_id', DEVICE_ID);
-      oauthUrl.searchParams.set('device_name', 'tableau-mcp');
-      oauthUrl.searchParams.set('client_type', `tableau-mcp`);
+      oauthUrl.searchParams.set('device_id', uuidv4());
+      oauthUrl.searchParams.set('target_site', this.config.siteName);
+      oauthUrl.searchParams.set('device_name', this.getDeviceName(redirectUri, state ?? ''));
+      oauthUrl.searchParams.set('client_type', 'tableau-mcp');
 
       res.redirect(oauthUrl.toString());
     });
@@ -421,7 +418,7 @@ export class OAuthProvider {
         const tokensResult = await this.exchangeAuthorizationCode(
           code,
           this.config.oauth.redirectUri,
-          TABLEAU_CLIENT_ID,
+          pendingAuth.tableauClientId,
           pendingAuth.codeChallenge,
         );
 
@@ -433,11 +430,26 @@ export class OAuthProvider {
           return;
         }
 
-        const { accessToken, refreshToken, expiresIn } = tokensResult.value;
+        const { accessToken, refreshToken, expiresInSeconds } = tokensResult.value;
 
         const restApi = new RestApi(this.config.server);
         restApi.setCredentials(accessToken, 'unknown user id');
-        const session = await restApi.serverMethods.getCurrentServerSession();
+        const sessionResult = await restApi.serverMethods.getCurrentServerSession();
+        if (sessionResult.isErr()) {
+          if (sessionResult.error.type === 'unauthorized') {
+            res.status(401).json({
+              error: 'unauthorized',
+              error_description: `Unable to get the Tableau server session. Ensure the site is from the pod ${this.config.server}. Error: ${JSON.stringify(sessionResult.error)}`,
+            });
+          } else {
+            res.status(500).json({
+              error: 'server_error',
+              error_description:
+                'Internal server error during authorization. Unable to get the Tableau server session. Contact your administrator.',
+            });
+          }
+          return;
+        }
 
         // Generate authorization code
         const authorizationCode = randomBytes(32).toString('hex');
@@ -445,11 +457,12 @@ export class OAuthProvider {
           clientId: pendingAuth.clientId,
           redirectUri: pendingAuth.redirectUri,
           codeChallenge: pendingAuth.codeChallenge,
-          user: session.user,
+          user: sessionResult.value.user,
+          tableauClientId: pendingAuth.tableauClientId,
           tokens: {
             accessToken,
             refreshToken,
-            expiresIn,
+            expiresInSeconds,
           },
           expiresAt: Date.now() + this.config.oauth.authzCodeTimeoutMs,
         });
@@ -467,7 +480,8 @@ export class OAuthProvider {
         console.error('OAuth callback error:', error);
         res.status(500).json({
           error: 'server_error',
-          error_description: 'Internal server error during authorization',
+          error_description:
+            'Internal server error during authorization. Contact your administrator.',
         });
       }
     });
@@ -527,6 +541,7 @@ export class OAuthProvider {
             clientId: authCode.clientId,
             tokens: authCode.tokens,
             expiresAt: Date.now() + this.config.oauth.refreshTokenTimeoutMs,
+            tableauClientId: authCode.tableauClientId,
           });
 
           this.authorizationCodes.delete(code);
@@ -534,7 +549,7 @@ export class OAuthProvider {
           res.json({
             access_token: accessToken,
             token_type: 'Bearer',
-            expires_in: authCode.tokens.expiresIn,
+            expires_in: this.config.oauth.accessTokenTimeoutMs / 1000,
             refresh_token: refreshTokenId,
             scope: 'read',
           });
@@ -544,6 +559,7 @@ export class OAuthProvider {
           const { refreshToken } = result.data;
           const tokenData = this.refreshTokens.get(refreshToken);
           if (!tokenData || tokenData.expiresAt < Date.now()) {
+            // Refresh token is expired
             this.refreshTokens.delete(refreshToken);
             res.status(400).json({
               error: 'invalid_grant',
@@ -552,16 +568,39 @@ export class OAuthProvider {
             return;
           }
 
-          // TODO: Refresh tokens if needed
-          // * Should we just always refresh the Tableau tokens when the MCP access token is refreshed?
-          // * Should we configure the lifetime of the MCP access token to be shorter than the Tableau tokens?
-          // * Is the expiration time of the Tableau tokens configurable for Server?
-          const accessToken = await this.createAccessToken(tokenData);
+          const { refreshToken: tableauRefreshToken } = tokenData.tokens;
+
+          const tokensResult = await this.exchangeRefreshToken(
+            tableauRefreshToken,
+            tokenData.tableauClientId,
+          );
+
+          let accessToken: string;
+          if (tokensResult.isErr()) {
+            // If the refresh token exchange fails, reuse the existing Tableau access token
+            // which may nor may not be expired.
+            accessToken = await this.createAccessToken(tokenData);
+          } else {
+            const {
+              accessToken: newTableauAccessToken,
+              refreshToken: newTableauRefreshToken,
+              expiresInSeconds,
+            } = tokensResult.value;
+
+            accessToken = await this.createAccessToken({
+              user: tokenData.user,
+              tokens: {
+                accessToken: newTableauAccessToken,
+                refreshToken: newTableauRefreshToken,
+                expiresInSeconds,
+              },
+            });
+          }
 
           res.json({
             access_token: accessToken,
             token_type: 'Bearer',
-            expires_in: tokenData.tokens.expiresIn,
+            expires_in: this.config.oauth.accessTokenTimeoutMs / 1000,
             scope: 'read',
           });
           return;
@@ -596,20 +635,48 @@ export class OAuthProvider {
         issuer: this.jwtIssuer,
       });
 
-      const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
-      if (!mcpAccessToken.success) {
-        return Err(
-          `Invalid access token: ${mcpAccessToken.error.errors.map((e) => e.message).join(', ')}`,
-        );
+      if (payload.exp && payload.exp < Date.now()) {
+        // https://github.com/modelcontextprotocol/inspector/issues/608
+        // MCP Inspector Not Using Refresh Token for Token Validation
+        return new Err('Invalid or expired access token');
       }
 
-      const { tableauAccessToken, tableauRefreshToken, tableauUserId, sub } = mcpAccessToken.data;
-      const authInfo: TableauAuthInfo = {
-        username: sub,
-        userId: tableauUserId,
-        accessToken: tableauAccessToken,
-        refreshToken: tableauRefreshToken,
-      };
+      let authInfo: TableauAuthInfo;
+      if (this.config.auth === 'oauth') {
+        const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
+        if (!mcpAccessToken.success) {
+          return Err(
+            `Invalid access token: ${mcpAccessToken.error.errors.map((e) => e.message).join(', ')}`,
+          );
+        }
+
+        const { tableauAccessToken, tableauRefreshToken, tableauExpiresAt, tableauUserId, sub } =
+          mcpAccessToken.data;
+
+        if (Date.now() > tableauExpiresAt) {
+          return new Err('Invalid or expired access token');
+        }
+
+        authInfo = {
+          username: sub,
+          userId: tableauUserId,
+          accessToken: tableauAccessToken,
+          refreshToken: tableauRefreshToken,
+        };
+      } else {
+        const mcpAccessToken = mcpAccessTokenUserOnlySchema.safeParse(payload);
+        if (!mcpAccessToken.success) {
+          return Err(
+            `Invalid access token: ${mcpAccessToken.error.errors.map((e) => e.message).join(', ')}`,
+          );
+        }
+
+        const { tableauUserId, sub } = mcpAccessToken.data;
+        authInfo = {
+          username: sub,
+          userId: tableauUserId,
+        };
+      }
 
       return Ok({
         token,
@@ -619,8 +686,7 @@ export class OAuthProvider {
         extra: authInfo,
       });
     } catch {
-      // TODO: Auto-refresh logic would go here
-      throw new Error('Invalid or expired access token');
+      return new Err('Invalid or expired access token');
     }
   }
 
@@ -638,12 +704,17 @@ export class OAuthProvider {
     return await new SignJWT({
       sub: tokenData.user.name,
       tableauUserId: tokenData.user.id,
-      tableauAccessToken: tokenData.tokens.accessToken,
-      tableauRefreshToken: tokenData.tokens.refreshToken,
+      ...(this.config.auth === 'oauth'
+        ? {
+            tableauAccessToken: tokenData.tokens.accessToken,
+            tableauRefreshToken: tokenData.tokens.refreshToken,
+            tableauExpiresAt: Date.now() + tokenData.tokens.expiresInSeconds * 1000,
+          }
+        : {}),
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setExpirationTime(Date.now() + (tokenData.tokens.expiresIn - 30 * 60) * 1000) // 30 minutes before expiration
+      .setExpirationTime(Date.now() + this.config.oauth.accessTokenTimeoutMs)
       .setAudience(this.jwtAudience)
       .setIssuer(this.jwtIssuer)
       .sign(this.jwtSecret);
@@ -697,6 +768,55 @@ export class OAuthProvider {
 
       const errorText = JSON.stringify(error.response.data);
       return Err(`Failed to exchange authorization code: ${error.response.status} - ${errorText}`);
+    }
+  }
+
+  private async exchangeRefreshToken(
+    refreshToken: string,
+    clientId: string,
+  ): Promise<Result<TableauAccessToken, string>> {
+    try {
+      const result = await getTokenResult(this.config.server, {
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: clientId,
+        site_namespace: '',
+      });
+
+      return Ok(result);
+    } catch (error) {
+      if (!isAxiosError(error) || !error.response) {
+        return Err(`Failed to exchange refresh token: ${getExceptionMessage(error)}`);
+      }
+
+      const errorText = JSON.stringify(error.response.data);
+      return Err(`Failed to exchange refresh token: ${error.response.status} - ${errorText}`);
+    }
+  }
+
+  private getDeviceName(redirectUri: string, state: string): string {
+    const defaultDeviceName = 'tableau-mcp (Unknown agent)';
+
+    try {
+      const url = new URL(redirectUri);
+      if (url.protocol === 'https:' || url.protocol === 'http:') {
+        if (
+          redirectUri === 'https://vscode.dev/redirect' &&
+          new URL(state).protocol === 'vscode:'
+        ) {
+          // VS Code normally authenticates in a way that doesn't give any clues about who it is.
+          // It has a backup authentication method they call "URL Handler" that does though.
+          return 'tableau-mcp (VS Code)';
+        }
+
+        return defaultDeviceName;
+      } else if (url.protocol === 'cursor:') {
+        return 'tableau-mcp (Cursor)';
+      } else {
+        return `tableau-mcp (${url.protocol.slice(0, -1)})`;
+      }
+    } catch {
+      return defaultDeviceName;
     }
   }
 }

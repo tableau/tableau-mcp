@@ -1,9 +1,15 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
-import { Datasource, Query, TableauError } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import {
+  Datasource,
+  Query,
+  QueryOutput,
+  TableauError,
+} from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/schemas.js';
 import { Tool } from '../tool.js';
@@ -11,6 +17,7 @@ import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { validateQuery } from './queryDatasourceValidator.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
+import { validateFilterValues } from './validators/validateFilterValues.js';
 
 type Datasource = z.infer<typeof Datasource>;
 
@@ -18,6 +25,16 @@ const paramsSchema = {
   datasourceLuid: z.string().nonempty(),
   query: Query,
 };
+
+export type QueryDatasourceError =
+  | {
+      type: 'filter-validation';
+      message: string;
+    }
+  | {
+      type: 'tableau-error';
+      error: z.infer<typeof TableauError>;
+    };
 
 export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema> => {
   const queryDatasourceTool = new Tool({
@@ -36,7 +53,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
       { requestId, authInfo },
     ): Promise<CallToolResult> => {
       const config = getConfig();
-      return await queryDatasourceTool.logAndExecute({
+      return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
         authInfo,
         args: { datasourceLuid, query },
@@ -65,12 +82,50 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             server,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
-              return await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+              if (!config.disableQueryDatasourceFilterValidation) {
+                // Validate filters values for SET and MATCH filters
+                const filterValidationResult = await validateFilterValues(
+                  server,
+                  query,
+                  restApi.vizqlDataServiceMethods,
+                  datasource,
+                );
+
+                if (filterValidationResult.isErr()) {
+                  const errors = filterValidationResult.error;
+                  const errorMessage = errors.map((error) => error.message).join('\n\n');
+                  return new Err({
+                    type: 'filter-validation',
+                    message: errorMessage,
+                  });
+                }
+              }
+
+              const result = await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+              if (result.isErr()) {
+                return new Err({
+                  type: 'tableau-error',
+                  error: result.error,
+                });
+              }
+              return result;
             },
           });
         },
-        getErrorText: (error: z.infer<typeof TableauError>) => {
-          return JSON.stringify({ requestId, ...handleQueryDatasourceError(error) });
+        getErrorText: (error: QueryDatasourceError) => {
+          switch (error.type) {
+            case 'filter-validation':
+              return JSON.stringify({
+                requestId,
+                errorType: 'validation',
+                message: error.message,
+              });
+            case 'tableau-error':
+              return JSON.stringify({
+                requestId,
+                ...handleQueryDatasourceError(error.error),
+              });
+          }
         },
       });
     },
