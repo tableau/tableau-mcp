@@ -24,7 +24,7 @@ export class Config {
   siteName: string;
   patName: string;
   patValue: string;
-  connectedAppUsername: string;
+  jwtSubClaim: string;
   connectedAppClientId: string;
   connectedAppSecretId: string;
   connectedAppSecretValue: string;
@@ -58,7 +58,7 @@ export class Config {
       CORS_ORIGIN_CONFIG: corsOriginConfig,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
-      CONNECTED_APP_USERNAME: connectedAppUsername,
+      JWT_SUB_CLAIM: jwtSubClaim,
       CONNECTED_APP_CLIENT_ID: clientId,
       CONNECTED_APP_SECRET_ID: secretId,
       CONNECTED_APP_SECRET_VALUE: secretValue,
@@ -161,7 +161,7 @@ export class Config {
       invariant(patName, 'The environment variable PAT_NAME is not set');
       invariant(patValue, 'The environment variable PAT_VALUE is not set');
     } else if (this.auth === 'direct-trust') {
-      invariant(connectedAppUsername, 'The environment variable CONNECTED_APP_USERNAME is not set');
+      invariant(jwtSubClaim, 'The environment variable JWT_SUB_CLAIM is not set');
       invariant(clientId, 'The environment variable CONNECTED_APP_CLIENT_ID is not set');
       invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
       invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
@@ -170,7 +170,7 @@ export class Config {
     this.server = server;
     this.patName = patName ?? '';
     this.patValue = patValue ?? '';
-    this.connectedAppUsername = connectedAppUsername ?? '';
+    this.jwtSubClaim = jwtSubClaim ?? '';
     this.connectedAppClientId = clientId ?? '';
     this.connectedAppSecretId = secretId ?? '';
     this.connectedAppSecretValue = secretValue ?? '';

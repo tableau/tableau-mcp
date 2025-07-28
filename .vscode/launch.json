@@ -17,6 +17,7 @@
         "SITE_NAME": "${config:tableau.mcp.SITE_NAME}",
         "PAT_NAME": "${config:tableau.mcp.PAT_NAME}",
         "PAT_VALUE": "${config:tableau.mcp.PAT_VALUE}",
+        "JWT_SUB_CLAIM": "${config:tableau.mcp.JWT_SUB_CLAIM}",
         "CONNECTED_APP_CLIENT_ID": "${config:tableau.mcp.CONNECTED_APP_CLIENT_ID}",
         "CONNECTED_APP_SECRET_ID": "${config:tableau.mcp.CONNECTED_APP_SECRET_ID}",
         "CONNECTED_APP_SECRET_VALUE": "${config:tableau.mcp.CONNECTED_APP_SECRET_VALUE}",

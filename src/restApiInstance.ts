@@ -48,7 +48,7 @@ const getNewRestApiInstanceAsync = async (
     await restApi.signIn({
       type: 'direct-trust',
       siteName: config.siteName,
-      username: getConnectedAppUsername(config, authInfo),
+      username: getJwtSubClaim(config, authInfo),
       clientId: config.connectedAppClientId,
       secretId: config.connectedAppSecretId,
       secretValue: config.connectedAppSecretValue,
@@ -191,10 +191,10 @@ function logResponse(
   log.info(server, messageObj, { logger: 'rest-api', requestId });
 }
 
-function getConnectedAppUsername(config: Config, authInfo: TableauAuthInfo | undefined): string {
+function getJwtSubClaim(config: Config, authInfo: TableauAuthInfo | undefined): string {
   return authInfo?.username
-    ? config.connectedAppUsername.replaceAll('{OAUTH_USERNAME}', authInfo.username)
-    : config.connectedAppUsername;
+    ? config.jwtSubClaim.replaceAll('{OAUTH_USERNAME}', authInfo.username)
+    : config.jwtSubClaim;
 }
 
 function getConnectedAppJwtAdditionalPayload(

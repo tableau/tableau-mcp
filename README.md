@@ -94,7 +94,9 @@ There are several ways to authenticate to Tableau. See
 
 1. Provide your Tableau [Personal Access Token][pat] by setting the `PAT_NAME` and `PAT_VALUE`
    environment variables.
-2. Use Tableau OAuth by setting the `AUTH` environment variable to `oauth`. See
+2. Use Tableau Connected Apps by setting the `AUTH` environment variable to `direct-trust`. See
+   [Direct Trust Configuration](#direct-trust-configuration) for additional required configuration.
+3. Use Tableau OAuth by setting the `AUTH` environment variable to `oauth`. See
    [OAuth Configuration](#oauth-configuration) for additional required configuration.
 
 ## Configuring AI Tools
@@ -174,9 +176,7 @@ These config files will be used in tool configuration explained below.
 | **Variable**                                 | **Description**                                                                                     | **Default**                        | **Note**                                                                                                                                                                                    |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `TRANSPORT`                                  | The MCP transport type to use for the server.                                                       | `stdio`                            | Possible values are `stdio` or `http`. For `http`, see [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
-| `AUTH`                                       | The authentication method to use by the server.                                                     | `pat`                              | Possible values are `pat` or `oauth`. When `oauth`, `OAUTH_ISSUER` must also be provided. See [OAuth Configuration](#oauth-configuration) below for additional variables.                   |
-| `PAT_NAME`                                   | The name of the Tableau [Personal Access Token][pat] to use for authentication.                     |                                    | Required if `AUTH` is `pat`.                                                                                                                                                                |
-| `PAT_VALUE`                                  | The value of the Tableau [Personal Access Token][pat] to use for authentication.                    |                                    | Required if `AUTH` is `pat`.                                                                                                                                                                |
+| `AUTH`                                       | The authentication method to use by the server.                                                     | `pat`                              | Possible values are `pat`, `direct-trust`, or `oauth`. See below sections for additional required variables depending on the desired method.                                                |
 | `DEFAULT_LOG_LEVEL`                          | The default logging level of the server.                                                            | `debug`                            |                                                                                                                                                                                             |
 | `DATASOURCE_CREDENTIALS`                     | A JSON string that includes usernames and passwords for any datasources that require them.          |                                    | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
 | `DISABLE_LOG_MASKING`                        | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                                                                                                                             |
@@ -198,10 +198,39 @@ used to configure the HTTP server.
 | `SSL_CERT`                        | The path to the SSL certificate file to use for the HTTP server. |             |                                                                                                                         |
 | `CORS_ORIGIN_CONFIG`              | The origin or origins to allow CORS requests from.               | `true`      | Acceptable values include `true`, `false`, `*`, or a URL or array of URLs. See [cors config options][cors] for details. |
 
+#### Personal Access Token Configuration
+
+When `AUTH` is `pat`, the following environment variables are required:
+
+| **Variable** | **Description**                                                                  |
+| ------------ | -------------------------------------------------------------------------------- |
+| `PAT_NAME`   | The name of the Tableau [Personal Access Token][pat] to use for authentication.  |
+| `PAT_VALUE`  | The value of the Tableau [Personal Access Token][pat] to use for authentication. |
+
+#### Direct Trust Configuration
+
+When `AUTH` is `direct-trust`, the following environment variables are required:
+
+| **Variable**                 | **Description**                                | **Notes**                                                                                       |
+| ---------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `JWT_SUB_CLAIM`              | The username for the `sub` claim of the JWT.   | Can either be a hard-coded username, or the OAuth username by setting it to `{OAUTH_USERNAME}`. |
+| `CONNECTED_APP_CLIENT_ID`    | The client ID of the Tableau Connected App.    |                                                                                                 |
+| `CONNECTED_APP_SECRET_ID`    | The secret ID of the Tableau Connected App.    |                                                                                                 |
+| `CONNECTED_APP_SECRET_VALUE` | The secret value of the Tableau Connected App. |                                                                                                 |
+
+The optional `CONNECTED_APP_JWT_ADDITIONAL_PAYLOAD` environment variable is a JSON string that
+includes any additional user attributes to include on the JWT. It also supports dynamically
+including the OAuth username. The following is an example:
+
+```json
+{ "username": "{OAUTH_USERNAME}", "region": "West" }
+```
+
 #### OAuth Configuration
 
 When a URL for `OAUTH_ISSUER` is provided, the MCP server will require logging in via Tableau OAuth
-to access. The following environment variables will also apply or have additional meaning:
+to access. If `AUTH` is `oauth`, then `OAUTH_ISSUER` is required. The following environment
+variables will also apply or have additional meaning:
 
 | **Variable**                          | **Description**                                     | **Default**               | **Notes**                                                                                                                                                                                                |
 | ------------------------------------- | --------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
