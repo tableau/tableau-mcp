@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'crypto';
 import express from 'express';
 import { jwtVerify, SignJWT } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
+import { v4 as uuidv4 } from 'uuid';
 
 import { isAxiosError } from '../../../node_modules/axios/index.js';
 import { getConfig } from '../../config.js';
@@ -25,9 +26,6 @@ import {
   RefreshTokenData,
   UserAndTokens,
 } from './types.js';
-
-const TABLEAU_CLIENT_ID = '{E93A0E88-C2F8-4431-B805-11E9957FB03F}';
-const DEVICE_ID = '8FA5479C-56EE-407F-A040-F14FD7E80157';
 
 /**
  * OAuth 2.1 Provider
@@ -339,6 +337,7 @@ export class OAuthProvider {
       const tableauState = randomBytes(32).toString('hex');
       const authKey = randomBytes(32).toString('hex');
 
+      const tableauClientId = uuidv4();
       this.pendingAuthorizations.set(authKey, {
         clientId,
         redirectUri,
@@ -347,6 +346,7 @@ export class OAuthProvider {
         state: state ?? '',
         scope,
         tableauState,
+        tableauClientId,
       });
 
       // Clean up expired authorizations
@@ -358,15 +358,15 @@ export class OAuthProvider {
       // Redirect to Tableau OAuth
       const tableauCodeChallenge = this.generateCodeChallenge(codeChallenge);
       const oauthUrl = new URL(`${this.config.server}/oauth2/v1/auth`);
-      oauthUrl.searchParams.set('client_id', TABLEAU_CLIENT_ID);
+      oauthUrl.searchParams.set('client_id', tableauClientId);
       oauthUrl.searchParams.set('code_challenge', tableauCodeChallenge);
       oauthUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
       oauthUrl.searchParams.set('response_type', 'code');
       oauthUrl.searchParams.set('redirect_uri', this.config.oauth.redirectUri);
       oauthUrl.searchParams.set('state', `${authKey}:${tableauState}`);
-      oauthUrl.searchParams.set('device_id', DEVICE_ID);
+      oauthUrl.searchParams.set('device_id', uuidv4());
       oauthUrl.searchParams.set('target_site', this.config.siteName);
-      oauthUrl.searchParams.set('device_name', 'tableau-mcp');
+      oauthUrl.searchParams.set('device_name', this.getDeviceName(redirectUri, state ?? ''));
       oauthUrl.searchParams.set('client_type', 'tableau-mcp');
 
       res.redirect(oauthUrl.toString());
@@ -418,7 +418,7 @@ export class OAuthProvider {
         const tokensResult = await this.exchangeAuthorizationCode(
           code,
           this.config.oauth.redirectUri,
-          TABLEAU_CLIENT_ID,
+          pendingAuth.tableauClientId,
           pendingAuth.codeChallenge,
         );
 
@@ -458,6 +458,7 @@ export class OAuthProvider {
           redirectUri: pendingAuth.redirectUri,
           codeChallenge: pendingAuth.codeChallenge,
           user: sessionResult.value.user,
+          tableauClientId: pendingAuth.tableauClientId,
           tokens: {
             accessToken,
             refreshToken,
@@ -540,6 +541,7 @@ export class OAuthProvider {
             clientId: authCode.clientId,
             tokens: authCode.tokens,
             expiresAt: Date.now() + this.config.oauth.refreshTokenTimeoutMs,
+            tableauClientId: authCode.tableauClientId,
           });
 
           this.authorizationCodes.delete(code);
@@ -570,7 +572,7 @@ export class OAuthProvider {
 
           const tokensResult = await this.exchangeRefreshToken(
             tableauRefreshToken,
-            TABLEAU_CLIENT_ID,
+            tokenData.tableauClientId,
           );
 
           let accessToken: string;
@@ -785,6 +787,32 @@ export class OAuthProvider {
 
       const errorText = JSON.stringify(error.response.data);
       return Err(`Failed to exchange refresh token: ${error.response.status} - ${errorText}`);
+    }
+  }
+
+  private getDeviceName(redirectUri: string, state: string): string {
+    const defaultDeviceName = 'tableau-mcp (Unknown agent)';
+
+    try {
+      const url = new URL(redirectUri);
+      if (url.protocol === 'https:' || url.protocol === 'http:') {
+        if (
+          redirectUri === 'https://vscode.dev/redirect' &&
+          new URL(state).protocol === 'vscode:'
+        ) {
+          // VS Code normally authenticates in a way that doesn't give any clues about who it is.
+          // It has a backup authentication method they call "URL Handler" that does though.
+          return 'tableau-mcp (VS Code)';
+        }
+
+        return defaultDeviceName;
+      } else if (url.protocol === 'cursor:') {
+        return 'tableau-mcp (Cursor)';
+      } else {
+        return `tableau-mcp (${url.protocol.slice(0, -1)})`;
+      }
+    } catch {
+      return defaultDeviceName;
     }
   }
 }

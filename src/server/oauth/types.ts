@@ -21,6 +21,7 @@ export type PendingAuthorization = {
   state: string;
   scope: string;
   tableauState: string;
+  tableauClientId: string;
 };
 
 export type UserAndTokens = {
@@ -33,9 +34,11 @@ export type AuthorizationCode = UserAndTokens & {
   redirectUri: string;
   codeChallenge: string;
   expiresAt: number;
+  tableauClientId: string;
 };
 
 export type RefreshTokenData = UserAndTokens & {
   clientId: string;
   expiresAt: number;
+  tableauClientId: string;
 };
