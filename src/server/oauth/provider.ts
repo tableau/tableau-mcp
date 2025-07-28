@@ -547,7 +547,7 @@ export class OAuthProvider {
           res.json({
             access_token: accessToken,
             token_type: 'Bearer',
-            expires_in: authCode.tokens.expiresInSeconds,
+            expires_in: this.config.oauth.accessTokenTimeoutMs / 1000,
             refresh_token: refreshTokenId,
             scope: 'read',
           });
@@ -557,6 +557,7 @@ export class OAuthProvider {
           const { refreshToken } = result.data;
           const tokenData = this.refreshTokens.get(refreshToken);
           if (!tokenData || tokenData.expiresAt < Date.now()) {
+            // Refresh token is expired
             this.refreshTokens.delete(refreshToken);
             res.status(400).json({
               error: 'invalid_grant',
@@ -565,16 +566,39 @@ export class OAuthProvider {
             return;
           }
 
-          // TODO: Refresh tokens if needed
-          // * Should we just always refresh the Tableau tokens when the MCP access token is refreshed?
-          // * Should we configure the lifetime of the MCP access token to be shorter than the Tableau tokens?
-          // * Is the expiration time of the Tableau tokens configurable for Server?
-          const accessToken = await this.createAccessToken(tokenData);
+          const { refreshToken: tableauRefreshToken } = tokenData.tokens;
+
+          const tokensResult = await this.exchangeRefreshToken(
+            tableauRefreshToken,
+            TABLEAU_CLIENT_ID,
+          );
+
+          let accessToken: string;
+          if (tokensResult.isErr()) {
+            // If the refresh token exchange fails, reuse the existing Tableau access token
+            // which may nor may not be expired.
+            accessToken = await this.createAccessToken(tokenData);
+          } else {
+            const {
+              accessToken: newTableauAccessToken,
+              refreshToken: newTableauRefreshToken,
+              expiresInSeconds,
+            } = tokensResult.value;
+
+            accessToken = await this.createAccessToken({
+              user: tokenData.user,
+              tokens: {
+                accessToken: newTableauAccessToken,
+                refreshToken: newTableauRefreshToken,
+                expiresInSeconds,
+              },
+            });
+          }
 
           res.json({
             access_token: accessToken,
             token_type: 'Bearer',
-            expires_in: tokenData.tokens.expiresInSeconds,
+            expires_in: this.config.oauth.accessTokenTimeoutMs / 1000,
             scope: 'read',
           });
           return;
@@ -609,6 +633,12 @@ export class OAuthProvider {
         issuer: this.jwtIssuer,
       });
 
+      if (payload.exp && payload.exp < Date.now()) {
+        // https://github.com/modelcontextprotocol/inspector/issues/608
+        // MCP Inspector Not Using Refresh Token for Token Validation
+        return new Err('Invalid or expired access token');
+      }
+
       let authInfo: TableauAuthInfo;
       if (this.config.auth === 'oauth') {
         const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
@@ -618,7 +648,12 @@ export class OAuthProvider {
           );
         }
 
-        const { tableauAccessToken, tableauRefreshToken, sub } = mcpAccessToken.data;
+        const { tableauAccessToken, tableauRefreshToken, tableauExpiresAt, sub } =
+          mcpAccessToken.data;
+
+        if (Date.now() > tableauExpiresAt) {
+          return new Err('Invalid or expired access token');
+        }
 
         authInfo = {
           userId: sub,
@@ -646,8 +681,7 @@ export class OAuthProvider {
         extra: authInfo,
       });
     } catch {
-      // TODO: Auto-refresh logic would go here
-      throw new Error('Invalid or expired access token');
+      return new Err('Invalid or expired access token');
     }
   }
 
@@ -668,12 +702,13 @@ export class OAuthProvider {
         ? {
             tableauAccessToken: tokenData.tokens.accessToken,
             tableauRefreshToken: tokenData.tokens.refreshToken,
+            tableauExpiresAt: Date.now() + tokenData.tokens.expiresInSeconds * 1000,
           }
         : {}),
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setExpirationTime(Date.now() + (tokenData.tokens.expiresInSeconds - 30 * 60) * 1000) // 30 minutes before expiration
+      .setExpirationTime(Date.now() + this.config.oauth.accessTokenTimeoutMs)
       .setAudience(this.jwtAudience)
       .setIssuer(this.jwtIssuer)
       .sign(this.jwtSecret);
@@ -727,6 +762,29 @@ export class OAuthProvider {
 
       const errorText = JSON.stringify(error.response.data);
       return Err(`Failed to exchange authorization code: ${error.response.status} - ${errorText}`);
+    }
+  }
+
+  private async exchangeRefreshToken(
+    refreshToken: string,
+    clientId: string,
+  ): Promise<Result<TableauAccessToken, string>> {
+    try {
+      const result = await getTokenResult(this.config.server, {
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: clientId,
+        site_namespace: '',
+      });
+
+      return Ok(result);
+    } catch (error) {
+      if (!isAxiosError(error) || !error.response) {
+        return Err(`Failed to exchange refresh token: ${getExceptionMessage(error)}`);
+      }
+
+      const errorText = JSON.stringify(error.response.data);
+      return Err(`Failed to exchange refresh token: ${error.response.status} - ${errorText}`);
     }
   }
 }

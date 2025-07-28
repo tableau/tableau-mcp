@@ -6,6 +6,7 @@ import invariant from './utils/invariant.js';
 
 const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
+const TWENTY_FOUR_HOURS_IN_MS = 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
 const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
@@ -33,6 +34,7 @@ export class Config {
     redirectUri: string;
     jwtSecret: string;
     authzCodeTimeoutMs: number;
+    accessTokenTimeoutMs: number;
     refreshTokenTimeoutMs: number;
   };
 
@@ -55,6 +57,7 @@ export class Config {
       OAUTH_JWT_SECRET: jwtSecret,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
+      OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
@@ -85,6 +88,11 @@ export class Config {
         defaultValue: TEN_MINUTES_IN_MS,
         minValue: 0,
         maxValue: ONE_HOUR_IN_MS,
+      }),
+      accessTokenTimeoutMs: parseNumber(accessTokenTimeoutMs, {
+        defaultValue: TWENTY_FOUR_HOURS_IN_MS,
+        minValue: 0,
+        maxValue: THIRTY_DAYS_IN_MS,
       }),
       refreshTokenTimeoutMs: parseNumber(refreshTokenTimeoutMs, {
         defaultValue: THIRTY_DAYS_IN_MS,
