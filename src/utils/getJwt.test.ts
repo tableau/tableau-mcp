@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import { decodeJwt, decodeProtectedHeader, jwtVerify } from 'jose';
 
 import { getJwt } from './getJwt.js';
 
@@ -20,14 +20,14 @@ describe('getJwt', () => {
     vi.restoreAllMocks();
   });
 
-  it('should include correct header in the token', () => {
-    const token = getJwt({
+  it('should include correct header in the token', async () => {
+    const token = await getJwt({
       username: mockUsername,
       connectedApp: mockConnectedApp,
       scopes: mockScopes,
     });
 
-    const decodedHeader = jwt.decode(token, { complete: true })?.header;
+    const decodedHeader = decodeProtectedHeader(token);
     expect(decodedHeader).toEqual({
       alg: 'HS256',
       typ: 'JWT',
@@ -35,14 +35,14 @@ describe('getJwt', () => {
     });
   });
 
-  it('should include correct payload in the token', () => {
-    const token = getJwt({
+  it('should include correct payload in the token', async () => {
+    const token = await getJwt({
       username: mockUsername,
       connectedApp: mockConnectedApp,
       scopes: mockScopes,
     });
 
-    const decodedPayload = jwt.decode(token) as jwt.JwtPayload;
+    const decodedPayload = decodeJwt(token);
     expect(decodedPayload).toMatchObject({
       jti: '123e4567-e89b-12d3-a456-426614174000',
       iss: mockConnectedApp.clientId,
@@ -57,27 +57,25 @@ describe('getJwt', () => {
     expect(decodedPayload.exp).toBeGreaterThan(now);
   });
 
-  it('should generate a token that can be verified with the secret', () => {
-    const token = getJwt({
+  it('should generate a token that can be verified with the secret', async () => {
+    const token = await getJwt({
       username: mockUsername,
       connectedApp: mockConnectedApp,
       scopes: mockScopes,
     });
 
-    expect(() => {
-      jwt.verify(token, mockConnectedApp.secretValue);
-    }).not.toThrow();
+    await expect(
+      jwtVerify(token, new TextEncoder().encode(mockConnectedApp.secretValue)),
+    ).resolves.not.toThrow();
   });
 
-  it('should throw when verifying with incorrect secret', () => {
-    const token = getJwt({
+  it('should throw when verifying with incorrect secret', async () => {
+    const token = await getJwt({
       username: mockUsername,
       connectedApp: mockConnectedApp,
       scopes: mockScopes,
     });
 
-    expect(() => {
-      jwt.verify(token, 'wrong-secret');
-    }).toThrow();
+    await expect(jwtVerify(token, new TextEncoder().encode('wrong-secret'))).rejects.toThrow();
   });
 });

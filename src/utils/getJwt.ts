@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
-// TODO: Rewrite this using jose
-import jwt, { JwtHeader, JwtPayload } from 'jsonwebtoken';
+import { JWTHeaderParameters, JWTPayload, SignJWT } from 'jose';
 
-export function getJwt({
+export async function getJwt({
   username,
   connectedApp,
   scopes,
@@ -17,14 +16,14 @@ export function getJwt({
   };
   scopes: string[];
   additionalPayload?: Record<string, unknown>;
-}): string {
-  const header: JwtHeader = {
+}): Promise<string> {
+  const header: JWTHeaderParameters = {
     alg: 'HS256',
     typ: 'JWT',
     kid: connectedApp.secretId,
   };
 
-  const payload: JwtPayload = {
+  const payload: JWTPayload = {
     jti: randomUUID(),
     iss: connectedApp.clientId,
     aud: 'tableau',
@@ -35,10 +34,9 @@ export function getJwt({
     ...additionalPayload,
   };
 
-  const token = jwt.sign(payload, connectedApp.secretValue, {
-    algorithm: 'HS256',
-    header,
-  });
+  const token = await new SignJWT(payload)
+    .setProtectedHeader(header)
+    .sign(new TextEncoder().encode(connectedApp.secretValue));
 
   return token;
 }

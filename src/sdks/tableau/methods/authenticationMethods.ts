@@ -38,7 +38,7 @@ export default class AuthenticationMethods extends Methods<typeof authentication
           site: {
             contentUrl: authConfig.siteName,
           },
-          ...(() => {
+          ...(await (async () => {
             switch (authConfig.type) {
               case 'pat':
                 return {
@@ -47,7 +47,7 @@ export default class AuthenticationMethods extends Methods<typeof authentication
                 };
               case 'direct-trust':
                 return {
-                  jwt: getJwt({
+                  jwt: await getJwt({
                     username: authConfig.username,
                     connectedApp: {
                       clientId: authConfig.clientId,
@@ -59,7 +59,7 @@ export default class AuthenticationMethods extends Methods<typeof authentication
                   }),
                 };
             }
-          })(),
+          })()),
         },
       })
     ).credentials;
