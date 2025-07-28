@@ -18,6 +18,7 @@ describe('Config', () => {
     vi.resetModules();
     process.env = {
       ...originalEnv,
+      AUTH: undefined,
       TRANSPORT: undefined,
       HTTP_PORT_ENV_VAR_NAME: undefined,
       PORT: undefined,
@@ -27,6 +28,11 @@ describe('Config', () => {
       SITE_NAME: undefined,
       PAT_NAME: undefined,
       PAT_VALUE: undefined,
+      JWT_SUB_CLAIM: undefined,
+      CONNECTED_APP_CLIENT_ID: undefined,
+      CONNECTED_APP_SECRET_ID: undefined,
+      CONNECTED_APP_SECRET_VALUE: undefined,
+      CONNECTED_APP_JWT_ADDITIONAL_PAYLOAD: undefined,
       DATASOURCE_CREDENTIALS: undefined,
       DEFAULT_LOG_LEVEL: undefined,
       DISABLE_LOG_MASKING: undefined,
@@ -520,6 +526,118 @@ describe('Config', () => {
       expect(() => new Config()).toThrow(
         'The environment variable CORS_ORIGIN_CONFIG is not a valid array of URLs: ["https://example.com", "invalid"]',
       );
+    });
+  });
+
+  describe('Connected App config parsing', () => {
+    const defaultDirectTrustEnvVars = {
+      ...defaultEnvVars,
+      AUTH: 'direct-trust',
+      JWT_SUB_CLAIM: 'test-jwt-sub-claim',
+      CONNECTED_APP_CLIENT_ID: 'test-client-id',
+      CONNECTED_APP_SECRET_ID: 'test-secret-id',
+      CONNECTED_APP_SECRET_VALUE: 'test-secret-value',
+    } as const;
+
+    it('should configure direct-trust authentication when all required variables are provided', () => {
+      process.env = {
+        ...process.env,
+        ...defaultDirectTrustEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.auth).toBe('direct-trust');
+      expect(config.jwtSubClaim).toBe('test-jwt-sub-claim');
+      expect(config.connectedAppClientId).toBe('test-client-id');
+      expect(config.connectedAppSecretId).toBe('test-secret-id');
+      expect(config.connectedAppSecretValue).toBe('test-secret-value');
+      expect(config.connectedAppJwtAdditionalPayload).toBe('{}');
+    });
+
+    it('should set connectedAppJwtAdditionalPayload to the specified value when CONNECTED_APP_JWT_ADDITIONAL_PAYLOAD is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultDirectTrustEnvVars,
+        CONNECTED_APP_JWT_ADDITIONAL_PAYLOAD: '{"custom":"payload"}',
+      };
+
+      const config = new Config();
+      expect(JSON.parse(config.connectedAppJwtAdditionalPayload)).toEqual({ custom: 'payload' });
+    });
+
+    it('should throw error when JWT_SUB_CLAIM is missing for direct-trust auth', () => {
+      process.env = {
+        ...process.env,
+        ...defaultDirectTrustEnvVars,
+        JWT_SUB_CLAIM: undefined,
+      };
+
+      expect(() => new Config()).toThrow('The environment variable JWT_SUB_CLAIM is not set');
+    });
+
+    it('should throw error when CONNECTED_APP_CLIENT_ID is missing for direct-trust auth', () => {
+      process.env = {
+        ...process.env,
+        ...defaultDirectTrustEnvVars,
+        CONNECTED_APP_CLIENT_ID: undefined,
+      };
+
+      expect(() => new Config()).toThrow(
+        'The environment variable CONNECTED_APP_CLIENT_ID is not set',
+      );
+    });
+
+    it('should throw error when CONNECTED_APP_SECRET_ID is missing for direct-trust auth', () => {
+      process.env = {
+        ...process.env,
+        ...defaultDirectTrustEnvVars,
+        CONNECTED_APP_SECRET_ID: undefined,
+      };
+
+      expect(() => new Config()).toThrow(
+        'The environment variable CONNECTED_APP_SECRET_ID is not set',
+      );
+    });
+
+    it('should throw error when CONNECTED_APP_SECRET_VALUE is missing for direct-trust auth', () => {
+      process.env = {
+        ...process.env,
+        ...defaultDirectTrustEnvVars,
+        CONNECTED_APP_SECRET_VALUE: undefined,
+      };
+
+      expect(() => new Config()).toThrow(
+        'The environment variable CONNECTED_APP_SECRET_VALUE is not set',
+      );
+    });
+
+    it('should allow PAT_NAME and PAT_VALUE to be empty when AUTH is "direct-trust"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultDirectTrustEnvVars,
+        PAT_NAME: undefined,
+        PAT_VALUE: undefined,
+      };
+
+      const config = new Config();
+      expect(config.patName).toBe('');
+      expect(config.patValue).toBe('');
+    });
+
+    it('should allow all direct-trust fields to be empty when AUTH is not "direct-trust"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        AUTH: 'pat',
+      };
+
+      const config = new Config();
+      expect(config.auth).toBe('pat');
+      expect(config.jwtSubClaim).toBe('');
+      expect(config.connectedAppClientId).toBe('');
+      expect(config.connectedAppSecretId).toBe('');
+      expect(config.connectedAppSecretValue).toBe('');
+      expect(config.connectedAppJwtAdditionalPayload).toBe('{}');
     });
   });
 
