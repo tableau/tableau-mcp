@@ -20,10 +20,19 @@ import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { userAgent } from './server/userAgent.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
+type JwtScopes =
+  | 'tableau:viz_data_service:read'
+  | 'tableau:content:read'
+  | 'tableau:insight_definitions_metrics:read'
+  | 'tableau:insight_metrics:read'
+  | 'tableau:metric_subscriptions:read'
+  | 'tableau:insights:read';
+
 const getNewRestApiInstanceAsync = async (
   config: Config,
   requestId: RequestId,
   server: Server,
+  jwtScopes: Set<JwtScopes>,
   authInfo?: TableauAuthInfo,
 ): Promise<RestApi> => {
   const restApi = new RestApi(config.server, {
@@ -52,7 +61,7 @@ const getNewRestApiInstanceAsync = async (
       clientId: config.connectedAppClientId,
       secretId: config.connectedAppSecretId,
       secretValue: config.connectedAppSecretValue,
-      scopes: ['tableau:viz_data_service:read', 'tableau:content:read'],
+      scopes: jwtScopes,
       additionalPayload: getJwtAdditionalPayload(config, authInfo),
     });
   } else {
@@ -71,15 +80,23 @@ export const useRestApi = async <T>({
   requestId,
   server,
   callback,
+  jwtScopes,
   authInfo,
 }: {
   config: Config;
   requestId: RequestId;
   server: Server;
   callback: (restApi: RestApi) => Promise<T>;
+  jwtScopes: Array<JwtScopes>;
   authInfo?: TableauAuthInfo;
 }): Promise<T> => {
-  const restApi = await getNewRestApiInstanceAsync(config, requestId, server, authInfo);
+  const restApi = await getNewRestApiInstanceAsync(
+    config,
+    requestId,
+    server,
+    new Set(jwtScopes),
+    authInfo,
+  );
   try {
     return await callback(restApi);
   } finally {

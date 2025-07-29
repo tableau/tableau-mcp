@@ -209,7 +209,14 @@ When `AUTH` is `pat`, the following environment variables are required:
 
 #### Direct Trust Configuration
 
-When `AUTH` is `direct-trust`, the following environment variables are required:
+When `AUTH` is `direct-trust`, the MCP server will use the provided Tableau Direct Trust Connected
+App info to generate a scoped [JSON Web Token (JWT)][direct-trust] and use it to authenticate to
+authenticate to the Tableau REST APIs. The generated JWT will have the minimum set of scopes
+necessary to invoke the methods called by the tool being executed. For example, for the
+`query-datasource` tool, since it internally calls into VizQL Data Service, the JWT will only have
+the `tableau:viz_data_service:read` scope.
+
+The following environment variables are required:
 
 | **Variable**                 | **Description**                                | **Notes**                                                                                       |
 | ---------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
@@ -370,3 +377,5 @@ To set up local debugging with breakpoints:
 [express]: https://expressjs.com/
 [cors]: https://expressjs.com/en/resources/middleware/cors.html#configuration-options
 [sign-jwt]: https://github.com/panva/jose/blob/main/docs/jwt/sign/classes/SignJWT.md#examples
+[direct-trust]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#jwt

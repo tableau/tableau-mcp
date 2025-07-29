@@ -12,7 +12,7 @@ export type AuthConfig = {
       clientId: string;
       secretId: string;
       secretValue: string;
-      scopes: string[];
+      scopes: Set<string>;
       additionalPayload?: Record<string, unknown>;
     }
   | {

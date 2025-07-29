@@ -14,7 +14,7 @@ export async function getJwt({
     secretId: string;
     secretValue: string;
   };
-  scopes: string[];
+  scopes: Set<string>;
   additionalPayload?: Record<string, unknown>;
 }): Promise<string> {
   const header: JWTHeaderParameters = {
@@ -28,7 +28,7 @@ export async function getJwt({
     iss: connectedApp.clientId,
     aud: 'tableau',
     sub: username,
-    scp: scopes,
+    scp: [...scopes],
     iat: Math.floor(Date.now() / 1000) - 5,
     exp: Math.floor(Date.now() / 1000) + 5 * 60,
     ...additionalPayload,
