@@ -15,8 +15,4 @@ export type AuthConfig = {
       scopes: Set<string>;
       additionalPayload?: Record<string, unknown>;
     }
-  | {
-      type: 'accessToken';
-      accessToken: string;
-    }
 );
