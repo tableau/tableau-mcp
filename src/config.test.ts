@@ -32,7 +32,7 @@ describe('Config', () => {
       CONNECTED_APP_CLIENT_ID: undefined,
       CONNECTED_APP_SECRET_ID: undefined,
       CONNECTED_APP_SECRET_VALUE: undefined,
-      CONNECTED_APP_JWT_ADDITIONAL_PAYLOAD: undefined,
+      JWT_ADDITIONAL_PAYLOAD: undefined,
       DATASOURCE_CREDENTIALS: undefined,
       DEFAULT_LOG_LEVEL: undefined,
       DISABLE_LOG_MASKING: undefined,
@@ -551,18 +551,18 @@ describe('Config', () => {
       expect(config.connectedAppClientId).toBe('test-client-id');
       expect(config.connectedAppSecretId).toBe('test-secret-id');
       expect(config.connectedAppSecretValue).toBe('test-secret-value');
-      expect(config.connectedAppJwtAdditionalPayload).toBe('{}');
+      expect(config.jwtAdditionalPayload).toBe('{}');
     });
 
-    it('should set connectedAppJwtAdditionalPayload to the specified value when CONNECTED_APP_JWT_ADDITIONAL_PAYLOAD is set', () => {
+    it('should set jwtAdditionalPayload to the specified value when JWT_ADDITIONAL_PAYLOAD is set', () => {
       process.env = {
         ...process.env,
         ...defaultDirectTrustEnvVars,
-        CONNECTED_APP_JWT_ADDITIONAL_PAYLOAD: '{"custom":"payload"}',
+        JWT_ADDITIONAL_PAYLOAD: '{"custom":"payload"}',
       };
 
       const config = new Config();
-      expect(JSON.parse(config.connectedAppJwtAdditionalPayload)).toEqual({ custom: 'payload' });
+      expect(JSON.parse(config.jwtAdditionalPayload)).toEqual({ custom: 'payload' });
     });
 
     it('should throw error when JWT_SUB_CLAIM is missing for direct-trust auth', () => {
@@ -637,7 +637,7 @@ describe('Config', () => {
       expect(config.connectedAppClientId).toBe('');
       expect(config.connectedAppSecretId).toBe('');
       expect(config.connectedAppSecretValue).toBe('');
-      expect(config.connectedAppJwtAdditionalPayload).toBe('{}');
+      expect(config.jwtAdditionalPayload).toBe('{}');
     });
   });
 

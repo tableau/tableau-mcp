@@ -21,7 +21,7 @@
         "CONNECTED_APP_CLIENT_ID": "${config:tableau.mcp.CONNECTED_APP_CLIENT_ID}",
         "CONNECTED_APP_SECRET_ID": "${config:tableau.mcp.CONNECTED_APP_SECRET_ID}",
         "CONNECTED_APP_SECRET_VALUE": "${config:tableau.mcp.CONNECTED_APP_SECRET_VALUE}",
-        "CONNECTED_APP_JWT_ADDITIONAL_PAYLOAD": "${config:tableau.mcp.CONNECTED_APP_JWT_ADDITIONAL_PAYLOAD}",
+        "JWT_ADDITIONAL_PAYLOAD": "${config:tableau.mcp.JWT_ADDITIONAL_PAYLOAD}",
         "DATASOURCE_CREDENTIALS": "${config:tableau.mcp.DATASOURCE_CREDENTIALS}",
         "DEFAULT_LOG_LEVEL": "${config:tableau.mcp.DEFAULT_LOG_LEVEL}",
         "INCLUDE_TOOLS": "${config:tableau.mcp.INCLUDE_TOOLS}",

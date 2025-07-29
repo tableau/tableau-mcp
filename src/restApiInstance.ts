@@ -53,7 +53,7 @@ const getNewRestApiInstanceAsync = async (
       secretId: config.connectedAppSecretId,
       secretValue: config.connectedAppSecretValue,
       scopes: ['tableau:viz_data_service:read', 'tableau:content:read'],
-      additionalPayload: getConnectedAppJwtAdditionalPayload(config, authInfo),
+      additionalPayload: getJwtAdditionalPayload(config, authInfo),
     });
   } else {
     if (!authInfo?.accessToken || !authInfo?.userId) {
@@ -197,13 +197,13 @@ function getJwtSubClaim(config: Config, authInfo: TableauAuthInfo | undefined): 
     : config.jwtSubClaim;
 }
 
-function getConnectedAppJwtAdditionalPayload(
+function getJwtAdditionalPayload(
   config: Config,
   authInfo: TableauAuthInfo | undefined,
 ): Record<string, unknown> {
   const json = authInfo?.username
-    ? config.connectedAppJwtAdditionalPayload.replaceAll('{OAUTH_USERNAME}', authInfo.username)
-    : config.connectedAppJwtAdditionalPayload;
+    ? config.jwtAdditionalPayload.replaceAll('{OAUTH_USERNAME}', authInfo.username)
+    : config.jwtAdditionalPayload;
 
   return JSON.parse(json);
 }

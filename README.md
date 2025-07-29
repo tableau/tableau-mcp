@@ -218,9 +218,9 @@ When `AUTH` is `direct-trust`, the following environment variables are required:
 | `CONNECTED_APP_SECRET_ID`    | The secret ID of the Tableau Connected App.    |                                                                                                 |
 | `CONNECTED_APP_SECRET_VALUE` | The secret value of the Tableau Connected App. |                                                                                                 |
 
-The optional `CONNECTED_APP_JWT_ADDITIONAL_PAYLOAD` environment variable is a JSON string that
-includes any additional user attributes to include on the JWT. It also supports dynamically
-including the OAuth username. The following is an example:
+The optional `JWT_ADDITIONAL_PAYLOAD` environment variable is a JSON string that includes any
+additional user attributes to include on the JWT. It also supports dynamically including the OAuth
+username. The following is an example:
 
 ```json
 { "username": "{OAUTH_USERNAME}", "region": "West" }
