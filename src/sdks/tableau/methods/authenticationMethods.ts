@@ -25,12 +25,6 @@ export default class AuthenticationMethods extends Methods<typeof authentication
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#sign_in
    */
   signIn = async (authConfig: AuthConfig): Promise<Credentials> => {
-    if (authConfig.type === 'accessToken') {
-      throw new Error(
-        'Do not use this method to authenticate with an access token, just provide it directly using RestApi.setCredentials()',
-      );
-    }
-
     return (
       await this._apiClient.signIn({
         credentials: {
