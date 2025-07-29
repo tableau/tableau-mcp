@@ -16,12 +16,15 @@ import {
 } from './sdks/tableau/interceptors.js';
 import RestApi from './sdks/tableau/restApi.js';
 import { Server } from './server.js';
+import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { userAgent } from './server/userAgent.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 const getNewRestApiInstanceAsync = async (
   config: Config,
   requestId: RequestId,
   server: Server,
+  authInfo?: TableauAuthInfo,
 ): Promise<RestApi> => {
   const restApi = new RestApi(config.server, {
     requestInterceptor: [
@@ -34,7 +37,21 @@ const getNewRestApiInstanceAsync = async (
     ],
   });
 
-  await restApi.signIn(config.authConfig);
+  if (config.auth === 'pat') {
+    await restApi.signIn({
+      type: 'pat',
+      patName: config.patName,
+      patValue: config.patValue,
+      siteName: config.siteName,
+    });
+  } else {
+    if (!authInfo?.accessToken || !authInfo?.userId) {
+      throw new Error('Auth info is required when not signing in first.');
+    }
+
+    restApi.setCredentials(authInfo.accessToken, authInfo.userId);
+  }
+
   return restApi;
 };
 
@@ -43,24 +60,28 @@ export const useRestApi = async <T>({
   requestId,
   server,
   callback,
+  authInfo,
 }: {
   config: Config;
   requestId: RequestId;
   server: Server;
   callback: (restApi: RestApi) => Promise<T>;
+  authInfo?: TableauAuthInfo;
 }): Promise<T> => {
-  const restApi = await getNewRestApiInstanceAsync(config, requestId, server);
+  const restApi = await getNewRestApiInstanceAsync(config, requestId, server, authInfo);
   try {
     return await callback(restApi);
   } finally {
-    await restApi.signOut();
+    if (config.auth === 'pat') {
+      await restApi.signOut();
+    }
   }
 };
 
 export const getRequestInterceptor =
   (server: Server, requestId: RequestId): RequestInterceptor =>
   (request) => {
-    request.headers['User-Agent'] = `${server.name}/${server.version}`;
+    request.headers['User-Agent'] = userAgent;
     logRequest(server, request, requestId);
     return request;
   };

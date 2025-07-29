@@ -4,6 +4,7 @@ import { Ok } from 'ts-results-es';
 import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
+import { getTableauAuthInfo } from '../../../server/oauth/schemas.js';
 import { Tool } from '../../tool.js';
 
 const paramsSchema = {};
@@ -30,10 +31,11 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (_, { requestId }): Promise<CallToolResult> => {
+    callback: async (_, { requestId, authInfo }): Promise<CallToolResult> => {
       const config = getConfig();
       return await listPulseMetricSubscriptionsTool.logAndExecute({
         requestId,
+        authInfo,
         args: {},
         callback: async () => {
           return new Ok(
@@ -41,6 +43,7 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
               config,
               requestId,
               server,
+              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
               },

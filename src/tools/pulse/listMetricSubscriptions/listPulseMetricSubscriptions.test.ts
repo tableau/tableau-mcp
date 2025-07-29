@@ -20,6 +20,7 @@ vi.mock('../../../restApiInstance.js', () => ({
         listPulseMetricSubscriptionsForCurrentUser:
           mocks.mockListPulseMetricSubscriptionsForCurrentUser,
       },
+      siteId: 'test-site-id',
     }),
   ),
 }));
