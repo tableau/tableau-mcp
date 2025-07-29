@@ -14,7 +14,7 @@ describe('getJwt', () => {
   };
 
   const mockUsername = 'test-user';
-  const mockScopes = ['read', 'write'];
+  const mockScopes = new Set(['read', 'write']);
 
   afterEach(() => {
     vi.restoreAllMocks();
