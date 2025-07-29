@@ -174,7 +174,7 @@ export class Config {
     this.connectedAppClientId = clientId ?? '';
     this.connectedAppSecretId = secretId ?? '';
     this.connectedAppSecretValue = secretValue ?? '';
-    this.jwtAdditionalPayload = jwtAdditionalPayload ?? '{}';
+    this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
   }
 }
 
