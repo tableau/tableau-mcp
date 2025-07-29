@@ -209,18 +209,13 @@ function logResponse(
 }
 
 function getJwtSubClaim(config: Config, authInfo: TableauAuthInfo | undefined): string {
-  return authInfo?.username
-    ? config.jwtSubClaim.replaceAll('{OAUTH_USERNAME}', authInfo.username)
-    : config.jwtSubClaim;
+  return config.jwtSubClaim.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
 }
 
 function getJwtAdditionalPayload(
   config: Config,
   authInfo: TableauAuthInfo | undefined,
 ): Record<string, unknown> {
-  const json = authInfo?.username
-    ? config.jwtAdditionalPayload.replaceAll('{OAUTH_USERNAME}', authInfo.username)
-    : config.jwtAdditionalPayload;
-
+  const json = config.jwtAdditionalPayload.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
   return JSON.parse(json);
 }
