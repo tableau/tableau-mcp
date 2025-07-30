@@ -16,10 +16,10 @@
   },
   "scripts": {
     ":build": "npx rimraf ./build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap",
-    "build": "npm run :build && npm run exec-perms && npm run manifest",
+    "build": "npm run :build && npm run exec-perms",
     "build:watch": "npm run :build -- --watch",
     "build:docker": "docker build -t tableau-mcp .",
-    "build:dxt": "npx @anthropic-ai/dxt pack . tableau-mcp.dxt",
+    "build:dxt": "npm run manifest && npx @anthropic-ai/dxt pack . tableau-mcp.dxt",
     "lint": "npm exec eslint",
     "inspect": "npx @modelcontextprotocol/inspector --config config.json --server tableau",
     "inspect:docker": "npx @modelcontextprotocol/inspector --config config.docker.json --server tableau",
