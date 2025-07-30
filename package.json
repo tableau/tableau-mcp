@@ -16,7 +16,7 @@
   },
   "scripts": {
     ":build": "npx rimraf ./build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap",
-    "build": "npm run :build && npm run exec-perms",
+    "build": "npm run :build && npm run exec-perms && npm run manifest",
     "build:watch": "npm run :build -- --watch",
     "build:docker": "docker build -t tableau-mcp .",
     "build:dxt": "npx @anthropic-ai/dxt pack . tableau-mcp.dxt",
@@ -26,6 +26,7 @@
     "build:inspect": "npm run build && npm run inspect",
     "build:inspect:docker": "npm run build && npm run inspect:docker",
     "exec-perms": "shx chmod +x build/*.js",
+    "manifest": "node scripts/create-manifest.js",
     "test": "vitest",
     "coverage": "vitest run --coverage",
     "version:major": "npm version major --no-git-tag-version",
