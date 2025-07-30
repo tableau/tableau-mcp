@@ -6,8 +6,10 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.json ./
 RUN npm ci --ignore-scripts
 
-# Copy source and build
+# Copy source, scripts, README and build
 COPY src ./src
+COPY scripts ./scripts
+COPY README.md ./
 RUN npm run build
 
 # Production stage

@@ -4,4 +4,5 @@
 .dockerignore
 .gitignore
 **/*.md
+!README.md
 **/*.test.ts
