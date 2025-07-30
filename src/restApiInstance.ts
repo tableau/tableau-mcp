@@ -100,7 +100,10 @@ export const useRestApi = async <T>({
   try {
     return await callback(restApi);
   } finally {
-    if (config.auth === 'pat') {
+    if (config.auth !== 'oauth') {
+      // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.
+      // Sessions for 'oauth' are not. Signing out would invalidate the session,
+      // preventing the access token from being reused for subsequent requests.
       await restApi.signOut();
     }
   }
