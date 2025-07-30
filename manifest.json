@@ -5,9 +5,9 @@
   "description": "An MCP server for Tableau, providing a suite of tools that will make it easier for developers to build AI-applications that integrate with Tableau.",
   "author": {
     "name": "Tableau",
-    "url": "https://github.com/tableau/tableau-mcp"
   },
   "homepage": "https://github.com/tableau/tableau-mcp",
+  "license": "Apache-2.0",
   "server": {
     "type": "node",
     "entry_point": "build/index.js",
@@ -26,15 +26,33 @@
     }
   },
   "tools": [
-    { "name": "list-datasources" },
-    { "name": "list-fields" },
-    { "name": "query-datasource" },
-    { "name": "read-metadata" },
-    { "name": "list-all-pulse-metric-definitions" },
-    { "name": "list-pulse-metric-definitions-from-definition-ids" },
-    { "name": "list-pulse-metrics-from-metric-definition-id" },
-    { "name": "list-pulse-metrics-from-metric-ids" },
-    { "name": "list-pulse-metric-subscriptions" }
+    {
+      "name": "list-datasources"
+    },
+    {
+      "name": "list-fields"
+    },
+    {
+      "name": "query-datasource"
+    },
+    {
+      "name": "read-metadata"
+    },
+    {
+      "name": "list-all-pulse-metric-definitions"
+    },
+    {
+      "name": "list-pulse-metric-definitions-from-definition-ids"
+    },
+    {
+      "name": "list-pulse-metrics-from-metric-definition-id"
+    },
+    {
+      "name": "list-pulse-metrics-from-metric-ids"
+    },
+    {
+      "name": "list-pulse-metric-subscriptions"
+    }
   ],
   "user_config": {
     "server": {
@@ -65,6 +83,5 @@
       "required": true,
       "sensitive": true
     }
-  },
-  "license": "Apache-2.0"
+  }
 }
