@@ -9,6 +9,7 @@ import { getConfig } from '../../config.js';
 import RestApi from '../../sdks/tableau/restApi.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
+import { serverName } from '../../server.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import {
   callbackSchema,
@@ -180,7 +181,7 @@ export class OAuthProvider {
      */
     app.get('/.well-known/oauth-protected-resource', (req, res) => {
       res.json({
-        resource: `${req.protocol}://${req.get('host')}/`,
+        resource: `${req.protocol}://${req.get('host')}/${serverName}`,
         authorization_servers: [`${req.protocol}://${req.get('host')}`],
         bearer_methods_supported: ['header'],
       });
