@@ -181,8 +181,8 @@ export class OAuthProvider {
      */
     app.get('/.well-known/oauth-protected-resource', (req, res) => {
       res.json({
-        resource: `${req.protocol}://${req.get('host')}/${serverName}`,
-        authorization_servers: [`${req.protocol}://${req.get('host')}`],
+        resource: `${this.config.oauth.issuer}/${serverName}`,
+        authorization_servers: [this.config.oauth.issuer],
         bearer_methods_supported: ['header'],
       });
     });
