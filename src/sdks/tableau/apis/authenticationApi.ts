@@ -4,13 +4,24 @@ import { z } from 'zod';
 import { credentialsSchema } from '../types/credentials.js';
 
 const signInRequestSchema = z.object({
-  credentials: z.object({
-    site: z.object({
-      contentUrl: z.string(),
-    }),
-    personalAccessTokenName: z.string(),
-    personalAccessTokenSecret: z.string(),
-  }),
+  credentials: z
+    .object({
+      site: z.object({
+        contentUrl: z.string(),
+      }),
+    })
+    .and(
+      z
+        .object({
+          personalAccessTokenName: z.string(),
+          personalAccessTokenSecret: z.string(),
+        })
+        .or(
+          z.object({
+            jwt: z.string(),
+          }),
+        ),
+    ),
 });
 
 const signInEndpoint = makeEndpoint({

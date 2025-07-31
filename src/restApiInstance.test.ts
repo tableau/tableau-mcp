@@ -51,6 +51,7 @@ describe('restApiInstance', () => {
         requestId: mockRequestId,
         server: new Server(),
         callback: (restApi) => Promise.resolve(restApi),
+        jwtScopes: [],
       });
 
       expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));

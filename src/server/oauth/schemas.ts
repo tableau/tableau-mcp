@@ -71,22 +71,25 @@ export const callbackSchema = z.object({
   error: z.string().optional(),
 });
 
-export const mcpAccessTokenSubOnlySchema = z.object({
+export const mcpAccessTokenUserOnlySchema = z.object({
   sub: requiredString('sub'),
+  tableauUserId: requiredString('tableauUserId'),
 });
 
 export const mcpAccessTokenSchema = z.object({
   sub: requiredString('sub'),
+  tableauUserId: requiredString('tableauUserId'),
   tableauAccessToken: requiredString('tableauAccessToken'),
   tableauRefreshToken: requiredString('tableauRefreshToken'),
   tableauExpiresAt: z.number().int().nonnegative(),
 });
 
 export type McpAccessToken = z.infer<typeof mcpAccessTokenSchema>;
-export type McpAccessTokenSubOnly = z.infer<typeof mcpAccessTokenSubOnlySchema>;
+export type McpAccessTokenSubOnly = z.infer<typeof mcpAccessTokenUserOnlySchema>;
 
 export const tableauAuthInfoSchema = z
   .object({
+    username: z.string(),
     userId: z.string(),
     accessToken: z.string(),
     refreshToken: z.string(),

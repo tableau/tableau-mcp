@@ -152,6 +152,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               config,
               requestId,
               server,
+              jwtScopes: ['tableau:insights:read'],
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) =>
                 await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
