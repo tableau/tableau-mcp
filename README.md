@@ -69,6 +69,24 @@ tableau-mcp   latest    c721228b6dd3   15 hours ago   260MB
 Remember to build the Docker image again whenever you pull the latest repo changes. Also you'll need
 to relaunch your AI tool so it starts using the updated image.
 
+### Claude Desktop Extension Build
+
+Anthropic recently added support for Desktop Extensions (DXT) that can simplify loading and configuring
+MCP servers in Claude Desktop. A Desktop Extension is self-contained and the end-user doesn't need to
+worry about git, command lines, or Node.
+
+To build the DXT file for this project:
+
+1. Pull latest changes: `git pull`
+2. `npm install`
+3. `npm run build:dxt`
+4. Use the output file `tableau_mcp.dxt` and install into Claude Desktop
+
+:warning: If you build this from your local repo, all files will be included. Make sure you don't have
+any environment files that contain sensitive data like personal access tokens. :warning:
+
+For more information about Desktop Extensions, see the [June 2025 Anthropic blog post](https://www.anthropic.com/engineering/desktop-extensions) and the [Anthropic DXT GitHub project](https://github.com/anthropics/dxt).
+
 ## Tableau Configuration
 
 Tableau MCP works with both Tableau Server and Tableau cloud data with these prerequisites:
