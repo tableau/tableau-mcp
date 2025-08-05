@@ -34,7 +34,7 @@
     "version:patch": "npm version patch --no-git-tag-version"
   },
   "dependencies": {
-    "@anthropic-ai/dxt": "^0.2.5",
+    "@anthropic-ai/dxt": "^0.2.6",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@zodios/core": "^10.9.6",
     "ts-results-es": "^5.0.1",
