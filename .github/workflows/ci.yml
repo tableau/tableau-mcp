@@ -58,3 +58,12 @@ jobs:
           indicators: true
           output: both
           thresholds: '60 80'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts
+          if-no-files-found: error
+          path: |
+            build/
+            tableau-mcp.dxt
