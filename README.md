@@ -71,6 +71,26 @@ tableau-mcp   latest    c721228b6dd3   15 hours ago   260MB
 Remember to build the Docker image again whenever you pull the latest repo changes. Also you'll need
 to relaunch your AI tool so it starts using the updated image.
 
+### Claude Desktop Extension Build
+
+Anthropic recently added support for Desktop Extensions (DXT) that can simplify loading and
+configuring MCP servers in Claude Desktop. A Desktop Extension is self-contained and the end-user
+doesn't need to worry about git, command lines, or Node.
+
+To build the DXT file for this project:
+
+1. Pull latest changes: `git pull`
+2. `npm install`
+3. `npm run build:dxt`
+4. Use the output file `tableau_mcp.dxt` and install into Claude Desktop
+
+:warning: If you build this from your local repo, all files will be included. Make sure you don't
+have any environment files that contain sensitive data like personal access tokens. :warning:
+
+For more information about Desktop Extensions, see the
+[June 2025 Anthropic blog post](https://www.anthropic.com/engineering/desktop-extensions) and the
+[Anthropic DXT GitHub project](https://github.com/anthropics/dxt).
+
 ## Tableau Configuration
 
 Tableau MCP works with both Tableau Server and Tableau cloud data with these prerequisites:
@@ -168,16 +188,16 @@ These config files will be used in tool configuration explained below.
 
 #### Optional Environment Variables
 
-| **Variable**             | **Description**                                                                                     | **Default**                        | **Note**                                                                                                                                                                                    |
-| ------------------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TRANSPORT`              | The MCP transport type to use for the server.                                                       | `stdio`                            | Possible values are `stdio` or `http`. For `http`, see [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
-| `DEFAULT_LOG_LEVEL`      | The default logging level of the server.                                                            | `debug`                            |                                                                                                                                                                                             |
-| `DATASOURCE_CREDENTIALS` | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
-| `DISABLE_LOG_MASKING`    | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                                                                                                                             |
-| `INCLUDE_TOOLS`          | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                                                                                                                    |
-| `EXCLUDE_TOOLS`          | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                                                                                                                    |
-| `MAX_RESULT_LIMIT`       | If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.  | Empty string (_no limit_)          | A positive number.                                                                                                                                                                          |
-| `DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION` | Disable validation of SET and MATCH filter values in query-datasource tool. | `false` | When `true`, skips validation that checks if filter values exist in the target field. |
+| **Variable**                                 | **Description**                                                                                     | **Default**                        | **Note**                                                                                                                                                                                    |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRANSPORT`                                  | The MCP transport type to use for the server.                                                       | `stdio`                            | Possible values are `stdio` or `http`. For `http`, see [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
+| `DEFAULT_LOG_LEVEL`                          | The default logging level of the server.                                                            | `debug`                            |                                                                                                                                                                                             |
+| `DATASOURCE_CREDENTIALS`                     | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
+| `DISABLE_LOG_MASKING`                        | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                                                                                                                             |
+| `INCLUDE_TOOLS`                              | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                                                                                                                    |
+| `EXCLUDE_TOOLS`                              | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                                                                                                                    |
+| `MAX_RESULT_LIMIT`                           | If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.  | Empty string (_no limit_)          | A positive number.                                                                                                                                                                          |
+| `DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION` | Disable validation of SET and MATCH filter values in query-datasource tool.                         | `false`                            | When `true`, skips validation that checks if filter values exist in the target field.                                                                                                       |
 
 #### HTTP Server Configuration
 
