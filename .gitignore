@@ -5,3 +5,5 @@ junit/
 coverage/
 config.json
 env.list
+manifest.json
+tableau-mcp.dxt
