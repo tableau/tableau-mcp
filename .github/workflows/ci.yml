@@ -40,6 +40,9 @@ jobs:
       - name: Build Docker image
         run: npm run build:docker
 
+      - name: Build Claude Desktop Extension
+        run: npm run build:dxt
+
       - name: Tests
         run: npm run coverage
 
