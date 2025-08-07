@@ -22,7 +22,8 @@ export class Config {
   disableQueryDatasourceFilterValidation: boolean;
 
   constructor() {
-    let { SITE_NAME: siteName } = process.env;
+    const cleansedVars = removeClaudeDesktopExtensionUserConfigTemplates(process.env);
+    let { SITE_NAME: siteName } = cleansedVars;
     const {
       SERVER: server,
       TRANSPORT: transport,
@@ -39,15 +40,13 @@ export class Config {
       EXCLUDE_TOOLS: excludeTools,
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
-    } = process.env;
+    } = cleansedVars;
 
     const defaultPort = 3927;
-    const httpPort = process.env[httpPortEnvVarName?.trim() || 'PORT'] || defaultPort.toString();
+    const httpPort = cleansedVars[httpPortEnvVarName?.trim() || 'PORT'] || defaultPort.toString();
     const httpPortNumber = parseInt(httpPort, 10);
 
-    // When the user does not provide a site name in the Claude Desktop Extension configuration,
-    // Claude doesn't replace its value and sets the site name to "${user_config.site_name}".
-    siteName = siteName === '${user_config.site_name}' ? '' : (siteName ?? '');
+    siteName = siteName ?? '';
     this.transport = isTransport(transport) ? transport : 'stdio';
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
@@ -143,6 +142,21 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
       `The environment variable CORS_ORIGIN_CONFIG is not a valid URL: ${corsOriginConfig}`,
     );
   }
+}
+
+// When the user does not provide a site name in the Claude Desktop Extension configuration,
+// Claude doesn't replace its value and sets the site name to "${user_config.site_name}".
+function removeClaudeDesktopExtensionUserConfigTemplates(
+  envVars: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  return Object.entries(envVars).reduce<Record<string, string | undefined>>((acc, [key, value]) => {
+    if (value?.startsWith('${user_config.')) {
+      acc[key] = '';
+    } else {
+      acc[key] = value;
+    }
+    return acc;
+  }, {});
 }
 
 export const getConfig = (): Config => new Config();
