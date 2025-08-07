@@ -75,11 +75,11 @@ const envVars = {
     sensitive: false,
   },
   DATASOURCE_CREDENTIALS: {
-    includeInUserConfig: false,
+    includeInUserConfig: true,
     type: 'string',
     title: 'Datasource Credentials',
     description:
-      'A JSON string that includes usernames and passwords for any datasources that require them.',
+      'A JSON string that includes usernames and passwords for any datasources that require them. See the README for details on how to format this string.',
     required: false,
     sensitive: true,
   },
