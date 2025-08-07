@@ -164,7 +164,7 @@ const userConfig = Object.entries(envVars).reduce<Record<string, DxtUserConfigur
     if (value.includeInUserConfig) {
       acc[key.toLowerCase()] = {
         type: value.type,
-        title: value.title,
+        title: value.required ? value.title : `${value.title} (Optional)`,
         description: value.description,
         required: value.required,
         sensitive: value.sensitive,
