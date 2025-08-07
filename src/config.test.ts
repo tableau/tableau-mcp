@@ -72,6 +72,19 @@ describe('Config', () => {
     );
   });
 
+  it('should set siteName to empty string when SITE_NAME is "${user_config.site_name}"', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'https://test-server.com',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: 'test-pat-value',
+      SITE_NAME: '${user_config.site_name}',
+    };
+
+    const config = new Config();
+    expect(config.authConfig.siteName).toBe('');
+  });
+
   it('should throw error when PAT_NAME is missing', () => {
     process.env = {
       ...process.env,

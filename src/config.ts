@@ -45,7 +45,9 @@ export class Config {
     const httpPort = process.env[httpPortEnvVarName?.trim() || 'PORT'] || defaultPort.toString();
     const httpPortNumber = parseInt(httpPort, 10);
 
-    siteName = siteName ?? '';
+    // When the user does not provide a site name in the Claude Desktop Extension configuration,
+    // Claude doesn't replace its value and sets the site name to "${user_config.site_name}".
+    siteName = siteName === '${user_config.site_name}' ? '' : (siteName ?? '');
     this.transport = isTransport(transport) ? transport : 'stdio';
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
