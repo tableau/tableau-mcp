@@ -12,40 +12,40 @@ import { toolNames } from '../tools/toolName.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-type EnvVar<TTitle extends string> = {
+type EnvVar = {
   type: 'string' | 'number' | 'boolean';
-  title: TTitle;
+  title: string;
   description: string;
   required: boolean;
   sensitive: boolean;
 };
 
 type EnvVars = {
-  [TKey in keyof ProcessEnvEx]: EnvVar<TKey> & { includeInUserConfig: boolean };
+  [TKey in keyof ProcessEnvEx]: EnvVar & { includeInUserConfig: boolean };
 };
 
 const envVars = {
   SERVER: {
     includeInUserConfig: true,
     type: 'string',
-    title: 'SERVER',
-    description: 'The URL of the Tableau server.',
+    title: 'Server',
+    description: 'The URL of the Tableau server e.g. https://tableau.example.com',
     required: true,
     sensitive: false,
   },
   SITE_NAME: {
     includeInUserConfig: true,
     type: 'string',
-    title: 'SITE_NAME',
+    title: 'Site Name',
     description:
-      'The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site.',
-    required: true,
+      'The name of the Tableau site to use. For Tableau Server, leave this empty to specify the default site.',
+    required: false,
     sensitive: false,
   },
   PAT_NAME: {
     includeInUserConfig: true,
     type: 'string',
-    title: 'PAT_NAME',
+    title: 'PAT Name',
     description: 'The name of the Tableau Personal Access Token to use for authentication.',
     required: true,
     sensitive: false,
@@ -53,7 +53,7 @@ const envVars = {
   PAT_VALUE: {
     includeInUserConfig: true,
     type: 'string',
-    title: 'PAT_VALUE',
+    title: 'PAT Value',
     description: 'The value of the Tableau Personal Access Token to use for authentication.',
     required: true,
     sensitive: true,
@@ -61,7 +61,7 @@ const envVars = {
   TRANSPORT: {
     includeInUserConfig: false,
     type: 'string',
-    title: 'TRANSPORT',
+    title: 'MCP Transport',
     description: 'The MCP transport type to use for the server.',
     required: false,
     sensitive: false,
@@ -69,7 +69,7 @@ const envVars = {
   DEFAULT_LOG_LEVEL: {
     includeInUserConfig: false,
     type: 'string',
-    title: 'DEFAULT_LOG_LEVEL',
+    title: 'Default Log Level',
     description: 'The default logging level of the server.',
     required: false,
     sensitive: false,
@@ -77,7 +77,7 @@ const envVars = {
   DATASOURCE_CREDENTIALS: {
     includeInUserConfig: false,
     type: 'string',
-    title: 'DATASOURCE_CREDENTIALS',
+    title: 'Datasource Credentials',
     description:
       'A JSON string that includes usernames and passwords for any datasources that require them.',
     required: false,
@@ -86,7 +86,7 @@ const envVars = {
   INCLUDE_TOOLS: {
     includeInUserConfig: false,
     type: 'string',
-    title: 'INCLUDE_TOOLS',
+    title: 'Included Tools',
     description:
       'A comma-separated list of tool names to include in the server. Only these tools will be available.',
     required: false,
@@ -95,7 +95,7 @@ const envVars = {
   EXCLUDE_TOOLS: {
     includeInUserConfig: false,
     type: 'string',
-    title: 'EXCLUDE_TOOLS',
+    title: 'Excluded Tools',
     description:
       'A comma-separated list of tool names to exclude from the server. All other tools will be available.',
     required: false,
@@ -104,7 +104,7 @@ const envVars = {
   MAX_RESULT_LIMIT: {
     includeInUserConfig: false,
     type: 'number',
-    title: 'MAX_RESULT_LIMIT',
+    title: 'Max Result Limit',
     description:
       'If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.',
     required: false,
@@ -113,7 +113,7 @@ const envVars = {
   DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: {
     includeInUserConfig: false,
     type: 'boolean',
-    title: 'DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION',
+    title: 'Disable Query Datasource Filter Validation',
     description: 'Disable validation of SET and MATCH filter values in query-datasource tool.',
     required: false,
     sensitive: false,
@@ -121,7 +121,7 @@ const envVars = {
   SSL_KEY: {
     includeInUserConfig: false,
     type: 'string',
-    title: 'SSL_KEY',
+    title: 'SSL Key Path',
     description: 'The path to the SSL key file to use for the HTTP server.',
     required: false,
     sensitive: false,
@@ -129,7 +129,7 @@ const envVars = {
   SSL_CERT: {
     includeInUserConfig: false,
     type: 'string',
-    title: 'SSL_CERT',
+    title: 'SSL Certificate Path',
     description: 'The path to the SSL certificate file to use for the HTTP server.',
     required: false,
     sensitive: false,
@@ -137,7 +137,7 @@ const envVars = {
   HTTP_PORT_ENV_VAR_NAME: {
     includeInUserConfig: false,
     type: 'string',
-    title: 'HTTP_PORT_ENV_VAR_NAME',
+    title: 'HTTP Port Environment Variable Name',
     description: 'The environment variable name to use for the HTTP server port.',
     required: false,
     sensitive: false,
@@ -145,7 +145,7 @@ const envVars = {
   CORS_ORIGIN_CONFIG: {
     includeInUserConfig: false,
     type: 'string',
-    title: 'CORS_ORIGIN_CONFIG',
+    title: 'CORS Origin Config',
     description: 'The origin or origins to allow CORS requests from.',
     required: false,
     sensitive: false,
@@ -153,34 +153,36 @@ const envVars = {
   DISABLE_LOG_MASKING: {
     includeInUserConfig: false,
     type: 'boolean',
-    title: 'DISABLE_LOG_MASKING',
+    title: 'Disable Log Masking',
     description: 'Disable masking of credentials in logs. For debug purposes only.',
     required: false,
     sensitive: false,
   },
 } satisfies EnvVars;
 
-const userConfig = Object.entries(envVars).reduce<Record<string, EnvVar<string>>>(
+const userConfig = Object.entries(envVars).reduce<Record<string, EnvVar>>((acc, [key, value]) => {
+  if (value.includeInUserConfig) {
+    acc[key.toLowerCase()] = {
+      type: value.type,
+      title: value.title,
+      description: value.description,
+      required: value.required,
+      sensitive: value.sensitive,
+    };
+  }
+
+  return acc;
+}, {});
+
+const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>(
   (acc, [key, value]) => {
     if (value.includeInUserConfig) {
-      acc[key] = {
-        type: value.type,
-        title: value.title.toLowerCase(),
-        description: value.description,
-        required: value.required,
-        sensitive: value.sensitive,
-      };
+      acc[key] = `\${user_config.${key.toLowerCase()}}`;
     }
-
     return acc;
   },
   {},
 );
-
-const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>((acc, [key]) => {
-  acc[key] = `\${user_config.${key.toLowerCase()}}`;
-  return acc;
-}, {});
 
 const manifest = {
   dxt_version: '0.1',
