@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
-import { DxtUserConfigurationOptionSchema } from '@anthropic-ai/dxt';
+import { DxtManifestSchema, DxtUserConfigurationOptionSchema } from '@anthropic-ai/dxt';
 import { writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -15,6 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 type DxtUserConfigurationOption = z.infer<typeof DxtUserConfigurationOptionSchema>;
+type DxtManifest = z.infer<typeof DxtManifestSchema>;
 
 type EnvVars = {
   [TKey in keyof ProcessEnvEx]: DxtUserConfigurationOption & {
@@ -212,7 +213,7 @@ const manifest = {
   },
   tools: toolNames.map((name) => ({ name })),
   user_config: userConfig,
-};
+} satisfies DxtManifest;
 
 const manifestPath = join(__dirname, '../../manifest.json');
 writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
