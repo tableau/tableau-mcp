@@ -12,7 +12,7 @@ import { toolNames } from '../tools/toolName.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-type EnvVar<TTitle> = {
+type EnvVar<TTitle extends string> = {
   type: 'string' | 'number' | 'boolean';
   title: TTitle;
   description: string;
@@ -22,14 +22,6 @@ type EnvVar<TTitle> = {
 
 type EnvVars = {
   [TKey in keyof ProcessEnvEx]: EnvVar<TKey> & { includeInUserConfig: boolean };
-};
-
-type UserConfig = {
-  [TKey in keyof ProcessEnvEx]: EnvVar<Lowercase<TKey>>;
-};
-
-type ManifestEnvObject = {
-  [TKey in keyof ProcessEnvEx]: `\${user_config.${Lowercase<TKey>}}`;
 };
 
 const envVars = {
@@ -168,28 +160,28 @@ const envVars = {
   },
 } satisfies EnvVars;
 
-const userConfig = Object.entries(envVars).reduce<
-  Record<string, Omit<EnvVar<string>, 'includeInUserConfig'>>
->((acc, [key, value]) => {
-  if (value.includeInUserConfig) {
-    acc[key] = {
-      type: value.type,
-      title: value.title.toLowerCase(),
-      description: value.description,
-      required: value.required,
-      sensitive: value.sensitive,
-    };
-  }
+const userConfig = Object.entries(envVars).reduce<Record<string, EnvVar<string>>>(
+  (acc, [key, value]) => {
+    if (value.includeInUserConfig) {
+      acc[key] = {
+        type: value.type,
+        title: value.title.toLowerCase(),
+        description: value.description,
+        required: value.required,
+        sensitive: value.sensitive,
+      };
+    }
 
-  return acc;
-}, {}) as UserConfig;
+    return acc;
+  },
+  {},
+);
 
 const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>((acc, [key]) => {
   acc[key] = `\${user_config.${key.toLowerCase()}}`;
   return acc;
-}, {}) as ManifestEnvObject;
+}, {});
 
-// Create the manifest object
 const manifest = {
   dxt_version: '0.1',
   name: packageJson.name,
