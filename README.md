@@ -200,8 +200,19 @@ used to configure the HTTP server.
 
 #### OAuth Configuration
 
+⚠️ Tableau Server 2025.3+ only. Tableau Cloud is not supported. ⚠️
+
 When a URL for `OAUTH_ISSUER` is provided, the MCP server will require logging in via Tableau OAuth
-to access. The following environment variables will also apply or have additional meaning:
+to access. Tableau Server administrators must also use
+[tsm](https://help.tableau.com/current/server/en-us/cli_configuration-set_tsm.htm) to set
+`oauth.allowed_redirect_uri_hosts` to the host of the MCP server.
+
+```cmd
+tsm configuration set -k oauth.allowed_redirect_uri_hosts -v tableau-mcp.example.com
+tsm pending-changes apply
+```
+
+The following environment variables will also apply or have additional meaning:
 
 | **Variable**                          | **Description**                                     | **Default**               | **Notes**                                                                                                                                                                                                |
 | ------------------------------------- | --------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
