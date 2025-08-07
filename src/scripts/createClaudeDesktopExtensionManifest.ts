@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
+import { DxtUserConfigurationOptionSchema } from '@anthropic-ai/dxt';
 import { writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { z } from 'zod';
 
 import packageJson from '../../package.json' with { type: 'json' };
 import { ProcessEnvEx } from '../../types/process-env.js';
@@ -12,16 +14,12 @@ import { toolNames } from '../tools/toolName.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-type EnvVar = {
-  type: 'string' | 'number' | 'boolean';
-  title: string;
-  description: string;
-  required: boolean;
-  sensitive: boolean;
-};
+type DxtUserConfigurationOption = z.infer<typeof DxtUserConfigurationOptionSchema>;
 
 type EnvVars = {
-  [TKey in keyof ProcessEnvEx]: EnvVar & { includeInUserConfig: boolean };
+  [TKey in keyof ProcessEnvEx]: DxtUserConfigurationOption & {
+    includeInUserConfig: boolean;
+  };
 };
 
 const envVars = {
@@ -160,19 +158,22 @@ const envVars = {
   },
 } satisfies EnvVars;
 
-const userConfig = Object.entries(envVars).reduce<Record<string, EnvVar>>((acc, [key, value]) => {
-  if (value.includeInUserConfig) {
-    acc[key.toLowerCase()] = {
-      type: value.type,
-      title: value.title,
-      description: value.description,
-      required: value.required,
-      sensitive: value.sensitive,
-    };
-  }
+const userConfig = Object.entries(envVars).reduce<Record<string, DxtUserConfigurationOption>>(
+  (acc, [key, value]) => {
+    if (value.includeInUserConfig) {
+      acc[key.toLowerCase()] = {
+        type: value.type,
+        title: value.title,
+        description: value.description,
+        required: value.required,
+        sensitive: value.sensitive,
+      };
+    }
 
-  return acc;
-}, {});
+    return acc;
+  },
+  {},
+);
 
 const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>(
   (acc, [key, value]) => {
