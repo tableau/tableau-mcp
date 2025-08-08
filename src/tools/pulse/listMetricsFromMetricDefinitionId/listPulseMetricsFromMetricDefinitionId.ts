@@ -43,6 +43,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
               config,
               requestId,
               server,
+              jwtScopes: ['tableau:insight_definitions_metrics:read'],
               callback: async (restApi) => {
                 return await restApi.pulseMethods.listPulseMetricsFromMetricDefinitionId(
                   pulseMetricDefinitionID,

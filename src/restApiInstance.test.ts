@@ -49,6 +49,7 @@ describe('restApiInstance', () => {
         config: mockConfig,
         requestId: mockRequestId,
         server: new Server(),
+        jwtScopes: [],
         callback: (restApi) => Promise.resolve(restApi),
       });
 
