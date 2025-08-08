@@ -47,6 +47,7 @@ export class Config {
   };
 
   constructor() {
+    const cleansedVars = removeClaudeDesktopExtensionUserConfigTemplates(process.env);
     const {
       AUTH: auth,
       SERVER: server,
@@ -76,13 +77,13 @@ export class Config {
       EXCLUDE_TOOLS: excludeTools,
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
-    } = process.env;
+    } = cleansedVars;
 
     this.siteName = siteName ?? '';
     this.auth = authTypes.find((type) => type === auth) ?? 'pat';
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
-    this.httpPort = parseNumber(process.env[httpPortEnvVarName?.trim() || 'PORT'], {
+    this.httpPort = parseNumber(cleansedVars[httpPortEnvVarName?.trim() || 'PORT'], {
       defaultValue: 3927,
       minValue: 1,
       maxValue: 65535,
@@ -126,10 +127,6 @@ export class Config {
       }
     } else if (this.auth === 'oauth') {
       throw new Error('When auth is "oauth", OAUTH_ISSUER must be set');
-    }
-
-    if (this.auth !== 'oauth') {
-      invariant(this.siteName, 'The environment variable SITE_NAME is not set');
     }
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
@@ -224,6 +221,21 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
       `The environment variable CORS_ORIGIN_CONFIG is not a valid URL: ${corsOriginConfig}`,
     );
   }
+}
+
+// When the user does not provide a site name in the Claude Desktop Extension configuration,
+// Claude doesn't replace its value and sets the site name to "${user_config.site_name}".
+function removeClaudeDesktopExtensionUserConfigTemplates(
+  envVars: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  return Object.entries(envVars).reduce<Record<string, string | undefined>>((acc, [key, value]) => {
+    if (value?.startsWith('${user_config.')) {
+      acc[key] = '';
+    } else {
+      acc[key] = value;
+    }
+    return acc;
+  }, {});
 }
 
 function parseNumber(

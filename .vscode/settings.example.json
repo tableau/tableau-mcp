@@ -1,4 +1,5 @@
 {
+  "tableau.mcp.AUTH": "pat",
   "tableau.mcp.TRANSPORT": "stdio",
   "tableau.mcp.SERVER": "https://my-tableau-server.com",
   "tableau.mcp.SITE_NAME": "",
@@ -8,6 +9,7 @@
   "tableau.mcp.CONNECTED_APP_CLIENT_ID": "",
   "tableau.mcp.CONNECTED_APP_SECRET_ID": "",
   "tableau.mcp.CONNECTED_APP_SECRET_VALUE": "",
+  "tableau.mcp.JWT_ADDITIONAL_PAYLOAD": "",
   "tableau.mcp.DATASOURCE_CREDENTIALS": "",
   "tableau.mcp.DEFAULT_LOG_LEVEL": "debug",
   "tableau.mcp.INCLUDE_TOOLS": "",

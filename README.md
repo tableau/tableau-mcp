@@ -71,6 +71,26 @@ tableau-mcp   latest    c721228b6dd3   15 hours ago   260MB
 Remember to build the Docker image again whenever you pull the latest repo changes. Also you'll need
 to relaunch your AI tool so it starts using the updated image.
 
+### Claude Desktop Extension Build
+
+Anthropic recently added support for Desktop Extensions (DXT) that can simplify loading and
+configuring MCP servers in Claude Desktop. A Desktop Extension is self-contained and the end-user
+doesn't need to worry about git, command lines, or Node.
+
+To build the DXT file for this project:
+
+1. Pull latest changes: `git pull`
+2. `npm install`
+3. `npm run build:dxt`
+4. Use the output file `tableau-mcp.dxt` and install into Claude Desktop
+
+:warning: If you build this from your local repo, all files will be included. Make sure you don't
+have any environment files that contain sensitive data like personal access tokens. :warning:
+
+For more information about Desktop Extensions, see the
+[June 2025 Anthropic blog post](https://www.anthropic.com/engineering/desktop-extensions) and the
+[Anthropic DXT GitHub project](https://github.com/anthropics/dxt).
+
 ## Tableau Configuration
 
 Tableau MCP works with both Tableau Server and Tableau cloud data with these prerequisites:
@@ -90,7 +110,7 @@ Tableau MCP requires authentication in order to connect with your Tableau Server
 site. This authenticated user must have access to the published data source(s) you plan to access.
 
 There are several ways to authenticate to Tableau. See
-[Environment Variables](#environment-variables) for more information.:
+[Environment Variables](#environment-variables) for more information.
 
 1. Provide your Tableau [Personal Access Token][pat] by setting the `PAT_NAME` and `PAT_VALUE`
    environment variables.
@@ -178,7 +198,7 @@ These config files will be used in tool configuration explained below.
 | `TRANSPORT`                                  | The MCP transport type to use for the server.                                                       | `stdio`                            | Possible values are `stdio` or `http`. For `http`, see [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
 | `AUTH`                                       | The authentication method to use by the server.                                                     | `pat`                              | Possible values are `pat`, `direct-trust`, or `oauth`. See below sections for additional required variables depending on the desired method.                                                |
 | `DEFAULT_LOG_LEVEL`                          | The default logging level of the server.                                                            | `debug`                            |                                                                                                                                                                                             |
-| `DATASOURCE_CREDENTIALS`                     | A JSON string that includes usernames and passwords for any datasources that require them.          |                                    | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
+| `DATASOURCE_CREDENTIALS`                     | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
 | `DISABLE_LOG_MASKING`                        | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                                                                                                                             |
 | `INCLUDE_TOOLS`                              | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                                                                                                                    |
 | `EXCLUDE_TOOLS`                              | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                                                                                                                    |

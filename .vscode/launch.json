@@ -12,6 +12,7 @@
       "program": "${workspaceFolder}/node_modules/@modelcontextprotocol/inspector/cli/build/cli.js",
       "outFiles": ["${workspaceFolder}/**/build/**/*.js"],
       "env": {
+        "AUTH": "${config:tableau.mcp.AUTH}",
         "TRANSPORT": "${config:tableau.mcp.TRANSPORT}",
         "SERVER": "${config:tableau.mcp.SERVER}",
         "SITE_NAME": "${config:tableau.mcp.SITE_NAME}",

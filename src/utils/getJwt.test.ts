@@ -48,7 +48,7 @@ describe('getJwt', () => {
       iss: mockConnectedApp.clientId,
       aud: 'tableau',
       sub: mockUsername,
-      scp: mockScopes,
+      scp: [...mockScopes],
     });
 
     // Verify timestamp fields are within expected ranges

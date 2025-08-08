@@ -86,8 +86,8 @@ export const useRestApi = async <T>({
   config: Config;
   requestId: RequestId;
   server: Server;
-  callback: (restApi: RestApi) => Promise<T>;
   jwtScopes: Array<JwtScopes>;
+  callback: (restApi: RestApi) => Promise<T>;
   authInfo?: TableauAuthInfo;
 }): Promise<T> => {
   const restApi = await getNewRestApiInstanceAsync(
