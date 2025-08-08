@@ -20,10 +20,19 @@ import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { userAgent } from './server/userAgent.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
+type JwtScopes =
+  | 'tableau:viz_data_service:read'
+  | 'tableau:content:read'
+  | 'tableau:insight_definitions_metrics:read'
+  | 'tableau:insight_metrics:read'
+  | 'tableau:metric_subscriptions:read'
+  | 'tableau:insights:read';
+
 const getNewRestApiInstanceAsync = async (
   config: Config,
   requestId: RequestId,
   server: Server,
+  jwtScopes: Set<JwtScopes>,
   authInfo?: TableauAuthInfo,
 ): Promise<RestApi> => {
   const restApi = new RestApi(config.server, {
@@ -44,6 +53,17 @@ const getNewRestApiInstanceAsync = async (
       patValue: config.patValue,
       siteName: config.siteName,
     });
+  } else if (config.auth === 'direct-trust') {
+    await restApi.signIn({
+      type: 'direct-trust',
+      siteName: config.siteName,
+      username: getJwtSubClaim(config),
+      clientId: config.connectedAppClientId,
+      secretId: config.connectedAppSecretId,
+      secretValue: config.connectedAppSecretValue,
+      scopes: jwtScopes,
+      additionalPayload: getJwtAdditionalPayload(config),
+    });
   } else {
     if (!authInfo?.accessToken || !authInfo?.userId) {
       throw new Error('Auth info is required when not signing in first.');
@@ -60,19 +80,30 @@ export const useRestApi = async <T>({
   requestId,
   server,
   callback,
+  jwtScopes,
   authInfo,
 }: {
   config: Config;
   requestId: RequestId;
   server: Server;
+  jwtScopes: Array<JwtScopes>;
   callback: (restApi: RestApi) => Promise<T>;
   authInfo?: TableauAuthInfo;
 }): Promise<T> => {
-  const restApi = await getNewRestApiInstanceAsync(config, requestId, server, authInfo);
+  const restApi = await getNewRestApiInstanceAsync(
+    config,
+    requestId,
+    server,
+    new Set(jwtScopes),
+    authInfo,
+  );
   try {
     return await callback(restApi);
   } finally {
-    if (config.auth === 'pat') {
+    if (config.auth !== 'oauth') {
+      // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.
+      // Sessions for 'oauth' are not. Signing out would invalidate the session,
+      // preventing the access token from being reused for subsequent requests.
       await restApi.signOut();
     }
   }
@@ -178,4 +209,13 @@ function logResponse(
   } as const;
 
   log.info(server, messageObj, { logger: 'rest-api', requestId });
+}
+
+function getJwtSubClaim(config: Config): string {
+  return config.jwtSubClaim;
+}
+
+function getJwtAdditionalPayload(config: Config): Record<string, unknown> {
+  const json = config.jwtAdditionalPayload;
+  return JSON.parse(json || '{}');
 }

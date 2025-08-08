@@ -10,8 +10,11 @@ const TWENTY_FOUR_HOURS_IN_MS = 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
 const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
+const authTypes = ['pat', 'direct-trust', 'oauth'] as const;
+type AuthType = (typeof authTypes)[number];
+
 export class Config {
-  auth: 'pat' | 'oauth';
+  auth: AuthType;
   server: string;
   transport: TransportName;
   sslKey: string;
@@ -21,6 +24,11 @@ export class Config {
   siteName: string;
   patName: string;
   patValue: string;
+  jwtSubClaim: string;
+  connectedAppClientId: string;
+  connectedAppSecretId: string;
+  connectedAppSecretValue: string;
+  jwtAdditionalPayload: string;
   datasourceCredentials: string;
   defaultLogLevel: string;
   disableLogMasking: boolean;
@@ -39,6 +47,7 @@ export class Config {
   };
 
   constructor() {
+    const cleansedVars = removeClaudeDesktopExtensionUserConfigTemplates(process.env);
     const {
       AUTH: auth,
       SERVER: server,
@@ -50,6 +59,11 @@ export class Config {
       CORS_ORIGIN_CONFIG: corsOriginConfig,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
+      JWT_SUB_CLAIM: jwtSubClaim,
+      CONNECTED_APP_CLIENT_ID: clientId,
+      CONNECTED_APP_SECRET_ID: secretId,
+      CONNECTED_APP_SECRET_VALUE: secretValue,
+      JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
@@ -63,13 +77,14 @@ export class Config {
       EXCLUDE_TOOLS: excludeTools,
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
-    } = process.env;
+    } = cleansedVars;
 
     this.siteName = siteName ?? '';
-    this.auth = auth === 'oauth' ? 'oauth' : 'pat';
+    this.auth = authTypes.find((type) => type === auth) ?? 'pat';
+
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
-    this.httpPort = parseNumber(process.env[httpPortEnvVarName?.trim() || 'PORT'], {
+    this.httpPort = parseNumber(cleansedVars[httpPortEnvVarName?.trim() || 'PORT'], {
       defaultValue: 3927,
       minValue: 1,
       maxValue: 65535,
@@ -115,10 +130,6 @@ export class Config {
       throw new Error('When auth is "oauth", OAUTH_ISSUER must be set');
     }
 
-    if (this.auth !== 'oauth') {
-      invariant(this.siteName, 'The environment variable SITE_NAME is not set');
-    }
-
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =
       isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
@@ -147,11 +158,21 @@ export class Config {
     if (this.auth === 'pat') {
       invariant(patName, 'The environment variable PAT_NAME is not set');
       invariant(patValue, 'The environment variable PAT_VALUE is not set');
+    } else if (this.auth === 'direct-trust') {
+      invariant(jwtSubClaim, 'The environment variable JWT_SUB_CLAIM is not set');
+      invariant(clientId, 'The environment variable CONNECTED_APP_CLIENT_ID is not set');
+      invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
+      invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
     }
 
     this.server = server;
     this.patName = patName ?? '';
     this.patValue = patValue ?? '';
+    this.jwtSubClaim = jwtSubClaim ?? '';
+    this.connectedAppClientId = clientId ?? '';
+    this.connectedAppSecretId = secretId ?? '';
+    this.connectedAppSecretValue = secretValue ?? '';
+    this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
   }
 }
 
@@ -201,6 +222,21 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
       `The environment variable CORS_ORIGIN_CONFIG is not a valid URL: ${corsOriginConfig}`,
     );
   }
+}
+
+// When the user does not provide a site name in the Claude Desktop Extension configuration,
+// Claude doesn't replace its value and sets the site name to "${user_config.site_name}".
+function removeClaudeDesktopExtensionUserConfigTemplates(
+  envVars: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  return Object.entries(envVars).reduce<Record<string, string | undefined>>((acc, [key, value]) => {
+    if (value?.startsWith('${user_config.')) {
+      acc[key] = '';
+    } else {
+      acc[key] = value;
+    }
+    return acc;
+  }, {});
 }
 
 function parseNumber(

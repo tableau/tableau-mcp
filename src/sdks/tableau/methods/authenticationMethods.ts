@@ -1,5 +1,6 @@
 import { Zodios } from '@zodios/core';
 
+import { getJwt } from '../../../utils/getJwt.js';
 import { authenticationApis } from '../apis/authenticationApi.js';
 import { AuthConfig } from '../authConfig.js';
 import { Credentials } from '../types/credentials.js';
@@ -31,15 +32,28 @@ export default class AuthenticationMethods extends Methods<typeof authentication
           site: {
             contentUrl: authConfig.siteName,
           },
-          ...(() => {
+          ...(await (async () => {
             switch (authConfig.type) {
               case 'pat':
                 return {
                   personalAccessTokenName: authConfig.patName,
                   personalAccessTokenSecret: authConfig.patValue,
                 };
+              case 'direct-trust':
+                return {
+                  jwt: await getJwt({
+                    username: authConfig.username,
+                    connectedApp: {
+                      clientId: authConfig.clientId,
+                      secretId: authConfig.secretId,
+                      secretValue: authConfig.secretValue,
+                    },
+                    scopes: authConfig.scopes,
+                    additionalPayload: authConfig.additionalPayload,
+                  }),
+                };
             }
-          })(),
+          })()),
         },
       })
     ).credentials;
@@ -63,6 +77,8 @@ export class AuthenticatedAuthenticationMethods extends AuthenticatedMethods<
   /**
    * Signs you out of the current session. This call invalidates the authentication token that is created by a call to Sign In.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#sign_out
+   *
+   * Required scopes: none
    *
    */
   signOut = async (): Promise<void> => {

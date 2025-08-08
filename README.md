@@ -71,6 +71,26 @@ tableau-mcp   latest    c721228b6dd3   15 hours ago   260MB
 Remember to build the Docker image again whenever you pull the latest repo changes. Also you'll need
 to relaunch your AI tool so it starts using the updated image.
 
+### Claude Desktop Extension Build
+
+Anthropic recently added support for Desktop Extensions (DXT) that can simplify loading and
+configuring MCP servers in Claude Desktop. A Desktop Extension is self-contained and the end-user
+doesn't need to worry about git, command lines, or Node.
+
+To build the DXT file for this project:
+
+1. Pull latest changes: `git pull`
+2. `npm install`
+3. `npm run build:dxt`
+4. Use the output file `tableau-mcp.dxt` and install into Claude Desktop
+
+:warning: If you build this from your local repo, all files will be included. Make sure you don't
+have any environment files that contain sensitive data like personal access tokens. :warning:
+
+For more information about Desktop Extensions, see the
+[June 2025 Anthropic blog post](https://www.anthropic.com/engineering/desktop-extensions) and the
+[Anthropic DXT GitHub project](https://github.com/anthropics/dxt).
+
 ## Tableau Configuration
 
 Tableau MCP works with both Tableau Server and Tableau cloud data with these prerequisites:
@@ -90,11 +110,13 @@ Tableau MCP requires authentication in order to connect with your Tableau Server
 site. This authenticated user must have access to the published data source(s) you plan to access.
 
 There are several ways to authenticate to Tableau. See
-[Environment Variables](#environment-variables) for more information.:
+[Environment Variables](#environment-variables) for more information.
 
 1. Provide your Tableau [Personal Access Token][pat] by setting the `PAT_NAME` and `PAT_VALUE`
    environment variables.
-2. Use Tableau OAuth by setting the `AUTH` environment variable to `oauth`. See
+2. Use Tableau Connected Apps by setting the `AUTH` environment variable to `direct-trust`. See
+   [Direct Trust Configuration](#direct-trust-configuration) for additional required configuration.
+3. Use Tableau OAuth by setting the `AUTH` environment variable to `oauth`. See
    [OAuth Configuration](#oauth-configuration) for additional required configuration.
 
 ## Configuring AI Tools
@@ -174,7 +196,7 @@ These config files will be used in tool configuration explained below.
 | **Variable**                                 | **Description**                                                                                     | **Default**                        | **Note**                                                                                                                                                                                    |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `TRANSPORT`                                  | The MCP transport type to use for the server.                                                       | `stdio`                            | Possible values are `stdio` or `http`. For `http`, see [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
-| `AUTH`                                       | The authentication method to use by the server.                                                     | `pat`                              | Possible values are `pat` or `oauth`. When `oauth`, `OAUTH_ISSUER` must also be provided. See [OAuth Configuration](#oauth-configuration) below for additional variables.                   |
+| `AUTH`                                       | The authentication method to use by the server.                                                     | `pat`                              | Possible values are `pat`, `direct-trust`, or `oauth`. When `oauth`, `OAUTH_ISSUER` must also be provided. See [OAuth Configuration](#oauth-configuration) below for additional variables.  |
 | `PAT_NAME`                                   | The name of the Tableau [Personal Access Token][pat] to use for authentication.                     |                                    | Required if `AUTH` is `pat`.                                                                                                                                                                |
 | `PAT_VALUE`                                  | The value of the Tableau [Personal Access Token][pat] to use for authentication.                    |                                    | Required if `AUTH` is `pat`.                                                                                                                                                                |
 | `DEFAULT_LOG_LEVEL`                          | The default logging level of the server.                                                            | `debug`                            |                                                                                                                                                                                             |
@@ -197,6 +219,40 @@ used to configure the HTTP server.
 | `SSL_KEY`                         | The path to the SSL key file to use for the HTTP server.         |             |                                                                                                                         |
 | `SSL_CERT`                        | The path to the SSL certificate file to use for the HTTP server. |             |                                                                                                                         |
 | `CORS_ORIGIN_CONFIG`              | The origin or origins to allow CORS requests from.               | `true`      | Acceptable values include `true`, `false`, `*`, or a URL or array of URLs. See [cors config options][cors] for details. |
+
+#### Personal Access Token Configuration
+
+When `AUTH` is `pat`, the following environment variables are required:
+
+| **Variable** | **Description**                                                                  |
+| ------------ | -------------------------------------------------------------------------------- |
+| `PAT_NAME`   | The name of the Tableau [Personal Access Token][pat] to use for authentication.  |
+| `PAT_VALUE`  | The value of the Tableau [Personal Access Token][pat] to use for authentication. |
+
+#### Direct Trust Configuration
+
+When `AUTH` is `direct-trust`, the MCP server will use the provided Tableau Direct Trust Connected
+App info to generate a scoped [JSON Web Token (JWT)][direct-trust] and use it to authenticate to the
+Tableau REST APIs. The generated JWT will have the minimum set of scopes necessary to invoke the
+methods called by the tool being executed. For example, for the `query-datasource` tool, since it
+internally calls into VizQL Data Service, the JWT will only have the `tableau:viz_data_service:read`
+scope.
+
+The following environment variables are required:
+
+| **Variable**                 | **Description**                                |
+| ---------------------------- | ---------------------------------------------- |
+| `JWT_SUB_CLAIM`              | The username for the `sub` claim of the JWT.   |
+| `CONNECTED_APP_CLIENT_ID`    | The client ID of the Tableau Connected App.    |
+| `CONNECTED_APP_SECRET_ID`    | The secret ID of the Tableau Connected App.    |
+| `CONNECTED_APP_SECRET_VALUE` | The secret value of the Tableau Connected App. |
+
+The optional `JWT_ADDITIONAL_PAYLOAD` environment variable is a JSON string that includes any
+additional user attributes to include on the JWT. The following is an example:
+
+```json
+{ "region": "West" }
+```
 
 #### OAuth Configuration
 
@@ -352,3 +408,5 @@ To set up local debugging with breakpoints:
 [express]: https://expressjs.com/
 [cors]: https://expressjs.com/en/resources/middleware/cors.html#configuration-options
 [sign-jwt]: https://github.com/panva/jose/blob/main/docs/jwt/sign/classes/SignJWT.md#examples
+[direct-trust]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#jwt

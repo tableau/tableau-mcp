@@ -80,6 +80,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             config,
             requestId,
             server,
+            jwtScopes: ['tableau:viz_data_service:read'],
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               if (!config.disableQueryDatasourceFilterValidation) {

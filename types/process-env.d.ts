@@ -1,4 +1,5 @@
 export interface ProcessEnvEx {
+  AUTH: string | undefined;
   TRANSPORT: string | undefined;
   SSL_KEY: string | undefined;
   SSL_CERT: string | undefined;
@@ -8,6 +9,11 @@ export interface ProcessEnvEx {
   SITE_NAME: string | undefined;
   PAT_NAME: string | undefined;
   PAT_VALUE: string | undefined;
+  JWT_SUB_CLAIM: string | undefined;
+  CONNECTED_APP_CLIENT_ID: string | undefined;
+  CONNECTED_APP_SECRET_ID: string | undefined;
+  CONNECTED_APP_SECRET_VALUE: string | undefined;
+  JWT_ADDITIONAL_PAYLOAD: string | undefined;
   DATASOURCE_CREDENTIALS: string | undefined;
   DEFAULT_LOG_LEVEL: string | undefined;
   DISABLE_LOG_MASKING: string | undefined;
