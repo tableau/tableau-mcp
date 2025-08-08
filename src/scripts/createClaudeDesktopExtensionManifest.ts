@@ -219,7 +219,7 @@ const envVars = {
     includeInUserConfig: false,
     type: 'string',
     title: 'OAuth JWT Secret',
-    description: 'The OAuth JWT secret.',
+    description: 'The secret to use for the OAuth JWT.',
     required: false,
     sensitive: true,
   },
