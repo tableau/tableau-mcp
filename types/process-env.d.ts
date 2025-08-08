@@ -1,4 +1,5 @@
 export interface ProcessEnvEx {
+  AUTH: string | undefined;
   TRANSPORT: string | undefined;
   SSL_KEY: string | undefined;
   SSL_CERT: string | undefined;

@@ -24,6 +24,15 @@ type EnvVars = {
 };
 
 const envVars = {
+  AUTH: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Authentication Method',
+    description:
+      'The authentication method to use by the server. Possible values are `pat` or `direct-trust`.',
+    required: false,
+    sensitive: false,
+  },
   SERVER: {
     includeInUserConfig: true,
     type: 'string',
@@ -62,7 +71,7 @@ const envVars = {
     type: 'string',
     title: 'JWT Sub Claim',
     description: 'The username for the `sub` claim of the JWT.',
-    required: true,
+    required: false,
     sensitive: false,
   },
   CONNECTED_APP_CLIENT_ID: {
@@ -70,7 +79,7 @@ const envVars = {
     type: 'string',
     title: 'Connected App Client ID',
     description: 'The client ID of the Tableau Connected App.',
-    required: true,
+    required: false,
     sensitive: false,
   },
   CONNECTED_APP_SECRET_ID: {
@@ -78,7 +87,7 @@ const envVars = {
     type: 'string',
     title: 'Connected App Secret ID',
     description: 'The secret ID of the Tableau Connected App.',
-    required: true,
+    required: false,
     sensitive: false,
   },
   CONNECTED_APP_SECRET_VALUE: {
@@ -86,7 +95,7 @@ const envVars = {
     type: 'string',
     title: 'Connected App Secret Value',
     description: 'The secret value of the Tableau Connected App.',
-    required: true,
+    required: false,
     sensitive: true,
   },
   JWT_ADDITIONAL_PAYLOAD: {
