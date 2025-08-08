@@ -33,10 +33,10 @@ export class Config {
 
   constructor() {
     const cleansedVars = removeClaudeDesktopExtensionUserConfigTemplates(process.env);
-    const { SITE_NAME: siteName } = cleansedVars;
     const {
       AUTH: auth,
       SERVER: server,
+      SITE_NAME: siteName,
       TRANSPORT: transport,
       SSL_KEY: sslKey,
       SSL_CERT: sslCert,
