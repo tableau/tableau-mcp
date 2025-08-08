@@ -197,8 +197,6 @@ These config files will be used in tool configuration explained below.
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `TRANSPORT`                                  | The MCP transport type to use for the server.                                                       | `stdio`                            | Possible values are `stdio` or `http`. For `http`, see [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
 | `AUTH`                                       | The authentication method to use by the server.                                                     | `pat`                              | Possible values are `pat`, `direct-trust`, or `oauth`. When `oauth`, `OAUTH_ISSUER` must also be provided. See [OAuth Configuration](#oauth-configuration) below for additional variables.  |
-| `PAT_NAME`                                   | The name of the Tableau [Personal Access Token][pat] to use for authentication.                     |                                    | Required if `AUTH` is `pat`.                                                                                                                                                                |
-| `PAT_VALUE`                                  | The value of the Tableau [Personal Access Token][pat] to use for authentication.                    |                                    | Required if `AUTH` is `pat`.                                                                                                                                                                |
 | `DEFAULT_LOG_LEVEL`                          | The default logging level of the server.                                                            | `debug`                            |                                                                                                                                                                                             |
 | `DATASOURCE_CREDENTIALS`                     | A JSON string that includes usernames and passwords for any datasources that require them.          |                                    | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
 | `DISABLE_LOG_MASKING`                        | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                                                                                                                             |
@@ -240,18 +238,19 @@ scope.
 
 The following environment variables are required:
 
-| **Variable**                 | **Description**                                |
-| ---------------------------- | ---------------------------------------------- |
-| `JWT_SUB_CLAIM`              | The username for the `sub` claim of the JWT.   |
-| `CONNECTED_APP_CLIENT_ID`    | The client ID of the Tableau Connected App.    |
-| `CONNECTED_APP_SECRET_ID`    | The secret ID of the Tableau Connected App.    |
-| `CONNECTED_APP_SECRET_VALUE` | The secret value of the Tableau Connected App. |
+| **Variable**                 | **Description**                                | **Notes**                                                                                       |
+| ---------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `JWT_SUB_CLAIM`              | The username for the `sub` claim of the JWT.   | Can either be a hard-coded username, or the OAuth username by setting it to `{OAUTH_USERNAME}`. |
+| `CONNECTED_APP_CLIENT_ID`    | The client ID of the Tableau Connected App.    |                                                                                                 |
+| `CONNECTED_APP_SECRET_ID`    | The secret ID of the Tableau Connected App.    |                                                                                                 |
+| `CONNECTED_APP_SECRET_VALUE` | The secret value of the Tableau Connected App. |                                                                                                 |
 
 The optional `JWT_ADDITIONAL_PAYLOAD` environment variable is a JSON string that includes any
-additional user attributes to include on the JWT. The following is an example:
+additional user attributes to include on the JWT. It also supports dynamically including the OAuth
+username. The following is an example:
 
 ```json
-{ "region": "West" }
+{ "username": "{OAUTH_USERNAME}", "region": "West" }
 ```
 
 #### OAuth Configuration

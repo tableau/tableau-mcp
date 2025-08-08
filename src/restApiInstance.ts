@@ -57,12 +57,12 @@ const getNewRestApiInstanceAsync = async (
     await restApi.signIn({
       type: 'direct-trust',
       siteName: config.siteName,
-      username: getJwtSubClaim(config),
+      username: getJwtSubClaim(config, authInfo),
       clientId: config.connectedAppClientId,
       secretId: config.connectedAppSecretId,
       secretValue: config.connectedAppSecretValue,
       scopes: jwtScopes,
-      additionalPayload: getJwtAdditionalPayload(config),
+      additionalPayload: getJwtAdditionalPayload(config, authInfo),
     });
   } else {
     if (!authInfo?.accessToken || !authInfo?.userId) {
@@ -211,11 +211,14 @@ function logResponse(
   log.info(server, messageObj, { logger: 'rest-api', requestId });
 }
 
-function getJwtSubClaim(config: Config): string {
-  return config.jwtSubClaim;
+function getJwtSubClaim(config: Config, authInfo: TableauAuthInfo | undefined): string {
+  return config.jwtSubClaim.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
 }
 
-function getJwtAdditionalPayload(config: Config): Record<string, unknown> {
-  const json = config.jwtAdditionalPayload;
+function getJwtAdditionalPayload(
+  config: Config,
+  authInfo: TableauAuthInfo | undefined,
+): Record<string, unknown> {
+  const json = config.jwtAdditionalPayload.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
   return JSON.parse(json || '{}');
 }

@@ -9,11 +9,12 @@ import { getConfig } from '../../config.js';
 import RestApi from '../../sdks/tableau/restApi.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
+import { serverName } from '../../server.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import {
   callbackSchema,
   mcpAccessTokenSchema,
-  mcpAccessTokenSubOnlySchema,
+  mcpAccessTokenUserOnlySchema,
   mcpAuthorizeSchema,
   mcpTokenSchema,
   TableauAuthInfo,
@@ -180,8 +181,8 @@ export class OAuthProvider {
      */
     app.get('/.well-known/oauth-protected-resource', (req, res) => {
       res.json({
-        resource: `${req.protocol}://${req.get('host')}/`,
-        authorization_servers: [`${req.protocol}://${req.get('host')}`],
+        resource: `${this.config.oauth.issuer}/${serverName}`,
+        authorization_servers: [this.config.oauth.issuer],
         bearer_methods_supported: ['header'],
       });
     });
@@ -649,7 +650,7 @@ export class OAuthProvider {
           );
         }
 
-        const { tableauAccessToken, tableauRefreshToken, tableauExpiresAt, sub } =
+        const { tableauAccessToken, tableauRefreshToken, tableauExpiresAt, tableauUserId, sub } =
           mcpAccessToken.data;
 
         if (Date.now() > tableauExpiresAt) {
@@ -657,20 +658,23 @@ export class OAuthProvider {
         }
 
         authInfo = {
-          userId: sub,
+          username: sub,
+          userId: tableauUserId,
           accessToken: tableauAccessToken,
           refreshToken: tableauRefreshToken,
         };
       } else {
-        const mcpAccessToken = mcpAccessTokenSubOnlySchema.safeParse(payload);
+        const mcpAccessToken = mcpAccessTokenUserOnlySchema.safeParse(payload);
         if (!mcpAccessToken.success) {
           return Err(
             `Invalid access token: ${mcpAccessToken.error.errors.map((e) => e.message).join(', ')}`,
           );
         }
 
+        const { tableauUserId, sub } = mcpAccessToken.data;
         authInfo = {
-          userId: mcpAccessToken.data.sub,
+          username: sub,
+          userId: tableauUserId,
         };
       }
 
@@ -699,6 +703,7 @@ export class OAuthProvider {
   private async createAccessToken(tokenData: UserAndTokens): Promise<string> {
     return await new SignJWT({
       sub: tokenData.user.name,
+      tableauUserId: tokenData.user.id,
       ...(this.config.auth === 'oauth'
         ? {
             tableauAccessToken: tokenData.tokens.accessToken,
