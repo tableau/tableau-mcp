@@ -1,18 +1,28 @@
 import { CorsOptions } from 'cors';
 
-import { AuthConfig } from './sdks/tableau/authConfig.js';
 import { isToolName, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
+const authTypes = ['pat', 'direct-trust'] as const;
+type AuthType = (typeof authTypes)[number];
+
 export class Config {
+  auth: AuthType;
   server: string;
   transport: TransportName;
   sslKey: string;
   sslCert: string;
   httpPort: number;
   corsOriginConfig: CorsOptions['origin'];
-  authConfig: AuthConfig;
+  siteName: string;
+  patName: string;
+  patValue: string;
+  jwtSubClaim: string;
+  connectedAppClientId: string;
+  connectedAppSecretId: string;
+  connectedAppSecretValue: string;
+  jwtAdditionalPayload: string;
   datasourceCredentials: string;
   defaultLogLevel: string;
   disableLogMasking: boolean;
@@ -23,9 +33,10 @@ export class Config {
 
   constructor() {
     const cleansedVars = removeClaudeDesktopExtensionUserConfigTemplates(process.env);
-    let { SITE_NAME: siteName } = cleansedVars;
     const {
+      AUTH: auth,
       SERVER: server,
+      SITE_NAME: siteName,
       TRANSPORT: transport,
       SSL_KEY: sslKey,
       SSL_CERT: sslCert,
@@ -33,6 +44,11 @@ export class Config {
       CORS_ORIGIN_CONFIG: corsOriginConfig,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
+      JWT_SUB_CLAIM: jwtSubClaim,
+      CONNECTED_APP_CLIENT_ID: clientId,
+      CONNECTED_APP_SECRET_ID: secretId,
+      CONNECTED_APP_SECRET_VALUE: secretValue,
+      JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
@@ -46,7 +62,8 @@ export class Config {
     const httpPort = cleansedVars[httpPortEnvVarName?.trim() || 'PORT'] || defaultPort.toString();
     const httpPortNumber = parseInt(httpPort, 10);
 
-    siteName = siteName ?? '';
+    this.siteName = siteName ?? '';
+    this.auth = authTypes.find((type) => type === auth) ?? 'pat';
     this.transport = isTransport(transport) ? transport : 'stdio';
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
@@ -82,17 +99,24 @@ export class Config {
     invariant(server, 'The environment variable SERVER is not set');
     validateServer(server);
 
-    invariant(patName, 'The environment variable PAT_NAME is not set');
-    invariant(patValue, 'The environment variable PAT_VALUE is not set');
+    if (this.auth === 'pat') {
+      invariant(patName, 'The environment variable PAT_NAME is not set');
+      invariant(patValue, 'The environment variable PAT_VALUE is not set');
+    } else if (this.auth === 'direct-trust') {
+      invariant(jwtSubClaim, 'The environment variable JWT_SUB_CLAIM is not set');
+      invariant(clientId, 'The environment variable CONNECTED_APP_CLIENT_ID is not set');
+      invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
+      invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
+    }
 
     this.server = server;
-
-    this.authConfig = {
-      type: 'pat',
-      patName,
-      patValue,
-      siteName,
-    };
+    this.patName = patName ?? '';
+    this.patValue = patValue ?? '';
+    this.jwtSubClaim = jwtSubClaim ?? '';
+    this.connectedAppClientId = clientId ?? '';
+    this.connectedAppSecretId = secretId ?? '';
+    this.connectedAppSecretValue = secretValue ?? '';
+    this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
   }
 }
 

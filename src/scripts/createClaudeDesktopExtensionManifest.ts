@@ -24,6 +24,15 @@ type EnvVars = {
 };
 
 const envVars = {
+  AUTH: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Authentication Method',
+    description:
+      'The authentication method to use by the server. Possible values are `pat` or `direct-trust`.',
+    required: false,
+    sensitive: false,
+  },
   SERVER: {
     includeInUserConfig: true,
     type: 'string',
@@ -56,6 +65,47 @@ const envVars = {
     description: 'The value of the Tableau Personal Access Token to use for authentication.',
     required: true,
     sensitive: true,
+  },
+  JWT_SUB_CLAIM: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'JWT Sub Claim',
+    description: 'The username for the `sub` claim of the JWT.',
+    required: false,
+    sensitive: false,
+  },
+  CONNECTED_APP_CLIENT_ID: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Connected App Client ID',
+    description: 'The client ID of the Tableau Connected App.',
+    required: false,
+    sensitive: false,
+  },
+  CONNECTED_APP_SECRET_ID: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Connected App Secret ID',
+    description: 'The secret ID of the Tableau Connected App.',
+    required: false,
+    sensitive: false,
+  },
+  CONNECTED_APP_SECRET_VALUE: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Connected App Secret Value',
+    description: 'The secret value of the Tableau Connected App.',
+    required: false,
+    sensitive: true,
+  },
+  JWT_ADDITIONAL_PAYLOAD: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'JWT Additional Payload',
+    description:
+      'A JSON string that includes any additional user attributes to include on the JWT.',
+    required: false,
+    sensitive: false,
   },
   TRANSPORT: {
     includeInUserConfig: false,

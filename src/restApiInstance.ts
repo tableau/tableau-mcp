@@ -18,10 +18,19 @@ import RestApi from './sdks/tableau/restApi.js';
 import { Server } from './server.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
+type JwtScopes =
+  | 'tableau:viz_data_service:read'
+  | 'tableau:content:read'
+  | 'tableau:insight_definitions_metrics:read'
+  | 'tableau:insight_metrics:read'
+  | 'tableau:metric_subscriptions:read'
+  | 'tableau:insights:read';
+
 const getNewRestApiInstanceAsync = async (
   config: Config,
   requestId: RequestId,
   server: Server,
+  jwtScopes: Set<JwtScopes>,
 ): Promise<RestApi> => {
   const restApi = new RestApi(config.server, {
     requestInterceptor: [
@@ -34,7 +43,26 @@ const getNewRestApiInstanceAsync = async (
     ],
   });
 
-  await restApi.signIn(config.authConfig);
+  if (config.auth === 'pat') {
+    await restApi.signIn({
+      type: 'pat',
+      patName: config.patName,
+      patValue: config.patValue,
+      siteName: config.siteName,
+    });
+  } else if (config.auth === 'direct-trust') {
+    await restApi.signIn({
+      type: 'direct-trust',
+      siteName: config.siteName,
+      username: getJwtSubClaim(config),
+      clientId: config.connectedAppClientId,
+      secretId: config.connectedAppSecretId,
+      secretValue: config.connectedAppSecretValue,
+      scopes: jwtScopes,
+      additionalPayload: getJwtAdditionalPayload(config),
+    });
+  }
+
   return restApi;
 };
 
@@ -43,13 +71,15 @@ export const useRestApi = async <T>({
   requestId,
   server,
   callback,
+  jwtScopes,
 }: {
   config: Config;
   requestId: RequestId;
   server: Server;
+  jwtScopes: Array<JwtScopes>;
   callback: (restApi: RestApi) => Promise<T>;
 }): Promise<T> => {
-  const restApi = await getNewRestApiInstanceAsync(config, requestId, server);
+  const restApi = await getNewRestApiInstanceAsync(config, requestId, server, new Set(jwtScopes));
   try {
     return await callback(restApi);
   } finally {
@@ -157,4 +187,13 @@ function logResponse(
   } as const;
 
   log.info(server, messageObj, { logger: 'rest-api', requestId });
+}
+
+function getJwtSubClaim(config: Config): string {
+  return config.jwtSubClaim;
+}
+
+function getJwtAdditionalPayload(config: Config): Record<string, unknown> {
+  const json = config.jwtAdditionalPayload;
+  return JSON.parse(json || '{}');
 }
