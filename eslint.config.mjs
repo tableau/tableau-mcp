@@ -31,8 +31,9 @@ export default [
       'simple-import-sort': simpleImportSort,
     },
     rules: {
-      'no-console': 'error',
+      'no-console': ['error', { allow: ['warn', 'error'] }],
       'no-duplicate-imports': ['error', { includeExports: true }],
+      quotes: ['error', 'single', { avoidEscape: true }],
       'simple-import-sort/imports': 'error',
       'simple-import-sort/exports': 'error',
       '@typescript-eslint/explicit-function-return-type': ['error', { allowExpressions: true }],

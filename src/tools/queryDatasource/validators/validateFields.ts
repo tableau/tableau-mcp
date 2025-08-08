@@ -16,7 +16,7 @@ export function validateFields(fields: Fields): void {
   {
     // Field caption must be a non-empty string.
     if (fields.some(hasEmptyFieldCaption)) {
-      throw new Error(`The query must not include any fields with an empty fieldCaption.`);
+      throw new Error('The query must not include any fields with an empty fieldCaption.');
     }
   }
 
