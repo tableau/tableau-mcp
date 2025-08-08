@@ -1,3 +1,4 @@
+*.local
 .env
 build/
 node_modules/

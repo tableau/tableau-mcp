@@ -8,6 +8,10 @@ import { getListPulseMetricsFromMetricIdsTool } from './pulse/listMetricsFromMet
 import { getListPulseMetricSubscriptionsTool } from './pulse/listMetricSubscriptions/listPulseMetricSubscriptions.js';
 import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { getReadMetadataTool } from './readMetadata.js';
+import { getGetWorkbookTool } from './workbook/getWorkbook.js';
+import { getQueryViewDataTool } from './workbook/queryViewData.js';
+import { getQueryViewImageTool } from './workbook/queryViewImage.js';
+import { getQueryWorkbooksTool } from './workbook/queryWorkbooks.js';
 
 export const toolFactories = [
   getListDatasourcesTool,
@@ -20,4 +24,8 @@ export const toolFactories = [
   getListPulseMetricsFromMetricIdsTool,
   getListPulseMetricSubscriptionsTool,
   getGeneratePulseMetricValueInsightBundleTool,
+  getGetWorkbookTool,
+  getQueryViewDataTool,
+  getQueryViewImageTool,
+  getQueryWorkbooksTool,
 ];

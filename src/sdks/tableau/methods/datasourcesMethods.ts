@@ -1,6 +1,8 @@
 import { Zodios } from '@zodios/core';
+import path from 'path';
 
-import { Datasource, datasourcesApis } from '../apis/datasourcesApi.js';
+import { Datasource, datasourcesApis, throwIfPublishFailed } from '../apis/datasourcesApi.js';
+import { usePostMultipartPluginAsync } from '../plugins/postMultipartPlugin.js';
 import { Credentials } from '../types/credentials.js';
 import { Pagination } from '../types/pagination.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
@@ -48,5 +50,47 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
       pagination: response.pagination,
       datasources: response.datasources.datasource ?? [],
     };
+  };
+
+  /**
+   * Publishes a data source on the specified site.
+   *
+   * Required scopes: `tableau:datasources:create`
+   *
+   * @param {string} pathToDataSourceFile The path to the data source file to publish.
+   * @param {string} siteId - The Tableau site ID
+   * @param {string} projectId The id of the project to which to publish.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#publish_data_source
+   */
+  publishDataSource = async (
+    pathToDataSourceFile: string,
+    siteId: string,
+    projectId: string,
+  ): Promise<void> => {
+    const dataSourceNameWithoutExtension = path.parse(pathToDataSourceFile).name;
+    const datasource = {
+      name: dataSourceNameWithoutExtension,
+      project: { id: projectId },
+    };
+
+    await usePostMultipartPluginAsync({
+      apiClient: this._apiClient,
+      actionFnAsync: async () => {
+        await this._apiClient.publishWorkbook(
+          {
+            contentDispositionName: 'tableau_datasource',
+            asset: { datasource },
+            pathToFile: pathToDataSourceFile,
+          },
+          {
+            params: { siteId },
+            ...this.authAndMultipartRequestHeaders,
+          },
+        );
+      },
+      catchFn: (e) => {
+        throwIfPublishFailed(e, dataSourceNameWithoutExtension);
+      },
+    });
   };
 }

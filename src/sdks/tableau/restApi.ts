@@ -14,6 +14,7 @@ import DatasourcesMethods from './methods/datasourcesMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import PulseMethods from './methods/pulseMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
+import WorkbookMethods from './methods/workbookMethods.js';
 import { Credentials } from './types/credentials.js';
 
 /**
@@ -32,8 +33,9 @@ export default class RestApi {
   private _authenticatedAuthenticationMethods?: AuthenticatedAuthenticationMethods;
   private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
-  private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
   private _pulseMethods?: PulseMethods;
+  private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
+  private _workbookMethods?: WorkbookMethods;
   private static _version = '3.24';
 
   private _requestInterceptor?: [RequestInterceptor, ErrorInterceptor?];
@@ -103,6 +105,15 @@ export default class RestApi {
     return this._metadataMethods;
   }
 
+  get pulseMethods(): PulseMethods {
+    if (!this._pulseMethods) {
+      this._pulseMethods = new PulseMethods(this._baseUrlWithoutVersion, this.creds);
+      this._addInterceptors(this._baseUrlWithoutVersion, this._pulseMethods.interceptors);
+    }
+
+    return this._pulseMethods;
+  }
+
   get vizqlDataServiceMethods(): VizqlDataServiceMethods {
     if (!this._vizqlDataServiceMethods) {
       const baseUrl = `${this._host}/api/v1/vizql-data-service`;
@@ -113,13 +124,13 @@ export default class RestApi {
     return this._vizqlDataServiceMethods;
   }
 
-  get pulseMethods(): PulseMethods {
-    if (!this._pulseMethods) {
-      this._pulseMethods = new PulseMethods(this._baseUrlWithoutVersion, this.creds);
-      this._addInterceptors(this._baseUrlWithoutVersion, this._pulseMethods.interceptors);
+  get workbookMethods(): WorkbookMethods {
+    if (!this._workbookMethods) {
+      this._workbookMethods = new WorkbookMethods(this._baseUrl, this.creds);
+      this._addInterceptors(this._baseUrl, this._workbookMethods.interceptors);
     }
 
-    return this._pulseMethods;
+    return this._workbookMethods;
   }
 
   signIn = async (authConfig: AuthConfig): Promise<void> => {
