@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
-import { getQueryViewImageTool } from './queryViewImage.js';
+import { getGetViewImageTool } from './getViewImage.js';
 
 // 1x1 png image
 const encodedPngData =
@@ -24,16 +24,18 @@ vi.mock('../../restApiInstance.js', () => ({
   ),
 }));
 
-describe('queryViewImageTool', () => {
+describe('getViewImageTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('should create a tool instance with correct properties', () => {
-    const queryViewImageTool = getQueryViewImageTool(new Server());
-    expect(queryViewImageTool.name).toBe('query-view-image');
-    expect(queryViewImageTool.description).toContain('Retrieves an image of the specified view.');
-    expect(queryViewImageTool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
+    const getViewImageTool = getGetViewImageTool(new Server());
+    expect(getViewImageTool.name).toBe('get-view-image');
+    expect(getViewImageTool.description).toContain(
+      'Retrieves an image of the specified view in a Tableau workbook.',
+    );
+    expect(getViewImageTool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
   });
 
   it('should successfully get view image', async () => {
@@ -63,8 +65,8 @@ describe('queryViewImageTool', () => {
 });
 
 async function getToolResult(params: { viewId: string }): Promise<CallToolResult> {
-  const queryViewImageTool = getQueryViewImageTool(new Server());
-  return await queryViewImageTool.callback(params, {
+  const getViewImageTool = getGetViewImageTool(new Server());
+  return await getViewImageTool.callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

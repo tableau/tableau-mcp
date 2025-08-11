@@ -15,7 +15,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
   const getWorkbookTool = new Tool({
     server,
     name: 'get-workbook',
-    description: `Returns information about the specified workbook, including information about views and tags.`,
+    description: `Retrieves information about the specified workbook, including information about the views contained in the workbook.`,
     paramsSchema,
     annotations: {
       title: 'Get Workbook',

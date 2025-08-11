@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
-import { getQueryViewDataTool } from './queryViewData.js';
+import { getGetViewDataTool as getGetViewDataTool } from './getViewData.js';
 
 const mockViewData =
   '"Country/Region,State/Province,Profit Ratio,Latitude (generated),Longitude (generated)\nCanada,Alberta,19.5%,53.41,-114.42\n"';
@@ -21,18 +21,18 @@ vi.mock('../../restApiInstance.js', () => ({
   ),
 }));
 
-describe('queryViewDataTool', () => {
+describe('getViewDataTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('should create a tool instance with correct properties', () => {
-    const queryViewDataTool = getQueryViewDataTool(new Server());
-    expect(queryViewDataTool.name).toBe('query-view-data');
-    expect(queryViewDataTool.description).toContain(
-      'Returns a specified view rendered as data in comma separated value (CSV) format.',
+    const getViewDataTool = getGetViewDataTool(new Server());
+    expect(getViewDataTool.name).toBe('get-view-data');
+    expect(getViewDataTool.description).toContain(
+      'Retrieves data in comma separated value (CSV) format for the specified view in a Tableau workbook.',
     );
-    expect(queryViewDataTool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
+    expect(getViewDataTool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
   });
 
   it('should successfully get view data', async () => {
@@ -59,8 +59,8 @@ describe('queryViewDataTool', () => {
 });
 
 async function getToolResult(params: { viewId: string }): Promise<CallToolResult> {
-  const queryViewDataTool = getQueryViewDataTool(new Server());
-  return await queryViewDataTool.callback(params, {
+  const getViewDataTool = getGetViewDataTool(new Server());
+  return await getViewDataTool.callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

@@ -11,21 +11,21 @@ const paramsSchema = {
   viewId: z.string(),
 };
 
-export const getQueryViewDataTool = (server: Server): Tool<typeof paramsSchema> => {
-  const queryViewDataTool = new Tool({
+export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> => {
+  const getViewImageTool = new Tool({
     server,
-    name: 'query-view-data',
-    description: `Returns a specified view rendered as data in comma separated value (CSV) format.`,
+    name: 'get-view-image',
+    description: `Retrieves an image of the specified view in a Tableau workbook.`,
     paramsSchema,
     annotations: {
-      title: 'Query View Data',
+      title: 'Get View Image',
       readOnlyHint: true,
       openWorldHint: false,
     },
     callback: async ({ viewId }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
 
-      return await queryViewDataTool.logAndExecute({
+      return await getViewImageTool.logAndExecute({
         requestId,
         args: { viewId },
         callback: async () => {
@@ -36,7 +36,7 @@ export const getQueryViewDataTool = (server: Server): Tool<typeof paramsSchema> 
               server,
               jwtScopes: ['tableau:views:download'],
               callback: async (restApi) => {
-                return await restApi.workbookMethods.queryViewData({
+                return await restApi.workbookMethods.queryViewImage({
                   viewId,
                   siteId: restApi.siteId,
                 });
@@ -44,9 +44,27 @@ export const getQueryViewDataTool = (server: Server): Tool<typeof paramsSchema> 
             }),
           );
         },
+        getSuccessResult: (pngData) => {
+          const base64Data = Buffer.from(pngData).toString('base64');
+          const size = Buffer.from(base64Data, 'base64').length;
+
+          return {
+            isError: false,
+            content: [
+              {
+                type: 'image',
+                data: base64Data,
+                mimeType: 'image/png',
+                annotations: {
+                  size: size,
+                },
+              },
+            ],
+          };
+        },
       });
     },
   });
 
-  return queryViewDataTool;
+  return getViewImageTool;
 };

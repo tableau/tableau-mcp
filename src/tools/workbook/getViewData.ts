@@ -11,21 +11,21 @@ const paramsSchema = {
   viewId: z.string(),
 };
 
-export const getQueryViewImageTool = (server: Server): Tool<typeof paramsSchema> => {
-  const queryViewImageTool = new Tool({
+export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> => {
+  const getViewDataTool = new Tool({
     server,
-    name: 'query-view-image',
-    description: `Retrieves an image of the specified view.`,
+    name: 'get-view-data',
+    description: `Retrieves data in comma separated value (CSV) format for the specified view in a Tableau workbook.`,
     paramsSchema,
     annotations: {
-      title: 'Query View Image',
+      title: 'Get View Data',
       readOnlyHint: true,
       openWorldHint: false,
     },
     callback: async ({ viewId }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
 
-      return await queryViewImageTool.logAndExecute({
+      return await getViewDataTool.logAndExecute({
         requestId,
         args: { viewId },
         callback: async () => {
@@ -36,7 +36,7 @@ export const getQueryViewImageTool = (server: Server): Tool<typeof paramsSchema>
               server,
               jwtScopes: ['tableau:views:download'],
               callback: async (restApi) => {
-                return await restApi.workbookMethods.queryViewImage({
+                return await restApi.workbookMethods.queryViewData({
                   viewId,
                   siteId: restApi.siteId,
                 });
@@ -44,27 +44,9 @@ export const getQueryViewImageTool = (server: Server): Tool<typeof paramsSchema>
             }),
           );
         },
-        getSuccessResult: (pngData) => {
-          const base64Data = Buffer.from(pngData).toString('base64');
-          const size = Buffer.from(base64Data, 'base64').length;
-
-          return {
-            isError: false,
-            content: [
-              {
-                type: 'image',
-                data: base64Data,
-                mimeType: 'image/png',
-                annotations: {
-                  size: size,
-                },
-              },
-            ],
-          };
-        },
       });
     },
   });
 
-  return queryViewImageTool;
+  return getViewDataTool;
 };

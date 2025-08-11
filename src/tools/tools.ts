@@ -9,9 +9,9 @@ import { getListPulseMetricSubscriptionsTool } from './pulse/listMetricSubscript
 import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { getReadMetadataTool } from './readMetadata.js';
 import { getGetWorkbookTool } from './workbook/getWorkbook.js';
-import { getQueryViewDataTool } from './workbook/queryViewData.js';
-import { getQueryViewImageTool } from './workbook/queryViewImage.js';
-import { getQueryWorkbooksTool } from './workbook/queryWorkbooks.js';
+import { getGetViewDataTool } from './workbook/getViewData.js';
+import { getGetViewImageTool } from './workbook/getViewImage.js';
+import { getListWorkbooksTool } from './workbook/listWorkbooks.js';
 
 export const toolFactories = [
   getListDatasourcesTool,
@@ -25,7 +25,7 @@ export const toolFactories = [
   getListPulseMetricSubscriptionsTool,
   getGeneratePulseMetricValueInsightBundleTool,
   getGetWorkbookTool,
-  getQueryViewDataTool,
-  getQueryViewImageTool,
-  getQueryWorkbooksTool,
+  getGetViewDataTool,
+  getGetViewImageTool,
+  getListWorkbooksTool,
 ];

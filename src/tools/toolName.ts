@@ -1,18 +1,18 @@
 export const toolNames = [
   'list-datasources',
   'list-fields',
+  'list-workbooks',
   'query-datasource',
   'read-metadata',
+  'get-workbook',
+  'get-view-data',
+  'get-view-image',
   'list-all-pulse-metric-definitions',
   'list-pulse-metric-definitions-from-definition-ids',
   'list-pulse-metrics-from-metric-definition-id',
   'list-pulse-metrics-from-metric-ids',
   'list-pulse-metric-subscriptions',
   'generate-pulse-metric-value-insight-bundle',
-  'get-workbook',
-  'query-view-data',
-  'query-view-image',
-  'query-workbooks',
 ] as const;
 export type ToolName = (typeof toolNames)[number];
 

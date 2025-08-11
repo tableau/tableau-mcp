@@ -28,7 +28,7 @@ describe('getWorkbookTool', () => {
     const getWorkbookTool = getGetWorkbookTool(new Server());
     expect(getWorkbookTool.name).toBe('get-workbook');
     expect(getWorkbookTool.description).toContain(
-      'Returns information about the specified workbook',
+      'Retrieves information about the specified workbook',
     );
     expect(getWorkbookTool.paramsSchema).toMatchObject({ workbookId: expect.any(Object) });
   });
