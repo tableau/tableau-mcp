@@ -26,6 +26,29 @@ const queryViewImageEndpoint = makeEndpoint({
   path: `/sites/:siteId/views/:viewId/image?resolution=high`,
   alias: 'queryViewImage',
   description: 'Returns an image of the specified view.',
+  parameters: [
+    {
+      name: 'vizWidth',
+      type: 'Query',
+      schema: z.number().optional(),
+      description:
+        'The width of the rendered pdf image in pixels that, along with the value of vizHeight determine its resolution and aspect ratio.',
+    },
+    {
+      name: 'vizHeight',
+      type: 'Query',
+      schema: z.number().optional(),
+      description:
+        'The height of the rendered pdf image in pixels that, along with the value of vizWidth determine its resolution and aspect ratio.',
+    },
+    {
+      name: 'resolution',
+      type: 'Query',
+      schema: z.literal('high').optional(),
+      description:
+        'The resolution of the image. Image width and actual pixel density are determined by the display context of the image. Aspect ratio is always preserved. Set the value to high to ensure maximum pixel density.',
+    },
+  ],
   response: z.string(),
 });
 

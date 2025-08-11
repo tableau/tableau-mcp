@@ -5,10 +5,13 @@ import { z } from 'zod';
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
+import { convertPngDataToToolResult } from '../convertPngDataToToolResult.js';
 import { Tool } from '../tool.js';
 
 const paramsSchema = {
   viewId: z.string(),
+  width: z.number().gt(0).optional(),
+  height: z.number().gt(0).optional(),
 };
 
 export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -22,7 +25,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ viewId }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ viewId, width, height }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getViewImageTool.logAndExecute({
@@ -39,29 +42,15 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
                 return await restApi.workbookMethods.queryViewImage({
                   viewId,
                   siteId: restApi.siteId,
+                  width,
+                  height,
+                  resolution: 'high',
                 });
               },
             }),
           );
         },
-        getSuccessResult: (pngData) => {
-          const base64Data = Buffer.from(pngData).toString('base64');
-          const size = Buffer.from(base64Data, 'base64').length;
-
-          return {
-            isError: false,
-            content: [
-              {
-                type: 'image',
-                data: base64Data,
-                mimeType: 'image/png',
-                annotations: {
-                  size: size,
-                },
-              },
-            ],
-          };
-        },
+        getSuccessResult: convertPngDataToToolResult,
       });
     },
   });
