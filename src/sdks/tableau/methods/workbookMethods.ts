@@ -1,8 +1,6 @@
 import { Zodios } from '@zodios/core';
-import path from 'path';
 
-import { throwIfPublishFailed, workbookApis } from '../apis/workbookApi.js';
-import { usePostMultipartPluginAsync } from '../plugins/postMultipartPlugin.js';
+import { workbookApis } from '../apis/workbookApi.js';
 import { Credentials } from '../types/credentials.js';
 import { Workbook } from '../types/workbook.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
@@ -105,60 +103,5 @@ export default class WorkbookMethods extends AuthenticatedMethods<typeof workboo
         })
       ).workbooks.workbook ?? []
     );
-  };
-
-  /**
-   * Publishes a workbook on the specified site.
-   *
-   * Required scopes: `tableau:workbooks:create`
-   *
-   * @param {string} pathToWorkbookFile The local path to the workbook file.
-   * @param {string} siteId - The Tableau site ID
-   * @param {string} projectId The id of the project to which to publish the workbook.
-   * @param {AdditionalWorkbookOptions} [options={}] Additional optional options.
-   * @param options.workbookNameSuffix A suffix string to append to the name of the workbook.
-   * @param options.additionalWorkbookFlags Additional workbook flags to add to the request payload.
-   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#publish_workbook
-   */
-  publishWorkbook = async ({
-    pathToWorkbookFile,
-    siteId,
-    projectId,
-    options,
-  }: {
-    pathToWorkbookFile: string;
-    siteId: string;
-    projectId: string;
-    options: Partial<{
-      workbookNameSuffix: string;
-      additionalWorkbookFlags: Partial<Workbook>;
-    }>;
-  }): Promise<void> => {
-    const workbookNameWithoutExtension = `${path.parse(pathToWorkbookFile).name}${options.workbookNameSuffix ?? ''}`;
-    const workbook = {
-      name: workbookNameWithoutExtension,
-      project: { id: projectId },
-      ...options.additionalWorkbookFlags,
-    };
-
-    await usePostMultipartPluginAsync({
-      apiClient: this._apiClient,
-      actionFnAsync: async () => {
-        await this._apiClient.publishWorkbook(
-          {
-            contentDispositionName: 'tableau_workbook',
-            asset: { workbook },
-            pathToFile: pathToWorkbookFile,
-          },
-          {
-            params: { siteId },
-            ...this.authAndMultipartRequestHeaders,
-          },
-        );
-      },
-      catchFn: (e) => {
-        throwIfPublishFailed(e, workbookNameWithoutExtension);
-      },
-    });
   };
 }
