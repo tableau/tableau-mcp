@@ -1,4 +1,4 @@
-import { makeApi, makeEndpoint, ZodiosEndpointDefinitions, ZodiosInstance } from '@zodios/core';
+import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
 import { paginationSchema } from '../types/pagination.js';
@@ -100,4 +100,3 @@ const workbookApi = makeApi([
 ]);
 
 export const workbookApis = [...workbookApi] as const satisfies ZodiosEndpointDefinitions;
-export type WorkbookApiClient = ZodiosInstance<typeof workbookApis>;

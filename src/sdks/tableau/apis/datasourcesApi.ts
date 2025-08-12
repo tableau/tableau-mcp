@@ -1,20 +1,9 @@
-import { makeApi, makeEndpoint, ZodiosEndpointDefinitions, ZodiosInstance } from '@zodios/core';
+import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { dataSourceSchema } from '../types/dataSource.js';
 import { paginationSchema } from '../types/pagination.js';
 
-const projectSchema = z.object({
-  name: z.string(),
-  id: z.string(),
-});
-
-const dataSourceSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  project: projectSchema,
-});
-
-export type Datasource = z.infer<typeof dataSourceSchema>;
 const listDatasourcesRestEndpoint = makeEndpoint({
   method: 'get',
   path: '/sites/:siteId/datasources',
@@ -57,4 +46,3 @@ const listDatasourcesRestEndpoint = makeEndpoint({
 
 const datasourcesApi = makeApi([listDatasourcesRestEndpoint]);
 export const datasourcesApis = [...datasourcesApi] as const satisfies ZodiosEndpointDefinitions;
-export type DataSourcesApiClient = ZodiosInstance<typeof datasourcesApi>;

@@ -9,6 +9,8 @@ export function isISO8601DateTime(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value);
 }
 
+const dateTimeFields = ['createdAt', 'updatedAt'];
+
 /**
  * Parses and validates a Tableau-style filter string
  * @param filterString e.g. 'name:eq:Project Views,type:eq:Workbook'
@@ -62,8 +64,8 @@ export function parseAndValidateFilterString<
       );
     }
 
-    // Validate ISO 8601 for createdAt and updatedAt
-    if ((field === 'createdAt' || field === 'updatedAt') && !isISO8601DateTime(value)) {
+    // Validate ISO 8601 for date-time fields
+    if (dateTimeFields.includes(field) && !isISO8601DateTime(value)) {
       throw new Error(
         `Value for field '${field}' must be a valid ISO 8601 date-time string (e.g., 2016-05-04T21:24:49Z)`,
       );

@@ -54,12 +54,6 @@ const _FilterExpressionSchema = z.object({
 
 type FilterExpression = z.infer<typeof _FilterExpressionSchema>;
 
-/**
- * Parses and validates a Tableau-style filter string
- * @param filterString e.g. 'name:eq:Project Views,type:eq:Workbook'
- * @returns validated filter string
- * @throws ZodError or custom error for invalid operators
- */
 export function parseAndValidateWorkbooksFilterString(filterString: string): string {
   return parseAndValidateFilterString<FilterField, FilterExpression>({
     filterString,

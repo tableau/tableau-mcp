@@ -17,20 +17,6 @@ export const workbookSchema = z.object({
       view: z.array(viewSchema),
     }),
   ),
-  connections: z.optional(
-    z.object({
-      connection: z.array(
-        z.object({
-          serverAddress: z.string(),
-          connectionCredentials: z.object({
-            name: z.string(),
-            password: z.string(),
-            embed: z.coerce.boolean(),
-          }),
-        }),
-      ),
-    }),
-  ),
 });
 
 export type Workbook = z.infer<typeof workbookSchema>;

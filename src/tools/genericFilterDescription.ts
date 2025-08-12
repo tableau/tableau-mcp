@@ -1,5 +1,4 @@
-export const genericFilterDescription = `
-  **Supported Operators**
+export const genericFilterDescription = `**Supported Operators**
   - \`eq\`: equals
   - \`gt\`: greater than
   - \`gte\`: greater than or equal
@@ -18,5 +17,4 @@ export const genericFilterDescription = `
   - Wildcard searches (starts with, ends with, contains) are supported in recent Tableau versions:
     - Starts with: \`?filter=name:eq:mark*\`
     - Ends with: \`?filter=name:eq:*-ample\`
-    - Contains: \`?filter=name:eq:mark*ex*\`
-`;
+    - Contains: \`?filter=name:eq:mark*ex*\``;
