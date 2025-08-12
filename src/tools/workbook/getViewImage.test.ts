@@ -47,7 +47,6 @@ describe('getViewImageTool', () => {
       type: 'image',
       data: base64PngData,
       mimeType: 'image/png',
-      annotations: { size: 82 },
     });
     expect(mocks.mockQueryViewImage).toHaveBeenCalledWith({
       siteId: 'test-site-id',
