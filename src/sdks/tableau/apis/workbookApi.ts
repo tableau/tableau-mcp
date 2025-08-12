@@ -23,7 +23,7 @@ const queryViewDataEndpoint = makeEndpoint({
 
 const queryViewImageEndpoint = makeEndpoint({
   method: 'get',
-  path: `/sites/:siteId/views/:viewId/image?resolution=high`,
+  path: `/sites/:siteId/views/:viewId/image`,
   alias: 'queryViewImage',
   description: 'Returns an image of the specified view.',
   parameters: [
