@@ -28,18 +28,18 @@ vi.mock('../../restApiInstance.js', () => ({
   ),
 }));
 
-describe('queryWorkbooksTool', () => {
+describe('listWorkbooksTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('should create a tool instance with correct properties', () => {
-    const queryWorkbooksTool = getListWorkbooksTool(new Server());
-    expect(queryWorkbooksTool.name).toBe('list-workbooks');
-    expect(queryWorkbooksTool.description).toContain(
+    const listWorkbooksTool = getListWorkbooksTool(new Server());
+    expect(listWorkbooksTool.name).toBe('list-workbooks');
+    expect(listWorkbooksTool.description).toContain(
       'Retrieves a list of workbooks on a Tableau site',
     );
-    expect(queryWorkbooksTool.paramsSchema).toMatchObject({});
+    expect(listWorkbooksTool.paramsSchema).toMatchObject({});
   });
 
   it('should successfully query workbooks', async () => {
@@ -65,8 +65,8 @@ describe('queryWorkbooksTool', () => {
 });
 
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
-  const queryWorkbooksTool = getListWorkbooksTool(new Server());
-  return await queryWorkbooksTool.callback(params, {
+  const listWorkbooksTool = getListWorkbooksTool(new Server());
+  return await listWorkbooksTool.callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),
