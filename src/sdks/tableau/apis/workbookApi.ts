@@ -32,14 +32,14 @@ const queryViewImageEndpoint = makeEndpoint({
       type: 'Query',
       schema: z.number().optional(),
       description:
-        'The width of the rendered pdf image in pixels that, along with the value of vizHeight determine its resolution and aspect ratio.',
+        'The width of the rendered image in pixels that, along with the value of vizHeight determine its resolution and aspect ratio.',
     },
     {
       name: 'vizHeight',
       type: 'Query',
       schema: z.number().optional(),
       description:
-        'The height of the rendered pdf image in pixels that, along with the value of vizWidth determine its resolution and aspect ratio.',
+        'The height of the rendered image in pixels that, along with the value of vizWidth determine its resolution and aspect ratio.',
     },
     {
       name: 'resolution',

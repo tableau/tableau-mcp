@@ -71,8 +71,8 @@ export default class WorkbookMethods extends AuthenticatedMethods<typeof workboo
    *
    * @param {string} viewId The ID of the view to return an image for.
    * @param {string} siteId - The Tableau site ID
-   * @param {number} width - (Optional) The width of the rendered pdf image in pixels that, along with the value of vizHeight determine its resolution and aspect ratio.
-   * @param {number} height - (Optional) The height of the rendered pdf image in pixels that, along with the value of vizWidth determine its resolution and aspect ratio.
+   * @param {number} width - (Optional) The width of the rendered image in pixels that, along with the value of vizHeight determine its resolution and aspect ratio.
+   * @param {number} height - (Optional) The height of the rendered image in pixels that, along with the value of vizWidth determine its resolution and aspect ratio.
    * @param {string} resolution - (Optional) The resolution of the image. Image width and actual pixel density are determined by the display context of the image. Aspect ratio is always preserved. Set the value to high to ensure maximum pixel density.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_view_image
    */
