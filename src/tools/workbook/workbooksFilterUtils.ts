@@ -6,74 +6,43 @@ import {
   parseAndValidateFilterString,
 } from '../../utils/parseAndValidateFilterString.js';
 
-// === Field and Operator Definitions ===
-// [Tableau REST API Data Sources filter fields](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_filtering_and_sorting.htm#datasources)
-
 const FilterFieldSchema = z.enum([
-  'authenticationType',
-  'connectedWorkbookType',
-  'connectionTo',
-  'connectionType',
-  'contentUrl',
   'createdAt',
-  'databaseName',
-  'databaseUserName',
-  'description',
+  'contentUrl',
+  'displayTabs',
   'favoritesTotal',
-  'hasAlert',
-  'hasEmbeddedPassword',
+  'hasAlerts',
   'hasExtracts',
-  'isCertified',
-  'isConnectable',
-  'isDefaultPort',
-  'isHierarchical',
-  'isPublished',
   'name',
   'ownerDomain',
   'ownerEmail',
   'ownerName',
   'projectName',
-  'serverName',
-  'serverPort',
+  'sheetCount',
   'size',
-  'tableName',
+  'subscriptionTotal',
   'tags',
-  'type',
   'updatedAt',
 ]);
 
 type FilterField = z.infer<typeof FilterFieldSchema>;
 
 const allowedOperatorsByField: Record<FilterField, FilterOperator[]> = {
-  authenticationType: ['eq', 'in'],
-  connectedWorkbookType: ['eq', 'gt', 'gte', 'lt', 'lte'],
-  connectionTo: ['eq', 'in'],
-  connectionType: ['eq', 'in'],
-  contentUrl: ['eq', 'in'],
   createdAt: ['eq', 'gt', 'gte', 'lt', 'lte'],
-  databaseName: ['eq', 'in'],
-  databaseUserName: ['eq', 'in'],
-  description: ['eq', 'in'],
+  contentUrl: ['eq', 'in'],
+  displayTabs: ['eq'],
   favoritesTotal: ['eq', 'gt', 'gte', 'lt', 'lte'],
-  hasAlert: ['eq'],
-  hasEmbeddedPassword: ['eq'],
+  hasAlerts: ['eq'],
   hasExtracts: ['eq'],
-  isCertified: ['eq'],
-  isConnectable: ['eq'],
-  isDefaultPort: ['eq'],
-  isHierarchical: ['eq'],
-  isPublished: ['eq'],
   name: ['eq', 'in'],
   ownerDomain: ['eq', 'in'],
-  ownerEmail: ['eq'],
+  ownerEmail: ['eq', 'in'],
   ownerName: ['eq', 'in'],
   projectName: ['eq', 'in'],
-  serverName: ['eq', 'in'],
-  serverPort: ['eq'],
+  sheetCount: ['eq', 'gt', 'gte', 'lt', 'lte'],
   size: ['eq', 'gt', 'gte', 'lt', 'lte'],
-  tableName: ['eq', 'in'],
+  subscriptionTotal: ['eq', 'gt', 'gte', 'lt', 'lte'],
   tags: ['eq', 'in'],
-  type: ['eq'],
   updatedAt: ['eq', 'gt', 'gte', 'lt', 'lte'],
 };
 
@@ -91,7 +60,7 @@ type FilterExpression = z.infer<typeof _FilterExpressionSchema>;
  * @returns validated filter string
  * @throws ZodError or custom error for invalid operators
  */
-export function parseAndValidateDatasourcesFilterString(filterString: string): string {
+export function parseAndValidateWorkbooksFilterString(filterString: string): string {
   return parseAndValidateFilterString<FilterField, FilterExpression>({
     filterString,
     allowedOperatorsByField,

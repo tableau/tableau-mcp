@@ -8,7 +8,7 @@ import { Server } from '../../server.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { Tool } from '../tool.js';
-import { parseAndValidateFilterString } from './datasourcesFilterUtils.js';
+import { parseAndValidateDatasourcesFilterString } from './datasourcesFilterUtils.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
@@ -78,7 +78,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
     },
     callback: async ({ filter, pageSize, limit }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
-      const validatedFilter = filter ? parseAndValidateFilterString(filter) : undefined;
+      const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
         requestId,
         args: { filter, pageSize, limit },

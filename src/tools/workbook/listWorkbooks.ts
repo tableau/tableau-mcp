@@ -8,6 +8,7 @@ import { Server } from '../../server.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { Tool } from '../tool.js';
+import { parseAndValidateWorkbooksFilterString } from './workbooksFilterUtils.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
@@ -62,12 +63,12 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
     },
     callback: async ({ filter, pageSize, limit }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
+      const validatedFilter = filter ? parseAndValidateWorkbooksFilterString(filter) : undefined;
 
       return await listWorkbooksTool.logAndExecute({
         requestId,
         args: {},
         callback: async () => {
-          const validatedFilter = filter ? filter : undefined;
           return new Ok(
             await useRestApi({
               config,
