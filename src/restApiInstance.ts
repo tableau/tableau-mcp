@@ -153,6 +153,10 @@ function logRequest(server: Server, request: RequestInterceptorConfig, requestId
   const config = getConfig();
   const maskedRequest = config.disableLogMasking ? request : maskRequest(request);
   const url = new URL(maskedRequest.url ?? '', maskedRequest.baseUrl);
+  if (request.params && Object.keys(request.params).length > 0) {
+    url.search = new URLSearchParams(request.params).toString();
+  }
+
   const messageObj = {
     type: 'request',
     requestId,
@@ -176,6 +180,9 @@ function logResponse(
   const config = getConfig();
   const maskedResponse = config.disableLogMasking ? response : maskResponse(response);
   const url = new URL(maskedResponse.url ?? '', maskedResponse.baseUrl);
+  if (response.request?.params && Object.keys(response.request.params).length > 0) {
+    url.search = new URLSearchParams(response.request.params).toString();
+  }
   const messageObj = {
     type: 'response',
     requestId,

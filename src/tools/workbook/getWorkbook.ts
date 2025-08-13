@@ -36,10 +36,24 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
               server,
               jwtScopes: ['tableau:content:read'],
               callback: async (restApi) => {
-                return await restApi.workbookMethods.getWorkbook({
+                const workbook = await restApi.workbookMethods.getWorkbook({
                   workbookId,
                   siteId: restApi.siteId,
                 });
+
+                // The views returned by the getWorkbook API do not include usage statistics.
+                // Query the views for the workbook to get each view's usage statistics.
+                if (workbook.views) {
+                  const views = await restApi.workbookMethods.queryViewsForWorkbook({
+                    workbookId,
+                    siteId: restApi.siteId,
+                    includeUsageStatistics: true,
+                  });
+
+                  workbook.views.view = views;
+                }
+
+                return workbook;
               },
             }),
           );

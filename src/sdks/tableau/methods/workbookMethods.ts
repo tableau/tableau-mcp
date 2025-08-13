@@ -3,6 +3,7 @@ import { Zodios } from '@zodios/core';
 import { workbookApis } from '../apis/workbookApi.js';
 import { Credentials } from '../types/credentials.js';
 import { Pagination } from '../types/pagination.js';
+import { View } from '../types/view.js';
 import { Workbook } from '../types/workbook.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
@@ -95,6 +96,34 @@ export default class WorkbookMethods extends AuthenticatedMethods<typeof workboo
       ...this.authHeader,
       responseType: 'arraybuffer',
     });
+  };
+
+  /**
+   * Returns all the views for the specified workbook, optionally including usage statistics.
+   *
+   * Required scopes: `tableau:content:read`
+   *
+   * @param {string} workbookId The ID of the workbook to return views for.
+   * @param {string} siteId - The Tableau site ID
+   * @param {boolean} includeUsageStatistics - (Optional) true to return usage statistics. The default is false.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_views_for_workbook
+   */
+  queryViewsForWorkbook = async ({
+    workbookId,
+    siteId,
+    includeUsageStatistics,
+  }: {
+    workbookId: string;
+    siteId: string;
+    includeUsageStatistics?: boolean;
+  }): Promise<View[]> => {
+    return (
+      await this._apiClient.queryViewsForWorkbook({
+        params: { siteId, workbookId },
+        queries: { includeUsageStatistics },
+        ...this.authHeader,
+      })
+    ).views.view;
   };
 
   /**

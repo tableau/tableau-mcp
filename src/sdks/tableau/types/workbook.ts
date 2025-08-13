@@ -12,6 +12,7 @@ export const workbookSchema = z.object({
   project: projectSchema.optional(),
   showTabs: z.coerce.boolean(),
   defaultViewId: z.string().optional(),
+  tags: z.object({ tag: z.array(z.object({ label: z.string() })).optional() }),
   views: z.optional(
     z.object({
       view: z.array(viewSchema),

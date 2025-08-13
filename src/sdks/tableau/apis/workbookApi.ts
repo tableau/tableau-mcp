@@ -2,6 +2,7 @@ import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
 import { paginationSchema } from '../types/pagination.js';
+import { viewSchema } from '../types/view.js';
 import { workbookSchema } from '../types/workbook.js';
 
 const getWorkbookEndpoint = makeEndpoint({
@@ -52,6 +53,23 @@ const queryViewImageEndpoint = makeEndpoint({
   response: z.string(),
 });
 
+const queryViewsForWorkbookEndpoint = makeEndpoint({
+  method: 'get',
+  path: `/sites/:siteId/workbooks/:workbookId/views`,
+  alias: 'queryViewsForWorkbook',
+  description:
+    'Returns all the views for the specified workbook, optionally including usage statistics.',
+  parameters: [
+    {
+      name: 'includeUsageStatistics',
+      type: 'Query',
+      schema: z.boolean().optional(),
+      description: 'true to return usage statistics. The default is false.',
+    },
+  ],
+  response: z.object({ views: z.object({ view: z.array(viewSchema) }) }),
+});
+
 const queryWorkbooksForSiteEndpoint = makeEndpoint({
   method: 'get',
   path: `/sites/:siteId/workbooks`,
@@ -95,6 +113,7 @@ const queryWorkbooksForSiteEndpoint = makeEndpoint({
 const workbookApi = makeApi([
   queryViewDataEndpoint,
   queryViewImageEndpoint,
+  queryViewsForWorkbookEndpoint,
   queryWorkbooksForSiteEndpoint,
   getWorkbookEndpoint,
 ]);
