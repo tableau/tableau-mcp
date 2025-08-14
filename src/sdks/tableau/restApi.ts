@@ -13,8 +13,9 @@ import AuthenticationMethods, {
 import DatasourcesMethods from './methods/datasourcesMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import PulseMethods from './methods/pulseMethods.js';
+import ViewsMethods from './methods/viewsMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
-import WorkbookMethods from './methods/workbookMethods.js';
+import WorkbooksMethods from './methods/workbooksMethods.js';
 import { Credentials } from './types/credentials.js';
 
 /**
@@ -35,7 +36,8 @@ export default class RestApi {
   private _metadataMethods?: MetadataMethods;
   private _pulseMethods?: PulseMethods;
   private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
-  private _workbookMethods?: WorkbookMethods;
+  private _viewsMethods?: ViewsMethods;
+  private _workbooksMethods?: WorkbooksMethods;
   private static _version = '3.24';
 
   private _requestInterceptor?: [RequestInterceptor, ErrorInterceptor?];
@@ -124,13 +126,22 @@ export default class RestApi {
     return this._vizqlDataServiceMethods;
   }
 
-  get workbookMethods(): WorkbookMethods {
-    if (!this._workbookMethods) {
-      this._workbookMethods = new WorkbookMethods(this._baseUrl, this.creds);
-      this._addInterceptors(this._baseUrl, this._workbookMethods.interceptors);
+  get viewsMethods(): ViewsMethods {
+    if (!this._viewsMethods) {
+      this._viewsMethods = new ViewsMethods(this._baseUrl, this.creds);
+      this._addInterceptors(this._baseUrl, this._viewsMethods.interceptors);
     }
 
-    return this._workbookMethods;
+    return this._viewsMethods;
+  }
+
+  get workbooksMethods(): WorkbooksMethods {
+    if (!this._workbooksMethods) {
+      this._workbooksMethods = new WorkbooksMethods(this._baseUrl, this.creds);
+      this._addInterceptors(this._baseUrl, this._workbooksMethods.interceptors);
+    }
+
+    return this._workbooksMethods;
   }
 
   signIn = async (authConfig: AuthConfig): Promise<void> => {

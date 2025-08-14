@@ -36,7 +36,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
               server,
               jwtScopes: ['tableau:views:download'],
               callback: async (restApi) => {
-                return await restApi.workbookMethods.queryViewData({
+                return await restApi.viewsMethods.queryViewData({
                   viewId,
                   siteId: restApi.siteId,
                 });

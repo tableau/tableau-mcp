@@ -85,7 +85,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
                   },
                   getDataFn: async (pageConfig) => {
                     const { pagination, workbooks: data } =
-                      await restApi.workbookMethods.queryWorkbooksForSite({
+                      await restApi.workbooksMethods.queryWorkbooksForSite({
                         siteId: restApi.siteId,
                         filter: validatedFilter ?? '',
                         pageSize: pageConfig.pageSize,
