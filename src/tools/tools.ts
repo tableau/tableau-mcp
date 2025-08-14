@@ -8,10 +8,10 @@ import { getListPulseMetricsFromMetricIdsTool } from './pulse/listMetricsFromMet
 import { getListPulseMetricSubscriptionsTool } from './pulse/listMetricSubscriptions/listPulseMetricSubscriptions.js';
 import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { getReadMetadataTool } from './readMetadata.js';
-import { getGetViewDataTool } from './workbook/getViewData.js';
-import { getGetViewImageTool } from './workbook/getViewImage.js';
-import { getGetWorkbookTool } from './workbook/getWorkbook.js';
-import { getListWorkbooksTool } from './workbook/listWorkbooks.js';
+import { getGetViewDataTool } from './views/getViewData.js';
+import { getGetViewImageTool } from './views/getViewImage.js';
+import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
+import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 
 export const toolFactories = [
   getListDatasourcesTool,
