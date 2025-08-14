@@ -1,6 +1,6 @@
 import { Zodios } from '@zodios/core';
 
-import { workbookApis } from '../apis/workbookApi.js';
+import { workbookApis } from '../apis/workbooksApi.js';
 import { Credentials } from '../types/credentials.js';
 import { Pagination } from '../types/pagination.js';
 import { Workbook } from '../types/workbook.js';
