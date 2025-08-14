@@ -53,6 +53,6 @@ const queryWorkbooksForSiteEndpoint = makeEndpoint({
   }),
 });
 
-const workbookApi = makeApi([queryWorkbooksForSiteEndpoint, getWorkbookEndpoint]);
+const workbooksApi = makeApi([queryWorkbooksForSiteEndpoint, getWorkbookEndpoint]);
 
-export const workbookApis = [...workbookApi] as const satisfies ZodiosEndpointDefinitions;
+export const workbooksApis = [...workbooksApi] as const satisfies ZodiosEndpointDefinitions;
