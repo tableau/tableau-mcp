@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../restApiInstance.js', () => ({
   useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
     callback({
-      workbookMethods: {
+      viewsMethods: {
         queryViewData: mocks.mockQueryViewData,
       },
       siteId: 'test-site-id',

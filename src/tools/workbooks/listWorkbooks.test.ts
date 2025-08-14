@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../restApiInstance.js', () => ({
   useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
     callback({
-      workbookMethods: {
+      workbooksMethods: {
         queryWorkbooksForSite: mocks.mockQueryWorkbooksForSite,
       },
       siteId: 'test-site-id',
