@@ -28,7 +28,7 @@ The following MCP tools are currently implemented:
 | list-workbooks                                    | Retrieves a list of workbooks from a specified Tableau site ([REST API][list-workbooks])              |
 | list-views                                        | Retrieves a list of views from a specified Tableau site ([REST API][list-views])                      |
 | list-fields                                       | Fetches field metadata (name, description) for the specified datasource ([Metadata API][meta])        |
-| get-workbook                                      | Retrieves a workbook from a specified Tableau site ([REST API][get-workbook])                         |
+| get-workbook                                      | Retrieves information on a workbook from a specified Tableau site ([REST API][get-workbook])          |
 | get-view-data                                     | Retrieves data in CSV format for the specified view in a Tableau workbook ([REST API][get-view-data]) |
 | get-view-image                                    | Retrieves an image for the specified view in a Tableau workbook ([REST API][get-view-image])          |
 | query-datasource                                  | Run a Tableau VizQL query ([VDS API][vds])                                                            |
