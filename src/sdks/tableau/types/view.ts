@@ -3,6 +3,8 @@ import { z } from 'zod';
 export const viewSchema = z.object({
   id: z.string(),
   name: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
   tags: z.object({ tag: z.array(z.object({ label: z.string() })).optional() }),
   usage: z
     .object({
