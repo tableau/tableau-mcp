@@ -2,6 +2,7 @@ import { Zodios } from '@zodios/core';
 
 import { viewsApis } from '../apis/viewsApi.js';
 import { Credentials } from '../types/credentials.js';
+import { Pagination } from '../types/pagination.js';
 import { View } from '../types/view.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
@@ -98,5 +99,41 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
         ...this.authHeader,
       })
     ).views.view;
+  };
+
+  /**
+   * Returns all the views for the specified site, optionally including usage statistics.
+   *
+   * Required scopes: `tableau:content:read`
+   *
+   * @param {string} siteId - The Tableau site ID
+   * @param {boolean} includeUsageStatistics - (Optional) true to return usage statistics. The default is false.
+   * @param {string} filter - (Optional) Fields and operators that you can use to filter results
+   * @param {number} pageSize - (Optional) The number of items to return in one response. The minimum is 1. The maximum is 1000. The default is 100.
+   * @param {number} pageNumber - (Optional) The offset for paging. The default is 1.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_views_for_site
+   */
+  queryViewsForSite = async ({
+    siteId,
+    includeUsageStatistics,
+    filter,
+    pageSize,
+    pageNumber,
+  }: {
+    siteId: string;
+    includeUsageStatistics?: boolean;
+    filter: string;
+    pageSize?: number;
+    pageNumber?: number;
+  }): Promise<{ pagination: Pagination; views: View[] }> => {
+    const response = await this._apiClient.queryViewsForSite({
+      params: { siteId },
+      queries: { includeUsageStatistics, filter, pageSize, pageNumber },
+      ...this.authHeader,
+    });
+    return {
+      pagination: response.pagination,
+      views: response.views.view,
+    };
   };
 }

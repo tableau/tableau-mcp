@@ -10,6 +10,7 @@ import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { getReadMetadataTool } from './readMetadata.js';
 import { getGetViewDataTool } from './views/getViewData.js';
 import { getGetViewImageTool } from './views/getViewImage.js';
+import { getListViewsTool } from './views/listViews.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 
@@ -28,4 +29,5 @@ export const toolFactories = [
   getGetViewDataTool,
   getGetViewImageTool,
   getListWorkbooksTool,
+  getListViewsTool,
 ];
