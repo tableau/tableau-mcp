@@ -12,7 +12,7 @@ const graphqlResponse = z.object({
         }),
         fields: z.array(
           z.object({
-            name: z.string().or(z.null()),
+            name: z.string(),
             isHidden: z.boolean().or(z.null()),
             description: z.string().or(z.null()),
             descriptionInherited: z
@@ -25,7 +25,7 @@ const graphqlResponse = z.object({
                   .or(z.null()),
               )
               .or(z.null()),
-            fullyQualifiedName: z.string().or(z.null()),
+            fullyQualifiedName: z.string(),
             __typename: z.string(),
             // Common field properties (optional since they depend on field type)
             dataCategory: z.string().or(z.null()).optional(),
