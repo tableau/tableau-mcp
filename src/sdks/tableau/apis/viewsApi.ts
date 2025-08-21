@@ -1,7 +1,9 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { paginationSchema } from '../types/pagination.js';
 import { viewSchema } from '../types/view.js';
+import { paginationParameters } from './paginationParameters.js';
 
 const queryViewDataEndpoint = makeEndpoint({
   method: 'get',
@@ -59,10 +61,39 @@ const queryViewsForWorkbookEndpoint = makeEndpoint({
   response: z.object({ views: z.object({ view: z.array(viewSchema) }) }),
 });
 
+const queryViewsForSiteEndpoint = makeEndpoint({
+  method: 'get',
+  path: `/sites/:siteId/views`,
+  alias: 'queryViewsForSite',
+  description:
+    'Returns all the views for the specified site, optionally including usage statistics.',
+  parameters: [
+    ...paginationParameters,
+    {
+      name: 'includeUsageStatistics',
+      type: 'Query',
+      schema: z.boolean().optional(),
+      description: 'true to return usage statistics. The default is false.',
+    },
+    {
+      name: 'filter',
+      type: 'Query',
+      schema: z.string().optional(),
+      description:
+        'An expression that lets you specify a subset of views to return. You can filter on predefined fields such as name, tags, and createdAt. You can include multiple filter expressions.',
+    },
+  ],
+  response: z.object({
+    pagination: paginationSchema,
+    views: z.object({ view: z.array(viewSchema) }),
+  }),
+});
+
 const viewsApi = makeApi([
   queryViewDataEndpoint,
   queryViewImageEndpoint,
   queryViewsForWorkbookEndpoint,
+  queryViewsForSiteEndpoint,
 ]);
 
 export const viewsApis = [...viewsApi] as const satisfies ZodiosEndpointDefinitions;
