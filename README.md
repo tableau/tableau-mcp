@@ -4,6 +4,19 @@
 
 [![Build and Test](https://github.com/tableau/tableau-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tableau/tableau-mcp/actions/workflows/ci.yml)
 
+## Dev Container Branch
+
+This branch includes a Dev Container definition which can be run with GitHub Codespaces as an
+experiment to see if that's useful.
+
+To launch in Codespaces:
+
+1. Go to the branch <https://github.com/tableau/tableau-mcp/tree/bcantoni/devcontainer>
+2. Click Code | Codespaces
+3. Click + to create a new Codespace
+
+In vscode switch to agent mode and start asking MCP questions
+
 ## Overview
 
 Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will

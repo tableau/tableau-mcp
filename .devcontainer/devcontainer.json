@@ -1,0 +1,80 @@
+{
+  "name": "Tableau MCP Server",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20-bookworm",
+
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  "secrets": {
+    "SERVER": {
+      "description": "The URL of the Tableau server.",
+      "documentationUrl": "https://github.com/tableau/tableau-mcp#required-environment-variables"
+    },
+    "SITE_NAME": {
+      "description": "The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site.",
+      "documentationUrl": "https://github.com/tableau/tableau-mcp#required-environment-variables"
+    },
+    "PAT_NAME": {
+      "description": "The name of the Personal Access Token to use.",
+      "documentationUrl": "https://github.com/tableau/tableau-mcp#personal-access-token-configuration"
+    },
+    "PAT_VALUE": {
+      "description": "The value of the Personal Access Token to use.",
+      "documentationUrl": "https://github.com/tableau/tableau-mcp#personal-access-token-configuration"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "mcp": {
+        "servers": {
+          "tableau": {
+            "command": "node",
+            "args": ["/workspaces/tableau-mcp/build/index.js"],
+            "env": {
+              "TRANSPORT": "stdio",
+              "SERVER": "${localEnv:SERVER}",
+              "SITE_NAME": "${localEnv:SITE_NAME:-}",
+              "PAT_NAME": "${localEnv:PAT_NAME}",
+              "PAT_VALUE": "${localEnv:PAT_VALUE}",
+              "DATASOURCE_CREDENTIALS": "",
+              "DEFAULT_LOG_LEVEL": "debug",
+              "INCLUDE_TOOLS": "",
+              "EXCLUDE_TOOLS": "",
+              "MAX_RESULT_LIMIT": "",
+              "DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION": ""
+            }
+          }
+        }
+      },
+      "extensions": [
+        "ms-vscode.vscode-typescript-next",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        "ms-vscode.vscode-json"
+      ],
+      "settings": {
+        "typescript.preferences.includePackageJsonAutoImports": "on",
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        "extensions.ignoreRecommendations": true,
+        "mcp.mcpServers.autoStart": true,
+        "mcp.mcpServers.enabledByDefault": true
+      }
+    }
+  },
+
+  "postCreateCommand": "npm ci && npm run build",
+
+  "postStartCommand": "npm run build",
+
+  "onCreateCommand": "echo 'Container created'",
+
+  "remoteUser": "node"
+}
