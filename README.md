@@ -6,16 +6,38 @@
 
 ## Dev Container Branch
 
-This branch includes a Dev Container definition which can be run with GitHub Codespaces as an
-experiment to see if that's useful.
+:construction: This branch includes a Dev Container definition which can be run
+on GitHub Codespaces as an experiment to see if that's useful.
+
+Codespaces are essential virtual machines that run in the cloud. The only
+prerequisite is having a GitHub account and being logged in.
 
 To launch in Codespaces:
 
-1. Go to the branch <https://github.com/tableau/tableau-mcp/tree/bcantoni/devcontainer>
-2. Click Code | Codespaces
-3. Click + to create a new Codespace
+1. Start here: <https://codespaces.new/tableau/tableau-mcp/tree/bcantoni/devcontainer?quickstart=1>
+2. Enter your Tableau MCP configuration values:
+   - SERVER
+   - SITE_NAME
+   - PAT_NAME
+   - PAT_VALUE
+3. Click 'Create new codespace'
 
-In vscode switch to agent mode and start asking MCP questions
+It takes up to 5 minutes for the codespace to be built. If you see any pop-up errors
+in the lower right corner, you can close those. Once you see the Tableau MCP README.md
+file showing, your codespace is ready.
+
+To start MCP and confirm it's working:
+
+1. Open the right side chat where you'll see Welcome to Copilot
+2. Type something like "hello" to wake up Copilot (you shouldn't need to sign in)
+3. Click the Gear icon, then MCP Servers
+4. On the left pane under MCP Servers - Installed you should see "tableau"
+5. Click the gear icon, then Start server
+6. In the bottom Output window, it should be all green and "discovered 15 tools"
+7. In the right side Chat get started with MCP, e.g. "list all tableau datasources"
+
+To quickly get back to your Codespaces, whether to rejoin a running one or delete
+one you no longer need, use this link: <https://github.com/codespaces>
 
 ## Overview
 
