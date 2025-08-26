@@ -1,4 +1,5 @@
 import { CorsOptions } from 'cors';
+import { existsSync } from 'fs';
 
 import { isToolName, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
@@ -41,6 +42,7 @@ export class Config {
     issuer: string;
     redirectUri: string;
     jwePrivateKeyPath: string;
+    jwePrivateKeyPassphrase: string | undefined;
     authzCodeTimeoutMs: number;
     accessTokenTimeoutMs: number;
     refreshTokenTimeoutMs: number;
@@ -69,6 +71,7 @@ export class Config {
       DISABLE_LOG_MASKING: disableLogMasking,
       OAUTH_ISSUER: oauthIssuer,
       OAUTH_JWE_PRIVATE_KEY_PATH: oauthJwePrivateKeyPath,
+      OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
@@ -99,6 +102,7 @@ export class Config {
       issuer: oauthIssuer ?? '',
       redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
       jwePrivateKeyPath: oauthJwePrivateKeyPath ?? '',
+      jwePrivateKeyPassphrase: oauthJwePrivateKeyPassphrase || undefined,
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
         defaultValue: TEN_MINUTES_IN_MS,
         minValue: 0,
@@ -125,6 +129,12 @@ export class Config {
         this.oauth.jwePrivateKeyPath,
         'The environment variable OAUTH_JWE_PRIVATE_KEY_PATH is not set',
       );
+
+      if (process.env.TABLEAU_MCP_TEST !== 'true' && !existsSync(this.oauth.jwePrivateKeyPath)) {
+        throw new Error(
+          `OAuth JWE private key path does not exist: ${this.oauth.jwePrivateKeyPath}`,
+        );
+      }
 
       if (this.transport === 'stdio') {
         throw new Error('TRANSPORT must be "http" when OAUTH_ISSUER is set');

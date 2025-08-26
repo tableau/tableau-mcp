@@ -223,6 +223,14 @@ const envVars = {
     required: false,
     sensitive: true,
   },
+  OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth JWE Private Key Passphrase',
+    description: 'The passphrase for the OAuth JWE private key.',
+    required: false,
+    sensitive: true,
+  },
   OAUTH_REDIRECT_URI: {
     includeInUserConfig: false,
     type: 'string',

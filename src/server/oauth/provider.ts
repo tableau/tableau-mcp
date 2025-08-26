@@ -75,8 +75,22 @@ export class OAuthProvider {
 
   get jwePrivateKey(): KeyObject {
     if (!this._jwePrivateKey) {
-      const privateKeyContents = readFileSync(this.config.oauth.jwePrivateKeyPath, 'utf8');
-      this._jwePrivateKey = createPrivateKey(privateKeyContents);
+      let privateKeyContents: string;
+      try {
+        privateKeyContents = readFileSync(this.config.oauth.jwePrivateKeyPath, 'utf8');
+      } catch (e) {
+        throw new Error(`Failed to read private key file: ${e}`);
+      }
+
+      try {
+        this._jwePrivateKey = createPrivateKey({
+          key: privateKeyContents,
+          format: 'pem',
+          passphrase: this.config.oauth.jwePrivateKeyPassphrase,
+        });
+      } catch (e) {
+        throw new Error(`Failed to create private key: ${e}`);
+      }
     }
 
     return this._jwePrivateKey;
@@ -84,8 +98,7 @@ export class OAuthProvider {
 
   get jwePublicKey(): KeyObject {
     if (!this._jwePublicKey) {
-      const privateKeyContents = readFileSync(this.config.oauth.jwePrivateKeyPath, 'utf8');
-      this._jwePublicKey = createPublicKey(privateKeyContents);
+      this._jwePublicKey = createPublicKey(this.jwePrivateKey);
     }
 
     return this._jwePublicKey;
@@ -655,11 +668,13 @@ export class OAuthProvider {
    * @returns AuthInfo with user details and tokens
    */
   async verifyAccessToken(token: string): Promise<Result<AuthInfo, string>> {
+    const privateKey = this.jwePrivateKey;
     try {
-      const { plaintext } = await compactDecrypt(token, this.jwePrivateKey);
+      const { plaintext } = await compactDecrypt(token, privateKey);
       const payload = JSON.parse(new TextDecoder().decode(plaintext));
 
       if (
+        !payload ||
         payload.iss !== this.jwtIssuer ||
         payload.aud !== this.jwtAudience ||
         !payload.exp ||
