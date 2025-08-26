@@ -15,12 +15,16 @@ describe('toolName', () => {
       (acc, [group, tools]) => {
         for (const tool of tools) {
           if (isToolName(tool) && isToolGroupName(group)) {
-            acc[tool] = group;
+            if (acc[tool]) {
+              acc[tool].add(group);
+            } else {
+              acc[tool] = new Set([group]);
+            }
           }
         }
         return acc;
       },
-      {} as Record<ToolName, ToolGroupName>,
+      {} as Record<ToolName, Set<ToolGroupName>>,
     );
 
     for (const toolName of toolNames) {
