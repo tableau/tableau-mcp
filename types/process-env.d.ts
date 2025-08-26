@@ -21,6 +21,9 @@ export interface ProcessEnvEx {
   EXCLUDE_TOOLS: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
   DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: string | undefined;
+  DISABLE_ELICITATION: string | undefined;
+  ELICIT_USER_ATTRIBUTES: string | undefined;
+  ENABLE_USER_ATTRIBUTES_TOOL_ARG: string | undefined;
 }
 
 declare global {

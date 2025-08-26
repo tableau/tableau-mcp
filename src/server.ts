@@ -1,5 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import {
+  ElicitRequest,
+  ElicitResult,
+  SetLevelRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 
 import pkg from '../package.json' with { type: 'json' };
 import { getConfig } from './config.js';
@@ -25,6 +30,7 @@ export class Server extends McpServer {
         capabilities: {
           logging: {},
           tools: {},
+          ...(getConfig().elicitation.disabled ? {} : { elicitation: {} }),
         },
       },
     );
@@ -50,6 +56,22 @@ export class Server extends McpServer {
       setLogLevel(this, request.params.level);
       return {};
     });
+  };
+
+  elicitInput = async (
+    params: ElicitRequest['params'],
+    options?: RequestOptions,
+  ): Promise<ElicitResult | 'disabled' | 'unsupported'> => {
+    const { elicitation } = getConfig();
+    if (elicitation.disabled) {
+      return 'disabled';
+    }
+
+    if (!this.server.getClientCapabilities()?.elicitation) {
+      return 'unsupported';
+    }
+
+    return this.server.elicitInput(params, options);
   };
 
   private _getToolsToRegister = (): Array<Tool<any>> => {

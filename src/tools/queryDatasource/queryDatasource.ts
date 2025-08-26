@@ -11,6 +11,7 @@ import {
   TableauError,
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
+import { getUserAttributes } from '../getUserAttributes.js';
 import { Tool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
@@ -20,12 +21,23 @@ import { validateFilterValues } from './validators/validateFilterValues.js';
 
 type Datasource = z.infer<typeof Datasource>;
 
+const config = getConfig();
+
 const paramsSchema = {
   datasourceLuid: z.string().nonempty(),
   query: Query,
+  ...(config.enableUserAttributesToolArgument
+    ? {
+        userAttributes: z.object({}).passthrough().optional(),
+      }
+    : {}),
 };
 
 export type QueryDatasourceError =
+  | {
+      type: 'invalid-user-attributes';
+      message: string;
+    }
   | {
       type: 'filter-validation';
       message: string;
@@ -47,12 +59,28 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
       openWorldHint: false,
     },
     argsValidator: validateQuery,
-    callback: async ({ datasourceLuid, query }, { requestId }): Promise<CallToolResult> => {
+    callback: async (
+      { datasourceLuid, query, userAttributes },
+      { requestId },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
-        args: { datasourceLuid, query },
+        args: { datasourceLuid, query, userAttributes },
         callback: async () => {
+          const userAttributesResult = await getUserAttributes({
+            initialUserAttributes: userAttributes,
+            server,
+            requestId,
+          });
+
+          if (userAttributesResult === 'invalid') {
+            return new Err({
+              type: 'invalid-user-attributes',
+              message: 'Invalid user attributes, see logs for more details',
+            });
+          }
+
           const datasource: Datasource = { datasourceLuid };
           const options = {
             returnFormat: 'OBJECTS',
@@ -76,6 +104,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             requestId,
             server,
             jwtScopes: ['tableau:viz_data_service:read'],
+            additionalJwtPayload: userAttributesResult,
             callback: async (restApi) => {
               if (!config.disableQueryDatasourceFilterValidation) {
                 // Validate filters values for SET and MATCH filters
@@ -109,6 +138,12 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
         },
         getErrorText: (error: QueryDatasourceError) => {
           switch (error.type) {
+            case 'invalid-user-attributes':
+              return JSON.stringify({
+                requestId,
+                errorType: 'invalid-user-attributes',
+                message: error.message,
+              });
             case 'filter-validation':
               return JSON.stringify({
                 requestId,

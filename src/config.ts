@@ -30,6 +30,11 @@ export class Config {
   excludeTools: Array<ToolName>;
   maxResultLimit: number | null;
   disableQueryDatasourceFilterValidation: boolean;
+  enableUserAttributesToolArgument: boolean;
+  elicitation: {
+    disabled: boolean;
+    elicitUserAttributes: boolean;
+  };
 
   constructor() {
     const cleansedVars = removeClaudeDesktopExtensionUserConfigTemplates(process.env);
@@ -56,6 +61,9 @@ export class Config {
       EXCLUDE_TOOLS: excludeTools,
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
+      DISABLE_ELICITATION: disableElicitation,
+      ELICIT_USER_ATTRIBUTES: elicitUserAttributes,
+      ENABLE_USER_ATTRIBUTES_TOOL_ARG: enableUserAttributesToolArgument,
     } = cleansedVars;
 
     const defaultPort = 3927;
@@ -73,6 +81,11 @@ export class Config {
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
+    this.enableUserAttributesToolArgument = enableUserAttributesToolArgument === 'true';
+    this.elicitation = {
+      disabled: disableElicitation === 'true',
+      elicitUserAttributes: elicitUserAttributes === 'true',
+    };
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =
@@ -107,6 +120,20 @@ export class Config {
       invariant(clientId, 'The environment variable CONNECTED_APP_CLIENT_ID is not set');
       invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
       invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
+    }
+
+    if (this.enableUserAttributesToolArgument) {
+      if (this.elicitation.disabled) {
+        throw new Error(
+          'The environment variables ENABLE_USER_ATTRIBUTES_TOOL_ARG and DISABLE_ELICITATION cannot both be "true"',
+        );
+      }
+
+      if (this.auth !== 'direct-trust') {
+        throw new Error(
+          'The environment variable ENABLE_USER_ATTRIBUTES_TOOL_ARG can only be "true" when AUTH = "direct-trust"',
+        );
+      }
     }
 
     this.server = server;

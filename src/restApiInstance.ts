@@ -32,6 +32,7 @@ const getNewRestApiInstanceAsync = async (
   requestId: RequestId,
   server: Server,
   jwtScopes: Set<JwtScopes>,
+  additionalJwtPayload?: Record<string, unknown>,
 ): Promise<RestApi> => {
   const restApi = new RestApi(config.server, {
     requestInterceptor: [
@@ -60,7 +61,10 @@ const getNewRestApiInstanceAsync = async (
       secretId: config.connectedAppSecretId,
       secretValue: config.connectedAppSecretValue,
       scopes: jwtScopes,
-      additionalPayload: getJwtAdditionalPayload(config),
+      additionalPayload: {
+        ...additionalJwtPayload,
+        ...getJwtAdditionalPayload(config),
+      },
     });
   }
 
@@ -73,14 +77,22 @@ export const useRestApi = async <T>({
   server,
   callback,
   jwtScopes,
+  additionalJwtPayload,
 }: {
   config: Config;
   requestId: RequestId;
   server: Server;
   jwtScopes: Array<JwtScopes>;
+  additionalJwtPayload?: Record<string, unknown>;
   callback: (restApi: RestApi) => Promise<T>;
 }): Promise<T> => {
-  const restApi = await getNewRestApiInstanceAsync(config, requestId, server, new Set(jwtScopes));
+  const restApi = await getNewRestApiInstanceAsync(
+    config,
+    requestId,
+    server,
+    new Set(jwtScopes),
+    additionalJwtPayload,
+  );
   try {
     return await callback(restApi);
   } finally {
