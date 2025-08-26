@@ -215,11 +215,11 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  OAUTH_JWT_SECRET: {
+  OAUTH_JWE_PRIVATE_KEY_PATH: {
     includeInUserConfig: false,
     type: 'string',
-    title: 'OAuth JWT Secret',
-    description: 'The secret to use for the OAuth JWT.',
+    title: 'OAuth JWE Private Key Path',
+    description: 'The path to the OAuth JWE private key.',
     required: false,
     sensitive: true,
   },
