@@ -4,6 +4,7 @@ import {
   isToolGroupName,
   isToolName,
   ToolGroupName,
+  toolGroupNames,
   toolGroups,
   ToolName,
   toolNames,
@@ -29,6 +30,12 @@ describe('toolName', () => {
 
     for (const toolName of toolNames) {
       expect(toolNamesToGroups[toolName], `Tool ${toolName} is not in a group`).toBeDefined();
+    }
+  });
+
+  it('should not allow a tool group to have the same name as a tool', () => {
+    for (const group of toolGroupNames) {
+      expect(isToolName(group), `Group ${group} is the same as a tool name`).toBe(false);
     }
   });
 });
