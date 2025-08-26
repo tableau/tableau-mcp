@@ -657,10 +657,6 @@ export class OAuthProvider {
   async verifyAccessToken(token: string): Promise<Result<AuthInfo, string>> {
     try {
       const { plaintext, protectedHeader } = await compactDecrypt(token, this.jwePrivateKey);
-      // const { payload } = await jwtVerify(token, this.jwtSecret, {
-      //   audience: this.jwtAudience,
-      //   issuer: this.jwtIssuer,
-      // });
 
       console.warn(protectedHeader);
       const payload = JSON.parse(new TextDecoder().decode(plaintext));
