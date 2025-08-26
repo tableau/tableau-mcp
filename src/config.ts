@@ -40,7 +40,7 @@ export class Config {
     enabled: boolean;
     issuer: string;
     redirectUri: string;
-    jwtSecret: string;
+    jwePrivateKeyPath: string;
     authzCodeTimeoutMs: number;
     accessTokenTimeoutMs: number;
     refreshTokenTimeoutMs: number;
@@ -68,7 +68,7 @@ export class Config {
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
       OAUTH_ISSUER: oauthIssuer,
-      OAUTH_JWT_SECRET: jwtSecret,
+      OAUTH_JWE_PRIVATE_KEY_PATH: oauthJwePrivateKeyPath,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
@@ -98,7 +98,7 @@ export class Config {
       enabled: !!oauthIssuer,
       issuer: oauthIssuer ?? '',
       redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
-      jwtSecret: jwtSecret ?? '',
+      jwePrivateKeyPath: oauthJwePrivateKeyPath ?? '',
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
         defaultValue: TEN_MINUTES_IN_MS,
         minValue: 0,
@@ -121,7 +121,10 @@ export class Config {
     if (this.oauth.enabled) {
       invariant(this.oauth.issuer, 'The environment variable OAUTH_ISSUER is not set');
       invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
-      invariant(this.oauth.jwtSecret, 'The environment variable OAUTH_JWT_SECRET is not set');
+      invariant(
+        this.oauth.jwePrivateKeyPath,
+        'The environment variable OAUTH_JWE_PRIVATE_KEY_PATH is not set',
+      );
 
       if (this.transport === 'stdio') {
         throw new Error('TRANSPORT must be "http" when OAUTH_ISSUER is set');

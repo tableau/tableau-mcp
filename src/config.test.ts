@@ -42,7 +42,7 @@ describe('Config', () => {
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: undefined,
       OAUTH_ISSUER: undefined,
       OAUTH_REDIRECT_URI: undefined,
-      OAUTH_JWT_SECRET: undefined,
+      OAUTH_JWE_PRIVATE_KEY_PATH: undefined,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: undefined,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: undefined,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: undefined,
@@ -649,7 +649,7 @@ describe('Config', () => {
     const defaultOAuthEnvVars = {
       ...defaultEnvVars,
       OAUTH_ISSUER: 'https://example.com',
-      OAUTH_JWT_SECRET: 'test-jwt-secret',
+      OAUTH_JWE_PRIVATE_KEY_PATH: 'path/to/private.pem',
     } as const;
 
     const defaultOAuthTimeoutMs = {
@@ -662,7 +662,7 @@ describe('Config', () => {
       enabled: true,
       issuer: defaultOAuthEnvVars.OAUTH_ISSUER,
       redirectUri: `${defaultOAuthEnvVars.OAUTH_ISSUER}/Callback`,
-      jwtSecret: 'test-jwt-secret',
+      jwePrivateKeyPath: defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH,
       ...defaultOAuthTimeoutMs,
     } as const;
 
@@ -677,7 +677,7 @@ describe('Config', () => {
         enabled: false,
         issuer: '',
         redirectUri: '',
-        jwtSecret: '',
+        jwePrivateKeyPath: '',
         ...defaultOAuthTimeoutMs,
       });
     });
@@ -759,14 +759,16 @@ describe('Config', () => {
       expect(config.oauth.refreshTokenTimeoutMs).toBe(1234);
     });
 
-    it('should throw error when OAUTH_JWT_SECRET is not set', () => {
+    it('should throw error when OAUTH_JWE_PRIVATE_KEY_PATH is not set', () => {
       process.env = {
         ...process.env,
         ...defaultOAuthEnvVars,
-        OAUTH_JWT_SECRET: '',
+        OAUTH_JWE_PRIVATE_KEY_PATH: '',
       };
 
-      expect(() => new Config()).toThrow('The environment variable OAUTH_JWT_SECRET is not set');
+      expect(() => new Config()).toThrow(
+        'The environment variable OAUTH_JWE_PRIVATE_KEY_PATH is not set',
+      );
     });
 
     it('should throw error when AUTH is "oauth" and OAUTH_ISSUER is not set', () => {

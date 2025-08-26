@@ -1,7 +1,15 @@
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { createHash, randomBytes, randomUUID } from 'crypto';
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  KeyObject,
+  randomBytes,
+  randomUUID,
+} from 'crypto';
 import express from 'express';
-import { jwtVerify, SignJWT } from 'jose';
+import { readFileSync } from 'fs';
+import { compactDecrypt, CompactEncrypt } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { isAxiosError } from '../../../node_modules/axios/index.js';
@@ -27,6 +35,8 @@ import {
   UserAndTokens,
 } from './types.js';
 
+//type KeyAlgorithm = Parameters<typeof crypto.subtle.importKey>[2];
+
 /**
  * OAuth 2.1 Provider
  *
@@ -50,7 +60,8 @@ import {
  * - Time-limited authorization codes
  */
 export class OAuthProvider {
-  private readonly jwtSecret: Uint8Array;
+  private _jwePrivateKey: KeyObject | undefined;
+  private _jwePublicKey: KeyObject | undefined;
   private readonly config = getConfig();
   private readonly pendingAuthorizations = new Map<string, PendingAuthorization>();
   private readonly authorizationCodes = new Map<string, AuthorizationCode>();
@@ -60,9 +71,26 @@ export class OAuthProvider {
   private readonly jwtIssuer: string;
 
   constructor() {
-    this.jwtSecret = new TextEncoder().encode(this.config.oauth.jwtSecret);
     this.jwtAudience = 'tableau-mcp-server';
     this.jwtIssuer = this.config.oauth.issuer;
+  }
+
+  get jwePrivateKey(): KeyObject {
+    if (!this._jwePrivateKey) {
+      const privateKeyContents = readFileSync(this.config.oauth.jwePrivateKeyPath, 'utf8');
+      this._jwePrivateKey = createPrivateKey(privateKeyContents);
+    }
+
+    return this._jwePrivateKey;
+  }
+
+  get jwePublicKey(): KeyObject {
+    if (!this._jwePublicKey) {
+      const privateKeyContents = readFileSync(this.config.oauth.jwePrivateKeyPath, 'utf8');
+      this._jwePublicKey = createPublicKey(privateKeyContents);
+    }
+
+    return this._jwePublicKey;
   }
 
   /**
@@ -630,10 +658,14 @@ export class OAuthProvider {
    */
   async verifyAccessToken(token: string): Promise<Result<AuthInfo, string>> {
     try {
-      const { payload } = await jwtVerify(token, this.jwtSecret, {
-        audience: this.jwtAudience,
-        issuer: this.jwtIssuer,
-      });
+      const { plaintext, protectedHeader } = await compactDecrypt(token, this.jwePrivateKey);
+      // const { payload } = await jwtVerify(token, this.jwtSecret, {
+      //   audience: this.jwtAudience,
+      //   issuer: this.jwtIssuer,
+      // });
+
+      console.warn(protectedHeader);
+      const payload = JSON.parse(new TextDecoder().decode(plaintext));
 
       if (payload.exp && payload.exp < Date.now()) {
         // https://github.com/modelcontextprotocol/inspector/issues/608
@@ -698,12 +730,16 @@ export class OAuthProvider {
    * JWT contains tokens for making API calls
    *
    * @param tokenData - token data
-   * @returns Signed JWT token for MCP authentication
+   * @returns Encrypted JWE token for MCP authentication
    */
   private async createAccessToken(tokenData: UserAndTokens): Promise<string> {
-    return await new SignJWT({
+    const payload = JSON.stringify({
       sub: tokenData.user.name,
       tableauUserId: tokenData.user.id,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Date.now() + this.config.oauth.accessTokenTimeoutMs,
+      aud: this.jwtAudience,
+      iss: this.jwtIssuer,
       ...(this.config.auth === 'oauth'
         ? {
             tableauAccessToken: tokenData.tokens.accessToken,
@@ -711,13 +747,13 @@ export class OAuthProvider {
             tableauExpiresAt: Date.now() + tokenData.tokens.expiresInSeconds * 1000,
           }
         : {}),
-    })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt()
-      .setExpirationTime(Date.now() + this.config.oauth.accessTokenTimeoutMs)
-      .setAudience(this.jwtAudience)
-      .setIssuer(this.jwtIssuer)
-      .sign(this.jwtSecret);
+    });
+
+    const jwe = await new CompactEncrypt(new TextEncoder().encode(payload))
+      .setProtectedHeader({ alg: 'RSA-OAEP-256', enc: 'A256GCM' })
+      .encrypt(this.jwePublicKey);
+
+    return jwe;
   }
 
   /**
@@ -820,3 +856,26 @@ export class OAuthProvider {
     }
   }
 }
+
+// function importPrivateKey(pemPath: string, jweKeyAlgorithm: KeyAlgorithm): KeyObject {
+//   const pem = readFileSync(pemPath, 'utf8');
+//   return createPrivateKey(pem);
+//   const pemHeader = '-----BEGIN PRIVATE KEY-----';
+//   const pemFooter = '-----END PRIVATE KEY-----';
+//   const pemContents = pem.substring(pemHeader.length, pem.length - pemFooter.length - 1);
+//   const binaryDer = new TextEncoder().encode(pemContents);
+
+//   return window.crypto.subtle.importKey('pkcs8', binaryDer, jweKeyAlgorithm, false, ['decrypt']);
+// }
+
+// function importPublicKey(pemPath: string, jweKeyAlgorithm: KeyAlgorithm): KeyObject {
+//   const pem = readFileSync(pemPath, 'utf8');
+//   return createPublicKey(pem);
+
+//   // const pemHeader = '-----BEGIN PUBLIC KEY-----';
+//   // const pemFooter = '-----END PUBLIC KEY-----';
+//   // const pemContents = pem.substring(pemHeader.length, pem.length - pemFooter.length - 1);
+//   // const binaryDer = new TextEncoder().encode(pemContents);
+
+//   // return crypto.subtle.importKey('spki', binaryDer, jweKeyAlgorithm, false, ['encrypt']);
+// }
