@@ -643,12 +643,12 @@ export class OAuthProvider {
   }
 
   /**
-   * Verifies JWT access token and extracts credentials
+   * Verifies JWE access token and extracts credentials
    *
    * @remarks
    * MCP OAuth Step 8: Authenticated MCP Request
    *
-   * Validates JWT signature and expiration.
+   * Decrypts and validates JWE signature and expiration.
    * Extracts access/refresh tokens for API calls.
    *
    * @param token - JWT access token from Authorization header
@@ -656,12 +656,15 @@ export class OAuthProvider {
    */
   async verifyAccessToken(token: string): Promise<Result<AuthInfo, string>> {
     try {
-      const { plaintext, protectedHeader } = await compactDecrypt(token, this.jwePrivateKey);
-
-      console.warn(protectedHeader);
+      const { plaintext } = await compactDecrypt(token, this.jwePrivateKey);
       const payload = JSON.parse(new TextDecoder().decode(plaintext));
 
-      if (payload.exp && payload.exp < Date.now()) {
+      if (
+        payload.iss !== this.jwtIssuer ||
+        payload.aud !== this.jwtAudience ||
+        !payload.exp ||
+        payload.exp < Date.now()
+      ) {
         // https://github.com/modelcontextprotocol/inspector/issues/608
         // MCP Inspector Not Using Refresh Token for Token Validation
         return new Err('Invalid or expired access token');
@@ -717,11 +720,11 @@ export class OAuthProvider {
   }
 
   /**
-   * Creates JWT access token containing credentials
+   * Creates JWE access token containing credentials
    *
    * @remarks
    * Part of MCP OAuth Step 7: Token Exchange
-   * JWT contains tokens for making API calls
+   * JWE contains tokens for making API calls
    *
    * @param tokenData - token data
    * @returns Encrypted JWE token for MCP authentication
