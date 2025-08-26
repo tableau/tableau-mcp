@@ -35,8 +35,6 @@ import {
   UserAndTokens,
 } from './types.js';
 
-//type KeyAlgorithm = Parameters<typeof crypto.subtle.importKey>[2];
-
 /**
  * OAuth 2.1 Provider
  *
@@ -856,26 +854,3 @@ export class OAuthProvider {
     }
   }
 }
-
-// function importPrivateKey(pemPath: string, jweKeyAlgorithm: KeyAlgorithm): KeyObject {
-//   const pem = readFileSync(pemPath, 'utf8');
-//   return createPrivateKey(pem);
-//   const pemHeader = '-----BEGIN PRIVATE KEY-----';
-//   const pemFooter = '-----END PRIVATE KEY-----';
-//   const pemContents = pem.substring(pemHeader.length, pem.length - pemFooter.length - 1);
-//   const binaryDer = new TextEncoder().encode(pemContents);
-
-//   return window.crypto.subtle.importKey('pkcs8', binaryDer, jweKeyAlgorithm, false, ['decrypt']);
-// }
-
-// function importPublicKey(pemPath: string, jweKeyAlgorithm: KeyAlgorithm): KeyObject {
-//   const pem = readFileSync(pemPath, 'utf8');
-//   return createPublicKey(pem);
-
-//   // const pemHeader = '-----BEGIN PUBLIC KEY-----';
-//   // const pemFooter = '-----END PUBLIC KEY-----';
-//   // const pemContents = pem.substring(pemHeader.length, pem.length - pemFooter.length - 1);
-//   // const binaryDer = new TextEncoder().encode(pemContents);
-
-//   // return crypto.subtle.importKey('spki', binaryDer, jweKeyAlgorithm, false, ['encrypt']);
-// }
