@@ -25,7 +25,9 @@ export class Server extends McpServer {
       {
         capabilities: {
           logging: {},
-          tools: {},
+          tools: {
+            listChanged: getConfig().toolRegistrationMode === 'task',
+          },
         },
       },
     );
