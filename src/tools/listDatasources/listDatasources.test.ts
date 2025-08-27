@@ -10,8 +10,18 @@ const mockDatasources = {
     totalAvailable: 2,
   },
   datasources: [
-    { id: 'ds1', name: 'Superstore', project: { name: 'Samples', id: 'proj1' } },
-    { id: 'ds2', name: 'Finance', project: { name: 'Finance', id: 'proj2' } },
+    {
+      id: 'ds1',
+      name: 'Superstore',
+      description: 'Sample superstore data source',
+      project: { name: 'Samples', id: 'proj1' },
+    },
+    {
+      id: 'ds2',
+      name: 'Finance',
+      description: 'Financial analysis data source',
+      project: { name: 'Finance', id: 'proj2' },
+    },
   ],
 };
 
