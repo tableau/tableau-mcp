@@ -29,6 +29,10 @@ describe('toolName', () => {
     );
 
     for (const toolName of toolNames) {
+      if (toolName === 'start-task' || toolName === 'complete-task') {
+        continue;
+      }
+
       expect(toolNamesToGroups[toolName], `Tool ${toolName} is not in a group`).toBeDefined();
     }
   });

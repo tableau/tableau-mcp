@@ -28,6 +28,10 @@ describe('server', () => {
 
     const tools = toolFactories.map((tool) => tool(server));
     for (const tool of tools) {
+      if (tool.name === 'complete-task' || tool.name === 'start-task') {
+        continue;
+      }
+
       expect(server.tool).toHaveBeenCalledWith(
         tool.name,
         tool.description,

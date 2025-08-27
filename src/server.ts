@@ -1,11 +1,11 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import pkg from '../package.json' with { type: 'json' };
 import { getConfig } from './config.js';
 import { setLogLevel } from './logging/log.js';
 import { Tool } from './tools/tool.js';
-import { toolNames } from './tools/toolName.js';
+import { ToolName, toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
 
 export const serverName = pkg.name;
@@ -14,6 +14,7 @@ export const serverVersion = pkg.version;
 export class Server extends McpServer {
   readonly name: string;
   readonly version: string;
+  readonly registeredTools: Map<ToolName, RegisteredTool> = new Map();
 
   constructor() {
     super(
@@ -33,15 +34,24 @@ export class Server extends McpServer {
     this.version = serverVersion;
   }
 
-  registerTools = (): void => {
+  registerTools = (
+    overrides?: Partial<{
+      includeTools: Array<ToolName>;
+      excludeTools: Array<ToolName>;
+    }>,
+  ): void => {
+    this.registeredTools.forEach((tool) => tool.remove());
+    this.registeredTools.clear();
+
     for (const {
       name,
       description,
       paramsSchema,
       annotations,
       callback,
-    } of this._getToolsToRegister()) {
-      this.tool(name, description, paramsSchema, annotations, callback);
+    } of this._getToolsToRegister(overrides)) {
+      const tool = this.tool(name, description, paramsSchema, annotations, callback);
+      this.registeredTools.set(name, tool);
     }
   };
 
@@ -52,8 +62,16 @@ export class Server extends McpServer {
     });
   };
 
-  private _getToolsToRegister = (): Array<Tool<any>> => {
-    const { includeTools, excludeTools } = getConfig();
+  private _getToolsToRegister = (
+    overrides?: Partial<{
+      includeTools: Array<ToolName>;
+      excludeTools: Array<ToolName>;
+    }>,
+  ): Array<Tool<any>> => {
+    const config = getConfig();
+    let { includeTools, excludeTools } = overrides ?? config;
+    includeTools = includeTools ?? config.includeTools;
+    excludeTools = excludeTools ?? config.excludeTools;
 
     const tools = toolFactories.map((tool) => tool(this));
     const toolsToRegister = tools.filter((tool) => {
@@ -63,6 +81,10 @@ export class Server extends McpServer {
 
       if (excludeTools.length > 0) {
         return !excludeTools.includes(tool.name);
+      }
+
+      if (tool.name === 'start-task') {
+        return false;
       }
 
       return true;

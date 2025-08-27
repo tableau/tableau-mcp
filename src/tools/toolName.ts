@@ -1,4 +1,6 @@
 export const toolNames = [
+  'start-task',
+  'complete-task',
   'list-datasources',
   'list-fields',
   'list-workbooks',
@@ -34,10 +36,17 @@ export const toolGroups = {
   ],
 } as const satisfies Record<ToolGroupName, Array<ToolName>>;
 
+export const toolRegistrationModes = ['auto', 'task'] as const;
+export type ToolRegistrationMode = (typeof toolRegistrationModes)[number];
+
 export function isToolName(value: unknown): value is ToolName {
   return !!toolNames.find((name) => name === value);
 }
 
 export function isToolGroupName(value: unknown): value is ToolGroupName {
   return !!toolGroupNames.find((name) => name === value);
+}
+
+export function isToolRegistrationMode(value: unknown): value is ToolRegistrationMode {
+  return !!toolRegistrationModes.find((name) => name === value);
 }

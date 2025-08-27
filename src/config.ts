@@ -1,6 +1,13 @@
 import { CorsOptions } from 'cors';
 
-import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
+import {
+  isToolGroupName,
+  isToolName,
+  isToolRegistrationMode,
+  toolGroups,
+  ToolName,
+  ToolRegistrationMode,
+} from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
@@ -28,6 +35,7 @@ export class Config {
   disableLogMasking: boolean;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
+  toolRegistrationMode: ToolRegistrationMode;
   maxResultLimit: number | null;
   disableQueryDatasourceFilterValidation: boolean;
 
@@ -54,6 +62,7 @@ export class Config {
       DISABLE_LOG_MASKING: disableLogMasking,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
+      TOOL_REGISTRATION_MODE: toolRegistrationMode,
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
     } = cleansedVars;
@@ -73,24 +82,48 @@ export class Config {
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
+    this.toolRegistrationMode = isToolRegistrationMode(toolRegistrationMode)
+      ? toolRegistrationMode
+      : 'auto';
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =
       isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
 
-    this.includeTools = includeTools
-      ? includeTools.split(',').flatMap((s) => {
-          const v = s.trim();
-          return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
-        })
-      : [];
+    if (this.toolRegistrationMode === 'task') {
+      this.includeTools = ['start-task'];
+      this.excludeTools = [];
 
-    this.excludeTools = excludeTools
-      ? excludeTools.split(',').flatMap((s) => {
-          const v = s.trim();
-          return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
-        })
-      : [];
+      if (includeTools) {
+        throw new Error(
+          'The environment variable INCLUDE_TOOLS cannot be set when tool registration mode is "task"',
+        );
+      }
+
+      if (excludeTools) {
+        throw new Error(
+          'The environment variable EXCLUDE_TOOLS cannot be set when tool registration mode is "task"',
+        );
+      }
+    } else {
+      this.includeTools = includeTools
+        ? includeTools.split(',').flatMap((s) => {
+            const v = s.trim();
+            return isToolName(v) && v !== 'start-task' && v !== 'complete-task'
+              ? v
+              : isToolGroupName(v)
+                ? toolGroups[v]
+                : [];
+          })
+        : [];
+
+      this.excludeTools = excludeTools
+        ? excludeTools.split(',').flatMap((s) => {
+            const v = s.trim();
+            return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
+          })
+        : [];
+    }
 
     if (this.includeTools.length > 0 && this.excludeTools.length > 0) {
       throw new Error('Cannot include and exclude tools simultaneously');
