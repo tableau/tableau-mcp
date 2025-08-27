@@ -85,7 +85,7 @@ export class Server extends McpServer {
         return !excludeTools.includes(tool.name);
       }
 
-      if (tool.name === 'start-task') {
+      if (tool.name === 'start-task' || tool.name === 'complete-task') {
         return false;
       }
 
