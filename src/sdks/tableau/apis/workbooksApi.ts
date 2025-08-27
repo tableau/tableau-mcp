@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { connectionSchema } from '../types/connection.js';
 import { paginationSchema } from '../types/pagination.js';
 import { workbookSchema } from '../types/workbook.js';
 import { paginationParameters } from './paginationParameters.js';
@@ -42,6 +43,18 @@ const queryWorkbooksForSiteEndpoint = makeEndpoint({
   }),
 });
 
-const workbooksApi = makeApi([queryWorkbooksForSiteEndpoint, getWorkbookEndpoint]);
+const queryWorkbookConnectionsEndpoint = makeEndpoint({
+  method: 'get',
+  path: `/sites/:siteId/workbooks/:workbookId/connections`,
+  alias: 'queryWorkbookConnections',
+  description: 'Returns a list of data connections for the specific workbook.',
+  response: z.object({ connections: z.object({ connection: z.array(connectionSchema) }) }),
+});
+
+const workbooksApi = makeApi([
+  queryWorkbooksForSiteEndpoint,
+  getWorkbookEndpoint,
+  queryWorkbookConnectionsEndpoint,
+]);
 
 export const workbooksApis = [...workbooksApi] as const satisfies ZodiosEndpointDefinitions;

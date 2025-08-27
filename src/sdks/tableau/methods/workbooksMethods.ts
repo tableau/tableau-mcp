@@ -1,6 +1,7 @@
 import { Zodios } from '@zodios/core';
 
 import { workbooksApis } from '../apis/workbooksApi.js';
+import { Connection } from '../types/connection.js';
 import { Credentials } from '../types/credentials.js';
 import { Pagination } from '../types/pagination.js';
 import { Workbook } from '../types/workbook.js';
@@ -73,5 +74,29 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       pagination: response.pagination,
       workbooks: response.workbooks.workbook ?? [],
     };
+  };
+
+  /**
+   * Returns a list of data connections for the specific workbook.
+   *
+   * Required scopes: N/A -- unannotated
+   *
+   * @param {string} workbookId The ID of the workbook to return information for.
+   * @param {string} siteId - The Tableau site ID
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook_connections
+   */
+  queryWorkbookConnections = async ({
+    workbookId,
+    siteId,
+  }: {
+    workbookId: string;
+    siteId: string;
+  }): Promise<Array<Connection>> => {
+    return (
+      await this._apiClient.queryWorkbookConnections({
+        params: { siteId, workbookId },
+        ...this.authHeader,
+      })
+    ).connections.connection;
   };
 }

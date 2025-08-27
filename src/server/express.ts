@@ -90,6 +90,7 @@ export async function startExpressServer({
 
       server.registerTools();
       server.registerRequestHandlers();
+      await server.registerResources();
 
       await server.connect(transport);
       setLogLevel(server, logLevel);

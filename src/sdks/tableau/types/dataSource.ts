@@ -6,6 +6,7 @@ export const dataSourceSchema = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string().optional(),
+  webpageUrl: z.string().optional(),
   project: projectSchema,
 });
 

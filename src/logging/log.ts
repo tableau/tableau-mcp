@@ -2,6 +2,7 @@ import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../server.js';
 import { ToolName } from '../tools/toolName.js';
+import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 type Logger = 'rest-api' | (string & {});
 type LogType = LoggingLevel | 'request' | 'response' | 'tool';
 type LogMessage = {
@@ -106,28 +107,41 @@ function getSendLoggingMessageFn(level: LoggingLevel) {
       return;
     }
 
+    const logMessage = JSON.stringify(
+      {
+        timestamp: new Date().toISOString(),
+        currentLogLevel,
+        message,
+      },
+      null,
+      2,
+    );
+
     // server.sendNotification doesn't provide a way to provide the relatedRequestId
     // so we're using server.notification directly.
-    return server.server.notification(
-      {
-        method: 'notifications/message',
-        params: {
-          level,
-          logger,
-          message: JSON.stringify(
-            {
-              timestamp: new Date().toISOString(),
-              currentLogLevel,
-              message,
-            },
-            null,
-            2,
-          ),
+    try {
+      return await server.server.notification(
+        {
+          method: 'notifications/message',
+          params: {
+            level,
+            logger,
+            message: logMessage,
+          },
         },
-      },
-      {
-        relatedRequestId: requestId,
-      },
-    );
+        {
+          relatedRequestId: requestId,
+        },
+      );
+    } catch (error) {
+      const errorMessage = `${getExceptionMessage(error)}`;
+      if (errorMessage.includes('Not connected')) {
+        console.warn(logMessage);
+      } else {
+        writeToStderr('Error sending logging message');
+        writeToStderr(errorMessage);
+        writeToStderr(logMessage);
+      }
+    }
   };
 }

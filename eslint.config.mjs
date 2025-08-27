@@ -31,7 +31,7 @@ export default [
       'simple-import-sort': simpleImportSort,
     },
     rules: {
-      'no-console': 'error',
+      'no-console': ['error', { allow: ['warn'] }],
       'no-duplicate-imports': ['error', { includeExports: true }],
       'simple-import-sort/imports': 'error',
       'simple-import-sort/exports': 'error',

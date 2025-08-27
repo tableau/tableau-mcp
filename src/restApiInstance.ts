@@ -29,7 +29,7 @@ type JwtScopes =
 
 const getNewRestApiInstanceAsync = async (
   config: Config,
-  requestId: RequestId,
+  requestId: RequestId | undefined,
   server: Server,
   jwtScopes: Set<JwtScopes>,
 ): Promise<RestApi> => {
@@ -75,7 +75,7 @@ export const useRestApi = async <T>({
   jwtScopes,
 }: {
   config: Config;
-  requestId: RequestId;
+  requestId: RequestId | undefined;
   server: Server;
   jwtScopes: Array<JwtScopes>;
   callback: (restApi: RestApi) => Promise<T>;
@@ -89,7 +89,7 @@ export const useRestApi = async <T>({
 };
 
 export const getRequestInterceptor =
-  (server: Server, requestId: RequestId): RequestInterceptor =>
+  (server: Server, requestId: RequestId | undefined): RequestInterceptor =>
   (request) => {
     request.headers['User-Agent'] = `${server.name}/${server.version}`;
     logRequest(server, request, requestId);
@@ -97,8 +97,9 @@ export const getRequestInterceptor =
   };
 
 export const getRequestErrorInterceptor =
-  (server: Server, requestId: RequestId): ErrorInterceptor =>
+  (server: Server, requestId: RequestId | undefined): ErrorInterceptor =>
   (error, baseUrl) => {
+    requestId = requestId ?? 'none';
     if (!isAxiosError(error) || !error.request) {
       log.error(server, `Request ${requestId} failed with error: ${getExceptionMessage(error)}`, {
         logger: 'rest-api',
@@ -119,14 +120,14 @@ export const getRequestErrorInterceptor =
   };
 
 export const getResponseInterceptor =
-  (server: Server, requestId: RequestId): ResponseInterceptor =>
+  (server: Server, requestId: RequestId | undefined): ResponseInterceptor =>
   (response) => {
     logResponse(server, response, requestId);
     return response;
   };
 
 export const getResponseErrorInterceptor =
-  (server: Server, requestId: RequestId): ErrorInterceptor =>
+  (server: Server, requestId: RequestId | undefined): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.response) {
       log.error(
@@ -149,7 +150,12 @@ export const getResponseErrorInterceptor =
     );
   };
 
-function logRequest(server: Server, request: RequestInterceptorConfig, requestId: RequestId): void {
+function logRequest(
+  server: Server,
+  request: RequestInterceptorConfig,
+  requestId: RequestId | undefined,
+): void {
+  requestId = requestId ?? 'none';
   const config = getConfig();
   const maskedRequest = config.disableLogMasking ? request : maskRequest(request);
   const url = new URL(maskedRequest.url ?? '', maskedRequest.baseUrl);
@@ -159,7 +165,7 @@ function logRequest(server: Server, request: RequestInterceptorConfig, requestId
 
   const messageObj = {
     type: 'request',
-    requestId,
+    requestId: requestId,
     method: maskedRequest.method,
     url: url.toString(),
     ...(shouldLogWhenLevelIsAtLeast('debug') && {
@@ -169,14 +175,15 @@ function logRequest(server: Server, request: RequestInterceptorConfig, requestId
     }),
   } as const;
 
-  log.info(server, messageObj, { logger: 'rest-api', requestId });
+  log.info(server, messageObj, { logger: 'rest-api', requestId: requestId });
 }
 
 function logResponse(
   server: Server,
   response: ResponseInterceptorConfig,
-  requestId: RequestId,
+  requestId: RequestId | undefined,
 ): void {
+  requestId = requestId ?? 'none';
   const config = getConfig();
   const maskedResponse = config.disableLogMasking ? response : maskResponse(response);
   const url = new URL(maskedResponse.url ?? '', maskedResponse.baseUrl);

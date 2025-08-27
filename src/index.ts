@@ -20,6 +20,18 @@ async function startServer(): Promise<void> {
       server.registerTools();
       server.registerRequestHandlers();
 
+      // TODO: Register resources *after* the server connects to the transport
+      // once https://github.com/modelcontextprotocol/typescript-sdk/issues/893 is fixed.
+      // Currently, an error is thrown: "Cannot register capabilities after connecting to transport".
+      // https://github.com/modelcontextprotocol/typescript-sdk/blob/79d11dc53fda1dffcbfdad101d9832227134bf7c/src/server/mcp.ts#L591
+      // https://github.com/modelcontextprotocol/typescript-sdk/blob/79d11dc53fda1dffcbfdad101d9832227134bf7c/src/server/index.ts#L149
+      //
+      // This will:
+      //  1. Allow the server to be connected to the transport more quickly.
+      //  2. Allow us to refresh the resources periodically.
+      //  3. Allow the REST API request/response tracing to successfully send logging notifications.
+      await server.registerResources();
+
       const transport = new StdioServerTransport();
       await server.connect(transport);
 

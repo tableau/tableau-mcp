@@ -30,6 +30,7 @@ export class Config {
   excludeTools: Array<ToolName>;
   maxResultLimit: number | null;
   disableQueryDatasourceFilterValidation: boolean;
+  provideDatasourceResources: boolean;
 
   constructor() {
     const cleansedVars = removeClaudeDesktopExtensionUserConfigTemplates(process.env);
@@ -56,6 +57,7 @@ export class Config {
       EXCLUDE_TOOLS: excludeTools,
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
+      PROVIDE_DATASOURCE_RESOURCES: provideDatasourceResources,
     } = cleansedVars;
 
     const defaultPort = 3927;
@@ -73,6 +75,7 @@ export class Config {
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
+    this.provideDatasourceResources = provideDatasourceResources === 'true';
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =
