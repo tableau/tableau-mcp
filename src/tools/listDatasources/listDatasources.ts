@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/schemas.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { Tool } from '../tool.js';
@@ -76,11 +77,15 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, pageSize, limit }, { requestId }): Promise<CallToolResult> => {
+    callback: async (
+      { filter, pageSize, limit },
+      { requestId, authInfo },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
         requestId,
+        authInfo,
         args: { filter, pageSize, limit },
         callback: async () => {
           const datasources = await useRestApi({
@@ -88,6 +93,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
             requestId,
             server,
             jwtScopes: ['tableau:content:read'],
+            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               const datasources = await paginate({
                 pageConfig: {

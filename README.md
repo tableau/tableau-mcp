@@ -51,7 +51,7 @@ contributions to help shape the future of this project.
 Follow these steps to install Tableau MCP for the first time:
 
 1. Clone the repository
-2. Install [Node.js](https://nodejs.org/en/download) (tested with 22.15.0 LTS)
+2. Install [Node.js >= 22.7.5](https://nodejs.org/en/download) (tested with 22.15.0 LTS)
 3. `npm install`
 4. `npm run build`
 
@@ -121,6 +121,8 @@ There are several ways to authenticate to Tableau. See
    environment variables.
 2. Use Tableau Connected Apps by setting the `AUTH` environment variable to `direct-trust`. See
    [Direct Trust Configuration](#direct-trust-configuration) for additional required configuration.
+3. Use Tableau OAuth by setting the `AUTH` environment variable to `oauth`. See
+   [OAuth Configuration](#oauth-configuration) for additional required configuration.
 
 ## Configuring AI Tools
 
@@ -189,19 +191,19 @@ These config files will be used in tool configuration explained below.
 
 #### Required Environment Variables
 
-| **Variable** | **Description**                                                                                                   |
-| ------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `SERVER`     | The URL of the Tableau server.                                                                                    |
-| `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site. |
+| **Variable** | **Description**                                                                                                                    |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `SERVER`     | The URL of the Tableau server. For Tableau Cloud, specify your site's specific pod e.g. `https://prod-useast-c.online.tableau.com` |
+| `SITE_NAME`  | The name of the Tableau site to use. For Tableau Server, set this to an empty string to specify the default site.                  |
 
 #### Optional Environment Variables
 
 | **Variable**                                 | **Description**                                                                                     | **Default**                        | **Note**                                                                                                                                                                                    |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `TRANSPORT`                                  | The MCP transport type to use for the server.                                                       | `stdio`                            | Possible values are `stdio` or `http`. For `http`, see [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
-| `AUTH`                                       | The authentication method to use by the server.                                                     | `pat`                              | Possible values are `pat` or `direct-trust`. See below sections for additional required variables depending on the desired method.                                                          |
+| `AUTH`                                       | The authentication method to use by the server.                                                     | `pat`                              | Possible values are `pat`, `direct-trust`, or `oauth`. When `oauth`, `OAUTH_ISSUER` must also be provided. See [OAuth Configuration](#oauth-configuration) below for additional variables.  |
 | `DEFAULT_LOG_LEVEL`                          | The default logging level of the server.                                                            | `debug`                            |                                                                                                                                                                                             |
-| `DATASOURCE_CREDENTIALS`                     | A JSON string that includes usernames and passwords for any datasources that require them.          | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
+| `DATASOURCE_CREDENTIALS`                     | A JSON string that includes usernames and passwords for any datasources that require them.          |                                    | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
 | `DISABLE_LOG_MASKING`                        | Disable masking of credentials in logs. For debug purposes only.                                    | `false`                            |                                                                                                                                                                                             |
 | `INCLUDE_TOOLS`                              | A comma-separated list of tool names to include in the server. Only these tools will be available.  | Empty string (_all_ are included)  | For a list of available tools, see [toolName.ts](src/tools/toolName.ts).                                                                                                                    |
 | `EXCLUDE_TOOLS`                              | A comma-separated list of tool names to exclude from the server. All other tools will be available. | Empty string (_none_ are excluded) | Cannot be provided with `INCLUDE_TOOLS`.                                                                                                                                                    |
@@ -241,19 +243,47 @@ scope.
 
 The following environment variables are required:
 
-| **Variable**                 | **Description**                                |
-| ---------------------------- | ---------------------------------------------- |
-| `JWT_SUB_CLAIM`              | The username for the `sub` claim of the JWT.   |
-| `CONNECTED_APP_CLIENT_ID`    | The client ID of the Tableau Connected App.    |
-| `CONNECTED_APP_SECRET_ID`    | The secret ID of the Tableau Connected App.    |
-| `CONNECTED_APP_SECRET_VALUE` | The secret value of the Tableau Connected App. |
+| **Variable**                 | **Description**                                | **Notes**                                                                                       |
+| ---------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `JWT_SUB_CLAIM`              | The username for the `sub` claim of the JWT.   | Can either be a hard-coded username, or the OAuth username by setting it to `{OAUTH_USERNAME}`. |
+| `CONNECTED_APP_CLIENT_ID`    | The client ID of the Tableau Connected App.    |                                                                                                 |
+| `CONNECTED_APP_SECRET_ID`    | The secret ID of the Tableau Connected App.    |                                                                                                 |
+| `CONNECTED_APP_SECRET_VALUE` | The secret value of the Tableau Connected App. |                                                                                                 |
 
 The optional `JWT_ADDITIONAL_PAYLOAD` environment variable is a JSON string that includes any
-additional user attributes to include on the JWT. The following is an example:
+additional user attributes to include on the JWT. It also supports dynamically including the OAuth
+username. The following is an example:
 
 ```json
-{ "region": "West" }
+{ "username": "{OAUTH_USERNAME}", "region": "West" }
 ```
+
+#### OAuth Configuration
+
+⚠️ Tableau Server 2025.3+ only. Tableau Cloud is not supported. ⚠️
+
+When a URL for `OAUTH_ISSUER` is provided, the MCP server will require logging in via Tableau OAuth
+to access. Tableau Server administrators must also use
+[tsm](https://help.tableau.com/current/server/en-us/cli_configuration-set_tsm.htm) to set
+`oauth.allowed_redirect_uri_hosts` to the host of the MCP server.
+
+```cmd
+tsm configuration set -k oauth.allowed_redirect_uri_hosts -v tableau-mcp.example.com
+tsm pending-changes apply
+```
+
+The following environment variables will also apply or have additional meaning:
+
+| **Variable**                          | **Description**                                     | **Default**               | **Notes**                                                                                                                                                                                                |
+| ------------------------------------- | --------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OAUTH_ISSUER`                        | The issuer of the OAuth server.                     |                           | Required if `AUTH` is `oauth`. For testing, use `http://127.0.0.1:3927`                                                                                                                                  |
+| `TRANSPORT`                           | The MCP transport type to use for the server.       | `http`                    | Must be `http` when OAuth is enabled. Also defaults to `http` if not provided.                                                                                                                           |
+| `SITE_NAME`                           | The target Tableau site for OAuth.                  |                           | Not required if `AUTH` is `oauth` and users will see the site picker if they have access to multiple sites. Choosing a site from a Cloud pod different from the one specified in `SERVER` will not work. |
+| `OAUTH_REDIRECT_URI`                  | The redirect URI for the OAuth flow.                | `{OAUTH_ISSUER}/Callback` | Host must be defined in the `oauth.allowed_redirect_uri_hosts` TSM config option. Path must be `/Callback`. Recommended to not define a value and just rely on its default value.                        |
+| `OAUTH_JWT_SECRET`                    | The symmetric secret to sign the access token with. |                           | Required. Use a good password that satisfies your security posture. See [jose SignJWT docs][sign-jwt] for details.                                                                                       |
+| `OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS` | The timeout for the OAuth authorization codes.      | _10 seconds_              | Max: 1 hour.                                                                                                                                                                                             |
+| `OAUTH_ACCESS_TOKEN_TIMEOUT_MS`       | The timeout for the OAuth access tokens.            | _24 hours_                | Max: 30 days.                                                                                                                                                                                            |
+| `OAUTH_REFRESH_TOKEN_TIMEOUT_MS`      | The timeout for the OAuth refresh tokens.           | _30 days_                 | Max: 1 year.                                                                                                                                                                                             |
 
 ##### DATASOURCE_CREDENTIALS
 
@@ -391,5 +421,6 @@ To set up local debugging with breakpoints:
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [express]: https://expressjs.com/
 [cors]: https://expressjs.com/en/resources/middleware/cors.html#configuration-options
+[sign-jwt]: https://github.com/panva/jose/blob/main/docs/jwt/sign/classes/SignJWT.md#examples
 [direct-trust]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#jwt

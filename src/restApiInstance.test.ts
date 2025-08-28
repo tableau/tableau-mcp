@@ -12,6 +12,7 @@ import {
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 import RestApi from './sdks/tableau/restApi.js';
 import { Server } from './server.js';
+import { userAgent } from './server/userAgent.js';
 
 vi.mock('./sdks/tableau/restApi.js', () => ({
   default: vi.fn().mockImplementation(() => ({
@@ -71,7 +72,7 @@ describe('restApiInstance', () => {
 
       interceptor(mockRequest);
 
-      expect(mockRequest.headers['User-Agent']).toBe(`${server.name}/${server.version}`);
+      expect(mockRequest.headers['User-Agent']).toBe(userAgent);
       expect(log.info).toHaveBeenCalledWith(
         server,
         expect.objectContaining({
