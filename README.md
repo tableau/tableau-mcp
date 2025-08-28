@@ -269,7 +269,7 @@ POST request body:
 ```js
 {
   username: "user@tableau.com", // The value of JWT_SUB_CLAIM
-  scopes: ["tableau:scope:1"], // The list of scopes the JWT should have
+  scopes: ["tableau:example:scope"], // The list of scopes the JWT should have
   source: "tableau-mcp",
   resource: 'mcp-tool-name', // The name of the tool being called e.g. query-datasource
   server: "https://tableau.example.com", // The value of SERVER
