@@ -11,7 +11,7 @@ const TWENTY_FOUR_HOURS_IN_MS = 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
 const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
-const authTypes = ['pat', 'direct-trust', 'oauth'] as const;
+const authTypes = ['pat', 'direct-trust', 'oauth', 'jwt'] as const;
 type AuthType = (typeof authTypes)[number];
 
 export class Config {
@@ -30,6 +30,7 @@ export class Config {
   connectedAppSecretId: string;
   connectedAppSecretValue: string;
   jwtAdditionalPayload: string;
+  jwtProviderUrl: string;
   datasourceCredentials: string;
   defaultLogLevel: string;
   disableLogMasking: boolean;
@@ -66,6 +67,7 @@ export class Config {
       CONNECTED_APP_SECRET_ID: secretId,
       CONNECTED_APP_SECRET_VALUE: secretValue,
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
+      JWT_PROVIDER_URL: jwtProviderUrl,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
@@ -186,6 +188,7 @@ export class Config {
     this.connectedAppSecretId = secretId ?? '';
     this.connectedAppSecretValue = secretValue ?? '';
     this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
+    this.jwtProviderUrl = jwtProviderUrl ?? '';
   }
 }
 

@@ -65,6 +65,29 @@ const getNewRestApiInstanceAsync = async (
       scopes: jwtScopes,
       additionalPayload: getJwtAdditionalPayload(config, authInfo),
     });
+  } else if (config.auth === 'jwt') {
+    const response = await fetch(config.jwtProviderUrl, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: getJwtSubClaim(config, authInfo),
+        scopes: [...jwtScopes],
+        source: server.name,
+        resource: 'query-datasource', // TODO: parameterize
+        server: config.server,
+        siteName: config.siteName,
+      }),
+    });
+
+    const { jwt } = await response.json();
+    await restApi.signIn({
+      type: 'jwt',
+      siteName: config.siteName,
+      jwt,
+    });
   } else {
     if (!authInfo?.accessToken || !authInfo?.userId) {
       throw new Error('Auth info is required when not signing in first.');

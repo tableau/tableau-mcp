@@ -6,9 +6,10 @@ import fs, { existsSync } from 'fs';
 import http from 'http';
 import https from 'https';
 
-import { Config } from '../config.js';
+import { Config, getConfig } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
+import { getJwt } from '../utils/getJwt.js';
 import { validateProtocolVersion } from './middleware.js';
 import { OAuthProvider } from './oauth/provider.js';
 
@@ -53,6 +54,7 @@ export async function startExpressServer({
   app.post(path, ...middleware, createMcpServer);
   app.get(path, ...middleware, methodNotAllowed);
   app.delete(path, ...middleware, methodNotAllowed);
+  app.post('/jwt', generateJwt);
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
@@ -132,4 +134,36 @@ async function methodNotAllowed(_req: Request, res: Response): Promise<void> {
       id: null,
     }),
   );
+}
+
+async function generateJwt(req: Request, res: Response): Promise<void> {
+  const { connectedAppClientId, connectedAppSecretId, connectedAppSecretValue } = getConfig();
+
+  const { username, scopes, source, resource, server, siteName } = req.body;
+  if (!username || !scopes || !source || !resource || !server || !siteName) {
+    res.status(400).json({
+      error: 'username, scopes, source, resource, server, and siteName are required',
+    });
+    return;
+  }
+
+  const additionalPayload: Record<string, unknown> = {};
+  if (resource === 'query-datasource') {
+    additionalPayload.region = 'West';
+  }
+
+  const jwt = await getJwt({
+    username: username as string,
+    connectedApp: {
+      clientId: connectedAppClientId,
+      secretId: connectedAppSecretId,
+      secretValue: connectedAppSecretValue,
+    },
+    scopes: new Set(scopes as string[]),
+    additionalPayload,
+  });
+
+  res.json({
+    jwt,
+  });
 }

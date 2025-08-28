@@ -28,6 +28,7 @@ export interface ProcessEnvEx {
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: string | undefined;
   OAUTH_ACCESS_TOKEN_TIMEOUT_MS: string | undefined;
   OAUTH_REFRESH_TOKEN_TIMEOUT_MS: string | undefined;
+  JWT_PROVIDER_URL: string | undefined;
 }
 
 declare global {

@@ -258,6 +258,32 @@ username. The following is an example:
 { "username": "{OAUTH_USERNAME}", "region": "West" }
 ```
 
+#### External JWT Configuration
+
+When `AUTH` is `jwt`, before the MCP server authenticates to the Tableau REST API, it will make a
+POST request to the endpoint provided in `JWT_PROVIDER_URL`.
+
+POST request body:
+
+```js
+{
+  username: "user@tableau.com", // The value of JWT_SUB_CLAIM
+  scopes: ["tableau:scope:1"], // The list of scopes the JWT should have
+  source: "tableau-mcp",
+  resource: 'mcp-tool-name', // The name of the tool being called e.g. query-datasource
+  server: "https://tableau.example.com", // The value of SERVER
+  siteName: "siteName", // The value of SITE_NAME
+}
+```
+
+Expected response:
+
+```json
+{
+  "jwt": "eyJhbGciOiJI..."
+}
+```
+
 #### OAuth Configuration
 
 ⚠️ Tableau Server 2025.3+ only. Tableau Cloud is not supported. ⚠️

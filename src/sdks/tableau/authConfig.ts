@@ -15,4 +15,8 @@ export type AuthConfig = {
       scopes: Set<string>;
       additionalPayload?: Record<string, unknown>;
     }
+  | {
+      type: 'jwt';
+      jwt: string;
+    }
 );
