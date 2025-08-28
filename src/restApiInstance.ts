@@ -18,6 +18,7 @@ import RestApi from './sdks/tableau/restApi.js';
 import { Server } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { userAgent } from './server/userAgent.js';
+import { ToolName } from './tools/toolName.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 type JwtScopes =
@@ -29,13 +30,21 @@ type JwtScopes =
   | 'tableau:insights:read'
   | 'tableau:views:download';
 
-const getNewRestApiInstanceAsync = async (
-  config: Config,
-  requestId: RequestId,
-  server: Server,
-  jwtScopes: Set<JwtScopes>,
-  authInfo?: TableauAuthInfo,
-): Promise<RestApi> => {
+const getNewRestApiInstanceAsync = async ({
+  config,
+  requestId,
+  server,
+  jwtScopes,
+  authInfo,
+  context,
+}: {
+  config: Config;
+  requestId: RequestId;
+  server: Server;
+  jwtScopes: Set<JwtScopes>;
+  authInfo?: TableauAuthInfo;
+  context: ToolName | 'none';
+}): Promise<RestApi> => {
   const restApi = new RestApi(config.server, {
     requestInterceptor: [
       getRequestInterceptor(server, requestId),
@@ -76,7 +85,7 @@ const getNewRestApiInstanceAsync = async (
         username: getJwtSubClaim(config, authInfo),
         scopes: [...jwtScopes],
         source: server.name,
-        resource: 'query-datasource', // TODO: parameterize
+        resource: context,
         server: config.server,
         siteName: config.siteName,
       }),
@@ -105,22 +114,25 @@ export const useRestApi = async <T>({
   server,
   callback,
   jwtScopes,
+  context,
   authInfo,
 }: {
   config: Config;
   requestId: RequestId;
   server: Server;
   jwtScopes: Array<JwtScopes>;
+  context: ToolName | 'none';
   callback: (restApi: RestApi) => Promise<T>;
   authInfo?: TableauAuthInfo;
 }): Promise<T> => {
-  const restApi = await getNewRestApiInstanceAsync(
+  const restApi = await getNewRestApiInstanceAsync({
     config,
     requestId,
     server,
-    new Set(jwtScopes),
+    jwtScopes: new Set(jwtScopes),
     authInfo,
-  );
+    context,
+  });
   try {
     return await callback(restApi);
   } finally {

@@ -83,6 +83,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
               requestId,
               server,
               jwtScopes: ['tableau:content:read'],
+              context: listViewsTool.name,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 const workbooks = await paginate({

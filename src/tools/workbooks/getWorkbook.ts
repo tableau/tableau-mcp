@@ -38,6 +38,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
               requestId,
               server,
               jwtScopes: ['tableau:content:read'],
+              context: getWorkbookTool.name,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 const workbook = await restApi.workbooksMethods.getWorkbook({

@@ -49,6 +49,7 @@ export const getReadMetadataTool = (server: Server): Tool<typeof paramsSchema> =
               requestId,
               server,
               jwtScopes: ['tableau:viz_data_service:read'],
+              context: readMetadataTool.name,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 return await restApi.vizqlDataServiceMethods.readMetadata({
