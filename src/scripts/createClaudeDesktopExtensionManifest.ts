@@ -107,6 +107,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  JWT_PROVIDER_URL: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'JWT Provider URL',
+    description: 'The URL of the JWT provider.',
+    required: false,
+    sensitive: false,
+  },
   TRANSPORT: {
     includeInUserConfig: false,
     type: 'string',
