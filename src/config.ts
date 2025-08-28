@@ -178,6 +178,9 @@ export class Config {
       invariant(clientId, 'The environment variable CONNECTED_APP_CLIENT_ID is not set');
       invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
       invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
+    } else if (this.auth === 'jwt') {
+      invariant(jwtProviderUrl, 'The environment variable JWT_PROVIDER_URL is not set');
+      invariant(jwtSubClaim, 'The environment variable JWT_SUB_CLAIM is not set');
     }
 
     this.server = server;
