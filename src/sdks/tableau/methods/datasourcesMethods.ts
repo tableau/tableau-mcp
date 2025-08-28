@@ -1,7 +1,8 @@
 import { Zodios } from '@zodios/core';
 
-import { Datasource, datasourcesApis } from '../apis/datasourcesApi.js';
+import { datasourcesApis } from '../apis/datasourcesApi.js';
 import { Credentials } from '../types/credentials.js';
+import { DataSource } from '../types/dataSource.js';
 import { Pagination } from '../types/pagination.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
@@ -38,7 +39,7 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
     filter: string;
     pageSize?: number;
     pageNumber?: number;
-  }): Promise<{ pagination: Pagination; datasources: Datasource[] }> => {
+  }): Promise<{ pagination: Pagination; datasources: DataSource[] }> => {
     const response = await this._apiClient.listDatasources({
       params: { siteId },
       queries: { filter, pageSize, pageNumber },

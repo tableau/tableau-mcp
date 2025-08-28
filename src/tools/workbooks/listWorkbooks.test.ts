@@ -1,63 +1,53 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
-import { getListDatasourcesTool } from './listDatasources.js';
+import { getListWorkbooksTool } from './listWorkbooks.js';
+import { mockWorkbook } from './mockWorkbook.js';
 
-const mockDatasources = {
+const mockWorkbooks = {
   pagination: {
     pageNumber: 1,
     pageSize: 10,
-    totalAvailable: 2,
+    totalAvailable: 1,
   },
-  datasources: [
-    {
-      id: 'ds1',
-      name: 'Superstore',
-      description: 'Sample superstore data source',
-      project: { name: 'Samples', id: 'proj1' },
-    },
-    {
-      id: 'ds2',
-      name: 'Finance',
-      description: 'Financial analysis data source',
-      project: { name: 'Finance', id: 'proj2' },
-    },
-  ],
+  workbooks: [mockWorkbook],
 };
 
 const mocks = vi.hoisted(() => ({
-  mockListDatasources: vi.fn(),
+  mockQueryWorkbooksForSite: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
   useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
     callback({
-      datasourcesMethods: {
-        listDatasources: mocks.mockListDatasources,
+      workbooksMethods: {
+        queryWorkbooksForSite: mocks.mockQueryWorkbooksForSite,
       },
       siteId: 'test-site-id',
     }),
   ),
 }));
 
-describe('listDatasourcesTool', () => {
+describe('listWorkbooksTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('should create a tool instance with correct properties', () => {
-    const listDatasourcesTool = getListDatasourcesTool(new Server());
-    expect(listDatasourcesTool.name).toBe('list-datasources');
-    expect(listDatasourcesTool.description).toContain('Retrieves a list of published data sources');
-    expect(listDatasourcesTool.paramsSchema).toMatchObject({ filter: expect.any(Object) });
+    const listWorkbooksTool = getListWorkbooksTool(new Server());
+    expect(listWorkbooksTool.name).toBe('list-workbooks');
+    expect(listWorkbooksTool.description).toContain(
+      'Retrieves a list of workbooks on a Tableau site',
+    );
+    expect(listWorkbooksTool.paramsSchema).toMatchObject({});
   });
 
-  it('should successfully list datasources', async () => {
-    mocks.mockListDatasources.mockResolvedValue(mockDatasources);
+  it('should successfully query workbooks', async () => {
+    mocks.mockQueryWorkbooksForSite.mockResolvedValue(mockWorkbooks);
     const result = await getToolResult({ filter: 'name:eq:Superstore' });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Superstore');
-    expect(mocks.mockListDatasources).toHaveBeenCalledWith({
+    expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       filter: 'name:eq:Superstore',
       pageSize: undefined,
@@ -67,7 +57,7 @@ describe('listDatasourcesTool', () => {
 
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
-    mocks.mockListDatasources.mockRejectedValue(new Error(errorMessage));
+    mocks.mockQueryWorkbooksForSite.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ filter: 'name:eq:Superstore' });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(errorMessage);
@@ -75,8 +65,8 @@ describe('listDatasourcesTool', () => {
 });
 
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
-  const listDatasourcesTool = getListDatasourcesTool(new Server());
-  return await listDatasourcesTool.callback(params, {
+  const listWorkbooksTool = getListWorkbooksTool(new Server());
+  return await listWorkbooksTool.callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),
