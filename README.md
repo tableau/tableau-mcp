@@ -261,7 +261,8 @@ username. The following is an example:
 #### External JWT Configuration
 
 When `AUTH` is `jwt`, before the MCP server authenticates to the Tableau REST API, it will make a
-POST request to the endpoint provided in `JWT_PROVIDER_URL`.
+POST request to the endpoint provided in `JWT_PROVIDER_URL`. This endpoint must return the JSON web
+token to then be used to authenticate to the REST API.
 
 POST request body:
 
