@@ -150,6 +150,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  TOOL_REGISTRATION_MODE: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Tool Registration Mode',
+    description: 'Set to "task" to enable task mode.',
+    required: false,
+    sensitive: false,
+  },
   MAX_RESULT_LIMIT: {
     includeInUserConfig: false,
     type: 'number',
