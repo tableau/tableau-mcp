@@ -5,6 +5,7 @@ export const toolNames = [
   'list-views',
   'query-datasource',
   'read-metadata',
+  'get-datasource-metadata',
   'get-workbook',
   'get-view-data',
   'get-view-image',

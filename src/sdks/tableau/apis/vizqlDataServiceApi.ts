@@ -82,6 +82,8 @@ export const MetadataOutput = z
   .partial()
   .passthrough();
 
+export type MetadataResponse = z.infer<typeof MetadataOutput>;
+
 export const TableauError = z
   .object({
     errorCode: z.string(),
