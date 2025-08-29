@@ -73,7 +73,7 @@ export class OAuthProvider {
     this.jwtIssuer = this.config.oauth.issuer;
   }
 
-  get jwePrivateKey(): KeyObject {
+  private get jwePrivateKey(): KeyObject {
     if (!this._jwePrivateKey) {
       let privateKeyContents: string;
       try {
@@ -96,7 +96,7 @@ export class OAuthProvider {
     return this._jwePrivateKey;
   }
 
-  get jwePublicKey(): KeyObject {
+  private get jwePublicKey(): KeyObject {
     if (!this._jwePublicKey) {
       this._jwePublicKey = createPublicKey(this.jwePrivateKey);
     }
