@@ -8,8 +8,8 @@ const PROVIDER_SECRET_HEADER = 'x-tabmcp-jwt-provider-secret';
 
 export async function getJwtFromProvider({
   jwtProviderUrl,
-  body,
   jwtProviderEncryptedSecret,
+  body,
 }: {
   jwtProviderUrl: string;
   jwtProviderEncryptedSecret: string;
