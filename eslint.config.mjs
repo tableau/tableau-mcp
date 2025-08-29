@@ -24,7 +24,7 @@ export default [
     },
   },
   {
-    ignores: ['node_modules/**', 'build/**'],
+    ignores: ['node_modules/**', 'build/**', 'docs/.docusaurus/**'],
   },
   {
     plugins: {
