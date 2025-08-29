@@ -76,6 +76,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             requestId,
             server,
             jwtScopes: ['tableau:viz_data_service:read'],
+            context: queryDatasourceTool.name,
             callback: async (restApi) => {
               if (!config.disableQueryDatasourceFilterValidation) {
                 // Validate filters values for SET and MATCH filters

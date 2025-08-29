@@ -199,7 +199,7 @@ These config files will be used in tool configuration explained below.
 | **Variable**                                 | **Description**                                                                                                   | **Default**                        | **Note**                                                                                                                                                                                    |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `TRANSPORT`                                  | The MCP transport type to use for the server.                                                                     | `stdio`                            | Possible values are `stdio` or `http`. For `http`, see [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
-| `AUTH`                                       | The authentication method to use by the server.                                                                   | `pat`                              | Possible values are `pat` or `direct-trust`. See below sections for additional required variables depending on the desired method.                                                          |
+| `AUTH`                                       | The authentication method to use by the server.                                                                   | `pat`                              | Possible values are `pat`, `direct-trust`, or `jwt-provider`. See below sections for additional required variables depending on the desired method.                                         |
 | `DEFAULT_LOG_LEVEL`                          | The default logging level of the server.                                                                          | `debug`                            |                                                                                                                                                                                             |
 | `DATASOURCE_CREDENTIALS`                     | A JSON string that includes usernames and passwords for any datasources that require them.                        | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
 | `DISABLE_LOG_MASKING`                        | Disable masking of credentials in logs. For debug purposes only.                                                  | `false`                            |                                                                                                                                                                                             |
@@ -253,6 +253,91 @@ additional user attributes to include on the JWT. The following is an example:
 
 ```json
 { "region": "West" }
+```
+
+#### JWT Provider Configuration
+
+When `AUTH` is `jwt-provider`, before the MCP server authenticates to the Tableau REST API, it will
+make a POST request to the endpoint provided in `JWT_PROVIDER_URL`. This endpoint must return the
+JSON web token to then be used to authenticate to the REST API. It must only accept and return JSON.
+
+The following environment variables are required:
+
+| **Variable**                   | **Description**                                                                                     | **Notes**                                                                                                                                                                                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JWT_PROVIDER_URL`             | The URL of the JWT provider endpoint.                                                               | Example: `https://example.com/jwt-provider`                                                                                                                                                                 |
+| `JWT_PROVIDER_SECRET`          | The secret value to encrypt and provide on the secret header.                                       | The JWT provider must decrypt the value of the secret header using the private key and verify it matches. See below for an example.                                                                         |
+| `JWT_PROVIDER_PUBLIC_KEY_PATH` | The absolute path to the RSA public key (.pem) file used to encrypt the JWT provider secret header. | Only PEM format is supported. If you need a key pair, you can generate them using [openssl-genrsa][genrsa] e.g. `openssl genrsa -out private.pem` and `openssl rsa -in private.pem -pubout -out public.pem` |
+| `JWT_SUB_CLAIM`                | The username provided as the `username` in the request body.                                        | The JWT provider doesn't necessarilly need to use this, but had `AUTH` been `direct-trust`, it would have been used for the `sub` claim of the JWT generated by the Tableau MCP server.                     |
+
+POST request header:
+
+```
+x-tabmcp-jwt-provider-secret: [Encrypted value of JWT_PROVIDER_SECRET]
+```
+
+POST request body:
+
+```js
+{
+  username: "user@tableau.com", // The value of JWT_SUB_CLAIM
+  scopes: ["tableau:example:scope"], // The list of scopes the JWT should have
+  source: "tableau-mcp",
+  resource: 'mcp-tool-name', // The name of the tool being called e.g. query-datasource
+  server: "https://tableau.example.com", // The value of SERVER
+  siteName: "siteName", // The value of SITE_NAME
+}
+```
+
+Expected response:
+
+```json
+{
+  "jwt": "eyJhbGciOiJI..."
+}
+```
+
+Example [Express][express] route handler:
+
+```js
+async function jwtProviderRouteHandler(req, res) {
+  // Read the secret header from the request
+  const secret = req.headers['x-tabmcp-jwt-provider-secret'];
+
+  // Decrypt the secret using the private key.
+  // The secret was encrypted by the Tableau MCP server using the public key.
+  const privateKey = crypto.createPrivateKey({
+    format: 'pem',
+    key: readFileSync(process.env.PRIVATE_KEY_PATH),
+    passphrase: process.env.PRIVATE_KEY_PASSPHRASE,
+  });
+
+  // compactDecrypt is a function from the jose package
+  // https://www.npmjs.com/package/jose
+  const { plaintext } = await compactDecrypt(secret, privateKey);
+  const equal = crypto.timingSafeEqual(
+    plaintext,
+    new TextEncoder().encode(process.env.JWT_PROVIDER_SECRET),
+  );
+
+  if (!equal) {
+    res.status(401).json({
+      error: 'Unauthorized',
+    });
+    return;
+  }
+
+  // Read the values provided by the Tableau MCP server
+  const { username, scopes, source, resource, server, siteName } = req.body;
+
+  // Add isAdmin user attribute for admin user
+  const userAttributes = { isAdmin: username === 'admin@example.com' };
+
+  // An example generateJwt function can be found here:
+  // https://github.com/tableau/connected-apps-jwt-samples/blob/main/javascript/index.js
+  const jwt = generateJwt(userAttributes);
+  res.json({ jwt });
+}
 ```
 
 ##### DATASOURCE_CREDENTIALS

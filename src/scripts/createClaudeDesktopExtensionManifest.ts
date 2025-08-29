@@ -107,6 +107,31 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  JWT_PROVIDER_URL: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'JWT Provider URL',
+    description: 'The URL of the JWT provider.',
+    required: false,
+    sensitive: false,
+  },
+  JWT_PROVIDER_SECRET: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'JWT Provider Secret',
+    description: 'The secret value to encrypt and provide on the secret header.',
+    required: false,
+    sensitive: true,
+  },
+  JWT_PROVIDER_PUBLIC_KEY_PATH: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'JWT Provider Secret Public Key Path',
+    description:
+      'The path to the RSA public key (.pem) file used to encrypt the JWT provider secret header.',
+    required: false,
+    sensitive: false,
+  },
   TRANSPORT: {
     includeInUserConfig: false,
     type: 'string',

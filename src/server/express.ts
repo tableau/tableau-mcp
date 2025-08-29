@@ -1,14 +1,17 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import cors from 'cors';
+import { createPrivateKey, timingSafeEqual } from 'crypto';
 import express, { Request, Response } from 'express';
-import fs, { existsSync } from 'fs';
+import fs, { existsSync, readFileSync } from 'fs';
 import http from 'http';
 import https from 'https';
+import { compactDecrypt } from 'jose';
 
-import { Config } from '../config.js';
+import { Config, getConfig } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
+import { getJwt } from '../utils/getJwt.js';
 
 export async function startExpressServer({
   basePath,
@@ -43,6 +46,7 @@ export async function startExpressServer({
   app.post(path, createMcpServer);
   app.get(path, methodNotAllowed);
   app.delete(path, methodNotAllowed);
+  app.post('/jwt', generateJwt);
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
@@ -123,4 +127,58 @@ async function methodNotAllowed(_req: Request, res: Response): Promise<void> {
       id: null,
     }),
   );
+}
+
+async function generateJwt(req: Request, res: Response): Promise<void> {
+  const secret = req.headers['x-tabmcp-jwt-provider-secret'];
+  if (!secret || typeof secret !== 'string') {
+    res.status(401).json({
+      error: 'Unauthorized',
+    });
+    return;
+  }
+
+  const privateKeyContents = readFileSync(process.env.PRIVATE_KEY_PATH!);
+  const privateKey = createPrivateKey({
+    key: privateKeyContents,
+    format: 'pem',
+    passphrase: process.env.PRIVATE_KEY_PASSPHRASE,
+  });
+
+  const { plaintext } = await compactDecrypt(secret, privateKey);
+  if (!timingSafeEqual(plaintext, new TextEncoder().encode(process.env.JWT_PROVIDER_SECRET))) {
+    res.status(401).json({
+      error: 'Unauthorized',
+    });
+    return;
+  }
+
+  const { username, scopes, source, resource, server, siteName } = req.body;
+  if (!username || !scopes || !source || !resource || !server || !siteName) {
+    res.status(400).json({
+      error: 'username, scopes, source, resource, server, and siteName are required',
+    });
+    return;
+  }
+
+  const additionalPayload: Record<string, unknown> = {};
+  if (resource === 'query-datasource') {
+    additionalPayload.region = 'West';
+  }
+
+  const { connectedAppClientId, connectedAppSecretId, connectedAppSecretValue } = getConfig();
+  const jwt = await getJwt({
+    username: username as string,
+    connectedApp: {
+      clientId: connectedAppClientId,
+      secretId: connectedAppSecretId,
+      secretValue: connectedAppSecretValue,
+    },
+    scopes: new Set(scopes as string[]),
+    additionalPayload,
+  });
+
+  res.json({
+    jwt,
+  });
 }

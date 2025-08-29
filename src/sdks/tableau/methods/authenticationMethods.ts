@@ -52,6 +52,10 @@ export default class AuthenticationMethods extends Methods<typeof authentication
                     additionalPayload: authConfig.additionalPayload,
                   }),
                 };
+              case 'jwt':
+                return {
+                  jwt: authConfig.jwt,
+                };
             }
           })()),
         },
