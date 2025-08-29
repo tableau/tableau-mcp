@@ -20,6 +20,7 @@ import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { userAgent } from './server/userAgent.js';
 import { ToolName } from './tools/toolName.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
+import { getJwtFromProvider } from './utils/getJwtFromProvider.js';
 
 type JwtScopes =
   | 'tableau:viz_data_service:read'
@@ -75,23 +76,15 @@ const getNewRestApiInstanceAsync = async ({
       additionalPayload: getJwtAdditionalPayload(config, authInfo),
     });
   } else if (config.auth === 'jwt') {
-    const response = await fetch(config.jwtProviderUrl, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        username: getJwtSubClaim(config, authInfo),
-        scopes: [...jwtScopes],
-        source: server.name,
-        resource: context,
-        server: config.server,
-        siteName: config.siteName,
-      }),
+    const jwt = await getJwtFromProvider(config.jwtProviderUrl, {
+      username: getJwtSubClaim(config, authInfo),
+      scopes: [...jwtScopes],
+      source: server.name,
+      resource: context,
+      server: config.server,
+      siteName: config.siteName,
     });
 
-    const { jwt } = await response.json();
     await restApi.signIn({
       type: 'jwt',
       siteName: config.siteName,

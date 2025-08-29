@@ -262,7 +262,7 @@ username. The following is an example:
 
 When `AUTH` is `jwt`, before the MCP server authenticates to the Tableau REST API, it will make a
 POST request to the endpoint provided in `JWT_PROVIDER_URL`. This endpoint must return the JSON web
-token to then be used to authenticate to the REST API.
+token to then be used to authenticate to the REST API. It must only accept and return JSON.
 
 POST request body:
 
