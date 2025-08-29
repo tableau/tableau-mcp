@@ -1,7 +1,15 @@
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { createHash, randomBytes, randomUUID } from 'crypto';
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  KeyObject,
+  randomBytes,
+  randomUUID,
+} from 'crypto';
 import express from 'express';
-import { jwtVerify, SignJWT } from 'jose';
+import { readFileSync } from 'fs';
+import { compactDecrypt, CompactEncrypt } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { isAxiosError } from '../../../node_modules/axios/index.js';
@@ -50,7 +58,8 @@ import {
  * - Time-limited authorization codes
  */
 export class OAuthProvider {
-  private readonly jwtSecret: Uint8Array;
+  private _jwePrivateKey: KeyObject | undefined;
+  private _jwePublicKey: KeyObject | undefined;
   private readonly config = getConfig();
   private readonly pendingAuthorizations = new Map<string, PendingAuthorization>();
   private readonly authorizationCodes = new Map<string, AuthorizationCode>();
@@ -60,9 +69,39 @@ export class OAuthProvider {
   private readonly jwtIssuer: string;
 
   constructor() {
-    this.jwtSecret = new TextEncoder().encode(this.config.oauth.jwtSecret);
     this.jwtAudience = 'tableau-mcp-server';
     this.jwtIssuer = this.config.oauth.issuer;
+  }
+
+  private get jwePrivateKey(): KeyObject {
+    if (!this._jwePrivateKey) {
+      let privateKeyContents: string;
+      try {
+        privateKeyContents = readFileSync(this.config.oauth.jwePrivateKeyPath, 'utf8');
+      } catch (e) {
+        throw new Error(`Failed to read private key file: ${e}`);
+      }
+
+      try {
+        this._jwePrivateKey = createPrivateKey({
+          key: privateKeyContents,
+          format: 'pem',
+          passphrase: this.config.oauth.jwePrivateKeyPassphrase,
+        });
+      } catch (e) {
+        throw new Error(`Failed to create private key: ${e}`);
+      }
+    }
+
+    return this._jwePrivateKey;
+  }
+
+  private get jwePublicKey(): KeyObject {
+    if (!this._jwePublicKey) {
+      this._jwePublicKey = createPublicKey(this.jwePrivateKey);
+    }
+
+    return this._jwePublicKey;
   }
 
   /**
@@ -617,25 +656,30 @@ export class OAuthProvider {
   }
 
   /**
-   * Verifies JWT access token and extracts credentials
+   * Verifies JWE access token and extracts credentials
    *
    * @remarks
    * MCP OAuth Step 8: Authenticated MCP Request
    *
-   * Validates JWT signature and expiration.
+   * Decrypts and validates JWE signature and expiration.
    * Extracts access/refresh tokens for API calls.
    *
    * @param token - JWT access token from Authorization header
    * @returns AuthInfo with user details and tokens
    */
   async verifyAccessToken(token: string): Promise<Result<AuthInfo, string>> {
+    const privateKey = this.jwePrivateKey;
     try {
-      const { payload } = await jwtVerify(token, this.jwtSecret, {
-        audience: this.jwtAudience,
-        issuer: this.jwtIssuer,
-      });
+      const { plaintext } = await compactDecrypt(token, privateKey);
+      const payload = JSON.parse(new TextDecoder().decode(plaintext));
 
-      if (payload.exp && payload.exp < Date.now()) {
+      if (
+        !payload ||
+        payload.iss !== this.jwtIssuer ||
+        payload.aud !== this.jwtAudience ||
+        !payload.exp ||
+        payload.exp < Date.now()
+      ) {
         // https://github.com/modelcontextprotocol/inspector/issues/608
         // MCP Inspector Not Using Refresh Token for Token Validation
         return new Err('Invalid or expired access token');
@@ -691,19 +735,23 @@ export class OAuthProvider {
   }
 
   /**
-   * Creates JWT access token containing credentials
+   * Creates JWE access token containing credentials
    *
    * @remarks
    * Part of MCP OAuth Step 7: Token Exchange
-   * JWT contains tokens for making API calls
+   * JWE contains tokens for making API calls
    *
    * @param tokenData - token data
-   * @returns Signed JWT token for MCP authentication
+   * @returns Encrypted JWE token for MCP authentication
    */
   private async createAccessToken(tokenData: UserAndTokens): Promise<string> {
-    return await new SignJWT({
+    const payload = JSON.stringify({
       sub: tokenData.user.name,
       tableauUserId: tokenData.user.id,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Date.now() + this.config.oauth.accessTokenTimeoutMs,
+      aud: this.jwtAudience,
+      iss: this.jwtIssuer,
       ...(this.config.auth === 'oauth'
         ? {
             tableauAccessToken: tokenData.tokens.accessToken,
@@ -711,13 +759,13 @@ export class OAuthProvider {
             tableauExpiresAt: Date.now() + tokenData.tokens.expiresInSeconds * 1000,
           }
         : {}),
-    })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt()
-      .setExpirationTime(Date.now() + this.config.oauth.accessTokenTimeoutMs)
-      .setAudience(this.jwtAudience)
-      .setIssuer(this.jwtIssuer)
-      .sign(this.jwtSecret);
+    });
+
+    const jwe = await new CompactEncrypt(new TextEncoder().encode(payload))
+      .setProtectedHeader({ alg: 'RSA-OAEP-256', enc: 'A256GCM' })
+      .encrypt(this.jwePublicKey);
+
+    return jwe;
   }
 
   /**

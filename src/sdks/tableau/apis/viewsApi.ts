@@ -7,7 +7,7 @@ import { paginationParameters } from './paginationParameters.js';
 
 const queryViewDataEndpoint = makeEndpoint({
   method: 'get',
-  path: `/sites/:siteId/views/:viewId/data`,
+  path: '/sites/:siteId/views/:viewId/data',
   alias: 'queryViewData',
   description: 'Returns a specified view rendered as data in comma separated value (CSV) format.',
   response: z.string(),
@@ -15,7 +15,7 @@ const queryViewDataEndpoint = makeEndpoint({
 
 const queryViewImageEndpoint = makeEndpoint({
   method: 'get',
-  path: `/sites/:siteId/views/:viewId/image`,
+  path: '/sites/:siteId/views/:viewId/image',
   alias: 'queryViewImage',
   description: 'Returns an image of the specified view.',
   parameters: [
@@ -46,7 +46,7 @@ const queryViewImageEndpoint = makeEndpoint({
 
 const queryViewsForWorkbookEndpoint = makeEndpoint({
   method: 'get',
-  path: `/sites/:siteId/workbooks/:workbookId/views`,
+  path: '/sites/:siteId/workbooks/:workbookId/views',
   alias: 'queryViewsForWorkbook',
   description:
     'Returns all the views for the specified workbook, optionally including usage statistics.',
@@ -63,7 +63,7 @@ const queryViewsForWorkbookEndpoint = makeEndpoint({
 
 const queryViewsForSiteEndpoint = makeEndpoint({
   method: 'get',
-  path: `/sites/:siteId/views`,
+  path: '/sites/:siteId/views',
   alias: 'queryViewsForSite',
   description:
     'Returns all the views for the specified site, optionally including usage statistics.',
