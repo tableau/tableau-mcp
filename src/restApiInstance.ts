@@ -71,7 +71,7 @@ const getNewRestApiInstanceAsync = async ({
       scopes: jwtScopes,
       additionalPayload: getJwtAdditionalPayload(config),
     });
-  } else if (config.auth === 'jwt') {
+  } else if (config.auth === 'jwt-provider') {
     const jwt = await getJwtFromProvider(config.jwtProviderUrl, {
       username: getJwtSubClaim(config),
       scopes: [...jwtScopes],

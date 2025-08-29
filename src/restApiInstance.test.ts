@@ -273,7 +273,7 @@ describe('restApiInstance', () => {
       mocks.mockJwtProviderResponse.mockResolvedValue(mockJwtProviderResponses.success);
 
       const config = getConfig();
-      config.auth = 'jwt';
+      config.auth = 'jwt-provider';
       config.jwtProviderUrl = 'https://example.com/jwt';
       config.jwtSubClaim = 'user@example.com';
 
@@ -308,7 +308,7 @@ describe('restApiInstance', () => {
       mocks.mockJwtProviderResponse.mockResolvedValue(mockJwtProviderResponses.error);
 
       const config = getConfig();
-      config.auth = 'jwt';
+      config.auth = 'jwt-provider';
       config.jwtProviderUrl = 'https://example.com/jwt';
       config.jwtSubClaim = 'user@example.com';
 

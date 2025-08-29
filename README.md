@@ -199,7 +199,7 @@ These config files will be used in tool configuration explained below.
 | **Variable**                                 | **Description**                                                                                                   | **Default**                        | **Note**                                                                                                                                                                                    |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `TRANSPORT`                                  | The MCP transport type to use for the server.                                                                     | `stdio`                            | Possible values are `stdio` or `http`. For `http`, see [HTTP Server Configuration](#http-server-configuration) below for additional variables. See [Transports][mcp-transport] for details. |
-| `AUTH`                                       | The authentication method to use by the server.                                                                   | `pat`                              | Possible values are `pat`, `direct-trust`, or `jwt`. See below sections for additional required variables depending on the desired method.                                                  |
+| `AUTH`                                       | The authentication method to use by the server.                                                                   | `pat`                              | Possible values are `pat`, `direct-trust`, or `jwt-provider`. See below sections for additional required variables depending on the desired method.                                         |
 | `DEFAULT_LOG_LEVEL`                          | The default logging level of the server.                                                                          | `debug`                            |                                                                                                                                                                                             |
 | `DATASOURCE_CREDENTIALS`                     | A JSON string that includes usernames and passwords for any datasources that require them.                        | Empty string                       | Format is provided in the [DATASOURCE_CREDENTIALS](#datasource_credentials) section below.                                                                                                  |
 | `DISABLE_LOG_MASKING`                        | Disable masking of credentials in logs. For debug purposes only.                                                  | `false`                            |                                                                                                                                                                                             |
@@ -257,9 +257,9 @@ additional user attributes to include on the JWT. The following is an example:
 
 #### JWT Provider Configuration
 
-When `AUTH` is `jwt`, before the MCP server authenticates to the Tableau REST API, it will make a
-POST request to the endpoint provided in `JWT_PROVIDER_URL`. This endpoint must return the JSON web
-token to then be used to authenticate to the REST API. It must only accept and return JSON.
+When `AUTH` is `jwt-provider`, before the MCP server authenticates to the Tableau REST API, it will
+make a POST request to the endpoint provided in `JWT_PROVIDER_URL`. This endpoint must return the
+JSON web token to then be used to authenticate to the REST API. It must only accept and return JSON.
 
 POST request body:
 
