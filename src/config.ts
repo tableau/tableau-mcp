@@ -1,4 +1,7 @@
 import { CorsOptions } from 'cors';
+import { createPublicKey } from 'crypto';
+import { existsSync, readFileSync } from 'fs';
+import { CompactEncrypt } from 'jose';
 
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
@@ -8,6 +11,11 @@ const authTypes = ['pat', 'direct-trust', 'jwt-provider'] as const;
 type AuthType = (typeof authTypes)[number];
 
 export class Config {
+  private readonly _jwtProviderSecretPublicKeyPath: string;
+  private readonly _jwtProviderSecret: string;
+
+  private _jwtProviderEncryptedSecret: string | undefined;
+
   auth: AuthType;
   server: string;
   transport: TransportName;
@@ -51,6 +59,8 @@ export class Config {
       CONNECTED_APP_SECRET_VALUE: secretValue,
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       JWT_PROVIDER_URL: jwtProviderUrl,
+      JWT_PROVIDER_SECRET: jwtProviderSecret,
+      JWT_PROVIDER_SECRET_PUBLIC_KEY_PATH: jwtProviderSecretPublicKeyPath,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
@@ -112,6 +122,15 @@ export class Config {
     } else if (this.auth === 'jwt-provider') {
       invariant(jwtProviderUrl, 'The environment variable JWT_PROVIDER_URL is not set');
       invariant(jwtSubClaim, 'The environment variable JWT_SUB_CLAIM is not set');
+      invariant(jwtProviderSecret, 'The environment variable JWT_PROVIDER_SECRET is not set');
+      invariant(
+        jwtProviderSecretPublicKeyPath,
+        'The environment variable JWT_PROVIDER_SECRET_PUBLIC_KEY_PATH is not set',
+      );
+
+      if (process.env.TABLEAU_MCP_TEST !== 'true' && !existsSync(jwtProviderSecretPublicKeyPath)) {
+        throw new Error(`The file ${jwtProviderSecretPublicKeyPath} does not exist`);
+      }
     }
 
     this.server = server;
@@ -123,7 +142,27 @@ export class Config {
     this.connectedAppSecretValue = secretValue ?? '';
     this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
     this.jwtProviderUrl = jwtProviderUrl ?? '';
+    this._jwtProviderSecretPublicKeyPath = jwtProviderSecretPublicKeyPath ?? '';
+    this._jwtProviderSecret = jwtProviderSecret ?? '';
   }
+
+  getJwtProviderEncryptedSecret = async (): Promise<string> => {
+    if (!this._jwtProviderEncryptedSecret) {
+      const publicKeyContents = readFileSync(this._jwtProviderSecretPublicKeyPath);
+      const publicKey = createPublicKey({
+        key: publicKeyContents,
+        format: 'pem',
+      });
+
+      this._jwtProviderEncryptedSecret = await new CompactEncrypt(
+        new TextEncoder().encode(this._jwtProviderSecret),
+      )
+        .setProtectedHeader({ alg: 'RSA-OAEP-256', enc: 'A256GCM' })
+        .encrypt(publicKey);
+    }
+
+    return this._jwtProviderEncryptedSecret;
+  };
 }
 
 function validateServer(server: string): void {

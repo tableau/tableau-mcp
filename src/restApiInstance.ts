@@ -72,13 +72,17 @@ const getNewRestApiInstanceAsync = async ({
       additionalPayload: getJwtAdditionalPayload(config),
     });
   } else if (config.auth === 'jwt-provider') {
-    const jwt = await getJwtFromProvider(config.jwtProviderUrl, {
-      username: getJwtSubClaim(config),
-      scopes: [...jwtScopes],
-      source: server.name,
-      resource: context,
-      server: config.server,
-      siteName: config.siteName,
+    const jwt = await getJwtFromProvider({
+      jwtProviderUrl: config.jwtProviderUrl,
+      jwtProviderEncryptedSecret: await config.getJwtProviderEncryptedSecret(),
+      body: {
+        username: getJwtSubClaim(config),
+        scopes: [...jwtScopes],
+        source: server.name,
+        resource: context,
+        server: config.server,
+        siteName: config.siteName,
+      },
     });
 
     await restApi.signIn({

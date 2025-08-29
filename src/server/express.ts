@@ -1,10 +1,12 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import cors from 'cors';
+import { createPrivateKey, timingSafeEqual } from 'crypto';
 import express, { Request, Response } from 'express';
-import fs, { existsSync } from 'fs';
+import fs, { existsSync, readFileSync } from 'fs';
 import http from 'http';
 import https from 'https';
+import { compactDecrypt } from 'jose';
 
 import { Config, getConfig } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
@@ -128,7 +130,28 @@ async function methodNotAllowed(_req: Request, res: Response): Promise<void> {
 }
 
 async function generateJwt(req: Request, res: Response): Promise<void> {
-  const { connectedAppClientId, connectedAppSecretId, connectedAppSecretValue } = getConfig();
+  const secret = req.headers['x-tabmcp-jwt-provider-secret'];
+  if (!secret || typeof secret !== 'string') {
+    res.status(401).json({
+      error: 'Unauthorized',
+    });
+    return;
+  }
+
+  const privateKeyContents = readFileSync(process.env.JWE_PRIVATE_KEY_PATH!);
+  const jwePrivateKey = createPrivateKey({
+    key: privateKeyContents,
+    format: 'pem',
+    passphrase: process.env.JWE_PRIVATE_KEY_PASSPHRASE,
+  });
+
+  const { plaintext } = await compactDecrypt(secret, jwePrivateKey);
+  if (!timingSafeEqual(plaintext, new TextEncoder().encode(process.env.JWT_PROVIDER_SECRET))) {
+    res.status(401).json({
+      error: 'Unauthorized',
+    });
+    return;
+  }
 
   const { username, scopes, source, resource, server, siteName } = req.body;
   if (!username || !scopes || !source || !resource || !server || !siteName) {
@@ -142,6 +165,8 @@ async function generateJwt(req: Request, res: Response): Promise<void> {
   if (resource === 'query-datasource') {
     additionalPayload.region = 'West';
   }
+
+  const { connectedAppClientId, connectedAppSecretId, connectedAppSecretValue } = getConfig();
   const jwt = await getJwt({
     username: username as string,
     connectedApp: {

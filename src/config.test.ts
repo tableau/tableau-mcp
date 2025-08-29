@@ -34,6 +34,8 @@ describe('Config', () => {
       CONNECTED_APP_SECRET_VALUE: undefined,
       JWT_ADDITIONAL_PAYLOAD: undefined,
       JWT_PROVIDER_URL: undefined,
+      JWT_PROVIDER_SECRET: undefined,
+      JWT_PROVIDER_SECRET_PUBLIC_KEY_PATH: undefined,
       DATASOURCE_CREDENTIALS: undefined,
       DEFAULT_LOG_LEVEL: undefined,
       DISABLE_LOG_MASKING: undefined,
@@ -632,13 +634,15 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         ...defaultEnvVars,
-        AUTH: 'jwt',
+        AUTH: 'jwt-provider',
         JWT_PROVIDER_URL: 'https://example.com/jwt',
+        JWT_PROVIDER_SECRET: 'secret',
+        JWT_PROVIDER_SECRET_PUBLIC_KEY_PATH: 'public.pem',
         JWT_SUB_CLAIM: 'user@example.com',
       };
 
       const config = new Config();
-      expect(config.auth).toBe('jwt');
+      expect(config.auth).toBe('jwt-provider');
       expect(config.jwtProviderUrl).toBe('https://example.com/jwt');
       expect(config.jwtSubClaim).toBe('user@example.com');
     });
@@ -647,7 +651,7 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         ...defaultEnvVars,
-        AUTH: 'jwt',
+        AUTH: 'jwt-provider',
         JWT_PROVIDER_URL: undefined,
       };
 
@@ -658,7 +662,7 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         ...defaultEnvVars,
-        AUTH: 'jwt',
+        AUTH: 'jwt-provider',
         JWT_PROVIDER_URL: 'https://example.com',
         JWT_SUB_CLAIM: undefined,
       };

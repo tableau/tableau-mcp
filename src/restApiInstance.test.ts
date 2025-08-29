@@ -255,6 +255,7 @@ describe('restApiInstance', () => {
       vi.spyOn(global, 'fetch').mockImplementation(
         vi.fn(async () =>
           Promise.resolve({
+            ok: true,
             json: async () => {
               const json = await mocks.mockJwtProviderResponse();
               fetchJsonResolve(json);
@@ -276,6 +277,7 @@ describe('restApiInstance', () => {
       config.auth = 'jwt-provider';
       config.jwtProviderUrl = 'https://example.com/jwt';
       config.jwtSubClaim = 'user@example.com';
+      config.getJwtProviderEncryptedSecret = vi.fn().mockResolvedValue('mock-encrypted-secret');
 
       await useRestApi({
         config,
@@ -299,6 +301,7 @@ describe('restApiInstance', () => {
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
+          'x-tabmcp-jwt-provider-secret': 'mock-encrypted-secret',
         },
       });
       expect(fetchJsonResolve).toHaveBeenCalledWith(mockJwtProviderResponses.success);
@@ -311,6 +314,7 @@ describe('restApiInstance', () => {
       config.auth = 'jwt-provider';
       config.jwtProviderUrl = 'https://example.com/jwt';
       config.jwtSubClaim = 'user@example.com';
+      config.getJwtProviderEncryptedSecret = vi.fn().mockResolvedValue('mock-encrypted-secret');
 
       await expect(
         useRestApi({
