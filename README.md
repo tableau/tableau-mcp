@@ -291,7 +291,6 @@ async function jwtProviderRouteHandler(req, res) {
 
   // https://github.com/tableau/connected-apps-jwt-samples/blob/main/javascript/index.js
   const jwt = generateJwt(userAttributes);
-
   res.json({ jwt });
 }
 ```
