@@ -138,14 +138,14 @@ async function generateJwt(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const privateKeyContents = readFileSync(process.env.JWE_PRIVATE_KEY_PATH!);
-  const jwePrivateKey = createPrivateKey({
+  const privateKeyContents = readFileSync(process.env.PRIVATE_KEY_PATH!);
+  const privateKey = createPrivateKey({
     key: privateKeyContents,
     format: 'pem',
-    passphrase: process.env.JWE_PRIVATE_KEY_PASSPHRASE,
+    passphrase: process.env.PRIVATE_KEY_PASSPHRASE,
   });
 
-  const { plaintext } = await compactDecrypt(secret, jwePrivateKey);
+  const { plaintext } = await compactDecrypt(secret, privateKey);
   if (!timingSafeEqual(plaintext, new TextEncoder().encode(process.env.JWT_PROVIDER_SECRET))) {
     res.status(401).json({
       error: 'Unauthorized',

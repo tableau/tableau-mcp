@@ -306,15 +306,15 @@ async function jwtProviderRouteHandler(req, res) {
 
   // Decrypt the secret using the private key.
   // The secret was encrypted by the Tableau MCP server using the public key.
-  const jwePrivateKey = crypto.createPrivateKey({
+  const privateKey = crypto.createPrivateKey({
     format: 'pem',
-    key: readFileSync(process.env.JWE_PRIVATE_KEY_PATH),
-    passphrase: process.env.JWE_PRIVATE_KEY_PASSPHRASE,
+    key: readFileSync(process.env.PRIVATE_KEY_PATH),
+    passphrase: process.env.PRIVATE_KEY_PASSPHRASE,
   });
 
   // compactDecrypt is a function from the jose package
   // https://www.npmjs.com/package/jose
-  const { plaintext } = await compactDecrypt(secret, jwePrivateKey);
+  const { plaintext } = await compactDecrypt(secret, privateKey);
   const equal = crypto.timingSafeEqual(
     plaintext,
     new TextEncoder().encode(process.env.JWT_PROVIDER_SECRET),
