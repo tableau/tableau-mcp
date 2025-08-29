@@ -17,6 +17,10 @@ export async function getJwtFromProvider(
     body: JSON.stringify(body),
   });
 
+  if (!response.ok) {
+    throw new Error(`Failed to get JWT from provider: ${response.status} ${response.statusText}`);
+  }
+
   const json = await response.json();
   const result = jwtResponseSchema.safeParse(json);
 
