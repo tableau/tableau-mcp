@@ -23,7 +23,7 @@ The Tableau authentication method to use by the server.
 
 - Default: `pat`
 - Possible values: `pat` or `direct-trust`
-- See [Authentication](#authentication) for additional required variables depending on the desired
+- See [Authentication](authentication) for additional required variables depending on the desired
   method.
 
 <hr />
