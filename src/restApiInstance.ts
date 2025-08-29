@@ -16,7 +16,9 @@ import {
 } from './sdks/tableau/interceptors.js';
 import RestApi from './sdks/tableau/restApi.js';
 import { Server } from './server.js';
+import { ToolName } from './tools/toolName.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
+import { getJwtFromProvider } from './utils/getJwtFromProvider.js';
 
 type JwtScopes =
   | 'tableau:viz_data_service:read'
@@ -27,12 +29,19 @@ type JwtScopes =
   | 'tableau:insights:read'
   | 'tableau:views:download';
 
-const getNewRestApiInstanceAsync = async (
-  config: Config,
-  requestId: RequestId,
-  server: Server,
-  jwtScopes: Set<JwtScopes>,
-): Promise<RestApi> => {
+const getNewRestApiInstanceAsync = async ({
+  config,
+  requestId,
+  server,
+  jwtScopes,
+  context,
+}: {
+  config: Config;
+  requestId: RequestId;
+  server: Server;
+  jwtScopes: Set<JwtScopes>;
+  context: ToolName | 'none';
+}): Promise<RestApi> => {
   const restApi = new RestApi(config.server, {
     requestInterceptor: [
       getRequestInterceptor(server, requestId),
@@ -62,6 +71,21 @@ const getNewRestApiInstanceAsync = async (
       scopes: jwtScopes,
       additionalPayload: getJwtAdditionalPayload(config),
     });
+  } else if (config.auth === 'jwt') {
+    const jwt = await getJwtFromProvider(config.jwtProviderUrl, {
+      username: getJwtSubClaim(config),
+      scopes: [...jwtScopes],
+      source: server.name,
+      resource: context,
+      server: config.server,
+      siteName: config.siteName,
+    });
+
+    await restApi.signIn({
+      type: 'jwt',
+      siteName: config.siteName,
+      jwt,
+    });
   }
 
   return restApi;
@@ -73,14 +97,22 @@ export const useRestApi = async <T>({
   server,
   callback,
   jwtScopes,
+  context,
 }: {
   config: Config;
   requestId: RequestId;
   server: Server;
   jwtScopes: Array<JwtScopes>;
+  context: ToolName | 'none';
   callback: (restApi: RestApi) => Promise<T>;
 }): Promise<T> => {
-  const restApi = await getNewRestApiInstanceAsync(config, requestId, server, new Set(jwtScopes));
+  const restApi = await getNewRestApiInstanceAsync({
+    config,
+    requestId,
+    server,
+    jwtScopes: new Set(jwtScopes),
+    context,
+  });
   try {
     return await callback(restApi);
   } finally {

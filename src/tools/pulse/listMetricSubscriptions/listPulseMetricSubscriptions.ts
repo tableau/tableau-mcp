@@ -42,6 +42,7 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
               requestId,
               server,
               jwtScopes: ['tableau:metric_subscriptions:read'],
+              context: listPulseMetricSubscriptionsTool.name,
               callback: async (restApi) => {
                 return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
               },

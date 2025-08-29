@@ -33,6 +33,7 @@ describe('Config', () => {
       CONNECTED_APP_SECRET_ID: undefined,
       CONNECTED_APP_SECRET_VALUE: undefined,
       JWT_ADDITIONAL_PAYLOAD: undefined,
+      JWT_PROVIDER_URL: undefined,
       DATASOURCE_CREDENTIALS: undefined,
       DEFAULT_LOG_LEVEL: undefined,
       DISABLE_LOG_MASKING: undefined,
@@ -623,6 +624,46 @@ describe('Config', () => {
       expect(config.connectedAppSecretId).toBe('');
       expect(config.connectedAppSecretValue).toBe('');
       expect(config.jwtAdditionalPayload).toBe('{}');
+    });
+  });
+
+  describe('JWT auth configuration', () => {
+    it('should parse jwt auth configuration when all required variables are provided', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        AUTH: 'jwt',
+        JWT_PROVIDER_URL: 'https://example.com/jwt',
+        JWT_SUB_CLAIM: 'user@example.com',
+      };
+
+      const config = new Config();
+      expect(config.auth).toBe('jwt');
+      expect(config.jwtProviderUrl).toBe('https://example.com/jwt');
+      expect(config.jwtSubClaim).toBe('user@example.com');
+    });
+
+    it('should throw error when JWT_PROVIDER_URL is missing for jwt auth', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        AUTH: 'jwt',
+        JWT_PROVIDER_URL: undefined,
+      };
+
+      expect(() => new Config()).toThrow('The environment variable JWT_PROVIDER_URL is not set');
+    });
+
+    it('should throw error when JWT_SUB_CLAIM is missing for jwt auth', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        AUTH: 'jwt',
+        JWT_PROVIDER_URL: 'https://example.com',
+        JWT_SUB_CLAIM: undefined,
+      };
+
+      expect(() => new Config()).toThrow('The environment variable JWT_SUB_CLAIM is not set');
     });
   });
 });

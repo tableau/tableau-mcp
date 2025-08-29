@@ -38,6 +38,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
               requestId,
               server,
               jwtScopes: ['tableau:views:download'],
+              context: getViewImageTool.name,
               callback: async (restApi) => {
                 return await restApi.viewsMethods.queryViewImage({
                   viewId,

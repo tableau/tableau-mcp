@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 
 import { getConfig } from './config.js';
 import { log } from './logging/log.js';
@@ -50,6 +50,7 @@ describe('restApiInstance', () => {
         requestId: mockRequestId,
         server: new Server(),
         jwtScopes: [],
+        context: 'none',
         callback: (restApi) => Promise.resolve(restApi),
       });
 
@@ -231,6 +232,96 @@ describe('restApiInstance', () => {
           requestId: mockRequestId,
         }),
       );
+    });
+  });
+
+  describe('JWT auth', () => {
+    const fetchJsonResolve = vi.fn();
+
+    const mockJwtProviderResponses = vi.hoisted(() => ({
+      success: {
+        jwt: 'mock-jwt',
+      },
+      error: {
+        token: 'mock-jwt',
+      },
+    }));
+
+    const mocks = vi.hoisted(() => ({
+      mockJwtProviderResponse: vi.fn(),
+    }));
+
+    beforeEach(() => {
+      vi.spyOn(global, 'fetch').mockImplementation(
+        vi.fn(async () =>
+          Promise.resolve({
+            json: async () => {
+              const json = await mocks.mockJwtProviderResponse();
+              fetchJsonResolve(json);
+              return Promise.resolve(json);
+            },
+          }),
+        ) as Mock,
+      );
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('should create a new RestApi instance and sign in', async () => {
+      mocks.mockJwtProviderResponse.mockResolvedValue(mockJwtProviderResponses.success);
+
+      const config = getConfig();
+      config.auth = 'jwt';
+      config.jwtProviderUrl = 'https://example.com/jwt';
+      config.jwtSubClaim = 'user@example.com';
+
+      await useRestApi({
+        config,
+        requestId: mockRequestId,
+        server: new Server(),
+        jwtScopes: ['tableau:content:read'],
+        context: 'query-datasource',
+        callback: (restApi) => Promise.resolve(restApi),
+      });
+
+      expect(fetch).toHaveBeenCalledWith(config.jwtProviderUrl, {
+        method: 'POST',
+        body: JSON.stringify({
+          username: config.jwtSubClaim,
+          scopes: ['tableau:content:read'],
+          source: 'test-server',
+          resource: 'query-datasource',
+          server: 'https://my-tableau-server.com',
+          siteName: 'tc25',
+        }),
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
+      expect(fetchJsonResolve).toHaveBeenCalledWith(mockJwtProviderResponses.success);
+    });
+
+    it('should throw an error if the JWT provider returns an invalid response', async () => {
+      mocks.mockJwtProviderResponse.mockResolvedValue(mockJwtProviderResponses.error);
+
+      const config = getConfig();
+      config.auth = 'jwt';
+      config.jwtProviderUrl = 'https://example.com/jwt';
+      config.jwtSubClaim = 'user@example.com';
+
+      await expect(
+        useRestApi({
+          config,
+          requestId: mockRequestId,
+          server: new Server(),
+          jwtScopes: ['tableau:content:read'],
+          context: 'query-datasource',
+          callback: (restApi) => Promise.resolve(restApi),
+        }),
+      ).rejects.toThrow('Invalid JWT response, expected: { "jwt": "..." }');
     });
   });
 });

@@ -88,6 +88,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
             requestId,
             server,
             jwtScopes: ['tableau:content:read'],
+            context: listDatasourcesTool.name,
             callback: async (restApi) => {
               const datasources = await paginate({
                 pageConfig: {

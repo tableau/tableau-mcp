@@ -75,6 +75,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
               requestId,
               server,
               jwtScopes: ['tableau:content:read'],
+              context: listWorkbooksTool.name,
               callback: async (restApi) => {
                 const workbooks = await paginate({
                   pageConfig: {

@@ -105,6 +105,7 @@ export const getListFieldsTool = (server: Server): Tool<typeof paramsSchema> => 
               requestId,
               server,
               jwtScopes: ['tableau:content:read'],
+              context: listFieldsTool.name,
               callback: async (restApi) => {
                 return await restApi.metadataMethods.graphql(query);
               },

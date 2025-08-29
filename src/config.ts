@@ -4,7 +4,7 @@ import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolN
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
-const authTypes = ['pat', 'direct-trust'] as const;
+const authTypes = ['pat', 'direct-trust', 'jwt'] as const;
 type AuthType = (typeof authTypes)[number];
 
 export class Config {
@@ -23,6 +23,7 @@ export class Config {
   connectedAppSecretId: string;
   connectedAppSecretValue: string;
   jwtAdditionalPayload: string;
+  jwtProviderUrl: string;
   datasourceCredentials: string;
   defaultLogLevel: string;
   disableLogMasking: boolean;
@@ -49,6 +50,7 @@ export class Config {
       CONNECTED_APP_SECRET_ID: secretId,
       CONNECTED_APP_SECRET_VALUE: secretValue,
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
+      JWT_PROVIDER_URL: jwtProviderUrl,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
@@ -107,6 +109,9 @@ export class Config {
       invariant(clientId, 'The environment variable CONNECTED_APP_CLIENT_ID is not set');
       invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
       invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
+    } else if (this.auth === 'jwt') {
+      invariant(jwtProviderUrl, 'The environment variable JWT_PROVIDER_URL is not set');
+      invariant(jwtSubClaim, 'The environment variable JWT_SUB_CLAIM is not set');
     }
 
     this.server = server;
@@ -117,6 +122,7 @@ export class Config {
     this.connectedAppSecretId = secretId ?? '';
     this.connectedAppSecretValue = secretValue ?? '';
     this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
+    this.jwtProviderUrl = jwtProviderUrl ?? '';
   }
 }
 
