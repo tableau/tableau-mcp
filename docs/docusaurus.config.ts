@@ -24,7 +24,7 @@ const config: Config = {
   // If you aren't using GitHub pages, you don't need these.
   organizationName: 'tableau', // Usually your GitHub org/user name.
   projectName: 'tableau-mcp', // Usually your repo name.
-  deploymentBranch: 'anyoung/docusaurus',
+  deploymentBranch: 'main',
 
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
