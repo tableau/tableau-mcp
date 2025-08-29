@@ -1,3 +1,4 @@
+import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
 import { getListFieldsTool } from './listFields.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './pulse/generateMetricValueInsightBundle/generatePulseMetricValueInsightBundleTool.js';
@@ -15,6 +16,7 @@ import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 
 export const toolFactories = [
+  getGetDatasourceMetadataTool,
   getListDatasourcesTool,
   getListFieldsTool,
   getQueryDatasourceTool,

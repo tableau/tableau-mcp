@@ -5,29 +5,45 @@ export function buildDataDictionary(
   readMetadataResult: MetadataResponse,
   listFieldsResult: GraphQLResponse,
 ): any {
-  // create a dataDictionary to combine field data from
-  // readMetadata (VizQL Data Service API) and listFields (GraphQL Metadata API) results.
+  // create a dataDictionary that combines field data from
+  // readMetadata (VizQL Data Service API) and listFields (GraphQL Metadata API) results
+  // to optimize for LLM accuracy and reduce tokens in response.
   const dataDictionary = {
     fields: Array<any>(),
   };
 
   if (!readMetadataResult.data) {
+    // TODO: what should we do here?
     return dataDictionary;
   }
 
   // Only include fields from readMetadata results in our dataDictionary since only those can be used in queries.
   for (const field of readMetadataResult.data) {
-    dataDictionary.fields.push(field);
+    // only keeping essential field properties.
+    const toPush: any = {
+      name: field.fieldCaption,
+      dataType: field.dataType,
+    };
+
+    if (field.defaultAggregation) {
+      toPush.defaultAggregation = field.defaultAggregation;
+    }
+
+    dataDictionary.fields.push(toPush);
   }
 
-  if (!listFieldsResult.data.publishedDatasources[0].fields) {
+  if (
+    !listFieldsResult.data.publishedDatasources ||
+    listFieldsResult.data.publishedDatasources.length === 0 ||
+    !listFieldsResult.data.publishedDatasources[0].fields
+  ) {
     return dataDictionary;
   }
 
-  // Of the fields in our dataDictionary, populate them with additional properties fromlistFields results.
+  // Of the fields in our dataDictionary, populate them with additional properties we get from listFields results.
   for (const field of dataDictionary.fields) {
     const matchingField = listFieldsResult.data.publishedDatasources[0].fields.find(
-      (f: any) => f.name === field.fieldCaption,
+      (f: any) => f.name === field.name,
     );
     if (!matchingField) {
       continue;
@@ -37,9 +53,6 @@ export function buildDataDictionary(
     }
     if (matchingField.descriptionInherited && matchingField.descriptionInherited.length > 0) {
       field.descriptionInherited = matchingField.descriptionInherited;
-    }
-    if (matchingField.dataType) {
-      field.dataType = matchingField.dataType;
     }
     if (matchingField.dataCategory) {
       field.dataCategory = matchingField.dataCategory;
