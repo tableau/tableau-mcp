@@ -1,9 +1,14 @@
 name: Test deployment
 
+defaults:
+  run:
+    shell: bash
+    working-directory: ./docs
+
 on:
   pull_request:
     branches:
-      - anyoung/docusaurus
+      - main
     # Review gh actions docs if you want to further define triggers, paths, etc
     # https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#on
 
