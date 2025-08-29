@@ -38,4 +38,18 @@ make it easier for developers to build AI-applications that integrate with Table
 | list-pulse-metric-subscriptions                   | List Pulse Metric Subscriptions for Current User ([Pulse API][pulse])                                 |
 | generate-pulse-metric-value-insight-bundle        | Generate Pulse Metric Value Insight Bundle ([Pulse API][pulse])                                       |
 
+[query]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources
+[list-workbooks]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbooks_for_site
+[list-views]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_views_for_site
+[get-workbook]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook
+[get-view-data]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_view_data
+[get-view-image]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_view_image
+[meta]: https://help.tableau.com/current/api/metadata_api/en-us/index.html
+[vds]: https://help.tableau.com/current/api/vizql-data-service/en-us/index.html
 [pulse]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm
