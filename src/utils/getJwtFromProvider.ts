@@ -1,3 +1,9 @@
+import { z } from 'zod';
+
+const jwtResponseSchema = z.object({
+  jwt: z.string(),
+});
+
 export async function getJwtFromProvider(
   jwtProviderUrl: string,
   body: Record<string, unknown>,
@@ -11,6 +17,12 @@ export async function getJwtFromProvider(
     body: JSON.stringify(body),
   });
 
-  const { jwt } = await response.json();
-  return jwt;
+  const json = await response.json();
+  const result = jwtResponseSchema.safeParse(json);
+
+  if (!result.success) {
+    throw new Error('Invalid JWT response, expected: { "jwt": "..." }');
+  }
+
+  return result.data.jwt;
 }
