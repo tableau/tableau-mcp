@@ -12,8 +12,7 @@ The MCP transport type to use for the server.
 
 - Default: `stdio`
 - Possible values: `stdio` or `http`
-- For `http`, see [HTTP Server Configuration](../environment-variables/http-server) for additional
-  variables.
+- For `http`, see [HTTP Server Configuration](http-server.md) for additional variables.
 - See [MCP Transports][mcp-transport] for details.
 
 <hr />
@@ -91,7 +90,7 @@ be available.
 
 - Default: Empty string (_all_ are included)
 - For a list of available tools and groups, see
-  [toolName.ts](<[src/tools/toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.ts)>).
+  [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.ts).
 - Mixing tool names and group names is allowed.
 
 <hr />
