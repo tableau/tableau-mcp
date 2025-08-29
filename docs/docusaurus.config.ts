@@ -7,6 +7,7 @@ const config: Config = {
   tagline:
     'Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will make it easier for developers to build AI-applications that integrate with Tableau.',
   favicon: 'img/favicon.ico',
+  trailingSlash: false,
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
@@ -14,7 +15,7 @@ const config: Config = {
   },
 
   // Set the production url of your site here
-  url: 'https://your-docusaurus-site.example.com',
+  url: 'https://tableau.github.io/tableau-mcp/',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/',
@@ -23,6 +24,7 @@ const config: Config = {
   // If you aren't using GitHub pages, you don't need these.
   organizationName: 'tableau', // Usually your GitHub org/user name.
   projectName: 'tableau-mcp', // Usually your repo name.
+  deploymentBranch: 'anyoung/docusaurus',
 
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
