@@ -1,5 +1,6 @@
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
 import { getListFieldsTool } from './listFields.js';
+import { getGetSemanticsTool } from './getSemantics.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './pulse/generateMetricValueInsightBundle/generatePulseMetricValueInsightBundleTool.js';
 import { getListAllPulseMetricDefinitionsTool } from './pulse/listAllMetricDefinitions/listAllPulseMetricDefinitions.js';
 import { getListPulseMetricDefinitionsFromDefinitionIdsTool } from './pulse/listMetricDefinitionsFromDefinitionIds/listPulseMetricDefinitionsFromDefinitionIds.js';
@@ -17,6 +18,7 @@ import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 export const toolFactories = [
   getListDatasourcesTool,
   getListFieldsTool,
+  getGetSemanticsTool,
   getQueryDatasourceTool,
   getReadMetadataTool,
   getListAllPulseMetricDefinitionsTool,

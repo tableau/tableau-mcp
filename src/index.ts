@@ -9,7 +9,7 @@ import { startExpressServer } from './server/express.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 async function startServer(): Promise<void> {
-  dotenv.config();
+  dotenv.config({ override: true });
   const config = getConfig();
 
   const logLevel = isLoggingLevel(config.defaultLogLevel) ? config.defaultLogLevel : 'debug';

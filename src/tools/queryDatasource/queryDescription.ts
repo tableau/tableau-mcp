@@ -5,7 +5,14 @@ Executes VizQL queries against Tableau data sources to answer business questions
 ## Prerequisites
 Before using this tool, you should:
 1. Understand available fields and their types
-3. Understand the data structure and field relationships
+2. Understand the data structure and field relationships
+3. Understand the data semantics defined in related downstream workbooks
+
+Don't invent new concepts if they already exist the workbook semantics that are provided as context. You MUST always take advantage of the semantics concepts returned in the workbook semantics object
+to construct better data queries that reuse the business logic defined in workbooks. However, the workbook semantics field names cannot be referred to explicitly. Instead, you can reuse the 
+calculation strings in a data query. 
+
+If you think there is ambiguity in how to translate the question into a semantic data query that is accurate, you can ask the user for clarification.
 
 ## Best Practices
 
@@ -305,6 +312,6 @@ Filter relative date periods:
 - Field validation shows incompatible field types for the requested operation
 
 **Instead:**
-- Use metadata tools to understand available fields
+- Use metadata tools to understand available fields and semantic concepts 
 - Suggest alternative questions that can be answered with available data
 - Recommend appropriate aggregation levels for the business question`;
