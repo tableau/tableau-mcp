@@ -286,6 +286,17 @@ describe('Config', () => {
       expect(config.includeTools).toEqual(['query-datasource', 'list-fields']);
     });
 
+    it('should parse INCLUDE_TOOLS into an array of valid tool names when tool group names are used', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        INCLUDE_TOOLS: 'query-datasource,workbook',
+      };
+
+      const config = new Config();
+      expect(config.includeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
+    });
+
     it('should parse EXCLUDE_TOOLS into an array of valid tool names', () => {
       process.env = {
         ...process.env,
@@ -295,6 +306,17 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.excludeTools).toEqual(['query-datasource']);
+    });
+
+    it('should parse EXCLUDE_TOOLS into an array of valid tool names when tool group names are used', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        EXCLUDE_TOOLS: 'query-datasource,workbook',
+      };
+
+      const config = new Config();
+      expect(config.excludeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
     });
 
     it('should filter out invalid tool names from INCLUDE_TOOLS', () => {
@@ -327,7 +349,17 @@ describe('Config', () => {
         EXCLUDE_TOOLS: 'list-fields',
       };
 
-      expect(() => new Config()).toThrow('Cannot specify both INCLUDE_TOOLS and EXCLUDE_TOOLS');
+      expect(() => new Config()).toThrow('Cannot include and exclude tools simultaneously');
+    });
+
+    it('should throw error when both INCLUDE_TOOLS and EXCLUDE_TOOLS are specified with tool group names', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        INCLUDE_TOOLS: 'datasource',
+        EXCLUDE_TOOLS: 'workbook',
+      };
+      expect(() => new Config()).toThrow('Cannot include and exclude tools simultaneously');
     });
   });
 

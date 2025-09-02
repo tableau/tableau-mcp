@@ -1,7 +1,7 @@
 import { CorsOptions } from 'cors';
 import { existsSync } from 'fs';
 
-import { isToolName, ToolName } from './tools/toolName.js';
+import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
@@ -148,21 +148,21 @@ export class Config {
       isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
 
     this.includeTools = includeTools
-      ? includeTools
-          .split(',')
-          .map((s) => s.trim())
-          .filter(isToolName)
+      ? includeTools.split(',').flatMap((s) => {
+          const v = s.trim();
+          return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
+        })
       : [];
 
     this.excludeTools = excludeTools
-      ? excludeTools
-          .split(',')
-          .map((s) => s.trim())
-          .filter(isToolName)
+      ? excludeTools.split(',').flatMap((s) => {
+          const v = s.trim();
+          return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
+        })
       : [];
 
     if (this.includeTools.length > 0 && this.excludeTools.length > 0) {
-      throw new Error('Cannot specify both INCLUDE_TOOLS and EXCLUDE_TOOLS');
+      throw new Error('Cannot include and exclude tools simultaneously');
     }
 
     invariant(server, 'The environment variable SERVER is not set');
