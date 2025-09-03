@@ -1,25 +1,18 @@
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import dotenv from 'dotenv';
-import { globSync, unlinkSync } from 'fs';
 import z from 'zod';
 
 import { dataSourceSchema } from '../src/sdks/tableau/types/dataSource.js';
 import invariant from '../src/utils/invariant.js';
 import { startInspector } from './startInspector.js';
+import { deleteConfigJsons, resetEnv, setEnv } from './testConfig.js';
 import { writeConfigJson } from './writeConfigJson.js';
 
 describe('list-datasources', () => {
-  beforeAll(deleteConfigJsons);
-  afterEach(deleteConfigJsons);
+  beforeAll(() => deleteConfigJsons('list-datasources'));
+  afterEach(() => deleteConfigJsons('list-datasources'));
 
-  beforeAll(() => {
-    dotenv.config({ path: 'e2e/.env', override: true });
-  });
-
-  function deleteConfigJsons(): void {
-    const configJsons = globSync('config.list-datasources.*.test.json');
-    configJsons.forEach(unlinkSync);
-  }
+  beforeAll(setEnv);
+  afterAll(resetEnv);
 
   it('should list datasources', async () => {
     const {
