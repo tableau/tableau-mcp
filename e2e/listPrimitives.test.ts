@@ -5,7 +5,7 @@ import { toolNames } from '../src/tools/toolName.js';
 import { startInspector } from './startInspector.js';
 import { writeConfigJson } from './writeConfigJson.js';
 
-describe('listTools', () => {
+describe('listPrimitives', () => {
   beforeAll(deleteConfigJsons);
   afterEach(deleteConfigJsons);
 
@@ -15,7 +15,7 @@ describe('listTools', () => {
   }
 
   it('should list tools', async () => {
-    const { filename: configJson } = writeConfigJson({ describe: 'listTools' });
+    const { filename: configJson } = writeConfigJson({ describe: 'listPrimitives' });
 
     const result = await startInspector(
       {
