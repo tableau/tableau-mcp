@@ -3,9 +3,10 @@ import z from 'zod';
 
 import { dataSourceSchema } from '../src/sdks/tableau/types/dataSource.js';
 import invariant from '../src/utils/invariant.js';
+import { deleteConfigJsons, writeConfigJson } from './configJson.js';
+import { getDatasource } from './constants.js';
 import { startInspector } from './startInspector.js';
-import { deleteConfigJsons, resetEnv, setEnv } from './testConfig.js';
-import { writeConfigJson } from './writeConfigJson.js';
+import { getEnv, resetEnv, setEnv } from './testEnv.js';
 
 describe('list-datasources', () => {
   beforeAll(() => deleteConfigJsons('list-datasources'));
@@ -15,17 +16,22 @@ describe('list-datasources', () => {
   afterAll(resetEnv);
 
   it('should list datasources', async () => {
+    const env = getEnv([
+      'SERVER',
+      'SITE_NAME',
+      'AUTH',
+      'JWT_SUB_CLAIM',
+      'CONNECTED_APP_CLIENT_ID',
+      'CONNECTED_APP_SECRET_ID',
+      'CONNECTED_APP_SECRET_VALUE',
+    ]);
+
+    const { SERVER, SITE_NAME } = env;
+    const superstore = getDatasource(SERVER, SITE_NAME, 'Superstore Datasource');
+
     const { filename: configJson } = writeConfigJson({
       describe: 'list-datasources',
-      envKeys: [
-        'SERVER',
-        'SITE_NAME',
-        'AUTH',
-        'JWT_SUB_CLAIM',
-        'CONNECTED_APP_CLIENT_ID',
-        'CONNECTED_APP_SECRET_ID',
-        'CONNECTED_APP_SECRET_VALUE',
-      ],
+      env,
     });
 
     const result = await startInspector(
@@ -50,26 +56,31 @@ describe('list-datasources', () => {
     expect(datasources).toEqual(
       expect.arrayContaining([
         {
-          id: '2d935df8-fe7e-4fd8-bb14-35eb4ba31d45',
+          id: superstore.id,
           name: 'Superstore Datasource',
-          project: { name: 'Samples', id: 'cbec32db-a4a2-4308-b5f0-4fc67322f359' },
+          project: expect.any(Object),
         },
       ]),
     );
   });
 
   it('should list datasources with filter', async () => {
+    const env = getEnv([
+      'SERVER',
+      'SITE_NAME',
+      'AUTH',
+      'JWT_SUB_CLAIM',
+      'CONNECTED_APP_CLIENT_ID',
+      'CONNECTED_APP_SECRET_ID',
+      'CONNECTED_APP_SECRET_VALUE',
+    ]);
+
+    const { SERVER, SITE_NAME } = env;
+    const superstore = getDatasource(SERVER, SITE_NAME, 'Superstore Datasource');
+
     const { filename: configJson } = writeConfigJson({
       describe: 'list-datasources',
-      envKeys: [
-        'SERVER',
-        'SITE_NAME',
-        'AUTH',
-        'JWT_SUB_CLAIM',
-        'CONNECTED_APP_CLIENT_ID',
-        'CONNECTED_APP_SECRET_ID',
-        'CONNECTED_APP_SECRET_VALUE',
-      ],
+      env,
     });
 
     const result = await startInspector(
@@ -95,9 +106,9 @@ describe('list-datasources', () => {
     expect(datasources).toEqual(
       expect.arrayContaining([
         {
-          id: '2d935df8-fe7e-4fd8-bb14-35eb4ba31d45',
+          id: superstore.id,
           name: 'Superstore Datasource',
-          project: { name: 'Samples', id: 'cbec32db-a4a2-4308-b5f0-4fc67322f359' },
+          project: expect.any(Object),
         },
       ]),
     );

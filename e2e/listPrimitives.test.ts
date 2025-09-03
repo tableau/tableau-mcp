@@ -1,9 +1,8 @@
 import { ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import { toolNames } from '../src/tools/toolName.js';
+import { deleteConfigJsons, writeConfigJson } from './configJson.js';
 import { startInspector } from './startInspector.js';
-import { deleteConfigJsons } from './testConfig.js';
-import { writeConfigJson } from './writeConfigJson.js';
 
 describe('listPrimitives', () => {
   beforeAll(() => deleteConfigJsons('listPrimitives'));
