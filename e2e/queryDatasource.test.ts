@@ -1,9 +1,6 @@
-import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
-
 import { QueryOutput } from '../src/sdks/tableau/apis/vizqlDataServiceApi.js';
-import invariant from '../src/utils/invariant.js';
 import { deleteConfigJsons, writeConfigJson } from './configJson.js';
-import { startInspector } from './startInspector.js';
+import { callTool } from './startInspector.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from './testEnv.js';
 
 describe('query-datasource', () => {
@@ -26,27 +23,16 @@ describe('query-datasource', () => {
       env,
     });
 
-    const result = await startInspector(
-      {
-        '--config': configJson,
-        '--server': 'tableau',
-        '--method': 'tools/call',
-        '--tool-name': 'query-datasource',
-        '--tool-args': {
-          datasourceLuid: superstore.id,
-          query: { fields: [{ fieldCaption: 'Postal Code' }] },
-        },
+    const output = await callTool({
+      configJson,
+      toolName: 'query-datasource',
+      schema: QueryOutput,
+      toolArgs: {
+        datasourceLuid: superstore.id,
+        query: { fields: [{ fieldCaption: 'Postal Code' }] },
       },
-      CallToolResultSchema,
-    );
+    });
 
-    expect(result.isError).toBe(false);
-    expect(result.content).toHaveLength(1);
-    expect(result.content[0].type).toBe('text');
-
-    const text = result.content[0].text;
-    invariant(typeof text === 'string');
-    const output = QueryOutput.parse(JSON.parse(text));
     console.log(output);
   });
 });

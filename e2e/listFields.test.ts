@@ -1,9 +1,6 @@
-import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
-
 import { graphqlResponse } from '../src/sdks/tableau/apis/metadataApi.js';
-import invariant from '../src/utils/invariant.js';
 import { deleteConfigJsons, writeConfigJson } from './configJson.js';
-import { startInspector } from './startInspector.js';
+import { callTool } from './startInspector.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from './testEnv.js';
 
 describe('list-fields', () => {
@@ -22,24 +19,12 @@ describe('list-fields', () => {
       env,
     });
 
-    const result = await startInspector(
-      {
-        '--config': configJson,
-        '--server': 'tableau',
-        '--method': 'tools/call',
-        '--tool-name': 'list-fields',
-        '--tool-args': { datasourceLuid: superstore.id },
-      },
-      CallToolResultSchema,
-    );
-
-    expect(result.isError).toBe(false);
-    expect(result.content).toHaveLength(1);
-    expect(result.content[0].type).toBe('text');
-
-    const text = result.content[0].text;
-    invariant(typeof text === 'string');
-    const { data } = graphqlResponse.parse(JSON.parse(text));
+    const { data } = await callTool({
+      configJson,
+      toolName: 'list-fields',
+      schema: graphqlResponse,
+      toolArgs: { datasourceLuid: superstore.id },
+    });
 
     expect(data.publishedDatasources.length).greaterThan(0);
 

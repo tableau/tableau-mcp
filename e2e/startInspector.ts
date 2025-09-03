@@ -1,7 +1,9 @@
+import { CallToolResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { spawn } from 'child_process';
 import { z } from 'zod';
 
 import { ToolName } from '../src/tools/toolName.js';
+import invariant from '../src/utils/invariant.js';
 
 const TIMEOUT_IN_MILLISECONDS = 10_000;
 
@@ -19,7 +21,53 @@ type InspectorArgs = {
     }
 );
 
-export async function startInspector<Z extends z.ZodTypeAny = z.ZodNever>(
+export async function listTools(configJson: string): Promise<Array<string>> {
+  const result = await startInspector(
+    {
+      '--config': configJson,
+      '--server': 'tableau',
+      '--method': 'tools/list',
+    },
+    ListToolsResultSchema,
+  );
+
+  const names = result.tools.map((tool) => tool.name);
+  return names;
+}
+
+export async function callTool<Z extends z.ZodTypeAny = z.ZodNever>({
+  configJson,
+  toolName,
+  schema,
+  toolArgs,
+}: {
+  configJson: string;
+  toolName: ToolName;
+  schema: Z;
+  toolArgs?: Record<string, unknown>;
+}): Promise<z.infer<Z>> {
+  const result = await startInspector(
+    {
+      '--config': configJson,
+      '--server': 'tableau',
+      '--method': 'tools/call',
+      '--tool-name': toolName,
+      '--tool-args': toolArgs,
+    },
+    CallToolResultSchema,
+  );
+
+  expect(result.isError).toBe(false);
+  expect(result.content).toHaveLength(1);
+  expect(result.content[0].type).toBe('text');
+
+  const text = result.content[0].text;
+  invariant(typeof text === 'string');
+  const response = schema.parse(JSON.parse(text));
+  return response;
+}
+
+async function startInspector<Z extends z.ZodTypeAny = z.ZodNever>(
   argsObj: InspectorArgs,
   schema: Z,
 ): Promise<z.infer<Z>> {
