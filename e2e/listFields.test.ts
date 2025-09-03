@@ -33,6 +33,6 @@ describe('list-fields', () => {
     expect(datasource.fields.length).greaterThan(0);
     const fieldNames = datasource.fields.map((field) => field.name);
     expect(fieldNames).toContain('Postal Code');
-    expect(fieldNames).toContain('Product');
+    expect(fieldNames).toContain('Product Name');
   });
 });
