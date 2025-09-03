@@ -21,9 +21,8 @@ describe('list-datasources', () => {
       env,
     });
 
-    const datasources = await callTool({
+    const datasources = await callTool('list-datasources', {
       configJson,
-      toolName: 'list-datasources',
       schema: z.array(dataSourceSchema),
     });
 
@@ -47,9 +46,8 @@ describe('list-datasources', () => {
       env,
     });
 
-    const datasources = await callTool({
+    const datasources = await callTool('list-datasources', {
       configJson,
-      toolName: 'list-datasources',
       schema: z.array(dataSourceSchema),
       toolArgs: { filter: 'name:eq:Super*' },
     });

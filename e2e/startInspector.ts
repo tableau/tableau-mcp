@@ -35,17 +35,18 @@ export async function listTools(configJson: string): Promise<Array<string>> {
   return names;
 }
 
-export async function callTool<Z extends z.ZodTypeAny = z.ZodNever>({
-  configJson,
-  toolName,
-  schema,
-  toolArgs,
-}: {
-  configJson: string;
-  toolName: ToolName;
-  schema: Z;
-  toolArgs?: Record<string, unknown>;
-}): Promise<z.infer<Z>> {
+export async function callTool<Z extends z.ZodTypeAny = z.ZodNever>(
+  toolName: ToolName,
+  {
+    configJson,
+    schema,
+    toolArgs,
+  }: {
+    configJson: string;
+    schema: Z;
+    toolArgs?: Record<string, unknown>;
+  },
+): Promise<z.infer<Z>> {
   const result = await startInspector(
     {
       '--config': configJson,
@@ -57,7 +58,11 @@ export async function callTool<Z extends z.ZodTypeAny = z.ZodNever>({
     CallToolResultSchema,
   );
 
-  expect(result.isError).toBe(false);
+  if (result.isError) {
+    console.error(result.content[0].text);
+    throw new Error(result.content[0].text as string);
+  }
+
   expect(result.content).toHaveLength(1);
   expect(result.content[0].type).toBe('text');
 
@@ -77,12 +82,14 @@ async function startInspector<Z extends z.ZodTypeAny = z.ZodNever>(
     ...Object.entries(argsObj).flatMap(([k, v]) =>
       v
         ? typeof v === 'object'
-          ? Object.entries(v).flatMap(([k, v]) => [
+          ? Object.entries(v).flatMap(([vk, vv]) => [
               '--tool-arg',
-              `${typeof v === 'string' ? `${k}=${v}` : `'${k}=${JSON.stringify(v)}'`}`,
+              `${typeof vv === 'object' ? `'${vk}=${JSON.stringify(vv)}'` : `${vk}=${vv}`}`,
             ])
           : [k, v]
-        : k,
+        : k === '--tool-args'
+          ? ''
+          : k,
     ),
   ];
   console.log(`npx ${args.join(' ')}`);

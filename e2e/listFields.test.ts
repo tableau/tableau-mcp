@@ -19,9 +19,8 @@ describe('list-fields', () => {
       env,
     });
 
-    const { data } = await callTool({
+    const { data } = await callTool('list-fields', {
       configJson,
-      toolName: 'list-fields',
       schema: graphqlResponse,
       toolArgs: { datasourceLuid: superstore.id },
     });

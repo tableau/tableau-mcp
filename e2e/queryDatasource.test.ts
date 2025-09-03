@@ -23,9 +23,8 @@ describe('query-datasource', () => {
       env,
     });
 
-    const output = await callTool({
+    const output = await callTool('query-datasource', {
       configJson,
-      toolName: 'query-datasource',
       schema: QueryOutput,
       toolArgs: {
         datasourceLuid: superstore.id,

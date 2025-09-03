@@ -133,7 +133,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     });
     return {
       pagination: response.pagination,
-      views: response.views.view,
+      views: response.views.view ?? [],
     };
   };
 }

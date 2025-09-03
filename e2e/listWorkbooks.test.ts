@@ -21,9 +21,8 @@ describe('list-workbooks', () => {
       env,
     });
 
-    const workbooks = await callTool({
+    const workbooks = await callTool('list-workbooks', {
       configJson,
-      toolName: 'list-workbooks',
       schema: z.array(workbookSchema),
     });
 
@@ -46,9 +45,8 @@ describe('list-workbooks', () => {
       env,
     });
 
-    const workbooks = await callTool({
+    const workbooks = await callTool('list-workbooks', {
       configJson,
-      toolName: 'list-workbooks',
       schema: z.array(workbookSchema),
       toolArgs: { filter: 'name:eq:Super*' },
     });
