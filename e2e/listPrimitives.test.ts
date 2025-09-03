@@ -10,7 +10,7 @@ describe('listPrimitives', () => {
   afterEach(deleteConfigJsons);
 
   function deleteConfigJsons(): void {
-    const configJsons = globSync('config.*.test.json');
+    const configJsons = globSync('config.listPrimitives.*.test.json');
     configJsons.forEach(unlinkSync);
   }
 

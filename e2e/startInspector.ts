@@ -1,10 +1,25 @@
 import { spawn } from 'child_process';
 import { z } from 'zod';
 
+import { ToolName } from '../src/tools/toolName.js';
+
 const TIMEOUT_IN_MILLISECONDS = 10_000;
 
+type InspectorArgs = {
+  '--config': string;
+  '--server': 'tableau';
+} & (
+  | {
+      '--method': 'tools/list';
+    }
+  | {
+      '--method': 'tools/call';
+      '--tool-name': ToolName;
+    }
+);
+
 export async function startInspector<Z extends z.ZodTypeAny = z.ZodNever>(
-  argsObj: Record<string, string | undefined>,
+  argsObj: InspectorArgs,
   schema: Z,
 ): Promise<z.infer<Z>> {
   const args = [
