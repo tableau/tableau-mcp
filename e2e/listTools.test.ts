@@ -1,19 +1,21 @@
 import { ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { startInspector } from './startInspector.js';
-import { toolNames } from '../src/tools/toolName.js';
-import { writeConfigJson } from './writeConfigJson.js';
 import { globSync, unlinkSync } from 'fs';
+
+import { toolNames } from '../src/tools/toolName.js';
+import { startInspector } from './startInspector.js';
+import { writeConfigJson } from './writeConfigJson.js';
 
 describe('listTools', () => {
   beforeAll(deleteConfigJsons);
   afterEach(deleteConfigJsons);
 
-  function deleteConfigJsons() {
-    globSync('config.*.test.json').forEach(unlinkSync);
+  function deleteConfigJsons(): void {
+    const configJsons = globSync('config.*.test.json');
+    configJsons.forEach(unlinkSync);
   }
 
   it('should list tools', async () => {
-    const configJson = writeConfigJson({});
+    const { filename: configJson } = writeConfigJson({ describe: 'listTools', env: {} });
 
     const result = await startInspector(
       {

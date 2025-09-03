@@ -1,8 +1,15 @@
-import { writeFileSync } from 'fs';
-import { ProcessEnvEx } from '../types/process-env.js';
 import { randomUUID } from 'crypto';
+import { writeFileSync } from 'fs';
 
-export function writeConfigJson(env: Partial<ProcessEnvEx>): string {
+import { ProcessEnvEx } from '../types/process-env.js';
+
+export function writeConfigJson({
+  env,
+  describe,
+}: {
+  env: Partial<ProcessEnvEx>;
+  describe: string;
+}): { filename: string } {
   const config = {
     mcpServers: {
       tableau: {
@@ -13,7 +20,7 @@ export function writeConfigJson(env: Partial<ProcessEnvEx>): string {
     },
   };
 
-  const filename = `config.${randomUUID()}.test.json`;
+  const filename = `config.${describe}.${randomUUID()}.test.json`;
   writeFileSync(filename, JSON.stringify(config, null, 2));
-  return filename;
+  return { filename };
 }
