@@ -16,7 +16,7 @@ type EnvironmentData = {
 
 const environmentData: EnvironmentData = {
   servers: {
-    'https://10ax.online.tableau.com/': {
+    'https://10ax.online.tableau.com': {
       sites: {
         'mcp-test': {
           datasources: {
@@ -33,12 +33,8 @@ export function getDatasource(
   siteName: string,
   datasourceName: string,
 ): { id: string } {
-  invariant(environmentData.servers[server], `Server ${server} not found`);
-  invariant(environmentData.servers[server].sites[siteName], `Site ${siteName} not found`);
-  invariant(
-    environmentData.servers[server].sites[siteName].datasources[datasourceName],
-    `Datasource ${datasourceName} not found`,
-  );
+  const datasource = environmentData.servers[server]?.sites[siteName]?.datasources[datasourceName];
+  invariant(datasource, `Datasource not found. Input: ${{ server, siteName, datasourceName }}`);
 
-  return environmentData.servers[server].sites[siteName].datasources[datasourceName];
+  return datasource;
 }
