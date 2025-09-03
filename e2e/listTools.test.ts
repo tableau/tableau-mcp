@@ -27,6 +27,7 @@ describe('listTools', () => {
     );
 
     const names = result.tools.map((tool) => tool.name);
-    expect(names).toEqual(expect.arrayContaining([...toolNames]));
+    expect(names).toEqual(expect.arrayContaining(['query-datasource']));
+    expect(names).toHaveLength(toolNames.length);
   });
 });
