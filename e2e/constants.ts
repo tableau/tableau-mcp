@@ -3,6 +3,9 @@ import invariant from '../src/utils/invariant.js';
 export type Datasource = { id: string };
 export type Workbook = { id: string; defaultViewId: string };
 
+export type PulseDefinition = { id: string; metrics: Array<PulseMetric> };
+export type PulseMetric = { id: string };
+
 type EnvironmentData = {
   servers: {
     [url: string]: {
@@ -13,6 +16,11 @@ type EnvironmentData = {
           };
           workbooks: {
             [name: string]: Workbook;
+          };
+          pulse: {
+            definitions: {
+              [name: string]: PulseDefinition;
+            };
           };
         };
       };
@@ -32,6 +40,14 @@ const environmentData: EnvironmentData = {
             Superstore: {
               id: '222ea993-9391-4910-a167-56b3d19b4e3b',
               defaultViewId: '9460abfe-a6b2-49d1-b998-39e1ebcc55ce',
+            },
+          },
+          pulse: {
+            definitions: {
+              'Tableau MCP': {
+                id: '9ad098f4-49cf-4e8a-bec0-0ca803091dd0',
+                metrics: [{ id: 'fd6c4aa0-f6d3-469e-b75b-d597435ae199' }],
+              },
             },
           },
         },
@@ -56,4 +72,19 @@ export function getWorkbook(server: string, siteName: string, workbookName: stri
   invariant(workbook, `Workbook not found. Input: ${{ server, siteName, workbookName }}`);
 
   return workbook;
+}
+
+export function getPulseDefinition(
+  server: string,
+  siteName: string,
+  definitionName: string,
+): PulseDefinition {
+  const definition =
+    environmentData.servers[server]?.sites[siteName]?.pulse.definitions[definitionName];
+  invariant(
+    definition,
+    `Pulse definition not found. Input: ${{ server, siteName, definitionName }}`,
+  );
+
+  return definition;
 }
