@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     watch: false,
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'e2e/**/*.test.ts'],
     setupFiles: './src/testSetup.ts',
     reporters: [
       [

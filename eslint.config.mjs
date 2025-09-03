@@ -47,5 +47,13 @@ export default [
         },
       ],
     },
+    overrides: [
+      {
+        files: ['e2e/**/*.ts'],
+        rules: {
+          'no-console': 'off',
+        },
+      },
+    ],
   },
 ];
