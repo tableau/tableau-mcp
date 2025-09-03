@@ -1,18 +1,13 @@
 import { ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { globSync, unlinkSync } from 'fs';
 
 import { toolNames } from '../src/tools/toolName.js';
 import { startInspector } from './startInspector.js';
+import { deleteConfigJsons } from './testConfig.js';
 import { writeConfigJson } from './writeConfigJson.js';
 
 describe('listPrimitives', () => {
-  beforeAll(deleteConfigJsons);
-  afterEach(deleteConfigJsons);
-
-  function deleteConfigJsons(): void {
-    const configJsons = globSync('config.listPrimitives.*.test.json');
-    configJsons.forEach(unlinkSync);
-  }
+  beforeAll(() => deleteConfigJsons('listPrimitives'));
+  afterEach(() => deleteConfigJsons('listPrimitives'));
 
   it('should list tools', async () => {
     const { filename: configJson } = writeConfigJson({ describe: 'listPrimitives' });
