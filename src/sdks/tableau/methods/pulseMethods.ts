@@ -6,6 +6,10 @@ import { Credentials } from '../types/credentials.js';
 import {
   pulseBundleRequestSchema,
   pulseBundleResponseSchema,
+  pulseBriefRequestSchema,
+  pulseBriefResponseSchema,
+  PulseBriefRequest,
+  PulseBriefResponse,
   PulseInsightBundleType,
   PulseMetric,
   PulseMetricDefinition,
@@ -129,5 +133,28 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
       { params: { bundle_type: bundleType }, ...this.authHeader },
     );
     return response ?? {};
+  };
+
+  /**
+   * Generates a conversational insight brief for Pulse metrics using natural language questions.
+   *
+   * Required scopes: TBD (will be determined based on auth requirements)
+   *
+   * @param briefRequest - The request containing messages and metric context.
+   */
+  generatePulseInsightBrief = async (
+    briefRequest: PulseBriefRequest,
+  ): Promise<PulseBriefResponse> => {
+    const response = await this._apiClient.generatePulseInsightBrief(
+      briefRequest,
+      {
+        ...this.authHeader,
+        headers: {
+          ...this.authHeader.headers,
+          'Content-Type': 'application/vnd.tableau.pulse.embeddingsservice.v1.GenerateInsightBriefRequest+json',
+        },
+      },
+    );
+    return response;
   };
 }

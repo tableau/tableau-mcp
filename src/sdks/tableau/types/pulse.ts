@@ -349,6 +349,141 @@ export const pulseMetricDefinitionViewEnum = [
 ] as const;
 export type PulseMetricDefinitionView = (typeof pulseMetricDefinitionViewEnum)[number];
 
+// Schemas for the brief API
+export const pulseMetricContextSchema = z.object({
+  metadata: z.object({
+    name: z.string(),
+    metric_id: z.string(),
+    definition_id: z.string(),
+    tags: z.array(z.string()).optional(),
+  }),
+  metric: z.object({
+    definition: z.object({
+      datasource: z.object({
+        id: z.string(),
+      }),
+      is_running_total: z.boolean(),
+      viz_state_specification: z.object({
+        viz_state_string: z.string(),
+      }),
+    }),
+    metric_specification: z.object({
+      filters: z.array(z.any()),
+      measurement_period: z.object({
+        granularity: z.string(),
+        range: z.string(),
+      }),
+      comparison: z.object({
+        comparison: z.string(),
+        comparison_period_override: z.array(z.any()),
+      }),
+    }),
+    extension_options: z.object({
+      allowed_dimensions: z.array(z.string()),
+      allowed_granularities: z.array(z.string()),
+      offset_from_today: z.number(),
+      correlation_candidate_definition_ids: z.array(z.string()),
+      use_dynamic_offset: z.boolean(),
+    }),
+    representation_options: z.object({
+      type: z.string(),
+      number_units: z.object({
+        singular_noun: z.string(),
+        plural_noun: z.string(),
+      }),
+      sentiment_type: z.string(),
+      row_level_id_field: z.object({
+        identifier_col: z.string(),
+        identifier_label: z.string(),
+      }),
+      row_level_entity_names: z.object({
+        entity_name_singular: z.string(),
+        entity_name_plural: z.string(),
+      }),
+      row_level_name_field: z.object({
+        name_col: z.string(),
+      }),
+      currency_code: z.string(),
+    }),
+    insights_options: z.object({
+      show_insights: z.boolean(),
+      settings: z.array(z.object({
+        type: z.string(),
+        disabled: z.boolean(),
+      })),
+    }),
+    candidates: z.array(z.any()),
+  }),
+});
+
+export const pulseBriefMessageSchema = z.object({
+  role: z.string(),
+  content: z.string(),
+  metric_group_context: z.array(pulseMetricContextSchema),
+});
+
+export const pulseBriefRequestSchema = z.object({
+  messages: z.array(pulseBriefMessageSchema),
+});
+
+export const pulseInsightVisualizationSchema = z.object({
+  view: z.object({
+    stroke: z.any(),
+  }).optional(),
+  config: z.object({
+    axis: z.object({
+      ticks: z.boolean(),
+    }),
+  }).optional(),
+  encoding: z.any().optional(),
+  data: z.object({
+    name: z.string().optional(),
+    values: z.array(z.any()),
+  }).optional(),
+  width: z.any().optional(),
+  height: z.any().optional(),
+  params: z.array(z.any()).optional(),
+  layer: z.array(z.any()).optional(),
+  mark: z.any().optional(),
+  '$schema': z.string().optional(),
+});
+
+export const pulseSourceInsightSchema = z.object({
+  type: z.string(),
+  version: z.number(),
+  content: z.string(),
+  markup: z.string(),
+  viz: pulseInsightVisualizationSchema.optional(),
+  facts: z.any().optional(),
+  characterization: z.string(),
+  question: z.string(),
+  score: z.number(),
+  id: z.string(),
+  insight_feedback_metadata: z.object({
+    type: z.string(),
+    score: z.number(),
+    dimension_hash: z.string(),
+    candidate_definition_id: z.string(),
+  }),
+  generation_id: z.string(),
+});
+
+export const pulseFollowUpQuestionSchema = z.object({
+  content: z.string(),
+  metric_group_context_resolved: z.boolean(),
+});
+
+export const pulseBriefResponseSchema = z.object({
+  markup: z.string(),
+  generation_id: z.string(),
+  source_insights: z.array(pulseSourceInsightSchema),
+  follow_up_questions: z.array(pulseFollowUpQuestionSchema),
+  group_context: z.array(pulseMetricContextSchema),
+  not_enough_information: z.boolean(),
+});
+
 export type PulseMetricDefinition = z.infer<typeof pulseMetricDefinitionSchema>;
 export type PulseMetric = z.infer<typeof pulseMetricSchema>;
 export type PulseMetricSubscription = z.infer<typeof pulseMetricSubscriptionSchema>;
+export type PulseBriefRequest = z.infer<typeof pulseBriefRequestSchema>;
+export type PulseBriefResponse = z.infer<typeof pulseBriefResponseSchema>;

@@ -6,6 +6,7 @@ import { getListPulseMetricDefinitionsFromDefinitionIdsTool } from './pulse/list
 import { getListPulseMetricsFromMetricDefinitionIdTool } from './pulse/listMetricsFromMetricDefinitionId/listPulseMetricsFromMetricDefinitionId.js';
 import { getListPulseMetricsFromMetricIdsTool } from './pulse/listMetricsFromMetricIds/listPulseMetricsFromMetricIds.js';
 import { getListPulseMetricSubscriptionsTool } from './pulse/listMetricSubscriptions/listPulseMetricSubscriptions.js';
+import { getGenerateInsightBriefTool } from './pulse/pulseDiscover/generateInsightBrief.js';
 import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { getReadMetadataTool } from './readMetadata.js';
 import { getGetViewDataTool } from './views/getViewData.js';
@@ -25,6 +26,7 @@ export const toolFactories = [
   getListPulseMetricsFromMetricIdsTool,
   getListPulseMetricSubscriptionsTool,
   getGeneratePulseMetricValueInsightBundleTool,
+  getGenerateInsightBriefTool,
   getGetWorkbookTool,
   getGetViewDataTool,
   getGetViewImageTool,
