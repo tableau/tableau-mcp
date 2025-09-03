@@ -4,13 +4,21 @@ import { writeFileSync } from 'fs';
 import { ProcessEnvEx } from '../types/process-env.js';
 
 export function writeConfigJson({
-  env,
+  envKeys,
   describe,
 }: {
-  env?: Partial<ProcessEnvEx>;
+  envKeys?: (keyof ProcessEnvEx)[];
   describe: string;
 }): { filename: string } {
-  env = env ?? {};
+  envKeys = envKeys ?? [];
+
+  const env = envKeys.reduce(
+    (acc, key) => {
+      acc[key] = process.env[key];
+      return acc;
+    },
+    {} as Record<keyof ProcessEnvEx, string | undefined>,
+  );
 
   const config = {
     mcpServers: {

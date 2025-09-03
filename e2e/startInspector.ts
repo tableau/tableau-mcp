@@ -15,6 +15,7 @@ type InspectorArgs = {
   | {
       '--method': 'tools/call';
       '--tool-name': ToolName;
+      '--tool-args'?: Record<string, string>;
     }
 );
 
@@ -25,7 +26,13 @@ export async function startInspector<Z extends z.ZodTypeAny = z.ZodNever>(
   const args = [
     '@modelcontextprotocol/inspector',
     '--cli',
-    ...Object.entries(argsObj).flatMap(([k, v]) => (v ? [k, v] : k)),
+    ...Object.entries(argsObj).flatMap(([k, v]) =>
+      v
+        ? typeof v === 'object'
+          ? Object.entries(v).flatMap(([k, v]) => ['--tool-arg', `${k}=${v}`])
+          : [k, v]
+        : k,
+    ),
   ];
   console.log(`npx ${args.join(' ')}`);
 
