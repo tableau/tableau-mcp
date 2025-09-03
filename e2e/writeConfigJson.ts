@@ -7,9 +7,11 @@ export function writeConfigJson({
   env,
   describe,
 }: {
-  env: Partial<ProcessEnvEx>;
+  env?: Partial<ProcessEnvEx>;
   describe: string;
 }): { filename: string } {
+  env = env ?? {};
+
   const config = {
     mcpServers: {
       tableau: {

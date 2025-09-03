@@ -15,7 +15,7 @@ describe('listTools', () => {
   }
 
   it('should list tools', async () => {
-    const { filename: configJson } = writeConfigJson({ describe: 'listTools', env: {} });
+    const { filename: configJson } = writeConfigJson({ describe: 'listTools' });
 
     const result = await startInspector(
       {
