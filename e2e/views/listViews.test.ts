@@ -1,10 +1,10 @@
 import z from 'zod';
 
-import { viewSchema } from '../src/sdks/tableau/types/view.js';
-import invariant from '../src/utils/invariant.js';
-import { deleteConfigJsons, writeConfigJson } from './configJson.js';
-import { callTool } from './startInspector.js';
-import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from './testEnv.js';
+import { viewSchema } from '../../src/sdks/tableau/types/view.js';
+import invariant from '../../src/utils/invariant.js';
+import { deleteConfigJsons, writeConfigJson } from '../configJson.js';
+import { callTool } from '../startInspector.js';
+import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../testEnv.js';
 
 describe('list-views', () => {
   beforeAll(() => deleteConfigJsons('list-views'));

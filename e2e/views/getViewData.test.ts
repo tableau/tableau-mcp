@@ -1,8 +1,8 @@
 import z from 'zod';
 
-import { deleteConfigJsons, writeConfigJson } from './configJson.js';
-import { callTool } from './startInspector.js';
-import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from './testEnv.js';
+import { deleteConfigJsons, writeConfigJson } from '../configJson.js';
+import { callTool } from '../startInspector.js';
+import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../testEnv.js';
 
 describe('get-view-data', () => {
   beforeAll(() => deleteConfigJsons('get-view-data'));

@@ -1,9 +1,9 @@
 import z from 'zod';
 
-import { workbookSchema } from '../src/sdks/tableau/types/workbook.js';
-import { deleteConfigJsons, writeConfigJson } from './configJson.js';
-import { callTool } from './startInspector.js';
-import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from './testEnv.js';
+import { workbookSchema } from '../../src/sdks/tableau/types/workbook.js';
+import { deleteConfigJsons, writeConfigJson } from '../configJson.js';
+import { callTool } from '../startInspector.js';
+import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../testEnv.js';
 
 describe('list-workbooks', () => {
   beforeAll(() => deleteConfigJsons('list-workbooks'));
