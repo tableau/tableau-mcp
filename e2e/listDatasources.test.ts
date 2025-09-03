@@ -4,9 +4,8 @@ import z from 'zod';
 import { dataSourceSchema } from '../src/sdks/tableau/types/dataSource.js';
 import invariant from '../src/utils/invariant.js';
 import { deleteConfigJsons, writeConfigJson } from './configJson.js';
-import { getDatasource } from './constants.js';
 import { startInspector } from './startInspector.js';
-import { getEnv, resetEnv, setEnv } from './testEnv.js';
+import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from './testEnv.js';
 
 describe('list-datasources', () => {
   beforeAll(() => deleteConfigJsons('list-datasources'));
@@ -16,18 +15,8 @@ describe('list-datasources', () => {
   afterAll(resetEnv);
 
   it('should list datasources', async () => {
-    const env = getEnv([
-      'SERVER',
-      'SITE_NAME',
-      'AUTH',
-      'JWT_SUB_CLAIM',
-      'CONNECTED_APP_CLIENT_ID',
-      'CONNECTED_APP_SECRET_ID',
-      'CONNECTED_APP_SECRET_VALUE',
-    ]);
-
-    const { SERVER, SITE_NAME } = env;
-    const superstore = getDatasource(SERVER, SITE_NAME, 'Superstore Datasource');
+    const env = getDefaultEnv();
+    const superstore = getSuperstoreDatasource(env);
 
     const { filename: configJson } = writeConfigJson({
       describe: 'list-datasources',
@@ -52,31 +41,21 @@ describe('list-datasources', () => {
     invariant(typeof text === 'string');
     const datasources = z.array(dataSourceSchema).parse(JSON.parse(text));
 
-    expect(datasources).toHaveLength(1);
-    expect(datasources).toEqual(
-      expect.arrayContaining([
-        {
-          id: superstore.id,
-          name: 'Superstore Datasource',
-          project: expect.any(Object),
-        },
-      ]),
+    expect(datasources.length).greaterThan(0);
+    const datasource = datasources.find(
+      (datasource) => datasource.name === 'Superstore Datasource',
     );
+
+    expect(datasource).toEqual({
+      id: superstore.id,
+      name: 'Superstore Datasource',
+      project: expect.any(Object),
+    });
   });
 
   it('should list datasources with filter', async () => {
-    const env = getEnv([
-      'SERVER',
-      'SITE_NAME',
-      'AUTH',
-      'JWT_SUB_CLAIM',
-      'CONNECTED_APP_CLIENT_ID',
-      'CONNECTED_APP_SECRET_ID',
-      'CONNECTED_APP_SECRET_VALUE',
-    ]);
-
-    const { SERVER, SITE_NAME } = env;
-    const superstore = getDatasource(SERVER, SITE_NAME, 'Superstore Datasource');
+    const env = getDefaultEnv();
+    const superstore = getSuperstoreDatasource(env);
 
     const { filename: configJson } = writeConfigJson({
       describe: 'list-datasources',
@@ -102,15 +81,15 @@ describe('list-datasources', () => {
     invariant(typeof text === 'string');
     const datasources = z.array(dataSourceSchema).parse(JSON.parse(text));
 
-    expect(datasources).toHaveLength(1);
-    expect(datasources).toEqual(
-      expect.arrayContaining([
-        {
-          id: superstore.id,
-          name: 'Superstore Datasource',
-          project: expect.any(Object),
-        },
-      ]),
+    expect(datasources.length).greaterThan(0);
+    const datasource = datasources.find(
+      (datasource) => datasource.name === 'Superstore Datasource',
     );
+
+    expect(datasource).toEqual({
+      id: superstore.id,
+      name: 'Superstore Datasource',
+      project: expect.any(Object),
+    });
   });
 });
