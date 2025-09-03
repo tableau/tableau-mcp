@@ -40,13 +40,16 @@ export async function callTool<Z extends z.ZodTypeAny = z.ZodNever>(
   {
     configJson,
     schema,
+    expectedContentType,
     toolArgs,
   }: {
     configJson: string;
     schema: Z;
+    expectedContentType?: 'text' | 'image';
     toolArgs?: Record<string, unknown>;
   },
 ): Promise<z.infer<Z>> {
+  expectedContentType = expectedContentType ?? 'text';
   const result = await startInspector(
     {
       '--config': configJson,
@@ -59,17 +62,25 @@ export async function callTool<Z extends z.ZodTypeAny = z.ZodNever>(
   );
 
   if (result.isError) {
-    console.error(result.content[0].text);
-    throw new Error(result.content[0].text as string);
+    const content = result.content[0][expectedContentType === 'text' ? 'text' : 'data'];
+    console.error(content);
+    throw new Error(content as string);
   }
 
   expect(result.content).toHaveLength(1);
-  expect(result.content[0].type).toBe('text');
+  expect(result.content[0].type).toBe(expectedContentType);
 
-  const text = result.content[0].text;
-  invariant(typeof text === 'string');
-  const response = schema.parse(JSON.parse(text));
-  return response;
+  if (expectedContentType === 'text') {
+    const text = result.content[0].text;
+    invariant(typeof text === 'string');
+    const response = schema.parse(JSON.parse(text));
+    return response;
+  } else {
+    const content = result.content[0].data;
+    invariant(typeof content === 'string');
+    const response = schema.parse(content);
+    return response;
+  }
 }
 
 async function startInspector<Z extends z.ZodTypeAny = z.ZodNever>(
