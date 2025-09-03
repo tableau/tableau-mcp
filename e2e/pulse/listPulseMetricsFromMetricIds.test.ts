@@ -14,33 +14,29 @@ describe('list-pulse-metrics-from-metric-ids', () => {
   beforeAll(setEnv);
   afterAll(resetEnv);
 
-  it(
-    'should list all pulse metrics from a list of metric ids',
-    { timeout: 10_000 },
-    async ({ skip }) => {
-      skip(
-        'Tool arguments in JSON format not supported yet: https://github.com/modelcontextprotocol/inspector/pull/647',
-      );
-      const env = getDefaultEnv();
-      const tableauMcpDefinition = getPulseDefinition(env.SERVER, env.SITE_NAME, 'Tableau MCP');
+  it('should list all pulse metrics from a list of metric ids', async ({ skip }) => {
+    skip(
+      'Tool arguments in JSON format not supported yet: https://github.com/modelcontextprotocol/inspector/pull/647',
+    );
+    const env = getDefaultEnv();
+    const tableauMcpDefinition = getPulseDefinition(env.SERVER, env.SITE_NAME, 'Tableau MCP');
 
-      const { filename: configJson } = writeConfigJson({
-        describe: 'list-pulse-metrics-from-metric-ids',
-        env,
-      });
+    const { filename: configJson } = writeConfigJson({
+      describe: 'list-pulse-metrics-from-metric-ids',
+      env,
+    });
 
-      const metrics = await callTool('list-pulse-metrics-from-metric-ids', {
-        configJson,
-        schema: z.array(pulseMetricSchema),
-        toolArgs: {
-          metricIds: [tableauMcpDefinition.metrics[0].id],
-        },
-      });
+    const metrics = await callTool('list-pulse-metrics-from-metric-ids', {
+      configJson,
+      schema: z.array(pulseMetricSchema),
+      toolArgs: {
+        metricIds: [tableauMcpDefinition.metrics[0].id],
+      },
+    });
 
-      expect(metrics.length).toBeGreaterThan(0);
-      const metric = metrics.find((metric) => metric.id === tableauMcpDefinition.metrics[0].id);
-      invariant(metric, 'Metric not found');
-      expect(metric.definition_id).toBe(tableauMcpDefinition.id);
-    },
-  );
+    expect(metrics.length).toBeGreaterThan(0);
+    const metric = metrics.find((metric) => metric.id === tableauMcpDefinition.metrics[0].id);
+    invariant(metric, 'Metric not found');
+    expect(metric.definition_id).toBe(tableauMcpDefinition.id);
+  });
 });

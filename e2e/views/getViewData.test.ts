@@ -11,7 +11,7 @@ describe('get-view-data', () => {
   beforeAll(setEnv);
   afterAll(resetEnv);
 
-  it('should get view data', { timeout: 10_000 }, async () => {
+  it('should get view data', async () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 

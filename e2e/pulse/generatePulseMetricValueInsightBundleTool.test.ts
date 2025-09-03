@@ -11,7 +11,7 @@ describe('generate-pulse-metric-value-insight-bundle', () => {
   beforeAll(setEnv);
   afterAll(resetEnv);
 
-  it('should list all pulse metric definitions', { timeout: 10_000 }, async ({ skip }) => {
+  it('should list all pulse metric definitions', async ({ skip }) => {
     skip(
       'Tool arguments in JSON format not supported yet: https://github.com/modelcontextprotocol/inspector/pull/647',
     );

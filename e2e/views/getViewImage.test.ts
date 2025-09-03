@@ -11,7 +11,7 @@ describe('get-view-image', () => {
   beforeAll(setEnv);
   afterAll(resetEnv);
 
-  it('should get view image', { timeout: 10_000 }, async () => {
+  it('should get view image', async () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 

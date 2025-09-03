@@ -13,7 +13,7 @@ describe('list-all-pulse-metric-definitions', () => {
   beforeAll(setEnv);
   afterAll(resetEnv);
 
-  it('should list all pulse metric definitions', { timeout: 10_000 }, async () => {
+  it('should list all pulse metric definitions', async () => {
     const env = getDefaultEnv();
     const tableauMcpDefinition = getPulseDefinition(env.SERVER, env.SITE_NAME, 'Tableau MCP');
 

@@ -14,7 +14,7 @@ describe('list-pulse-metrics-from-metric-definition-id', () => {
   beforeAll(setEnv);
   afterAll(resetEnv);
 
-  it('should list all pulse metrics from a metric definition id', { timeout: 10_000 }, async () => {
+  it('should list all pulse metrics from a metric definition id', async () => {
     const env = getDefaultEnv();
     const tableauMcpDefinition = getPulseDefinition(env.SERVER, env.SITE_NAME, 'Tableau MCP');
 

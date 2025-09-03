@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     watch: false,
-    include: ['src/**/*.test.ts', 'e2e/**/*.test.ts'],
+    include: ['**/*.test.ts'],
     setupFiles: './src/testSetup.ts',
     reporters: [
       [
@@ -27,6 +27,16 @@ export default defineConfig({
       ],
       reporter: ['text', 'cobertura'],
       reportsDirectory: './coverage/unit',
+    },
+    poolOptions: {
+      forks: {
+        // disable Node warning about globSync
+        execArgv: ['--disable-warning=ExperimentalWarning'],
+      },
+    },
+    onConsoleLog: () => {
+      // don't show console.log in tests
+      return false;
     },
   },
 });
