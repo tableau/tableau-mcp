@@ -67,6 +67,7 @@ export async function callTool<Z extends z.ZodTypeAny = z.ZodNever>(
 
 export async function getClient(env?: Record<string, string>): Promise<Client> {
   env = env ?? getDefaultEnv();
+  env.PATH = process.env.PATH ?? '';
 
   console.log('into build dir');
   const buildDir = resolve(__dirname, '..', 'build');
