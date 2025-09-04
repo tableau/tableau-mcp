@@ -1,8 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { existsSync, readdirSync } from 'fs';
+import { readdirSync } from 'fs';
 import { resolve } from 'path';
-import { fileURLToPath } from 'url';
 import { z } from 'zod';
 
 import { ToolName } from '../src/tools/toolName.js';
@@ -69,31 +68,15 @@ export async function callTool<Z extends z.ZodTypeAny = z.ZodNever>(
 export async function getClient(env?: Record<string, string>): Promise<Client> {
   env = env ?? getDefaultEnv();
 
-  const __filename = fileURLToPath(import.meta.url);
-  console.log('__filename', __filename);
-  console.log('__dirname', __dirname);
-  console.log('CI', process.env.CI);
-
-  for (const file of readdirSync(__dirname)) {
+  console.log('into build dir');
+  const buildDir = resolve(__dirname, '..', 'build');
+  for (const file of readdirSync(buildDir)) {
     console.log('file', file);
-  }
-
-  console.log('up a dir');
-  for (const file of readdirSync(resolve(__dirname, '..'))) {
-    console.log('file', file);
-  }
-
-  if (!existsSync('build')) {
-    throw new Error('build directory not found');
-  }
-
-  if (!existsSync('build/index.js')) {
-    throw new Error('build/index.js not found');
   }
 
   const transport = new StdioClientTransport({
     command: 'node',
-    cwd: process.env.CI ? '../build' : 'build',
+    cwd: buildDir,
     args: ['index.js'],
     env: env ?? {},
   });
