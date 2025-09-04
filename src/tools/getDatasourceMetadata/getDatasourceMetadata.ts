@@ -18,8 +18,11 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
   const getDatasourceMetadataTool = new Tool({
     server,
     name: 'get-datasource-metadata',
-    description:
-      'TODO: This tool combines the read-metadata and list-fields tools to get metadata for a datasource.',
+    description: `
+    This tool retrieves field metadata for a specified datasource by taking the basic, high level, metadata results from Tableau's VizQL Data Service and enriches them with additional context provided by Tableau's Metadata API.
+    The fields provided by this tool will contain properties such as name and dataType, but may also expose richer context such as descriptions, dataCategories, roles, etc.
+    This tool should be used for getting the metadata to ground the use of the query_datasource tool.
+    `,
     paramsSchema,
     annotations: {
       title: 'Get Datasource Metadata',
