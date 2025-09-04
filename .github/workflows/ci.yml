@@ -43,8 +43,19 @@ jobs:
       - name: Build Claude Desktop Extension
         run: npm run build:dxt
 
-      - name: Tests
+      - name: Unit Tests
         run: npm run coverage
+
+      - name: E2E Tests
+        run: npm run test:e2e
+        env:
+          SERVER: ${{ secrets.E2E_TEST_SERVER }}
+          SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
+          AUTH: ${{ secrets.E2E_TEST_AUTH }}
+          JWT_SUB_CLAIM: ${{ secrets.E2E_TEST_JWT_SUB_CLAIM }}
+          CONNECTED_APP_CLIENT_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}
+          CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
+          CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
 
       - name: Report code coverage
         uses: irongut/CodeCoverageSummary@v1.3.0
