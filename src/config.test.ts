@@ -270,11 +270,11 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         ...defaultEnvVars,
-        INCLUDE_TOOLS: 'query-datasource,list-fields',
+        INCLUDE_TOOLS: 'query-datasource,get-datasource-metadata',
       };
 
       const config = new Config();
-      expect(config.includeTools).toEqual(['query-datasource', 'list-fields']);
+      expect(config.includeTools).toEqual(['query-datasource', 'get-datasource-metadata']);
     });
 
     it('should parse EXCLUDE_TOOLS into an array of valid tool names', () => {
@@ -315,7 +315,7 @@ describe('Config', () => {
         ...process.env,
         ...defaultEnvVars,
         INCLUDE_TOOLS: 'query-datasource',
-        EXCLUDE_TOOLS: 'list-fields',
+        EXCLUDE_TOOLS: 'get-datasource-metadata',
       };
 
       expect(() => new Config()).toThrow('Cannot specify both INCLUDE_TOOLS and EXCLUDE_TOOLS');
