@@ -53,4 +53,4 @@ To run the E2E tests locally against a different site, you need to:
 If you are using VS Code or a fork, you can use the [Vitest extension][vitest.explorer] to run and
 debug the E2E tests.
 
-[vitest.explorer]: (https://marketplace.visualstudio.com/items?itemName=vitest.explorer)
+[vitest.explorer]: https://marketplace.visualstudio.com/items?itemName=vitest.explorer
