@@ -1,14 +1,10 @@
 import z from 'zod';
 
 import { workbookSchema } from '../../src/sdks/tableau/types/workbook.js';
-import { deleteConfigJsons, writeConfigJson } from '../configJson.js';
-import { callTool } from '../startInspector.js';
+import { callTool } from '../client.js';
 import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../testEnv.js';
 
 describe('list-workbooks', () => {
-  beforeAll(() => deleteConfigJsons('list-workbooks'));
-  afterEach(() => deleteConfigJsons('list-workbooks'));
-
   beforeAll(setEnv);
   afterAll(resetEnv);
 
@@ -16,13 +12,8 @@ describe('list-workbooks', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const { filename: configJson } = writeConfigJson({
-      describe: 'list-workbooks',
-      env,
-    });
-
     const workbooks = await callTool('list-workbooks', {
-      configJson,
+      env,
       schema: z.array(workbookSchema),
     });
 
@@ -40,13 +31,8 @@ describe('list-workbooks', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const { filename: configJson } = writeConfigJson({
-      describe: 'list-workbooks',
-      env,
-    });
-
     const workbooks = await callTool('list-workbooks', {
-      configJson,
+      env,
       schema: z.array(workbookSchema),
       toolArgs: { filter: 'name:eq:Super*' },
     });

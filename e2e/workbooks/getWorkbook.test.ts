@@ -1,12 +1,8 @@
 import { workbookSchema } from '../../src/sdks/tableau/types/workbook.js';
-import { deleteConfigJsons, writeConfigJson } from '../configJson.js';
-import { callTool } from '../startInspector.js';
+import { callTool } from '../client.js';
 import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../testEnv.js';
 
 describe('get-workbook', () => {
-  beforeAll(() => deleteConfigJsons('get-workbook'));
-  afterEach(() => deleteConfigJsons('get-workbook'));
-
   beforeAll(setEnv);
   afterAll(resetEnv);
 
@@ -14,13 +10,8 @@ describe('get-workbook', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const { filename: configJson } = writeConfigJson({
-      describe: 'get-workbook',
-      env,
-    });
-
     const workbook = await callTool('get-workbook', {
-      configJson,
+      env,
       schema: workbookSchema,
       toolArgs: { workbookId: superstore.id },
     });

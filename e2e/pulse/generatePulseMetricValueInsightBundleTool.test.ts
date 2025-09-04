@@ -1,29 +1,16 @@
 import { pulseBundleResponseSchema } from '../../src/sdks/tableau/types/pulse.js';
-import { deleteConfigJsons, writeConfigJson } from '../configJson.js';
+import { callTool } from '../client.js';
 import { getPulseDefinition } from '../constants.js';
-import { callTool } from '../startInspector.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../testEnv.js';
 
 describe('generate-pulse-metric-value-insight-bundle', () => {
-  beforeAll(() => deleteConfigJsons('generate-pulse-metric-value-insight-bundle'));
-  afterEach(() => deleteConfigJsons('generate-pulse-metric-value-insight-bundle'));
-
   beforeAll(setEnv);
   afterAll(resetEnv);
 
-  it('should list all pulse metric definitions', async ({ skip }) => {
-    skip(
-      'Tool arguments in JSON format not supported yet: https://github.com/modelcontextprotocol/inspector/pull/647',
-    );
-
+  it('should list all pulse metric definitions', async () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreDatasource(env);
     const tableauMcpDefinition = getPulseDefinition(env.SERVER, env.SITE_NAME, 'Tableau MCP');
-
-    const { filename: configJson } = writeConfigJson({
-      describe: 'generate-pulse-metric-value-insight-bundle',
-      env,
-    });
 
     const bundleRequest = {
       bundle_request: {
@@ -99,7 +86,7 @@ describe('generate-pulse-metric-value-insight-bundle', () => {
     };
 
     const bundle = await callTool('generate-pulse-metric-value-insight-bundle', {
-      configJson,
+      env,
       schema: pulseBundleResponseSchema,
       toolArgs: {
         bundleRequest,
@@ -107,6 +94,6 @@ describe('generate-pulse-metric-value-insight-bundle', () => {
       },
     });
 
-    console.log(bundle);
+    expect(bundle.bundle_response.result.insight_groups.length).toBeGreaterThan(0);
   });
 });

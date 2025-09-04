@@ -1,14 +1,10 @@
 import z from 'zod';
 
 import { dataSourceSchema } from '../src/sdks/tableau/types/dataSource.js';
-import { deleteConfigJsons, writeConfigJson } from './configJson.js';
-import { callTool } from './startInspector.js';
+import { callTool } from './client.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from './testEnv.js';
 
 describe('list-datasources', () => {
-  beforeAll(() => deleteConfigJsons('list-datasources'));
-  afterEach(() => deleteConfigJsons('list-datasources'));
-
   beforeAll(setEnv);
   afterAll(resetEnv);
 
@@ -16,13 +12,8 @@ describe('list-datasources', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreDatasource(env);
 
-    const { filename: configJson } = writeConfigJson({
-      describe: 'list-datasources',
-      env,
-    });
-
     const datasources = await callTool('list-datasources', {
-      configJson,
+      env,
       schema: z.array(dataSourceSchema),
     });
 
@@ -41,13 +32,8 @@ describe('list-datasources', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreDatasource(env);
 
-    const { filename: configJson } = writeConfigJson({
-      describe: 'list-datasources',
-      env,
-    });
-
     const datasources = await callTool('list-datasources', {
-      configJson,
+      env,
       schema: z.array(dataSourceSchema),
       toolArgs: { filter: 'name:eq:Super*' },
     });

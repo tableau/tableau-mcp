@@ -2,14 +2,10 @@ import z from 'zod';
 
 import { viewSchema } from '../../src/sdks/tableau/types/view.js';
 import invariant from '../../src/utils/invariant.js';
-import { deleteConfigJsons, writeConfigJson } from '../configJson.js';
-import { callTool } from '../startInspector.js';
+import { callTool } from '../client.js';
 import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../testEnv.js';
 
 describe('list-views', () => {
-  beforeAll(() => deleteConfigJsons('list-views'));
-  afterEach(() => deleteConfigJsons('list-views'));
-
   beforeAll(setEnv);
   afterAll(resetEnv);
 
@@ -17,13 +13,8 @@ describe('list-views', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const { filename: configJson } = writeConfigJson({
-      describe: 'list-views',
-      env,
-    });
-
     const views = await callTool('list-views', {
-      configJson,
+      env,
       schema: z.array(viewSchema),
     });
 
@@ -44,13 +35,8 @@ describe('list-views', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const { filename: configJson } = writeConfigJson({
-      describe: 'list-views',
-      env,
-    });
-
     const views = await callTool('list-views', {
-      configJson,
+      env,
       schema: z.array(viewSchema),
       toolArgs: { filter: 'name:eq:Overview,workbookName:eq:Superstore' },
     });
@@ -66,15 +52,7 @@ describe('list-views', () => {
   });
 
   it('should list views with pageSize and limit', async () => {
-    const env = getDefaultEnv();
-
-    const { filename: configJson } = writeConfigJson({
-      describe: 'list-views',
-      env,
-    });
-
     const views = await callTool('list-views', {
-      configJson,
       schema: z.array(viewSchema),
       toolArgs: { pageSize: 5, limit: 10 },
     });

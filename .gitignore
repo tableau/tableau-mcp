@@ -6,7 +6,6 @@ node_modules/
 junit/
 coverage/
 config.json
-config.*.test.json
 env.list
 manifest.json
 tableau-mcp.dxt

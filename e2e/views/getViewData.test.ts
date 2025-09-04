@@ -1,13 +1,9 @@
 import z from 'zod';
 
-import { deleteConfigJsons, writeConfigJson } from '../configJson.js';
-import { callTool } from '../startInspector.js';
+import { callTool } from '../client.js';
 import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../testEnv.js';
 
 describe('get-view-data', () => {
-  beforeAll(() => deleteConfigJsons('get-view-data'));
-  afterEach(() => deleteConfigJsons('get-view-data'));
-
   beforeAll(setEnv);
   afterAll(resetEnv);
 
@@ -15,13 +11,8 @@ describe('get-view-data', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const { filename: configJson } = writeConfigJson({
-      describe: 'get-view-data',
-      env,
-    });
-
     const data = await callTool('get-view-data', {
-      configJson,
+      env,
       schema: z.string(),
       toolArgs: { viewId: superstore.defaultViewId },
     });

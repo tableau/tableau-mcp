@@ -1,30 +1,19 @@
+import z from 'zod';
+
 import { QueryOutput } from '../src/sdks/tableau/apis/vizqlDataServiceApi.js';
-import { deleteConfigJsons, writeConfigJson } from './configJson.js';
-import { callTool } from './startInspector.js';
+import { callTool } from './client.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from './testEnv.js';
 
 describe('query-datasource', () => {
-  beforeAll(() => deleteConfigJsons('query-datasource'));
-  afterEach(() => deleteConfigJsons('query-datasource'));
-
   beforeAll(setEnv);
   afterAll(resetEnv);
 
-  it('should query datasource', async ({ skip }) => {
-    skip(
-      'Tool arguments in JSON format not supported yet: https://github.com/modelcontextprotocol/inspector/pull/647',
-    );
-
+  it('should query datasource', async () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreDatasource(env);
 
-    const { filename: configJson } = writeConfigJson({
-      describe: 'query-datasource',
+    const { data } = await callTool('query-datasource', {
       env,
-    });
-
-    const output = await callTool('query-datasource', {
-      configJson,
       schema: QueryOutput,
       toolArgs: {
         datasourceLuid: superstore.id,
@@ -32,6 +21,7 @@ describe('query-datasource', () => {
       },
     });
 
-    console.log(output);
+    const postalCodes = z.array(z.object({ 'Postal Code': z.string() })).parse(data);
+    expect(postalCodes.length).toBeGreaterThan(0);
   });
 });

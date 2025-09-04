@@ -1,27 +1,17 @@
 import z from 'zod';
 
-import { deleteConfigJsons, writeConfigJson } from '../configJson.js';
-import { callTool } from '../startInspector.js';
+import { callTool } from '../client.js';
 import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../testEnv.js';
 
 describe('get-view-image', () => {
-  beforeAll(() => deleteConfigJsons('get-view-image'));
-  afterEach(() => deleteConfigJsons('get-view-image'));
-
   beforeAll(setEnv);
   afterAll(resetEnv);
 
   it('should get view image', async () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
-
-    const { filename: configJson } = writeConfigJson({
-      describe: 'get-view-image',
-      env,
-    });
-
     const pngData = await callTool('get-view-image', {
-      configJson,
+      env,
       schema: z.string(),
       toolArgs: { viewId: superstore.defaultViewId },
       expectedContentType: 'image',

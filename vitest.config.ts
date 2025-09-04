@@ -28,15 +28,5 @@ export default defineConfig({
       reporter: ['text', 'cobertura'],
       reportsDirectory: './coverage/unit',
     },
-    poolOptions: {
-      forks: {
-        // disable Node warning about globSync
-        execArgv: ['--disable-warning=ExperimentalWarning'],
-      },
-    },
-    onConsoleLog: () => {
-      // don't show console.log in tests
-      return false;
-    },
   },
 });

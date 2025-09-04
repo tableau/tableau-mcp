@@ -1,13 +1,9 @@
 import { MetadataOutput } from '../src/sdks/tableau/apis/vizqlDataServiceApi.js';
 import invariant from '../src/utils/invariant.js';
-import { deleteConfigJsons, writeConfigJson } from './configJson.js';
-import { callTool } from './startInspector.js';
+import { callTool } from './client.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from './testEnv.js';
 
 describe('read-metadata', () => {
-  beforeAll(() => deleteConfigJsons('read-metadata'));
-  afterEach(() => deleteConfigJsons('read-metadata'));
-
   beforeAll(setEnv);
   afterAll(resetEnv);
 
@@ -15,13 +11,8 @@ describe('read-metadata', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreDatasource(env);
 
-    const { filename: configJson } = writeConfigJson({
-      describe: 'read-metadata',
-      env,
-    });
-
     const { data } = await callTool('read-metadata', {
-      configJson,
+      env,
       schema: MetadataOutput,
       toolArgs: {
         datasourceLuid: superstore.id,

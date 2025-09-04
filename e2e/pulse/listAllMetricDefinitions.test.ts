@@ -1,15 +1,11 @@
 import z from 'zod';
 
 import { pulseMetricDefinitionSchema } from '../../src/sdks/tableau/types/pulse.js';
-import { deleteConfigJsons, writeConfigJson } from '../configJson.js';
+import { callTool } from '../client.js';
 import { getPulseDefinition } from '../constants.js';
-import { callTool } from '../startInspector.js';
 import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
 
 describe('list-all-pulse-metric-definitions', () => {
-  beforeAll(() => deleteConfigJsons('list-all-pulse-metric-definitions'));
-  afterEach(() => deleteConfigJsons('list-all-pulse-metric-definitions'));
-
   beforeAll(setEnv);
   afterAll(resetEnv);
 
@@ -17,13 +13,8 @@ describe('list-all-pulse-metric-definitions', () => {
     const env = getDefaultEnv();
     const tableauMcpDefinition = getPulseDefinition(env.SERVER, env.SITE_NAME, 'Tableau MCP');
 
-    const { filename: configJson } = writeConfigJson({
-      describe: 'list-all-pulse-metric-definitions',
-      env,
-    });
-
     const definitions = await callTool('list-all-pulse-metric-definitions', {
-      configJson,
+      env,
       schema: z.array(pulseMetricDefinitionSchema),
     });
 

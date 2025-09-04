@@ -1,12 +1,8 @@
 import { graphqlResponse } from '../src/sdks/tableau/apis/metadataApi.js';
-import { deleteConfigJsons, writeConfigJson } from './configJson.js';
-import { callTool } from './startInspector.js';
+import { callTool } from './client.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from './testEnv.js';
 
 describe('list-fields', () => {
-  beforeAll(() => deleteConfigJsons('list-fields'));
-  afterEach(() => deleteConfigJsons('list-fields'));
-
   beforeAll(setEnv);
   afterAll(resetEnv);
 
@@ -14,13 +10,8 @@ describe('list-fields', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreDatasource(env);
 
-    const { filename: configJson } = writeConfigJson({
-      describe: 'list-fields',
-      env,
-    });
-
     const { data } = await callTool('list-fields', {
-      configJson,
+      env,
       schema: graphqlResponse,
       toolArgs: { datasourceLuid: superstore.id },
     });
