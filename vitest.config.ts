@@ -1,21 +1,11 @@
-import { coverageConfigDefaults, defineConfig } from 'vitest/config';
+import { coverageConfigDefaults, mergeConfig } from 'vitest/config';
 
-export default defineConfig({
+import { configShared } from './vitest.config.base';
+
+export default mergeConfig(configShared, {
   test: {
-    globals: true,
-    watch: false,
-    include: ['**/*.test.ts'],
+    dir: 'src',
     setupFiles: './src/testSetup.ts',
-    reporters: [
-      [
-        'default',
-        {
-          summary: false,
-        },
-      ],
-      'junit',
-    ],
-    outputFile: 'junit/results.xml',
     coverage: {
       provider: 'v8',
       include: ['src'],
