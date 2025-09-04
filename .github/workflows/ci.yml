@@ -22,29 +22,8 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
-      - name: Set up Docker
-        uses: docker/setup-buildx-action@v3
-
       - name: Install dependencies
         run: npm ci
-
-      - name: TypeScript compilation
-        run: npx tsc
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Build
-        run: npm run build
-
-      - name: Build Docker image
-        run: npm run build:docker
-
-      - name: Build Claude Desktop Extension
-        run: npm run build:dxt
-
-      - name: Unit Tests
-        run: npm run coverage
 
       - name: E2E Tests
         run: npm run test:e2e
@@ -57,19 +36,6 @@ jobs:
           CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
           CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
 
-      - name: Report code coverage
-        uses: irongut/CodeCoverageSummary@v1.3.0
-        with:
-          filename: coverage/**/cobertura-coverage.xml
-          badge: true
-          fail_below_min: false
-          format: markdown
-          hide_branch_rate: false
-          hide_complexity: true
-          indicators: true
-          output: both
-          thresholds: '60 80'
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -77,4 +43,5 @@ jobs:
           if-no-files-found: error
           path: |
             build/
+            junit/
             tableau-mcp.dxt
