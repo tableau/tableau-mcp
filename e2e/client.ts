@@ -1,7 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { readdirSync } from 'fs';
-import { resolve } from 'path';
 import { z } from 'zod';
 
 import { ToolName } from '../src/tools/toolName.js';
@@ -67,18 +65,13 @@ export async function callTool<Z extends z.ZodTypeAny = z.ZodNever>(
 
 export async function getClient(env?: Record<string, string>): Promise<Client> {
   env = env ?? getDefaultEnv();
-  env.PATH = process.env.PATH ?? '';
 
-  console.log('into build dir');
-  const buildDir = resolve(__dirname, '..', 'build');
-  for (const file of readdirSync(buildDir)) {
-    console.log('file', file);
-  }
+  // https://github.com/nodejs/node/issues/55374
+  env.PATH = process.env.PATH ?? '';
 
   const transport = new StdioClientTransport({
     command: 'node',
-    cwd: buildDir,
-    args: ['index.js'],
+    args: ['build/index.js'],
     env: env ?? {},
   });
 
