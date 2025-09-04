@@ -22,7 +22,7 @@ The MCP transport type to use for the server.
 The Tableau authentication method to use by the server.
 
 - Default: `pat`
-- Possible values: `pat` or `direct-trust`
+- Possible values: `pat`, `direct-trust`, or `oauth`
 - See [Authentication](authentication) for additional required variables depending on the desired
   method.
 
