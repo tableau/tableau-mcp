@@ -21,7 +21,7 @@ describe('PulseMetricDefinition schema', () => {
     const data = createValidPulseMetricDefinition({
       // is_default should be boolean
       metrics: [createValidPulseMetric({ is_default: 'yes' })],
-      total_metrics: 1,
+      total_metrics: '1',
     });
     expect(() => pulseMetricDefinitionSchema.parse(data)).toThrow();
   });
@@ -117,7 +117,7 @@ function createValidPulseMetric(overrides = {}): any {
     definition_id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
     is_default: true,
     schema_version: '1.0',
-    metric_version: 1,
+    metric_version: '1',
     goals: { target: { value: 100 } },
     is_followed: false,
     ...overrides,
@@ -131,8 +131,8 @@ function createValidPulseMetricDefinition(overrides = {}): any {
       description: 'A test metric',
       id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
       schema_version: '1.0',
-      metric_version: 1,
-      definition_version: 1,
+      metric_version: '1',
+      definition_version: '1',
       last_updated_user: { id: 'USER-1234' },
     },
     specification: {
@@ -164,7 +164,7 @@ function createValidPulseMetricDefinition(overrides = {}): any {
         is_followed: true,
       }),
     ],
-    total_metrics: 2,
+    total_metrics: '2',
     representation_options: {
       type: 'number',
       number_units: { singular_noun: 'unit', plural_noun: 'units' },
@@ -178,7 +178,7 @@ function createValidPulseMetricDefinition(overrides = {}): any {
       settings: [{ type: 'trend', disabled: false }],
     },
     comparisons: {
-      comparisons: [{ compare_config: { comparison: 'previous_period' }, index: 0 }],
+      comparisons: [{ compare_config: { comparison: 'previous_period' }, index: '0' }],
     },
     datasource_goals: [
       {

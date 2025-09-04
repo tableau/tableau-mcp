@@ -35,8 +35,9 @@
     "build:inspect:docker": "run-s build:docker inspect:docker",
     "build:inspect:docker:http": "run-s build:docker inspect:docker:http",
     "exec-perms": "shx chmod +x build/*.js",
-    "test": "vitest",
-    "coverage": "vitest run --coverage",
+    "test": "vitest --config ./vitest.config.ts",
+    "test:e2e": "vitest --config ./vitest.config.e2e.ts",
+    "coverage": "vitest run --config ./vitest.config.ts --coverage",
     "version:major": "npm version major --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
     "version:patch": "npm version patch --no-git-tag-version"

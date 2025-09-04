@@ -1,7 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
-const graphqlResponse = z.object({
+export const graphqlResponse = z.object({
   data: z.object({
     publishedDatasources: z.array(
       z.object({
