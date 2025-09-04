@@ -75,17 +75,15 @@ export async function getClient(env?: Record<string, string>): Promise<Client> {
     env: env ?? {},
   });
 
-  console.log('transport created');
-
   const client = new Client({
     name: 'tableau-mcp-e2e-tests',
     version: '1.0.0',
+    capabilities: {
+      listTools: true,
+      callTool: true,
+    },
   });
 
-  console.log('client created');
-
   await client.connect(transport);
-
-  console.log('client connected');
   return client;
 }
