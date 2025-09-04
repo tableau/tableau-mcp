@@ -88,7 +88,7 @@ export async function getClient(env?: Record<string, string>): Promise<Client> {
     version: '1.0.0',
   });
 
-  console.log('transport created');
+  console.log('client created');
 
   await client.connect(transport);
 
