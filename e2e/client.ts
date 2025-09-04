@@ -74,8 +74,6 @@ export async function getClient(env?: Record<string, string>): Promise<Client> {
     console.log('file', file);
   }
 
-  throw new Error('short circuit');
-
   const transport = new StdioClientTransport({
     command: 'node',
     cwd: buildDir,
@@ -83,11 +81,17 @@ export async function getClient(env?: Record<string, string>): Promise<Client> {
     env: env ?? {},
   });
 
+  console.log('transport created');
+
   const client = new Client({
     name: 'tableau-mcp-e2e-tests',
     version: '1.0.0',
   });
 
+  console.log('transport created');
+
   await client.connect(transport);
+
+  console.log('client connected');
   return client;
 }
