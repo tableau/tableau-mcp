@@ -1,10 +1,13 @@
-import { mergeConfig } from 'vitest/config';
+import { defineConfig, mergeConfig } from 'vitest/config';
 
-import { configShared } from './vitest.config.base';
+import { configShared } from './configShared';
 
-export default mergeConfig(configShared, {
-  test: {
-    dir: 'e2e',
-    testTimeout: 30000,
-  },
-});
+export default mergeConfig(
+  defineConfig(configShared),
+  defineConfig({
+    test: {
+      dir: 'e2e',
+      testTimeout: 30_000,
+    },
+  }),
+);
