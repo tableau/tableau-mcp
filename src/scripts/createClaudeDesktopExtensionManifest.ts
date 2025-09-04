@@ -207,6 +207,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  DISABLE_OAUTH: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Disable OAuth',
+    description: 'Disable OAuth when transport is http.',
+    required: false,
+    sensitive: false,
+  },
   OAUTH_ISSUER: {
     includeInUserConfig: false,
     type: 'string',

@@ -21,6 +21,7 @@ export interface ProcessEnvEx {
   EXCLUDE_TOOLS: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
   DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: string | undefined;
+  DISABLE_OAUTH: string | undefined;
   OAUTH_ISSUER: string | undefined;
   OAUTH_JWE_PRIVATE_KEY_PATH: string | undefined;
   OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: string | undefined;

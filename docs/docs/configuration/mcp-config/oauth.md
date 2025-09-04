@@ -26,7 +26,8 @@ The following environment variables also apply or have additional meaning:
 
 The issuer of the OAuth server. This should be the host of the MCP server.
 
-- Required if `AUTH` is `oauth`. For testing, use `http://127.0.0.1:3927`
+- Required if `AUTH` is `oauth`. For testing, use `http://127.0.0.1:3927`.
+- Required if `TRANSPORT` is `http` unless `DISABLE_OAUTH` is `true`.
 
 <hr />
 
@@ -34,7 +35,7 @@ The issuer of the OAuth server. This should be the host of the MCP server.
 
 The MCP transport type to use for the server.
 
-- Default: `http`
+- Defaults to `http` when OAuth is enabled.
 - Must be `http` when OAuth is enabled.
 
 <hr />
@@ -134,5 +135,22 @@ The timeout for the OAuth refresh tokens.
 
 - Default: 30 days.
 - Max: 1 year.
+
+<hr />
+
+### `DISABLE_OAUTH`
+
+:::warning
+
+When `TRANSPORT` is `http`, the default behavior changes to require protecting your MCP server with
+OAuth as a security best practice.
+
+To opt out of this behavior at your own risk, set `DISABLE_OAUTH` to `true`.
+
+This is not recommended as your MCP server will not be protected from unauthorized access.
+
+:::
+
+- Default: `false`
 
 <hr />

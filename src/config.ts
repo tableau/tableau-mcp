@@ -69,6 +69,7 @@ export class Config {
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
+      DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
       OAUTH_JWE_PRIVATE_KEY_PATH: oauthJwePrivateKeyPath,
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
@@ -97,8 +98,10 @@ export class Config {
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
+
+    const disableOauthOverride = disableOauth === 'true';
     this.oauth = {
-      enabled: !!oauthIssuer,
+      enabled: disableOauthOverride ? false : !!oauthIssuer,
       issuer: oauthIssuer ?? '',
       redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
       jwePrivateKeyPath: oauthJwePrivateKeyPath ?? '',
@@ -122,8 +125,23 @@ export class Config {
 
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
 
+    if (this.transport === 'http' && !disableOauthOverride && !this.oauth.issuer) {
+      throw new Error(
+        'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DISABLE_OAUTH is "true"',
+      );
+    }
+
+    if (this.auth === 'oauth') {
+      if (disableOauthOverride) {
+        throw new Error('When AUTH is "oauth", DISABLE_OAUTH cannot be "true"');
+      }
+
+      if (!this.oauth.issuer) {
+        throw new Error('When AUTH is "oauth", OAUTH_ISSUER must be set');
+      }
+    }
+
     if (this.oauth.enabled) {
-      invariant(this.oauth.issuer, 'The environment variable OAUTH_ISSUER is not set');
       invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
       invariant(
         this.oauth.jwePrivateKeyPath,
@@ -139,8 +157,6 @@ export class Config {
       if (this.transport === 'stdio') {
         throw new Error('TRANSPORT must be "http" when OAUTH_ISSUER is set');
       }
-    } else if (this.auth === 'oauth') {
-      throw new Error('When auth is "oauth", OAUTH_ISSUER must be set');
     }
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;

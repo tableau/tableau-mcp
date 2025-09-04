@@ -34,12 +34,22 @@ async function startServer(): Promise<void> {
       console.log(
         `${serverName} v${serverVersion} stateless streamable HTTP server available at ${url}`,
       );
+
+      if (!config.oauth.enabled) {
+        const host = new URL(url).hostname;
+
+        if (host !== 'localhost' && host !== '127.0.0.1') {
+          writeToStderr(
+            '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access!',
+          );
+        }
+      }
       break;
     }
   }
 
   if (config.disableLogMasking) {
-    writeToStderr('Log masking is disabled!');
+    writeToStderr('⚠️ Log masking is disabled!');
   }
 }
 
