@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { existsSync } from 'fs';
+import { fileURLToPath } from 'url';
 import { z } from 'zod';
 
 import { ToolName } from '../src/tools/toolName.js';
@@ -67,6 +68,9 @@ export async function callTool<Z extends z.ZodTypeAny = z.ZodNever>(
 export async function getClient(env?: Record<string, string>): Promise<Client> {
   env = env ?? getDefaultEnv();
 
+  const __filename = fileURLToPath(import.meta.url);
+  console.log(__filename);
+
   if (!existsSync('build')) {
     throw new Error('build directory not found');
   }
@@ -77,7 +81,7 @@ export async function getClient(env?: Record<string, string>): Promise<Client> {
 
   const transport = new StdioClientTransport({
     command: 'node',
-    cwd: 'build',
+    cwd: process.env.CI ? '../build' : 'build',
     args: ['index.js'],
     env: env ?? {},
   });
