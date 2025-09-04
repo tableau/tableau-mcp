@@ -37,7 +37,7 @@
     "exec-perms": "shx chmod +x build/*.js",
     "test": "vitest --dir=src",
     "test:e2e": "vitest --dir=e2e --testTimeout=30000",
-    "coverage": "vitest run --coverage",
+    "coverage": "vitest run --dir=src --coverage",
     "version:major": "npm version major --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
     "version:patch": "npm version patch --no-git-tag-version"
