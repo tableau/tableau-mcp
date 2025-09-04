@@ -62,14 +62,20 @@ export function getDatasource(
   datasourceName: string,
 ): Datasource {
   const datasource = environmentData.servers[server]?.sites[siteName]?.datasources[datasourceName];
-  invariant(datasource, `Datasource not found. Input: ${{ server, siteName, datasourceName }}`);
+  invariant(
+    datasource,
+    `Datasource not found. Input: ${JSON.stringify({ server, siteName, datasourceName })}`,
+  );
 
   return datasource;
 }
 
 export function getWorkbook(server: string, siteName: string, workbookName: string): Workbook {
   const workbook = environmentData.servers[server]?.sites[siteName]?.workbooks[workbookName];
-  invariant(workbook, `Workbook not found. Input: ${{ server, siteName, workbookName }}`);
+  invariant(
+    workbook,
+    `Workbook not found. Input: ${JSON.stringify({ server, siteName, workbookName })}`,
+  );
 
   return workbook;
 }
@@ -83,7 +89,7 @@ export function getPulseDefinition(
     environmentData.servers[server]?.sites[siteName]?.pulse.definitions[definitionName];
   invariant(
     definition,
-    `Pulse definition not found. Input: ${{ server, siteName, definitionName }}`,
+    `Pulse definition not found. Input: ${JSON.stringify({ server, siteName, definitionName })}`,
   );
 
   return definition;
