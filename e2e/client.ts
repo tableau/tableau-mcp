@@ -74,6 +74,8 @@ export async function getClient(env?: Record<string, string>): Promise<Client> {
     console.log('file', file);
   }
 
+  throw new Error('short circuit');
+
   const transport = new StdioClientTransport({
     command: 'node',
     cwd: buildDir,
