@@ -8,6 +8,7 @@ export default mergeConfig(
     test: {
       dir: 'e2e',
       testTimeout: 30_000,
+      outputFile: 'junit/e2e.xml',
     },
   }),
 );

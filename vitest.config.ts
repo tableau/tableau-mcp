@@ -8,6 +8,7 @@ export default mergeConfig(
     test: {
       dir: 'src',
       setupFiles: './src/testSetup.ts',
+      outputFile: 'junit/unit.xml',
       coverage: {
         provider: 'v8',
         include: ['src'],
