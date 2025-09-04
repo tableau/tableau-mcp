@@ -258,6 +258,7 @@ describe('Config', () => {
       ...process.env,
       ...defaultEnvVars,
       TRANSPORT: 'http',
+      DISABLE_OAUTH: 'true',
     };
 
     const config = new Config();
