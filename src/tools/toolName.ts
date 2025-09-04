@@ -20,7 +20,7 @@ export const toolGroupNames = ['datasource', 'workbook', 'view', 'pulse'] as con
 export type ToolGroupName = (typeof toolGroupNames)[number];
 
 export const toolGroups = {
-  datasource: ['list-datasources', 'list-fields', 'query-datasource', 'read-metadata'],
+  datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
   workbook: ['list-workbooks', 'get-workbook'],
   view: ['list-views', 'get-view-data', 'get-view-image'],
   pulse: [
