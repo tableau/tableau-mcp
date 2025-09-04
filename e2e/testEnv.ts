@@ -1,5 +1,4 @@
 import dotenv from 'dotenv';
-import { existsSync } from 'fs';
 
 import { ProcessEnvEx } from '../types/process-env.js';
 import { Datasource, getDatasource, getWorkbook, Workbook } from './constants.js';
@@ -7,15 +6,11 @@ import { Datasource, getDatasource, getWorkbook, Workbook } from './constants.js
 type EnvValues = Record<keyof ProcessEnvEx, string>;
 
 export function setEnv(): void {
-  if (existsSync('e2e/.env')) {
-    dotenv.config({ path: 'e2e/.env', override: true });
-  }
+  dotenv.config({ path: 'e2e/.env', override: true });
 }
 
 export function resetEnv(): void {
-  if (existsSync('e2e/.env.reset')) {
-    dotenv.config({ path: 'e2e/.env.reset', override: true });
-  }
+  dotenv.config({ path: 'e2e/.env.reset', override: true });
 }
 
 export function getEnv(envKeys: Array<keyof ProcessEnvEx>): EnvValues {

@@ -26,7 +26,9 @@ jobs:
         run: npm ci
 
       - name: E2E Tests
-        run: npm run test:e2e
+        run: |
+          npm run build
+          npm run test:e2e
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}
           SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
