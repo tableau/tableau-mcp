@@ -5,9 +5,9 @@ const pulseMetadataSchema = z.object({
   description: z.string(),
   id: z.string(),
   schema_version: z.string(),
-  metric_version: z.number(),
-  definition_version: z.number(),
-  last_updated_user: z.object({ id: z.string() }),
+  metric_version: z.coerce.number(),
+  definition_version: z.coerce.number(),
+  last_updated_user: z.object({ id: z.string() }).optional(),
 });
 
 const pulseDatasourceSchema = z.object({
@@ -35,7 +35,7 @@ const pulseBasicSpecificationSchema = z.object({
 const pulseSpecificationSchema = z.object({
   datasource: pulseDatasourceSchema,
   basic_specification: pulseBasicSpecificationSchema,
-  viz_state_specification: z.object({ viz_state_string: z.string() }),
+  viz_state_specification: z.object({ viz_state_string: z.string() }).optional(),
   is_running_total: z.boolean(),
 });
 
@@ -64,7 +64,7 @@ export const pulseMetricSchema = z.object({
   definition_id: z.string(),
   is_default: z.boolean(),
   schema_version: z.string(),
-  metric_version: z.number(),
+  metric_version: z.coerce.number(),
   goals: pulseGoalsSchema.optional(),
   is_followed: z.boolean(),
 });
@@ -93,7 +93,7 @@ export const comparisonSchema = z.object({
   comparisons: z.array(
     z.object({
       compare_config: z.object({ comparison: z.string() }),
-      index: z.number(),
+      index: z.coerce.number(),
     }),
   ),
 });
@@ -101,7 +101,7 @@ export const comparisonSchema = z.object({
 export const datasourceGoalsSchema = z.array(
   z.object({
     basic_specification: pulseBasicSpecificationSchema,
-    viz_state_specification: z.object({ viz_state_string: z.string() }),
+    viz_state_specification: z.object({ viz_state_string: z.string() }).optional(),
     minimum_granularity: z.string(),
   }),
 );
@@ -111,7 +111,7 @@ export const pulseMetricDefinitionSchema = z.object({
   specification: pulseSpecificationSchema,
   extension_options: pulseExtensionOptionsSchema,
   metrics: z.array(pulseMetricSchema),
-  total_metrics: z.number(),
+  total_metrics: z.coerce.number(),
   representation_options: pulseRepresentationOptionsSchema,
   insights_options: insightOptionsSchema,
   comparisons: comparisonSchema,
@@ -322,8 +322,8 @@ export const popcBanInsightGroupSchema = z.object({
         markup: z.string().optional(),
         viz: z.any().optional(),
         generation_id: z.string(),
-        timestamp: z.string(),
-        last_attempted_timestamp: z.string(),
+        timestamp: z.string().optional(),
+        last_attempted_timestamp: z.string().optional(),
       }),
     }),
   ),

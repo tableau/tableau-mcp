@@ -1,5 +1,5 @@
 ---
-sidebar_position: 6
+sidebar_position: 2
 ---
 
 # Get View Image
@@ -15,7 +15,7 @@ Retrieves an image of the specified view in a Tableau workbook.
 ### `viewId`
 
 The ID of the view, potentially retrieved by the [List Views](list-views.md) or
-[Get Workbook](get-workbook.md) tool.
+[Get Workbook](../workbooks/get-workbook.md) tool.
 
 Example: `9460abfe-a6b2-49d1-b998-39e1ebcc55ce`
 

@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 1
 ---
 
 # List Views
@@ -42,7 +42,7 @@ The maximum number of views to return. The tool will return at most this many vi
 
 Example: `2000`
 
-See also: [`MAX_RESULT_LIMIT`](../configuration/mcp-config/optional.md#max_result_limit)
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/optional.md#max_result_limit)
 
 ## Example result
 

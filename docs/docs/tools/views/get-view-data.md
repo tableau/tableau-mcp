@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 3
 ---
 
 # Get View Data
@@ -15,7 +15,7 @@ Retrieves data in comma separated value (CSV) format for the specified view in a
 ### `viewId`
 
 The ID of the view, potentially retrieved by the [List Views](list-views.md) or
-[Get Workbook](get-workbook.md) tool.
+[Get Workbook](../workbooks/get-workbook.md) tool.
 
 Example: `9460abfe-a6b2-49d1-b998-39e1ebcc55ce`
 
