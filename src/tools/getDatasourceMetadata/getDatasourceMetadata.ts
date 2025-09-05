@@ -7,7 +7,7 @@ import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
 import { validateDatasourceLuid } from '../validateDatasourceLuid.js';
-import { buildDataDictionary } from './datasourceMetadataUtils.js';
+import { combineFields } from './datasourceMetadataUtils.js';
 
 export const getGraphqlQuery = (datasourceLuid: string): string => `
   query datasourceFieldInfo {
@@ -116,7 +116,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
                 // TODO: add guardrails to make sure this request does not fail.
                 const listFieldsResult = await restApi.metadataMethods.graphql(query);
 
-                return buildDataDictionary(readMetadataResult, listFieldsResult);
+                return combineFields(readMetadataResult, listFieldsResult);
               },
             }),
           );
