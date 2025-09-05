@@ -52,14 +52,14 @@ describe('exploreInTableauTool', () => {
 
   it('should successfully submit TDS content and return redirect URL', async () => {
     mocks.mockExploreInTableau.mockResolvedValue(mockRedirectUrl);
-    
+
     const rawTdsContent = `<?xml version="1.0" encoding="UTF-8"?>
 <datasource formatted-name="Sample Data" inline="true" version="18.1">
   <!-- Sample TDS content -->
 </datasource>`;
-    
+
     const result = await getToolResult({ tdsContent: rawTdsContent });
-    
+
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('https://example.com/tableau/redirect');
     expect(mocks.mockExploreInTableau).toHaveBeenCalledWith(rawTdsContent);
@@ -68,21 +68,21 @@ describe('exploreInTableauTool', () => {
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'External API Error';
     mocks.mockExploreInTableau.mockRejectedValue(new Error(errorMessage));
-    
+
     const rawTdsContent = `<?xml version="1.0" encoding="UTF-8"?>
 <datasource formatted-name="Sample Data" inline="true" version="18.1">
   <!-- Sample TDS content -->
 </datasource>`;
-    
+
     const result = await getToolResult({ tdsContent: rawTdsContent });
-    
+
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(errorMessage);
   });
 
   it('should validate required parameters', async () => {
     const result = await getToolResult({ tdsContent: '' });
-    
+
     expect(result.isError).toBe(true);
   });
 }); 

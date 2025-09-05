@@ -4,10 +4,17 @@ import { z } from 'zod';
 
 import ExploreInTableauMethods from '../sdks/tableau/methods/exploreInTableauMethods.js';
 import { Tool } from './tool.js';
+import { Server } from '../server.js';
 
-export const exploreInTableauTool = new Tool({
-  name: 'explore-in-tableau',
-  description: `
+const paramsSchema = {
+  tdsContent: z.string().nonempty(),
+};
+
+export const getExploreInTableauTool = (server: Server): Tool<typeof paramsSchema> => {
+  const exploreInTableauTool = new Tool({
+    server,
+    name: 'explore-in-tableau',
+    description: `
 Submit TDS (Tableau Data Source) content to Tableau's Explore in Tableau service and receive a redirect URL to an authoring session connected to the datasource.
 
 **Purpose:**
@@ -30,23 +37,26 @@ Use this tool when you need to:
 
 **Note:** The API returns the redirect URL in response headers rather than the response body.
 `,
-  paramsSchema: {
-    tdsContent: z.string().nonempty().describe('Raw TDS content as XML string'),
-  },
-  annotations: {
-    title: 'Explore in Tableau',
-    readOnlyHint: false,
-    openWorldHint: false,
-  },
-  callback: async ({ tdsContent }, { requestId }): Promise<CallToolResult> => {
-    return await exploreInTableauTool.logAndExecute({
-      requestId,
-      args: { tdsContent },
-      callback: async () => {
-        const exploreInTableauMethods = new ExploreInTableauMethods();
-        const result = await exploreInTableauMethods.exploreInTableau(tdsContent);
-        return new Ok(result);
-      },
-    });
-  },
-});
+    paramsSchema: {
+      tdsContent: z.string().nonempty().describe('Raw TDS content as XML string'),
+    },
+    annotations: {
+      title: 'Explore in Tableau',
+      readOnlyHint: false,
+      openWorldHint: false,
+    },
+    callback: async ({ tdsContent }, { requestId }): Promise<CallToolResult> => {
+      return await exploreInTableauTool.logAndExecute({
+        requestId,
+        args: { tdsContent },
+        callback: async () => {
+          const exploreInTableauMethods = new ExploreInTableauMethods();
+          const result = await exploreInTableauMethods.exploreInTableau(tdsContent);
+          return new Ok(result);
+        },
+      });
+    },
+  });
+
+  return exploreInTableauTool;
+};
