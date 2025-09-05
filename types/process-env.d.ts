@@ -1,3 +1,6 @@
+// If you add a new environment variable, make sure you update
+// docs/docs/configuration/mcp-config/generator.mdx
+
 export interface ProcessEnvEx {
   AUTH: string | undefined;
   TRANSPORT: string | undefined;

@@ -1,0 +1,261 @@
+---
+sidebar_position: 7
+title: Config Generator
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import React, { useState } from 'react';
+
+export const EnvVarInput = ({ inputs, setInputs, reset }) => {
+  return (
+    <>
+      <style>{`
+        [data-theme='dark'] {
+          .env-var-input {
+            box-shadow: 0 0.25rem 0.5rem rgba(255, 255, 255, 0.1);
+          }
+        }
+
+        .env-var-input {
+          flex-basis: 50%;
+          padding: 1rem;
+          border-radius: 0.5rem;
+          box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+
+          label {
+            color: #333;
+            margin-bottom: 0.125rem;
+          }
+
+          input {
+            width: 100%;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border: 0.1625rem solid #ccc;
+            border-radius: 0.25rem;
+            box-sizing: border-box;
+          }
+
+          .clear-values {
+            display: flex;
+            justify-content: flex-end;
+          }
+        }
+      `}
+      </style>
+      <div className="env-var-input">
+        <div className="clear-values">
+          <button type="button" onClick={reset}>Clear values</button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {Object.entries(inputs).map(([k, v]) => (
+            <>
+              <label for={k}>
+                {v.docs ? <a href={v.docs}>{k}</a> : k}
+              </label>
+              <input
+                id={k}
+                type={v.isSensitive ? 'password' : 'text'}
+                value={inputs[k]?.value ?? ''}
+                onChange={(e) => setInputs({ ...inputs, [k]: { value: e.target.value, isSensitive: v.isSensitive } })}
+              />
+            </>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+};
+
+export const ConfigOutput = ({ type, inputs }) => {
+  let output = '';
+  let sanitizedOutput = '';
+
+  switch (type) {
+    case '.env':
+      output = Object.entries(inputs).map(([k, v]) => `${k}=${v.value ?? ''}`).join('\n');
+      sanitizedOutput = Object.entries(inputs).map(([k, v]) => `${k}=${v.isSensitive ? '*'.repeat(v.value?.length ?? 0) : v.value ?? ''}`).join('\n');
+      break;
+    case 'agent':
+      const env = Object.entries(inputs).reduce((acc, [k, v]) => ({ ...acc, [k]: v.value ?? '' }), {});
+      const sanitizedEnv = Object.entries(inputs).reduce((acc, [k, v]) => ({ ...acc, [k]: v.isSensitive ? '*'.repeat(v.value?.length ?? 0) : v.value ?? '' }), {});
+
+      const config = {
+        mcpServers: {
+          tableau: {
+            command: "node",
+            args: ["build/index.js"],
+            env
+          }
+        }
+      }
+      output = JSON.stringify(config, null, 2);
+      config.mcpServers.tableau.env = sanitizedEnv;
+      sanitizedOutput = JSON.stringify(config, null, 2);
+      break;
+    case 'vscode':
+      output = Object.entries(inputs).map(([k, v]) => `"tableau.mcp.${k}": "${v.value ?? ''}"`).join('\n');
+      sanitizedOutput = Object.entries(inputs).map(([k, v]) => `"tableau.mcp.${k}": "${v.isSensitive ? '*'.repeat(v.value?.length ?? 0) : v.value ?? ''}"`).join('\n');
+      break;
+  }
+
+  return (
+    <>
+      <style>{`
+        [data-theme='dark'] {
+          .env-var-output {
+            box-shadow: 0 0.25rem 0.5rem rgba(255, 255, 255, 0.1);
+          }
+        }
+
+        .env-var-output {
+          flex-basis: 50%;
+          padding: 1rem;
+
+          button {
+            margin-bottom: 1rem;
+          }
+
+          pre {
+            border-radius: 0.5rem;
+            box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+            overflow-x: auto;
+            width: 35rem;
+          }
+        }
+      `}
+      </style>
+      <div className="env-var-output">
+        <button type="button" onClick={() => navigator.clipboard.writeText(output)}>Copy (secrets unmasked)</button>
+        <pre>
+          {sanitizedOutput}
+        </pre>
+      </div>
+    </>
+  );
+};
+
+export const ConfigGenerator = () => {
+  const defaultInputs = {
+    SERVER: {
+      docs: 'required#server',
+    },
+    SITE_NAME: {
+      docs: 'required#site-name',
+    },
+    AUTH: {
+      docs: 'optional#auth',
+    },
+    TRANSPORT: {
+      docs: 'optional#transport',
+    },
+    PAT_NAME: {
+      isSensitive: true,
+      docs: 'authentication/pat#pat_name',
+    },
+    PAT_VALUE: {
+      isSensitive: true,
+      docs: 'authentication/pat#pat_value',
+    },
+    DATASOURCE_CREDENTIALS: {
+      isSensitive: true,
+      docs: 'optional#datasource_credentials',
+    },
+    JWT_SUB_CLAIM: {
+      docs: 'authentication/direct-trust#jwt_sub_claim',
+    },
+    CONNECTED_APP_CLIENT_ID: {
+      docs: 'authentication/direct-trust#connected_app_client_id',
+    },
+    CONNECTED_APP_SECRET_ID: {
+      docs: 'authentication/direct-trust#connected_app_secret_id',
+    },
+    CONNECTED_APP_SECRET_VALUE: {
+      isSensitive: true,
+      docs: 'authentication/direct-trust#connected_app_secret_value',
+    },
+    JWT_ADDITIONAL_PAYLOAD: {
+      docs: 'authentication/direct-trust#jwt_additional_payload',
+    },
+    INCLUDE_TOOLS: {
+      docs: 'optional#include_tools',
+    },
+    EXCLUDE_TOOLS: {
+      docs: 'optional#exclude_tools',
+    },
+    MAX_RESULT_LIMIT: {
+      docs: 'optional#max_result_limit',
+    },
+    DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: {
+      docs: 'optional#disable_query_datasource_filter_validation',
+    },
+    DISABLE_OAUTH: {
+      docs: 'oauth#disable_oauth',
+    },
+    OAUTH_ISSUER: {
+      docs: 'oauth#oauth_issuer',
+    },
+    OAUTH_JWE_PRIVATE_KEY_PATH: {
+      docs: 'oauth#oauth_jwe_private_key_path',
+    },
+    OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: {
+      isSensitive: true,
+      docs: 'oauth#oauth_jwe_private_key_passphrase'
+    },
+    OAUTH_REDIRECT_URI: {
+      docs: 'oauth#oauth_redirect_uri'
+    },
+    OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: {
+      docs: 'oauth#oauth_authorization_code_timeout_ms',
+    },
+    OAUTH_ACCESS_TOKEN_TIMEOUT_MS: {
+      docs: 'oauth#oauth_access_token_timeout_ms',
+    },
+    OAUTH_REFRESH_TOKEN_TIMEOUT_MS: {
+      docs: 'oauth#oauth_refresh_token_timeout_ms',
+    },
+    DEFAULT_LOG_LEVEL: {
+      docs: 'optional#default_log_level',
+    },
+    DISABLE_LOG_MASKING: {
+      docs: 'optional#disable_log_masking'
+    },
+  };
+
+  const [inputs, setInputs] = useState(defaultInputs);
+
+  const reset = () => {
+    setInputs(defaultInputs);
+  };
+
+  return (<>
+    <style>{`
+      .config-generator {
+        display: flex;
+        flex-direction: row;
+        gap: 2rem;
+        width: 100%;
+      }
+    `}
+    </style>
+    <div className="config-generator">
+      <EnvVarInput inputs={inputs} setInputs={setInputs} reset={reset} />
+      <Tabs queryString="type">
+        <TabItem value="env" label=".env" default>
+          <ConfigOutput type=".env" inputs={inputs} />
+        </TabItem>
+        <TabItem value="agent" label="Agent JSON">
+          <ConfigOutput type="agent" inputs={inputs} />
+        </TabItem>
+        <TabItem value="vscode" label="VS Code settings.json">
+          <ConfigOutput type="vscode" inputs={inputs} />
+        </TabItem>
+      </Tabs>
+    </div>
+  </>);
+}
+
+# Config Generator
+
+<ConfigGenerator />
