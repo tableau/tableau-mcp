@@ -2,7 +2,7 @@
 sidebar_position: 6
 ---
 
-# OAuth
+# Enabling OAuth
 
 :::warning
 
@@ -12,8 +12,8 @@ Tableau Server 2025.3+ only. Tableau Cloud is not supported yet but is coming so
 
 When a URL for `OAUTH_ISSUER` is provided, the MCP server will act as an OAuth 2.1 resource server,
 capable of accepting and responding to protected resource requests using access tokens. When
-enabled, MCP clients will require logging in via Tableau OAuth to access the MCP server. For more
-information, please see the
+enabled, MCP clients will first require logging in via Tableau OAuth to connect to the MCP server.
+For more information, please see the
 [MCP Authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
 
 <hr />
@@ -21,6 +21,18 @@ information, please see the
 ## Environment Variables
 
 The following environment variables also apply or have additional meaning:
+
+### `AUTH`
+
+The method the MCP server uses to authenticate to the Tableau REST APIs.
+
+- Defaults to `oauth` when OAuth is enabled.
+- Can still be set to other authentication methods. See [Authentication](optional#auth) for details.
+- When set to a value _other_ than `oauth`, the MCP server will still be protected from unauthorized
+  access by OAuthbut will _not_ use the Tableau session initiated by the Tableau OAuth flow to
+  authenticate to the Tableau REST APIs.
+
+<hr />
 
 ### `OAUTH_ISSUER`
 

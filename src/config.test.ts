@@ -851,7 +851,7 @@ describe('Config', () => {
       expect(() => new Config()).toThrow('When AUTH is "oauth", DISABLE_OAUTH cannot be "true"');
     });
 
-    it('should default transport to http OAUTH_ISSUER is set', () => {
+    it('should default transport to "http" when OAUTH_ISSUER is set', () => {
       process.env = {
         ...process.env,
         ...defaultOAuthEnvVars,
@@ -860,6 +860,16 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.transport).toBe('http');
+    });
+
+    it('should default auth to "oauth" when OAUTH_ISSUER is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.auth).toBe('oauth');
     });
 
     it('should throw error when transport is stdio and auth is "oauth"', () => {

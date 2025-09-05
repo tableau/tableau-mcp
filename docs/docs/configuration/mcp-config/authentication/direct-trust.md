@@ -1,6 +1,5 @@
 ---
-sidebar_position: 3
-title: Direct Trust
+sidebar_position: 2
 ---
 
 # Direct Trust

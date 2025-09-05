@@ -14,6 +14,10 @@ const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 const authTypes = ['pat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
 
+function isAuthType(auth: unknown): auth is AuthType {
+  return !!authTypes.find((type) => type === auth);
+}
+
 export class Config {
   auth: AuthType;
   server: string;
@@ -84,7 +88,6 @@ export class Config {
     } = cleansedVars;
 
     this.siteName = siteName ?? '';
-    this.auth = authTypes.find((type) => type === auth) ?? 'pat';
 
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
@@ -123,6 +126,7 @@ export class Config {
       }),
     };
 
+    this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
 
     if (this.transport === 'http' && !disableOauthOverride && !this.oauth.issuer) {
