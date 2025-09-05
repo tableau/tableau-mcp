@@ -21,9 +21,8 @@ export default class MetadataMethods extends AuthenticatedMethods<typeof metadat
    *
    * Required scopes: `tableau:content:read`
    *
-   * @link https://help.tableau.com/current/api/metadata_api/en-us/index.html
-   *
    * @param {string} query
+   * @link https://help.tableau.com/current/api/metadata_api/en-us/index.html
    */
   graphql = async (query: string): Promise<GraphQLResponse> => {
     return await this._apiClient.graphql({ query }, { ...this.authHeader });

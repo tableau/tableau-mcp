@@ -267,7 +267,7 @@ async function validateMatchFilter(
       `Filter validation failed for field "${fieldCaption}". ` +
       `No values found that ${patternDescriptions.join(' and ')}. ` +
       `${similarValuesString} ` +
-      `Please evaluate whether you included the wrong filter value or if you are trying to filter on the wrong field entirely.`;
+      'Please evaluate whether you included the wrong filter value or if you are trying to filter on the wrong field entirely.';
 
     return new Err({
       field: fieldCaption,

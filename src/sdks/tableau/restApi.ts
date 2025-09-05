@@ -13,6 +13,7 @@ import AuthenticationMethods, {
 import DatasourcesMethods from './methods/datasourcesMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import PulseMethods from './methods/pulseMethods.js';
+import ServerMethods from './methods/serverMethods.js';
 import ViewsMethods from './methods/viewsMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
 import WorkbooksMethods from './methods/workbooksMethods.js';
@@ -34,6 +35,7 @@ export default class RestApi {
   private _authenticatedAuthenticationMethods?: AuthenticatedAuthenticationMethods;
   private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
+  private _serverMethods?: ServerMethods;
   private _pulseMethods?: PulseMethods;
   private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
   private _viewsMethods?: ViewsMethods;
@@ -63,6 +65,24 @@ export default class RestApi {
     }
 
     return this._creds;
+  }
+
+  setCredentials(accessToken: string, userId: string): void {
+    const parts = accessToken.split('|');
+    if (parts.length < 3) {
+      throw new Error('Could not determine site ID. Access token must have 3 parts.');
+    }
+
+    const siteId = parts[2];
+    this._creds = {
+      site: {
+        id: siteId,
+      },
+      user: {
+        id: userId,
+      },
+      token: accessToken,
+    };
   }
 
   get siteId(): string {
@@ -105,6 +125,15 @@ export default class RestApi {
     }
 
     return this._metadataMethods;
+  }
+
+  get serverMethods(): ServerMethods {
+    if (!this._serverMethods) {
+      this._serverMethods = new ServerMethods(this._baseUrl, this.creds);
+      this._addInterceptors(this._baseUrl, this._serverMethods.interceptors);
+    }
+
+    return this._serverMethods;
   }
 
   get pulseMethods(): PulseMethods {

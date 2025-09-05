@@ -1,6 +1,5 @@
 ---
-sidebar_position: 3
-title: Direct Trust
+sidebar_position: 2
 ---
 
 # Direct Trust
@@ -20,6 +19,8 @@ JWT will only have the `tableau:viz_data_service:read` scope.
 ### `JWT_SUB_CLAIM`
 
 The username for the `sub` claim of the JWT.
+
+- Can either be a hard-coded username, or the OAuth username by setting it to `{OAUTH_USERNAME}`.
 
 <hr />
 
@@ -45,12 +46,13 @@ The secret value of the Tableau Connected App.
 
 ### `JWT_ADDITIONAL_PAYLOAD`
 
-A JSON string that includes any additional user attributes to include on the JWT.
+A JSON string that includes any additional user attributes to include on the JWT. It also supports
+dynamically including the OAuth username.
 
 Example:
 
 ```json
-{ "region": "West" }
+{ "username": "{OAUTH_USERNAME}", "region": "West" }
 ```
 
 <hr />
