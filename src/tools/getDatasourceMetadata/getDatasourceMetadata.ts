@@ -2,11 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getConfig } from '../config.js';
-import { useRestApi } from '../restApiInstance.js';
-import { Server } from '../server.js';
-import { Tool } from './tool.js';
-import { validateDatasourceLuid } from './validateDatasourceLuid.js';
+import { getConfig } from '../../config.js';
+import { useRestApi } from '../../restApiInstance.js';
+import { Server } from '../../server.js';
+import { Tool } from '../tool.js';
+import { validateDatasourceLuid } from '../validateDatasourceLuid.js';
+import { combineFields } from './datasourceMetadataUtils.js';
 
 export const getGraphqlQuery = (datasourceLuid: string): string => `
   query datasourceFieldInfo {
@@ -75,18 +76,18 @@ const paramsSchema = {
   datasourceLuid: z.string().nonempty(),
 };
 
-export const getListFieldsTool = (server: Server): Tool<typeof paramsSchema> => {
-  const listFieldsTool = new Tool({
+export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof paramsSchema> => {
+  const getDatasourceMetadataTool = new Tool({
     server,
-    name: 'list-fields',
+    name: 'get-datasource-metadata',
     description: `
-    Fetches rich field metadata (name, description, inherited description, dataType, dataCategory, role, etc.) for the specified datasource via Tableau's Metadata API.
-    This Returns a list of field dicts or an error message. In general this tool should be used for getting the metadata to ground the use of the query_datasource tool.
-    Note that not all fields, such as Hierarchy fields, can be used with the queryDatasource tool.
+    This tool retrieves field metadata for a specified datasource by taking the basic, high level, metadata results from Tableau's VizQL Data Service and enriches them with additional context provided by Tableau's Metadata API.
+    The fields provided by this tool will contain properties such as name and dataType, but may also expose richer context such as descriptions, dataCategories, roles, etc.
+    This tool should be used for getting the metadata to ground the use of a tool that queries Tableau published data sources.
     `,
     paramsSchema,
     annotations: {
-      title: 'List Fields',
+      title: 'Get Datasource Metadata',
       readOnlyHint: true,
       openWorldHint: false,
     },
@@ -95,7 +96,7 @@ export const getListFieldsTool = (server: Server): Tool<typeof paramsSchema> => 
       const config = getConfig();
       const query = getGraphqlQuery(datasourceLuid);
 
-      return await listFieldsTool.logAndExecute({
+      return await getDatasourceMetadataTool.logAndExecute({
         requestId,
         args: { datasourceLuid },
         callback: async () => {
@@ -104,9 +105,18 @@ export const getListFieldsTool = (server: Server): Tool<typeof paramsSchema> => 
               config,
               requestId,
               server,
-              jwtScopes: ['tableau:content:read'],
+              jwtScopes: ['tableau:content:read', 'tableau:viz_data_service:read'],
               callback: async (restApi) => {
-                return await restApi.metadataMethods.graphql(query);
+                const readMetadataResult = await restApi.vizqlDataServiceMethods.readMetadata({
+                  datasource: {
+                    datasourceLuid,
+                  },
+                });
+
+                // TODO: add guardrails to make sure this request does not fail.
+                const listFieldsResult = await restApi.metadataMethods.graphql(query);
+
+                return combineFields(readMetadataResult, listFieldsResult);
               },
             }),
           );
@@ -115,5 +125,5 @@ export const getListFieldsTool = (server: Server): Tool<typeof paramsSchema> => 
     },
   });
 
-  return listFieldsTool;
+  return getDatasourceMetadataTool;
 };

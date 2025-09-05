@@ -9,14 +9,14 @@ import { Tool } from './tool.js';
 describe('Tool', () => {
   const mockParams = {
     server: new Server(),
-    name: 'list-fields',
+    name: 'get-datasource-metadata',
     description: 'A test tool',
     paramsSchema: {
       param1: z.string(),
     },
     argsValidator: vi.fn(),
     annotations: {
-      title: 'List Fields',
+      title: 'Get Datasource Metadata',
       readOnlyHint: true,
       openWorldHint: false,
     },
@@ -45,7 +45,7 @@ describe('Tool', () => {
       type: 'tool',
       requestId: '2',
       tool: {
-        name: 'list-fields',
+        name: 'get-datasource-metadata',
         args: testArgs,
       },
     });
@@ -111,7 +111,7 @@ describe('Tool', () => {
   it('should return error result when argsValidator throws', async () => {
     const tool = new Tool({
       server: new Server(),
-      name: 'list-fields',
+      name: 'get-datasource-metadata',
       description: 'test',
       paramsSchema: z.object({ param1: z.string() }).shape,
       annotations: { title: 'test', readOnlyHint: true, openWorldHint: false },

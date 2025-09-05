@@ -25,12 +25,11 @@ make it easier for developers to build AI-applications that integrate with Table
 | list-datasources                                  | Retrieves a list of published data sources from a specified Tableau site ([REST API][query])          |
 | list-workbooks                                    | Retrieves a list of workbooks from a specified Tableau site ([REST API][list-workbooks])              |
 | list-views                                        | Retrieves a list of views from a specified Tableau site ([REST API][list-views])                      |
-| list-fields                                       | Fetches field metadata (name, description) for the specified datasource ([Metadata API][meta])        |
+| get-datasource-metadata                           | Fetches field metadata for the specified datasource ([Metadata API][meta] & [VDS API][vds])           |
 | get-workbook                                      | Retrieves information on a workbook from a specified Tableau site ([REST API][get-workbook])          |
 | get-view-data                                     | Retrieves data in CSV format for the specified view in a Tableau workbook ([REST API][get-view-data]) |
 | get-view-image                                    | Retrieves an image for the specified view in a Tableau workbook ([REST API][get-view-image])          |
 | query-datasource                                  | Run a Tableau VizQL query ([VDS API][vds])                                                            |
-| read-metadata                                     | Requests metadata for the specified data source ([VDS API][vds])                                      |
 | list-all-pulse-metric-definitions                 | List All Pulse Metric Definitions ([Pulse API][pulse])                                                |
 | list-pulse-metric-definitions-from-definition-ids | List Pulse Metric Definitions from Metric Definition IDs ([Pulse API][pulse])                         |
 | list-pulse-metrics-from-metric-definition-id      | List Pulse Metrics from Metric Definition ID ([Pulse API][pulse])                                     |

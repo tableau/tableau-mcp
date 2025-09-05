@@ -3,7 +3,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
-  MetadataOutput,
+  MetadataResponse,
   QueryOutput,
   QueryRequest,
   ReadMetadataRequest,
@@ -60,7 +60,7 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    */
   readMetadata = async (
     readMetadataRequest: z.infer<typeof ReadMetadataRequest>,
-  ): Promise<z.infer<typeof MetadataOutput>> => {
+  ): Promise<MetadataResponse> => {
     return await this._apiClient.readMetadata(readMetadataRequest, { ...this.authHeader });
   };
 }
