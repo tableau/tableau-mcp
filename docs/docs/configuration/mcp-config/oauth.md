@@ -27,7 +27,7 @@ The following environment variables also apply or have additional meaning:
 The issuer of the OAuth server. This should be the host of the MCP server.
 
 - Required if `AUTH` is `oauth`. For testing, use `http://127.0.0.1:3927`.
-- Required if `TRANSPORT` is `http` unless `DISABLE_OAUTH` is `true`.
+- Required if `TRANSPORT` is `http` unless [opted out](#disable_oauth).
 
 <hr />
 
