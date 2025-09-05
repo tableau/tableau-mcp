@@ -58,7 +58,7 @@ export const EnvVarInput = ({ inputs, setInputs, reset }) => {
                 id={k}
                 type={v.isSensitive ? 'password' : 'text'}
                 value={inputs[k]?.value ?? ''}
-                onChange={(e) => setInputs({ ...inputs, [k]: { value: e.target.value, isSensitive: v.isSensitive } })}
+                onChange={(e) => setInputs({ ...inputs, [k]: { ...v, value: e.target.value } })}
               />
             </>
           ))}
