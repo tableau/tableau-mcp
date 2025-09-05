@@ -52,7 +52,7 @@ export const EnvVarInput = ({ inputs, setInputs, reset }) => {
           {Object.entries(inputs).map(([k, v]) => (
             <>
               <label for={k}>
-                {v.docs ? <a href={v.docs}>{k}</a> : k}
+                {v.docs ? <a href={v.docs} target="_blank" rel="noopener noreferrer">{k}</a> : k}
               </label>
               <input
                 id={k}
