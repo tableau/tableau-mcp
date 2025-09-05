@@ -95,8 +95,8 @@ export const ConfigOutput = ({ type, inputs }) => {
       sanitizedOutput = JSON.stringify(config, null, 2);
       break;
     case 'vscode':
-      output = Object.entries(inputs).map(([k, v]) => `"tableau.mcp.${k}": "${v.value ?? ''}"`).join('\n');
-      sanitizedOutput = Object.entries(inputs).map(([k, v]) => `"tableau.mcp.${k}": "${v.isSensitive ? '*'.repeat(v.value?.length ?? 0) : v.value ?? ''}"`).join('\n');
+      output = Object.entries(inputs).map(([k, v]) => `"tableau.mcp.${k}": "${v.value ?? ''}",`).join('\n');
+      sanitizedOutput = Object.entries(inputs).map(([k, v]) => `"tableau.mcp.${k}": "${v.isSensitive ? '*'.repeat(v.value?.length ?? 0) : v.value ?? ''}",`).join('\n');
       break;
   }
 
