@@ -11,6 +11,10 @@ data.
 
 - [Query Data Source](https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/QueryDatasource)
 
+## Environment variables
+
+- [`DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION`](../../configuration/mcp-config/optional.md#disable_query_datasource_filter_validation)
+
 ## Required arguments
 
 ### `datasourceLuid`
