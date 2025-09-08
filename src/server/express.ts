@@ -1,4 +1,3 @@
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import cors from 'cors';
 import express, { Request, RequestHandler, Response } from 'express';
@@ -6,11 +5,14 @@ import fs, { existsSync } from 'fs';
 import http from 'http';
 import https from 'https';
 
-import { Config } from '../config.js';
+import { Config, getConfig } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
 import { validateProtocolVersion } from './middleware.js';
 import { OAuthProvider } from './oauth/provider.js';
+import { getSessionFromRequest, Session } from './session.js';
+
+const sessions: { [sessionId: string]: Session } = {};
 
 export async function startExpressServer({
   basePath,
@@ -36,6 +38,7 @@ export async function startExpressServer({
         'Cache-Control',
         'Accept',
         'MCP-Protocol-Version',
+        'mcp-session-id',
       ],
       exposedHeaders: ['mcp-session-id', 'x-session-id'],
     }),
@@ -52,7 +55,11 @@ export async function startExpressServer({
   const path = `/${basePath}`;
   app.post(path, ...middleware, createMcpServer);
   app.get(path, ...middleware, methodNotAllowed);
-  app.delete(path, ...middleware, methodNotAllowed);
+  app.delete(
+    path,
+    ...middleware,
+    config.toolRegistrationMode === 'service' ? handleSessionRequest : methodNotAllowed,
+  );
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
@@ -87,24 +94,41 @@ export async function startExpressServer({
   });
 
   async function createMcpServer(req: Request, res: Response): Promise<void> {
+    const { toolRegistrationMode } = getConfig();
+    const stateful = toolRegistrationMode === 'service';
     try {
       const server = new Server();
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
+      const getSessionResult = getSessionFromRequest({
+        stateful,
+        req,
+        res,
       });
 
-      res.on('close', () => {
-        transport.close();
-        server.close();
-      });
+      if (!getSessionResult) {
+        return;
+      }
 
-      server.registerTools();
-      server.registerRequestHandlers();
+      const { session, fromCache } = getSessionResult;
+      if (!session) {
+        return;
+      }
 
-      await server.connect(transport);
-      setLogLevel(server, logLevel);
+      if (!fromCache) {
+        server.registerTools();
+        server.registerRequestHandlers();
 
-      await transport.handleRequest(req, res, req.body);
+        if (!stateful) {
+          res.on('close', () => {
+            session.transport.close();
+            server.close();
+          });
+        }
+
+        await server.connect(session.transport);
+        setLogLevel(server, logLevel);
+      }
+
+      await session.transport.handleRequest(req, res, req.body);
     } catch (error) {
       console.error('Error handling MCP request:', error);
       if (!res.headersSent) {
@@ -119,6 +143,24 @@ export async function startExpressServer({
       }
     }
   }
+}
+
+// Reusable handler for GET and DELETE requests
+async function handleSessionRequest(req: express.Request, res: express.Response): Promise<void> {
+  const sessionId = req.headers['mcp-session-id'];
+
+  if (Array.isArray(sessionId)) {
+    res.status(400).send('Bad Request: Multiple MCP-Session-Id headers are not supported');
+    return;
+  }
+
+  if (!sessionId || !sessions[sessionId]) {
+    res.status(400).send('Bad Request: Invalid or missing MCP-Session-Id header');
+    return;
+  }
+
+  const session = sessions[sessionId];
+  await session.transport.handleRequest(req, res);
 }
 
 async function methodNotAllowed(_req: Request, res: Response): Promise<void> {
