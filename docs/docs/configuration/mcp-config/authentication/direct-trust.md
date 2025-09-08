@@ -12,8 +12,9 @@ Tableau REST APIs.
 The generated JWT will have the minimum set of scopes necessary to invoke the methods called by the
 tool being executed.
 
-For example, for the `query-datasource` tool, since it internally calls into VizQL Data Service, the
-JWT will only have the `tableau:viz_data_service:read` scope.
+For example, for the [`query-datasource`](../../../tools/data-qna/query-datasource.md) tool, since
+it internally calls into VizQL Data Service, the JWT will only have the
+`tableau:viz_data_service:read` scope.
 
 ## Required Variables
 
