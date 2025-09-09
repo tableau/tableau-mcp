@@ -1,5 +1,4 @@
 export const toolNames = [
-  'connect-to-site',
   'list-datasources',
   'list-fields',
   'list-workbooks',

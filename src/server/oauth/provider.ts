@@ -177,7 +177,6 @@ export class OAuthProvider {
         });
         return;
       }
-
       req.auth = result.value;
       next();
     };
