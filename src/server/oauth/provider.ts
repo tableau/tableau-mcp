@@ -241,7 +241,10 @@ export class OAuthProvider {
     app.post('/oauth/register', express.json(), (req, res) => {
       const { redirect_uris } = req.body;
 
-      const validatedRedirectUris = [];
+      const validatedRedirectUris = [
+        'https://claude.ai/api/mcp/auth_callback',
+        'https://claude.com/api/mcp/auth_callback',
+      ];
       if (redirect_uris && Array.isArray(redirect_uris)) {
         for (const uri of redirect_uris) {
           if (typeof uri !== 'string') {
