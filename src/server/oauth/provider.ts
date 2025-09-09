@@ -472,8 +472,22 @@ export class OAuthProvider {
         }
 
         const { accessToken, refreshToken, expiresInSeconds, originHost } = tokensResult.value;
+        const originHostUrl = new URL(`https://${originHost}`);
 
-        const server = this.config.server || `https://${originHost}`;
+        if (this.config.server) {
+          const configServerUrl = new URL(this.config.server);
+          if (originHostUrl.hostname !== configServerUrl.hostname) {
+            // Not sure if this can actually happen but without returning an error here,
+            // this would fail downstream when attempting to authenticate to the REST API.
+            res.status(400).json({
+              error: 'invalid_request',
+              error_description: `Invalid origin host: ${originHost}. Expected: ${this.config.server}`,
+            });
+            return;
+          }
+        }
+
+        const server = originHostUrl.toString();
         const restApi = new RestApi(server);
         restApi.setCredentials(accessToken, 'unknown user id');
         const sessionResult = await restApi.serverMethods.getCurrentServerSession();
@@ -481,7 +495,7 @@ export class OAuthProvider {
           if (sessionResult.error.type === 'unauthorized') {
             res.status(401).json({
               error: 'unauthorized',
-              error_description: `Unable to get the Tableau server session. Ensure the site is from the pod ${server}. Error: ${JSON.stringify(sessionResult.error)}`,
+              error_description: `Unable to get the Tableau server session. Error: ${JSON.stringify(sessionResult.error)}`,
             });
           } else {
             res.status(500).json({

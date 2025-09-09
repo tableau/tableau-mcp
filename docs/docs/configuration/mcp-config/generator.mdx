@@ -1,5 +1,5 @@
 ---
-sidebar_position: 7
+sidebar_position: 5
 title: Config Generator
 ---
 
@@ -139,16 +139,16 @@ export const ConfigOutput = ({ type, inputs }) => {
 export const ConfigGenerator = () => {
   const defaultInputs = {
     SERVER: {
-      docs: 'required#server',
+      docs: 'env-vars#server',
     },
     SITE_NAME: {
-      docs: 'required#site-name',
+      docs: 'env-vars#site-name',
     },
     AUTH: {
-      docs: 'optional#auth',
+      docs: 'env-vars#auth',
     },
     TRANSPORT: {
-      docs: 'optional#transport',
+      docs: 'env-vars#transport',
     },
     PAT_NAME: {
       isSensitive: true,
@@ -160,7 +160,7 @@ export const ConfigGenerator = () => {
     },
     DATASOURCE_CREDENTIALS: {
       isSensitive: true,
-      docs: 'optional#datasource_credentials',
+      docs: 'env-vars#datasource_credentials',
     },
     JWT_SUB_CLAIM: {
       docs: 'authentication/direct-trust#jwt_sub_claim',
@@ -179,16 +179,16 @@ export const ConfigGenerator = () => {
       docs: 'authentication/direct-trust#jwt_additional_payload',
     },
     INCLUDE_TOOLS: {
-      docs: 'optional#include_tools',
+      docs: 'env-vars#include_tools',
     },
     EXCLUDE_TOOLS: {
-      docs: 'optional#exclude_tools',
+      docs: 'env-vars#exclude_tools',
     },
     MAX_RESULT_LIMIT: {
-      docs: 'optional#max_result_limit',
+      docs: 'env-vars#max_result_limit',
     },
     DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: {
-      docs: 'optional#disable_query_datasource_filter_validation',
+      docs: 'env-vars#disable_query_datasource_filter_validation',
     },
     DISABLE_OAUTH: {
       docs: 'oauth#disable_oauth',
@@ -216,10 +216,10 @@ export const ConfigGenerator = () => {
       docs: 'oauth#oauth_refresh_token_timeout_ms',
     },
     DEFAULT_LOG_LEVEL: {
-      docs: 'optional#default_log_level',
+      docs: 'env-vars#default_log_level',
     },
     DISABLE_LOG_MASKING: {
-      docs: 'optional#disable_log_masking'
+      docs: 'env-vars#disable_log_masking'
     },
   };
 
