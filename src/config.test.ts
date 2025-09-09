@@ -40,6 +40,7 @@ describe('Config', () => {
       EXCLUDE_TOOLS: undefined,
       MAX_RESULT_LIMIT: undefined,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: undefined,
+      DISABLE_METADATA_API_REQUESTS: undefined,
     };
   });
 
@@ -231,6 +232,27 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.disableQueryDatasourceFilterValidation).toBe(true);
+  });
+
+  it('should set disableMetadataApiRequests to false by default', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+    };
+
+    const config = new Config();
+    expect(config.disableMetadataApiRequests).toBe(false);
+  });
+
+  it('should set disableMetadataApiRequests to true when specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      DISABLE_METADATA_API_REQUESTS: 'true',
+    };
+
+    const config = new Config();
+    expect(config.disableMetadataApiRequests).toBe(true);
   });
 
   it('should default transport to stdio when not specified', () => {
