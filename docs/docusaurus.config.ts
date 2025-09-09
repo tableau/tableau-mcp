@@ -8,6 +8,10 @@ const config: Config = {
     'Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will make it easier for developers to build AI-applications that integrate with Tableau.',
   favicon: 'img/favicon.ico',
   trailingSlash: false,
+  markdown: {
+    mermaid: true,
+  },
+  themes: ['@docusaurus/theme-mermaid'],
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
