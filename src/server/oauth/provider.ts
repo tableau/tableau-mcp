@@ -35,6 +35,8 @@ import {
   UserAndTokens,
 } from './types.js';
 
+const TABLEAU_CLOUD_SERVER_URL = 'https://online.tableau.com';
+
 /**
  * OAuth 2.1 Provider
  *
@@ -395,7 +397,7 @@ export class OAuthProvider {
       );
 
       // Redirect to Tableau OAuth
-      const server = this.config.server || 'https://online.tableau.com';
+      const server = this.config.server || TABLEAU_CLOUD_SERVER_URL;
       const tableauCodeChallenge = this.generateCodeChallenge(codeChallenge);
       const oauthUrl = new URL(`${server}/oauth2/v1/auth`);
       oauthUrl.searchParams.set('client_id', tableauClientId);
@@ -455,13 +457,13 @@ export class OAuthProvider {
           return;
         }
 
-        const tokensResult = await this.exchangeAuthorizationCode(
-          this.config.server || 'https://online.tableau.com',
+        const tokensResult = await this.exchangeAuthorizationCode({
+          server: this.config.server || TABLEAU_CLOUD_SERVER_URL,
           code,
-          this.config.oauth.redirectUri,
-          pendingAuth.tableauClientId,
-          pendingAuth.codeChallenge,
-        );
+          redirectUri: this.config.oauth.redirectUri,
+          clientId: pendingAuth.tableauClientId,
+          codeVerifier: pendingAuth.codeChallenge,
+        });
 
         if (tokensResult.isErr()) {
           res.status(400).json({
@@ -822,15 +824,23 @@ export class OAuthProvider {
    * @param server - Tableau server host
    * @param code - Authorization code
    * @param redirectUri - Redirect URI used in initial request
+   * @param clientId - Client ID
+   * @param codeVerifier - Code verifier
    * @returns token response with access_token and refresh_token
    */
-  private async exchangeAuthorizationCode(
-    server: string,
-    code: string,
-    redirectUri: string,
-    clientId: string,
-    codeVerifier: string,
-  ): Promise<Result<TableauAccessToken, string>> {
+  private async exchangeAuthorizationCode({
+    server,
+    code,
+    redirectUri,
+    clientId,
+    codeVerifier,
+  }: {
+    server: string;
+    code: string;
+    redirectUri: string;
+    clientId: string;
+    codeVerifier: string;
+  }): Promise<Result<TableauAccessToken, string>> {
     try {
       const result = await getTokenResult(server, {
         grant_type: 'authorization_code',
