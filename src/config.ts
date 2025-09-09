@@ -7,7 +7,6 @@ import invariant from './utils/invariant.js';
 
 const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
-const TWENTY_FOUR_HOURS_IN_MS = 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
 const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
@@ -115,7 +114,7 @@ export class Config {
         maxValue: ONE_HOUR_IN_MS,
       }),
       accessTokenTimeoutMs: parseNumber(accessTokenTimeoutMs, {
-        defaultValue: TWENTY_FOUR_HOURS_IN_MS,
+        defaultValue: ONE_HOUR_IN_MS,
         minValue: 0,
         maxValue: THIRTY_DAYS_IN_MS,
       }),
@@ -143,6 +142,9 @@ export class Config {
       if (!this.oauth.issuer) {
         throw new Error('When AUTH is "oauth", OAUTH_ISSUER must be set');
       }
+    } else {
+      invariant(server, 'The environment variable SERVER is not set');
+      validateServer(server);
     }
 
     if (this.oauth.enabled) {
@@ -185,9 +187,6 @@ export class Config {
       throw new Error('Cannot include and exclude tools simultaneously');
     }
 
-    invariant(server, 'The environment variable SERVER is not set');
-    validateServer(server);
-
     if (this.auth === 'pat') {
       invariant(patName, 'The environment variable PAT_NAME is not set');
       invariant(patValue, 'The environment variable PAT_VALUE is not set');
@@ -198,7 +197,7 @@ export class Config {
       invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
     }
 
-    this.server = server;
+    this.server = server ?? '';
     this.patName = patName ?? '';
     this.patValue = patValue ?? '';
     this.jwtSubClaim = jwtSubClaim ?? '';

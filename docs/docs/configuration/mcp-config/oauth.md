@@ -1,36 +1,40 @@
 ---
-sidebar_position: 6
+sidebar_position: 4
 ---
 
 # Enabling OAuth
 
 :::warning
 
-Tableau Server 2025.3+ only. Tableau Cloud is not supported yet but is coming soon ETA Q2 2026
+Tableau Server 2025.3+ only. Tableau Cloud is not supported yet but is coming soon ETA Q2 2026.
+
+Otherwise, you can still test by running the MCP server locally.
 
 :::
 
 When a URL for `OAUTH_ISSUER` is provided, the MCP server will act as an OAuth 2.1 resource server,
-capable of accepting and responding to protected resource requests using access tokens. When
-enabled, MCP clients will first require logging in via Tableau OAuth to connect to the MCP server.
-For more information, please see the
+capable of accepting and responding to protected resource requests using encrypted access tokens.
+When enabled, MCP clients will first require logging in via Tableau OAuth to connect to the MCP
+server. For more information, please see the
 [MCP Authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
 
 <hr />
 
 ## Environment Variables
 
-The following environment variables also apply or have additional meaning:
+When OAuth is enabled, the following environment variables also apply or have additional meaning:
 
 ### `AUTH`
 
 The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 - Defaults to `oauth` when OAuth is enabled.
-- Can still be set to other authentication methods. See [Authentication](optional#auth) for details.
+- Can still be set to other authentication methods. See [Authentication](env-vars#auth) for options.
 - When set to a value _other_ than `oauth`, the MCP server will still be protected from unauthorized
-  access by OAuthbut will _not_ use the Tableau session initiated by the Tableau OAuth flow to
-  authenticate to the Tableau REST APIs.
+  access by OAuth but will _not_ use the Tableau session initiated by the Tableau OAuth flow to
+  authenticate to the Tableau REST APIs. For example, if `AUTH` is set to `pat`, the MCP server will
+  use the values of [`PAT_NAME`](authentication/pat#pat_name) and
+  [`PAT_VALUE`](authentication/pat#pat_value) to authenticate to the Tableau REST APIs.
 
 <hr />
 
@@ -39,7 +43,7 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 The issuer of the OAuth server. This should be the host of the MCP server.
 
 - Required if `AUTH` is `oauth`. For testing, use `http://127.0.0.1:3927`.
-- Required if `TRANSPORT` is `http` unless [opted out](#disable_oauth).
+- Required if `TRANSPORT` is `http` unless opted out with [`DISABLE_OAUTH`](#disable_oauth).
 
 <hr />
 
@@ -52,14 +56,19 @@ The MCP transport type to use for the server.
 
 <hr />
 
+### `SERVER`
+
+- When [`AUTH`](#auth) is `oauth`, leave this empty to support any Tableau Cloud pod determined by
+  the site the user signed into when connecting to the MCP server.
+
+<hr />
+
 ### `SITE_NAME`
 
 The target Tableau site for OAuth.
 
-- Not required if `AUTH` is `oauth` and users will see the site picker if they have access to
-  multiple sites.
-- Choosing a site from a Cloud pod different from the one specified in `SERVER` will not work and
-  tool calls will fail.
+- When [`AUTH`](#auth) is `oauth`, leaving this empty means any site will be supported, determined
+  by the site the user signed into when connecting to the MCP server.
 
 <hr />
 
@@ -69,7 +78,7 @@ The redirect URI for the OAuth flow.
 
 - Default: `${OAUTH_ISSUER}/Callback`
 - Recommended to not define a value at all and just rely on its default value.
-- Path must be `/Callback`.
+- Path must be `/Callback` (case-sensitive).
 
 :::info
 
@@ -95,16 +104,16 @@ The absolute path to the RSA private key (.pem) file used to decrypt the OAuth a
 
 - Required.
 - Only PEM format is supported.
-- The public key used to encrypt the MCP access token is derived from the provided RSA private key.
-  You don't need to provide the public key.
 
 :::info
 
 The access token issued by the MCP server is encrypted using JWE (JSON Web Encryption) using an RSA
-public key. MCP clients will provide this access token to the MCP server on the `Authorization`
-header of its requests. The MCP server will decrypt the access token using the private key and use
-the decrypted access token to authenticate subsequent requests to Tableau APIs. Any requests to the
-MCP server that do not have a valid access token will be rejected.
+public key. This public key is derived from the provided RSA private key.
+
+MCP clients provide this encrypted access token to the MCP server on the `Authorization` header of
+its requests. The MCP server decrypts the access token using the provided private key and uses the
+Tableau access token held within to authenticate subsequent requests to Tableau APIs. Any requests
+to the MCP server that do not have a valid access token will be rejected.
 
 If you need a private key, you can generate one using
 [openssl-genrsa](https://docs.openssl.org/3.0/man1/openssl-genrsa/) e.g.
@@ -136,7 +145,7 @@ The timeout for the OAuth authorization codes.
 
 The timeout for the OAuth access tokens.
 
-- Default: 24 hours.
+- Default: 1 hour.
 - Max: 30 days.
 
 <hr />

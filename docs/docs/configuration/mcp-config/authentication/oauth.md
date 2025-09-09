@@ -6,7 +6,9 @@ sidebar_position: 3
 
 :::warning
 
-Tableau Server 2025.3+ only. Tableau Cloud is not supported yet but is coming soon ETA Q2 2026
+Tableau Server 2025.3+ only. Tableau Cloud is not supported yet but is coming soon ETA Q2 2026.
+
+Otherwise, you can still test by running the MCP server locally.
 
 :::
 

@@ -19,6 +19,7 @@ import { Server } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { userAgent } from './server/userAgent.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
+import invariant from './utils/invariant.js';
 
 type JwtScopes =
   | 'tableau:viz_data_service:read'
@@ -36,7 +37,10 @@ const getNewRestApiInstanceAsync = async (
   jwtScopes: Set<JwtScopes>,
   authInfo?: TableauAuthInfo,
 ): Promise<RestApi> => {
-  const restApi = new RestApi(config.server, {
+  const tableauServer = config.server || authInfo?.server;
+  invariant(tableauServer, 'Tableau server could not be determined');
+
+  const restApi = new RestApi(tableauServer, {
     requestInterceptor: [
       getRequestInterceptor(server, requestId),
       getRequestErrorInterceptor(server, requestId),

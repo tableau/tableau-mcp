@@ -23,11 +23,13 @@ export const tableauAccessTokenResponseSchema = z
     access_token: requiredString('access_token'),
     expires_in: z.number().int().nonnegative(),
     refresh_token: requiredString('refresh_token'),
+    origin_host: requiredString('origin_host'),
   })
   .transform((data) => ({
     accessToken: data.access_token,
     expiresInSeconds: data.expires_in,
     refreshToken: data.refresh_token,
+    originHost: data.origin_host,
   }));
 
 export type TableauAccessTokenRequest = z.infer<typeof tableauAccessTokenRequestSchema>;
