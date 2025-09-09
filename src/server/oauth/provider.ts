@@ -409,8 +409,9 @@ export class OAuthProvider {
       );
 
       // Redirect to Tableau OAuth
+      const server = this.config.server || 'https://online.tableau.com';
       const tableauCodeChallenge = this.generateCodeChallenge(codeChallenge);
-      const oauthUrl = new URL(`${this.config.server}/oauth2/v1/auth`);
+      const oauthUrl = new URL(`${server}/oauth2/v1/auth`);
       oauthUrl.searchParams.set('client_id', tableauClientId);
       oauthUrl.searchParams.set('code_challenge', tableauCodeChallenge);
       oauthUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
@@ -469,6 +470,7 @@ export class OAuthProvider {
         }
 
         const tokensResult = await this.exchangeAuthorizationCode(
+          this.config.server || 'https://online.tableau.com',
           code,
           this.config.oauth.redirectUri,
           pendingAuth.tableauClientId,
@@ -483,16 +485,17 @@ export class OAuthProvider {
           return;
         }
 
-        const { accessToken, refreshToken, expiresInSeconds } = tokensResult.value;
+        const { accessToken, refreshToken, expiresInSeconds, originHost } = tokensResult.value;
 
-        const restApi = new RestApi(this.config.server);
+        const server = this.config.server || `https://${originHost}`;
+        const restApi = new RestApi(server);
         restApi.setCredentials(accessToken, 'unknown user id');
         const sessionResult = await restApi.serverMethods.getCurrentServerSession();
         if (sessionResult.isErr()) {
           if (sessionResult.error.type === 'unauthorized') {
             res.status(401).json({
               error: 'unauthorized',
-              error_description: `Unable to get the Tableau server session. Ensure the site is from the pod ${this.config.server}. Error: ${JSON.stringify(sessionResult.error)}`,
+              error_description: `Unable to get the Tableau server session. Ensure the site is from the pod ${server}. Error: ${JSON.stringify(sessionResult.error)}`,
             });
           } else {
             res.status(500).json({
@@ -511,6 +514,7 @@ export class OAuthProvider {
           redirectUri: pendingAuth.redirectUri,
           codeChallenge: pendingAuth.codeChallenge,
           user: sessionResult.value.user,
+          server,
           tableauClientId: pendingAuth.tableauClientId,
           tokens: {
             accessToken,
@@ -591,6 +595,7 @@ export class OAuthProvider {
           const accessToken = await this.createAccessToken(authCode);
           this.refreshTokens.set(refreshTokenId, {
             user: authCode.user,
+            server: authCode.server,
             clientId: authCode.clientId,
             tokens: authCode.tokens,
             expiresAt: Date.now() + this.config.oauth.refreshTokenTimeoutMs,
@@ -624,6 +629,7 @@ export class OAuthProvider {
           const { refreshToken: tableauRefreshToken } = tokenData.tokens;
 
           const tokensResult = await this.exchangeRefreshToken(
+            tokenData.server,
             tableauRefreshToken,
             tokenData.tableauClientId,
           );
@@ -642,6 +648,7 @@ export class OAuthProvider {
 
             accessToken = await this.createAccessToken({
               user: tokenData.user,
+              server: tokenData.server,
               tokens: {
                 accessToken: newTableauAccessToken,
                 refreshToken: newTableauRefreshToken,
@@ -708,8 +715,14 @@ export class OAuthProvider {
           );
         }
 
-        const { tableauAccessToken, tableauRefreshToken, tableauExpiresAt, tableauUserId, sub } =
-          mcpAccessToken.data;
+        const {
+          tableauAccessToken,
+          tableauRefreshToken,
+          tableauExpiresAt,
+          tableauUserId,
+          tableauServer,
+          sub,
+        } = mcpAccessToken.data;
 
         if (Date.now() > tableauExpiresAt) {
           return new Err('Invalid or expired access token');
@@ -718,6 +731,7 @@ export class OAuthProvider {
         authInfo = {
           username: sub,
           userId: tableauUserId,
+          server: tableauServer,
           accessToken: tableauAccessToken,
           refreshToken: tableauRefreshToken,
         };
@@ -729,10 +743,11 @@ export class OAuthProvider {
           );
         }
 
-        const { tableauUserId, sub } = mcpAccessToken.data;
+        const { tableauUserId, tableauServer, sub } = mcpAccessToken.data;
         authInfo = {
           username: sub,
           userId: tableauUserId,
+          server: tableauServer,
         };
       }
 
@@ -761,6 +776,7 @@ export class OAuthProvider {
   private async createAccessToken(tokenData: UserAndTokens): Promise<string> {
     const payload = JSON.stringify({
       sub: tokenData.user.name,
+      tableauServer: tokenData.server,
       tableauUserId: tokenData.user.id,
       iat: Math.floor(Date.now() / 1000),
       exp: Date.now() + this.config.oauth.accessTokenTimeoutMs,
@@ -803,18 +819,20 @@ export class OAuthProvider {
    * Part of MCP OAuth Step 6: OAuth Callback
    * Uses token endpoint with basic auth
    *
+   * @param server - Tableau server host
    * @param code - Authorization code
    * @param redirectUri - Redirect URI used in initial request
    * @returns token response with access_token and refresh_token
    */
   private async exchangeAuthorizationCode(
+    server: string,
     code: string,
     redirectUri: string,
     clientId: string,
     codeVerifier: string,
   ): Promise<Result<TableauAccessToken, string>> {
     try {
-      const result = await getTokenResult(this.config.server, {
+      const result = await getTokenResult(server, {
         grant_type: 'authorization_code',
         code,
         redirect_uri: redirectUri,
@@ -834,11 +852,12 @@ export class OAuthProvider {
   }
 
   private async exchangeRefreshToken(
+    server: string,
     refreshToken: string,
     clientId: string,
   ): Promise<Result<TableauAccessToken, string>> {
     try {
-      const result = await getTokenResult(this.config.server, {
+      const result = await getTokenResult(server, {
         grant_type: 'refresh_token',
         refresh_token: refreshToken,
         client_id: clientId,

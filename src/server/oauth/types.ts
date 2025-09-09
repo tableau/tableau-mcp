@@ -26,6 +26,7 @@ export type PendingAuthorization = {
 
 export type UserAndTokens = {
   user: User;
+  server: string;
   tokens: Tokens;
 };
 

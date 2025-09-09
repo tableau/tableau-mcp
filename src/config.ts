@@ -197,8 +197,10 @@ export class Config {
       throw new Error('Cannot include and exclude tools simultaneously');
     }
 
-    invariant(server, 'The environment variable SERVER is not set');
-    validateServer(server);
+    if (this.toolRegistrationMode !== 'service') {
+      invariant(server, 'The environment variable SERVER is not set');
+      validateServer(server);
+    }
 
     if (this.auth === 'pat') {
       invariant(patName, 'The environment variable PAT_NAME is not set');
@@ -210,7 +212,7 @@ export class Config {
       invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
     }
 
-    this.server = server;
+    this.server = server ?? '';
     this.patName = patName ?? '';
     this.patValue = patValue ?? '';
     this.jwtSubClaim = jwtSubClaim ?? '';
