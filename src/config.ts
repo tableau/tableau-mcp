@@ -7,7 +7,6 @@ import invariant from './utils/invariant.js';
 
 const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
-const TWENTY_FOUR_HOURS_IN_MS = 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
 const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
@@ -115,7 +114,7 @@ export class Config {
         maxValue: ONE_HOUR_IN_MS,
       }),
       accessTokenTimeoutMs: parseNumber(accessTokenTimeoutMs, {
-        defaultValue: TWENTY_FOUR_HOURS_IN_MS,
+        defaultValue: ONE_HOUR_IN_MS,
         minValue: 0,
         maxValue: THIRTY_DAYS_IN_MS,
       }),

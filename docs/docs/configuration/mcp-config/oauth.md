@@ -145,7 +145,7 @@ The timeout for the OAuth authorization codes.
 
 The timeout for the OAuth access tokens.
 
-- Default: 24 hours.
+- Default: 1 hour.
 - Max: 30 days.
 
 <hr />
