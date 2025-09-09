@@ -1,14 +1,7 @@
 import { CorsOptions } from 'cors';
 import { existsSync } from 'fs';
 
-import {
-  isToolGroupName,
-  isToolName,
-  isToolRegistrationMode,
-  toolGroups,
-  ToolName,
-  ToolRegistrationMode,
-} from './tools/toolName.js';
+import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
@@ -46,7 +39,6 @@ export class Config {
   disableLogMasking: boolean;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
-  toolRegistrationMode: ToolRegistrationMode;
   maxResultLimit: number | null;
   disableQueryDatasourceFilterValidation: boolean;
   oauth: {
@@ -91,7 +83,6 @@ export class Config {
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
-      TOOL_REGISTRATION_MODE: toolRegistrationMode,
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
     } = cleansedVars;
@@ -110,9 +101,6 @@ export class Config {
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
-    this.toolRegistrationMode = isToolRegistrationMode(toolRegistrationMode)
-      ? toolRegistrationMode
-      : 'auto';
 
     const disableOauthOverride = disableOauth === 'true';
     this.oauth = {
@@ -155,6 +143,9 @@ export class Config {
       if (!this.oauth.issuer) {
         throw new Error('When AUTH is "oauth", OAUTH_ISSUER must be set');
       }
+    } else {
+      invariant(server, 'The environment variable SERVER is not set');
+      validateServer(server);
     }
 
     if (this.oauth.enabled) {
@@ -195,11 +186,6 @@ export class Config {
 
     if (this.includeTools.length > 0 && this.excludeTools.length > 0) {
       throw new Error('Cannot include and exclude tools simultaneously');
-    }
-
-    if (this.toolRegistrationMode !== 'service') {
-      invariant(server, 'The environment variable SERVER is not set');
-      validateServer(server);
     }
 
     if (this.auth === 'pat') {

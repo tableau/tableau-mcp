@@ -22,7 +22,6 @@ export interface ProcessEnvEx {
   DISABLE_LOG_MASKING: string | undefined;
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;
-  TOOL_REGISTRATION_MODE: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
   DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: string | undefined;
   DISABLE_OAUTH: string | undefined;

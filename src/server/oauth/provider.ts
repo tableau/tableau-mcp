@@ -19,7 +19,6 @@ import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
 import { serverName } from '../../server.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
-import { verifySessionAccessToken } from '../session.js';
 import {
   callbackSchema,
   mcpAccessTokenSchema,
@@ -158,7 +157,6 @@ export class OAuthProvider {
       const token = authHeader.slice(7);
       const result = await this.verifyAccessToken(token);
 
-      const stateful = this.config.toolRegistrationMode === 'service';
       if (result.isErr()) {
         // For SSE requests (GET), provide proper SSE error response
         if (req.method === 'GET' && req.headers.accept?.includes('text/event-stream')) {
@@ -178,17 +176,6 @@ export class OAuthProvider {
           error_description: result.error,
         });
         return;
-      }
-
-      if (stateful) {
-        const verifySessionAccessTokenResult = verifySessionAccessToken(req, res);
-        if (verifySessionAccessTokenResult.isErr()) {
-          res.status(401).json({
-            error: 'invalid_token',
-            error_description: verifySessionAccessTokenResult.error,
-          });
-          return;
-        }
       }
 
       req.auth = result.value;
