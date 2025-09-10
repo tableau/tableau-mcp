@@ -604,6 +604,11 @@ export class OAuthProvider {
             tableauClientId: authCode.tableauClientId,
           });
 
+          setTimeout(
+            () => this.refreshTokens.delete(refreshTokenId),
+            this.config.oauth.refreshTokenTimeoutMs,
+          );
+
           this.authorizationCodes.delete(code);
 
           res.json({
