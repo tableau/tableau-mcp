@@ -4,10 +4,11 @@ import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
+import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
 import { validateDatasourceLuid } from '../validateDatasourceLuid.js';
-import { combineFields } from './datasourceMetadataUtils.js';
+import { combineFields, simplifyReadMetadataResult } from './datasourceMetadataUtils.js';
 
 export const getGraphqlQuery = (datasourceLuid: string): string => `
   query datasourceFieldInfo {
@@ -107,15 +108,29 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
               server,
               jwtScopes: ['tableau:content:read', 'tableau:viz_data_service:read'],
               callback: async (restApi) => {
+                // Fetching metadata from VizQL Data Service API.
                 const readMetadataResult = await restApi.vizqlDataServiceMethods.readMetadata({
                   datasource: {
                     datasourceLuid,
                   },
                 });
 
-                // TODO: add guardrails to make sure this request does not fail.
-                const listFieldsResult = await restApi.metadataMethods.graphql(query);
+                if (config.disableMetadataApiRequests) {
+                  // Exit early since requests to the Tableau Metadata API are disabled.
+                  return simplifyReadMetadataResult(readMetadataResult);
+                }
 
+                let listFieldsResult: GraphQLResponse;
+
+                try {
+                  // Fetching metadata from Tableau Metadata API.
+                  // Using try-catch here since requests could fail if the service is not enabled.
+                  listFieldsResult = await restApi.metadataMethods.graphql(query);
+                } catch {
+                  return simplifyReadMetadataResult(readMetadataResult);
+                }
+
+                // Combine the results from the VizQL Data Service API and the Tableau Metadata API.
                 return combineFields(readMetadataResult, listFieldsResult);
               },
             }),
