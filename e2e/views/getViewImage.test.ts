@@ -14,7 +14,7 @@ describe('get-view-image', () => {
       env,
       schema: z.string(),
       toolArgs: { viewId: superstore.defaultViewId },
-      expectedContentType: 'image',
+      contentType: 'image',
     });
 
     // Assert the PNG data starts with the eight-byte PNG signature.
