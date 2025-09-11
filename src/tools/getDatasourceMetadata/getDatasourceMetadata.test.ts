@@ -138,6 +138,7 @@ const mockListFieldsResponses = vi.hoisted(() => ({
 const mocks = vi.hoisted(() => ({
   mockReadMetadata: vi.fn(),
   mockGraphql: vi.fn(),
+  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -153,9 +154,17 @@ vi.mock('../../restApiInstance.js', () => ({
   ),
 }));
 
+vi.mock('../../config.js', () => ({
+  getConfig: mocks.mockGetConfig,
+}));
+
 describe('getDatasourceMetadataTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Set default config for existing tests
+    mocks.mockGetConfig.mockReturnValue({
+      disableMetadataApiRequests: false,
+    });
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -489,6 +498,80 @@ describe('getDatasourceMetadataTool', () => {
     expect(result.content[0].text).toBe(
       'requestId: test-request-id, error: ReadMetadata API Error',
     );
+  });
+
+  it('should return only readMetadata result when disableMetadataApiRequests is true and readMetadata succeeds', async () => {
+    // Configure to disable metadata API requests
+    mocks.mockGetConfig.mockReturnValue({
+      disableMetadataApiRequests: true,
+    });
+
+    mocks.mockReadMetadata.mockResolvedValue(mockReadMetadataResponses.success);
+    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    const responseData = JSON.parse(result.content[0].text as string);
+
+    // Should only have basic fields from readMetadata without enrichment
+    expect(responseData).toMatchObject({
+      fields: [
+        {
+          name: 'Profit Ratio',
+          dataType: 'REAL',
+          defaultAggregation: 'SUM',
+        },
+        {
+          name: 'Product Name',
+          dataType: 'STRING',
+        },
+        {
+          name: 'Quantity',
+          dataType: 'INTEGER',
+          defaultAggregation: 'SUM',
+        },
+      ],
+    });
+
+    // Ensure no enriched fields are present
+    expect(responseData.fields[0]).not.toHaveProperty('description');
+    expect(responseData.fields[0]).not.toHaveProperty('dataCategory');
+    expect(responseData.fields[0]).not.toHaveProperty('role');
+
+    // Verify readMetadata was called but graphql was not
+    expect(mocks.mockReadMetadata).toHaveBeenCalledWith({
+      datasource: {
+        datasourceLuid: 'test-luid',
+      },
+    });
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
+  });
+
+  it('should return error when disableMetadataApiRequests is true and readMetadata fails', async () => {
+    // Configure to disable metadata API requests
+    mocks.mockGetConfig.mockReturnValue({
+      disableMetadataApiRequests: true,
+    });
+
+    const errorMessage = 'ReadMetadata API Error';
+    mocks.mockReadMetadata.mockRejectedValue(new Error(errorMessage));
+    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(
+      'requestId: test-request-id, error: ReadMetadata API Error',
+    );
+
+    // Verify readMetadata was called but graphql was not
+    expect(mocks.mockReadMetadata).toHaveBeenCalledWith({
+      datasource: {
+        datasourceLuid: 'test-luid',
+      },
+    });
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
 });
 
