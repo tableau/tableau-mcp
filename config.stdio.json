@@ -14,7 +14,8 @@
         "INCLUDE_TOOLS": "",
         "EXCLUDE_TOOLS": "",
         "MAX_RESULT_LIMIT": "",
-        "DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION": ""
+        "DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION": "",
+        "DISABLE_METADATA_API_REQUESTS": ""
       }
     }
   }
