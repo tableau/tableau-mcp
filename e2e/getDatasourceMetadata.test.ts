@@ -1,28 +1,28 @@
-import { MetadataOutput } from '../src/sdks/tableau/apis/vizqlDataServiceApi.js';
+import { fieldsResultSchema } from '../src/tools/getDatasourceMetadata/datasourceMetadataUtils.js';
 import invariant from '../src/utils/invariant.js';
 import { callTool } from './client.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from './testEnv.js';
 
-describe('read-metadata', () => {
+describe('get-datasource-metadata', () => {
   beforeAll(setEnv);
   afterAll(resetEnv);
 
-  it('should read metadata', async () => {
+  it('should get metadata', async () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreDatasource(env);
 
-    const { data } = await callTool('read-metadata', {
+    const { fields } = await callTool('get-datasource-metadata', {
       env,
-      schema: MetadataOutput,
+      schema: fieldsResultSchema,
       toolArgs: {
         datasourceLuid: superstore.id,
       },
     });
 
-    invariant(data, 'data is undefined');
-    expect(data.length).toBeGreaterThan(0);
+    invariant(fields, 'data is undefined');
+    expect(fields.length).toBeGreaterThan(0);
 
-    const fieldNames = data.map((field) => field.fieldName);
+    const fieldNames = fields.map((field) => field.name);
     expect(fieldNames).toContain('Postal Code');
     expect(fieldNames).toContain('Product Name');
   });
