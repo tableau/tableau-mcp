@@ -1,1 +1,1 @@
-web: sh -c 'openssl genrsa -out private.pem && node build/index.js'
+web: node build/index.js
