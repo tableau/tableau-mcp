@@ -98,12 +98,21 @@ tsm pending-changes apply
 
 <hr />
 
-### `OAUTH_JWE_PRIVATE_KEY_PATH`
+### `OAUTH_JWE_PRIVATE_KEY`
 
-The absolute path to the RSA private key (.pem) file used to decrypt the OAuth access token.
+The RSA private key used to decrypt the OAuth access token.
 
-- Required.
+- It or `OAUTH_JWE_PRIVATE_KEY_PATH` must be provided, but not both.
 - Only PEM format is supported.
+- Examples:
+
+  ```
+  -----BEGIN RSA PRIVATE KEY-----\nMIIE...HZ3Q==\n-----END RSA PRIVATE KEY-----
+
+  or
+
+  -----BEGIN ENCRYPTED PRIVATE KEY-----\nMIIJ...te1w==\n-----END ENCRYPTED PRIVATE KEY-----
+  ```
 
 :::info
 
@@ -123,6 +132,15 @@ openssl genrsa -out private.pem
 ```
 
 :::
+
+<hr />
+
+### `OAUTH_JWE_PRIVATE_KEY_PATH`
+
+The absolute path to the RSA private key (.pem) file used to decrypt the OAuth access token.
+
+- It or `OAUTH_JWE_PRIVATE_KEY` must be provided, but not both.
+- Only PEM format is supported.
 
 <hr />
 

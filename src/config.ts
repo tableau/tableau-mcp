@@ -44,6 +44,7 @@ export class Config {
     enabled: boolean;
     issuer: string;
     redirectUri: string;
+    jwePrivateKey: string;
     jwePrivateKeyPath: string;
     jwePrivateKeyPassphrase: string | undefined;
     authzCodeTimeoutMs: number;
@@ -74,6 +75,7 @@ export class Config {
       DISABLE_LOG_MASKING: disableLogMasking,
       DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
+      OAUTH_JWE_PRIVATE_KEY: oauthJwePrivateKey,
       OAUTH_JWE_PRIVATE_KEY_PATH: oauthJwePrivateKeyPath,
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
       OAUTH_REDIRECT_URI: redirectUri,
@@ -106,6 +108,7 @@ export class Config {
       enabled: disableOauthOverride ? false : !!oauthIssuer,
       issuer: oauthIssuer ?? '',
       redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
+      jwePrivateKey: oauthJwePrivateKey ?? '',
       jwePrivateKeyPath: oauthJwePrivateKeyPath ?? '',
       jwePrivateKeyPassphrase: oauthJwePrivateKeyPassphrase || undefined,
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
@@ -149,12 +152,24 @@ export class Config {
 
     if (this.oauth.enabled) {
       invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
-      invariant(
-        this.oauth.jwePrivateKeyPath,
-        'The environment variable OAUTH_JWE_PRIVATE_KEY_PATH is not set',
-      );
 
-      if (process.env.TABLEAU_MCP_TEST !== 'true' && !existsSync(this.oauth.jwePrivateKeyPath)) {
+      if (!this.oauth.jwePrivateKey && !this.oauth.jwePrivateKeyPath) {
+        throw new Error(
+          'One of the environment variables: OAUTH_JWE_PRIVATE_KEY_PATH or OAUTH_JWE_PRIVATE_KEY must be set',
+        );
+      }
+
+      if (this.oauth.jwePrivateKey && this.oauth.jwePrivateKeyPath) {
+        throw new Error(
+          'Only one of the environment variables: OAUTH_JWE_PRIVATE_KEY or OAUTH_JWE_PRIVATE_KEY_PATH must be set',
+        );
+      }
+
+      if (
+        this.oauth.jwePrivateKeyPath &&
+        process.env.TABLEAU_MCP_TEST !== 'true' &&
+        !existsSync(this.oauth.jwePrivateKeyPath)
+      ) {
         throw new Error(
           `OAuth JWE private key path does not exist: ${this.oauth.jwePrivateKeyPath}`,
         );

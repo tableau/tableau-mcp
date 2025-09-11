@@ -27,6 +27,7 @@ export interface ProcessEnvEx {
   DISABLE_OAUTH: string | undefined;
   OAUTH_ISSUER: string | undefined;
   OAUTH_JWE_PRIVATE_KEY_PATH: string | undefined;
+  OAUTH_JWE_PRIVATE_KEY: string | undefined;
   OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: string | undefined;
   OAUTH_REDIRECT_URI: string | undefined;
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: string | undefined;

@@ -43,6 +43,7 @@ describe('Config', () => {
       DISABLE_OAUTH: undefined,
       OAUTH_ISSUER: undefined,
       OAUTH_REDIRECT_URI: undefined,
+      OAUTH_JWE_PRIVATE_KEY: undefined,
       OAUTH_JWE_PRIVATE_KEY_PATH: undefined,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: undefined,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: undefined,
@@ -696,6 +697,7 @@ describe('Config', () => {
       enabled: true,
       issuer: defaultOAuthEnvVars.OAUTH_ISSUER,
       redirectUri: `${defaultOAuthEnvVars.OAUTH_ISSUER}/Callback`,
+      jwePrivateKey: '',
       jwePrivateKeyPath: defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH,
       ...defaultOAuthTimeoutMs,
     } as const;
@@ -711,6 +713,7 @@ describe('Config', () => {
         enabled: false,
         issuer: '',
         redirectUri: '',
+        jwePrivateKey: '',
         jwePrivateKeyPath: '',
         ...defaultOAuthTimeoutMs,
       });
@@ -762,6 +765,23 @@ describe('Config', () => {
       expect(config.oauth).toEqual({
         ...defaultOAuthConfig,
         redirectUri: `${defaultOAuthEnvVars.OAUTH_ISSUER}/Callback`,
+      });
+    });
+
+    it('should set jwePrivateKey to the specified value when OAUTH_JWE_PRIVATE_KEY is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_JWE_PRIVATE_KEY: 'hamburgers',
+        OAUTH_JWE_PRIVATE_KEY_PATH: '',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        jwePrivateKey: 'hamburgers',
+        jwePrivateKeyPath: '',
+        jwePrivateKeyPassphrase: undefined,
       });
     });
 
@@ -817,7 +837,7 @@ describe('Config', () => {
       );
     });
 
-    it('should throw error when OAUTH_JWE_PRIVATE_KEY_PATH is not set', () => {
+    it('should throw error when OAUTH_JWE_PRIVATE_KEY and OAUTH_JWE_PRIVATE_KEY_PATH is not set', () => {
       process.env = {
         ...process.env,
         ...defaultOAuthEnvVars,
@@ -825,7 +845,20 @@ describe('Config', () => {
       };
 
       expect(() => new Config()).toThrow(
-        'The environment variable OAUTH_JWE_PRIVATE_KEY_PATH is not set',
+        'One of the environment variables: OAUTH_JWE_PRIVATE_KEY_PATH or OAUTH_JWE_PRIVATE_KEY must be set',
+      );
+    });
+
+    it('should throw error when OAUTH_JWE_PRIVATE_KEY and OAUTH_JWE_PRIVATE_KEY_PATH are both set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_JWE_PRIVATE_KEY: 'hamburgers',
+        OAUTH_JWE_PRIVATE_KEY_PATH: 'hotdogs',
+      };
+
+      expect(() => new Config()).toThrow(
+        'Only one of the environment variables: OAUTH_JWE_PRIVATE_KEY or OAUTH_JWE_PRIVATE_KEY_PATH must be set',
       );
     });
 

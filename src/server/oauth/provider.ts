@@ -77,11 +77,13 @@ export class OAuthProvider {
 
   private get jwePrivateKey(): KeyObject {
     if (!this._jwePrivateKey) {
-      let privateKeyContents: string;
-      try {
-        privateKeyContents = readFileSync(this.config.oauth.jwePrivateKeyPath, 'utf8');
-      } catch (e) {
-        throw new Error(`Failed to read private key file: ${e}`);
+      let privateKeyContents = this.config.oauth.jwePrivateKey.replace(/\\n/g, '\n');
+      if (!privateKeyContents) {
+        try {
+          privateKeyContents = readFileSync(this.config.oauth.jwePrivateKeyPath, 'utf8');
+        } catch (e) {
+          throw new Error(`Failed to read private key file: ${e}`);
+        }
       }
 
       try {
