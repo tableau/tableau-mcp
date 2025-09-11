@@ -454,8 +454,26 @@ describe('getDatasourceMetadataTool', () => {
     mocks.mockGraphql.mockRejectedValue(new Error(errorMessage));
 
     const result = await getToolResult();
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toBe('requestId: test-request-id, error: GraphQL API Error');
+    expect(result.isError).toBe(false);
+    const responseData = JSON.parse(result.content[0].text as string);
+    expect(responseData).toMatchObject({
+      fields: [
+        {
+          name: 'Profit Ratio',
+          dataType: 'REAL',
+          defaultAggregation: 'SUM',
+        },
+        {
+          name: 'Product Name',
+          dataType: 'STRING',
+        },
+        {
+          name: 'Quantity',
+          dataType: 'INTEGER',
+          defaultAggregation: 'SUM',
+        },
+      ],
+    });
   });
 
   it('should handle when both APIs fail', async () => {
