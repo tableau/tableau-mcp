@@ -167,6 +167,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  DISABLE_METADATA_API_REQUESTS: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Disable Metadata API Requests',
+    description:
+      'Disable requests to the Tableau Metadata API in the get-datasource-metadata tool.',
+    required: false,
+    sensitive: false,
+  },
   SSL_KEY: {
     includeInUserConfig: false,
     type: 'string',

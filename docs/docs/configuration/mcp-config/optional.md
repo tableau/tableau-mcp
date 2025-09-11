@@ -123,4 +123,13 @@ Disable validation of SET and MATCH filter values in `query-datasource` tool.
 
 <hr />
 
+## `DISABLE_METADATA_API_REQUESTS`
+
+Disables `graphql` requests to the Tableau Metadata API in the `get-datasource-metadata` tool.
+
+- Default: `false`
+- When `true`, skips requests to the `graphql` endpoint that provides additional context to field metadata.
+
+<hr />
+
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
