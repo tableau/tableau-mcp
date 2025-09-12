@@ -40,7 +40,7 @@ jobs:
       - name: Build Docker image
         run: npm run build:docker
 
-      - name: Build Claude Desktop Extension
+      - name: Build Claude MCP Bundle
         run: npm run build:mcpb
 
       - name: Tests

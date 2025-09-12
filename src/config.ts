@@ -171,7 +171,7 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
   }
 }
 
-// When the user does not provide a site name in the Claude Desktop Extension configuration,
+// When the user does not provide a site name in the Claude MCP Bundle configuration,
 // Claude doesn't replace its value and sets the site name to "${user_config.site_name}".
 function removeClaudeMcpBundleUserConfigTemplates(
   envVars: Record<string, string | undefined>,
