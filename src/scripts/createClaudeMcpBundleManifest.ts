@@ -246,7 +246,7 @@ const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>
 );
 
 const manifest = {
-  manifest_version: '0.1',
+  dxt_version: '0.1', // Replace with manifest_version this once Claude Desktop understands it
   name: packageJson.name,
   version: packageJson.version,
   description: packageJson.description,
