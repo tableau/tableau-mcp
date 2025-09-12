@@ -33,7 +33,7 @@ export class Config {
   disableMetadataApiRequests: boolean;
 
   constructor() {
-    const cleansedVars = removeClaudeDesktopExtensionUserConfigTemplates(process.env);
+    const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
     const {
       AUTH: auth,
       SERVER: server,
@@ -173,7 +173,7 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
 
 // When the user does not provide a site name in the Claude Desktop Extension configuration,
 // Claude doesn't replace its value and sets the site name to "${user_config.site_name}".
-function removeClaudeDesktopExtensionUserConfigTemplates(
+function removeClaudeMcpBundleUserConfigTemplates(
   envVars: Record<string, string | undefined>,
 ): Record<string, string | undefined> {
   return Object.entries(envVars).reduce<Record<string, string | undefined>>((acc, [key, value]) => {
