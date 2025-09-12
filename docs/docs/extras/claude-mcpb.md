@@ -2,7 +2,7 @@
 sidebar_position: 1
 ---
 
-# Claude Desktop Extension
+# Claude MCP Bundle
 
 Anthropic recently added support for MCP Bundles (MCPB)—previously called Desktop Extensions
 (DXT)—that can simplify loading and configuring MCP servers in Claude Desktop. An MCP Bundle is
