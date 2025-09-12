@@ -50,7 +50,8 @@ export class AuthenticatedServerMethods extends AuthenticatedMethods<typeof serv
   /**
    * Returns details of the current session of Tableau Server.
    *
-   * Required scopes: none
+   * Required scopes: tableau:sessions:read
+   * Scopes added in 2026.1: https://github.com/sf-analyticscloud/monolith/pull/41191
    *
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_server.htm#get-current-server-session
    */

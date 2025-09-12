@@ -13,13 +13,15 @@ export const toolNames = [
   'list-pulse-metrics-from-metric-ids',
   'list-pulse-metric-subscriptions',
   'generate-pulse-metric-value-insight-bundle',
+  'get-tableau-server-info',
 ] as const;
 export type ToolName = (typeof toolNames)[number];
 
-export const toolGroupNames = ['datasource', 'workbook', 'view', 'pulse'] as const;
+export const toolGroupNames = ['datasource', 'workbook', 'view', 'pulse', 'utility'] as const;
 export type ToolGroupName = (typeof toolGroupNames)[number];
 
 export const toolGroups = {
+  utility: ['get-tableau-server-info'],
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
   workbook: ['list-workbooks', 'get-workbook'],
   view: ['list-views', 'get-view-data', 'get-view-image'],

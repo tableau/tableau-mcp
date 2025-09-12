@@ -7,6 +7,7 @@ import { getListPulseMetricsFromMetricDefinitionIdTool } from './pulse/listMetri
 import { getListPulseMetricsFromMetricIdsTool } from './pulse/listMetricsFromMetricIds/listPulseMetricsFromMetricIds.js';
 import { getListPulseMetricSubscriptionsTool } from './pulse/listMetricSubscriptions/listPulseMetricSubscriptions.js';
 import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
+import { getGetTableauServerInfoTool } from './utility/getTableauServerInfo.js';
 import { getGetViewDataTool } from './views/getViewData.js';
 import { getGetViewImageTool } from './views/getViewImage.js';
 import { getListViewsTool } from './views/listViews.js';
@@ -28,4 +29,5 @@ export const toolFactories = [
   getGetViewImageTool,
   getListWorkbooksTool,
   getListViewsTool,
+  getGetTableauServerInfoTool,
 ];
