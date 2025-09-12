@@ -41,7 +41,7 @@ jobs:
         run: npm run build:docker
 
       - name: Build Claude Desktop Extension
-        run: npm run build:dxt
+        run: npm run build:mcpb
 
       - name: Tests
         run: npm run coverage
@@ -78,4 +78,4 @@ jobs:
           path: |
             build/
             junit/
-            tableau-mcp.dxt
+            tableau-mcp.mcpb

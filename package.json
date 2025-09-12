@@ -19,8 +19,8 @@
     "build": "run-s :build exec-perms",
     "build:watch": "npm run :build -- --watch",
     "build:docker": "docker build -t tableau-mcp .",
-    ":build:dxt": "npx @anthropic-ai/dxt pack . tableau-mcp.dxt",
-    "build:dxt": "run-s build:manifest:script build:manifest :build:dxt",
+    ":build:mcpb": "npx @anthropic-ai/mcpb pack . tableau-mcp.mcpb",
+    "build:mcpb": "run-s build:manifest:script build:manifest :build:mcpb",
     "build:manifest": "node build/scripts/createClaudeDesktopExtensionManifest.mjs",
     "build:manifest:script": "esbuild src/scripts/createClaudeDesktopExtensionManifest.ts --bundle --platform=node --format=esm --outdir=build/scripts --sourcemap=inline --out-extension:.js=.mjs",
     "start:http": "node build/index.js",
@@ -54,7 +54,7 @@
     "zod": "^3.24.3"
   },
   "devDependencies": {
-    "@anthropic-ai/dxt": "^0.2.6",
+    "@anthropic-ai/mcpb": "^1.0.0",
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.25.1",
     "@modelcontextprotocol/inspector": "^0.16.6",
