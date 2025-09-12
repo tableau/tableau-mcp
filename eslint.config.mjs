@@ -13,23 +13,6 @@ export default [
   eslintPluginPrettierRecommended,
   {
     files: ['**/*.{js,mjs,cjs,ts}'],
-  },
-  {
-    languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
-      globals: {
-        ...globals.node,
-      },
-    },
-  },
-  {
-    ignores: ['node_modules/**', 'build/**', 'docs/.docusaurus/**'],
-  },
-  {
-    plugins: {
-      'simple-import-sort': simpleImportSort,
-    },
     rules: {
       'no-console': 'error',
       'no-duplicate-imports': ['error', { includeExports: true }],
@@ -46,6 +29,29 @@ export default [
           varsIgnorePattern: '^_',
         },
       ],
+    },
+  },
+  {
+    files: ['e2e/**/*.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  {
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+  {
+    ignores: ['node_modules/**', 'build/**', 'docs/.docusaurus/**'],
+  },
+  {
+    plugins: {
+      'simple-import-sort': simpleImportSort,
     },
   },
 ];
