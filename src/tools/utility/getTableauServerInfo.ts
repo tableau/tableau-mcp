@@ -38,9 +38,9 @@ export const getGetTableauServerInfoTool = (server: Server): Tool<typeof paramsS
                   await restApi.authenticatedServerMethods.getCurrentServerSession();
 
                 return {
+                  serverUrl: config.server,
                   serverVersion: serverInfo.productVersion.value,
                   serverBuild: serverInfo.productVersion.build,
-                  restApiVersion: serverInfo.restApiVersion,
                   session: currentSessionResult.isOk()
                     ? currentSessionResult.value
                     : currentSessionResult.error,
