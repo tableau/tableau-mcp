@@ -116,10 +116,24 @@ If a tool has a `limit` parameter and returns an array of items, the maximum len
 
 ## `DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION`
 
-Disable validation of SET and MATCH filter values in `query-datasource` tool.
+Disable validation of SET and MATCH filter values in the
+[`query-datasource`](../../tools/data-qna/query-datasource.md) tool.
 
 - Default: `false`
 - When `true`, skips the validation that checks if filter values exist in the target field.
+
+<hr />
+
+## `DISABLE_METADATA_API_REQUESTS`
+
+Disables `graphql` requests to the Tableau Metadata API in the
+[`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool.
+
+- Default: `false`
+- When `true`, skips requests to the `graphql` endpoint that provides additional context to field
+  metadata.
+- Set this to `true` if you are using the `get-datasource-metadata` tool and the Tableau Metadata
+  API is not enabled on your Tableau Server.
 
 <hr />
 

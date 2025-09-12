@@ -50,7 +50,7 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
    * Required scopes: `tableau:insight_definitions_metrics:read`
    *
    * @param metricDefinitionIds - The list of metric definition IDs to list metrics for.
-   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#MetricQueryService_BatchGetDefinitions
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#MetricQueryService_BatchGetDefinitionsByPost
    */
   listPulseMetricDefinitionsFromMetricDefinitionIds = async (
     metricDefinitionIds: string[],
