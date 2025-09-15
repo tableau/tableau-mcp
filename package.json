@@ -1,5 +1,5 @@
 {
-  "name": "tableau-mcp",
+  "name": "@tableau/mcp-server",
   "description": "An MCP server for Tableau, providing a suite of tools that will make it easier for developers to build AI-applications that integrate with Tableau.",
   "version": "1.8.0",
   "homepage": "https://github.com/tableau/tableau-mcp",
