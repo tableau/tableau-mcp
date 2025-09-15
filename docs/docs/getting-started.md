@@ -18,7 +18,7 @@ Standard config works in most MCP clients:
   "mcpServers": {
     "tableau": {
       "command": "npx",
-      "args": ["@tableau/mcp-server@latest"],
+      "args": ["-y", "@tableau/mcp-server@latest"],
       "env": {
         "SERVER": "https://my-tableau-server.com",
         "SITE_NAME": "my_site",
