@@ -12,3 +12,23 @@ make it easier for developers to build AI-applications that integrate with Table
 ## Official Documentation
 
 https://tableau.github.io/tableau-mcp/
+
+## Quick Start
+
+### Requirements
+
+- Node.js 20 or newer
+- An MCP client e.g. Claude Desktop, Cursor, VS Code, MCP Inspector, etc.
+
+Standard config works in most MCP clients:
+
+```json
+{
+  "mcpServers": {
+    "tableau": {
+      "command": "npx",
+      "args": ["@tableau/mcp-server@latest"]
+    }
+  }
+}
+```
