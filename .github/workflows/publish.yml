@@ -1,7 +1,8 @@
 name: Publish
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - 'anyoung/npmjs'
 jobs:
   publish-npm:
     runs-on: ubuntu-latest
@@ -16,9 +17,9 @@ jobs:
           registry-url: https://registry.npmjs.org/
       - run: |
           git fetch --tags
-          git checkout ${{ github.event.release.tag_name }}
+          git checkout v1.8.0
           npm ci
           npm run build
-          npm publish --provenance
+          npm publish --provenance --dry-run
           env:
             NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
