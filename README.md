@@ -27,7 +27,13 @@ Standard config works in most MCP clients:
   "mcpServers": {
     "tableau": {
       "command": "npx",
-      "args": ["@tableau/mcp-server@latest"]
+      "args": ["@tableau/mcp-server@latest"],
+      "env": {
+        "SERVER": "https://my-tableau-server.com",
+        "SITE_NAME": "my_site",
+        "PAT_NAME": "my_pat",
+        "PAT_VALUE": "pat_value"
+      }
     }
   }
 }
