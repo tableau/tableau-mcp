@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -98,10 +99,14 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
 
               const result = await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
               if (result.isErr()) {
-                return new Err({
-                  type: 'tableau-error',
-                  error: result.error,
-                });
+                return new Err(
+                  result.error instanceof ZodiosError
+                    ? result.error
+                    : {
+                        type: 'tableau-error',
+                        error: result.error,
+                      },
+                );
               }
               return result;
             },

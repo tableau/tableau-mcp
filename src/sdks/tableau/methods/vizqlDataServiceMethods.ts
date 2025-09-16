@@ -1,4 +1,4 @@
-import { isErrorFromAlias, Zodios } from '@zodios/core';
+import { isErrorFromAlias, Zodios, ZodiosError } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -38,12 +38,16 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    */
   queryDatasource = async (
     queryRequest: z.infer<typeof QueryRequest>,
-  ): Promise<Result<QueryOutput, TableauError>> => {
+  ): Promise<Result<QueryOutput, TableauError | ZodiosError>> => {
     try {
       return Ok(await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader }));
     } catch (error) {
       if (isErrorFromAlias(this._apiClient.api, 'queryDatasource', error)) {
         return Err(error.response.data);
+      }
+
+      if (error instanceof ZodiosError) {
+        return Err(error);
       }
 
       throw error;

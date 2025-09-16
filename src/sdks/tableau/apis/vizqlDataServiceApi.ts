@@ -270,7 +270,7 @@ export const QueryRequest = z
 
 export const QueryOutput = z
   .object({
-    data: z.array(z.unknown()),
+    dataz: z.array(z.unknown()),
   })
   .partial()
   .passthrough();
