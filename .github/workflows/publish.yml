@@ -19,6 +19,6 @@ jobs:
           git checkout -b publish ${{ github.event.release.tag_name }}
           npm ci
           npm run build
-          npm publish --provenance
+          npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
