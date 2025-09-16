@@ -17,7 +17,8 @@ The E2E tests can only be run:
 
 To run them locally:
 
-1. Create a `e2e/.env` file with contents:
+1. Ensure you do not have a `.env` file in the root of the project.
+2. Create a `e2e/.env` file with contents:
 
 ```
 SERVER=https://10ax.online.tableau.com
@@ -29,9 +30,9 @@ CONNECTED_APP_SECRET_ID=<redacted>
 CONNECTED_APP_SECRET_VALUE=<redacted>
 ```
 
-2. Create a `e2e/.env.reset` file with the same contents except all the env var values as empty.
+3. Create a `e2e/.env.reset` file with the same contents except all the env var values as empty.
    Environment variables get set at the beginning of each test and cleared at the end of each test.
-3. Run `npm run test:e2e` or select the `vitest.config.e2e.ts` config in the [Vitest
+4. Run `npm run test:e2e` or select the `vitest.config.e2e.ts` config in the [Vitest
    extension][vitest.explorer] and run them from your IDE.
 
 ## Running the E2E tests against a different site
