@@ -132,17 +132,9 @@ Disables `graphql` requests to the Tableau Metadata API in the
 - Default: `false`
 - When `true`, skips requests to the `graphql` endpoint that provides additional context to field
   metadata.
-- Set this to `true` if you are using the `get-datasource-metadata` tool and the Tableau Metadata
-  API is not enabled on your Tableau Server.
-
-<hr />
-
-## `DISABLE_METADATA_API_REQUESTS`
-
-Disables `graphql` requests to the Tableau Metadata API in the `get-datasource-metadata` tool.
-
-- Default: `false`
-- When `true`, skips requests to the `graphql` endpoint that provides additional context to field metadata.
+- Set this to `true` if you are using the
+  [`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool and the Tableau
+  Metadata API is not enabled on your Tableau Server.
 
 <hr />
 
