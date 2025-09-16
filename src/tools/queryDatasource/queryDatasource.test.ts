@@ -1,6 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
+import { QueryOutput } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
 import { getQueryDatasourceTool } from './queryDatasource.js';
@@ -102,6 +104,32 @@ describe('queryDatasourceTool', () => {
           },
         ],
       },
+    });
+  });
+
+  it('should return a successful result when the VDS response contains a schema validation error', async () => {
+    const badResponse = {
+      ...mockVdsResponses.success,
+      data: 'hamburgers',
+    };
+
+    mocks.mockQueryDatasource.mockImplementation(() => {
+      const zodiosError = new ZodiosError(
+        'Zodios: Invalid response from endpoint',
+        undefined,
+        badResponse,
+        QueryOutput.safeParse(badResponse).error,
+      );
+
+      return new Err(zodiosError);
+    });
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.content[0].text as string)).toEqual({
+      data: badResponse,
+      warning: 'Validation error: Expected array, received string at "data"',
     });
   });
 
