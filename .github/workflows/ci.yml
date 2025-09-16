@@ -43,6 +43,9 @@ jobs:
       - name: Build Claude MCP Bundle
         run: npm run build:mcpb
 
+      - name: Build NPM package
+        run: npm pack
+
       - name: Tests
         run: npm run coverage
 

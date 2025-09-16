@@ -4,10 +4,40 @@ sidebar_position: 2
 
 # Getting Started
 
+## Quick Start
+
+### Requirements
+
+- Node.js 20 or newer
+- An MCP client e.g. Claude Desktop, Cursor, VS Code, MCP Inspector, etc.
+
+Standard config works in most MCP clients:
+
+```json
+{
+  "mcpServers": {
+    "tableau": {
+      "command": "npx",
+      "args": ["-y", "@tableau/mcp-server@latest"],
+      "env": {
+        "SERVER": "https://my-tableau-server.com",
+        "SITE_NAME": "my_site",
+        "PAT_NAME": "my_pat",
+        "PAT_VALUE": "pat_value"
+      }
+    }
+  }
+}
+```
+
+## Working with the source code
+
 1. Clone the repository.
 2. Install [Node.js](https://nodejs.org/en/download) (tested with 22.15.0 LTS).
 3. `npm install`
 4. `npm run build`
+5. Configure your MCP client using the instructions in the
+   [Configuring AI Tools](./configuration/ai-tools-config/README.md) section.
 
 To keep up with repo changes:
 
