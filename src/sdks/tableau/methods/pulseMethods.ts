@@ -150,14 +150,26 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
   };
 }
 
-type PulseResult<T> = Result<T, 'pulse-disabled'>;
+type PulseResult<T> = Result<T, 'tableau-server' | 'pulse-disabled'>;
 async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise<PulseResult<T>> {
   try {
     return new Ok(await callback());
   } catch (error) {
-    if (isAxiosError(error) && error.response?.status === 404) {
-      return new Err('pulse-disabled');
+    if (isAxiosError(error)) {
+      if (error.response?.status === 404) {
+        return new Err('tableau-server');
+      }
+
+      if (
+        error.response?.status === 400 &&
+        error.response.headers.tableau_error_code === '0xd3408984' &&
+        error.response.headers.validation_code === '400999'
+      ) {
+        // ntbue-service-chassis/-/blob/main/server/interceptors/site_settings.go
+        return new Err('pulse-disabled');
+      }
     }
+
     throw error;
   }
 }
