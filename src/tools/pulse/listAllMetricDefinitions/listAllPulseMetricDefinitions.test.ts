@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
 
 import type { PulseMetricDefinition } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
@@ -63,7 +64,7 @@ describe('listAllPulseMetricDefinitionsTool', () => {
     { view: 'DEFINITION_VIEW_FULL', label: 'full view' },
     { view: 'DEFINITION_VIEW_DEFAULT', label: 'default view' },
   ])('should list pulse metric definitions with $label', async ({ view }) => {
-    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(mockPulseMetricDefinitions);
+    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(new Ok(mockPulseMetricDefinitions));
     const result = await getToolResult({ view });
     expect(result.isError).toBe(false);
     const parsedValue = JSON.parse(result.content[0].text as string);
@@ -72,7 +73,7 @@ describe('listAllPulseMetricDefinitionsTool', () => {
   });
 
   it('should list pulse metric definitions with no view (default)', async () => {
-    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(mockPulseMetricDefinitions);
+    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(new Ok(mockPulseMetricDefinitions));
     const result = await getToolResult({});
     expect(result.isError).toBe(false);
     const parsedValue = JSON.parse(result.content[0].text as string);
