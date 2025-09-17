@@ -6,6 +6,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
+import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
   view: z.optional(z.enum(pulseMetricDefinitionViewEnum)),
@@ -59,13 +60,7 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
             },
           });
         },
-        getErrorText: (_error: 'pulse-disabled') => {
-          return [
-            'Pulse is disabled on this site.',
-            'To enable Pulse on your Tableau Cloud site, see the instuctions at https://help.tableau.com/current/online/en-us/pulse_set_up.htm.',
-            'Pulse is not available on Tableau Server.',
-          ].join(' ');
-        },
+        getErrorText: getPulseDisabledError,
       });
     },
   });
