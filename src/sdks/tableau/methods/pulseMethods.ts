@@ -1,6 +1,8 @@
 import { Zodios } from '@zodios/core';
+import { Err, Ok, Result } from 'ts-results-es';
 import z from 'zod';
 
+import { isAxiosError } from '../../../utils/isAxiosError.js';
 import { pulseApis } from '../apis/pulseApi.js';
 import { Credentials } from '../types/credentials.js';
 import {
@@ -36,12 +38,14 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
    */
   listAllPulseMetricDefinitions = async (
     view?: PulseMetricDefinitionView,
-  ): Promise<PulseMetricDefinition[]> => {
-    const response = await this._apiClient.listAllPulseMetricDefinitions({
-      queries: { view },
-      ...this.authHeader,
+  ): Promise<PulseResult<PulseMetricDefinition[]>> => {
+    return await guardAgainstPulseDisabled(async () => {
+      const response = await this._apiClient.listAllPulseMetricDefinitions({
+        queries: { view },
+        ...this.authHeader,
+      });
+      return response.definitions ?? [];
     });
-    return response.definitions ?? [];
   };
 
   /**
@@ -55,12 +59,14 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
   listPulseMetricDefinitionsFromMetricDefinitionIds = async (
     metricDefinitionIds: string[],
     view?: PulseMetricDefinitionView,
-  ): Promise<PulseMetricDefinition[]> => {
-    const response = await this._apiClient.listPulseMetricDefinitionsFromMetricDefinitionIds(
-      { definition_ids: metricDefinitionIds },
-      { queries: { view }, ...this.authHeader },
-    );
-    return response.definitions ?? [];
+  ): Promise<PulseResult<PulseMetricDefinition[]>> => {
+    return await guardAgainstPulseDisabled(async () => {
+      const response = await this._apiClient.listPulseMetricDefinitionsFromMetricDefinitionIds(
+        { definition_ids: metricDefinitionIds },
+        { queries: { view }, ...this.authHeader },
+      );
+      return response.definitions ?? [];
+    });
   };
 
   /**
@@ -73,12 +79,14 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
    */
   listPulseMetricsFromMetricDefinitionId = async (
     pulseMetricDefinitionID: string,
-  ): Promise<PulseMetric[]> => {
-    const response = await this._apiClient.listPulseMetricsFromMetricDefinitionId({
-      params: { pulseMetricDefinitionID },
-      ...this.authHeader,
+  ): Promise<PulseResult<PulseMetric[]>> => {
+    return await guardAgainstPulseDisabled(async () => {
+      const response = await this._apiClient.listPulseMetricsFromMetricDefinitionId({
+        params: { pulseMetricDefinitionID },
+        ...this.authHeader,
+      });
+      return response.metrics ?? [];
     });
-    return response.metrics ?? [];
   };
 
   /**
@@ -89,12 +97,16 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
    * @param metricIds - The list of metric IDs to list metrics for.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#MetricQueryService_BatchGetMetrics
    */
-  listPulseMetricsFromMetricIds = async (metricIds: string[]): Promise<PulseMetric[]> => {
-    const response = await this._apiClient.listPulseMetricsFromMetricIds(
-      { metric_ids: metricIds },
-      { ...this.authHeader },
-    );
-    return response.metrics ?? [];
+  listPulseMetricsFromMetricIds = async (
+    metricIds: string[],
+  ): Promise<PulseResult<PulseMetric[]>> => {
+    return await guardAgainstPulseDisabled(async () => {
+      const response = await this._apiClient.listPulseMetricsFromMetricIds(
+        { metric_ids: metricIds },
+        { ...this.authHeader },
+      );
+      return response.metrics ?? [];
+    });
   };
 
   /**
@@ -104,12 +116,16 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
    *
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#PulseSubscriptionService_ListSubscriptions
    */
-  listPulseMetricSubscriptionsForCurrentUser = async (): Promise<PulseMetricSubscription[]> => {
-    const response = await this._apiClient.listPulseMetricSubscriptionsForCurrentUser({
-      queries: { user_id: this.userId },
-      ...this.authHeader,
+  listPulseMetricSubscriptionsForCurrentUser = async (): Promise<
+    PulseResult<PulseMetricSubscription[]>
+  > => {
+    return await guardAgainstPulseDisabled(async () => {
+      const response = await this._apiClient.listPulseMetricSubscriptionsForCurrentUser({
+        queries: { user_id: this.userId },
+        ...this.authHeader,
+      });
+      return response.subscriptions ?? [];
     });
-    return response.subscriptions ?? [];
   };
 
   /**
@@ -123,11 +139,25 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
   generatePulseMetricValueInsightBundle = async (
     bundleRequest: z.infer<typeof pulseBundleRequestSchema>,
     bundleType: PulseInsightBundleType,
-  ): Promise<z.infer<typeof pulseBundleResponseSchema>> => {
-    const response = await this._apiClient.generatePulseMetricValueInsightBundle(
-      { bundle_request: bundleRequest.bundle_request },
-      { params: { bundle_type: bundleType }, ...this.authHeader },
-    );
-    return response ?? {};
+  ): Promise<PulseResult<z.infer<typeof pulseBundleResponseSchema>>> => {
+    return await guardAgainstPulseDisabled(async () => {
+      const response = await this._apiClient.generatePulseMetricValueInsightBundle(
+        { bundle_request: bundleRequest.bundle_request },
+        { params: { bundle_type: bundleType }, ...this.authHeader },
+      );
+      return response ?? {};
+    });
   };
+}
+
+type PulseResult<T> = Result<T, 'pulse-disabled'>;
+async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise<PulseResult<T>> {
+  try {
+    return new Ok(await callback());
+  } catch (error) {
+    if (isAxiosError(error) && error.response?.status === 404) {
+      return new Err('pulse-disabled');
+    }
+    throw error;
+  }
 }

@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
@@ -50,17 +49,22 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
         requestId,
         args: { view },
         callback: async () => {
-          return new Ok(
-            await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: ['tableau:insight_definitions_metrics:read'],
-              callback: async (restApi) => {
-                return await restApi.pulseMethods.listAllPulseMetricDefinitions(view);
-              },
-            }),
-          );
+          return await useRestApi({
+            config,
+            requestId,
+            server,
+            jwtScopes: ['tableau:insight_definitions_metrics:read'],
+            callback: async (restApi) => {
+              return await restApi.pulseMethods.listAllPulseMetricDefinitions(view);
+            },
+          });
+        },
+        getErrorText: (_error: 'pulse-disabled') => {
+          return [
+            'Pulse is disabled on this site.',
+            'To enable Pulse on your Tableau Cloud site, see the instuctions at https://help.tableau.com/current/online/en-us/pulse_set_up.htm.',
+            'Pulse is not available on Tableau Server.',
+          ].join(' ');
         },
       });
     },
