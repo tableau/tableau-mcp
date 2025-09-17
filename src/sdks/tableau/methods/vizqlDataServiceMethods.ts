@@ -38,11 +38,15 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    */
   queryDatasource = async (
     queryRequest: z.infer<typeof QueryRequest>,
-  ): Promise<Result<QueryOutput, TableauError | ZodiosError>> => {
+  ): Promise<Result<QueryOutput, 'feature-disabled' | TableauError | ZodiosError>> => {
     try {
       return Ok(await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader }));
     } catch (error) {
       if (isErrorFromAlias(this._apiClient.api, 'queryDatasource', error)) {
+        if (error.response.status === 404) {
+          return Err('feature-disabled');
+        }
+
         return Err(error.response.data);
       }
 
@@ -64,7 +68,18 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    */
   readMetadata = async (
     readMetadataRequest: z.infer<typeof ReadMetadataRequest>,
-  ): Promise<MetadataResponse> => {
-    return await this._apiClient.readMetadata(readMetadataRequest, { ...this.authHeader });
+  ): Promise<Result<MetadataResponse, 'feature-disabled'>> => {
+    try {
+      return Ok(await this._apiClient.readMetadata(readMetadataRequest, { ...this.authHeader }));
+    } catch (error) {
+      if (
+        isErrorFromAlias(this._apiClient.api, 'readMetadata', error) &&
+        error.response.status === 404
+      ) {
+        return Err('feature-disabled');
+      }
+
+      throw error;
+    }
   };
 }
