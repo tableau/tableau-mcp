@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 
 import type { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
@@ -85,6 +85,24 @@ describe('listPulseMetricsFromMetricIdsTool', () => {
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(errorMessage);
+  });
+
+  it('should return an error when executing the tool against Tableau Server', async () => {
+    mocks.mockListPulseMetricsFromMetricIds.mockResolvedValue(new Err('tableau-server'));
+    const result = await getToolResult({
+      metricIds: ['CF32DDCC-362B-4869-9487-37DA4D152552', 'CF32DDCC-362B-4869-9487-37DA4D152553'],
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
+  });
+
+  it('should return an error when Pulse is disabled', async () => {
+    mocks.mockListPulseMetricsFromMetricIds.mockResolvedValue(new Err('pulse-disabled'));
+    const result = await getToolResult({
+      metricIds: ['CF32DDCC-362B-4869-9487-37DA4D152552', 'CF32DDCC-362B-4869-9487-37DA4D152553'],
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
   });
 });
 
