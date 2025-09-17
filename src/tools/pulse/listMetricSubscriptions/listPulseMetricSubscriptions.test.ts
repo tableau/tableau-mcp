@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
 
 import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
@@ -40,7 +41,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
 
   it('should list pulse metric subscriptions for the current user', async () => {
     mocks.mockListPulseMetricSubscriptionsForCurrentUser.mockResolvedValue(
-      mockPulseMetricSubscriptions,
+      new Ok(mockPulseMetricSubscriptions),
     );
     const result = await getToolResult();
     expect(result.isError).toBe(false);

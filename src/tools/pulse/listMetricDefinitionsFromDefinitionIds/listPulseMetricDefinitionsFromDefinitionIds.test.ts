@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
 
 import type { PulseMetricDefinition } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
@@ -69,7 +70,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
     { view: 'DEFINITION_VIEW_DEFAULT', label: 'default view' },
   ])('should list pulse metric definitions from IDs with $label', async ({ view }) => {
     mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockResolvedValue(
-      mockPulseMetricDefinitions,
+      new Ok(mockPulseMetricDefinitions),
     );
     const result = await getToolResult({
       metricDefinitionIds: [
@@ -94,7 +95,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
 
   it('should list pulse metric definitions from IDs with no view (default)', async () => {
     mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockResolvedValue(
-      mockPulseMetricDefinitions,
+      new Ok(mockPulseMetricDefinitions),
     );
     const result = await getToolResult({
       metricDefinitionIds: [

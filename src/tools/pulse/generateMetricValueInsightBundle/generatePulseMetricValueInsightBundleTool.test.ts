@@ -1,3 +1,5 @@
+import { Ok } from 'ts-results-es';
+
 import { Server } from '../../../server.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './generatePulseMetricValueInsightBundleTool.js';
 
@@ -106,7 +108,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   it('should call generatePulseMetricValueInsightBundle without bundleType and return Ok result', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(mockBundleRequestResponse);
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
     const result = await tool.callback(
       { bundleRequest },
       {
@@ -126,7 +130,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   it('should call generatePulseMetricValueInsightBundle with bundleType and return Ok result', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(mockBundleRequestResponse);
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
     const result = await tool.callback(
       { bundleRequest, bundleType: 'springboard' },
       {
@@ -148,7 +154,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   it.each(['ban', 'springboard', 'basic', 'detail'] as const)(
     'should call generatePulseMetricValueInsightBundle with bundleType "%s" and return Ok result',
     async (bundleType) => {
-      mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(mockBundleRequestResponse);
+      mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+        new Ok(mockBundleRequestResponse),
+      );
       const result = await tool.callback(
         { bundleRequest, bundleType },
         {

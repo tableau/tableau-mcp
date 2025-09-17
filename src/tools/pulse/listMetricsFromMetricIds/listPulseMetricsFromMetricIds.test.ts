@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
 
 import type { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
@@ -48,7 +49,7 @@ describe('listPulseMetricsFromMetricIdsTool', () => {
   });
 
   it('should list pulse metrics for given metric IDs', async () => {
-    mocks.mockListPulseMetricsFromMetricIds.mockResolvedValue(mockPulseMetrics);
+    mocks.mockListPulseMetricsFromMetricIds.mockResolvedValue(new Ok(mockPulseMetrics));
     const result = await getToolResult({
       metricIds: ['CF32DDCC-362B-4869-9487-37DA4D152552', 'CF32DDCC-362B-4869-9487-37DA4D152553'],
     });
