@@ -8,7 +8,7 @@ export function getPulseDisabledError(reason: 'tableau-server' | 'pulse-disabled
       ].join(' ');
     case 'pulse-disabled':
       return [
-        'Pulse is disabled on this Tableau Cloud site or not enabled for a group to which you belong.',
+        'Pulse is disabled on this Tableau Cloud site.',
         'To enable Pulse, please see the instructions at https://help.tableau.com/current/online/en-us/pulse_set_up.htm.',
       ].join(' ');
   }
