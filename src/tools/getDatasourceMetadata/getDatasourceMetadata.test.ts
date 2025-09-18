@@ -1,7 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../server.js';
+import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata.js';
 
 const mockReadMetadataResponses = vi.hoisted(() => ({
@@ -572,6 +573,15 @@ describe('getDatasourceMetadataTool', () => {
         datasourceLuid: 'test-luid',
       },
     });
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
+  });
+
+  it('should show feature-disabled error when VDS is disabled', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(Err('feature-disabled'));
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
 });
