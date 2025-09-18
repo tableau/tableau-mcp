@@ -59,8 +59,10 @@ jobs:
 
       - name: Build Claude MCP Bundle
         run: |
+          npm run build:manifest:script
+          npm run build:manifest
           npm ci --omit=dev
-          npm run build:mcpb
+          npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb
 
       - name: Report code coverage
         uses: irongut/CodeCoverageSummary@v1.3.0

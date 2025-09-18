@@ -37,6 +37,8 @@ jobs:
           git checkout -b mcpb ${{ github.event.release.tag_name }}
           npm ci
           npm run build
+          npm run build:manifest:script
+          npm run build:manifest
           npm ci --omit=dev
           npx -y @anthropic-ai/mcpb pack . tableau-mcp-${{ github.event.release.tag_name }}.mcpb
       - name: Upload mcpb to release
