@@ -17,8 +17,11 @@ To build the MCPB file for this project:
 
 :::danger
 
-If you build this from your local repo, all files will be included. Make sure you don't have any
-environment files that contain sensitive data like personal access tokens.
+If you build this from your local repo, unnecessary and potentially sensitive files will be
+[automatically excluded](https://github.com/anthropics/mcpb/blob/main/CLI.md#excluded-files) from
+the generated MCPB file. However, there may be some gaps in the exclusion list defined in the
+[`.mcpbignore` file](https://github.com/tableau/tableau-mcp/blob/main/.mcpbignore). If you find any
+gaps, please open an issue or submit a pull request.
 
 :::
 
