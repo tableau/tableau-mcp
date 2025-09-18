@@ -40,9 +40,6 @@ jobs:
       - name: Build Docker image
         run: npm run build:docker
 
-      - name: Build Claude MCP Bundle
-        run: npm run build:mcpb
-
       - name: Build NPM package
         run: npm pack
 
@@ -51,6 +48,11 @@ jobs:
 
       - name: E2E Tests
         run: npm run test:e2e
+
+      - name: Build Claude MCP Bundle
+        run: |
+          npm ci --omit=dev
+          npm run build:mcpb
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}
           SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}

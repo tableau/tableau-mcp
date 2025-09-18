@@ -22,3 +22,25 @@ jobs:
           npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  upload-mcpb:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to upload release assets
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: |
+          git fetch --tags
+          git checkout -b mcpb ${{ github.event.release.tag_name }}
+          npm ci
+          npm run build
+          npm ci --omit=dev
+          npx -y @anthropic-ai/mcpb pack . tableau-mcp-${{ github.event.release.tag_name }}.mcpb
+      - name: Upload mcpb to release
+        run: |
+          gh release upload ${{github.event.release.tag_name}} tableau-mcp-${{ github.event.release.tag_name }}.mcpb
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
