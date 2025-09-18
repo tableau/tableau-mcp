@@ -48,11 +48,6 @@ jobs:
 
       - name: E2E Tests
         run: npm run test:e2e
-
-      - name: Build Claude MCP Bundle
-        run: |
-          npm ci --omit=dev
-          npm run build:mcpb
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}
           SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
@@ -61,6 +56,11 @@ jobs:
           CONNECTED_APP_CLIENT_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}
           CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
           CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
+
+      - name: Build Claude MCP Bundle
+        run: |
+          npm ci --omit=dev
+          npm run build:mcpb
 
       - name: Report code coverage
         uses: irongut/CodeCoverageSummary@v1.3.0
