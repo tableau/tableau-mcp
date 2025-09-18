@@ -3,7 +3,7 @@ export function getPulseDisabledError(reason: 'tableau-server' | 'pulse-disabled
     case 'tableau-server':
       return [
         'Pulse is not available on Tableau Server.',
-        'These tools are only available on Tableau Cloud.',
+        'Consider disabling the Pulse MCP tools in your client or removing them using the EXCLUDE_TOOLS environment variable.',
         'To enable Pulse on your Tableau Cloud site, please see the instructions at https://help.tableau.com/current/online/en-us/pulse_set_up.htm.',
       ].join(' ');
     case 'pulse-disabled':
