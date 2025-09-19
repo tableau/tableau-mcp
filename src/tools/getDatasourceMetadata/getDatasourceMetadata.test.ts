@@ -1,6 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../server.js';
+import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata.js';
 
 const mockReadMetadataResponses = vi.hoisted(() => ({
@@ -182,7 +184,7 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should successfully merge data from both APIs and return enriched metadata', async () => {
-    mocks.mockReadMetadata.mockResolvedValue(mockReadMetadataResponses.success);
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
     mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
 
     const result = await getToolResult();
@@ -238,7 +240,7 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should handle empty readMetadata response gracefully', async () => {
-    mocks.mockReadMetadata.mockResolvedValue(mockReadMetadataResponses.empty);
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.empty));
     mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
 
     const result = await getToolResult();
@@ -251,7 +253,7 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should handle null readMetadata data gracefully', async () => {
-    mocks.mockReadMetadata.mockResolvedValue(mockReadMetadataResponses.nullData);
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.nullData));
     mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
 
     const result = await getToolResult();
@@ -308,7 +310,7 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should handle empty listFields response and return basic metadata only', async () => {
-    mocks.mockReadMetadata.mockResolvedValue(mockReadMetadataResponses.success);
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
     mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.empty);
 
     const result = await getToolResult();
@@ -342,7 +344,7 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should handle empty fields in listFields response', async () => {
-    mocks.mockReadMetadata.mockResolvedValue(mockReadMetadataResponses.success);
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
     mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.emptyFields);
 
     const result = await getToolResult();
@@ -391,7 +393,7 @@ describe('getDatasourceMetadataTool', () => {
       },
     };
 
-    mocks.mockReadMetadata.mockResolvedValue(partialReadMetadata);
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(partialReadMetadata));
     mocks.mockGraphql.mockResolvedValue(partialListFields);
 
     const result = await getToolResult();
@@ -430,7 +432,7 @@ describe('getDatasourceMetadataTool', () => {
       ],
     };
 
-    mocks.mockReadMetadata.mockResolvedValue(readMetadataWithBin);
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(readMetadataWithBin));
     mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
 
     const result = await getToolResult();
@@ -459,7 +461,7 @@ describe('getDatasourceMetadataTool', () => {
 
   it('should handle listFields API errors gracefully', async () => {
     const errorMessage = 'GraphQL API Error';
-    mocks.mockReadMetadata.mockResolvedValue(mockReadMetadataResponses.success);
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
     mocks.mockGraphql.mockRejectedValue(new Error(errorMessage));
 
     const result = await getToolResult();
@@ -506,7 +508,7 @@ describe('getDatasourceMetadataTool', () => {
       disableMetadataApiRequests: true,
     });
 
-    mocks.mockReadMetadata.mockResolvedValue(mockReadMetadataResponses.success);
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
     mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
 
     const result = await getToolResult();
@@ -571,6 +573,15 @@ describe('getDatasourceMetadataTool', () => {
         datasourceLuid: 'test-luid',
       },
     });
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
+  });
+
+  it('should show feature-disabled error when VDS is disabled', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(Err('feature-disabled'));
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
 });

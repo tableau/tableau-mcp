@@ -4,6 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { QueryOutput } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
+import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
 import { getQueryDatasourceTool } from './queryDatasource.js';
 
@@ -176,7 +177,7 @@ describe('queryDatasourceTool', () => {
     });
   });
 
-  it('should return error VDS returns an error', async () => {
+  it('should return error when VDS returns an error', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(new Err(mockVdsResponses.error));
 
     const result = await getToolResult();
@@ -464,6 +465,14 @@ describe('queryDatasourceTool', () => {
       // Should call main query first, then both validation queries
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('should show feature-disabled error when VDS is disabled', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(Err('feature-disabled'));
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
   });
 });
 

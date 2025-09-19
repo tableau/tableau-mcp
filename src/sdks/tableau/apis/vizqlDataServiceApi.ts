@@ -297,6 +297,10 @@ const vizqlDataServiceApi = makeApi([
         status: 'default',
         schema: TableauError,
       },
+      {
+        status: 404,
+        schema: z.any(),
+      },
     ],
   },
   {
@@ -313,6 +317,12 @@ const vizqlDataServiceApi = makeApi([
       },
     ],
     response: MetadataOutput,
+    errors: [
+      {
+        status: 404,
+        schema: z.any(),
+      },
+    ],
   },
   {
     method: 'get',
