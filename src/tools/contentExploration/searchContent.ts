@@ -34,7 +34,15 @@ export const getSearchContentTool = (server: Server): Tool<typeof paramsSchema> 
       const config = getConfig();
       const orderByString = orderBy ? buildOrderByString(orderBy) : undefined;
       const filterString = filter ? buildFilterString(filter) : undefined;
-      // TODO: Throw is orderByString includes "downstreamWorkbookCount" and filterString type is not eq:table or eq:database
+      if (
+        orderByString?.includes('downstreamWorkbookCount') &&
+        !filterString?.includes('type:eq:table') &&
+        !filterString?.includes('type:eq:database')
+      ) {
+        throw new Error(
+          "When 'orderBy' includes 'downstreamWorkbookCount', the filter must include of content type of 'table' or 'database'",
+        );
+      }
 
       return await searchContentTool.logAndExecute({
         requestId,

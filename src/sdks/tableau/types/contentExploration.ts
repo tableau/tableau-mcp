@@ -12,7 +12,7 @@ export const OrderBySchema = z
   .array(
     z.object({
       method: OrderingMethods,
-      sortDirection: z.enum(['asc', 'desc']).default('desc').optional(), // TODO: should default be asc? and is this auto applied?
+      sortDirection: z.enum(['asc', 'desc']).default('asc').optional(),
     }),
   )
   .nonempty();

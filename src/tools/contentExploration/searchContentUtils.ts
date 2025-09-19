@@ -46,8 +46,7 @@ export function buildOrderByString(orderBy: OrderBy): string {
 
   return orderBy
     .map(
-      (ordering) =>
-        ordering.method + (ordering.sortDirection ? `:${ordering.sortDirection}` : ':desc'),
+      (ordering) => ordering.method + (ordering.sortDirection ? `:${ordering.sortDirection}` : ''),
     )
     .join(',');
 }
