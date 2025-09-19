@@ -1,8 +1,6 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
-import { SearchContentResponseSchema } from '../types/contentExploration.js';
-
 const searchContentEndpoint = makeEndpoint({
   method: 'get',
   path: '/search',
@@ -18,12 +16,12 @@ const searchContentEndpoint = makeEndpoint({
     {
       name: 'page',
       type: 'Query',
-      schema: z.number().int().min(0).optional(),
+      schema: z.number().int().optional(),
     },
     {
       name: 'limit',
       type: 'Query',
-      schema: z.number().int().max(2000).min(1).default(10).optional(),
+      schema: z.number().int().optional(),
     },
     {
       name: 'order_by',
@@ -36,9 +34,7 @@ const searchContentEndpoint = makeEndpoint({
       schema: z.string().optional(),
     },
   ],
-  response: z.object({
-    results: SearchContentResponseSchema,
-  }),
+  response: z.any(),
 });
 
 const contentExplorationApi = makeApi([searchContentEndpoint]);

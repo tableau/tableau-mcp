@@ -65,19 +65,21 @@ export const SearchContentFilterSchema = z.union([
 export type SearchContentFilter = z.infer<typeof SearchContentFilterSchema>;
 
 // TODO: Does this need to be a partial object?
-export const SearchContentResponseSchema = z.object({
-  next: z.string(),
-  prev: z.string(),
-  pageIndex: z.number().int().min(0),
-  startIndex: z.number().int().min(0),
-  total: z.number().int().max(2000),
-  limit: z.number().int().max(2000),
-  items: z.array(
-    z.object({
-      uri: z.string(),
-      content: z.object({}),
-    }),
-  ), // TODO: does this schema work?
-});
+// export const SearchContentResponseSchema = z.object({
+//   next: z.string(),
+//   prev: z.string(),
+//   pageIndex: z.number().int().min(0),
+//   startIndex: z.number().int().min(0),
+//   total: z.number().int().max(2000),
+//   limit: z.number().int().max(2000),
+//   items: z.array(
+//     z.object({
+//       uri: z.string(),
+//       content: z.object({}),
+//     }),
+//   ), // TODO: does this schema work?
+// });
+
+export const SearchContentResponseSchema = z.any();
 
 export type SearchContentResponse = z.infer<typeof SearchContentResponseSchema>;

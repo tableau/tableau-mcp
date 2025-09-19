@@ -14,7 +14,7 @@ import { buildFilterString, buildOrderByString } from './searchContentUtils.js';
 
 const paramsSchema = {
   terms: z.string().optional(),
-  limit: z.number().int().max(2000).min(1).default(100).optional(),
+  limit: z.number().int().optional(),
   orderBy: OrderBySchema.optional(),
   filter: SearchContentFilterSchema.optional(),
 };
