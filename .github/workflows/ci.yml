@@ -40,9 +40,6 @@ jobs:
       - name: Build Docker image
         run: npm run build:docker
 
-      - name: Build Claude MCP Bundle
-        run: npm run build:mcpb
-
       - name: Build NPM package
         run: npm pack
 
@@ -59,6 +56,13 @@ jobs:
           CONNECTED_APP_CLIENT_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}
           CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
           CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
+
+      - name: Build Claude MCP Bundle
+        run: |
+          npm run build:manifest:script
+          npm run build:manifest
+          npm ci --omit=dev
+          npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb
 
       - name: Report code coverage
         uses: irongut/CodeCoverageSummary@v1.3.0

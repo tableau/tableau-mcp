@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "An MCP server for Tableau, providing a suite of tools that will make it easier for developers to build AI-applications that integrate with Tableau.",
-  "version": "1.8.5",
+  "version": "1.8.6",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -23,7 +23,7 @@
     "build": "run-s :build exec-perms",
     "build:watch": "npm run :build -- --watch",
     "build:docker": "docker build -t tableau-mcp .",
-    ":build:mcpb": "npx @anthropic-ai/mcpb pack . tableau-mcp.mcpb",
+    ":build:mcpb": "npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb",
     "build:mcpb": "run-s build:manifest:script build:manifest :build:mcpb",
     "build:manifest": "node build/scripts/createClaudeMcpBundleManifest.mjs",
     "build:manifest:script": "esbuild src/scripts/createClaudeMcpBundleManifest.ts --bundle --platform=node --format=esm --outdir=build/scripts --sourcemap=inline --out-extension:.js=.mjs",
