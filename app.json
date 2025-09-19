@@ -26,7 +26,7 @@
       "required": true
     },
     "TRANSPORT": {
-      "description": "The MCP transport type to use for the server",
+      "description": "The MCP transport type to use for the server. Must be http.",
       "required": true,
       "value": "http"
     }
