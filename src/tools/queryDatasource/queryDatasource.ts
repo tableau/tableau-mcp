@@ -12,6 +12,7 @@ import {
   TableauError,
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
+import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { Tool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
@@ -27,6 +28,9 @@ const paramsSchema = {
 };
 
 export type QueryDatasourceError =
+  | {
+      type: 'feature-disabled';
+    }
   | {
       type: 'filter-validation';
       message: string;
@@ -102,10 +106,12 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
                 return new Err(
                   result.error instanceof ZodiosError
                     ? result.error
-                    : {
-                        type: 'tableau-error',
-                        error: result.error,
-                      },
+                    : result.error === 'feature-disabled'
+                      ? { type: 'feature-disabled' }
+                      : {
+                          type: 'tableau-error',
+                          error: result.error,
+                        },
                 );
               }
               return result;
@@ -114,6 +120,8 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
         },
         getErrorText: (error: QueryDatasourceError) => {
           switch (error.type) {
+            case 'feature-disabled':
+              return getVizqlDataServiceDisabledError();
             case 'filter-validation':
               return JSON.stringify({
                 requestId,
