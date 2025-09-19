@@ -13,10 +13,17 @@ export const toolNames = [
   'list-pulse-metrics-from-metric-ids',
   'list-pulse-metric-subscriptions',
   'generate-pulse-metric-value-insight-bundle',
+  'search-content',
 ] as const;
 export type ToolName = (typeof toolNames)[number];
 
-export const toolGroupNames = ['datasource', 'workbook', 'view', 'pulse'] as const;
+export const toolGroupNames = [
+  'datasource',
+  'workbook',
+  'view',
+  'pulse',
+  'contentExploration',
+] as const;
 export type ToolGroupName = (typeof toolGroupNames)[number];
 
 export const toolGroups = {
@@ -31,6 +38,7 @@ export const toolGroups = {
     'list-pulse-metric-subscriptions',
     'generate-pulse-metric-value-insight-bundle',
   ],
+  contentExploration: ['search-content'],
 } as const satisfies Record<ToolGroupName, Array<ToolName>>;
 
 export function isToolName(value: unknown): value is ToolName {
