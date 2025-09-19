@@ -26,6 +26,10 @@
       "description": "The value of the Tableau Personal Access Token to use for authentication",
       "required": true
     },
-    "TRANSPORT": "http"
+    "TRANSPORT": {
+      "description": "The MCP transport type to use for the server. Must be http.",
+      "required": true,
+      "value": "http"
+    }
   }
 }
