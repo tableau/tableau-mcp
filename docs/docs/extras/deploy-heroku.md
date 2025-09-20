@@ -2,7 +2,7 @@
 sidebar_position: 2
 ---
 
-## Deploy to Heroku
+# Deploy to Heroku
 
 For information on how the deployment works, see the
 [Creating a 'Deploy to Heroku' Button](https://devcenter.heroku.com/articles/heroku-button)

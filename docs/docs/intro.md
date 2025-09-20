@@ -5,14 +5,13 @@ sidebar_position: 1
 # Introduction
 
 Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will
-make it easier for developers to build AI-applications that integrate with Tableau.
+make it easier for developers to build AI applications that integrate with Tableau.
 
 ## Key Features
 
-- Provides access to Tableau published data sources through the
-  [VizQL Data Service (VDS) API](https://help.tableau.com/current/api/vizql-data-service/en-us/index.html).
-- Supports collecting data source metadata (columns with descriptions) through the Tableau
-  [Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/docs/meta_api_start.html).
+- Provides access to Tableau published data sources through the [VizQL Data Service (VDS) API][vds].
+- Supports collecting data source metadata (columns with descriptions) through the Tableau [Metadata
+  API][meta].
 - Supports access to Pulse Metric, Pulse Metric Definitions, Pulse Subscriptions, and Pulse Metric
   Value Insight Bundle through the [Pulse API][pulse].
 - Usable by AI tools which support MCP Tools (e.g., Claude Desktop, Cursor and others).
@@ -20,7 +19,7 @@ make it easier for developers to build AI-applications that integrate with Table
 
 ## Tool List
 
-| **Variable**                                                                                                          | **Description**                                                                                       |
+| **Tool**                                                                                                              | **Description**                                                                                       |
 | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | [list-datasources](tools/data-qna/list-datasources.md)                                                                | Retrieves a list of published data sources from a specified Tableau site ([REST API][query])          |
 | [list-workbooks](tools/workbooks/list-workbooks.md)                                                                   | Retrieves a list of workbooks from a specified Tableau site ([REST API][list-workbooks])              |

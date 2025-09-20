@@ -43,6 +43,9 @@ The default logging level of the server.
   - `alert`
   - `emergency`
 
+MCP logs are stored by your AI client, so check that documentation to find the location where they
+are saved.
+
 <hr />
 
 ## `DATASOURCE_CREDENTIALS`
@@ -67,11 +70,11 @@ This is a JSON-stringified version of the following object:
 }
 ```
 
-The connection LUIDs can be determined using the
-[Query Data Source Connections REST API](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source_connections).
+The connection LUIDs can be determined using the [Query Data Source Connections REST
+API][tab-ds-connections].
 
-Future work will include a tool to automate this process. For more information, see
-[Connect to your data source](https://help.tableau.com/current/api/vizql-data-service/en-us/docs/vds_create_queries.html#connect-to-your-data-source).
+Future work will include a tool to automate this process. For more information, see [Connect to your
+data source][tab-connect-ds].
 
 <hr />
 
@@ -139,3 +142,7 @@ Disables `graphql` requests to the Tableau Metadata API in the
 <hr />
 
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
+[tab-ds-connections]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source_connections
+[tab-connect-ds]:
+  https://help.tableau.com/current/api/vizql-data-service/en-us/docs/vds_create_queries.html#connect-to-your-data-source

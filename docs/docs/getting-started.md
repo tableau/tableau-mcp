@@ -50,14 +50,18 @@ To keep up with repo changes:
 
 ## Docker Build
 
-To use the Docker version of Tableau MCP, build the image from source:
+To use the Docker version of Tableau MCP, make sure that Docker is running, then build the image
+from source:
 
 ```bash
-$ docker build -t tableau-mcp .
+$ npm run build:docker
 $ docker images
 REPOSITORY    TAG       IMAGE ID       CREATED        SIZE
 tableau-mcp   latest    c721228b6dd3   15 hours ago   260MB
 ```
+
+Configure your MCP client using the "running with Docker" instructions in the
+[Configuring AI Tools](./configuration/ai-tools-config/README.md) section.
 
 Remember to build the Docker image again whenever you pull the latest repo changes. Also you'll need
 to relaunch your AI tool so it starts using the updated image.

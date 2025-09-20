@@ -37,10 +37,10 @@ For `stdio` transport, it should look similar to this:
 <hr />
 
 For **running with Docker**, create an `env.list` file in the root of the project using
-`env.example.list` as a template. Also create an `mcpServers` JSON snippet like
-`config.docker.json`.
+`env.example.list` as a template.
 
-It should look similar to this:
+Also create an `mcpServers` JSON snippet using `config.docker.json` as a template. Make sure to
+include the full path to your `env.list` file. It should look similar to this:
 
 ```json
 {
