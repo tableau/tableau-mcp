@@ -1,6 +1,8 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { SearchContentResponseSchema } from '../types/contentExploration.js';
+
 const searchContentEndpoint = makeEndpoint({
   method: 'get',
   path: '/search',
@@ -34,7 +36,9 @@ const searchContentEndpoint = makeEndpoint({
       schema: z.string().optional(),
     },
   ],
-  response: z.any(),
+  response: z.object({
+    hits: SearchContentResponseSchema,
+  }),
 });
 
 const contentExplorationApi = makeApi([searchContentEndpoint]);

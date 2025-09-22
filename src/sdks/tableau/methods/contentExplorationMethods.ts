@@ -46,6 +46,6 @@ export default class ContentExplorationMethods extends AuthenticatedMethods<
       queries: { terms, page, limit, order_by: orderBy, filter },
       ...this.authHeader,
     });
-    return response;
+    return response.hits;
   };
 }

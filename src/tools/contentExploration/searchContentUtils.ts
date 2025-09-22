@@ -1,36 +1,8 @@
-import { OrderBy, SearchContentFilter } from '../../sdks/tableau/types/contentExploration.js';
-
-// import {
-//   FilterOperator,
-//   FilterOperatorSchema,
-//   parseAndValidateFilterString,
-// } from '../../utils/parseAndValidateFilterString.js';
-
-// const FilterFieldSchema = z.enum(['type', 'ownerId', 'modifiedTime']);
-
-// type FilterField = z.infer<typeof FilterFieldSchema>;
-
-// const allowedOperatorsByField: Record<FilterField, FilterOperator[]> = {
-//   type: ['eq', 'in'],
-//   ownerId: ['eq', 'in'],
-//   modifiedTime: ['eq', 'gt', 'gte', 'lt', 'lte'], // TODO: Test if 'lt' is allowed
-// };
-
-// const _FilterExpressionSchema = z.object({
-//   field: FilterFieldSchema,
-//   operator: FilterOperatorSchema,
-//   value: z.string(),
-// });
-
-// type FilterExpression = z.infer<typeof _FilterExpressionSchema>;
-
-// export function parseAndValidateSearchContentFilterString(filter: string): string {
-//   return parseAndValidateFilterString<FilterField, FilterExpression>({
-//     filterString: filter,
-//     allowedOperatorsByField,
-//     filterFieldSchema: FilterFieldSchema,
-//   });
-// }
+import {
+  OrderBy,
+  SearchContentFilter,
+  SearchContentResponse,
+} from '../../sdks/tableau/types/contentExploration.js';
 
 export function buildOrderByString(orderBy: OrderBy): string {
   const methodsUsed = new Set<string>();
@@ -88,11 +60,128 @@ export function buildFilterString(filter: SearchContentFilter): string {
     }
   }
   if (filter.modifiedTime) {
-    // TODO: Refine logic for this
-    for (const modifiedTime of filter.modifiedTime) {
-      filterExpressions.push(`modifiedTime:${modifiedTime.operator}:${modifiedTime.value}`);
+    if (Array.isArray(filter.modifiedTime)) {
+      if (filter.modifiedTime.length === 1) {
+        filterExpressions.push(`modifiedTime:eq:${filter.modifiedTime[0]}`);
+      } else {
+        const modifiedTimesUsed = new Set<string>();
+        for (const modifiedTime of filter.modifiedTime) {
+          // TODO: Should we ignore duplicate modified times instead of throwing an error?
+          if (modifiedTimesUsed.has(modifiedTime)) {
+            throw new Error(
+              `The 'modifiedTime' array in the 'filter' parameter can only contain one of each modified time. The modified time: '${modifiedTime}' is used more than once in the 'modifiedTime' array.`,
+            );
+          }
+          modifiedTimesUsed.add(modifiedTime);
+        }
+        filterExpressions.push(`modifiedTime:in:[${filter.modifiedTime.join(',')}]`);
+      }
+    } else if (filter.modifiedTime.startDate && filter.modifiedTime.endDate) {
+      let startDate = filter.modifiedTime.startDate;
+      let endDate = filter.modifiedTime.endDate;
+      // if the client provides startDate and endDate in the wrong order, we swap them
+      if (startDate > endDate) {
+        startDate = filter.modifiedTime.endDate;
+        endDate = filter.modifiedTime.startDate;
+      }
+      filterExpressions.push(`modifiedTime:gte:${startDate}`);
+      filterExpressions.push(`modifiedTime:lte:${endDate}`);
+    } else if (filter.modifiedTime.startDate) {
+      filterExpressions.push(`modifiedTime:gte:${filter.modifiedTime.startDate}`);
+    } else if (filter.modifiedTime.endDate) {
+      filterExpressions.push(`modifiedTime:lte:${filter.modifiedTime.endDate}`);
     }
   }
 
-  return filterExpressions.join('&');
+  return filterExpressions.join(',');
+}
+
+export function reduceSearchContentResponse(response: SearchContentResponse): Array<object> {
+  const searchResults = new Array<object>();
+  if (response.items) {
+    for (const item of response.items) {
+      searchResults.push(getReducedSearchItemContent(item.content));
+    }
+  }
+  return searchResults;
+}
+
+function getReducedSearchItemContent(content: Record<string, any>): Record<string, unknown> {
+  const reducedContent: Record<string, unknown> = {};
+  if (content.modifiedTime) {
+    reducedContent.modifiedTime = content.modifiedTime;
+  }
+  if (content.hitsLastTwoWeeksTotal != undefined) {
+    reducedContent.hitsLastTwoWeeksTotal = content.hitsLastTwoWeeksTotal;
+  }
+  if (content.sheetType) {
+    reducedContent.sheetType = content.sheetType;
+  }
+  if (content.caption) {
+    reducedContent.caption = content.caption;
+  }
+  if (content.workbookDescription) {
+    reducedContent.workbookDescription = content.workbookDescription;
+  }
+  if (content.type) {
+    reducedContent.type = content.type;
+  }
+  if (content.ownerId) {
+    reducedContent.ownerId = content.ownerId;
+  }
+  if (content.title) {
+    reducedContent.title = content.title;
+  }
+  if (content.ownerName) {
+    reducedContent.ownerName = content.ownerName;
+  }
+  if (content.containerName) {
+    reducedContent.containerName = content.containerName;
+  }
+  if (content.luid) {
+    reducedContent.luid = content.luid;
+  }
+  if (content.hitsLargeSpanTotal != undefined) {
+    reducedContent.hitsLargeSpanTotal = content.hitsLargeSpanTotal;
+  }
+  if (content.createdTime) {
+    reducedContent.createdTime = content.createdTime;
+  }
+  if (content.hitsMediumSpanTotal != undefined) {
+    reducedContent.hitsMediumSpanTotal = content.hitsMediumSpanTotal;
+  }
+  if (content.locationName) {
+    reducedContent.locationName = content.locationName;
+  }
+  if (content.comments?.length) {
+    reducedContent.comments = content.comments;
+  }
+  if (content.containerType) {
+    reducedContent.containerType = content.containerType;
+  }
+  if (content.hitsTotal != undefined) {
+    reducedContent.hitsTotal = content.hitsTotal;
+  }
+  if (content.favoritesTotal != undefined) {
+    reducedContent.favoritesTotal = content.favoritesTotal;
+  }
+  if (content.ownerEmail) {
+    reducedContent.ownerEmail = content.ownerEmail;
+  }
+  if (content.tags?.length) {
+    reducedContent.tags = content.tags;
+  }
+  if (content.siteLuid) {
+    reducedContent.siteLuid = content.siteLuid;
+  }
+  if (content.hitsSmallSpanTotal != undefined) {
+    reducedContent.hitsSmallSpanTotal = content.hitsSmallSpanTotal;
+  }
+  if (content.fields) {
+    reducedContent.fields = content.fields;
+  }
+  if (content.projectName) {
+    reducedContent.projectName = content.projectName;
+  }
+  return reducedContent;
 }

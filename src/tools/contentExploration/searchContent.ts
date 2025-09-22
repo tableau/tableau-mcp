@@ -10,11 +10,15 @@ import {
 } from '../../sdks/tableau/types/contentExploration.js';
 import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
-import { buildFilterString, buildOrderByString } from './searchContentUtils.js';
+import {
+  buildFilterString,
+  buildOrderByString,
+  reduceSearchContentResponse,
+} from './searchContentUtils.js';
 
 const paramsSchema = {
   terms: z.string().optional(),
-  limit: z.number().int().optional(),
+  limit: z.number().int().min(1).max(2000).default(2000).optional(),
   orderBy: OrderBySchema.optional(),
   filter: SearchContentFilterSchema.optional(),
 };
@@ -55,13 +59,14 @@ export const getSearchContentTool = (server: Server): Tool<typeof paramsSchema> 
               server,
               jwtScopes: [],
               callback: async (restApi) => {
-                return await restApi.contentExplorationMethods.searchContent({
-                  terms, // TODO: Check on restrictions for terms
+                const response = await restApi.contentExplorationMethods.searchContent({
+                  terms,
                   page: 0,
-                  limit: limit ?? 100,
+                  limit: limit ?? 2000, // TODO: determine default limit
                   orderBy: orderByString,
                   filter: filterString,
                 });
+                return reduceSearchContentResponse(response);
               },
             }),
           );
