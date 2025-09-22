@@ -43,8 +43,7 @@ The default logging level of the server.
   - `alert`
   - `emergency`
 
-MCP logs are stored by your AI client, so check that documentation to find the location where they
-are saved.
+MCP logs are written by your AI client, so check that documentation to find their location.
 
 <hr />
 
