@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -12,6 +13,7 @@ import {
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/schemas.js';
+import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { Tool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
@@ -27,6 +29,9 @@ const paramsSchema = {
 };
 
 export type QueryDatasourceError =
+  | {
+      type: 'feature-disabled';
+    }
   | {
       type: 'filter-validation';
       message: string;
@@ -104,10 +109,16 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
 
               const result = await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
               if (result.isErr()) {
-                return new Err({
-                  type: 'tableau-error',
-                  error: result.error,
-                });
+                return new Err(
+                  result.error instanceof ZodiosError
+                    ? result.error
+                    : result.error === 'feature-disabled'
+                      ? { type: 'feature-disabled' }
+                      : {
+                          type: 'tableau-error',
+                          error: result.error,
+                        },
+                );
               }
               return result;
             },
@@ -115,6 +126,8 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
         },
         getErrorText: (error: QueryDatasourceError) => {
           switch (error.type) {
+            case 'feature-disabled':
+              return getVizqlDataServiceDisabledError();
             case 'filter-validation':
               return JSON.stringify({
                 requestId,

@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
@@ -8,6 +7,7 @@ import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/schemas.js';
 import { Tool } from '../../tool.js';
+import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
   metricDefinitionIds: z.array(z.string().length(36)).min(1),
@@ -66,22 +66,21 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
         authInfo,
         args: { metricDefinitionIds, view },
         callback: async () => {
-          return new Ok(
-            await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: ['tableau:insight_definitions_metrics:read'],
+          return await useRestApi({
+            config,
+            requestId,
+            server,
+            jwtScopes: ['tableau:insight_definitions_metrics:read'],
               authInfo: getTableauAuthInfo(authInfo),
-              callback: async (restApi) => {
-                return await restApi.pulseMethods.listPulseMetricDefinitionsFromMetricDefinitionIds(
-                  metricDefinitionIds,
-                  view,
-                );
-              },
-            }),
-          );
+            callback: async (restApi) => {
+              return await restApi.pulseMethods.listPulseMetricDefinitionsFromMetricDefinitionIds(
+                metricDefinitionIds,
+                view,
+              );
+            },
+          });
         },
+        getErrorText: getPulseDisabledError,
       });
     },
   });

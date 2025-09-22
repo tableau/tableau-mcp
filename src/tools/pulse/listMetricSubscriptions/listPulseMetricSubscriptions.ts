@@ -1,11 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/schemas.js';
 import { Tool } from '../../tool.js';
+import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {};
 
@@ -38,19 +38,18 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
         authInfo,
         args: {},
         callback: async () => {
-          return new Ok(
-            await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: ['tableau:metric_subscriptions:read'],
+          return await useRestApi({
+            config,
+            requestId,
+            server,
+            jwtScopes: ['tableau:metric_subscriptions:read'],
               authInfo: getTableauAuthInfo(authInfo),
-              callback: async (restApi) => {
-                return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
-              },
-            }),
-          );
+            callback: async (restApi) => {
+              return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
+            },
+          });
         },
+        getErrorText: getPulseDisabledError,
       });
     },
   });

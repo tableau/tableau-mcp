@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
@@ -8,6 +7,7 @@ import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/schemas.js';
 import { Tool } from '../../tool.js';
+import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
   view: z.optional(z.enum(pulseMetricDefinitionViewEnum)),
@@ -52,19 +52,18 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
         authInfo,
         args: { view },
         callback: async () => {
-          return new Ok(
-            await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: ['tableau:insight_definitions_metrics:read'],
+          return await useRestApi({
+            config,
+            requestId,
+            server,
+            jwtScopes: ['tableau:insight_definitions_metrics:read'],
               authInfo: getTableauAuthInfo(authInfo),
-              callback: async (restApi) => {
-                return await restApi.pulseMethods.listAllPulseMetricDefinitions(view);
-              },
-            }),
-          );
+            callback: async (restApi) => {
+              return await restApi.pulseMethods.listAllPulseMetricDefinitions(view);
+            },
+          });
         },
+        getErrorText: getPulseDisabledError,
       });
     },
   });

@@ -40,6 +40,7 @@ describe('Config', () => {
       EXCLUDE_TOOLS: undefined,
       MAX_RESULT_LIMIT: undefined,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: undefined,
+      DISABLE_METADATA_API_REQUESTS: undefined,
       DISABLE_OAUTH: undefined,
       OAUTH_ISSUER: undefined,
       OAUTH_REDIRECT_URI: undefined,
@@ -244,6 +245,27 @@ describe('Config', () => {
     expect(config.disableQueryDatasourceFilterValidation).toBe(true);
   });
 
+  it('should set disableMetadataApiRequests to false by default', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+    };
+
+    const config = new Config();
+    expect(config.disableMetadataApiRequests).toBe(false);
+  });
+
+  it('should set disableMetadataApiRequests to true when specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      DISABLE_METADATA_API_REQUESTS: 'true',
+    };
+
+    const config = new Config();
+    expect(config.disableMetadataApiRequests).toBe(true);
+  });
+
   it('should default transport to stdio when not specified', () => {
     process.env = {
       ...process.env,
@@ -282,11 +304,11 @@ describe('Config', () => {
       process.env = {
         ...process.env,
         ...defaultEnvVars,
-        INCLUDE_TOOLS: 'query-datasource,list-fields',
+        INCLUDE_TOOLS: 'query-datasource,get-datasource-metadata',
       };
 
       const config = new Config();
-      expect(config.includeTools).toEqual(['query-datasource', 'list-fields']);
+      expect(config.includeTools).toEqual(['query-datasource', 'get-datasource-metadata']);
     });
 
     it('should parse INCLUDE_TOOLS into an array of valid tool names when tool group names are used', () => {
@@ -349,7 +371,7 @@ describe('Config', () => {
         ...process.env,
         ...defaultEnvVars,
         INCLUDE_TOOLS: 'query-datasource',
-        EXCLUDE_TOOLS: 'list-fields',
+        EXCLUDE_TOOLS: 'get-datasource-metadata',
       };
 
       expect(() => new Config()).toThrow('Cannot include and exclude tools simultaneously');

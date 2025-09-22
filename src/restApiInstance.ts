@@ -1,6 +1,5 @@
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 
-import { isAxiosError } from '../node_modules/axios/index.js';
 import { Config, getConfig } from './config.js';
 import { log, shouldLogWhenLevelIsAtLeast } from './logging/log.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
@@ -19,6 +18,7 @@ import { Server } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { userAgent } from './server/userAgent.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
+import { isAxiosError } from './utils/isAxiosError.js';
 import invariant from './utils/invariant.js';
 
 type JwtScopes =

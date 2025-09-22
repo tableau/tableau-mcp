@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import z from 'zod';
 
 import { getConfig } from '../../../config.js';
@@ -11,6 +10,7 @@ import {
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/schemas.js';
 import { Tool } from '../../tool.js';
+import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
   bundleRequest: pulseBundleRequestSchema,
@@ -147,21 +147,20 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
         authInfo,
         args: { bundleRequest, bundleType },
         callback: async () => {
-          return new Ok(
-            await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: ['tableau:insights:read'],
+          return await useRestApi({
+            config,
+            requestId,
+            server,
+            jwtScopes: ['tableau:insights:read'],
               authInfo: getTableauAuthInfo(authInfo),
-              callback: async (restApi) =>
-                await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
-                  bundleRequest,
-                  bundleType ?? 'ban',
-                ),
-            }),
-          );
+            callback: async (restApi) =>
+              await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
+                bundleRequest,
+                bundleType ?? 'ban',
+              ),
+          });
         },
+        getErrorText: getPulseDisabledError,
       });
     },
   });

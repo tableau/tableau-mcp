@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
-import { DxtManifestSchema, DxtUserConfigurationOptionSchema } from '@anthropic-ai/dxt';
+import { McpbManifestSchema, McpbUserConfigurationOptionSchema } from '@anthropic-ai/mcpb';
 import { writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -14,11 +14,11 @@ import { toolNames } from '../tools/toolName.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-type DxtUserConfigurationOption = z.infer<typeof DxtUserConfigurationOptionSchema>;
-type DxtManifest = z.infer<typeof DxtManifestSchema>;
+type McpbUserConfigurationOption = z.infer<typeof McpbUserConfigurationOptionSchema>;
+type McpbManifest = z.infer<typeof McpbManifestSchema>;
 
 type EnvVars = {
-  [TKey in keyof ProcessEnvEx]: DxtUserConfigurationOption & {
+  [TKey in keyof ProcessEnvEx]: McpbUserConfigurationOption & {
     includeInUserConfig: boolean;
   };
 };
@@ -167,6 +167,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  DISABLE_METADATA_API_REQUESTS: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Disable Metadata API Requests',
+    description:
+      'Disable requests to the Tableau Metadata API in the get-datasource-metadata tool.',
+    required: false,
+    sensitive: false,
+  },
   SSL_KEY: {
     includeInUserConfig: false,
     type: 'string',
@@ -281,7 +290,7 @@ const envVars = {
   },
 } satisfies EnvVars;
 
-const userConfig = Object.entries(envVars).reduce<Record<string, DxtUserConfigurationOption>>(
+const userConfig = Object.entries(envVars).reduce<Record<string, McpbUserConfigurationOption>>(
   (acc, [key, value]) => {
     if (value.includeInUserConfig) {
       acc[key.toLowerCase()] = {
@@ -309,8 +318,8 @@ const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>
 );
 
 const manifest = {
-  dxt_version: '0.1',
-  name: packageJson.name,
+  dxt_version: '0.1', // Replace with manifest_version this once Claude Desktop understands it
+  name: 'Tableau',
   version: packageJson.version,
   description: packageJson.description,
   author: {
@@ -321,6 +330,7 @@ const manifest = {
     url: 'https://github.com/tableau/tableau-mcp',
   },
   homepage: packageJson.homepage,
+  documentation: 'https://tableau.github.io/tableau-mcp/',
   license: packageJson.license,
   support: 'https://github.com/tableau/tableau-mcp/issues',
   icon: 'https://avatars.githubusercontent.com/u/828667',
@@ -335,7 +345,7 @@ const manifest = {
   },
   tools: toolNames.map((name) => ({ name })),
   user_config: userConfig,
-} satisfies DxtManifest;
+} satisfies McpbManifest;
 
 const manifestPath = join(__dirname, '../../manifest.json');
 writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));

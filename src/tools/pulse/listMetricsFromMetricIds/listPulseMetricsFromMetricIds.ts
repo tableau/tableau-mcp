@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
@@ -7,6 +6,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/schemas.js';
 import { Tool } from '../../tool.js';
+import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
   metricIds: z.array(z.string().length(36)),
@@ -44,19 +44,18 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
         authInfo,
         args: { metricIds },
         callback: async () => {
-          return new Ok(
-            await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: ['tableau:insight_metrics:read'],
+          return await useRestApi({
+            config,
+            requestId,
+            server,
+            jwtScopes: ['tableau:insight_metrics:read'],
               authInfo: getTableauAuthInfo(authInfo),
-              callback: async (restApi) => {
-                return await restApi.pulseMethods.listPulseMetricsFromMetricIds(metricIds);
-              },
-            }),
-          );
+            callback: async (restApi) => {
+              return await restApi.pulseMethods.listPulseMetricsFromMetricIds(metricIds);
+            },
+          });
         },
+        getErrorText: getPulseDisabledError,
       });
     },
   });

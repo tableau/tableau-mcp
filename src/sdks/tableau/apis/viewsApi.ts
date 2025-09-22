@@ -85,7 +85,7 @@ const queryViewsForSiteEndpoint = makeEndpoint({
   ],
   response: z.object({
     pagination: paginationSchema,
-    views: z.object({ view: z.array(viewSchema) }),
+    views: z.object({ view: z.array(viewSchema).optional() }),
   }),
 });
 

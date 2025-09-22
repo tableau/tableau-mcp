@@ -8,7 +8,7 @@ import { Tool } from './tools/tool.js';
 import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
 
-export const serverName = pkg.name;
+export const serverName = 'tableau-mcp';
 export const serverVersion = pkg.version;
 
 export class Server extends McpServer {

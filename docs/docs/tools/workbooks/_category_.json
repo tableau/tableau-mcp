@@ -1,0 +1,8 @@
+{
+  "label": "Workbooks",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for retrieving information about workbooks."
+  }
+}

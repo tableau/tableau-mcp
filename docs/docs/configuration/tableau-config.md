@@ -13,7 +13,8 @@ Tableau MCP works with both Tableau Server and Tableau Cloud data with these pre
   [enable it](https://help.tableau.com/current/api/metadata_api/en-us/docs/meta_api_start.html#enable-the-tableau-metadata-api-for-tableau-server)).
 - You may need to
   [enable Tableau Pulse](https://help.tableau.com/current/online/en-us/pulse_set_up.htm) on your
-  Tableau Cloud site to use [Pulse API][pulse] tools (Tableau Server is unable to use Tableau
+  Tableau Cloud site to use [Pulse API][pulse]
+  [tools](../tools/pulse/list-all-pulse-metric-definitions) (Tableau Server is unable to use Tableau
   Pulse).
 
 [pulse]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm

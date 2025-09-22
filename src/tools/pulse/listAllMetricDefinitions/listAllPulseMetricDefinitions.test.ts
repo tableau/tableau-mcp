@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err, Ok } from 'ts-results-es';
 
 import type { PulseMetricDefinition } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
@@ -64,7 +65,7 @@ describe('listAllPulseMetricDefinitionsTool', () => {
     { view: 'DEFINITION_VIEW_FULL', label: 'full view' },
     { view: 'DEFINITION_VIEW_DEFAULT', label: 'default view' },
   ])('should list pulse metric definitions with $label', async ({ view }) => {
-    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(mockPulseMetricDefinitions);
+    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(new Ok(mockPulseMetricDefinitions));
     const result = await getToolResult({ view });
     expect(result.isError).toBe(false);
     const parsedValue = JSON.parse(result.content[0].text as string);
@@ -73,7 +74,7 @@ describe('listAllPulseMetricDefinitionsTool', () => {
   });
 
   it('should list pulse metric definitions with no view (default)', async () => {
-    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(mockPulseMetricDefinitions);
+    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(new Ok(mockPulseMetricDefinitions));
     const result = await getToolResult({});
     expect(result.isError).toBe(false);
     const parsedValue = JSON.parse(result.content[0].text as string);
@@ -103,6 +104,20 @@ describe('listAllPulseMetricDefinitionsTool', () => {
     expect(result.content[0].text).toContain(
       'DEFINITION_VIEW_BASIC, DEFINITION_VIEW_FULL, DEFINITION_VIEW_DEFAULT',
     );
+  });
+
+  it('should return an error when executing the tool against Tableau Server', async () => {
+    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(new Err('tableau-server'));
+    const result = await getToolResult({});
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
+  });
+
+  it('should return an error when Pulse is disabled', async () => {
+    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(new Err('pulse-disabled'));
+    const result = await getToolResult({});
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
   });
 });
 

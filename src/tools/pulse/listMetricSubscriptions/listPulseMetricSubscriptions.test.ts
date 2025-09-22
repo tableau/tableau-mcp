@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err, Ok } from 'ts-results-es';
 
 import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
@@ -41,7 +42,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
 
   it('should list pulse metric subscriptions for the current user', async () => {
     mocks.mockListPulseMetricSubscriptionsForCurrentUser.mockResolvedValue(
-      mockPulseMetricSubscriptions,
+      new Ok(mockPulseMetricSubscriptions),
     );
     const result = await getToolResult();
     expect(result.isError).toBe(false);
@@ -56,6 +57,24 @@ describe('listPulseMetricSubscriptionsTool', () => {
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(errorMessage);
+  });
+
+  it('should return an error when executing the tool against Tableau Server', async () => {
+    mocks.mockListPulseMetricSubscriptionsForCurrentUser.mockResolvedValue(
+      new Err('tableau-server'),
+    );
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
+  });
+
+  it('should return an error when Pulse is disabled', async () => {
+    mocks.mockListPulseMetricSubscriptionsForCurrentUser.mockResolvedValue(
+      new Err('pulse-disabled'),
+    );
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
   });
 });
 

@@ -40,11 +40,29 @@ jobs:
       - name: Build Docker image
         run: npm run build:docker
 
-      - name: Build Claude Desktop Extension
-        run: npm run build:dxt
+      - name: Build NPM package
+        run: npm pack
 
       - name: Tests
         run: npm run coverage
+
+      - name: E2E Tests
+        run: npm run test:e2e
+        env:
+          SERVER: ${{ secrets.E2E_TEST_SERVER }}
+          SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
+          AUTH: ${{ secrets.E2E_TEST_AUTH }}
+          JWT_SUB_CLAIM: ${{ secrets.E2E_TEST_JWT_SUB_CLAIM }}
+          CONNECTED_APP_CLIENT_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}
+          CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
+          CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
+
+      - name: Build Claude MCP Bundle
+        run: |
+          npm run build:manifest:script
+          npm run build:manifest
+          npm ci --omit=dev
+          npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb
 
       - name: Report code coverage
         uses: irongut/CodeCoverageSummary@v1.3.0
@@ -66,4 +84,5 @@ jobs:
           if-no-files-found: error
           path: |
             build/
-            tableau-mcp.dxt
+            junit/
+            tableau-mcp.mcpb

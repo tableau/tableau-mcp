@@ -82,6 +82,9 @@ export const MetadataOutput = z
   .partial()
   .passthrough();
 
+export type FieldMetadata = z.infer<typeof FieldMetadata>;
+export type MetadataResponse = z.infer<typeof MetadataOutput>;
+
 export const TableauError = z
   .object({
     errorCode: z.string(),
@@ -294,6 +297,10 @@ const vizqlDataServiceApi = makeApi([
         status: 'default',
         schema: TableauError,
       },
+      {
+        status: 404,
+        schema: z.any(),
+      },
     ],
   },
   {
@@ -311,6 +318,12 @@ const vizqlDataServiceApi = makeApi([
       },
     ],
     response: MetadataOutput,
+    errors: [
+      {
+        status: 404,
+        schema: z.any(),
+      },
+    ],
   },
   {
     method: 'get',
