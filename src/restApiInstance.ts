@@ -18,8 +18,8 @@ import { Server } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { userAgent } from './server/userAgent.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
-import { isAxiosError } from './utils/isAxiosError.js';
 import invariant from './utils/invariant.js';
+import { isAxiosError } from './utils/isAxiosError.js';
 
 type JwtScopes =
   | 'tableau:viz_data_service:read'

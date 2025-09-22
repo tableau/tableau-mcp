@@ -71,7 +71,7 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
             requestId,
             server,
             jwtScopes: ['tableau:insight_definitions_metrics:read'],
-              authInfo: getTableauAuthInfo(authInfo),
+            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricDefinitionsFromMetricDefinitionIds(
                 metricDefinitionIds,
