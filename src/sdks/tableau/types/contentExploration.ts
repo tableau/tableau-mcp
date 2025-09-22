@@ -51,13 +51,13 @@ const ModifiedTimeSchema = z.union([
 
 export const SearchContentFilterBase = z.object({
   contentTypes: z.array(ContentTypes).nonempty().optional(),
-  ownerIds: z.array(z.string()).nonempty().optional(),
+  ownerIds: z.array(z.number().int()).nonempty().optional(),
   modifiedTime: ModifiedTimeSchema.optional(),
 });
 
 export const SearchContentFilterSchema = z.union([
   SearchContentFilterBase.extend({ contentTypes: z.array(ContentTypes).nonempty() }).strict(),
-  SearchContentFilterBase.extend({ ownerIds: z.array(z.string()).nonempty() }).strict(), // TODO: Fix ownerIds schema
+  SearchContentFilterBase.extend({ ownerIds: z.array(z.number().int()).nonempty() }).strict(),
   SearchContentFilterBase.extend({ modifiedTime: ModifiedTimeSchema }).strict(),
 ]);
 

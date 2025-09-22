@@ -6,20 +6,14 @@ import {
 
 export function buildOrderByString(orderBy: OrderBy): string {
   const methodsUsed = new Set<string>();
-  for (const ordering of orderBy) {
-    if (methodsUsed.has(ordering.method)) {
-      // TODO: Should we ignore duplicate ordering methods instead of throwing an error?
-      throw new Error(
-        `The 'orderBy' parameter can only contain one of each sorting method. The sorting method: '${ordering.method}' is used more than once in the 'orderBy' array.`,
-      );
-    }
-    methodsUsed.add(ordering.method);
-  }
-
   return orderBy
-    .map(
-      (ordering) => ordering.method + (ordering.sortDirection ? `:${ordering.sortDirection}` : ''),
-    )
+    .flatMap((ordering) => {
+      if (methodsUsed.has(ordering.method)) {
+        return []; // skip duplicate methods
+      }
+      methodsUsed.add(ordering.method);
+      return ordering.method + (ordering.sortDirection ? `:${ordering.sortDirection}` : '');
+    })
     .join(',');
 }
 
@@ -31,32 +25,20 @@ export function buildFilterString(filter: SearchContentFilter): string {
     } else {
       const typesUsed = new Set<string>();
       for (const type of filter.contentTypes) {
-        if (typesUsed.has(type)) {
-          // TODO: Should we ignore duplicate types instead of throwing an error?
-          throw new Error(
-            `The 'contentTypes' array in the 'filter' parameter can only contain one of each content type. The content type: '${type}' is used more than once in the 'contentTypes' array.`,
-          );
-        }
         typesUsed.add(type);
       }
-      filterExpressions.push(`type:in:[${filter.contentTypes.join(',')}]`);
+      filterExpressions.push(`type:in:[${Array.from(typesUsed).join(',')}]`);
     }
   }
   if (filter.ownerIds) {
     if (filter.ownerIds.length === 1) {
       filterExpressions.push(`ownerId:eq:${filter.ownerIds[0]}`);
     } else {
-      const idsUsed = new Set<string>();
+      const idsUsed = new Set<number>();
       for (const id of filter.ownerIds) {
-        if (idsUsed.has(id)) {
-          // TODO: Should we ignore duplicate ids instead of throwing an error?
-          throw new Error(
-            `The 'ownerIds' array in the 'filter' parameter can only contain one of each owner id. The owner id: '${id}' is used more than once in the 'ownerIds' array.`,
-          );
-        }
         idsUsed.add(id);
       }
-      filterExpressions.push(`ownerId:in:[${filter.ownerIds.join(',')}]`);
+      filterExpressions.push(`ownerId:in:[${Array.from(idsUsed).join(',')}]`);
     }
   }
   if (filter.modifiedTime) {
@@ -66,15 +48,9 @@ export function buildFilterString(filter: SearchContentFilter): string {
       } else {
         const modifiedTimesUsed = new Set<string>();
         for (const modifiedTime of filter.modifiedTime) {
-          // TODO: Should we ignore duplicate modified times instead of throwing an error?
-          if (modifiedTimesUsed.has(modifiedTime)) {
-            throw new Error(
-              `The 'modifiedTime' array in the 'filter' parameter can only contain one of each modified time. The modified time: '${modifiedTime}' is used more than once in the 'modifiedTime' array.`,
-            );
-          }
           modifiedTimesUsed.add(modifiedTime);
         }
-        filterExpressions.push(`modifiedTime:in:[${filter.modifiedTime.join(',')}]`);
+        filterExpressions.push(`modifiedTime:in:[${Array.from(modifiedTimesUsed).join(',')}]`);
       }
     } else if (filter.modifiedTime.startDate && filter.modifiedTime.endDate) {
       let startDate = filter.modifiedTime.startDate;
