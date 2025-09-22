@@ -17,7 +17,7 @@ import {
 } from './searchContentUtils.js';
 
 const paramsSchema = {
-  terms: z.string().optional(),
+  terms: z.string().trim().nonempty().optional(),
   limit: z.number().int().min(1).max(2000).default(2000).optional(),
   orderBy: OrderBySchema.optional(),
   filter: SearchContentFilterSchema.optional(),
