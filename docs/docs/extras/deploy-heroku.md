@@ -36,6 +36,6 @@ settings, configuring in AI tools only needs to point to the instance:
 :::warning
 
 Deploying Tableau MCP to Heroku should be considered experimental at this point. Treat your Heroku
-instance URL carefully and don't share it.
+instance URL carefully and don't share it. This is meant only for test and development at this time.
 
 :::

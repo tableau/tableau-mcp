@@ -20,4 +20,11 @@ The name of the PAT to use for authentication.
 
 The value of the PAT to use for authentication.
 
+:::warning
+
+Treat your personal access token value securely and do not share it with anyone or in any
+client-side code where it could accidentally be revealed.
+
+:::
+
 [pat]: https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm

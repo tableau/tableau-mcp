@@ -40,6 +40,13 @@ The secret ID of the Tableau Connected App.
 
 The secret value of the Tableau Connected App.
 
+:::warning
+
+Treat your Connected App secret value securely and do not share it with anyone or in any client-side
+code where it could accidentally be revealed.
+
+:::
+
 <hr />
 
 ## Optional Variables

@@ -19,15 +19,13 @@ For `stdio` transport, it should look similar to this:
 {
   "mcpServers": {
     "tableau": {
-      "command": "node",
-      "args": ["/full-path-to-tableau-mcp/build/index.js"],
+      "command": "npx",
+      "args": ["-y", "@tableau/mcp-server@latest"],
       "env": {
-        "TRANSPORT": "stdio",
         "SERVER": "https://my-tableau-server.com",
-        "SITE_NAME": "",
-        "PAT_NAME": "",
-        "PAT_VALUE": "",
-        ... etc
+        "SITE_NAME": "my_site",
+        "PAT_NAME": "my_pat",
+        "PAT_VALUE": "pat_value"
       }
     }
   }
