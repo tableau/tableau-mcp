@@ -5,7 +5,7 @@ import { themes as prismThemes } from 'prism-react-renderer';
 const config: Config = {
   title: 'Tableau MCP',
   tagline:
-    'Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will make it easier for developers to build AI-applications that integrate with Tableau.',
+    'Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will make it easier for developers to build AI applications that integrate with Tableau.',
   favicon: 'img/favicon.ico',
   trailingSlash: false,
 
