@@ -44,10 +44,23 @@ export default class ContentExplorationMethods extends AuthenticatedMethods<
     orderBy?: string;
     filter?: string;
   }): Promise<SearchContentResponse> => {
-    const response = await this._apiClient.searchContent({
-      queries: { terms, page, limit, order_by: orderBy, filter },
-      ...this.authHeader,
-    });
+    const queries: Record<string, unknown> = {};
+    if (terms) {
+      queries.terms = terms;
+    }
+    if (page != undefined && page >= 0) {
+      queries.page = page;
+    }
+    if (limit != undefined && limit >= 0) {
+      queries.limit = limit;
+    }
+    if (orderBy) {
+      queries.order_by = orderBy;
+    }
+    if (filter) {
+      queries.filter = filter;
+    }
+    const response = await this._apiClient.searchContent(queries);
     return response.hits;
   };
 }
