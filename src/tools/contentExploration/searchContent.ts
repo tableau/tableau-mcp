@@ -18,7 +18,7 @@ import {
 
 const paramsSchema = {
   terms: z.string().trim().nonempty().optional(),
-  limit: z.number().int().min(1).max(2000).default(2000).optional(),
+  limit: z.number().int().min(1).max(2000).default(100).optional(),
   orderBy: orderBySchema.optional(),
   filter: searchContentFilterSchema.optional(),
 };
@@ -46,13 +46,12 @@ This tool searches across all supported content types for objects relevant to th
   - \`hitsSmallSpanTotal\`: Number of times a content item was viewed in the last month
   - \`hitsMediumSpanTotal\`: Number of times a content item was viewed in the last 3 months
   - \`hitsLargeSpanTotal\`: Number of times a content item was viewed in the last year
-  - \`downstreamWorkbookCount\`: Number of workbooks in a given project (requires content type filter of 'database' or 'table')
+  - \`downstreamWorkbookCount\`: Number of workbooks in a given project. This value is only available when the content type filter includes 'database' or 'table'
   
   For each sort method, you can specify a sort direction: 'asc' for ascending or 'desc' for descending (default: 'asc'). The orderBy parameter is an array of objects containing the sorting method and direction. The first element determines primary sorting, with subsequent elements used as tiebreakers.
 
 **Important Notes:**
-- If \`orderBy\` is omitted, the search will sort items by their "relevance score" in descending order, which is Tableau's internal algorithm for providing the most relevant results
-- When using 'downstreamWorkbookCount' as a sorting method, you must filter the content type to 'database' or 'table'`,
+- If \`orderBy\` is omitted, the search will sort items by their "relevance score" in descending order, which is Tableau's internal algorithm for providing the most relevant results`,
     paramsSchema,
     annotations: {
       title: 'Search Content',
@@ -63,16 +62,6 @@ This tool searches across all supported content types for objects relevant to th
       const config = getConfig();
       const orderByString = orderBy ? buildOrderByString(orderBy) : undefined;
       const filterString = filter ? buildFilterString(filter) : undefined;
-      if (
-        orderByString?.includes('downstreamWorkbookCount') &&
-        !filterString?.includes('type:eq:table') &&
-        !filterString?.includes('type:eq:database')
-      ) {
-        throw new Error(
-          "When 'orderBy' includes 'downstreamWorkbookCount', the filter must include of content type of 'table' or 'database'",
-        );
-      }
-
       return await searchContentTool.logAndExecute({
         requestId,
         args: {},
@@ -87,7 +76,7 @@ This tool searches across all supported content types for objects relevant to th
                 const response = await restApi.contentExplorationMethods.searchContent({
                   terms,
                   page: 0,
-                  limit: limit ?? 2000, // TODO: determine default limit
+                  limit: limit ?? 100,
                   orderBy: orderByString,
                   filter: filterString,
                 });

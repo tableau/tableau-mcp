@@ -87,9 +87,6 @@ function getReducedSearchItemContent(content: Record<string, any>): Record<strin
   if (content.modifiedTime) {
     reducedContent.modifiedTime = content.modifiedTime;
   }
-  if (content.hitsLastTwoWeeksTotal != undefined) {
-    reducedContent.hitsLastTwoWeeksTotal = content.hitsLastTwoWeeksTotal;
-  }
   if (content.sheetType) {
     reducedContent.sheetType = content.sheetType;
   }
@@ -112,19 +109,14 @@ function getReducedSearchItemContent(content: Record<string, any>): Record<strin
     reducedContent.ownerName = content.ownerName;
   }
   if (content.containerName) {
-    reducedContent.containerName = content.containerName;
+    if (content.type === 'view') {
+      reducedContent.parentWorkbookName = content.containerName;
+    } else {
+      reducedContent.containerName = content.containerName;
+    }
   }
   if (content.luid) {
     reducedContent.luid = content.luid;
-  }
-  if (content.hitsLargeSpanTotal != undefined) {
-    reducedContent.hitsLargeSpanTotal = content.hitsLargeSpanTotal;
-  }
-  if (content.createdTime) {
-    reducedContent.createdTime = content.createdTime;
-  }
-  if (content.hitsMediumSpanTotal != undefined) {
-    reducedContent.hitsMediumSpanTotal = content.hitsMediumSpanTotal;
   }
   if (content.locationName) {
     reducedContent.locationName = content.locationName;
@@ -136,28 +128,22 @@ function getReducedSearchItemContent(content: Record<string, any>): Record<strin
     reducedContent.containerType = content.containerType;
   }
   if (content.hitsTotal != undefined) {
-    reducedContent.hitsTotal = content.hitsTotal;
+    reducedContent.totalViewCount = content.hitsTotal;
   }
   if (content.favoritesTotal != undefined) {
     reducedContent.favoritesTotal = content.favoritesTotal;
   }
-  if (content.ownerEmail) {
-    reducedContent.ownerEmail = content.ownerEmail;
-  }
   if (content.tags?.length) {
     reducedContent.tags = content.tags;
   }
-  if (content.siteLuid) {
-    reducedContent.siteLuid = content.siteLuid;
-  }
-  if (content.hitsSmallSpanTotal != undefined) {
-    reducedContent.hitsSmallSpanTotal = content.hitsSmallSpanTotal;
-  }
-  if (content.fields) {
-    reducedContent.fields = content.fields;
-  }
   if (content.projectName) {
     reducedContent.projectName = content.projectName;
+  }
+  if (content.hitsSmallSpanTotal != undefined) {
+    reducedContent.viewCountLastMonth = content.hitsSmallSpanTotal;
+  }
+  if (content.downstreamWorkbookCount != undefined) {
+    reducedContent.downstreamWorkbookCount = content.downstreamWorkbookCount;
   }
   return reducedContent;
 }
