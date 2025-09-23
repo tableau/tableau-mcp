@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const OrderingMethods = z.enum([
+const orderingMethods = z.enum([
   'hitsTotal',
   'hitsSmallSpanTotal',
   'hitsMediumSpanTotal',
@@ -8,18 +8,18 @@ const OrderingMethods = z.enum([
   'downstreamWorkbookCount',
 ]);
 
-export const OrderBySchema = z
+export const orderBySchema = z
   .array(
     z.object({
-      method: OrderingMethods,
+      method: orderingMethods,
       sortDirection: z.enum(['asc', 'desc']).default('asc').optional(),
     }),
   )
   .nonempty();
 
-export type OrderBy = z.infer<typeof OrderBySchema>;
+export type OrderBy = z.infer<typeof orderBySchema>;
 
-const ContentTypes = z.enum([
+const contentTypes = z.enum([
   'lens',
   'datasource',
   'virtualconnection',
@@ -33,7 +33,7 @@ const ContentTypes = z.enum([
   'workbook',
 ]);
 
-const ModifiedTimeSchema = z.union([
+const modifiedTimeSchema = z.union([
   z.array(z.string().datetime()).nonempty(),
   z
     .object({
@@ -49,35 +49,35 @@ const ModifiedTimeSchema = z.union([
     .strict(),
 ]);
 
-export const SearchContentFilterBase = z.object({
-  contentTypes: z.array(ContentTypes).nonempty().optional(),
+export const searchContentFilterBase = z.object({
+  contentTypes: z.array(contentTypes).nonempty().optional(),
   ownerIds: z.array(z.number().int()).nonempty().optional(),
-  modifiedTime: ModifiedTimeSchema.optional(),
+  modifiedTime: modifiedTimeSchema.optional(),
 });
 
-export const SearchContentFilterSchema = z.union([
-  SearchContentFilterBase.extend({ contentTypes: z.array(ContentTypes).nonempty() }).strict(),
-  SearchContentFilterBase.extend({ ownerIds: z.array(z.number().int()).nonempty() }).strict(),
-  SearchContentFilterBase.extend({ modifiedTime: ModifiedTimeSchema }).strict(),
+export const searchContentFilterSchema = z.union([
+  searchContentFilterBase.extend({ contentTypes: z.array(contentTypes).nonempty() }).strict(),
+  searchContentFilterBase.extend({ ownerIds: z.array(z.number().int()).nonempty() }).strict(),
+  searchContentFilterBase.extend({ modifiedTime: modifiedTimeSchema }).strict(),
 ]);
 
-export type SearchContentFilter = z.infer<typeof SearchContentFilterSchema>;
+export type SearchContentFilter = z.infer<typeof searchContentFilterSchema>;
 
-const SearchContentItemSchema = z.object({
+const searchContentItemSchema = z.object({
   uri: z.string(),
   content: z.record(z.string(), z.unknown()),
 });
 
-export const SearchContentResponseSchema = z.object({
+export const searchContentResponseSchema = z.object({
   next: z.string().optional(),
   prev: z.string().optional(),
   pageIndex: z.number().int().optional(),
   startIndex: z.number().int().optional(),
   total: z.number().int().optional(),
   limit: z.number().int().optional(),
-  items: z.array(SearchContentItemSchema).optional(),
+  items: z.array(searchContentItemSchema).optional(),
 });
 
-export type SearchContentItem = z.infer<typeof SearchContentItemSchema>;
+export type SearchContentItem = z.infer<typeof searchContentItemSchema>;
 
-export type SearchContentResponse = z.infer<typeof SearchContentResponseSchema>;
+export type SearchContentResponse = z.infer<typeof searchContentResponseSchema>;

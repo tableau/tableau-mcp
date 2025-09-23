@@ -5,8 +5,8 @@ import { z } from 'zod';
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import {
-  OrderBySchema,
-  SearchContentFilterSchema,
+  orderBySchema,
+  searchContentFilterSchema,
 } from '../../sdks/tableau/types/contentExploration.js';
 import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
@@ -19,8 +19,8 @@ import {
 const paramsSchema = {
   terms: z.string().trim().nonempty().optional(),
   limit: z.number().int().min(1).max(2000).default(2000).optional(),
-  orderBy: OrderBySchema.optional(),
-  filter: SearchContentFilterSchema.optional(),
+  orderBy: orderBySchema.optional(),
+  filter: searchContentFilterSchema.optional(),
 };
 
 export const getSearchContentTool = (server: Server): Tool<typeof paramsSchema> => {
