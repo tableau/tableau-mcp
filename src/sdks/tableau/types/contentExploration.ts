@@ -49,11 +49,13 @@ const modifiedTimeSchema = z.union([
     .strict(),
 ]);
 
-export const searchContentFilterBase = z.object({
-  contentTypes: z.array(contentTypes).nonempty().optional(),
-  ownerIds: z.array(z.number().int()).nonempty().optional(),
-  modifiedTime: modifiedTimeSchema.optional(),
-});
+export const searchContentFilterBase = z
+  .object({
+    contentTypes: z.array(contentTypes).nonempty(),
+    ownerIds: z.array(z.number().int()).nonempty(),
+    modifiedTime: modifiedTimeSchema,
+  })
+  .partial();
 
 export const searchContentFilterSchema = z.union([
   searchContentFilterBase.extend({ contentTypes: z.array(contentTypes).nonempty() }).strict(),
@@ -68,15 +70,17 @@ const searchContentItemSchema = z.object({
   content: z.record(z.string(), z.unknown()),
 });
 
-export const searchContentResponseSchema = z.object({
-  next: z.string().optional(),
-  prev: z.string().optional(),
-  pageIndex: z.number().int().optional(),
-  startIndex: z.number().int().optional(),
-  total: z.number().int().optional(),
-  limit: z.number().int().optional(),
-  items: z.array(searchContentItemSchema).optional(),
-});
+export const searchContentResponseSchema = z
+  .object({
+    next: z.string(),
+    prev: z.string(),
+    pageIndex: z.number().int(),
+    startIndex: z.number().int(),
+    total: z.number().int(),
+    limit: z.number().int(),
+    items: z.array(searchContentItemSchema),
+  })
+  .partial();
 
 export type SearchContentItem = z.infer<typeof searchContentItemSchema>;
 
