@@ -22,6 +22,8 @@ export default class ContentExplorationMethods extends AuthenticatedMethods<
   /**
    * Searches across all supported content types for objects relevant to the search expression specified in the querystring of the request URI.
    *
+   * Required scopes: Not available.
+   *
    * @param terms - The search terms
    * @param page - The number of the page in the list reponse pages to return. Maximum number of items is 2000.
    * @param limit - The number of items to return on each page. The default is 10.
