@@ -124,9 +124,6 @@ function getReducedSearchItemContent(content: Record<string, any>): Record<strin
   if (content.comments?.length) {
     reducedContent.comments = content.comments;
   }
-  if (content.containerType) {
-    reducedContent.containerType = content.containerType;
-  }
   if (content.hitsTotal != undefined) {
     reducedContent.totalViewCount = content.hitsTotal;
   }
@@ -144,6 +141,42 @@ function getReducedSearchItemContent(content: Record<string, any>): Record<strin
   }
   if (content.downstreamWorkbookCount != undefined) {
     reducedContent.downstreamWorkbookCount = content.downstreamWorkbookCount;
+  }
+  if (content.isConnectable != undefined) {
+    reducedContent.isConnectable = content.isConnectable;
+  }
+  if (content.datasourceIsPublished != undefined) {
+    reducedContent.datasourceIsPublished = content.datasourceIsPublished;
+  }
+  if (content.connectionType) {
+    reducedContent.connectionType = content.connectionType;
+  }
+  if (content.isCertified != undefined) {
+    reducedContent.isCertified = content.isCertified;
+  }
+  if (content.hasExtracts != undefined) {
+    reducedContent.hasExtracts = content.hasExtracts;
+  }
+  if (content.extractRefreshedAt) {
+    reducedContent.extractRefreshedAt = content.extractRefreshedAt;
+  }
+  if (content.extractUpdatedAt) {
+    reducedContent.extractUpdatedAt = content.extractUpdatedAt;
+  }
+  if (content.connectedWorkbooksCount != undefined) {
+    reducedContent.connectedWorkbooksCount = content.connectedWorkbooksCount;
+  }
+  if (content.extractCreationPending != undefined) {
+    reducedContent.extractCreationPending = content.extractCreationPending;
+  }
+  if (content.hasSevereDataQualityWarning != undefined) {
+    reducedContent.hasSevereDataQualityWarning = content.hasSevereDataQualityWarning;
+  }
+  if (content.datasourceLuid) {
+    reducedContent.datasourceLuid = content.datasourceLuid;
+  }
+  if (content.hasActiveDataQualityWarning != undefined) {
+    reducedContent.hasActiveDataQualityWarning = content.hasActiveDataQualityWarning;
   }
   return reducedContent;
 }
