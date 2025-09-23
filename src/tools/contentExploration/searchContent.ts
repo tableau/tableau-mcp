@@ -76,7 +76,9 @@ This tool searches across all supported content types for objects relevant to th
                 const response = await restApi.contentExplorationMethods.searchContent({
                   terms,
                   page: 0,
-                  limit: limit ?? 100,
+                  limit: config.maxResultLimit
+                    ? Math.min(config.maxResultLimit, limit ?? 100)
+                    : (limit ?? 100),
                   orderBy: orderByString,
                   filter: filterString,
                 });
