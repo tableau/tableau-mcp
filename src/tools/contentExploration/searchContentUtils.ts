@@ -18,7 +18,7 @@ export function buildOrderByString(orderBy: OrderBy): string {
 }
 
 export function buildFilterString(filter: SearchContentFilter): string {
-  const filterExpressions = new Array<string>();
+  const filterExpressions: Array<string> = [];
   if (filter.contentTypes) {
     if (filter.contentTypes.length === 1) {
       filterExpressions.push(`type:eq:${filter.contentTypes[0]}`);
@@ -73,7 +73,7 @@ export function buildFilterString(filter: SearchContentFilter): string {
 }
 
 export function reduceSearchContentResponse(response: SearchContentResponse): Array<object> {
-  const searchResults = new Array<object>();
+  const searchResults: Array<Record<string, unknown>> = [];
   if (response.items) {
     for (const item of response.items) {
       searchResults.push(getReducedSearchItemContent(item.content));
