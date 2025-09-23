@@ -1,7 +1,6 @@
 name: Build and Test
 
 on:
-  push:
   pull_request:
     branches:
       - main
@@ -12,7 +11,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20.x]
+        node-version: [20.x, 22.x, 24.x]
     steps:
       - uses: actions/checkout@v4
 
@@ -40,9 +39,6 @@ jobs:
       - name: Build Docker image
         run: npm run build:docker
 
-      - name: Build Claude MCP Bundle
-        run: npm run build:mcpb
-
       - name: Build NPM package
         run: npm pack
 
@@ -60,7 +56,15 @@ jobs:
           CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
           CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
 
+      - name: Build Claude MCP Bundle
+        run: |
+          npm run build:manifest:script
+          npm run build:manifest
+          npm ci --omit=dev
+          npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb
+
       - name: Report code coverage
+        if: matrix.node-version == '20.x'
         uses: irongut/CodeCoverageSummary@v1.3.0
         with:
           filename: coverage/**/cobertura-coverage.xml
@@ -76,7 +80,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts
+          name: artifacts-node${{ matrix.node-version }}
           if-no-files-found: error
           path: |
             build/

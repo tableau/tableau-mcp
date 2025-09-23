@@ -4,6 +4,8 @@
 
 [![Build and Test](https://github.com/tableau/tableau-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tableau/tableau-mcp/actions/workflows/ci.yml)
 
+[![npm](https://img.shields.io/npm/v/@tableau/mcp-server)](https://www.npmjs.com/package/@tableau/mcp-server)
+
 ## Overview
 
 Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will
@@ -38,3 +40,7 @@ Standard config works in most MCP clients:
   }
 }
 ```
+
+## Deploy to Heroku
+
+[![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://www.heroku.com/deploy?template=https://github.com/tableau/tableau-mcp)

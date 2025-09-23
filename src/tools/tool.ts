@@ -1,7 +1,9 @@
 import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
+import { ZodiosError } from '@zodios/core';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
+import { fromError, isZodErrorLike } from 'zod-validation-error';
 
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
@@ -12,24 +14,64 @@ type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args exte
   ? (args: z.objectOutputType<Args, ZodTypeAny>) => void
   : never;
 
+/**
+ * The parameters for creating a tool instance
+ *
+ * @typeParam Args - The schema of the tool's parameters
+ */
 export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
+  // The MCP server instance
   server: Server;
+
+  // The name of the tool
   name: ToolName;
+
+  // The description of the tool
   description: string;
+
+  // The schema of the tool's parameters
   paramsSchema: Args;
+
+  // The annotations of the tool
   annotations: ToolAnnotations;
+
+  // A function that validates the tool's arguments provided by the client
   argsValidator?: ArgsValidator<Args>;
+
+  // The implementation of the tool itself
   callback: ToolCallback<Args>;
 };
 
+/**
+ * The parameters the logAndExecute method
+ *
+ * @typeParam T - The type of the result the tool's implementation returns
+ * @typeParam E - The type of the error the tool's implementation can return
+ * @typeParam Args - The schema of the tool's parameters
+ */
 type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined> = {
+  // The request ID of the tool call
   requestId: RequestId;
+
+  // The arguments of the tool call
   args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
-  callback: () => Promise<Result<T, E>>;
+
+  // A function that contains the business logic of the tool to be logged and executed
+  callback: () => Promise<Result<T, E | ZodiosError>>;
+
+  // A function that can transform a successful result of the callback into a CallToolResult
   getSuccessResult?: (result: T) => CallToolResult;
+
+  // A function that can transform an error result of the callback into a string.
+  // Required if the callback can return an error result.
   getErrorText?: (error: E) => string;
 };
 
+/**
+ * Represents an MCP tool
+ *
+ * @template Args - The schema of the tool's parameters or undefined if the tool has no parameters
+ */
 export class Tool<Args extends ZodRawShape | undefined = undefined> {
   server: Server;
   name: ToolName;
@@ -113,6 +155,10 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
         };
       }
 
+      if (result.error instanceof ZodiosError) {
+        return getErrorResult(requestId, result.error);
+      }
+
       if (getErrorText) {
         return {
           isError: true,
@@ -133,6 +179,28 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
 }
 
 function getErrorResult(requestId: RequestId, error: unknown): CallToolResult {
+  if (error instanceof ZodiosError && isZodErrorLike(error.cause)) {
+    // Schema validation errors on otherwise successful API calls will not return an "error" result to the MCP client.
+    // We instead return the full response from the API with a data quality warning message
+    // that mentions why the schema validation failed.
+    // This should make it so users don't get "stuck" when our schemas are too strict or wrong.
+    // The only con is that the full response from the API might be larger than normal
+    // since a successful schema validation "trims" the response down to the shape of the schema.
+    const validationError = fromError(error.cause);
+    return {
+      isError: false,
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            data: error.data,
+            warning: validationError.toString(),
+          }),
+        },
+      ],
+    };
+  }
+
   return {
     isError: true,
     content: [

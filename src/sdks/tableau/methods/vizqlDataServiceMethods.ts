@@ -1,4 +1,4 @@
-import { isErrorFromAlias, Zodios } from '@zodios/core';
+import { isErrorFromAlias, Zodios, ZodiosError } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -38,12 +38,20 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    */
   queryDatasource = async (
     queryRequest: z.infer<typeof QueryRequest>,
-  ): Promise<Result<QueryOutput, TableauError>> => {
+  ): Promise<Result<QueryOutput, 'feature-disabled' | TableauError | ZodiosError>> => {
     try {
       return Ok(await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader }));
     } catch (error) {
       if (isErrorFromAlias(this._apiClient.api, 'queryDatasource', error)) {
+        if (error.response.status === 404) {
+          return Err('feature-disabled');
+        }
+
         return Err(error.response.data);
+      }
+
+      if (error instanceof ZodiosError) {
+        return Err(error);
       }
 
       throw error;
@@ -60,7 +68,18 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    */
   readMetadata = async (
     readMetadataRequest: z.infer<typeof ReadMetadataRequest>,
-  ): Promise<MetadataResponse> => {
-    return await this._apiClient.readMetadata(readMetadataRequest, { ...this.authHeader });
+  ): Promise<Result<MetadataResponse, 'feature-disabled'>> => {
+    try {
+      return Ok(await this._apiClient.readMetadata(readMetadataRequest, { ...this.authHeader }));
+    } catch (error) {
+      if (
+        isErrorFromAlias(this._apiClient.api, 'readMetadata', error) &&
+        error.response.status === 404
+      ) {
+        return Err('feature-disabled');
+      }
+
+      throw error;
+    }
   };
 }

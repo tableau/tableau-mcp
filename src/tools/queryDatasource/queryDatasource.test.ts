@@ -1,7 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
+import { QueryOutput } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
+import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
 import { getQueryDatasourceTool } from './queryDatasource.js';
 
@@ -105,6 +108,32 @@ describe('queryDatasourceTool', () => {
     });
   });
 
+  it('should return a successful result when the VDS response contains a schema validation error', async () => {
+    const badResponse = {
+      ...mockVdsResponses.success,
+      data: 'hamburgers',
+    };
+
+    mocks.mockQueryDatasource.mockImplementation(() => {
+      const zodiosError = new ZodiosError(
+        'Zodios: Invalid response from endpoint',
+        undefined,
+        badResponse,
+        QueryOutput.safeParse(badResponse).error,
+      );
+
+      return new Err(zodiosError);
+    });
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.content[0].text as string)).toEqual({
+      data: badResponse,
+      warning: 'Validation error: Expected array, received string at "data"',
+    });
+  });
+
   it('should add datasource credentials to the request when provided', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
 
@@ -148,7 +177,7 @@ describe('queryDatasourceTool', () => {
     });
   });
 
-  it('should return error VDS returns an error', async () => {
+  it('should return error when VDS returns an error', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(new Err(mockVdsResponses.error));
 
     const result = await getToolResult();
@@ -436,6 +465,14 @@ describe('queryDatasourceTool', () => {
       // Should call main query first, then both validation queries
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('should show feature-disabled error when VDS is disabled', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(Err('feature-disabled'));
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
   });
 });
 

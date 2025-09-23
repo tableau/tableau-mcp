@@ -247,7 +247,7 @@ const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>
 
 const manifest = {
   dxt_version: '0.1', // Replace with manifest_version this once Claude Desktop understands it
-  name: packageJson.name,
+  name: 'Tableau',
   version: packageJson.version,
   description: packageJson.description,
   author: {

@@ -1,3 +1,5 @@
+import { Err, Ok } from 'ts-results-es';
+
 import { Server } from '../../../server.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './generatePulseMetricValueInsightBundleTool.js';
 
@@ -106,7 +108,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   it('should call generatePulseMetricValueInsightBundle without bundleType and return Ok result', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(mockBundleRequestResponse);
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
     const result = await tool.callback(
       { bundleRequest },
       {
@@ -126,7 +130,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   it('should call generatePulseMetricValueInsightBundle with bundleType and return Ok result', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(mockBundleRequestResponse);
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
+    );
     const result = await tool.callback(
       { bundleRequest, bundleType: 'springboard' },
       {
@@ -148,7 +154,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   it.each(['ban', 'springboard', 'basic', 'detail'] as const)(
     'should call generatePulseMetricValueInsightBundle with bundleType "%s" and return Ok result',
     async (bundleType) => {
-      mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(mockBundleRequestResponse);
+      mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+        new Ok(mockBundleRequestResponse),
+      );
       const result = await tool.callback(
         { bundleRequest, bundleType },
         {
@@ -206,5 +214,35 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('bundleRequest');
+  });
+
+  it('should return an error when executing the tool against Tableau Server', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(new Err('tableau-server'));
+    const result = await tool.callback(
+      { bundleRequest },
+      {
+        signal: new AbortController().signal,
+        requestId: 'test-request-id',
+        sendNotification: vi.fn(),
+        sendRequest: vi.fn(),
+      },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
+  });
+
+  it('should return an error when Pulse is disabled', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(new Err('pulse-disabled'));
+    const result = await tool.callback(
+      { bundleRequest },
+      {
+        signal: new AbortController().signal,
+        requestId: 'test-request-id',
+        sendNotification: vi.fn(),
+        sendRequest: vi.fn(),
+      },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
   });
 });
