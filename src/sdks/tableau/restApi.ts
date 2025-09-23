@@ -33,13 +33,13 @@ export default class RestApi {
 
   private _authenticationMethods?: AuthenticationMethods;
   private _authenticatedAuthenticationMethods?: AuthenticatedAuthenticationMethods;
+  private _contentExplorationMethods?: ContentExplorationMethods;
   private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
   private _pulseMethods?: PulseMethods;
   private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
   private _viewsMethods?: ViewsMethods;
   private _workbooksMethods?: WorkbooksMethods;
-  private _contentExplorationMethods?: ContentExplorationMethods;
   private static _version = '3.24';
 
   private _requestInterceptor?: [RequestInterceptor, ErrorInterceptor?];
@@ -90,6 +90,21 @@ export default class RestApi {
     return this._authenticatedAuthenticationMethods;
   }
 
+  get contentExplorationMethods(): ContentExplorationMethods {
+    if (!this._contentExplorationMethods) {
+      this._contentExplorationMethods = new ContentExplorationMethods(
+        this._baseUrlWithoutVersion,
+        this.creds,
+      );
+      this._addInterceptors(
+        this._baseUrlWithoutVersion,
+        this._contentExplorationMethods.interceptors,
+      );
+    }
+
+    return this._contentExplorationMethods;
+  }
+
   get datasourcesMethods(): DatasourcesMethods {
     if (!this._datasourcesMethods) {
       this._datasourcesMethods = new DatasourcesMethods(this._baseUrl, this.creds);
@@ -116,21 +131,6 @@ export default class RestApi {
     }
 
     return this._pulseMethods;
-  }
-
-  get contentExplorationMethods(): ContentExplorationMethods {
-    if (!this._contentExplorationMethods) {
-      this._contentExplorationMethods = new ContentExplorationMethods(
-        this._baseUrlWithoutVersion,
-        this.creds,
-      );
-      this._addInterceptors(
-        this._baseUrlWithoutVersion,
-        this._contentExplorationMethods.interceptors,
-      );
-    }
-
-    return this._contentExplorationMethods;
   }
 
   get vizqlDataServiceMethods(): VizqlDataServiceMethods {
