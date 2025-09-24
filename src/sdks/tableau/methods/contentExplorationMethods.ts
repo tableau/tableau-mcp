@@ -60,7 +60,7 @@ export default class ContentExplorationMethods extends AuthenticatedMethods<
     if (filter) {
       queries.filter = filter;
     }
-    const response = await this._apiClient.searchContent(queries);
+    const response = await this._apiClient.searchContent({ queries, ...this.authHeader });
     return response.hits;
   };
 }
