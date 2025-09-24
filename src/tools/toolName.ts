@@ -22,7 +22,7 @@ export const toolGroupNames = [
   'workbook',
   'view',
   'pulse',
-  'contentExploration',
+  'content-exploration',
 ] as const;
 export type ToolGroupName = (typeof toolGroupNames)[number];
 
@@ -38,7 +38,7 @@ export const toolGroups = {
     'list-pulse-metric-subscriptions',
     'generate-pulse-metric-value-insight-bundle',
   ],
-  contentExploration: ['search-content'],
+  'content-exploration': ['search-content'],
 } as const satisfies Record<ToolGroupName, Array<ToolName>>;
 
 export function isToolName(value: unknown): value is ToolName {
