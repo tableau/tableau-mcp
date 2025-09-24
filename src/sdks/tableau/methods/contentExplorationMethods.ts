@@ -31,35 +31,18 @@ export default class ContentExplorationMethods extends AuthenticatedMethods<
    * @param filter - An expression to filter the response
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_content_exploration.htm#ContentExplorationService_getSearch
    */
-  searchContent = async ({
-    terms,
-    page,
-    limit,
-    orderBy,
-    filter,
-  }: {
+  searchContent = async (queries: {
     terms?: string;
     page?: number;
     limit?: number;
     orderBy?: string;
     filter?: string;
   }): Promise<SearchContentResponse> => {
-    const queries: Record<string, unknown> = {};
-    if (terms) {
-      queries.terms = terms;
-    }
-    if (page != undefined && page >= 0) {
-      queries.page = page;
-    }
-    if (limit != undefined && limit >= 0) {
-      queries.limit = limit;
-    }
-    if (orderBy) {
-      queries.order_by = orderBy;
-    }
-    if (filter) {
-      queries.filter = filter;
-    }
+    Object.entries(queries).forEach(([key, value]) => {
+      if (value === undefined) {
+        delete queries[key as keyof typeof queries];
+      }
+    });
     const response = await this._apiClient.searchContent({ queries, ...this.authHeader });
     return response.hits;
   };
