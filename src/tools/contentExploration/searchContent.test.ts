@@ -9,7 +9,7 @@ const mockSearchContentResponse = {
   pageIndex: 0,
   startIndex: 0,
   total: 3,
-  limit: 2000,
+  limit: 100,
   items: [
     {
       uri: 'test-uri-1',
@@ -21,6 +21,7 @@ const mockSearchContentResponse = {
         ownerId: 123,
         ownerEmail: 'john.doe@example.com',
         projectName: 'Finance',
+        containerName: 'Finance',
         hitsTotal: 150,
         hitsSmallSpanTotal: 10,
         hitsMediumSpanTotal: 25,
@@ -41,6 +42,7 @@ const mockSearchContentResponse = {
         ownerId: 456,
         ownerEmail: 'jane.smith@example.com',
         projectName: 'Marketing',
+        containerName: 'Marketing',
         hitsTotal: 75,
         hitsSmallSpanTotal: 5,
         hitsMediumSpanTotal: 15,
@@ -93,7 +95,7 @@ describe('searchContentTool', () => {
     expect(mocks.mockSearchContent).toHaveBeenCalledWith({
       terms: 'sales dashboard',
       page: 0,
-      limit: 2000,
+      limit: 100,
       orderBy: undefined,
       filter: undefined,
     });
@@ -104,6 +106,9 @@ describe('searchContentTool', () => {
       type: 'workbook',
       title: 'Sales Dashboard',
       ownerName: 'John Doe',
+      totalViewCount: 150,
+      viewCountLastMonth: 10,
+      containerName: 'Finance',
     });
   });
 
@@ -132,7 +137,7 @@ describe('searchContentTool', () => {
     expect(mocks.mockSearchContent).toHaveBeenCalledWith({
       terms: 'dashboard',
       page: 0,
-      limit: 2000,
+      limit: 100,
       orderBy: 'hitsTotal:desc',
       filter: undefined,
     });
@@ -152,7 +157,7 @@ describe('searchContentTool', () => {
     expect(mocks.mockSearchContent).toHaveBeenCalledWith({
       terms: 'dashboard',
       page: 0,
-      limit: 2000,
+      limit: 100,
       orderBy: 'hitsTotal:desc,hitsSmallSpanTotal:asc',
       filter: undefined,
     });
@@ -168,7 +173,7 @@ describe('searchContentTool', () => {
     expect(mocks.mockSearchContent).toHaveBeenCalledWith({
       terms: undefined,
       page: 0,
-      limit: 2000,
+      limit: 100,
       orderBy: undefined,
       filter: 'type:in:[workbook,datasource]',
     });
@@ -184,7 +189,7 @@ describe('searchContentTool', () => {
     expect(mocks.mockSearchContent).toHaveBeenCalledWith({
       terms: undefined,
       page: 0,
-      limit: 2000,
+      limit: 100,
       orderBy: undefined,
       filter: 'type:eq:workbook',
     });
@@ -200,7 +205,7 @@ describe('searchContentTool', () => {
     expect(mocks.mockSearchContent).toHaveBeenCalledWith({
       terms: undefined,
       page: 0,
-      limit: 2000,
+      limit: 100,
       orderBy: undefined,
       filter: 'ownerId:in:[123,456]',
     });
@@ -221,7 +226,7 @@ describe('searchContentTool', () => {
     expect(mocks.mockSearchContent).toHaveBeenCalledWith({
       terms: undefined,
       page: 0,
-      limit: 2000,
+      limit: 100,
       orderBy: undefined,
       filter: 'modifiedTime:gte:2024-01-01T00:00:00Z,modifiedTime:lte:2024-01-31T23:59:59Z',
     });
@@ -244,7 +249,7 @@ describe('searchContentTool', () => {
     expect(mocks.mockSearchContent).toHaveBeenCalledWith({
       terms: 'sales',
       page: 0,
-      limit: 2000,
+      limit: 100,
       orderBy: undefined,
       filter: 'type:eq:workbook,ownerId:eq:123,modifiedTime:gte:2024-01-01T00:00:00Z',
     });
@@ -261,7 +266,7 @@ describe('searchContentTool', () => {
     expect(mocks.mockSearchContent).toHaveBeenCalledWith({
       terms: undefined,
       page: 0,
-      limit: 2000,
+      limit: 100,
       orderBy: 'downstreamWorkbookCount:desc',
       filter: 'type:eq:table',
     });
@@ -278,31 +283,10 @@ describe('searchContentTool', () => {
     expect(mocks.mockSearchContent).toHaveBeenCalledWith({
       terms: undefined,
       page: 0,
-      limit: 2000,
+      limit: 100,
       orderBy: 'downstreamWorkbookCount:desc',
       filter: 'type:eq:database',
     });
-  });
-
-  it('should throw error when downstreamWorkbookCount used without table or database filter', async () => {
-    await expect(
-      getToolResult({
-        orderBy: [{ method: 'downstreamWorkbookCount', sortDirection: 'desc' }],
-        filter: { contentTypes: ['workbook'] },
-      }),
-    ).rejects.toThrow(
-      "When 'orderBy' includes 'downstreamWorkbookCount', the filter must include of content type of 'table' or 'database'",
-    );
-  });
-
-  it('should throw error when downstreamWorkbookCount used without any filter', async () => {
-    await expect(
-      getToolResult({
-        orderBy: [{ method: 'downstreamWorkbookCount', sortDirection: 'desc' }],
-      }),
-    ).rejects.toThrow(
-      "When 'orderBy' includes 'downstreamWorkbookCount', the filter must include of content type of 'table' or 'database'",
-    );
   });
 
   it('should handle API errors gracefully', async () => {

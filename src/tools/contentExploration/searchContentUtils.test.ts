@@ -206,6 +206,7 @@ describe('searchContentUtils', () => {
               ownerId: 123,
               ownerEmail: 'john@example.com',
               projectName: 'Finance',
+              containerName: 'Finance',
               hitsTotal: 150,
               hitsSmallSpanTotal: 10,
               hitsMediumSpanTotal: 25,
@@ -231,18 +232,14 @@ describe('searchContentUtils', () => {
         title: 'Test Workbook',
         ownerName: 'John Doe',
         ownerId: 123,
-        ownerEmail: 'john@example.com',
         projectName: 'Finance',
-        hitsTotal: 150,
-        hitsSmallSpanTotal: 10,
-        hitsMediumSpanTotal: 25,
-        hitsLargeSpanTotal: 50,
+        containerName: 'Finance',
+        totalViewCount: 150,
+        viewCountLastMonth: 10,
         favoritesTotal: 5,
         modifiedTime: '2024-01-15T10:30:00Z',
-        createdTime: '2023-12-01T09:00:00Z',
         tags: ['dashboard', 'sales'],
         comments: ['Great dashboard!'],
-        fields: ['Sales', 'Region'],
       });
 
       // Should not include extraProperty
@@ -300,12 +297,9 @@ describe('searchContentUtils', () => {
       expect(result[0]).toEqual({
         type: 'view',
         title: 'Test View',
-        hitsTotal: 0,
-        hitsSmallSpanTotal: 0,
-        hitsMediumSpanTotal: 0,
-        hitsLargeSpanTotal: 0,
+        totalViewCount: 0,
+        viewCountLastMonth: 0,
         favoritesTotal: 0,
-        hitsLastTwoWeeksTotal: 0,
       });
     });
 
@@ -356,6 +350,66 @@ describe('searchContentUtils', () => {
 
       const result = reduceSearchContentResponse(response);
       expect(result).toEqual([]);
+    });
+
+    it('should map containerName to parentWorkbookName for views', () => {
+      const response = {
+        total: 1,
+        items: [
+          {
+            uri: 'test-uri',
+            content: {
+              type: 'view',
+              title: 'Test View',
+              containerName: 'Parent Workbook',
+              ownerId: 123,
+            },
+          },
+        ],
+      };
+
+      const result = reduceSearchContentResponse(response);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        type: 'view',
+        title: 'Test View',
+        parentWorkbookName: 'Parent Workbook',
+        ownerId: 123,
+      });
+
+      // Should not have containerName for views
+      expect(result[0]).not.toHaveProperty('containerName');
+    });
+
+    it('should map containerName normally for non-views', () => {
+      const response = {
+        total: 1,
+        items: [
+          {
+            uri: 'test-uri',
+            content: {
+              type: 'workbook',
+              title: 'Test Workbook',
+              containerName: 'Finance Project',
+              ownerId: 123,
+            },
+          },
+        ],
+      };
+
+      const result = reduceSearchContentResponse(response);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        type: 'workbook',
+        title: 'Test Workbook',
+        containerName: 'Finance Project',
+        ownerId: 123,
+      });
+
+      // Should not have parentWorkbookName for non-views
+      expect(result[0]).not.toHaveProperty('parentWorkbookName');
     });
 
     it('should handle multiple items', () => {
