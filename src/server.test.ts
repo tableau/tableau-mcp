@@ -1,6 +1,7 @@
 import { ZodObject } from 'zod';
 
 import { exportedForTesting as serverExportedForTesting } from './server.js';
+import { testProductVersion } from './testShared.js';
 import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
 import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
@@ -24,9 +25,9 @@ describe('server', () => {
 
   it('should register tools', async () => {
     const server = getServer();
-    server.registerTools();
+    await server.registerTools();
 
-    const tools = toolFactories.map((tool) => tool(server));
+    const tools = toolFactories.map((tool) => tool(server, testProductVersion));
     for (const tool of tools) {
       expect(server.tool).toHaveBeenCalledWith(
         tool.name,
@@ -41,9 +42,9 @@ describe('server', () => {
   it('should register tools filtered by includeTools', async () => {
     process.env.INCLUDE_TOOLS = 'query-datasource';
     const server = getServer();
-    server.registerTools();
+    await server.registerTools();
 
-    const tool = getQueryDatasourceTool(server);
+    const tool = getQueryDatasourceTool(server, testProductVersion);
     expect(server.tool).toHaveBeenCalledWith(
       tool.name,
       tool.description,
@@ -56,9 +57,9 @@ describe('server', () => {
   it('should register tools filtered by excludeTools', async () => {
     process.env.EXCLUDE_TOOLS = 'query-datasource';
     const server = getServer();
-    server.registerTools();
+    await server.registerTools();
 
-    const tools = toolFactories.map((tool) => tool(server));
+    const tools = toolFactories.map((tool) => tool(server, testProductVersion));
     for (const tool of tools) {
       if (tool.name === 'query-datasource') {
         expect(server.tool).not.toHaveBeenCalledWith(
@@ -93,7 +94,7 @@ describe('server', () => {
     ];
 
     for (const sentence of sentences) {
-      expect(() => server.registerTools()).toThrow(sentence);
+      expect(async () => await server.registerTools()).rejects.toThrow(sentence);
     }
   });
 

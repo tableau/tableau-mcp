@@ -33,14 +33,14 @@ export class Server extends McpServer {
     this.version = serverVersion;
   }
 
-  registerTools = (): void => {
+  registerTools = async (): Promise<void> => {
     for (const {
       name,
       description,
       paramsSchema,
       annotations,
       callback,
-    } of this._getToolsToRegister()) {
+    } of await this._getToolsToRegister()) {
       this.tool(name, description, paramsSchema, annotations, callback);
     }
   };
@@ -52,10 +52,11 @@ export class Server extends McpServer {
     });
   };
 
-  private _getToolsToRegister = (): Array<Tool<any>> => {
+  private _getToolsToRegister = async (): Promise<Array<Tool<any>>> => {
     const { includeTools, excludeTools } = getConfig();
+    const productVersion = await getConfig().getTableauServerVersion();
 
-    const tools = toolFactories.map((tool) => tool(this));
+    const tools = toolFactories.map((tool) => tool(this, productVersion));
     const toolsToRegister = tools.filter((tool) => {
       if (includeTools.length > 0) {
         return includeTools.includes(tool.name);

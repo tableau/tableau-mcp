@@ -1,3 +1,5 @@
+import { testProductVersion } from './testShared.js';
+
 vi.stubEnv('SERVER', 'https://my-tableau-server.com');
 vi.stubEnv('SITE_NAME', 'tc25');
 vi.stubEnv('PAT_NAME', 'sponge');
@@ -10,6 +12,19 @@ vi.mock('./server.js', async (importOriginal) => ({
     name: 'test-server',
     server: {
       notification: vi.fn(),
+    },
+  })),
+}));
+
+vi.mock('./sdks/tableau/restApi.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  RestApi: vi.fn().mockImplementation(() => ({
+    signIn: vi.fn().mockResolvedValue(undefined),
+    signOut: vi.fn().mockResolvedValue(undefined),
+    serverMethods: {
+      getServerInfo: vi.fn().mockResolvedValue({
+        productVersion: testProductVersion,
+      }),
     },
   })),
 }));
