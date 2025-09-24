@@ -44,7 +44,7 @@ For each sort method, you can specify a sort direction: `"asc"` for ascending or
 
 The `orderBy` parameter is an array of objects containing the sorting method and direction. The first element determines primary sorting, with subsequent elements used as tiebreakers.
 
-If the `orderBy` parameter is ommitted, the search will sort items by their "relevance score" in descending order, which is Tableau's internal algorithm for providing the most relevant results.
+If the `orderBy` parameter is omitted, the search will sort items by their "relevance score" in descending order, which is Tableau's internal algorithm for providing the most relevant results.
 
 Example:
 
