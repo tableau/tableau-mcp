@@ -66,11 +66,11 @@ Example:
 ### `filter`
 
 An object that allows you to limit search results based on:
-- `contentTypes`: Filter by content types (array of strings). Supported types are: "lens", "datasource", "virtualconnection", "collection", "project", "flow", "datarole", "table", "database", "view", "workbook"
+- `contentTypes`: Filter by content types (array of strings). Supported types are: `lens`, `datasource`, `virtualconnection`, `collection`, `project`, `flow`, `datarole`, `table`, `database`, `view`, `workbook`
 - `ownerIds`: Filter by specific owner IDs (array of integers)
 - `modifiedTime`: Filter by last modified times using ISO 8601 date-time strings. Can be either a range (with startDate/endDate) or an array of specific date-times to include
 
-The `filter` object is optional, but if it is provided it only requires one of the three filtering methods (`contentTypes`, `ownerIds`, or `modifiedTime`)
+The `filter` parameter is optional, but if it is provided it requires at least one of the three filtering methods (`contentTypes`, `ownerIds`, or `modifiedTime`)
 
 Example:
 
@@ -97,4 +97,65 @@ Example:
     "2025-04-18T20:55:14Z"
   ]
 }
+```
+
+## Example result
+
+```json
+[
+  {
+    "modifiedTime": "2025-09-19T18:52:18.475Z",
+    "type": "workbook",
+    "ownerId": 325277,
+    "title": "Income Trends with Age",
+    "ownerName": "Lucia Orange",
+    "containerName": "Research",
+    "luid": "d9870a9b-4934-4ebc-a9ee-5fc723c79590",
+    "totalViewCount": 3061,
+    "favoritesTotal": 1,
+    "viewCountLastMonth": 105,
+    "hasExtracts": true,
+    "extractCreationPending": false
+  },
+  {
+    "modifiedTime": "2025-08-28T20:11:05.699Z",
+    "sheetType": "dashboard",
+    "workbookDescription": "This dashboard contains KPIs for e bike manufactures within our network.",
+    "type": "view",
+    "ownerId": 461938,
+    "title": "Manufacturer Overview",
+    "ownerName": "Maria Stone",
+    "parentWorkbookName": "eBikes Analytics",
+    "luid": "b4457c0b-5eeb-4cbc-b1ae-47ed1d90cee7",
+    "locationName": "2025 Reports",
+    "totalViewCount": 3991,
+    "favoritesTotal": 7,
+    "projectName": "2025 Reports",
+    "viewCountLastMonth": 567
+  },
+  {
+    "modifiedTime": "2025-09-24T20:10:35.437Z",
+    "type": "unifieddatasource",
+    "ownerId": 411957,
+    "title": "Test Report Data",
+    "ownerName": "Bruce Springtail",
+    "containerName": "Data Sources",
+    "luid": "86712226-f5d6-4712-8426-074e5070fb77",
+    "totalViewCount": 42260,
+    "favoritesTotal": 3,
+    "viewCountLastMonth": 1947,
+    "isConnectable": true,
+    "datasourceIsPublished": true,
+    "connectionType": "snowflake",
+    "isCertified": false,
+    "hasExtracts": true,
+    "extractRefreshedAt": "2025-09-24T20:10:35.385Z",
+    "extractUpdatedAt": "2025-09-24T20:10:35.385Z",
+    "connectedWorkbooksCount": 228,
+    "extractCreationPending": false,
+    "hasSevereDataQualityWarning": false,
+    "datasourceLuid": "a9af708b-0d44-48f8-23e2-4ee4b12446b2",
+    "hasActiveDataQualityWarning": false
+  },
+]
 ```
