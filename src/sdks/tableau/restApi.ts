@@ -25,7 +25,7 @@ import { Credentials } from './types/credentials.js';
  * @export
  * @class RestApi
  */
-export default class RestApi {
+export class RestApi {
   private _creds?: Credentials;
   private readonly _host: string;
   private readonly _baseUrl: string;

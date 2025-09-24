@@ -2,7 +2,7 @@ import { ZodiosError } from '@zodios/core';
 import { CorsOptions } from 'cors';
 import { fromError, isZodErrorLike } from 'zod-validation-error';
 
-import RestApi from './sdks/tableau/restApi.js';
+import { RestApi } from './sdks/tableau/restApi.js';
 import { ProductVersion } from './sdks/tableau/types/serverInfo.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
@@ -13,7 +13,7 @@ const authTypes = ['pat', 'direct-trust'] as const;
 type AuthType = (typeof authTypes)[number];
 
 export class Config {
-  private _serverVersion: ProductVersion | undefined;
+  private static _serverVersion: ProductVersion | undefined;
 
   auth: AuthType;
   server: string;
@@ -129,11 +129,11 @@ export class Config {
     this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
   }
 
-  getServerVersion = async (): Promise<ProductVersion> => {
-    if (!this._serverVersion) {
+  getTableauServerVersion = async (): Promise<ProductVersion> => {
+    if (!Config._serverVersion) {
       const restApi = new RestApi(this.server);
       try {
-        this._serverVersion = (await restApi.serverMethods.getServerInfo()).productVersion;
+        Config._serverVersion = (await restApi.serverMethods.getServerInfo()).productVersion;
       } catch (error) {
         const reason =
           error instanceof ZodiosError && isZodErrorLike(error.cause)
@@ -144,7 +144,7 @@ export class Config {
       }
     }
 
-    return this._serverVersion;
+    return Config._serverVersion;
   };
 }
 
