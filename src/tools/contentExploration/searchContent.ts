@@ -39,7 +39,7 @@ This tool searches across all supported content types for objects relevant to th
   - \`ownerIds\`: Filter by specific owner IDs (array of integers)
   - \`modifiedTime\`: Filter by last modified times using ISO 8601 date-time strings. Can be either a range (with startDate/endDate) or an array of specific date-times to include
 
-- \`limit\` (optional): The number of items to return in the search response (default: 2000, max: 2000)
+- \`limit\` (optional): The number of items to return in the search response (default: 100, max: 2000)
 
 - \`orderBy\` (optional): Determines the sorting method for returned items. Available sorting methods:
   - \`hitsTotal\`: Number of times a content item has been viewed since it was created
