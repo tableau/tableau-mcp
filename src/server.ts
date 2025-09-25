@@ -53,11 +53,11 @@ export class Server extends McpServer {
   };
 
   private _getToolsToRegister = (): Array<Tool<any>> => {
-    const { includeTools, excludeTools, auth } = getConfig();
+    const { includeTools, excludeTools } = getConfig();
 
     const tools = toolFactories.map((tool) => tool(this));
     const toolsToRegister = tools.filter((tool) => {
-      if (tool.name === 'search-content' && auth === 'direct-trust') {
+      if (tool.disabled) {
         return false;
       }
 

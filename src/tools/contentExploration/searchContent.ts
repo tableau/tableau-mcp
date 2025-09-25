@@ -27,6 +27,7 @@ export const getSearchContentTool = (server: Server): Tool<typeof paramsSchema> 
   const searchContentTool = new Tool({
     server,
     name: 'search-content',
+    disabled: getConfig().auth === 'direct-trust',
     description: `
 This tool searches across all supported content types for objects relevant to the search expression specified by search terms and filters.
 
