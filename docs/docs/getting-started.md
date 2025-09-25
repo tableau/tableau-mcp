@@ -37,8 +37,8 @@ file which can be downloaded and installed without the need to edit any JSON con
 
 1. Go to the latest [Tableau MCP release][releases] on GitHub
 2. Under Assets, download the `.mcpb` file
-3. Have your Tableau MCP settings ready (SERVER, SITE_NAME, etc) ready follow the [Claude Desktop
-   instructions][claude]
+3. Have your Tableau MCP settings ready (SERVER, SITE_NAME, etc) ready and follow the [Claude
+   Desktop instructions][claude]
 
 The Desktop Extension has been available starting with Tableau MCP v1.5.2.
 

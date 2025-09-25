@@ -32,7 +32,7 @@ like this:
   "mcpServers": {
     "tableau": {
       "command": "node",
-      "args": ["build/index.js"],
+      "args": ["full/path/to/build/index.js"],
       "env": {
         "SERVER": "https://my-tableau-server.com",
         "SITE_NAME": "my_site",
