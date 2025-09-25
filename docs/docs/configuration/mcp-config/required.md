@@ -19,6 +19,5 @@ The URL of the Tableau server.
 
 The name of the Tableau site to use.
 
-- To specify the default site on Tableau Server, leave this empty.
-
-<hr />
+- For Tableau Cloud, specify your site name.
+- For Tableau Server, you may leave this value blank to use the default site.
