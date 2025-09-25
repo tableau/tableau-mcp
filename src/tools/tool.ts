@@ -26,6 +26,9 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   // The name of the tool
   name: ToolName;
 
+  // Whether the tool is disabled
+  disabled?: boolean;
+
   // The description of the tool
   description: string;
 
@@ -75,6 +78,7 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
 export class Tool<Args extends ZodRawShape | undefined = undefined> {
   server: Server;
   name: ToolName;
+  disabled: boolean;
   description: string;
   paramsSchema: Args;
   annotations: ToolAnnotations;
@@ -84,6 +88,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   constructor({
     server,
     name,
+    disabled,
     description,
     paramsSchema,
     annotations,
@@ -92,6 +97,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   }: ToolParams<Args>) {
     this.server = server;
     this.name = name;
+    this.disabled = !!disabled;
     this.description = description;
     this.paramsSchema = paramsSchema;
     this.annotations = annotations;
