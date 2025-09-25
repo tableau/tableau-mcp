@@ -4,6 +4,8 @@ import { getClient, listTools } from './client.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
 describe('server', () => {
+  const toolsNotSupportedWithDirectTrust = ['search-content'];
+
   beforeAll(setEnv);
   afterAll(resetEnv);
 
@@ -18,8 +20,10 @@ describe('server', () => {
   it('should list tools', async () => {
     const names = await listTools();
     expect(names).toEqual(
-      expect.arrayContaining([...toolNames.filter((name) => name !== 'search-content')]),
+      expect.arrayContaining([
+        ...toolNames.filter((name) => !toolsNotSupportedWithDirectTrust.includes(name)),
+      ]),
     );
-    expect(names).toHaveLength(toolNames.length);
+    expect(names).toHaveLength(toolNames.length - toolsNotSupportedWithDirectTrust.length);
   });
 });
