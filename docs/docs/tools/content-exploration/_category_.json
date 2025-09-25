@@ -1,0 +1,8 @@
+{
+    "label": "Content Exploration",
+    "position": 5,
+    "link": {
+      "type": "generated-index",
+      "description": "Tools for exploring content in a Tableau Site."
+    }
+  }

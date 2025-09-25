@@ -97,6 +97,80 @@ describe('server', () => {
     }
   });
 
+  it('should register search-content tool when auth is pat', async () => {
+    // Set up PAT auth environment variables
+    process.env.AUTH = 'pat';
+    process.env.SERVER = 'https://test-server.com';
+    process.env.PAT_NAME = 'test-pat-name';
+    process.env.PAT_VALUE = 'test-pat-value';
+
+    const server = getServer();
+    server.registerTools();
+
+    const tools = toolFactories.map((tool) => tool(server));
+
+    // Verify search-content tool IS registered
+    const searchContentTool = tools.find((tool) => tool.name === 'search-content');
+    expect(searchContentTool).toBeDefined();
+    expect(server.tool).toHaveBeenCalledWith(
+      'search-content',
+      searchContentTool!.description,
+      expect.any(Object),
+      expect.any(Object),
+      expect.any(Function),
+    );
+
+    // Verify all tools are registered (including search-content)
+    for (const tool of tools) {
+      expect(server.tool).toHaveBeenCalledWith(
+        tool.name,
+        tool.description,
+        expect.any(Object),
+        expect.any(Object),
+        expect.any(Function),
+      );
+    }
+  });
+
+  it('should not register search-content tool when auth is direct-trust', async () => {
+    // Set up direct-trust auth environment variables
+    process.env.AUTH = 'direct-trust';
+    process.env.SERVER = 'https://test-server.com';
+    process.env.JWT_SUB_CLAIM = 'test-jwt-sub-claim';
+    process.env.CONNECTED_APP_CLIENT_ID = 'test-client-id';
+    process.env.CONNECTED_APP_SECRET_ID = 'test-secret-id';
+    process.env.CONNECTED_APP_SECRET_VALUE = 'test-secret-value';
+
+    const server = getServer();
+    server.registerTools();
+
+    const tools = toolFactories.map((tool) => tool(server));
+
+    // Verify search-content tool is NOT registered
+    const searchContentTool = tools.find((tool) => tool.name === 'search-content');
+    expect(searchContentTool).toBeDefined();
+    expect(server.tool).not.toHaveBeenCalledWith(
+      'search-content',
+      searchContentTool!.description,
+      expect.any(Object),
+      expect.any(Object),
+      expect.any(Function),
+    );
+
+    // Verify other tools ARE still registered
+    for (const tool of tools) {
+      if (tool.name !== 'search-content') {
+        expect(server.tool).toHaveBeenCalledWith(
+          tool.name,
+          tool.description,
+          expect.any(Object),
+          expect.any(Object),
+          expect.any(Function),
+        );
+      }
+    }
+  });
+
   it('should register request handlers', async () => {
     const server = getServer();
     server.server.setRequestHandler = vi.fn();
