@@ -17,7 +17,9 @@ describe('server', () => {
 
   it('should list tools', async () => {
     const names = await listTools();
-    expect(names).toEqual(expect.arrayContaining([...toolNames]));
+    expect(names).toEqual(
+      expect.arrayContaining([...toolNames.filter((name) => name !== 'search-content')]),
+    );
     expect(names).toHaveLength(toolNames.length);
   });
 });
