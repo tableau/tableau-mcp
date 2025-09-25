@@ -4,9 +4,9 @@ sidebar_position: 2
 
 # Deploy to Heroku
 
-For information on how the deployment works, see the
-[Creating a 'Deploy to Heroku' Button](https://devcenter.heroku.com/articles/heroku-button)
-documentation.
+This project now includes experimental support for Heroku.
+
+Use the Deploy to Heroku button to start the app creation flow to create a Tableau MCP instance:
 
 [![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://www.heroku.com/deploy?template=https://github.com/tableau/tableau-mcp)
 
@@ -16,6 +16,10 @@ As part of the deployment process, Heroku will prompt for the key configuration 
 - SITE_NAME
 - PAT_NAME
 - PAT_VALUE
+
+For information on how the deployment works, see the
+[Creating a 'Deploy to Heroku' Button](https://devcenter.heroku.com/articles/heroku-button)
+documentation.
 
 ## Configure AI Tools with Heroku
 
@@ -32,6 +36,8 @@ settings, configuring in AI tools only needs to point to the instance:
   }
 }
 ```
+
+The project includes a template file `config.http.json` which you can use as an example.
 
 :::warning
 
