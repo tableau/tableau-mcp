@@ -33,7 +33,7 @@ Standard config works in most MCP clients:
 ## Working with the source code
 
 1. Clone the repository.
-2. Install [Node.js](https://nodejs.org/en/download) (tested with 22.15.0 LTS).
+2. Install [Node.js](https://nodejs.org/en/download) >= 22.7.5 (tested with 22.15.0 LTS).
 3. `npm install`
 4. `npm run build`
 5. Configure your MCP client using the instructions in the

@@ -29,3 +29,10 @@ jobs:
         run: npm ci
       - name: Test build website
         run: npm run build
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts
+          if-no-files-found: error
+          path: |
+            docs/build/
