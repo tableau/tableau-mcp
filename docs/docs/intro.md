@@ -35,6 +35,7 @@ make it easier for developers to build AI applications that integrate with Table
 | [list-pulse-metrics-from-metric-ids](tools/pulse/list-pulse-metrics-from-metric-ids.md)                               | List Pulse Metrics from Metric IDs ([Pulse API][pulse])                                               |
 | [list-pulse-metric-subscriptions](tools/pulse/list-pulse-metric-subscriptions.md)                                     | List Pulse Metric Subscriptions for Current User ([Pulse API][pulse])                                 |
 | [generate-pulse-metric-value-insight-bundle](tools/pulse/generate-pulse-metric-value-insight-bundle.md)               | Generate Pulse Metric Value Insight Bundle ([Pulse API][pulse])                                       |
+| [search-content](tools/content-exploration/search-content.md)                                                         | Searches for content in a Tableau site ([Content Exploration API][content-exploration])               |
 
 [query]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources
@@ -51,3 +52,4 @@ make it easier for developers to build AI applications that integrate with Table
 [meta]: https://help.tableau.com/current/api/metadata_api/en-us/index.html
 [vds]: https://help.tableau.com/current/api/vizql-data-service/en-us/index.html
 [pulse]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm
+[content-exploration]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_content_exploration.htm
