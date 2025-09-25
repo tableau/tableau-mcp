@@ -6,6 +6,8 @@ sidebar-position: 1
 
 Searches across all supported content types in a Tableau Site for objects relevant to the search query.
 
+Note: This tool is disabled when `AUTH` is `direct-trust`.
+
 ## APIs called
 
 - [Get Content Search Results](https://help.tableau.com/current/api/rest_api/en-us/REST/TAG/index.html#tag/Content-Exploration-Methods/operation/ContentExplorationService_getSearch)
