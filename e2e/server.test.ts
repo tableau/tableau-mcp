@@ -1,10 +1,10 @@
 import { serverName, serverVersion } from '../src/server.js';
-import { toolNames } from '../src/tools/toolName.js';
+import { ToolName, toolNames } from '../src/tools/toolName.js';
 import { getClient, listTools } from './client.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
 describe('server', () => {
-  const toolsNotSupportedWithDirectTrust = ['search-content'];
+  const toolsNotSupportedWithDirectTrust: Array<ToolName> = [];
 
   beforeAll(setEnv);
   afterAll(resetEnv);
