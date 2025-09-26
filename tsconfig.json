@@ -12,6 +12,6 @@
     "resolveJsonModule": true,
     "types": ["vitest/globals"]
   },
-  "include": ["src/**/*", "e2e/**/*", "types", "eslint.config.mjs"],
+  "include": ["src/**/*", "e2e/**/*", "eval/**/*", "types", "eslint.config.mjs"],
   "exclude": ["node_modules"]
 }
