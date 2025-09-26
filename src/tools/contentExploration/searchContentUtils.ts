@@ -72,7 +72,9 @@ export function buildFilterString(filter: SearchContentFilter): string {
   return filterExpressions.join(',');
 }
 
-export function reduceSearchContentResponse(response: SearchContentResponse): Array<object> {
+export function reduceSearchContentResponse(
+  response: SearchContentResponse,
+): Array<Record<string, unknown>> {
   const searchResults: Array<Record<string, unknown>> = [];
   if (response.items) {
     for (const item of response.items) {
