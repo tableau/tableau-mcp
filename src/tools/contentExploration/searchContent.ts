@@ -27,7 +27,6 @@ export const getSearchContentTool = (server: Server): Tool<typeof paramsSchema> 
   const searchContentTool = new Tool({
     server,
     name: 'search-content',
-    disabled: getConfig().auth === 'direct-trust',
     description: `
 This tool searches across all supported content types for objects relevant to the search expression specified by search terms and filters.
 
@@ -72,7 +71,7 @@ This tool searches across all supported content types for objects relevant to th
               config,
               requestId,
               server,
-              jwtScopes: [],
+              jwtScopes: ['tableau:content:read'],
               callback: async (restApi) => {
                 const response = await restApi.contentExplorationMethods.searchContent({
                   terms,
