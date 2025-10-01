@@ -5,7 +5,7 @@ sidebar_position: 6
 # E2E Tests
 
 The Tableau MCP project uses [Vitest][] for end-to-end (E2E) testing. E2E tests are located in the
-`e2e` directory and are named `*.test.ts`.
+`tests/e2e` directory and are named `*.test.ts`.
 
 ## Running
 
@@ -18,7 +18,7 @@ The E2E tests can only be run:
 To run them locally:
 
 1. Ensure you do not have a `.env` file in the root of the project.
-2. Create a `e2e/.env` file with contents:
+2. Create a `tests/.env` file with contents:
 
 ```
 SERVER=https://10ax.online.tableau.com
@@ -30,7 +30,7 @@ CONNECTED_APP_SECRET_ID=<redacted>
 CONNECTED_APP_SECRET_VALUE=<redacted>
 ```
 
-3. Create a `e2e/.env.reset` file with the same contents except all the env var values are empty.
+3. Create a `tests/.env.reset` file with the same contents except all the env var values are empty.
    (Environment variables get set at the beginning of each test and cleared at the end of each
    test.)
 4. Run `npm run test:e2e` or select the `vitest.config.e2e.ts` config in the [Vitest
@@ -44,9 +44,9 @@ To run the E2E tests locally against a different site, you need to:
    site). The tests query this datasource and workbook.
 2. Create and enable a [Direct Trust Connected App][connected-app] in the site.
 3. Create a Pulse Metric Definition named `Tableau MCP`. Its details don't matter.
-4. Update the `environmentData` object in `e2e/constants.ts` with the new site details.
+4. Update the `environmentData` object in `tests/e2e/constants.ts` with the new site details.
 5. Follow the steps in the [Running](#running) section, providing these new site details in the
-   `e2e/.env` file.
+   `tests/.env` file.
 
 ## Debugging
 

@@ -1,7 +1,7 @@
 import z from 'zod';
 
-import { viewSchema } from '../../src/sdks/tableau/types/view.js';
-import invariant from '../../src/utils/invariant.js';
+import { viewSchema } from '../../../src/sdks/tableau/types/view.js';
+import invariant from '../../../src/utils/invariant.js';
 import { callTool } from '../client.js';
 import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../testEnv.js';
 

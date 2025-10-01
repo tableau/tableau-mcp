@@ -32,7 +32,7 @@ export default [
     },
   },
   {
-    files: ['e2e/**/*.ts', 'eval/**/*.ts'],
+    files: ['tests/**/*.ts'],
     rules: {
       'no-console': 'off',
     },

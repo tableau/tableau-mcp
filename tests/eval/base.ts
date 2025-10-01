@@ -8,9 +8,10 @@ import {
   withTrace,
 } from '@openai/agents';
 import { OpenAI } from 'openai/client.js';
+import { Err, Ok, Result } from 'ts-results-es';
 import z from 'zod';
 
-import invariant from '../src/utils/invariant.js';
+import invariant from '../../src/utils/invariant.js';
 import { getSupportedModels } from './llmGatewayExpressApi.js';
 
 type ToolExecution = {
@@ -31,7 +32,7 @@ export async function getApiKey(): Promise<string> {
         'OPENAI_API_KEY is not set.',
         '1. Go to https://eng-ai-model-gateway.sfproxy.devx.aws-dev2-uswest2.aws.sfdc.cl/',
         '2. Log in using SSO and click "Generate Key"',
-        '3. Copy the key and add it to the .env file i.e. OPENAI_API_KEY=your-api-key',
+        '3. Copy the key and add it to the tests/eval/.env file i.e. OPENAI_API_KEY=your-api-key',
         'For more info, see https://git.soma.salesforce.com/pages/codeai/eng-ai-model-gateway/#/',
       ].join('\n'),
     );
@@ -148,8 +149,9 @@ export async function getToolExecutions(
   const executions = [...toolExecutions.values()];
   for (const execution of executions) {
     log(execution.name);
-    log(execution.arguments);
-    log(execution.output);
+    log(`  arguments: ${JSON.stringify(execution.arguments)}`);
+    log(`  output: ${execution.output}`);
+    log('\n');
   }
 
   return executions;
@@ -164,6 +166,21 @@ export function getCallToolResult<Z extends z.ZodTypeAny = z.ZodNever>(
   invariant(typeof callToolResult.text === 'string');
   const result = schema.parse(JSON.parse(callToolResult.text));
   return result;
+}
+
+export function getCallToolResultSafe<Z extends z.ZodTypeAny = z.ZodNever>(
+  toolExecution: ToolExecution,
+  schema: Z,
+): Result<z.infer<Z>, z.ZodError> {
+  const callToolResult = CallToolResultSchema.safeParse(JSON.parse(toolExecution.output));
+  if (!callToolResult.success) {
+    return Err(callToolResult.error);
+  }
+
+  invariant(callToolResult.data.type === 'text');
+  invariant(typeof callToolResult.data.text === 'string');
+  const result = schema.parse(JSON.parse(callToolResult.data.text));
+  return Ok(result);
 }
 
 export function log(message?: any, force?: boolean): void {

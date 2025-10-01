@@ -1,6 +1,6 @@
 import z from 'zod';
 
-import { dataSourceSchema } from '../src/sdks/tableau/types/dataSource.js';
+import { dataSourceSchema } from '../../src/sdks/tableau/types/dataSource.js';
 import { callTool } from './client.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from './testEnv.js';
 

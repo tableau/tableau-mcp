@@ -1,6 +1,6 @@
 import z from 'zod';
 
-import { workbookSchema } from '../../src/sdks/tableau/types/workbook.js';
+import { workbookSchema } from '../../../src/sdks/tableau/types/workbook.js';
 import { callTool } from '../client.js';
 import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../testEnv.js';
 

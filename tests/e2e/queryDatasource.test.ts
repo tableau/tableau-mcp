@@ -1,6 +1,6 @@
 import z from 'zod';
 
-import { QueryOutput } from '../src/sdks/tableau/apis/vizqlDataServiceApi.js';
+import { QueryOutput } from '../../src/sdks/tableau/apis/vizqlDataServiceApi.js';
 import { callTool } from './client.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from './testEnv.js';
 
