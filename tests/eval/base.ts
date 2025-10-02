@@ -87,7 +87,37 @@ export async function getMcpServer(env?: Record<string, string>): Promise<MCPSer
   return mcpServer;
 }
 
-export async function getAgentWithTools(mcpServer: MCPServerStdio, model: string): Promise<Agent> {
+export async function getAgent({
+  systemPrompt,
+  model,
+}: {
+  systemPrompt: string;
+  model: string;
+}): Promise<Agent> {
+  return await withTrace('get_agent', async () => {
+    return new Agent({
+      name: 'Assistant with Tableau MCP tools',
+      instructions: systemPrompt,
+      model: new OpenAIChatCompletionsModel(
+        new OpenAI({
+          baseURL: process.env.OPENAI_BASE_URL || LLM_GATEWAY_EXPRESS_URL,
+          apiKey: process.env.OPENAI_API_KEY,
+        }),
+        model,
+      ),
+    });
+  });
+}
+
+export async function getAgentWithTools({
+  mcpServer,
+  systemPrompt,
+  model,
+}: {
+  mcpServer: MCPServerStdio;
+  systemPrompt: string;
+  model: string;
+}): Promise<Agent> {
   return await withTrace('get_agent_with_tools', async () => {
     const mcpServers = [mcpServer];
 
@@ -98,8 +128,7 @@ export async function getAgentWithTools(mcpServer: MCPServerStdio, model: string
 
     return new Agent({
       name: 'Assistant with Tableau MCP tools',
-      instructions:
-        'Always answer using the available tools. Never use other tools or answer with other information. Do not second guess yourself. Always use the tool that is most appropriate for the task.',
+      instructions: systemPrompt,
       mcpServers,
       tools,
       modelSettings: { toolChoice: 'required' },
@@ -145,12 +174,12 @@ export async function getToolExecutions(
     }
   }
 
-  log('tool executions:');
+  log('🛠️ tool executions:');
   const executions = [...toolExecutions.values()];
   for (const execution of executions) {
-    log(execution.name);
-    log(`  arguments: ${JSON.stringify(execution.arguments)}`);
-    log(`  output: ${execution.output}`);
+    log(`  🔨 ${execution.name}`);
+    log(`    👉 arguments: ${JSON.stringify(execution.arguments)}`);
+    log(`    👈 output: ${execution.output}`);
     log('\n');
   }
 

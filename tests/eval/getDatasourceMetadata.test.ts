@@ -1,4 +1,4 @@
-import { MCPServerStdio, run, withTrace } from '@openai/agents';
+import { MCPServerStdio } from '@openai/agents';
 import dotenv from 'dotenv';
 import z from 'zod';
 
@@ -8,16 +8,15 @@ import invariant from '../../src/utils/invariant.js';
 import { Datasource } from '../constants.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../e2e/testEnv.js';
 import {
-  getAgentWithTools,
   getApiKey,
   getCallToolResult,
   getCallToolResultSafe,
   getMcpServer,
   getModel,
   getToolExecutions,
-  log,
   validateCertChain,
 } from './base.js';
+import { grade } from './grade.js';
 
 describe('get-datasource-metadata', () => {
   let model: string;
@@ -45,22 +44,15 @@ describe('get-datasource-metadata', () => {
   });
 
   it('should call get_datasource_metadata tool', async () => {
-    const message = `For the Superstore data source, get its metadata. Do not perform any analysis on the metadata, just show it.`;
-    log(`Running: ${message}`, true);
+    const prompt = `For the Superstore data source, get its metadata. Do not perform any analysis on the metadata, just show it.`;
 
-    const agent = await getAgentWithTools(mcpServer, model);
-
-    const result = await withTrace('run_agent', async () => {
-      const stream = await run(agent, message, { stream: true });
-      if (process.env.ENABLE_LOGGING === 'true') {
-        stream.toTextStream({ compatibleWithNodeStreams: true }).pipe(process.stdout);
-      }
-
-      await stream.completed;
-      return stream;
+    const { agentResult } = await grade({
+      mcpServer,
+      model,
+      prompt,
     });
 
-    const toolExecutions = await getToolExecutions(result);
+    const toolExecutions = await getToolExecutions(agentResult);
     expect(toolExecutions.length).toBeGreaterThanOrEqual(2);
 
     const listDatasourcesToolExecution = toolExecutions.find((toolExecution) => {

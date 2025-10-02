@@ -1,4 +1,4 @@
-import { MCPServerStdio, run, withTrace } from '@openai/agents';
+import { MCPServerStdio } from '@openai/agents';
 import dotenv from 'dotenv';
 import z from 'zod';
 
@@ -6,15 +6,14 @@ import { dataSourceSchema } from '../../src/sdks/tableau/types/dataSource.js';
 import { Datasource } from '../constants.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../e2e/testEnv.js';
 import {
-  getAgentWithTools,
   getApiKey,
   getCallToolResult,
   getMcpServer,
   getModel,
   getToolExecutions,
-  log,
   validateCertChain,
 } from './base.js';
+import { grade } from './grade.js';
 
 describe('list-datasources', () => {
   let model: string;
@@ -38,27 +37,20 @@ describe('list-datasources', () => {
   });
 
   afterEach(async () => {
-    await mcpServer.close();
+    await mcpServer?.close();
   });
 
   it('should call list_datasources tool', async () => {
-    const message =
+    const prompt =
       'List the data sources that are available on my Tableau site. Do not perform any analysis on the the list of data sources, just show the list.';
-    log(`Running: ${message}`, true);
 
-    const agent = await getAgentWithTools(mcpServer, model);
-
-    const result = await withTrace('run_agent', async () => {
-      const stream = await run(agent, message, { stream: true });
-      if (process.env.ENABLE_LOGGING === 'true') {
-        stream.toTextStream({ compatibleWithNodeStreams: true }).pipe(process.stdout);
-      }
-
-      await stream.completed;
-      return stream;
+    const { agentResult } = await grade({
+      mcpServer,
+      model,
+      prompt,
     });
 
-    const toolExecutions = await getToolExecutions(result);
+    const toolExecutions = await getToolExecutions(agentResult);
 
     expect(toolExecutions.length).toBe(1);
     expect(toolExecutions[0].name).toBe('list_datasources');
