@@ -1,3 +1,6 @@
+// If you add a new environment variable, make sure you update
+// docs/docs/configuration/mcp-config/generator.mdx
+
 export interface ProcessEnvEx {
   AUTH: string | undefined;
   TRANSPORT: string | undefined;
@@ -22,6 +25,15 @@ export interface ProcessEnvEx {
   MAX_RESULT_LIMIT: string | undefined;
   DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: string | undefined;
   DISABLE_METADATA_API_REQUESTS: string | undefined;
+  DISABLE_OAUTH: string | undefined;
+  OAUTH_ISSUER: string | undefined;
+  OAUTH_JWE_PRIVATE_KEY_PATH: string | undefined;
+  OAUTH_JWE_PRIVATE_KEY: string | undefined;
+  OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: string | undefined;
+  OAUTH_REDIRECT_URI: string | undefined;
+  OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: string | undefined;
+  OAUTH_ACCESS_TOKEN_TIMEOUT_MS: string | undefined;
+  OAUTH_REFRESH_TOKEN_TIMEOUT_MS: string | undefined;
 }
 
 declare global {

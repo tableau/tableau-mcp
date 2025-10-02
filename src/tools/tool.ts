@@ -1,3 +1,4 @@
+import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
@@ -52,6 +53,9 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
 type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined> = {
   // The request ID of the tool call
   requestId: RequestId;
+
+  // The Authentication info provided when OAuth is enabled
+  authInfo: AuthInfo | undefined;
 
   // The arguments of the tool call
   args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;

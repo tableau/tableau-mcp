@@ -1,10 +1,29 @@
 ---
-sidebar_position: 2
+sidebar_position: 1
 ---
 
-# Optional Environment Variables
+# Environment Variables
 
-Values for the following environment variables are optional.
+Values for the following environment variables can be provided to configure the Tableau MCP server.
+
+## `SERVER`
+
+The URL of the Tableau server.
+
+- For Tableau Cloud, specify your site's specific pod e.g.
+  `https://prod-useast-c.online.tableau.com`
+- Required unless [`AUTH`](#auth) is `oauth`.
+
+<hr />
+
+## `SITE_NAME`
+
+The name of the Tableau site to use.
+
+- For Tableau Cloud, specify your site name.
+- For Tableau Server, you may leave this value blank to use the default site.
+
+<hr />
 
 ## `TRANSPORT`
 
@@ -19,10 +38,10 @@ The MCP transport type to use for the server.
 
 ## `AUTH`
 
-The Tableau authentication method to use by the server.
+The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 - Default: `pat`
-- Possible values: `pat` or `direct-trust`
+- Possible values: `pat`, `direct-trust`, or `oauth`
 - See [Authentication](authentication) for additional required variables depending on the desired
   method.
 
