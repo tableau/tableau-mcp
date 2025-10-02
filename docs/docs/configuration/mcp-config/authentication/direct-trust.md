@@ -4,9 +4,9 @@ sidebar_position: 2
 
 # Direct Trust
 
-When `AUTH` is `direct-trust`, the MCP server will use the provided Tableau Direct Trust Connected
-App info to generate a scoped [JSON Web Token (JWT)][direct-trust] and use it to authenticate to the
-Tableau REST APIs.
+When `AUTH` is `direct-trust`, the MCP server will use the provided [Tableau Direct Trust Connected
+App][direct-trust] info to generate a scoped [JSON Web Token (JWT)][jwt] and use it to authenticate
+to the Tableau REST APIs.
 
 The generated JWT will have the minimum set of scopes necessary to invoke the methods called by the
 tool being executed.
@@ -41,6 +41,13 @@ The secret ID of the Tableau Connected App.
 
 The secret value of the Tableau Connected App.
 
+:::warning
+
+Treat your Connected App secret value securely and do not share it with anyone or in any client-side
+code where it could accidentally be revealed.
+
+:::
+
 <hr />
 
 ## Optional Variables
@@ -56,7 +63,5 @@ Example:
 { "username": "{OAUTH_USERNAME}", "region": "West" }
 ```
 
-<hr />
-
-[direct-trust]:
-  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#jwt
+[direct-trust]: https://help.tableau.com/current/online/en-us/connected_apps.htm#direct-trust
+[jwt]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#jwt

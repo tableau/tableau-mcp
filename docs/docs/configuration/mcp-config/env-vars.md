@@ -8,10 +8,9 @@ Values for the following environment variables can be provided to configure the 
 
 ## `SERVER`
 
-The URL of the Tableau server to constrain requests to.
+The URL of the Tableau server.
 
-- For Tableau Server, specify the host e.g. `https://my-tableau-server.com`
-- For Tableau Cloud, specify the pod the [`SITE_NAME`](#site_name) belongs to e.g.
+- For Tableau Cloud, specify your site's specific pod e.g.
   `https://prod-useast-c.online.tableau.com`
 - Required unless [`AUTH`](#auth) is `oauth`.
 
@@ -19,10 +18,10 @@ The URL of the Tableau server to constrain requests to.
 
 ## `SITE_NAME`
 
-The name of the Tableau site to constrain requests to.
+The name of the Tableau site to use.
 
-- For Tableau Server, leave this empty to specify the default site.
-- For Tableau Cloud, specify the site name e.g. `my-site`.
+- For Tableau Cloud, specify your site name.
+- For Tableau Server, you may leave this value blank to use the default site.
 
 <hr />
 
@@ -63,6 +62,8 @@ The default logging level of the server.
   - `alert`
   - `emergency`
 
+MCP logs are written by your AI client, so check that documentation to find their location.
+
 <hr />
 
 ## `DATASOURCE_CREDENTIALS`
@@ -87,11 +88,11 @@ This is a JSON-stringified version of the following object:
 }
 ```
 
-The connection LUIDs can be determined using the
-[Query Data Source Connections REST API](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source_connections).
+The connection LUIDs can be determined using the [Query Data Source Connections REST
+API][tab-ds-connections].
 
-Future work will include a tool to automate this process. For more information, see
-[Connect to your data source](https://help.tableau.com/current/api/vizql-data-service/en-us/docs/vds_create_queries.html#connect-to-your-data-source).
+Future work will include a tool to automate this process. For more information, see [Connect to your
+data source][tab-connect-ds].
 
 <hr />
 
@@ -159,3 +160,7 @@ Disables `graphql` requests to the Tableau Metadata API in the
 <hr />
 
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
+[tab-ds-connections]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source_connections
+[tab-connect-ds]:
+  https://help.tableau.com/current/api/vizql-data-service/en-us/docs/vds_create_queries.html#connect-to-your-data-source

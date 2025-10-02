@@ -1,6 +1,8 @@
-# Developers
+---
+sidebar_position: 3
+---
 
-## Contributing
+# Contributing
 
 We are following the
 [fork and pull model](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/getting-started/about-collaborative-development-models)

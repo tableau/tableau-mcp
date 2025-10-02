@@ -56,6 +56,4 @@ The origin or origins to allow CORS requests from.
 - Acceptable values include `true`, `false`, `*`, or a URL or array of URLs. See [cors config
   options][cors] for details.
 
-<hr />
-
 [cors]: https://expressjs.com/en/resources/middleware/cors.html#configuration-options

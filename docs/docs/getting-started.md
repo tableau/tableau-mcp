@@ -6,12 +6,12 @@ sidebar_position: 2
 
 ## Quick Start
 
-### Requirements
+Requirements
 
 - Node.js 20 or newer
 - An MCP client e.g. Claude Desktop, Cursor, VS Code, MCP Inspector, etc.
 
-Standard config works in most MCP clients:
+This standard config works in most MCP clients:
 
 ```json
 {
@@ -30,34 +30,19 @@ Standard config works in most MCP clients:
 }
 ```
 
-## Working with the source code
+## Claude Desktop Extension
 
-1. Clone the repository.
-2. Install [Node.js](https://nodejs.org/en/download) >= 22.7.5 (tested with 22.15.0 LTS).
-3. `npm install`
-4. `npm run build`
-5. Configure your MCP client using the instructions in the
-   [Configuring AI Tools](./configuration/ai-tools-config/README.md) section.
+Claude Desktop users can also install Tableau MCP as a [Desktop Extension][mcpb]. This is a single
+file which can be downloaded and installed without the need to edit any JSON config files.
 
-To keep up with repo changes:
+1. Go to the latest [Tableau MCP release][releases] on GitHub
+2. Under Assets, download the `.mcpb` file
+3. Have your Tableau MCP settings ready (SERVER, SITE_NAME, etc) ready and follow the [Claude
+   Desktop instructions][claude]
 
-1. Pull latest changes: `git pull`
-2. `npm install`
-3. `npm run build`
-4. Relaunch your AI tool or 'refresh' the MCP tools.
+The Desktop Extension has been available starting with Tableau MCP v1.5.2.
 
-<hr />
-
-## Docker Build
-
-To use the Docker version of Tableau MCP, build the image from source:
-
-```bash
-$ docker build -t tableau-mcp .
-$ docker images
-REPOSITORY    TAG       IMAGE ID       CREATED        SIZE
-tableau-mcp   latest    c721228b6dd3   15 hours ago   260MB
-```
-
-Remember to build the Docker image again whenever you pull the latest repo changes. Also you'll need
-to relaunch your AI tool so it starts using the updated image.
+[mcpb]: https://www.anthropic.com/engineering/desktop-extensions
+[releases]: https://github.com/tableau/tableau-mcp/releases
+[claude]:
+  https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop

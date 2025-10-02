@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20.x
           cache: npm
 
       - name: Install dependencies
@@ -33,7 +33,7 @@ jobs:
       - name: Upload Build Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/build
+          path: docs/build/tableau-mcp
 
   deploy:
     name: Deploy to GitHub Pages
