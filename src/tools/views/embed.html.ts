@@ -1,8 +1,6 @@
 export const embedHtml = String.raw`<html>
 
 <head>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.1.0/uuidv4.min.js"></script>
   <style>
     html, body, tableau-viz, tableau-authoring-viz, tableau-pulse {
       height: 100%;
@@ -71,7 +69,7 @@ export const embedHtml = String.raw`<html>
           viz.addEventListener('vizloaderror', (e) => {
             const detail = JSON.parse(e.detail.message);
             clearTimeout(timeout);
-            reject(JSON.stringify({ status: detail.statusCode, errorCodes:JSON.parse(detail.errorMessage).result.errors.map(({ code }) => code) }));
+            reject(JSON.stringify({ status: detail.statusCode, errorCodes: JSON.parse(detail.errorMessage).result.errors.map(({ code }) => code) }));
           });
         });
       } catch (e) {
