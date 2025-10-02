@@ -31,6 +31,7 @@ export class Config {
   maxResultLimit: number | null;
   disableQueryDatasourceFilterValidation: boolean;
   disableMetadataApiRequests: boolean;
+  useHeadedBrowser: boolean;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -58,6 +59,7 @@ export class Config {
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
+      USE_HEADED_BROWSER: useHeadedBrowser,
     } = cleansedVars;
 
     const defaultPort = 3927;
@@ -76,6 +78,7 @@ export class Config {
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
     this.disableMetadataApiRequests = disableMetadataApiRequests === 'true';
+    this.useHeadedBrowser = useHeadedBrowser === 'true';
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =
