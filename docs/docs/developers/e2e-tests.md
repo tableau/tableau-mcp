@@ -4,8 +4,8 @@ sidebar_position: 6
 
 # E2E Tests
 
-The Tableau MCP project uses [Vitest][] for end-to-end (E2E) testing. E2E tests are located in the
-`tests/e2e` directory and are named `*.test.ts`.
+The Tableau MCP project uses [Vitest][vitest] for end-to-end (E2E) testing. E2E tests are located in
+the `tests/e2e` directory and are named `*.test.ts`.
 
 ## Running
 

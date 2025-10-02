@@ -4,8 +4,18 @@ sidebar_position: 7
 
 # Eval Tests
 
-The Tableau MCP project uses [Vitest][] for eval tests. Eval tests are located in the `tests/eval`
-directory and are named `*.test.ts`.
+The Tableau MCP project uses [Vitest][vitest] for eval tests. Eval tests are located in the
+`tests/eval` directory and are named `*.test.ts`.
+
+## What is an Eval test?
+
+Eval tests—aka Evals—are tests used to evaluate the MCP tool implementations using LLM-based
+scoring. The tests provide assessments for accuracy, completeness, relevance, clarity, and reasoning
+and help answer questions like:
+
+- Can the model consistently use choose the correct tools to answer the user prompt?
+- Does the tool implementation accurately answer the user prompt?
+- Is the tone suitable for the target audience?
 
 ## Running
 
@@ -40,30 +50,30 @@ CONNECTED_APP_SECRET_VALUE=<redacted>
    different gateway, set the `OPENAI_BASE_URL` environment variable to the URL of the gateway you
    want to use. If you are a Salesforce employee and want to use the gateway, you also need to:
 
-   1. Get your API key from the gateway.
+   - Get your API key from the gateway.
 
-      1. Go to [LLM Gateway Express][llm-gateway-express] in your browser.
-      2. Log in using SSO and click "Generate Key".
-      3. This will be the value of your `OPENAI_API_KEY` environment variable.
+     1. Go to [LLM Gateway Express][llm-gateway-express] in your browser.
+     2. Log in using SSO and click "Generate Key".
+     3. This will be the value of your `OPENAI_API_KEY` environment variable.
 
-   2. Set the `NODE_EXTRA_CA_CERTS` environment variable to the path of the file containing the
-      certificate chain of the gateway.
+   - Set the `NODE_EXTRA_CA_CERTS` environment variable to the path of the file containing the
+     certificate chain of the gateway.
 
-      1. Go to [LLM Gateway Express][llm-gateway-express] in your browser.
-      2. Click the SSL lock icon > Connection is secure > Show certificate button > Details tab. If
-         you're using a non-Chromium browser, YMMV.
-      3. Click Export and choose the Base64-encoded ASCII **certificate chain** option. This is not
-         necessarily the default selected option in the Save dialog. Make sure you explicitly choose
-         the **chain**.
-      4. Name the file something like `ingressgateway.pem`, put it somewhere "permanent" like in
-         your home directory.
-      5. Open the file in a text editor and verify you see all certs in the chain, not just a single
-         cert. If it's just a single cert, return to step 3 and read the instructions more
-         carefully.
-      6. Set the `NODE_EXTRA_CA_CERTS` environment variable to the path of the file i.e.
-         `NODE_EXTRA_CA_CERTS=path/to/ingressgateway.pem`. No quotes.
-      7. ⚠️ Note that this cannot be done with the `.env` file. It **must** be set _before_ running
-         the tests. See https://nodejs.org/docs/latest/api/cli.html#node_extra_ca_certsfile
+     1. Go to [LLM Gateway Express][llm-gateway-express] in your browser.
+     2. Click the SSL lock icon > Connection is secure > Show certificate button > Details tab. If
+        you're using a non-Chromium browser, YMMV.
+     3. Click Export and choose the Base64-encoded ASCII **certificate chain** option. This is not
+        necessarily the default selected option in the Save dialog. Make sure you explicitly choose
+        the **chain**.
+     4. Name the file something like `ingressgateway.pem`, put it somewhere "permanent" like in your
+        home directory.
+     5. Open the file in a text editor and verify you see all certs in the chain, not just a single
+        cert. If it's just a single cert, return to step (c) and read the instructions more
+        carefully.
+     6. Set the `NODE_EXTRA_CA_CERTS` environment variable to the path of the file i.e.
+        `NODE_EXTRA_CA_CERTS=path/to/ingressgateway.pem`. No quotes.
+     7. ⚠️ Note that this cannot be done with the `.env` file. It **must** be set _before_ running
+        the tests. See https://nodejs.org/docs/latest/api/cli.html#node_extra_ca_certsfile
 
 5. Create a `tests/eval/.env` file with contents:
 
@@ -102,7 +112,7 @@ curl -X GET "https://eng-ai-model-gateway.sfproxy.devx.aws-dev2-uswest2.aws.sfdc
 ## Debugging
 
 If you are using VS Code or a fork, you can use the [Vitest extension][vitest.explorer] to run and
-debug the Eval tests. Keep in mind that the `NODE_EXTRA_CA_CERTS` environment variable must be set
+debug the Eval tests, keep in mind that the `NODE_EXTRA_CA_CERTS` environment variable must be set
 if you are using the [LLM Gateway Express][llm-gateway-express]. I don't think Vitest supports this
 (see [Vitest issue #13](https://github.com/rluvaton/vitest-vs-code-plugin/issues/13)) so your best
 bet is to set a system-level environment variable or set it in the IDE's JavaScript Debug terminal,
