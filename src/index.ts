@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import dotenv from 'dotenv';
+import express from 'express';
 
 import { getConfig } from './config.js';
 import { isLoggingLevel, log, setLogLevel, writeToStderr } from './logging/log.js';
 import { Server, serverName, serverVersion } from './server.js';
 import { startExpressServer } from './server/express.js';
+import { embedHtml } from './tools/views/embed.html.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 async function startServer(): Promise<void> {
@@ -19,6 +21,17 @@ async function startServer(): Promise<void> {
       const server = new Server();
       server.registerTools();
       server.registerRequestHandlers();
+
+      const app = express();
+
+      app.get('/embed', (req, res) => {
+        res.set('Content-Type', 'text/html');
+        res.send(Buffer.from(embedHtml));
+      });
+
+      app.listen(config.httpPort, () => {
+        log.info(server, `Embed server running on port ${config.httpPort}`);
+      });
 
       const transport = new StdioServerTransport();
       await server.connect(transport);

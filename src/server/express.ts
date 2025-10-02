@@ -9,6 +9,7 @@ import https from 'https';
 import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
+import { embedHtml } from '../tools/views/embed.html.js';
 
 export async function startExpressServer({
   basePath,
@@ -43,6 +44,10 @@ export async function startExpressServer({
   app.post(path, createMcpServer);
   app.get(path, methodNotAllowed);
   app.delete(path, methodNotAllowed);
+  app.get('/embed', (req, res) => {
+    res.set('Content-Type', 'text/html');
+    res.send(Buffer.from(embedHtml));
+  });
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {

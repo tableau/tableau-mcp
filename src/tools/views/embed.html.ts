@@ -1,0 +1,54 @@
+export const embedHtml = String.raw`<html>
+
+<head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.1.0/uuidv4.min.js"></script>
+  <style>
+    html, body, tableau-viz, tableau-authoring-viz, tableau-pulse {
+      height: 100%;
+      width: 100%;
+    }
+  </style>
+</head>
+
+<body>
+  <tableau-viz id="viz"></tableau-viz>
+  <script type="module">
+    function showSuccess(message) {
+      const div = document.createElement('div');
+      div.id = 'success';
+      div.textContent = message;
+      div.style.display = 'none';
+      document.body.prepend(div);
+    }
+
+    const urlParams = new URLSearchParams(window.location.hash.substring(1));
+    const url = urlParams.get('url');
+    const token = urlParams.get('token');
+    const parsedUrl = new URL(url);
+
+    (async () => {
+      await import(${'`${parsedUrl.origin}'}/javascripts/api/tableau.embedding.3.latest.js${'`'});
+
+      viz.token = token;
+      viz.src = parsedUrl.toString();
+      document.body.appendChild(viz);
+
+      try {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject('firstinteractive event did not fire within 10 seconds'), 10000);
+
+          viz.addEventListener('firstinteractive', () => {
+            showSuccess('Viz is interactive!');
+            clearTimeout(timeout);
+            resolve();
+          });
+        });
+      } catch (e) {
+        console.log(e);
+      }
+    })();
+  </script>
+</body>
+
+</html>`;
