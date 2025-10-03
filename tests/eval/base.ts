@@ -12,16 +12,13 @@ import { Err, Ok, Result } from 'ts-results-es';
 import z from 'zod';
 
 import invariant from '../../src/utils/invariant.js';
-import { getSupportedModels } from './llmGatewayExpressApi.js';
+import { getSupportedModels, LLM_GATEWAY_EXPRESS_URL } from './llmGatewayExpressApi.js';
 
 type ToolExecution = {
   name: string;
   arguments: Record<string, unknown>;
   output: string;
 };
-
-const LLM_GATEWAY_EXPRESS_URL =
-  'https://eng-ai-model-gateway.sfproxy.devx.aws-dev2-uswest2.aws.sfdc.cl';
 
 export async function getApiKey(): Promise<string> {
   const { OPENAI_API_KEY } = process.env;

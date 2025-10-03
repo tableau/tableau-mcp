@@ -1,7 +1,7 @@
 import { makeApi, Zodios, ZodiosInstance } from '@zodios/core';
 import { z } from 'zod';
 
-const LLM_GATEWAY_EXPRESS_URL =
+export const LLM_GATEWAY_EXPRESS_URL =
   'https://eng-ai-model-gateway.sfproxy.devx.aws-dev2-uswest2.aws.sfdc.cl';
 
 const modelsResponseSchema = z
