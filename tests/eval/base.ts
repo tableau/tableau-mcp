@@ -90,12 +90,14 @@ export async function getMcpServer(env?: Record<string, string>): Promise<MCPSer
 export async function getAgent({
   systemPrompt,
   model,
+  mcpServer,
 }: {
   systemPrompt: string;
   model: string;
+  mcpServer?: MCPServerStdio;
 }): Promise<Agent> {
   return await withTrace('get_agent', async () => {
-    return new Agent({
+    const agentOptions = {
       name: 'Assistant with Tableau MCP tools',
       instructions: systemPrompt,
       model: new OpenAIChatCompletionsModel(
@@ -105,40 +107,22 @@ export async function getAgent({
         }),
         model,
       ),
-    });
-  });
-}
+    };
 
-export async function getAgentWithTools({
-  mcpServer,
-  systemPrompt,
-  model,
-}: {
-  mcpServer: MCPServerStdio;
-  systemPrompt: string;
-  model: string;
-}): Promise<Agent> {
-  return await withTrace('get_agent_with_tools', async () => {
-    const mcpServers = [mcpServer];
+    if (!mcpServer) {
+      return new Agent(agentOptions);
+    }
 
-    const tools = await getAllMcpTools(mcpServers);
+    const tools = await getAllMcpTools([mcpServer]);
     tools.forEach((tool) => {
       tool.name = `tableau_${tool.name}`;
     });
 
     return new Agent({
-      name: 'Assistant with Tableau MCP tools',
-      instructions: systemPrompt,
-      mcpServers,
+      ...agentOptions,
+      mcpServers: [mcpServer],
       tools,
       modelSettings: { toolChoice: 'required' },
-      model: new OpenAIChatCompletionsModel(
-        new OpenAI({
-          baseURL: process.env.OPENAI_BASE_URL || LLM_GATEWAY_EXPRESS_URL,
-          apiKey: process.env.OPENAI_API_KEY,
-        }),
-        model,
-      ),
     });
   });
 }
