@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { JWTHeaderParameters, JWTPayload, SignJWT } from 'jose';
 
+import { Config } from '../config.js';
+
 export async function getJwt({
   username,
   connectedApp,
@@ -39,4 +41,13 @@ export async function getJwt({
     .sign(new TextEncoder().encode(connectedApp.secretValue));
 
   return token;
+}
+
+export function getJwtSubClaim(config: Config): string {
+  return config.jwtSubClaim;
+}
+
+export function getJwtAdditionalPayload(config: Config): Record<string, unknown> {
+  const json = config.jwtAdditionalPayload;
+  return JSON.parse(json || '{}');
 }

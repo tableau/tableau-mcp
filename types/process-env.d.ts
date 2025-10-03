@@ -22,6 +22,7 @@ export interface ProcessEnvEx {
   MAX_RESULT_LIMIT: string | undefined;
   DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: string | undefined;
   DISABLE_METADATA_API_REQUESTS: string | undefined;
+  USE_HEADED_BROWSER: string | undefined;
 }
 
 declare global {
