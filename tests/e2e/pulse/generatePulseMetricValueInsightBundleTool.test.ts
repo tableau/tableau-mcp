@@ -1,7 +1,7 @@
-import { pulseBundleResponseSchema } from '../../src/sdks/tableau/types/pulse.js';
+import { pulseBundleResponseSchema } from '../../../src/sdks/tableau/types/pulse.js';
+import { getPulseDefinition } from '../../constants.js';
+import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../../testEnv.js';
 import { callTool } from '../client.js';
-import { getPulseDefinition } from '../constants.js';
-import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../testEnv.js';
 
 describe('generate-pulse-metric-value-insight-bundle', () => {
   beforeAll(setEnv);
