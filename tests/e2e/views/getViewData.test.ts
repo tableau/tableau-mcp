@@ -1,7 +1,7 @@
 import z from 'zod';
 
 import { callTool } from '../client.js';
-import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../testEnv.js';
+import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
 
 describe('get-view-data', () => {
   beforeAll(setEnv);

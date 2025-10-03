@@ -13,7 +13,8 @@ Eval tests—aka Evals—are tests used to evaluate the MCP tool implementations
 scoring. The tests provide assessments for accuracy, completeness, relevance, clarity, and reasoning
 and help answer questions like:
 
-- Can the model consistently use choose the correct tools to answer the user prompt?
+- Can the model consistently choose the correct tools to answer the user prompt?
+- Can the model generate the correct tool inputs based on the user prompt?
 - Does the tool implementation accurately answer the user prompt?
 - Is the tone suitable for the target audience?
 

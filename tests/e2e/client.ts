@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { ToolName } from '../../src/tools/toolName.js';
 import invariant from '../../src/utils/invariant.js';
-import { getDefaultEnv } from './testEnv.js';
+import { getDefaultEnv } from '../testEnv.js';
 
 /**
  * Lists the tools available in the MCP server.

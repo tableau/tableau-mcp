@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 
-import { ProcessEnvEx } from '../../types/process-env.js';
-import { Datasource, getDatasource, getWorkbook, Workbook } from '../constants.js';
+import { ProcessEnvEx } from '../types/process-env.js';
+import { Datasource, getDatasource, getWorkbook, Workbook } from './constants.js';
 
 type EnvValues = Record<keyof ProcessEnvEx, string>;
 

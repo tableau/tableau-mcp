@@ -1,6 +1,6 @@
 import { workbookSchema } from '../../../src/sdks/tableau/types/workbook.js';
 import { callTool } from '../client.js';
-import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../testEnv.js';
+import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
 
 describe('get-workbook', () => {
   beforeAll(setEnv);

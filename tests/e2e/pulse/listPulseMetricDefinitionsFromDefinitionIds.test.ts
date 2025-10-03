@@ -3,7 +3,7 @@ import z from 'zod';
 import { pulseMetricDefinitionSchema } from '../../../src/sdks/tableau/types/pulse.js';
 import { getPulseDefinition } from '../../constants.js';
 import { callTool } from '../client.js';
-import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
+import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 
 describe('list-pulse-metric-definitions-from-definition-ids', () => {
   beforeAll(setEnv);

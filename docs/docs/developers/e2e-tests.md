@@ -44,7 +44,7 @@ To run the E2E tests locally against a different site, you need to:
    site). The tests query this datasource and workbook.
 2. Create and enable a [Direct Trust Connected App][connected-app] in the site.
 3. Create a Pulse Metric Definition named `Tableau MCP`. Its details don't matter.
-4. Update the `environmentData` object in `tests/e2e/constants.ts` with the new site details.
+4. Update the `environmentData` object in `tests/constants.ts` with the new site details.
 5. Follow the steps in the [Running](#running) section, providing these new site details in the
    `tests/.env` file.
 
