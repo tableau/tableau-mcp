@@ -46,7 +46,7 @@ export async function validateCertChain(): Promise<void> {
     throw new Error(
       [
         'NODE_EXTRA_CA_CERTS is not set. This is required when using the LLM Gateway Express.',
-        '1. Go to https://git.soma.salesforce.com/pages/codeai/eng-ai-model-gateway/#/',
+        '1. Go to https://eng-ai-model-gateway.sfproxy.devx.aws-dev2-uswest2.aws.sfdc.cl/',
         '2. Click the SSL lock icon > Connection is secure > Show certificate button > Details tab',
         '3. Click Export and choose the Base64-encoded ASCII **certificate chain** option. This is not necessarily the default selected option in the Save dialog. Make sure you explicitly choose the **chain**.',
         '4. Save the chain somewhere "permanent" like in your home directory',
