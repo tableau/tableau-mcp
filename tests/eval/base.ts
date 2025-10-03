@@ -27,10 +27,11 @@ export async function getApiKey(): Promise<string> {
     throw new Error(
       [
         'OPENAI_API_KEY is not set.',
-        '1. Go to https://eng-ai-model-gateway.sfproxy.devx.aws-dev2-uswest2.aws.sfdc.cl/',
-        '2. Log in using SSO and click "Generate Key"',
-        '3. Copy the key and add it to the tests/eval/.env file i.e. OPENAI_API_KEY=your-api-key',
-        'For more info, see https://git.soma.salesforce.com/pages/codeai/eng-ai-model-gateway/#/',
+        'If you are a Salesforce employee, you can use the LLM Gateway Express',
+        'For more info, see https://git.soma.salesforce.com/pages/codeai/eng-ai-model-gateway/',
+        '  1. Go to https://eng-ai-model-gateway.sfproxy.devx.aws-dev2-uswest2.aws.sfdc.cl/',
+        '  2. Log in using SSO and click "Generate Key"',
+        '  3. Copy the key and add it to the tests/eval/.env file i.e. OPENAI_API_KEY=your-api-key',
       ].join('\n'),
     );
   }
@@ -48,9 +49,9 @@ export async function validateCertChain(): Promise<void> {
         '1. Go to https://git.soma.salesforce.com/pages/codeai/eng-ai-model-gateway/#/',
         '2. Click the SSL lock icon > Connection is secure > Show certificate button > Details tab',
         '3. Click Export and choose the Base64-encoded ASCII **certificate chain** option. This is not necessarily the default selected option in the Save dialog. Make sure you explicitly choose the **chain**.',
-        '4. Name the file something like ingressgateway.pem, put it somewhere "permanent" like in your home directory',
+        '4. Save the chain somewhere "permanent" like in your home directory',
         '5. Open the file in a text editor and verify you see all certs in the chain, not just a single cert.',
-        '6. Set the NODE_EXTRA_CA_CERTS environment variable to the path of the file i.e. NODE_EXTRA_CA_CERTS=path/to/ingressgateway.pem',
+        '6. Set the NODE_EXTRA_CA_CERTS environment variable to the path of the file i.e. NODE_EXTRA_CA_CERTS=path/to/chain.crt',
         '7. Note that this cannot be done with the .env file. See https://nodejs.org/docs/latest/api/cli.html#node_extra_ca_certsfile',
       ].join('\n'),
     );
