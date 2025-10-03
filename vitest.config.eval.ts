@@ -7,7 +7,7 @@ export default mergeConfig(
   defineConfig({
     test: {
       dir: 'tests/eval',
-      testTimeout: 30 * 60 * 1000,
+      testTimeout: 60 * 1000,
       fileParallelism: false,
       outputFile: 'junit/eval.xml',
     },
