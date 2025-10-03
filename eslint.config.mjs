@@ -47,7 +47,7 @@ export default [
     },
   },
   {
-    ignores: ['node_modules/**', 'build/**', 'docs/.docusaurus/**'],
+    ignores: ['node_modules/**', 'build/**', 'docs/.docusaurus/**', 'docs/build/**'],
   },
   {
     plugins: {

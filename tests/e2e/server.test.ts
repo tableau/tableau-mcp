@@ -1,7 +1,7 @@
 import { serverName, serverVersion } from '../../src/server.js';
 import { toolNames } from '../../src/tools/toolName.js';
-import { getClient, listTools } from './client.js';
 import { resetEnv, setEnv } from '../testEnv.js';
+import { getClient, listTools } from './client.js';
 
 describe('server', () => {
   beforeAll(setEnv);
