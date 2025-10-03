@@ -71,7 +71,6 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
           const rendererOptions: RendererOptions = {
             width: width || 800,
             height: height || 800,
-            url,
           };
 
           const token =

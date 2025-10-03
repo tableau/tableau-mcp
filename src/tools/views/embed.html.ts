@@ -42,7 +42,7 @@ export const embedHtml = String.raw`<html>
       } catch {
         return ${'`${error}`'};
       }
-}
+    }
 
     const urlParams = new URLSearchParams(window.location.hash.substring(1));
     const url = urlParams.get('url');
@@ -50,7 +50,7 @@ export const embedHtml = String.raw`<html>
     const parsedUrl = new URL(url);
 
     (async () => {
-      await import(${'`${parsedUrl.origin}'}/javascripts/api/tableau.embedding.3.latest.js${'`'});
+      const { TableauEventType } = await import(${'`${parsedUrl.origin}'}/javascripts/api/tableau.embedding.3.latest.js${'`'});
 
       viz.token = token;
       viz.src = parsedUrl.toString();
@@ -60,13 +60,13 @@ export const embedHtml = String.raw`<html>
         await new Promise((resolve, reject) => {
           const timeout = setTimeout(() => reject('firstinteractive event did not fire within 30 seconds'), 30000);
 
-          viz.addEventListener('firstinteractive', () => {
+          viz.addEventListener(TableauEventType.FirstInteractive, () => {
             showSuccess('Viz is interactive!');
             clearTimeout(timeout);
             resolve();
           });
 
-          viz.addEventListener('vizloaderror', (e) => {
+          viz.addEventListener(TableauEventType.VizLoadError, (e) => {
             const detail = JSON.parse(e.detail.message);
             clearTimeout(timeout);
             reject(JSON.stringify({ status: detail.statusCode, errorCodes: JSON.parse(detail.errorMessage).result.errors.map(({ code }) => code) }));

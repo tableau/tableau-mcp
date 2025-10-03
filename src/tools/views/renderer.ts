@@ -1,10 +1,16 @@
-import puppeteer, { Browser, BrowserContext, Page, ScreenshotOptions } from 'puppeteer';
+import { randomUUID } from 'crypto';
+import fs from 'fs';
+import path, { dirname } from 'path';
+import puppeteer, { Browser, BrowserContext, CDPSession, Page, ScreenshotOptions } from 'puppeteer';
 import { Err, Ok, Result } from 'ts-results-es';
+import { fileURLToPath } from 'url';
 
 import { Server } from '../../server.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 export type RendererOptions = {
-  url: string;
   width: number;
   height: number;
 };
@@ -17,6 +23,13 @@ export type RendererError = {
     | 'page-creation-failed'
     | 'screenshot-failed';
   error: unknown;
+};
+
+type BrowserSession = {
+  page: Page;
+  pageSession: CDPSession;
+  browserSession: CDPSession;
+  downloadPath: string;
 };
 
 export class Renderer {
@@ -46,7 +59,7 @@ export class Renderer {
   private async _getPage(
     context: BrowserContext,
     options: RendererOptions,
-  ): Promise<Result<Page, unknown>> {
+  ): Promise<Result<BrowserSession, unknown>> {
     try {
       const page = await context.newPage();
       await page.setViewport({
@@ -54,7 +67,25 @@ export class Renderer {
         height: options.height,
       });
 
-      return Ok(page);
+      const browserSession = await this.browser.target().createCDPSession();
+      const downloadPath = path.resolve(__dirname, 'downloads', randomUUID());
+      if (!fs.existsSync(downloadPath)) {
+        fs.mkdirSync(downloadPath, { recursive: true });
+      }
+
+      const pageSession = await page.createCDPSession();
+      await pageSession.send('Page.setDownloadBehavior', {
+        behavior: 'allow',
+        downloadPath,
+      });
+
+      await browserSession.send('Browser.setDownloadBehavior', {
+        behavior: 'allowAndName',
+        downloadPath,
+        eventsEnabled: true,
+      });
+
+      return Ok({ page, pageSession, browserSession, downloadPath });
     } catch (error) {
       return Err(error);
     }
@@ -94,7 +125,7 @@ export class Renderer {
     server: Server,
     url: string,
     options: RendererOptions,
-  ): Promise<Result<Page, RendererError>> {
+  ): Promise<Result<BrowserSession, RendererError>> {
     const context = await this._getBrowserContext();
     if (context.isErr()) {
       return Err({ type: 'browser-context-creation-failed', error: context.error });
@@ -105,18 +136,26 @@ export class Renderer {
       return Err({ type: 'page-creation-failed', error: pageResult.error });
     }
 
-    const navigateResult = await this._navigate(pageResult.value, url);
+    const navigateResult = await this._navigate(pageResult.value.page, url);
     if (navigateResult.isErr()) {
       return Err({ type: 'navigation-failed', error: navigateResult.error });
     }
 
-    const pageLoadResult = await this._waitForPageLoad(pageResult.value);
+    const pageLoadResult = await this._waitForPageLoad(pageResult.value.page);
     if (pageLoadResult.isErr()) {
       return Err({ type: 'page-failed-to-load', error: pageLoadResult.error });
     }
 
-    await this._finalizePage(pageResult.value);
+    await this._finalizePage(pageResult.value.page);
     return Ok(pageResult.value);
+  }
+
+  async embedAndWaitForInteractive(
+    server: Server,
+    url: string,
+    options?: RendererOptions,
+  ): Promise<Result<BrowserSession, RendererError>> {
+    return await this._createPage(server, url, options ?? { width: 800, height: 800 });
   }
 
   async screenshot(
@@ -126,13 +165,14 @@ export class Renderer {
   ): Promise<Result<Uint8Array, RendererError>> {
     let page: Page | null = null;
     let screenshot: Uint8Array | null = null;
+
     try {
       const pageResult = await this._createPage(server, url, options);
       if (pageResult.isErr()) {
         return pageResult;
       }
 
-      page = pageResult.value;
+      page = pageResult.value.page;
 
       const screenshotOptions: ScreenshotOptions = {
         type: 'png',

@@ -20,6 +20,7 @@
   },
   "scripts": {
     ":build": "npx rimraf ./build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --minify --outdir=build --sourcemap",
+    ":build:dev": "npx rimraf ./build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap",
     "build": "run-s :build exec-perms",
     "build:watch": "npm run :build -- --watch",
     "build:docker": "docker build -t tableau-mcp .",
@@ -64,6 +65,7 @@
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.25.1",
     "@modelcontextprotocol/inspector": "^0.16.6",
+    "@tableau/embedding-api": "^3.14.2",
     "@types/cors": "^2.8.19",
     "@types/eslint__js": "^8.42.3",
     "@types/express": "^5.0.3",
