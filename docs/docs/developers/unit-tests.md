@@ -4,7 +4,7 @@ sidebar_position: 5
 
 # Unit Tests
 
-The Tableau MCP project uses [Vitest](vitest) for unit testing. Unit tests are located in the `src`
+The Tableau MCP project uses [Vitest][vitest] for unit testing. Unit tests are located in the `src`
 directory alongside their corresponding source files and are named `*.test.ts`.
 
 ## Running
