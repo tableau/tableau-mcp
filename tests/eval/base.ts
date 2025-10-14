@@ -12,7 +12,6 @@ import { Err, Ok, Result } from 'ts-results-es';
 import z from 'zod';
 
 import invariant from '../../src/utils/invariant.js';
-import { getSupportedModels, LLM_GATEWAY_EXPRESS_URL } from './llmGatewayExpressApi.js';
 
 type ToolExecution = {
   name: string;
@@ -20,57 +19,20 @@ type ToolExecution = {
   output: string;
 };
 
-export async function getApiKey(): Promise<string> {
+const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
+
+function getApiKey(): string {
   const { OPENAI_API_KEY } = process.env;
 
   if (!OPENAI_API_KEY) {
-    throw new Error(
-      [
-        'OPENAI_API_KEY is not set.',
-        'If you are a Salesforce employee, you can use the LLM Gateway Express',
-        'For more info, see https://git.soma.salesforce.com/pages/codeai/eng-ai-model-gateway/',
-        '  1. Go to https://eng-ai-model-gateway.sfproxy.devx.aws-dev2-uswest2.aws.sfdc.cl/',
-        '  2. Log in using SSO and click "Generate Key"',
-        '  3. Copy the key and add it to the tests/eval/.env file i.e. OPENAI_API_KEY=your-api-key',
-      ].join('\n'),
-    );
+    throw new Error('OPENAI_API_KEY is not set.');
   }
 
   return OPENAI_API_KEY;
 }
 
-export async function validateCertChain(): Promise<void> {
-  const { OPENAI_BASE_URL, NODE_EXTRA_CA_CERTS } = process.env;
-
-  if ((!OPENAI_BASE_URL || OPENAI_BASE_URL === LLM_GATEWAY_EXPRESS_URL) && !NODE_EXTRA_CA_CERTS) {
-    throw new Error(
-      [
-        'NODE_EXTRA_CA_CERTS is not set. This is required when using the LLM Gateway Express.',
-        '1. Go to https://eng-ai-model-gateway.sfproxy.devx.aws-dev2-uswest2.aws.sfdc.cl/',
-        '2. Click the SSL lock icon > Connection is secure > Show certificate button > Details tab',
-        '3. Click Export and choose the Base64-encoded ASCII **certificate chain** option. This is not necessarily the default selected option in the Save dialog. Make sure you explicitly choose the **chain**.',
-        '4. Save the chain somewhere "permanent" like in your home directory',
-        '5. Open the file in a text editor and verify you see all certs in the chain, not just a single cert.',
-        '6. Set the NODE_EXTRA_CA_CERTS environment variable to the path of the file i.e. NODE_EXTRA_CA_CERTS=path/to/chain.crt',
-        '7. Note that this cannot be done with the .env file. See https://nodejs.org/docs/latest/api/cli.html#node_extra_ca_certsfile',
-      ].join('\n'),
-    );
-  }
-}
-
-export async function getModel(apiKey: string): Promise<string> {
-  const { EVAL_TEST_MODEL } = process.env;
-
-  const model = EVAL_TEST_MODEL || 'claude-sonnet-4-5-20250929';
-  const supportedModels = await getSupportedModels(apiKey);
-
-  if (!supportedModels.includes(model)) {
-    throw new Error(
-      `Model ${model} is not supported by the LLM Gateway Express. Supported models: \n${supportedModels.join('\n')}`,
-    );
-  }
-
-  return model;
+export function getModel(): string {
+  return process.env.EVAL_TEST_MODEL || DEFAULT_MODEL;
 }
 
 export async function getMcpServer(env?: Record<string, string>): Promise<MCPServerStdio> {
@@ -100,8 +62,8 @@ export async function getAgent({
       instructions: systemPrompt,
       model: new OpenAIChatCompletionsModel(
         new OpenAI({
-          baseURL: process.env.OPENAI_BASE_URL || LLM_GATEWAY_EXPRESS_URL,
-          apiKey: process.env.OPENAI_API_KEY,
+          baseURL: process.env.OPENAI_BASE_URL,
+          apiKey: getApiKey(),
         }),
         model,
       ),

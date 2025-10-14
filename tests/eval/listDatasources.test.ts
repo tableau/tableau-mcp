@@ -5,18 +5,10 @@ import z from 'zod';
 import { dataSourceSchema } from '../../src/sdks/tableau/types/dataSource.js';
 import { Datasource } from '../constants.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../testEnv.js';
-import {
-  getApiKey,
-  getCallToolResult,
-  getMcpServer,
-  getModel,
-  getToolExecutions,
-  validateCertChain,
-} from './base.js';
+import { getCallToolResult, getMcpServer, getModel, getToolExecutions } from './base.js';
 import { grade } from './grade.js';
 
 describe('list-datasources', () => {
-  let model: string;
   let mcpServer: MCPServerStdio;
   let superstore: Datasource;
 
@@ -25,9 +17,6 @@ describe('list-datasources', () => {
 
   beforeAll(async () => {
     dotenv.config({ path: 'tests/eval/.env' });
-    const apiKey = await getApiKey();
-    await validateCertChain();
-    model = await getModel(apiKey);
   });
 
   beforeEach(async () => {
@@ -46,7 +35,7 @@ describe('list-datasources', () => {
 
     const { agentResult } = await grade({
       mcpServer,
-      model,
+      model: getModel(),
       prompt,
     });
 

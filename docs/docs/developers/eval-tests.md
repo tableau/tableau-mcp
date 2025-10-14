@@ -46,43 +46,13 @@ CONNECTED_APP_SECRET_VALUE=<redacted>
    (Environment variables get set at the beginning of each test and cleared at the end of each
    test.)
 
-4. By default, the tests use Salesforce's internal [LLM Gateway Express (LLM
-   GE)][llm-gateway-express], which is an OpenAI-compatible gateway only available internally to
-   Salesforce employees. To use a different gateway, set the `OPENAI_BASE_URL` environment variable
-   to the URL of the gateway you want to use. If you are a Salesforce employee and want to use the
-   gateway, you also need to:
-
-   - Get your API key from the gateway.
-
-     1. Go to [LLM GE][llm-gateway-express] in your browser.
-     2. Log in using SSO and click "Generate Key".
-     3. This will be the value of your `OPENAI_API_KEY` environment variable.
-
-   - Set the `NODE_EXTRA_CA_CERTS` environment variable to the path of the file containing the
-     certificate chain of the gateway.
-
-     1. Go to [LLM GE][llm-gateway-express] in your browser.
-     2. Click the SSL lock icon > Connection is secure > Show certificate button > Details tab. If
-        you're using a non-Chromium browser, YMMV.
-     3. Click Export and choose the Base64-encoded ASCII **certificate chain** option. This is not
-        necessarily the default selected option in the Save dialog. Make sure you explicitly choose
-        the **chain**.
-     4. Save the certificate chain somewhere "permanent" like in your home directory.
-     5. Open the file in a text editor and verify you see all certs in the chain, not just a single
-        cert. If it's just a single cert, return to step (c) and read the instructions more
-        carefully.
-     6. Set the `NODE_EXTRA_CA_CERTS` environment variable to the path of the file i.e.
-        `NODE_EXTRA_CA_CERTS=path/to/chain.crt`. No quotes.
-     7. ⚠️ Note that this cannot be done with the `.env` file. It **must** be set _before_ running
-        the tests. See https://nodejs.org/docs/latest/api/cli.html#node_extra_ca_certsfile
-
-5. Create a `tests/eval/.env` file with contents:
+4. Create a `tests/eval/.env` file with contents:
 
 ```
-OPENAI_API_KEY=<your OpenAI or LLM GE API key>
+OPENAI_API_KEY=<your OpenAI API key>
 ```
 
-6. Run `npm run test:eval` or select the `vitest.config.eval.ts` config in the [Vitest
+5. Run `npm run test:eval` or select the `vitest.config.eval.ts` config in the [Vitest
    extension][vitest.explorer] and run them from your IDE.
 
 ## Environment Variables
@@ -91,13 +61,7 @@ The following environment variables are used by the Eval tests:
 
 ### `OPENAI_API_KEY`
 
-The API key for the OpenAI or LLM GE API.
-
-<hr />
-
-### `NODE_EXTRA_CA_CERTS`
-
-The path to the certificate chain for the LLM GE API. This is required when using the LLM GE API.
+The OpenAI API key.
 
 <hr />
 
@@ -110,24 +74,13 @@ logged.
 
 ### `OPENAI_BASE_URL`
 
-The base URL for the OpenAI-compatibile gateway. If not set, the LLM GE API will be used.
+The base URL for the OpenAI-compatible gateway.
 
 <hr />
 
 ### `EVAL_TEST_MODEL`
 
 The model to use for the Eval tests. If not set, the default model is used.
-
-## Other models
-
-If you're using the [LLM GE][llm-gateway-express], you can get the list of supported models by
-making a GET request. Use the model `id` as the value of the `EVAL_TEST_MODEL` environment
-
-```cmd
-curl -X GET "https://eng-ai-model-gateway.sfproxy.devx.aws-dev2-uswest2.aws.sfdc.cl/v1/models" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <your API key>"
-```
 
 ## Running the Eval tests against a different site
 
@@ -144,13 +97,8 @@ To run the Eval tests locally against a different site, you need to:
 ## Debugging
 
 If you are using VS Code or a fork, you can use the [Vitest extension][vitest.explorer] to run and
-debug the Eval tests, keep in mind that the `NODE_EXTRA_CA_CERTS` environment variable must be set
-if you are using the [LLM GE][llm-gateway-express]. I don't think Vitest supports this (see
-[Vitest issue #13](https://github.com/rluvaton/vitest-vs-code-plugin/issues/13)) so your best bet is
-to set a system-level environment variable or set it in the IDE's JavaScript Debug terminal, setting
-breakpoints, then running the tests using `npm run test:eval`.
+debug the Eval tests.
 
 [vitest.explorer]: https://marketplace.visualstudio.com/items?itemName=vitest.explorer
 [vitest]: https://vitest.dev/
 [connected-app]: https://help.tableau.com/current/server/en-us/connected_apps_direct.htm
-[llm-gateway-express]: https://eng-ai-model-gateway.sfproxy.devx.aws-dev2-uswest2.aws.sfdc.cl

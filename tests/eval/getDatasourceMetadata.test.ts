@@ -8,18 +8,15 @@ import invariant from '../../src/utils/invariant.js';
 import { Datasource } from '../constants.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../testEnv.js';
 import {
-  getApiKey,
   getCallToolResult,
   getCallToolResultSafe,
   getMcpServer,
   getModel,
   getToolExecutions,
-  validateCertChain,
 } from './base.js';
 import { grade } from './grade.js';
 
 describe('get-datasource-metadata', () => {
-  let model: string;
   let mcpServer: MCPServerStdio;
   let superstore: Datasource;
 
@@ -28,9 +25,6 @@ describe('get-datasource-metadata', () => {
 
   beforeAll(async () => {
     dotenv.config({ path: 'tests/eval/.env' });
-    const apiKey = await getApiKey();
-    await validateCertChain();
-    model = await getModel(apiKey);
   });
 
   beforeEach(async () => {
@@ -48,7 +42,7 @@ describe('get-datasource-metadata', () => {
 
     const { agentResult } = await grade({
       mcpServer,
-      model,
+      model: getModel(),
       prompt,
     });
 
