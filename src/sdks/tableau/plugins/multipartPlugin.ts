@@ -1,13 +1,15 @@
 import { ZodiosEndpointDefinitions, ZodiosInstance, ZodiosPlugin } from '@zodios/core';
+import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 type RequestOptions = ReturnType<NonNullable<ZodiosPlugin['request']>>;
 
 export const multipartRequestSchema = z.object({
-  contentDispositionName: z.literal('request_payload'),
+  boundaryString: z.string(),
+  contentDispositionName: z.literal('tableau_file'),
   contentType: z.literal('application/xml'),
   filename: z.string(),
-  contents: z.string(),
+  fileBuffer: z.instanceof(Buffer),
 });
 
 type MultipartRequest = z.infer<typeof multipartRequestSchema>;
@@ -26,35 +28,34 @@ const multipartPlugin: ZodiosPlugin = {
   },
 };
 
-export const useMultipartPluginAsync = async <T extends ZodiosEndpointDefinitions>({
+export const useMultipartPluginAsync = async <T extends ZodiosEndpointDefinitions, S>({
   apiClient,
   actionFnAsync,
-  catchFn,
 }: {
   apiClient: ZodiosInstance<T>;
-  actionFnAsync: () => Promise<void>;
-  catchFn: (e: unknown) => void;
-}): Promise<void> => {
+  actionFnAsync: () => Promise<S>;
+}): Promise<Result<S, unknown>> => {
   try {
     apiClient.use(multipartPlugin);
-    await actionFnAsync();
+    return new Ok(await actionFnAsync());
   } catch (e: unknown) {
-    catchFn(e);
+    return new Err(e);
   } finally {
     apiClient.eject(pluginName);
   }
 };
 
-export const boundaryString = crypto.randomUUID();
 function getMultipartRequestData({
+  boundaryString,
   contentDispositionName,
   contentType,
   filename,
-  contents,
+  fileBuffer,
 }: MultipartRequest): Buffer<ArrayBuffer> {
   const requestBodyStart = `--${boundaryString}
-Content-Disposition: name="${contentDispositionName}"
+Content-Disposition: name="request_payload"
 Content-Type: ${contentType}
+
 
 --${boundaryString}
 Content-Disposition: name="${contentDispositionName}"; filename="${filename}"
@@ -68,7 +69,7 @@ Content-Type: application/octet-stream
 
   const data = Buffer.concat([
     Buffer.from(requestBodyStart, 'utf8'),
-    Buffer.from(contents, 'utf8'),
+    fileBuffer,
     Buffer.from(requestBodyEnd, 'utf8'),
   ]);
 

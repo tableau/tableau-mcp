@@ -13,6 +13,7 @@ import AuthenticationMethods, {
 import ContentExplorationMethods from './methods/contentExplorationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
+import PublishingMethods from './methods/publishingMethods.js';
 import PulseMethods from './methods/pulseMethods.js';
 import ViewsMethods from './methods/viewsMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
@@ -36,6 +37,7 @@ export default class RestApi {
   private _contentExplorationMethods?: ContentExplorationMethods;
   private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
+  private _publishingMethods?: PublishingMethods;
   private _pulseMethods?: PulseMethods;
   private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
   private _viewsMethods?: ViewsMethods;
@@ -122,6 +124,15 @@ export default class RestApi {
     }
 
     return this._metadataMethods;
+  }
+
+  get publishingMethods(): PublishingMethods {
+    if (!this._publishingMethods) {
+      this._publishingMethods = new PublishingMethods(this._baseUrl, this.creds);
+      this._addInterceptors(this._baseUrl, this._publishingMethods.interceptors);
+    }
+
+    return this._publishingMethods;
   }
 
   get pulseMethods(): PulseMethods {

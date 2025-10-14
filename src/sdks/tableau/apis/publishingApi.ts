@@ -1,4 +1,5 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
+import { z } from 'zod';
 
 import { multipartRequestSchema } from '../plugins/multipartPlugin.js';
 import { fileUploadSchema } from '../types/fileUpload.js';
@@ -8,7 +9,7 @@ const initiateFileUploadEndpoint = makeEndpoint({
   path: `/sites/:siteId/fileUploads`,
   alias: 'initiateFileUpload',
   description: 'Initiates the upload process for a file.',
-  response: fileUploadSchema,
+  response: z.object({ fileUpload: fileUploadSchema }),
 });
 
 const appendToFileUploadEndpoint = makeEndpoint({
@@ -16,7 +17,7 @@ const appendToFileUploadEndpoint = makeEndpoint({
   path: `/sites/:siteId/fileUploads/:uploadSessionId`,
   alias: 'appendToFileUpload',
   description: 'Uploads a block of data and appends it to the data that is already uploaded.',
-  response: fileUploadSchema,
+  response: z.object({ fileUpload: fileUploadSchema }),
   parameters: [
     {
       name: 'body',
