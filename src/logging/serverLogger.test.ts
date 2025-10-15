@@ -8,6 +8,7 @@ import { loggingLevels } from './log.js';
 import { ServerLogger } from './serverLogger.js';
 
 const logLineSchema = z.object({
+  timestamp: z.date(),
   message: z.string().or(z.record(z.string(), z.any())),
   level: z.enum(loggingLevels),
 });

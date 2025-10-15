@@ -21,6 +21,7 @@ export class ServerLogger {
 
   async log(message: string | LogMessage, level: LoggingLevel): Promise<void> {
     // Create a new log file each hour e.g. 2025-10-15T21-00-00-000Z.log
+    const timestamp = new Date().toISOString();
     const filename = `${new Date(new Date().setMinutes(0, 0, 0)).toISOString().replace(/[:.]/g, '-')}.log`;
     const logFilePath = join(this._logDirectory, filename);
 
@@ -32,7 +33,7 @@ export class ServerLogger {
     const newMutex = currentMutex.then(async () => {
       try {
         // appendFile will create the file if it doesn't exist
-        await appendFile(logFilePath, JSON.stringify({ level, message }) + '\n');
+        await appendFile(logFilePath, JSON.stringify({ timestamp, level, message }) + '\n');
       } catch (error) {
         writeToStderr(`Failed to write to log file ${logFilePath}: ${getExceptionMessage(error)}`);
       }
