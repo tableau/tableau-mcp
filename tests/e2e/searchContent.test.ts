@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
+import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
 import { callTool } from './client.js';
-import { getDefaultEnv, resetEnv, setEnv } from './testEnv.js';
 
 describe('search-content', () => {
   beforeAll(setEnv);
