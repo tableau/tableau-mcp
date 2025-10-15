@@ -17,6 +17,7 @@ jobs:
       - run: |
           git fetch --tags
           git checkout -b publish ${{ github.event.release.tag_name }}
+          npm install -g npm@latest
           npm ci
           npm run build
           npm publish
