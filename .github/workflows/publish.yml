@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # Needed for npm provenance and OIDC
+      id-token: write # Needed for OIDC authentication
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
