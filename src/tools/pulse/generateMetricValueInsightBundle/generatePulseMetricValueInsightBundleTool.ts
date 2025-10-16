@@ -8,6 +8,7 @@ import {
   pulseInsightBundleTypeEnum,
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { getTableauAuthInfo } from '../../../server/oauth/schemas.js';
 import { Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -136,10 +137,14 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ bundleRequest, bundleType }, { requestId }): Promise<CallToolResult> => {
+    callback: async (
+      { bundleRequest, bundleType },
+      { requestId, authInfo },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       return await generatePulseMetricValueInsightBundleTool.logAndExecute({
         requestId,
+        authInfo,
         args: { bundleRequest, bundleType },
         callback: async () => {
           return await useRestApi({
@@ -147,6 +152,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
             requestId,
             server,
             jwtScopes: ['tableau:insights:read'],
+            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
                 bundleRequest,

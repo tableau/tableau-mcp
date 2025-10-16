@@ -85,14 +85,17 @@ export const getToolLogMessage = ({
   requestId,
   toolName,
   args,
+  username,
 }: {
   requestId: RequestId;
   toolName: ToolName;
   args: unknown;
+  username?: string;
 }): LogMessage => {
   return {
     type: 'tool',
     requestId,
+    ...(username ? { username } : {}),
     tool: {
       name: toolName,
       ...(args !== undefined ? { args } : {}),

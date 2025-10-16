@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/schemas.js';
 import { Tool } from '../tool.js';
 
 const paramsSchema = {
@@ -15,18 +16,20 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
   const getWorkbookTool = new Tool({
     server,
     name: 'get-workbook',
-    description: `Retrieves information about the specified workbook, including information about the views contained in the workbook.`,
+    description:
+      'Retrieves information about the specified workbook, including information about the views contained in the workbook.',
     paramsSchema,
     annotations: {
       title: 'Get Workbook',
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ workbookId }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ workbookId }, { requestId, authInfo }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getWorkbookTool.logAndExecute({
         requestId,
+        authInfo,
         args: { workbookId },
         callback: async () => {
           return new Ok(
@@ -35,6 +38,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
               requestId,
               server,
               jwtScopes: ['tableau:content:read'],
+              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 const workbook = await restApi.workbooksMethods.getWorkbook({
                   workbookId,
