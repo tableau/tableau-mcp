@@ -186,7 +186,8 @@ OAuth as a security best practice.
 
 To opt out of this behavior at your own risk, set `DISABLE_OAUTH` to `true`.
 
-This is not recommended as your MCP server will not be protected from unauthorized access.
+This is not recommended as your MCP server will not be protected from unauthorized access. You will
+be prompted to accept these risks when you start the MCP server.
 
 :::
 
