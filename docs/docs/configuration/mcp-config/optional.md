@@ -62,7 +62,6 @@ The directory server logs are written to when [`ENABLE_SERVER_LOGGING`](#enable_
 `true`.
 
 - Default: `[build directory]/logs` i.e. `build/logs`.
-- Must be an absolute path.
 - The server will attempt to create the directory if it does not exist.
 - There is no cleanup of old log files. The server will continue to create log files indefinitely.
 
