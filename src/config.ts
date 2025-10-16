@@ -1,8 +1,12 @@
 import { CorsOptions } from 'cors';
+import { join } from 'path';
+import { fileURLToPath } from 'url';
 
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 const authTypes = ['pat', 'direct-trust'] as const;
 type AuthType = (typeof authTypes)[number];
@@ -31,6 +35,8 @@ export class Config {
   maxResultLimit: number | null;
   disableQueryDatasourceFilterValidation: boolean;
   disableMetadataApiRequests: boolean;
+  enableServerLogging: boolean;
+  serverLogDirectory: string;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -58,6 +64,8 @@ export class Config {
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
+      ENABLE_SERVER_LOGGING: enableServerLogging,
+      SERVER_LOG_DIRECTORY: serverLogDirectory,
     } = cleansedVars;
 
     const defaultPort = 3927;
@@ -76,6 +84,8 @@ export class Config {
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
     this.disableMetadataApiRequests = disableMetadataApiRequests === 'true';
+    this.enableServerLogging = enableServerLogging === 'true';
+    this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =
