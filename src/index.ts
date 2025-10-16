@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import dotenv from 'dotenv';
+import readline from 'readline/promises';
 
 import { getConfig } from './config.js';
 import { isLoggingLevel, log, setLogLevel, setServerLogger, writeToStderr } from './logging/log.js';
@@ -34,20 +35,34 @@ async function startServer(): Promise<void> {
     case 'http': {
       const { url } = await startExpressServer({ basePath: serverName, config, logLevel });
 
+      if (!config.oauth.enabled) {
+        console.warn(
+          '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access!',
+        );
+
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+
+        const input = (
+          await rl.question('⚠️ To accept these risks, please type "I accept" and press Enter.\n> ')
+        )
+          .toLocaleLowerCase()
+          .replaceAll('"', '')
+          .trim();
+
+        if (input !== 'i accept') {
+          // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
+          console.log('Goodbye 👋');
+          process.exit(1);
+        }
+      }
+
       // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
       console.log(
         `${serverName} v${serverVersion} stateless streamable HTTP server available at ${url}`,
       );
-
-      if (!config.oauth.enabled) {
-        const host = new URL(url).hostname;
-
-        if (host !== 'localhost' && host !== '127.0.0.1') {
-          writeToStderr(
-            '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access!',
-          );
-        }
-      }
       break;
     }
   }
