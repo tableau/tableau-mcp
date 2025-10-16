@@ -8,6 +8,7 @@ import { fromError, isZodErrorLike } from 'zod-validation-error';
 
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
+import { tableauAuthInfoSchema } from '../server/oauth/schemas.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { ToolName } from './toolName.js';
 
@@ -103,8 +104,24 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.callback = callback;
   }
 
-  logInvocation({ requestId, args }: { requestId: RequestId; args: unknown }): void {
-    log.debug(this.server, getToolLogMessage({ requestId, toolName: this.name, args }));
+  logInvocation({
+    requestId,
+    args,
+    username,
+  }: {
+    requestId: RequestId;
+    args: unknown;
+    username?: string;
+  }): void {
+    log.debug(
+      this.server,
+      getToolLogMessage({
+        requestId,
+        toolName: this.name,
+        args,
+        username,
+      }),
+    );
   }
 
   // Overload for E = undefined (getErrorText omitted)
@@ -126,11 +143,16 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   async logAndExecute<T, E>({
     requestId,
     args,
+    authInfo,
     callback,
     getSuccessResult,
     getErrorText,
   }: LogAndExecuteParams<T, E, Args>): Promise<CallToolResult> {
-    this.logInvocation({ requestId, args });
+    const username = authInfo?.extra
+      ? tableauAuthInfoSchema.safeParse(authInfo.extra).data?.username
+      : undefined;
+
+    this.logInvocation({ requestId, args, username });
 
     if (args) {
       try {

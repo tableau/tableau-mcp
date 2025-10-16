@@ -62,6 +62,8 @@ APIs.
 - Each line in the log file is a JSON object with the following properties:
 
   - `timestamp`: The timestamp of the log message in UTC time.
+  - `username`: For tool calls, the username of the user who made the call. This is only present
+    when OAuth is enabled.
   - `level`: The logging level of the log message.
   - `logger`: The logger of the log message. This is typically `rest-api` for HTTP traces or
     `tableau-mcp` for tool calls.

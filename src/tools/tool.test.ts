@@ -38,12 +38,13 @@ describe('Tool', () => {
     const tool = new Tool(mockParams);
     const testArgs = { param1: 'test' };
 
-    tool.logInvocation({ requestId: '2', args: testArgs });
+    tool.logInvocation({ requestId: '2', args: testArgs, username: 'test-user' });
 
     const server = expect.any(Object);
     expect(spy).toHaveBeenCalledExactlyOnceWith(server, {
       type: 'tool',
       requestId: '2',
+      username: 'test-user',
       tool: {
         name: 'get-datasource-metadata',
         args: testArgs,
