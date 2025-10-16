@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { existsSync } from 'fs';
 
 import { ProcessEnvEx } from '../types/process-env.js';
 import { Datasource, getDatasource, getWorkbook, Workbook } from './constants.js';
@@ -6,11 +7,17 @@ import { Datasource, getDatasource, getWorkbook, Workbook } from './constants.js
 type EnvValues = Record<keyof ProcessEnvEx, string>;
 
 export function setEnv(): void {
-  dotenv.config({ path: 'e2e/.env', override: true });
+  if (existsSync('.env')) {
+    throw new Error(
+      'Please remove or rename the .env file at the base of the project before running the tests.',
+    );
+  }
+
+  dotenv.config({ path: 'tests/.env', override: true });
 }
 
 export function resetEnv(): void {
-  dotenv.config({ path: 'e2e/.env.reset', override: true });
+  dotenv.config({ path: 'tests/.env.reset', override: true });
 }
 
 export function getEnv(envKeys: Array<keyof ProcessEnvEx>): EnvValues {

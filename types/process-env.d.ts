@@ -25,6 +25,8 @@ export interface ProcessEnvEx {
   MAX_RESULT_LIMIT: string | undefined;
   DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: string | undefined;
   DISABLE_METADATA_API_REQUESTS: string | undefined;
+  ENABLE_SERVER_LOGGING: string | undefined;
+  SERVER_LOG_DIRECTORY: string | undefined;
   DISABLE_OAUTH: string | undefined;
   OAUTH_ISSUER: string | undefined;
   OAUTH_JWE_PRIVATE_KEY_PATH: string | undefined;

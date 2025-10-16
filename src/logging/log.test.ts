@@ -126,7 +126,7 @@ describe('log', () => {
           params: {
             level: 'info',
             logger: 'test-logger',
-            message: expect.stringContaining('test message'),
+            data: expect.stringContaining('test message'),
           },
         },
         {
@@ -156,7 +156,7 @@ describe('log', () => {
           params: {
             level: 'info',
             logger: 'test-server',
-            message: expect.stringContaining('test message'),
+            data: expect.stringContaining('test message'),
           },
         },
         {
@@ -182,7 +182,7 @@ describe('log', () => {
           params: {
             level: 'info',
             logger: 'test-logger',
-            message: expect.any(String),
+            data: expect.any(String),
           },
         },
         {

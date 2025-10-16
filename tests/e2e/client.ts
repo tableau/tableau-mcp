@@ -2,9 +2,9 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { z } from 'zod';
 
-import { ToolName } from '../src/tools/toolName.js';
-import invariant from '../src/utils/invariant.js';
-import { getDefaultEnv } from './testEnv.js';
+import { ToolName } from '../../src/tools/toolName.js';
+import invariant from '../../src/utils/invariant.js';
+import { getDefaultEnv } from '../testEnv.js';
 
 /**
  * Lists the tools available in the MCP server.

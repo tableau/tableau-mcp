@@ -2,6 +2,7 @@ import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../server.js';
 import { ToolName } from '../tools/toolName.js';
+import { ServerLogger } from './serverLogger.js';
 type Logger = 'rest-api' | (string & {});
 type LogType = LoggingLevel | 'request' | 'response' | 'tool';
 type LogMessage = {
@@ -9,7 +10,7 @@ type LogMessage = {
   [key: string]: any;
 };
 
-const loggingLevels = [
+export const loggingLevels = [
   'debug',
   'info',
   'notice',
@@ -21,6 +22,7 @@ const loggingLevels = [
 ] as const;
 
 let currentLogLevel: LoggingLevel = 'debug';
+let serverLogger: ServerLogger | undefined;
 
 export function isLoggingLevel(level: unknown): level is LoggingLevel {
   return !!loggingLevels.find((l) => l === level);
@@ -40,6 +42,10 @@ export const setLogLevel = (
   if (!silent) {
     log.notice(server, `Logging level set to: ${level}`);
   }
+};
+
+export const setServerLogger = (logger: ServerLogger): void => {
+  serverLogger = logger;
 };
 
 type LogMethodOptions = Partial<{ logger: Logger; requestId: RequestId }>;
@@ -102,6 +108,8 @@ function getSendLoggingMessageFn(level: LoggingLevel) {
       logger: server.name,
     },
   ) => {
+    serverLogger?.log({ message, level, logger });
+
     if (!shouldLogWhenLevelIsAtLeast(level)) {
       return;
     }
@@ -114,7 +122,7 @@ function getSendLoggingMessageFn(level: LoggingLevel) {
         params: {
           level,
           logger,
-          message: JSON.stringify(
+          data: JSON.stringify(
             {
               timestamp: new Date().toISOString(),
               currentLogLevel,

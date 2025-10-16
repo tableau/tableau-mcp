@@ -1,9 +1,9 @@
 import z from 'zod';
 
-import { pulseMetricSubscriptionSchema } from '../../src/sdks/tableau/types/pulse.js';
+import { pulseMetricSubscriptionSchema } from '../../../src/sdks/tableau/types/pulse.js';
+import { getPulseDefinition } from '../../constants.js';
+import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 import { callTool } from '../client.js';
-import { getPulseDefinition } from '../constants.js';
-import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
 
 describe('list-pulse-metric-subscriptions', () => {
   beforeAll(setEnv);

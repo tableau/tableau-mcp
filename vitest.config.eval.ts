@@ -6,9 +6,10 @@ export default mergeConfig(
   defineConfig(configShared),
   defineConfig({
     test: {
-      dir: 'tests/e2e',
-      testTimeout: 30_000,
-      outputFile: 'junit/e2e.xml',
+      dir: 'tests/eval',
+      testTimeout: 60 * 1000,
+      fileParallelism: false,
+      outputFile: 'junit/eval.xml',
     },
   }),
 );

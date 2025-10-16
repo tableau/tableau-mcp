@@ -1,9 +1,13 @@
 import { CorsOptions } from 'cors';
 import { existsSync } from 'fs';
+import { join } from 'path';
+import { fileURLToPath } from 'url';
 
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
@@ -41,6 +45,8 @@ export class Config {
   maxResultLimit: number | null;
   disableQueryDatasourceFilterValidation: boolean;
   disableMetadataApiRequests: boolean;
+  enableServerLogging: boolean;
+  serverLogDirectory: string;
   oauth: {
     enabled: boolean;
     issuer: string;
@@ -88,6 +94,8 @@ export class Config {
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
+      ENABLE_SERVER_LOGGING: enableServerLogging,
+      SERVER_LOG_DIRECTORY: serverLogDirectory,
     } = cleansedVars;
 
     this.siteName = siteName ?? '';
@@ -105,6 +113,8 @@ export class Config {
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
     this.disableMetadataApiRequests = disableMetadataApiRequests === 'true';
+    this.enableServerLogging = enableServerLogging === 'true';
+    this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
 
     const disableOauthOverride = disableOauth === 'true';
     this.oauth = {

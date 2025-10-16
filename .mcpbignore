@@ -14,7 +14,7 @@ vitest.config.ts
 build/scripts/**/*
 coverage/**/*
 docs/**/*
-e2e/**/*
+tests/**/*
 junit/**/*
 src/**/*
 tableau-mcp.dxt

@@ -33,7 +33,7 @@ export default [
     },
   },
   {
-    files: ['e2e/**/*.ts'],
+    files: ['tests/**/*.ts'],
     rules: {
       'no-console': 'off',
     },
@@ -48,7 +48,7 @@ export default [
     },
   },
   {
-    ignores: ['node_modules/**', 'build/**', 'docs/.docusaurus/**'],
+    ignores: ['node_modules/**', 'build/**', 'docs/.docusaurus/**', 'docs/build/**'],
   },
   {
     plugins: {
