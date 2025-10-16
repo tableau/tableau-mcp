@@ -34,9 +34,9 @@ When `true`, the server will continue sending notifications to MCP clients, but 
 them to local files in the directory specified in the
 [`SERVER_LOG_DIRECTORY`](#server_log_directory) environment variable.
 
-Log notifications are primarily going to be the HTTP requests and responses the Tableau MCP server
-makes to the Tableau REST APIs. If you are encountering any issues with these API requests, enabling
-logging may help you debug the issues.
+Log notifications are primarily the HTTP traces for the requests and responses the Tableau MCP
+server makes to the Tableau REST APIs. If you are encountering any issues with these API requests,
+enabling logging may help you debug the issues.
 
 - Default: `false`
 - New log files are created each hour, appending to the file for each log message during that hour.
@@ -50,8 +50,11 @@ logging may help you debug the issues.
   - `message`: The log message itself. This may be a string or a JSON object.
 
 - All notifications are written to the local log files regardless of the server's currently
-configured minimum logging level, since that only applies to notifications sent to MCP clients. See
-[`DEFAULT_LOG_LEVEL`](#default_log_level) for more information.
+  configured minimum logging level, since that only applies to notifications sent to MCP clients.
+  See [`DEFAULT_LOG_LEVEL`](#default_log_level) for more information.
+- Secrets are masked by default in the log files. To reveal them for debugging purposes, set the
+  [`DISABLE_LOG_MASKING`](#disable_log_masking) environment variable to `true`.
+
 <hr />
 
 ## `SERVER_LOG_DIRECTORY`
@@ -88,6 +91,14 @@ any time they want.
 
 <hr />
 
+## `DISABLE_LOG_MASKING`
+
+Disable masking of credentials in MCP client notifications and server logs. For debug purposes only.
+
+- Default: `false`
+
+<hr />
+
 ## `DATASOURCE_CREDENTIALS`
 
 A JSON string that includes usernames and passwords for any datasources that require them.
@@ -115,14 +126,6 @@ API][tab-ds-connections].
 
 Future work will include a tool to automate this process. For more information, see [Connect to your
 data source][tab-connect-ds].
-
-<hr />
-
-## `DISABLE_LOG_MASKING`
-
-Disable masking of credentials in logs. For debug purposes only.
-
-- Default: `false`
 
 <hr />
 
