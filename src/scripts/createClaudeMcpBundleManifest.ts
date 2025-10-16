@@ -115,6 +115,22 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  ENABLE_SERVER_LOGGING: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Enable Server Logging',
+    description: 'Enable logging of server activity to local files.',
+    required: false,
+    sensitive: false,
+  },
+  SERVER_LOG_DIRECTORY: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Server Log Directory',
+    description: 'The directory to write the server logs to when ENABLE_SERVER_LOGGING is true.',
+    required: false,
+    sensitive: false,
+  },
   DEFAULT_LOG_LEVEL: {
     includeInUserConfig: false,
     type: 'string',
