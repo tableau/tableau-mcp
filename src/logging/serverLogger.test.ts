@@ -8,13 +8,16 @@ import { loggingLevels } from './log.js';
 import { ServerLogger } from './serverLogger.js';
 
 const logLineSchema = z.object({
-  timestamp: z.date(),
+  timestamp: z.coerce.date(),
   message: z.string().or(z.record(z.string(), z.any())),
   level: z.enum(loggingLevels),
+  logger: z.string(),
 });
 
 describe('ServerLogger', () => {
   const testLogDirectory = 'test-logs';
+  const logger = 'test-logger';
+
   let serverLogger: ServerLogger;
 
   beforeEach(() => {
@@ -41,7 +44,7 @@ describe('ServerLogger', () => {
     const message = 'Test log message';
     const level = 'info';
 
-    await serverLogger.log(message, level);
+    await serverLogger.log({ message, level, logger });
 
     // Find the log file (it will have a timestamp-based name)
     const files = readdirSync(testLogDirectory);
@@ -54,6 +57,7 @@ describe('ServerLogger', () => {
     const logObject = logLineSchema.parse(JSON.parse(logLines[0]));
     expect(logObject.message).toBe(message);
     expect(logObject.level).toBe(level);
+    expect(logObject.logger).toBe(logger);
   });
 
   it('should handle concurrent log writes to the same file', async () => {
@@ -65,7 +69,7 @@ describe('ServerLogger', () => {
     const messages = [message1, message2, message3];
 
     // Wait for all operations to complete
-    await Promise.all(messages.map((message) => serverLogger.log(message, level)));
+    await Promise.all(messages.map((message) => serverLogger.log({ message, level, logger })));
 
     // Find the log file
     const files = readdirSync(testLogDirectory);
@@ -86,6 +90,7 @@ describe('ServerLogger', () => {
       const logObject = logLineSchema.parse(JSON.parse(logLines[line]));
       expect(logObject.message).toBe(messages[line]);
       expect(logObject.level).toBe(level);
+      expect(logObject.logger).toBe(logger);
     }
   });
 
@@ -97,7 +102,7 @@ describe('ServerLogger', () => {
     const messages = Array.from({ length: numConcurrentLogs }, (_, i) => `${baseMessage} ${i}`);
 
     // Create many concurrent log operations
-    await Promise.all(messages.map((message) => serverLogger.log(message, level)));
+    await Promise.all(messages.map((message) => serverLogger.log({ message, level, logger })));
 
     // Find the log file
     const files = readdirSync(testLogDirectory);
@@ -118,6 +123,7 @@ describe('ServerLogger', () => {
       const logObject = logLineSchema.parse(JSON.parse(logLines[line]));
       expect(logObject.message).toBe(messages[line]);
       expect(logObject.level).toBe(level);
+      expect(logObject.logger).toBe(logger);
     }
   });
 
@@ -130,7 +136,7 @@ describe('ServerLogger', () => {
     ];
 
     for (const { message, level } of messages) {
-      await serverLogger.log(message, level);
+      await serverLogger.log({ message, level, logger });
     }
 
     // Find the log file
@@ -152,6 +158,7 @@ describe('ServerLogger', () => {
       const logObject = logLineSchema.parse(JSON.parse(logLines[line]));
       expect(logObject.message).toBe(messages[line].message);
       expect(logObject.level).toBe(messages[line].level);
+      expect(logObject.logger).toBe(logger);
     }
   });
 });

@@ -32,21 +32,20 @@ The Tableau authentication method to use by the server.
 
 When `true`, the server will continue sending notifications to MCP clients, but will now also write
 them to local files in the directory specified in the
-[`SERVER_LOG_DIRECTORY`](#server_log_directory) environment variable.
-
-Log notifications are primarily the HTTP traces for the requests and responses the Tableau MCP
-server makes to the Tableau REST APIs. If you are encountering any issues with these API requests,
-enabling logging may help you debug the issues.
+[`SERVER_LOG_DIRECTORY`](#server_log_directory) environment variable. Notifications include tool
+calls and their arguments as well as HTTP traces for the requests and responses to the Tableau REST
+APIs.
 
 - Default: `false`
-- New log files are created each hour, appending to the file for each log message during that hour.
 - The log file names are in the format `YYYY-MM-DDTHH-00-00-000Z.log` e.g.
   `2025-10-15T22-00-00-000Z.log` meaning this log file contains all log messages for hour 22 of
-  2025-10-15 in UTC time.
+  2025-10-15 in UTC time. All log entries for a given hour of the day are appended to the same file.
 - Each line in the log file is a JSON object with the following properties:
 
   - `timestamp`: The timestamp of the log message in UTC time.
   - `level`: The logging level of the log message.
+  - `logger`: The logger of the log message. This is typically `rest-api` for HTTP traces or
+    `tableau-mcp` for tool calls.
   - `message`: The log message itself. This may be a string or a JSON object.
 
 - All notifications are written to the local log files regardless of the server's currently
@@ -59,7 +58,7 @@ enabling logging may help you debug the issues.
 
 ## `SERVER_LOG_DIRECTORY`
 
-The directory to write the server logs to when [`ENABLE_SERVER_LOGGING`](#enable_server_logging) is
+The directory server logs are written to when [`ENABLE_SERVER_LOGGING`](#enable_server_logging) is
 `true`.
 
 - Default: `[working directory]/logs` i.e. `build/logs`.

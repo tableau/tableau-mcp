@@ -5,7 +5,7 @@ import { ToolName } from '../tools/toolName.js';
 import { ServerLogger } from './serverLogger.js';
 type Logger = 'rest-api' | (string & {});
 type LogType = LoggingLevel | 'request' | 'response' | 'tool';
-export type LogMessage = {
+type LogMessage = {
   type: LogType;
   [key: string]: any;
 };
@@ -108,7 +108,7 @@ function getSendLoggingMessageFn(level: LoggingLevel) {
       logger: server.name,
     },
   ) => {
-    serverLogger?.log(message, level);
+    serverLogger?.log({ message, level, logger });
 
     if (!shouldLogWhenLevelIsAtLeast(level)) {
       return;
@@ -122,7 +122,7 @@ function getSendLoggingMessageFn(level: LoggingLevel) {
         params: {
           level,
           logger,
-          message: JSON.stringify(
+          data: JSON.stringify(
             {
               timestamp: new Date().toISOString(),
               currentLogLevel,

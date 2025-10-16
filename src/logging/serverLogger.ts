@@ -1,11 +1,10 @@
 import { appendFile } from 'node:fs/promises';
 
-import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
-import { LogMessage, writeToStderr } from './log.js';
+import { writeToStderr } from './log.js';
 
 export class ServerLogger {
   private readonly _logDirectory: string;
@@ -19,7 +18,7 @@ export class ServerLogger {
     }
   }
 
-  async log(message: string | LogMessage, level: LoggingLevel): Promise<void> {
+  async log(obj: Record<string, unknown>): Promise<void> {
     // Create a new log file each hour e.g. 2025-10-15T21-00-00-000Z.log
     const timestamp = new Date().toISOString();
     const filename = `${new Date(new Date().setMinutes(0, 0, 0)).toISOString().replace(/[:.]/g, '-')}.log`;
@@ -33,7 +32,7 @@ export class ServerLogger {
     const newMutex = currentMutex.then(async () => {
       try {
         // appendFile will create the file if it doesn't exist
-        await appendFile(logFilePath, JSON.stringify({ timestamp, level, message }) + '\n');
+        await appendFile(logFilePath, JSON.stringify({ timestamp, ...obj }) + '\n');
       } catch (error) {
         writeToStderr(`Failed to write to log file ${logFilePath}: ${getExceptionMessage(error)}`);
       }
