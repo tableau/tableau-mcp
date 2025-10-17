@@ -66,7 +66,7 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
   // Required if the callback can return an error result.
   getErrorText?: (error: E) => string;
 
-  // A function that constrain the successresult of the tool
+  // A function that constrains the success result of the tool
   constrainSuccessResult: (result: T) => T;
 };
 
