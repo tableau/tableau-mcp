@@ -44,6 +44,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
             }),
           );
         },
+        constrainSuccessResult: (response) => response,
       });
     },
   });

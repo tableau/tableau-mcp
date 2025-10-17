@@ -154,6 +154,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               ),
           });
         },
+        constrainSuccessResult: (response) => response,
         getErrorText: getPulseDisabledError,
       });
     },

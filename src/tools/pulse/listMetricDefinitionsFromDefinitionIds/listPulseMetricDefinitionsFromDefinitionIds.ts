@@ -74,6 +74,7 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
             },
           });
         },
+        constrainSuccessResult: (response) => response,
         getErrorText: getPulseDisabledError,
       });
     },

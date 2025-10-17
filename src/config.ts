@@ -11,6 +11,12 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const authTypes = ['pat', 'direct-trust'] as const;
 type AuthType = (typeof authTypes)[number];
 
+export type BoundedContext = {
+  projectIds: Set<string> | null;
+  datasourceIds: Set<string> | null;
+  workbookIds: Set<string> | null;
+};
+
 export class Config {
   auth: AuthType;
   server: string;
@@ -37,6 +43,7 @@ export class Config {
   disableMetadataApiRequests: boolean;
   enableServerLogging: boolean;
   serverLogDirectory: string;
+  boundedContext: BoundedContext;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -66,6 +73,9 @@ export class Config {
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
       ENABLE_SERVER_LOGGING: enableServerLogging,
       SERVER_LOG_DIRECTORY: serverLogDirectory,
+      INCLUDE_PROJECT_IDS: includeProjectIds,
+      INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
+      INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
     } = cleansedVars;
 
     const defaultPort = 3927;
@@ -86,6 +96,17 @@ export class Config {
     this.disableMetadataApiRequests = disableMetadataApiRequests === 'true';
     this.enableServerLogging = enableServerLogging === 'true';
     this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
+    this.boundedContext = {
+      projectIds: includeProjectIds
+        ? new Set(includeProjectIds.split(',').map((id) => id.trim()))
+        : null,
+      datasourceIds: includeDatasourceIds
+        ? new Set(includeDatasourceIds.split(',').map((id) => id.trim()))
+        : null,
+      workbookIds: includeWorkbookIds
+        ? new Set(includeWorkbookIds.split(',').map((id) => id.trim()))
+        : null,
+    };
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =

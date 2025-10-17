@@ -115,6 +115,24 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
 
           return new Ok(datasources);
         },
+        constrainSuccessResult: (datasources) => {
+          const { projectIds, datasourceIds } = getConfig().boundedContext;
+          if (projectIds) {
+            datasources =
+              projectIds.size > 0
+                ? datasources.filter((datasource) => projectIds.has(datasource.project.id))
+                : [];
+          }
+
+          if (datasourceIds) {
+            datasources =
+              datasourceIds.size > 0
+                ? datasources.filter((datasource) => datasourceIds.has(datasource.id))
+                : [];
+          }
+
+          return datasources;
+        },
       });
     },
   });

@@ -46,6 +46,7 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
             },
           });
         },
+        constrainSuccessResult: (response) => response,
         getErrorText: getPulseDisabledError,
       });
     },

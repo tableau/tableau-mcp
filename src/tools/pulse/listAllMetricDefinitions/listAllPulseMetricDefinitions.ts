@@ -60,6 +60,7 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
             },
           });
         },
+        constrainSuccessResult: (response) => response,
         getErrorText: getPulseDisabledError,
       });
     },

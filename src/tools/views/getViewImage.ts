@@ -50,6 +50,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
             }),
           );
         },
+        constrainSuccessResult: (response) => response,
         getSuccessResult: convertPngDataToToolResult,
       });
     },
