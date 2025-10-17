@@ -13,7 +13,7 @@ import {
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
-import { isDatasourceAllowed } from '../isDatasourceAllowed.js';
+import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
@@ -63,25 +63,9 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
         requestId,
         args: { datasourceLuid, query },
         callback: async () => {
-          const isDatasourceAllowedResult = await isDatasourceAllowed({
+          const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
-            boundedContext: config.boundedContext,
-            getDatasourceProjectId: async () => {
-              return await useRestApi({
-                config,
-                requestId,
-                server,
-                jwtScopes: ['tableau:content:read'],
-                callback: async (restApi) => {
-                  const datasource = await restApi.datasourcesMethods.queryDatasource({
-                    siteId: restApi.siteId,
-                    datasourceId: datasourceLuid,
-                  });
-
-                  return datasource.project.id;
-                },
-              });
-            },
+            restApiArgs: { config, requestId, server },
           });
 
           if (!isDatasourceAllowedResult.allowed) {
