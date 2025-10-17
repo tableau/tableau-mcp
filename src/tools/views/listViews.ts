@@ -105,6 +105,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
             }),
           );
         },
+        constrainSuccessResult: (response) => response,
       });
     },
   });

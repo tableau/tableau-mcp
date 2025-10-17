@@ -101,6 +101,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
             }),
           );
         },
+        constrainSuccessResult: (response) => response,
       });
     },
   });

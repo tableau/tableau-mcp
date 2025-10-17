@@ -118,6 +118,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             },
           });
         },
+        constrainSuccessResult: (response) => response,
         getErrorText: (error: QueryDatasourceError) => {
           switch (error.type) {
             case 'feature-disabled':

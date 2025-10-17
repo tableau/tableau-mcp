@@ -50,6 +50,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
             },
           });
         },
+        constrainSuccessResult: (response) => response,
         getErrorText: getPulseDisabledError,
       });
     },

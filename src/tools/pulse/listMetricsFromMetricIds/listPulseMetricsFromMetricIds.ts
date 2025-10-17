@@ -52,6 +52,7 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
             },
           });
         },
+        constrainSuccessResult: (response) => response,
         getErrorText: getPulseDisabledError,
       });
     },

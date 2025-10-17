@@ -65,6 +65,9 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
   // A function that can transform an error result of the callback into a string.
   // Required if the callback can return an error result.
   getErrorText?: (error: E) => string;
+
+  // A function that constrain the successresult of the tool
+  constrainSuccessResult: (result: T) => T;
 };
 
 /**
@@ -125,6 +128,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     callback,
     getSuccessResult,
     getErrorText,
+    constrainSuccessResult: constrainResult,
   }: LogAndExecuteParams<T, E, Args>): Promise<CallToolResult> {
     this.logInvocation({ requestId, args });
 
@@ -140,8 +144,10 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       const result = await callback();
 
       if (result.isOk()) {
+        const constrainedResult = constrainResult(result.value);
+
         if (getSuccessResult) {
-          return getSuccessResult(result.value);
+          return getSuccessResult(constrainedResult);
         }
 
         return {
@@ -149,7 +155,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
           content: [
             {
               type: 'text',
-              text: JSON.stringify(result.value),
+              text: JSON.stringify(constrainedResult),
             },
           ],
         };

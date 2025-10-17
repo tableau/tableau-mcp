@@ -150,6 +150,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
             },
           });
         },
+        constrainSuccessResult: (response) => response,
         getErrorText: (error: GetDatasourceMetadataError) => {
           switch (error.type) {
             case 'feature-disabled':

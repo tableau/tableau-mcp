@@ -63,6 +63,7 @@ describe('Tool', () => {
       requestId: '2',
       args: { param1: 'test' },
       callback,
+      constrainSuccessResult: (response) => response,
     });
 
     expect(result.isError).toBe(false);
@@ -88,6 +89,7 @@ describe('Tool', () => {
       requestId: '2',
       args: { param1: 'test' },
       callback,
+      constrainSuccessResult: (response) => response,
     });
 
     expect(result.isError).toBe(true);
@@ -103,6 +105,7 @@ describe('Tool', () => {
       requestId: '2',
       args,
       callback: vi.fn(),
+      constrainSuccessResult: (response) => response,
     });
 
     expect(mockParams.argsValidator).toHaveBeenCalledWith(args);
@@ -130,6 +133,7 @@ describe('Tool', () => {
       requestId: '2',
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok('test')),
+      constrainSuccessResult: (response) => response,
     });
 
     expect(result.isError).toBe(true);

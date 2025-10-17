@@ -58,6 +58,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
             }),
           );
         },
+        constrainSuccessResult: (response) => response,
       });
     },
   });

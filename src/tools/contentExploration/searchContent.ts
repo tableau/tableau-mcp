@@ -87,6 +87,7 @@ This tool searches across all supported content types for objects relevant to th
             }),
           );
         },
+        constrainSuccessResult: (response) => response,
       });
     },
   });
