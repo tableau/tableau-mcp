@@ -128,7 +128,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     callback,
     getSuccessResult,
     getErrorText,
-    constrainSuccessResult: constrainResult,
+    constrainSuccessResult,
   }: LogAndExecuteParams<T, E, Args>): Promise<CallToolResult> {
     this.logInvocation({ requestId, args });
 
@@ -144,7 +144,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       const result = await callback();
 
       if (result.isOk()) {
-        const constrainedResult = constrainResult(result.value);
+        const constrainedResult = constrainSuccessResult(result.value);
 
         if (getSuccessResult) {
           return getSuccessResult(constrainedResult);
