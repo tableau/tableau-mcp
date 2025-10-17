@@ -7,6 +7,7 @@ import { useRestApi } from '../../restApiInstance.js';
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { Server } from '../../server.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
+import { isDatasourceAllowed } from '../isDatasourceAllowed.js';
 import { Tool } from '../tool.js';
 import { validateDatasourceLuid } from '../validateDatasourceLuid.js';
 import {
@@ -82,9 +83,14 @@ const paramsSchema = {
   datasourceLuid: z.string().nonempty(),
 };
 
-export type GetDatasourceMetadataError = {
-  type: 'feature-disabled';
-};
+export type GetDatasourceMetadataError =
+  | {
+      type: 'feature-disabled';
+    }
+  | {
+      type: 'datasource-not-allowed';
+      message: string;
+    };
 
 export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof paramsSchema> => {
   const getDatasourceMetadataTool = new Tool({
@@ -113,6 +119,34 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
         requestId,
         args: { datasourceLuid },
         callback: async () => {
+          const isDatasourceAllowedResult = await isDatasourceAllowed({
+            datasourceLuid,
+            boundedContext: config.boundedContext,
+            getDatasourceProjectId: async () => {
+              return await useRestApi({
+                config,
+                requestId,
+                server,
+                jwtScopes: ['tableau:content:read'],
+                callback: async (restApi) => {
+                  const datasource = await restApi.datasourcesMethods.queryDatasource({
+                    siteId: restApi.siteId,
+                    datasourceId: datasourceLuid,
+                  });
+
+                  return datasource.project.id;
+                },
+              });
+            },
+          });
+
+          if (!isDatasourceAllowedResult.allowed) {
+            return new Err({
+              type: 'datasource-not-allowed',
+              message: isDatasourceAllowedResult.message,
+            });
+          }
+
           return await useRestApi({
             config,
             requestId,
@@ -155,6 +189,8 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
           switch (error.type) {
             case 'feature-disabled':
               return getVizqlDataServiceDisabledError();
+            case 'datasource-not-allowed':
+              return error.message;
           }
         },
       });

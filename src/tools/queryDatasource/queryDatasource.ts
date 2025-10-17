@@ -13,6 +13,7 @@ import {
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
+import { isDatasourceAllowed } from '../isDatasourceAllowed.js';
 import { Tool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
@@ -30,6 +31,10 @@ const paramsSchema = {
 export type QueryDatasourceError =
   | {
       type: 'feature-disabled';
+    }
+  | {
+      type: 'datasource-not-allowed';
+      message: string;
     }
   | {
       type: 'filter-validation';
@@ -58,6 +63,34 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
         requestId,
         args: { datasourceLuid, query },
         callback: async () => {
+          const isDatasourceAllowedResult = await isDatasourceAllowed({
+            datasourceLuid,
+            boundedContext: config.boundedContext,
+            getDatasourceProjectId: async () => {
+              return await useRestApi({
+                config,
+                requestId,
+                server,
+                jwtScopes: ['tableau:content:read'],
+                callback: async (restApi) => {
+                  const datasource = await restApi.datasourcesMethods.queryDatasource({
+                    siteId: restApi.siteId,
+                    datasourceId: datasourceLuid,
+                  });
+
+                  return datasource.project.id;
+                },
+              });
+            },
+          });
+
+          if (!isDatasourceAllowedResult.allowed) {
+            return new Err({
+              type: 'datasource-not-allowed',
+              message: isDatasourceAllowedResult.message,
+            });
+          }
+
           const datasource: Datasource = { datasourceLuid };
           const options = {
             returnFormat: 'OBJECTS',
@@ -123,6 +156,8 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
           switch (error.type) {
             case 'feature-disabled':
               return getVizqlDataServiceDisabledError();
+            case 'datasource-not-allowed':
+              return error.message;
             case 'filter-validation':
               return JSON.stringify({
                 requestId,

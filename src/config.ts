@@ -11,6 +11,12 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const authTypes = ['pat', 'direct-trust'] as const;
 type AuthType = (typeof authTypes)[number];
 
+export type BoundedContext = {
+  projectIds: Set<string> | null;
+  datasourceIds: Set<string> | null;
+  workbookIds: Set<string> | null;
+};
+
 export class Config {
   auth: AuthType;
   server: string;
@@ -37,11 +43,7 @@ export class Config {
   disableMetadataApiRequests: boolean;
   enableServerLogging: boolean;
   serverLogDirectory: string;
-  boundedContext: {
-    projectIds: Set<string> | null;
-    datasourceIds: Set<string> | null;
-    workbookIds: Set<string> | null;
-  };
+  boundedContext: BoundedContext;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
