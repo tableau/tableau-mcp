@@ -18,6 +18,7 @@ class ResourceAccessChecker {
 
   private readonly _knownDatasourceIds: Map<string, AllowedResult>;
   private readonly _knownWorkbookIds: Map<string, AllowedResult>;
+  private readonly _knownViewIds: Map<string, AllowedResult>;
 
   constructor(boundedContext: BoundedContext) {
     this._allowedProjectIds = boundedContext.projectIds;
@@ -26,6 +27,7 @@ class ResourceAccessChecker {
 
     this._knownDatasourceIds = new Map();
     this._knownWorkbookIds = new Map();
+    this._knownViewIds = new Map();
   }
 
   async isDatasourceAllowed({
@@ -66,6 +68,25 @@ class ResourceAccessChecker {
     return result;
   }
 
+  async isViewAllowed({
+    viewId,
+    restApiArgs,
+  }: {
+    viewId: string;
+    restApiArgs: RestApiArgs;
+  }): Promise<AllowedResult> {
+    const result = await this._isViewAllowed({
+      viewId,
+      restApiArgs,
+    });
+
+    if (result.cache) {
+      this._knownViewIds.set(viewId, result);
+    }
+
+    return result;
+  }
+
   private async _isDatasourceAllowed({
     datasourceLuid,
     restApiArgs: { config, requestId, server },
@@ -90,8 +111,8 @@ class ResourceAccessChecker {
 
     let cache = true;
     if (this._allowedProjectIds) {
-      let allowed = this._allowedProjectIds.size > 0;
-      if (allowed) {
+      let allowed = false;
+      if (this._allowedProjectIds.size > 0) {
         const datasourceProjectId = await useRestApi({
           config,
           requestId,
@@ -147,8 +168,8 @@ class ResourceAccessChecker {
 
     let cache = true;
     if (this._allowedProjectIds) {
-      let allowed = this._allowedProjectIds.size > 0;
-      if (allowed) {
+      let allowed = false;
+      if (this._allowedProjectIds.size > 0) {
         const workbookProjectId = await useRestApi({
           config,
           requestId,
@@ -182,6 +203,90 @@ class ResourceAccessChecker {
     }
 
     return { allowed: true, cache };
+  }
+
+  private async _isViewAllowed({
+    viewId,
+    restApiArgs: { config, requestId, server },
+  }: {
+    viewId: string;
+    restApiArgs: RestApiArgs;
+  }): Promise<AllowedResult> {
+    let viewWorkbookId = '';
+    let viewProjectId = '';
+
+    if (this._allowedWorkbookIds) {
+      let allowed = false;
+      if (this._allowedWorkbookIds.size > 0) {
+        const view = await useRestApi({
+          config,
+          requestId,
+          server,
+          jwtScopes: ['tableau:content:read'],
+          callback: async (restApi) => {
+            return await restApi.viewsMethods.getView({
+              siteId: restApi.siteId,
+              viewId,
+            });
+          },
+        });
+
+        viewWorkbookId = view.workbook?.id ?? '';
+        viewProjectId = view.project?.id ?? '';
+
+        allowed = this._allowedWorkbookIds.has(viewWorkbookId);
+      }
+
+      if (!allowed) {
+        return {
+          allowed: false,
+          // A view cannot be moved between workbooks so caching is safe.
+          cache: true,
+          message: [
+            'The set of allowed workbooks that can be queried is limited by the server configuration.',
+            `Querying the view with LUID ${viewId} is not allowed because it does not belong to an allowed workbook.`,
+          ].join(' '),
+        };
+      }
+    }
+
+    if (this._allowedProjectIds) {
+      let allowed = false;
+      if (this._allowedProjectIds.size > 0) {
+        viewProjectId =
+          viewProjectId ||
+          (await useRestApi({
+            config,
+            requestId,
+            server,
+            jwtScopes: ['tableau:content:read'],
+            callback: async (restApi) => {
+              const view = await restApi.viewsMethods.getView({
+                siteId: restApi.siteId,
+                viewId,
+              });
+
+              return view.project?.id ?? '';
+            },
+          }));
+
+        allowed = this._allowedProjectIds.has(viewProjectId);
+      }
+
+      if (!allowed) {
+        return {
+          allowed: false,
+          // A view cannot be moved between projects so caching is safe.
+          cache: true,
+          message: [
+            'The set of allowed projects that can be queried is limited by the server configuration.',
+            `Querying the view with LUID ${viewId} is not allowed because it does not belong to an allowed project.`,
+          ].join(' '),
+        };
+      }
+    }
+
+    return { allowed: true, cache: true };
   }
 }
 
