@@ -12,6 +12,16 @@ const paramsSchema = {
   view: z.optional(z.enum(pulseMetricDefinitionViewEnum)),
 };
 
+export type ListAllPulseMetricDefinitionsError =
+  | {
+      type: 'feature-disabled';
+      message: string;
+    }
+  | {
+      type: 'operation-not-allowed';
+      message: string;
+    };
+
 export const getListAllPulseMetricDefinitionsTool = (server: Server): Tool<typeof paramsSchema> => {
   const listAllPulseMetricDefinitionsTool = new Tool({
     server,
@@ -60,7 +70,20 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
             },
           });
         },
-        constrainSuccessResult: (response) => response,
+        constrainSuccessResult: (definitions) => {
+          const { datasourceIds } = getConfig().boundedContext;
+
+          if (datasourceIds) {
+            definitions =
+              datasourceIds.size > 0
+                ? definitions.filter((definition) => {
+                    return datasourceIds.has(definition.specification.datasource.id);
+                  })
+                : [];
+          }
+
+          return definitions;
+        },
         getErrorText: getPulseDisabledError,
       });
     },

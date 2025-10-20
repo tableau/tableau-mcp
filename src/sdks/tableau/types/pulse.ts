@@ -67,6 +67,7 @@ export const pulseMetricSchema = z.object({
   metric_version: z.coerce.number(),
   goals: pulseGoalsSchema.optional(),
   is_followed: z.boolean(),
+  datasource_luid: z.string(),
 });
 
 export const pulseRepresentationOptionsSchema = z.object({

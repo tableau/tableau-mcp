@@ -67,7 +67,7 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
   getErrorText?: (error: E) => string;
 
   // A function that constrains the success result of the tool
-  constrainSuccessResult: (result: T) => T;
+  constrainSuccessResult: (result: T) => T | Promise<T>;
 };
 
 /**
@@ -144,7 +144,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       const result = await callback();
 
       if (result.isOk()) {
-        const constrainedResult = constrainSuccessResult(result.value);
+        const constrainedResult = await constrainSuccessResult(result.value);
 
         if (getSuccessResult) {
           return getSuccessResult(constrainedResult);
