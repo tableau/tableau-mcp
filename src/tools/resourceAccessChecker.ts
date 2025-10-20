@@ -4,7 +4,7 @@ import { BoundedContext, Config, getConfig } from '../config.js';
 import { useRestApi } from '../restApiInstance.js';
 import { Server } from '../server.js';
 
-type AllowedResult = { allowed: true } | { allowed: false; message: string };
+type AllowedResult = { cache: boolean } & ({ allowed: true } | { allowed: false; message: string });
 type RestApiArgs = {
   config: Config;
   requestId: RequestId;
@@ -16,7 +16,6 @@ class ResourceAccessChecker {
   private readonly _allowedDatasourceIds: Set<string> | null;
   private readonly _allowedWorkbookIds: Set<string> | null;
 
-  private readonly _knownProjectIds: Map<string, AllowedResult>;
   private readonly _knownDatasourceIds: Map<string, AllowedResult>;
   private readonly _knownWorkbookIds: Map<string, AllowedResult>;
 
@@ -25,7 +24,6 @@ class ResourceAccessChecker {
     this._allowedDatasourceIds = boundedContext.datasourceIds;
     this._allowedWorkbookIds = boundedContext.workbookIds;
 
-    this._knownProjectIds = new Map();
     this._knownDatasourceIds = new Map();
     this._knownWorkbookIds = new Map();
   }
@@ -42,7 +40,10 @@ class ResourceAccessChecker {
       restApiArgs,
     });
 
-    this._knownDatasourceIds.set(datasourceLuid, result);
+    if (result.cache) {
+      this._knownDatasourceIds.set(datasourceLuid, result);
+    }
+
     return result;
   }
 
@@ -58,7 +59,10 @@ class ResourceAccessChecker {
       restApiArgs,
     });
 
-    this._knownWorkbookIds.set(workbookId, result);
+    if (result.cache) {
+      this._knownWorkbookIds.set(workbookId, result);
+    }
+
     return result;
   }
 
@@ -76,6 +80,7 @@ class ResourceAccessChecker {
     if (this._allowedDatasourceIds && !this._allowedDatasourceIds.has(datasourceLuid)) {
       return {
         allowed: false,
+        cache: true,
         message: [
           'The set of allowed data sources that can be queried is limited by the server configuration.',
           `Querying the datasource with LUID ${datasourceLuid} is not allowed.`,
@@ -83,6 +88,7 @@ class ResourceAccessChecker {
       };
     }
 
+    let cache = true;
     if (this._allowedProjectIds) {
       let allowed = this._allowedProjectIds.size > 0;
       if (allowed) {
@@ -100,12 +106,16 @@ class ResourceAccessChecker {
             return datasource.project.id;
           },
         });
+
+        // Do not cache since the datasource may be moved between projects after this check.
+        cache = false;
         allowed = this._allowedProjectIds.has(datasourceProjectId);
       }
 
       if (!allowed) {
         return {
           allowed: false,
+          cache,
           message: [
             'The set of allowed data sources that can be queried is limited by the server configuration.',
             `Querying the datasource with LUID ${datasourceLuid} is not allowed because it does not belong to an allowed project.`,
@@ -114,7 +124,7 @@ class ResourceAccessChecker {
       }
     }
 
-    return { allowed: true };
+    return { allowed: true, cache };
   }
 
   private async _isWorkbookAllowed({
@@ -127,6 +137,7 @@ class ResourceAccessChecker {
     if (this._allowedWorkbookIds && !this._allowedWorkbookIds.has(workbookId)) {
       return {
         allowed: false,
+        cache: true,
         message: [
           'The set of allowed workbooks that can be queried is limited by the server configuration.',
           `Querying the workbook with LUID ${workbookId} is not allowed.`,
@@ -134,6 +145,7 @@ class ResourceAccessChecker {
       };
     }
 
+    let cache = true;
     if (this._allowedProjectIds) {
       let allowed = this._allowedProjectIds.size > 0;
       if (allowed) {
@@ -152,12 +164,15 @@ class ResourceAccessChecker {
           },
         });
 
+        // Do not cache since the workbook may be moved between projects after this check.
+        cache = false;
         allowed = this._allowedProjectIds.has(workbookProjectId);
       }
 
       if (!allowed) {
         return {
           allowed: false,
+          cache,
           message: [
             'The set of allowed workbooks that can be queried is limited by the server configuration.',
             `Querying the workbook with LUID ${workbookId} is not allowed because it does not belong to an allowed project.`,
@@ -166,7 +181,7 @@ class ResourceAccessChecker {
       }
     }
 
-    return { allowed: true };
+    return { allowed: true, cache };
   }
 }
 
