@@ -52,7 +52,20 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
             },
           });
         },
-        constrainSuccessResult: (response) => response,
+        constrainSuccessResult: (metrics) => {
+          const { datasourceIds } = getConfig().boundedContext;
+
+          if (datasourceIds) {
+            metrics =
+              datasourceIds.size > 0
+                ? metrics.filter((metric) => {
+                    return datasourceIds.has(metric.datasource_luid);
+                  })
+                : [];
+          }
+
+          return metrics;
+        },
         getErrorText: getPulseDisabledError,
       });
     },

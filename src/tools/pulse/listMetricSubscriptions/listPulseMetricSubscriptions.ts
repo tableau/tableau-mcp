@@ -46,7 +46,48 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
             },
           });
         },
-        constrainSuccessResult: (response) => response,
+        constrainSuccessResult: async (subscriptions) => {
+          const { datasourceIds } = getConfig().boundedContext;
+
+          if (!datasourceIds) {
+            // No datasource IDs to filter by, return all subscriptions.
+            return subscriptions;
+          }
+
+          if (datasourceIds.size === 0) {
+            // No datasource IDs are allowed to be filtered by, return no subscriptions.
+            return [];
+          }
+
+          const metricsResult = await useRestApi({
+            config,
+            requestId,
+            server,
+            jwtScopes: ['tableau:insight_metrics:read'],
+            callback: async (restApi) => {
+              return await restApi.pulseMethods.listPulseMetricsFromMetricIds(
+                subscriptions.map((subscription) => subscription.metric_id),
+              );
+            },
+          });
+
+          if (metricsResult.isErr()) {
+            // When there is an error retrieving the metrics, return no subscriptions.
+            // This is unlikely to happen, but we don't want to reveal any subscriptions
+            // that may have been filtered out.
+            return [];
+          }
+
+          const allowedMetricIds = new Set(
+            metricsResult.value
+              .filter((metric) => datasourceIds.has(metric.datasource_luid))
+              .map((metric) => metric.id),
+          );
+
+          return subscriptions.filter((subscription) =>
+            allowedMetricIds.has(subscription.metric_id),
+          );
+        },
         getErrorText: getPulseDisabledError,
       });
     },
