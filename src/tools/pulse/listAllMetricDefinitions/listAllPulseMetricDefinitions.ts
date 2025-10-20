@@ -12,16 +12,6 @@ const paramsSchema = {
   view: z.optional(z.enum(pulseMetricDefinitionViewEnum)),
 };
 
-export type ListAllPulseMetricDefinitionsError =
-  | {
-      type: 'feature-disabled';
-      message: string;
-    }
-  | {
-      type: 'operation-not-allowed';
-      message: string;
-    };
-
 export const getListAllPulseMetricDefinitionsTool = (server: Server): Tool<typeof paramsSchema> => {
   const listAllPulseMetricDefinitionsTool = new Tool({
     server,

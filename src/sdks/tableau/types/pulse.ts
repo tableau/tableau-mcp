@@ -340,6 +340,8 @@ export const pulseBundleResponseSchema = z.object({
   }),
 });
 
+export type PulseBundleResponse = z.infer<typeof pulseBundleResponseSchema>;
+
 export const pulseInsightBundleTypeEnum = ['ban', 'springboard', 'basic', 'detail'] as const;
 export type PulseInsightBundleType = (typeof pulseInsightBundleTypeEnum)[number];
 
