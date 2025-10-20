@@ -74,12 +74,9 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
           const { datasourceIds } = getConfig().boundedContext;
 
           if (datasourceIds) {
-            definitions =
-              datasourceIds.size > 0
-                ? definitions.filter((definition) => {
-                    return datasourceIds.has(definition.specification.datasource.id);
-                  })
-                : [];
+            definitions = definitions.filter((definition) =>
+              datasourceIds.has(definition.specification.datasource.id),
+            );
           }
 
           return definitions;

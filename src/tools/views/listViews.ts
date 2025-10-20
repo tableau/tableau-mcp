@@ -108,21 +108,15 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
         constrainSuccessResult: (views) => {
           const { projectIds, workbookIds } = getConfig().boundedContext;
           if (projectIds) {
-            views =
-              projectIds.size > 0
-                ? views.filter((view) =>
-                    view.project?.id ? projectIds.has(view.project.id) : false,
-                  )
-                : [];
+            views = views.filter((view) =>
+              view.project?.id ? projectIds.has(view.project.id) : false,
+            );
           }
 
           if (workbookIds) {
-            views =
-              workbookIds.size > 0
-                ? views.filter((view) =>
-                    view.workbook?.id ? workbookIds.has(view.workbook.id) : false,
-                  )
-                : [];
+            views = views.filter((view) =>
+              view.workbook?.id ? workbookIds.has(view.workbook.id) : false,
+            );
           }
 
           return views;

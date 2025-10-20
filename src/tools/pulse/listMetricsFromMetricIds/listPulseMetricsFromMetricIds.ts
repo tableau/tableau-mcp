@@ -56,12 +56,7 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
           const { datasourceIds } = getConfig().boundedContext;
 
           if (datasourceIds) {
-            metrics =
-              datasourceIds.size > 0
-                ? metrics.filter((metric) => {
-                    return datasourceIds.has(metric.datasource_luid);
-                  })
-                : [];
+            metrics = metrics.filter((metric) => datasourceIds.has(metric.datasource_luid));
           }
 
           return metrics;

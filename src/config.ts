@@ -97,16 +97,24 @@ export class Config {
     this.enableServerLogging = enableServerLogging === 'true';
     this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
     this.boundedContext = {
-      projectIds: includeProjectIds
-        ? new Set(includeProjectIds.split(',').map((id) => id.trim()))
-        : null,
-      datasourceIds: includeDatasourceIds
-        ? new Set(includeDatasourceIds.split(',').map((id) => id.trim()))
-        : null,
-      workbookIds: includeWorkbookIds
-        ? new Set(includeWorkbookIds.split(',').map((id) => id.trim()))
-        : null,
+      projectIds: createSetFromCommaSeparatedString(includeProjectIds),
+      datasourceIds: createSetFromCommaSeparatedString(includeDatasourceIds),
+      workbookIds: createSetFromCommaSeparatedString(includeWorkbookIds),
     };
+
+    if (this.boundedContext.projectIds?.size === 0) {
+      throw new Error('The environment variable INCLUDE_PROJECT_IDS must have at least one value');
+    }
+
+    if (this.boundedContext.datasourceIds?.size === 0) {
+      throw new Error(
+        'The environment variable INCLUDE_DATASOURCE_IDS must have at least one value',
+      );
+    }
+
+    if (this.boundedContext.workbookIds?.size === 0) {
+      throw new Error('The environment variable INCLUDE_WORKBOOK_IDS must have at least one value');
+    }
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =
@@ -200,6 +208,22 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
       `The environment variable CORS_ORIGIN_CONFIG is not a valid URL: ${corsOriginConfig}`,
     );
   }
+}
+
+// Creates a set from a comma-separated string of values.
+// Returns null if the value is undefined.
+function createSetFromCommaSeparatedString(value: string | undefined): Set<string> | null {
+  if (value === undefined) {
+    return null;
+  }
+
+  return new Set(
+    value
+      .trim()
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
 }
 
 // When the user does not provide a site name in the Claude MCP Bundle configuration,

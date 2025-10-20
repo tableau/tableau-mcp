@@ -54,11 +54,6 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
             return subscriptions;
           }
 
-          if (datasourceIds.size === 0) {
-            // No datasource IDs are allowed to be filtered by, return no subscriptions.
-            return [];
-          }
-
           const metricsResult = await useRestApi({
             config,
             requestId,

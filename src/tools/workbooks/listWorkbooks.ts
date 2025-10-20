@@ -104,19 +104,13 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
         constrainSuccessResult: (workbooks) => {
           const { projectIds, workbookIds } = getConfig().boundedContext;
           if (projectIds) {
-            workbooks =
-              projectIds.size > 0
-                ? workbooks.filter((workbook) =>
-                    workbook.project?.id ? projectIds.has(workbook.project.id) : false,
-                  )
-                : [];
+            workbooks = workbooks.filter((workbook) =>
+              workbook.project?.id ? projectIds.has(workbook.project.id) : false,
+            );
           }
 
           if (workbookIds) {
-            workbooks =
-              workbookIds.size > 0
-                ? workbooks.filter((workbook) => workbookIds.has(workbook.id))
-                : [];
+            workbooks = workbooks.filter((workbook) => workbookIds.has(workbook.id));
           }
 
           return workbooks;
