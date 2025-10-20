@@ -6,6 +6,7 @@ import { MetadataResponse } from '../../sdks/tableau/apis/vizqlDataServiceApi.js
 export const fieldSchema = z
   .object({
     name: z.string(),
+    columnClass: z.string(),
     dataType: z.string().or(z.null()),
     defaultAggregation: z.string().or(z.null()),
     description: z.string().or(z.null()),
@@ -25,16 +26,36 @@ export const fieldSchema = z
   })
   .partial();
 
+export const parameterSchema = z
+  .object({
+    name: z.string(),
+    parameterType: z.string(),
+    dataType: z.string().or(z.null()),
+    value: z.union([z.number(), z.string(), z.boolean(), z.null()]),
+    members: z.array(z.union([z.number(), z.string(), z.boolean(), z.null()])),
+    min: z.number().nullable(),
+    max: z.number().nullable(),
+    step: z.number().nullable(),
+    minDate: z.string().nullable(),
+    maxDate: z.string().nullable(),
+    periodValue: z.number().nullable(),
+    periodType: z.string().nullable(),
+  })
+  .partial();
+
 export const fieldsResultSchema = z.object({
   fields: z.array(fieldSchema),
+  parameters: z.array(parameterSchema),
 });
 
+type Parameter = z.infer<typeof parameterSchema>;
 type Field = z.infer<typeof fieldSchema>;
 export type FieldsResult = z.infer<typeof fieldsResultSchema>;
 
 export function simplifyReadMetadataResult(readMetadataResult: MetadataResponse): FieldsResult {
   const simplifiedResponse: FieldsResult = {
     fields: [],
+    parameters: [],
   };
 
   if (!readMetadataResult.data) {
@@ -47,13 +68,45 @@ export function simplifyReadMetadataResult(readMetadataResult: MetadataResponse)
     const toPush: Field = {
       name: field.fieldCaption,
       dataType: field.dataType,
+      columnClass: field.columnClass,
     };
 
     if (field.defaultAggregation) {
       toPush.defaultAggregation = field.defaultAggregation;
     }
 
+    if (field.formula) {
+      toPush.formula = field.formula;
+    }
+
     simplifiedResponse.fields.push(toPush);
+  }
+
+  // Populate parameters from readMetadata results.
+  if (readMetadataResult.extraData?.parameters) {
+    for (const parameter of readMetadataResult.extraData.parameters) {
+      const toPush: Parameter = {
+        name: parameter.parameterCaption,
+        parameterType: parameter.parameterType,
+        dataType: parameter.dataType,
+        value: parameter.value,
+      };
+
+      if (parameter.parameterType === 'LIST' && parameter.members) {
+        toPush.members = parameter.members;
+      } else if (parameter.parameterType === 'QUANTITATIVE_DATE') {
+        toPush.minDate = parameter.minDate;
+        toPush.maxDate = parameter.maxDate;
+        toPush.periodValue = parameter.periodValue;
+        toPush.periodType = parameter.periodType;
+      } else if (parameter.parameterType === 'QUANTITATIVE_RANGE') {
+        toPush.min = parameter.min;
+        toPush.max = parameter.max;
+        toPush.step = parameter.step;
+      }
+
+      simplifiedResponse.parameters.push(toPush);
+    }
   }
 
   return simplifiedResponse;
@@ -68,6 +121,7 @@ export function combineFields(
   // to optimize for LLM accuracy and reduce tokens in response.
   const combinedFields: FieldsResult = {
     fields: [],
+    parameters: [],
   };
 
   if (!readMetadataResult.data) {
@@ -95,13 +149,45 @@ export function combineFields(
     const toPush: Field = {
       name: field.fieldCaption,
       dataType: field.dataType,
+      columnClass: field.columnClass,
     };
 
     if (field.defaultAggregation) {
       toPush.defaultAggregation = field.defaultAggregation;
     }
 
+    if (field.formula) {
+      toPush.formula = field.formula;
+    }
+
     combinedFields.fields.push(toPush);
+  }
+
+  // Populate parameters from readMetadata results.
+  if (readMetadataResult.extraData?.parameters) {
+    for (const parameter of readMetadataResult.extraData.parameters) {
+      const toPush: Parameter = {
+        name: parameter.parameterCaption,
+        parameterType: parameter.parameterType,
+        dataType: parameter.dataType,
+        value: parameter.value,
+      };
+
+      if (parameter.parameterType === 'LIST' && parameter.members) {
+        toPush.members = parameter.members;
+      } else if (parameter.parameterType === 'QUANTITATIVE_DATE') {
+        toPush.minDate = parameter.minDate;
+        toPush.maxDate = parameter.maxDate;
+        toPush.periodValue = parameter.periodValue;
+        toPush.periodType = parameter.periodType;
+      } else if (parameter.parameterType === 'QUANTITATIVE_RANGE') {
+        toPush.min = parameter.min;
+        toPush.max = parameter.max;
+        toPush.step = parameter.step;
+      }
+
+      combinedFields.parameters.push(toPush);
+    }
   }
 
   if (!listFieldsResult.data.publishedDatasources[0]?.fields.length) {

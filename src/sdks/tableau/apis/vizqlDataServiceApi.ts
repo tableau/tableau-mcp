@@ -55,29 +55,70 @@ export const Function = z.enum([
   'UNSPECIFIED',
 ]);
 
+const DataType = z.enum([
+  'INTEGER',
+  'REAL',
+  'STRING',
+  'DATETIME',
+  'BOOLEAN',
+  'DATE',
+  'SPATIAL',
+  'UNKNOWN',
+]);
+
+const PeriodType = z.enum(['MINUTES', 'HOURS', 'DAYS', 'WEEKS', 'MONTHS', 'QUARTERS', 'YEARS']);
+
 const FieldMetadata = z
   .object({
     fieldName: z.string(),
     fieldCaption: z.string(),
-    dataType: z.enum([
-      'INTEGER',
-      'REAL',
-      'STRING',
-      'DATETIME',
-      'BOOLEAN',
-      'DATE',
-      'SPATIAL',
-      'UNKNOWN',
-    ]),
+    dataType: DataType,
     defaultAggregation: Function,
+    columnClass: z.enum(['COLUMN', 'BIN', 'GROUP', 'CALCULATION', 'TABLE_CALCULATION']),
+    formula: z.string(),
     logicalTableId: z.string(),
   })
   .partial()
   .passthrough();
 
+const ParameterValue = z.union([z.number(), z.string(), z.boolean(), z.null()]);
+
+const ParameterBase = z.object({
+  parameterCaption: z.string(),
+  dataType: DataType.exclude(['DATETIME', 'SPATIAL', 'UNKNOWN']),
+  parameterName: z.string().optional(),
+  value: ParameterValue,
+});
+
+const Parameter = z.discriminatedUnion('parameterType', [
+  ParameterBase.extend({ parameterType: z.literal('ANY_VALUE') }).strict(),
+  ParameterBase.extend({
+    parameterType: z.literal('LIST'),
+    members: z.array(ParameterValue),
+  }).strict(),
+  ParameterBase.extend({
+    parameterType: z.literal('QUANTITATIVE_DATE'),
+    value: z.string().nullable(),
+    minDate: z.string().optional().nullable(),
+    maxDate: z.string().optional().nullable(),
+    periodValue: z.number().optional().nullable(),
+    periodType: PeriodType.optional().nullable(),
+  }).strict(),
+  ParameterBase.extend({
+    parameterType: z.literal('QUANTITATIVE_RANGE'),
+    value: z.number().nullable(),
+    min: z.number().optional().nullable(),
+    max: z.number().optional().nullable(),
+    step: z.number().optional().nullable(),
+  }).strict(),
+]);
+
 export const MetadataOutput = z
   .object({
     data: z.array(FieldMetadata),
+    extraData: z.object({
+      parameters: z.array(Parameter),
+    }),
   })
   .partial()
   .passthrough();
@@ -138,7 +179,7 @@ export const SetFilter = SimpleFilterBase.extend({
 
 const RelativeDateFilterBase = SimpleFilterBase.extend({
   filterType: z.literal('DATE'),
-  periodType: z.enum(['MINUTES', 'HOURS', 'DAYS', 'WEEKS', 'MONTHS', 'QUARTERS', 'YEARS']),
+  periodType: PeriodType,
   anchorDate: z.string().optional(),
   includeNulls: z.boolean().optional(),
 });
