@@ -4,6 +4,8 @@ import {
   SearchContentResponse,
 } from '../../sdks/tableau/types/contentExploration.js';
 
+export type ReducedSearchContentResponse = Partial<Record<SearchItemContent, unknown>>;
+
 export function buildOrderByString(orderBy: OrderBy): string {
   const methodsUsed = new Set<string>();
   return orderBy
@@ -74,8 +76,8 @@ export function buildFilterString(filter: SearchContentFilter): string {
 
 export function reduceSearchContentResponse(
   response: SearchContentResponse,
-): Array<Record<string, unknown>> {
-  const searchResults: Array<Record<string, unknown>> = [];
+): Array<ReducedSearchContentResponse> {
+  const searchResults: Array<ReducedSearchContentResponse> = [];
   if (response.items) {
     for (const item of response.items) {
       searchResults.push(getReducedSearchItemContent(item.content));
@@ -84,8 +86,46 @@ export function reduceSearchContentResponse(
   return searchResults;
 }
 
-function getReducedSearchItemContent(content: Record<string, any>): Record<string, unknown> {
-  const reducedContent: Record<string, unknown> = {};
+type SearchItemContent =
+  | 'caption'
+  | 'comments'
+  | 'connectedWorkbooksCount'
+  | 'connectionType'
+  | 'containerName'
+  | 'datasourceIsPublished'
+  | 'datasourceLuid'
+  | 'downstreamWorkbookCount'
+  | 'extractCreationPending'
+  | 'extractRefreshedAt'
+  | 'extractUpdatedAt'
+  | 'favoritesTotal'
+  | 'hasActiveDataQualityWarning'
+  | 'hasExtracts'
+  | 'hasSevereDataQualityWarning'
+  | 'hitsSmallSpanTotal'
+  | 'hitsTotal'
+  | 'isCertified'
+  | 'isConnectable'
+  | 'locationName'
+  | 'luid'
+  | 'modifiedTime'
+  | 'ownerId'
+  | 'ownerName'
+  | 'parentWorkbookName'
+  | 'projectId'
+  | 'projectName'
+  | 'sheetType'
+  | 'tags'
+  | 'title'
+  | 'totalViewCount'
+  | 'viewCountLastMonth'
+  | 'type'
+  | 'workbookDescription';
+
+function getReducedSearchItemContent(
+  content: Record<any, any>,
+): Partial<Record<SearchItemContent, unknown>> {
+  const reducedContent: ReducedSearchContentResponse = {};
   if (content.modifiedTime) {
     reducedContent.modifiedTime = content.modifiedTime;
   }
@@ -134,6 +174,9 @@ function getReducedSearchItemContent(content: Record<string, any>): Record<strin
   }
   if (content.tags?.length) {
     reducedContent.tags = content.tags;
+  }
+  if (content.projectId) {
+    reducedContent.projectId = content.projectId;
   }
   if (content.projectName) {
     reducedContent.projectName = content.projectName;

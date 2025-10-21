@@ -13,6 +13,7 @@ import { Tool } from '../tool.js';
 import {
   buildFilterString,
   buildOrderByString,
+  ReducedSearchContentResponse,
   reduceSearchContentResponse,
 } from './searchContentUtils.js';
 
@@ -62,7 +63,7 @@ This tool searches across all supported content types for objects relevant to th
       const config = getConfig();
       const orderByString = orderBy ? buildOrderByString(orderBy) : undefined;
       const filterString = filter ? buildFilterString(filter) : undefined;
-      return await searchContentTool.logAndExecute({
+      return await searchContentTool.logAndExecute<Array<ReducedSearchContentResponse>>({
         requestId,
         args: {},
         callback: async () => {
@@ -87,7 +88,55 @@ This tool searches across all supported content types for objects relevant to th
             }),
           );
         },
-        constrainSuccessResult: (response) => response,
+        constrainSuccessResult: (items) => {
+          const { projectIds, datasourceIds, workbookIds } = getConfig().boundedContext;
+
+          if (projectIds) {
+            items = items.filter((item) => {
+              if (
+                typeof item.projectId === 'number' &&
+                !projectIds.has(item.projectId.toString())
+              ) {
+                // ⚠️ The Search API returns the project "id" (e.g. 861566)
+                // but the Project REST APIs return the project "LUID" and there is no good way to look up one from the other.
+                // Admins who want to use a project filter here will need to provide both the id and LUID in their bounded context.
+                return false;
+              }
+
+              return true;
+            });
+          }
+
+          if (datasourceIds) {
+            items = items.filter((item) => {
+              if (
+                (item.type === 'datasource' || item.type === 'unifieddatasource') &&
+                typeof item.datasourceLuid === 'string' &&
+                !datasourceIds.has(item.datasourceLuid)
+              ) {
+                return false;
+              }
+
+              return true;
+            });
+          }
+
+          if (workbookIds) {
+            items = items.filter((item) => {
+              if (
+                item.type === 'workbook' &&
+                typeof item.luid === 'string' &&
+                !workbookIds.has(item.luid)
+              ) {
+                return false;
+              }
+
+              return true;
+            });
+          }
+
+          return items;
+        },
       });
     },
   });
