@@ -5,6 +5,7 @@ import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
+import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
@@ -52,15 +53,7 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
             },
           });
         },
-        constrainSuccessResult: (metrics) => {
-          const { datasourceIds } = getConfig().boundedContext;
-
-          if (datasourceIds) {
-            metrics = metrics.filter((metric) => datasourceIds.has(metric.datasource_luid));
-          }
-
-          return metrics;
-        },
+        constrainSuccessResult: constrainPulseMetrics,
         getErrorText: getPulseDisabledError,
       });
     },

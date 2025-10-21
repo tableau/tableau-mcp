@@ -195,7 +195,12 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
 
           return result;
         },
-        constrainSuccessResult: (response) => response,
+        constrainSuccessResult: (insightBundle) => {
+          return {
+            type: 'success',
+            result: insightBundle,
+          };
+        },
         getErrorText: (error) => {
           switch (error.type) {
             case 'feature-disabled':

@@ -47,11 +47,22 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
           });
         },
         constrainSuccessResult: async (subscriptions) => {
+          if (subscriptions.length === 0) {
+            return {
+              type: 'empty',
+              message:
+                'No Pulse Metric Subscriptions were found. Either none exist or you do not have permission to view them',
+            };
+          }
+
           const { datasourceIds } = getConfig().boundedContext;
 
           if (!datasourceIds) {
             // No datasource IDs to filter by, return all subscriptions.
-            return subscriptions;
+            return {
+              type: 'success',
+              result: subscriptions,
+            };
           }
 
           const metricsResult = await useRestApi({
@@ -67,10 +78,13 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
           });
 
           if (metricsResult.isErr()) {
-            // When there is an error retrieving the metrics, return no subscriptions.
-            // This is unlikely to happen, but we don't want to reveal any subscriptions
-            // that may have been filtered out.
-            return [];
+            return {
+              type: 'error',
+              message: [
+                'The set of allowed Pulse Metric Subscriptions that can be queried is limited by the server configuration.',
+                'While Pulse Metric Subscriptions were found, retrieving information about them to determine if they are allowed to be viewed failed.',
+              ].join(' '),
+            };
           }
 
           const allowedMetricIds = new Set(
@@ -79,9 +93,24 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
               .map((metric) => metric.id),
           );
 
-          return subscriptions.filter((subscription) =>
+          subscriptions = subscriptions.filter((subscription) =>
             allowedMetricIds.has(subscription.metric_id),
           );
+
+          if (subscriptions.length === 0) {
+            return {
+              type: 'empty',
+              message: [
+                'The set of allowed Pulse Metric Subscriptions that can be queried is limited by the server configuration.',
+                'While Pulse Metric Subscriptions were found, they were all filtered out by the server configuration.',
+              ].join(' '),
+            };
+          }
+
+          return {
+            type: 'success',
+            result: subscriptions,
+          };
         },
         getErrorText: getPulseDisabledError,
       });

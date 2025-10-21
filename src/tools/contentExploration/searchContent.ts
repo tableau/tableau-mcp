@@ -89,6 +89,14 @@ This tool searches across all supported content types for objects relevant to th
           );
         },
         constrainSuccessResult: (items) => {
+          if (items.length === 0) {
+            return {
+              type: 'empty',
+              message:
+                'No search results were found. Either none exist or you do not have permission to view them',
+            };
+          }
+
           const { projectIds, datasourceIds, workbookIds } = getConfig().boundedContext;
 
           if (projectIds) {
@@ -135,7 +143,20 @@ This tool searches across all supported content types for objects relevant to th
             });
           }
 
-          return items;
+          if (items.length === 0) {
+            return {
+              type: 'empty',
+              message: [
+                'The set of allowed content that can be queried is limited by the server configuration.',
+                'While search results were found, they were all filtered out by the server configuration.',
+              ].join(' '),
+            };
+          }
+
+          return {
+            type: 'success',
+            result: items,
+          };
         },
       });
     },

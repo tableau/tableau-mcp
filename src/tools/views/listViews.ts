@@ -106,6 +106,14 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
           );
         },
         constrainSuccessResult: (views) => {
+          if (views.length === 0) {
+            return {
+              type: 'empty',
+              message:
+                'No views were found. Either none exist or you do not have permission to view them',
+            };
+          }
+
           const { projectIds, workbookIds } = getConfig().boundedContext;
           if (projectIds) {
             views = views.filter((view) =>
@@ -119,7 +127,20 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
             );
           }
 
-          return views;
+          if (views.length === 0) {
+            return {
+              type: 'empty',
+              message: [
+                'The set of allowed views that can be queried is limited by the server configuration.',
+                'While views were found, they were all filtered out by the server configuration.',
+              ].join(' '),
+            };
+          }
+
+          return {
+            type: 'success',
+            result: views,
+          };
         },
       });
     },

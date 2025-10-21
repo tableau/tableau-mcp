@@ -68,7 +68,12 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
             }),
           );
         },
-        constrainSuccessResult: (response) => response,
+        constrainSuccessResult: (viewImage) => {
+          return {
+            type: 'success',
+            result: viewImage,
+          };
+        },
         getSuccessResult: convertPngDataToToolResult,
         getErrorText: (error: GetViewImageError) => {
           switch (error.type) {

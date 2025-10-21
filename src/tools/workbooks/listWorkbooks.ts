@@ -102,6 +102,14 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
           );
         },
         constrainSuccessResult: (workbooks) => {
+          if (workbooks.length === 0) {
+            return {
+              type: 'empty',
+              message:
+                'No workbooks were found. Either none exist or you do not have permission to view them',
+            };
+          }
+
           const { projectIds, workbookIds } = getConfig().boundedContext;
           if (projectIds) {
             workbooks = workbooks.filter((workbook) =>
@@ -113,7 +121,20 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
             workbooks = workbooks.filter((workbook) => workbookIds.has(workbook.id));
           }
 
-          return workbooks;
+          if (workbooks.length === 0) {
+            return {
+              type: 'empty',
+              message: [
+                'The set of allowed workbooks that can be queried is limited by the server configuration.',
+                'While workbooks were found, they were all filtered out by the server configuration.',
+              ].join(' '),
+            };
+          }
+
+          return {
+            type: 'success',
+            result: workbooks,
+          };
         },
       });
     },

@@ -135,7 +135,12 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             },
           });
         },
-        constrainSuccessResult: (response) => response,
+        constrainSuccessResult: (queryOutput) => {
+          return {
+            type: 'success',
+            result: queryOutput,
+          };
+        },
         getErrorText: (error: QueryDatasourceError) => {
           switch (error.type) {
             case 'feature-disabled':

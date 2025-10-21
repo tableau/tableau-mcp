@@ -14,6 +14,20 @@ type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args exte
   ? (args: z.objectOutputType<Args, ZodTypeAny>) => void
   : never;
 
+export type ConstrainedResult<T> =
+  | {
+      type: 'success';
+      result: T;
+    }
+  | {
+      type: 'empty';
+      message: string;
+    }
+  | {
+      type: 'error';
+      message: string;
+    };
+
 /**
  * The parameters for creating a tool instance
  *
@@ -67,7 +81,7 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
   getErrorText?: (error: E) => string;
 
   // A function that constrains the success result of the tool
-  constrainSuccessResult: (result: T) => T | Promise<T>;
+  constrainSuccessResult: (result: T) => ConstrainedResult<T> | Promise<ConstrainedResult<T>>;
 };
 
 /**
@@ -146,8 +160,15 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       if (result.isOk()) {
         const constrainedResult = await constrainSuccessResult(result.value);
 
+        if (constrainedResult.type !== 'success') {
+          return {
+            isError: constrainedResult.type === 'error',
+            content: [{ type: 'text', text: constrainedResult.message }],
+          };
+        }
+
         if (getSuccessResult) {
-          return getSuccessResult(constrainedResult);
+          return getSuccessResult(constrainedResult.result);
         }
 
         return {

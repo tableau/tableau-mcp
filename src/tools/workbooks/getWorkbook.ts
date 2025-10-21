@@ -77,7 +77,12 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
             }),
           );
         },
-        constrainSuccessResult: (response) => response,
+        constrainSuccessResult: (workbook) => {
+          return {
+            type: 'success',
+            result: workbook,
+          };
+        },
         getErrorText: (error: GetWorkbookError) => {
           switch (error.type) {
             case 'workbook-not-allowed':

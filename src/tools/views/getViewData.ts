@@ -62,7 +62,12 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
             }),
           );
         },
-        constrainSuccessResult: (response) => response,
+        constrainSuccessResult: (viewData) => {
+          return {
+            type: 'success',
+            result: viewData,
+          };
+        },
         getErrorText: (error: GetViewDataError) => {
           switch (error.type) {
             case 'view-not-allowed':

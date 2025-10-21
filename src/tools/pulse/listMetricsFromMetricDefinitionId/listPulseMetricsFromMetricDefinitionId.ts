@@ -7,6 +7,7 @@ import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.j
 import { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
+import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
@@ -55,15 +56,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
             },
           });
         },
-        constrainSuccessResult: async (metrics: Array<PulseMetric>) => {
-          const { datasourceIds } = getConfig().boundedContext;
-
-          if (datasourceIds) {
-            metrics = metrics.filter((metric) => datasourceIds.has(metric.datasource_luid));
-          }
-
-          return metrics;
-        },
+        constrainSuccessResult: constrainPulseMetrics,
         getErrorText: getPulseDisabledError,
       });
     },

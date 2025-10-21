@@ -116,6 +116,14 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
           return new Ok(datasources);
         },
         constrainSuccessResult: (datasources) => {
+          if (datasources.length === 0) {
+            return {
+              type: 'empty',
+              message:
+                'No datasources were found. Either none exist or you do not have permission to view them',
+            };
+          }
+
           const { projectIds, datasourceIds } = getConfig().boundedContext;
           if (projectIds) {
             datasources = datasources.filter((datasource) => projectIds.has(datasource.project.id));
@@ -125,7 +133,20 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
             datasources = datasources.filter((datasource) => datasourceIds.has(datasource.id));
           }
 
-          return datasources;
+          if (datasources.length === 0) {
+            return {
+              type: 'empty',
+              message: [
+                'The set of allowed data sources that can be queried is limited by the server configuration.',
+                'While data sources were found, they were all filtered out by the server configuration.',
+              ].join(' '),
+            };
+          }
+
+          return {
+            type: 'success',
+            result: datasources,
+          };
         },
       });
     },

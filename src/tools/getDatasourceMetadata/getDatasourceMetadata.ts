@@ -168,7 +168,12 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
             },
           });
         },
-        constrainSuccessResult: (response) => response,
+        constrainSuccessResult: (fields) => {
+          return {
+            type: 'success',
+            result: fields,
+          };
+        },
         getErrorText: (error: GetDatasourceMetadataError) => {
           switch (error.type) {
             case 'feature-disabled':
