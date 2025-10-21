@@ -1,4 +1,5 @@
 import { CorsOptions } from 'cors';
+import dotenv from 'dotenv';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -103,17 +104,21 @@ export class Config {
     };
 
     if (this.boundedContext.projectIds?.size === 0) {
-      throw new Error('The environment variable INCLUDE_PROJECT_IDS must have at least one value');
+      throw new Error(
+        'When set, the environment variable INCLUDE_PROJECT_IDS must have at least one value',
+      );
     }
 
     if (this.boundedContext.datasourceIds?.size === 0) {
       throw new Error(
-        'The environment variable INCLUDE_DATASOURCE_IDS must have at least one value',
+        'When set, the environment variable INCLUDE_DATASOURCE_IDS must have at least one value',
       );
     }
 
     if (this.boundedContext.workbookIds?.size === 0) {
-      throw new Error('The environment variable INCLUDE_WORKBOOK_IDS must have at least one value');
+      throw new Error(
+        'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
+      );
     }
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
@@ -241,7 +246,10 @@ function removeClaudeMcpBundleUserConfigTemplates(
   }, {});
 }
 
-export const getConfig = (): Config => new Config();
+export const getConfig = (): Config => {
+  dotenv.config();
+  return new Config();
+};
 
 export const exportedForTesting = {
   Config,

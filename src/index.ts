@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import dotenv from 'dotenv';
 
 import { getConfig } from './config.js';
 import { isLoggingLevel, log, setLogLevel, setServerLogger, writeToStderr } from './logging/log.js';
@@ -10,7 +9,6 @@ import { startExpressServer } from './server/express.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 async function startServer(): Promise<void> {
-  dotenv.config();
   const config = getConfig();
 
   const logLevel = isLoggingLevel(config.defaultLogLevel) ? config.defaultLogLevel : 'debug';
