@@ -99,17 +99,17 @@ const Parameter = z.discriminatedUnion('parameterType', [
   ParameterBase.extend({
     parameterType: z.literal('QUANTITATIVE_DATE'),
     value: z.string().nullable(),
-    minDate: z.string().optional().nullable(),
-    maxDate: z.string().optional().nullable(),
-    periodValue: z.number().optional().nullable(),
-    periodType: PeriodType.optional().nullable(),
+    minDate: z.string().nullish(),
+    maxDate: z.string().nullish(),
+    periodValue: z.number().nullish(),
+    periodType: PeriodType.nullish(),
   }).strict(),
   ParameterBase.extend({
     parameterType: z.literal('QUANTITATIVE_RANGE'),
     value: z.number().nullable(),
-    min: z.number().optional().nullable(),
-    max: z.number().optional().nullable(),
-    step: z.number().optional().nullable(),
+    min: z.number().nullish(),
+    max: z.number().nullish(),
+    step: z.number().nullish(),
   }).strict(),
 ]);
 
