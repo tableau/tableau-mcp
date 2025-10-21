@@ -41,6 +41,11 @@ describe('Config', () => {
       MAX_RESULT_LIMIT: undefined,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: undefined,
       DISABLE_METADATA_API_REQUESTS: undefined,
+      ENABLE_SERVER_LOGGING: undefined,
+      SERVER_LOG_DIRECTORY: undefined,
+      INCLUDE_PROJECT_IDS: undefined,
+      INCLUDE_DATASOURCE_IDS: undefined,
+      INCLUDE_WORKBOOK_IDS: undefined,
     };
   });
 
@@ -645,6 +650,75 @@ describe('Config', () => {
       expect(config.connectedAppSecretId).toBe('');
       expect(config.connectedAppSecretValue).toBe('');
       expect(config.jwtAdditionalPayload).toBe('{}');
+    });
+  });
+
+  describe('Bounded context parsing', () => {
+    it('should set boundedContext to null sets when no project, datasource, or workbook IDs are provided', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.boundedContext).toEqual({
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+      });
+    });
+
+    it('should set boundedContext to the specified project, datasource, and workbook IDs when provided', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        INCLUDE_PROJECT_IDS: ' 123, 456, 123   ', // spacing is intentional here to test trimming
+        INCLUDE_DATASOURCE_IDS: '789,101',
+        INCLUDE_WORKBOOK_IDS: '112,113',
+      };
+
+      const config = new Config();
+      expect(config.boundedContext).toEqual({
+        projectIds: new Set(['123', '456']),
+        datasourceIds: new Set(['789', '101']),
+        workbookIds: new Set(['112', '113']),
+      });
+    });
+
+    it('should throw error when INCLUDE_PROJECT_IDS is set to an empty string', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        INCLUDE_PROJECT_IDS: '',
+      };
+
+      expect(() => new Config()).toThrow(
+        'When set, the environment variable INCLUDE_PROJECT_IDS must have at least one value',
+      );
+    });
+
+    it('should throw error when INCLUDE_DATASOURCE_IDS is set to an empty string', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        INCLUDE_DATASOURCE_IDS: '',
+      };
+
+      expect(() => new Config()).toThrow(
+        'When set, the environment variable INCLUDE_DATASOURCE_IDS must have at least one value',
+      );
+    });
+
+    it('should throw error when INCLUDE_WORKBOOK_IDS is set to an empty string', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        INCLUDE_WORKBOOK_IDS: '',
+      };
+
+      expect(() => new Config()).toThrow(
+        'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
+      );
     });
   });
 });
