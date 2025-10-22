@@ -78,7 +78,6 @@ describe('getViewDataTool', () => {
 
   it('should return view not allowed error when view is not allowed', async () => {
     mocks.mockGetConfig.mockReturnValue({
-      datasourceCredentials: undefined,
       boundedContext: {
         projectIds: null,
         datasourceIds: null,
