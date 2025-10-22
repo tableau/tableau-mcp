@@ -84,6 +84,108 @@ describe('ResourceAccessChecker', () => {
         expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
       });
     });
+
+    describe('not allowed', () => {
+      it('should return not allowed when the datasource LUID is not allowed by the datasources in the bounded context', async () => {
+        const mockDatasource = mockDatasources.datasources[0];
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: null,
+          datasourceIds: new Set(['some-datasource-luid']),
+          workbookIds: null,
+        });
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: [
+            'The set of allowed data sources that can be queried is limited by the server configuration.',
+            `Querying the datasource with LUID ${mockDatasource.id} is not allowed.`,
+          ].join(' '),
+        });
+      });
+
+      it('should return not allowed when the datasource exists in a project that is not allowed by the projects in the bounded context', async () => {
+        const mockDatasource = mockDatasources.datasources[0];
+        mocks.mockQueryDatasource.mockResolvedValue(mockDatasource);
+
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: new Set(['some-project-id']),
+          datasourceIds: null,
+          workbookIds: null,
+        });
+
+        const expectedMessage = [
+          'The set of allowed projects that can be queried is limited by the server configuration.',
+          `The datasource with LUID ${mockDatasource.id} cannot be queried because it does not belong to an allowed project.`,
+        ].join(' ');
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: expectedMessage,
+        });
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: expectedMessage,
+        });
+
+        // Since project filtering is enabled, we cannot cache the result so we need to call the "Query Datasource" API each time.
+        expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
+      });
+
+      it('should return not allowed when the datasource is allowed by the datasources in the bounded context but exists in a project that is not allowed by the projects in the bounded context', async () => {
+        const mockDatasource = mockDatasources.datasources[0];
+        mocks.mockQueryDatasource.mockResolvedValue(mockDatasource);
+
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: new Set(['some-project-id']),
+          datasourceIds: new Set([mockDatasource.id]),
+          workbookIds: null,
+        });
+
+        const expectedMessage = [
+          'The set of allowed projects that can be queried is limited by the server configuration.',
+          `The datasource with LUID ${mockDatasource.id} cannot be queried because it does not belong to an allowed project.`,
+        ].join(' ');
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: expectedMessage,
+        });
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: expectedMessage,
+        });
+
+        // Since project filtering is enabled, we cannot cache the result so we need to call the "Query Datasource" API each time.
+        expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
+      });
+    });
   });
 
   describe('isWorkbookAllowed', () => {
@@ -152,6 +254,104 @@ describe('ResourceAccessChecker', () => {
             restApiArgs,
           }),
         ).toEqual({ allowed: true });
+
+        // Since project filtering is enabled, we cannot cache the result so we need to call the "Get Workbook" API each time.
+        expect(mocks.mockGetWorkbook).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('not allowed', () => {
+      it('should return not allowed when the workbook ID is not allowed by the workbooks in the bounded context', async () => {
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: new Set(['some-workbook-id']),
+        });
+
+        expect(
+          await resourceAccessChecker.isWorkbookAllowed({
+            workbookId: mockWorkbook.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: [
+            'The set of allowed workbooks that can be queried is limited by the server configuration.',
+            `Querying the workbook with LUID ${mockWorkbook.id} is not allowed.`,
+          ].join(' '),
+        });
+      });
+
+      it('should return not allowed when the workbook is in a project that is not allowed by the projects in the bounded context', async () => {
+        mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
+
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: new Set(['some-project-id']),
+          datasourceIds: null,
+          workbookIds: null,
+        });
+
+        const expectedMessage = [
+          'The set of allowed projects that can be queried is limited by the server configuration.',
+          `The workbook with LUID ${mockWorkbook.id} cannot be queried because it does not belong to an allowed project.`,
+        ].join(' ');
+
+        expect(
+          await resourceAccessChecker.isWorkbookAllowed({
+            workbookId: mockWorkbook.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: expectedMessage,
+        });
+
+        expect(
+          await resourceAccessChecker.isWorkbookAllowed({
+            workbookId: mockWorkbook.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: expectedMessage,
+        });
+
+        // Since project filtering is enabled, we cannot cache the result so we need to call the "Get Workbook" API each time.
+        expect(mocks.mockGetWorkbook).toHaveBeenCalledTimes(2);
+      });
+
+      it('should return not allowed when the workbook is allowed by the workbooks in the bounded context and exists in a project that is not allowed by the projects in the bounded context', async () => {
+        mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: new Set(['some-project-id']),
+          datasourceIds: null,
+          workbookIds: new Set([mockWorkbook.id]),
+        });
+
+        const expectedMessage = [
+          'The set of allowed projects that can be queried is limited by the server configuration.',
+          `The workbook with LUID ${mockWorkbook.id} cannot be queried because it does not belong to an allowed project.`,
+        ].join(' ');
+
+        expect(
+          await resourceAccessChecker.isWorkbookAllowed({
+            workbookId: mockWorkbook.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: expectedMessage,
+        });
+
+        expect(
+          await resourceAccessChecker.isWorkbookAllowed({
+            workbookId: mockWorkbook.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: expectedMessage,
+        });
 
         // Since project filtering is enabled, we cannot cache the result so we need to call the "Get Workbook" API each time.
         expect(mocks.mockGetWorkbook).toHaveBeenCalledTimes(2);
@@ -239,6 +439,119 @@ describe('ResourceAccessChecker', () => {
         ).toEqual({ allowed: true });
 
         // Since project filtering is enabled, we can't cache the result and we need to call the "Get View" API each time.
+        expect(mocks.mockGetView).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('not allowed', () => {
+      it('should return not allowed when the view exists in a workbook that is not allowed by the workbooks in the bounded context', async () => {
+        mocks.mockGetView.mockResolvedValue(mockView);
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: new Set(['some-workbook-id']),
+        });
+
+        const expectedMessage = [
+          'The set of allowed workbooks that can be queried is limited by the server configuration.',
+          `The view with LUID ${mockView.id} cannot be queried because it does not belong to an allowed workbook.`,
+        ].join(' ');
+
+        expect(
+          await resourceAccessChecker.isViewAllowed({
+            viewId: mockView.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: expectedMessage,
+        });
+
+        expect(
+          await resourceAccessChecker.isViewAllowed({
+            viewId: mockView.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: expectedMessage,
+        });
+
+        // Since project filtering is not enabled, we can cache the result so we only need to call the "Get View" API once.
+        expect(mocks.mockGetView).toHaveBeenCalledTimes(1);
+      });
+
+      it('should return not allowed when the view exists in a workbook that is not allowed by the projects in the bounded context', async () => {
+        mocks.mockGetView.mockResolvedValue(mockView);
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: new Set(['some-project-id']),
+          datasourceIds: null,
+          workbookIds: null,
+        });
+
+        const expectedMessage = [
+          'The set of allowed projects that can be queried is limited by the server configuration.',
+          `The view with LUID ${mockView.id} cannot be queried because it does not belong to an allowed project.`,
+        ].join(' ');
+
+        expect(
+          await resourceAccessChecker.isViewAllowed({
+            viewId: mockView.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: expectedMessage,
+        });
+
+        expect(
+          await resourceAccessChecker.isViewAllowed({
+            viewId: mockView.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: expectedMessage,
+        });
+
+        // Since project filtering is enabled, we cannot cache the result so we need to call the "Get View" API each time.
+        expect(mocks.mockGetView).toHaveBeenCalledTimes(2);
+      });
+
+      it('should return not allowed when the view exists in a workbook that is allowed in the bounded context but exists in a project that is not allowed by the projects in the bounded context', async () => {
+        mocks.mockGetView.mockResolvedValue(mockView);
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: new Set(['some-project-id']),
+          datasourceIds: null,
+          workbookIds: new Set([mockWorkbook.id]),
+        });
+
+        const expectedMessage = [
+          'The set of allowed projects that can be queried is limited by the server configuration.',
+          `The view with LUID ${mockView.id} cannot be queried because it does not belong to an allowed project.`,
+        ].join(' ');
+
+        expect(
+          await resourceAccessChecker.isViewAllowed({
+            viewId: mockView.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: expectedMessage,
+        });
+
+        expect(
+          await resourceAccessChecker.isViewAllowed({
+            viewId: mockView.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: expectedMessage,
+        });
+
+        // Since project filtering is enabled, we cannot cache the result so we need to call the "Get View" API each time.
         expect(mocks.mockGetView).toHaveBeenCalledTimes(2);
       });
     });
