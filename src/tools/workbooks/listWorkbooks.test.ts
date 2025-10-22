@@ -10,7 +10,7 @@ const mockWorkbooks = {
     pageSize: 10,
     totalAvailable: 1,
   },
-  workbooks: [mockWorkbook],
+  workbooks: [{ workbook: mockWorkbook }],
 };
 
 const mocks = vi.hoisted(() => ({

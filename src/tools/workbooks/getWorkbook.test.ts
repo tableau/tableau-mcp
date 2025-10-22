@@ -1,11 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import { mockView } from '../views/mockView.js';
 import { getGetWorkbookTool } from './getWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetWorkbook: vi.fn(),
+  mockQueryViewsForWorkbook: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -13,6 +15,9 @@ vi.mock('../../restApiInstance.js', () => ({
     callback({
       workbooksMethods: {
         getWorkbook: mocks.mockGetWorkbook,
+      },
+      viewsMethods: {
+        queryViewsForWorkbook: mocks.mockQueryViewsForWorkbook,
       },
       siteId: 'test-site-id',
     }),
@@ -35,6 +40,7 @@ describe('getWorkbookTool', () => {
 
   it('should successfully get workbook', async () => {
     mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
+    mocks.mockQueryViewsForWorkbook.mockResolvedValue([mockView]);
     const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain('Superstore');

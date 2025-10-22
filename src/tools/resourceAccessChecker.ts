@@ -272,4 +272,5 @@ class ResourceAccessChecker {
 }
 
 const resourceAccessChecker = new ResourceAccessChecker(getConfig().boundedContext);
-export { resourceAccessChecker };
+const exportedForTesting = { ResourceAccessChecker };
+export { exportedForTesting, resourceAccessChecker };

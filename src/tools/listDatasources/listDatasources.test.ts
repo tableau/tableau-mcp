@@ -2,28 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
 import { getListDatasourcesTool } from './listDatasources.js';
-
-const mockDatasources = {
-  pagination: {
-    pageNumber: 1,
-    pageSize: 10,
-    totalAvailable: 2,
-  },
-  datasources: [
-    {
-      id: 'ds1',
-      name: 'Superstore',
-      description: 'Sample superstore data source',
-      project: { name: 'Samples', id: 'proj1' },
-    },
-    {
-      id: 'ds2',
-      name: 'Finance',
-      description: 'Financial analysis data source',
-      project: { name: 'Finance', id: 'proj2' },
-    },
-  ],
-};
+import { mockDatasources } from './mockDatasources.js';
 
 const mocks = vi.hoisted(() => ({
   mockListDatasources: vi.fn(),
