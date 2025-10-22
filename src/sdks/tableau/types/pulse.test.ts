@@ -115,6 +115,7 @@ function createValidPulseMetric(overrides = {}): any {
       comparison: { comparison: 'previous_period' },
     },
     definition_id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
+    datasource_luid: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
     is_default: true,
     schema_version: '1.0',
     metric_version: '1',

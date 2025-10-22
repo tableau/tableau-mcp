@@ -308,8 +308,10 @@ describe('searchContentTool', () => {
     const result = await getToolResult({ terms: 'nonexistent' });
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
-    expect(responseData).toEqual([]);
+    const responseData = result.content[0].text as string;
+    expect(responseData).toEqual(
+      'No search results were found. Either none exist or you do not have permission to view them',
+    );
   });
 });
 

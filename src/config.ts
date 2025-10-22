@@ -1,5 +1,4 @@
 import { CorsOptions } from 'cors';
-import dotenv from 'dotenv';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -246,10 +245,7 @@ function removeClaudeMcpBundleUserConfigTemplates(
   }, {});
 }
 
-export const getConfig = (): Config => {
-  dotenv.config();
-  return new Config();
-};
+export const getConfig = (): Config => new Config();
 
 export const exportedForTesting = {
   Config,

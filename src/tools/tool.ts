@@ -176,7 +176,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
           content: [
             {
               type: 'text',
-              text: JSON.stringify(constrainedResult),
+              text: JSON.stringify(constrainedResult.result),
             },
           ],
         };

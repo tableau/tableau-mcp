@@ -12,23 +12,56 @@ type RestApiArgs = {
 };
 
 class ResourceAccessChecker {
-  private readonly _allowedProjectIds: Set<string> | null;
-  private readonly _allowedDatasourceIds: Set<string> | null;
-  private readonly _allowedWorkbookIds: Set<string> | null;
+  private _allowedProjectIds: Set<string> | null | undefined;
+  private _allowedDatasourceIds: Set<string> | null | undefined;
+  private _allowedWorkbookIds: Set<string> | null | undefined;
 
   private readonly _cachedDatasourceIds: Map<string, AllowedResult>;
   private readonly _cachedWorkbookIds: Map<string, AllowedResult>;
   private readonly _cachedViewIds: Map<string, AllowedResult>;
 
-  constructor(boundedContext: BoundedContext) {
+  static create(): ResourceAccessChecker {
+    return new ResourceAccessChecker();
+  }
+
+  static createForTesting(boundedContext: BoundedContext): ResourceAccessChecker {
+    return new ResourceAccessChecker(boundedContext);
+  }
+
+  // Optional bounded context to use for testing.
+  private constructor(boundedContext?: BoundedContext) {
     // The methods assume these sets are non-empty.
-    this._allowedProjectIds = boundedContext.projectIds;
-    this._allowedDatasourceIds = boundedContext.datasourceIds;
-    this._allowedWorkbookIds = boundedContext.workbookIds;
+    this._allowedProjectIds = boundedContext?.projectIds;
+    this._allowedDatasourceIds = boundedContext?.datasourceIds;
+    this._allowedWorkbookIds = boundedContext?.workbookIds;
 
     this._cachedDatasourceIds = new Map();
     this._cachedWorkbookIds = new Map();
     this._cachedViewIds = new Map();
+  }
+
+  private get allowedProjectIds(): Set<string> | null {
+    if (this._allowedProjectIds === undefined) {
+      this._allowedProjectIds = getConfig().boundedContext.projectIds;
+    }
+
+    return this._allowedProjectIds;
+  }
+
+  private get allowedDatasourceIds(): Set<string> | null {
+    if (this._allowedDatasourceIds === undefined) {
+      this._allowedDatasourceIds = getConfig().boundedContext.datasourceIds;
+    }
+
+    return this._allowedDatasourceIds;
+  }
+
+  private get allowedWorkbookIds(): Set<string> | null {
+    if (this._allowedWorkbookIds === undefined) {
+      this._allowedWorkbookIds = getConfig().boundedContext.workbookIds;
+    }
+
+    return this._allowedWorkbookIds;
   }
 
   async isDatasourceAllowed({
@@ -43,7 +76,7 @@ class ResourceAccessChecker {
       restApiArgs,
     });
 
-    if (!this._allowedProjectIds) {
+    if (!this.allowedProjectIds) {
       // If project filtering is enabled, we cannot cache the result since the datasource may be moved between projects.
       this._cachedDatasourceIds.set(datasourceLuid, result);
     }
@@ -63,7 +96,7 @@ class ResourceAccessChecker {
       restApiArgs,
     });
 
-    if (!this._allowedProjectIds) {
+    if (!this.allowedProjectIds) {
       // If project filtering is enabled, we cannot cache the result since the workbook may be moved between projects.
       this._cachedWorkbookIds.set(workbookId, result);
     }
@@ -83,7 +116,7 @@ class ResourceAccessChecker {
       restApiArgs,
     });
 
-    if (!this._allowedProjectIds) {
+    if (!this.allowedProjectIds) {
       // If project filtering is enabled, we cannot cache the result since the workbook containing the view may be moved between projects.
       this._cachedViewIds.set(viewId, result);
     }
@@ -103,7 +136,7 @@ class ResourceAccessChecker {
       return cachedResult;
     }
 
-    if (this._allowedDatasourceIds && !this._allowedDatasourceIds.has(datasourceLuid)) {
+    if (this.allowedDatasourceIds && !this.allowedDatasourceIds.has(datasourceLuid)) {
       return {
         allowed: false,
         message: [
@@ -113,7 +146,7 @@ class ResourceAccessChecker {
       };
     }
 
-    if (this._allowedProjectIds) {
+    if (this.allowedProjectIds) {
       const datasourceProjectId = await useRestApi({
         config,
         requestId,
@@ -129,7 +162,7 @@ class ResourceAccessChecker {
         },
       });
 
-      if (!this._allowedProjectIds.has(datasourceProjectId)) {
+      if (!this.allowedProjectIds.has(datasourceProjectId)) {
         return {
           allowed: false,
           message: [
@@ -155,7 +188,7 @@ class ResourceAccessChecker {
       return cachedResult;
     }
 
-    if (this._allowedWorkbookIds && !this._allowedWorkbookIds.has(workbookId)) {
+    if (this.allowedWorkbookIds && !this.allowedWorkbookIds.has(workbookId)) {
       return {
         allowed: false,
         message: [
@@ -165,7 +198,7 @@ class ResourceAccessChecker {
       };
     }
 
-    if (this._allowedProjectIds) {
+    if (this.allowedProjectIds) {
       const workbookProjectId = await useRestApi({
         config,
         requestId,
@@ -181,7 +214,7 @@ class ResourceAccessChecker {
         },
       });
 
-      if (!this._allowedProjectIds.has(workbookProjectId)) {
+      if (!this.allowedProjectIds.has(workbookProjectId)) {
         return {
           allowed: false,
           message: [
@@ -210,7 +243,7 @@ class ResourceAccessChecker {
     let viewWorkbookId = '';
     let viewProjectId = '';
 
-    if (this._allowedWorkbookIds) {
+    if (this.allowedWorkbookIds) {
       const view = await useRestApi({
         config,
         requestId,
@@ -227,7 +260,7 @@ class ResourceAccessChecker {
       viewWorkbookId = view.workbook?.id ?? '';
       viewProjectId = view.project?.id ?? '';
 
-      if (!this._allowedWorkbookIds.has(viewWorkbookId)) {
+      if (!this.allowedWorkbookIds.has(viewWorkbookId)) {
         return {
           allowed: false,
           message: [
@@ -238,7 +271,7 @@ class ResourceAccessChecker {
       }
     }
 
-    if (this._allowedProjectIds) {
+    if (this.allowedProjectIds) {
       viewProjectId =
         viewProjectId ||
         (await useRestApi({
@@ -256,7 +289,7 @@ class ResourceAccessChecker {
           },
         }));
 
-      if (!this._allowedProjectIds.has(viewProjectId)) {
+      if (!this.allowedProjectIds.has(viewProjectId)) {
         return {
           allowed: false,
           message: [
@@ -271,6 +304,6 @@ class ResourceAccessChecker {
   }
 }
 
-const resourceAccessChecker = new ResourceAccessChecker(getConfig().boundedContext);
-const exportedForTesting = { ResourceAccessChecker };
+const resourceAccessChecker = ResourceAccessChecker.create();
+const exportedForTesting = { createResourceAccessChecker: ResourceAccessChecker.createForTesting };
 export { exportedForTesting, resourceAccessChecker };

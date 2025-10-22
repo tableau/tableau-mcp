@@ -166,6 +166,11 @@ describe('getDatasourceMetadataTool', () => {
     // Set default config for existing tests
     mocks.mockGetConfig.mockReturnValue({
       disableMetadataApiRequests: false,
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+      },
     });
   });
 
@@ -506,6 +511,11 @@ describe('getDatasourceMetadataTool', () => {
     // Configure to disable metadata API requests
     mocks.mockGetConfig.mockReturnValue({
       disableMetadataApiRequests: true,
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+      },
     });
 
     mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
@@ -554,6 +564,11 @@ describe('getDatasourceMetadataTool', () => {
     // Configure to disable metadata API requests
     mocks.mockGetConfig.mockReturnValue({
       disableMetadataApiRequests: true,
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+      },
     });
 
     const errorMessage = 'ReadMetadata API Error';

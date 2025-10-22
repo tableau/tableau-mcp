@@ -5,7 +5,7 @@ import { exportedForTesting } from './resourceAccessChecker.js';
 import { mockView } from './views/mockView.js';
 import { mockWorkbook } from './workbooks/mockWorkbook.js';
 
-const { ResourceAccessChecker } = exportedForTesting;
+const { createResourceAccessChecker } = exportedForTesting;
 
 const mocks = vi.hoisted(() => ({
   mockGetView: vi.fn(),
@@ -42,7 +42,7 @@ describe('ResourceAccessChecker', () => {
       it('should return allowed when the datasource LUID is allowed by the datasources in the bounded context', async () => {
         const mockDatasource = mockDatasources.datasources[0];
 
-        const resourceAccessChecker = new ResourceAccessChecker({
+        const resourceAccessChecker = createResourceAccessChecker({
           projectIds: null,
           datasourceIds: new Set([mockDatasource.id]),
           workbookIds: null,
@@ -60,7 +60,7 @@ describe('ResourceAccessChecker', () => {
         const mockDatasource = mockDatasources.datasources[0];
         mocks.mockQueryDatasource.mockResolvedValue(mockDatasource);
 
-        const resourceAccessChecker = new ResourceAccessChecker({
+        const resourceAccessChecker = createResourceAccessChecker({
           projectIds: new Set([mockDatasource.project.id]),
           datasourceIds: new Set([mockDatasource.id]),
           workbookIds: null,
@@ -89,7 +89,7 @@ describe('ResourceAccessChecker', () => {
   describe('isWorkbookAllowed', () => {
     describe('allowed', () => {
       it('should return allowed when the workbook ID is allowed by the workbooks in the bounded context', async () => {
-        const resourceAccessChecker = new ResourceAccessChecker({
+        const resourceAccessChecker = createResourceAccessChecker({
           projectIds: null,
           datasourceIds: null,
           workbookIds: new Set([mockWorkbook.id]),
@@ -106,7 +106,7 @@ describe('ResourceAccessChecker', () => {
       it('should return allowed when the workbook is in a project that is allowed by the projects in the bounded context', async () => {
         mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
 
-        const resourceAccessChecker = new ResourceAccessChecker({
+        const resourceAccessChecker = createResourceAccessChecker({
           projectIds: new Set([mockWorkbook.project.id]),
           datasourceIds: null,
           workbookIds: null,
@@ -133,7 +133,7 @@ describe('ResourceAccessChecker', () => {
       it('should return allowed when the workbook is allowed by the workbooks in the bounded context and exists in a project that is allowed by the projects in the bounded context', async () => {
         mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
 
-        const resourceAccessChecker = new ResourceAccessChecker({
+        const resourceAccessChecker = createResourceAccessChecker({
           projectIds: new Set([mockWorkbook.project.id]),
           datasourceIds: null,
           workbookIds: new Set([mockWorkbook.id]),
@@ -164,7 +164,7 @@ describe('ResourceAccessChecker', () => {
       it('should return allowed when the view exists in a workbook that is allowed by the workbooks in the bounded context', async () => {
         mocks.mockGetView.mockResolvedValue(mockView);
 
-        const resourceAccessChecker = new ResourceAccessChecker({
+        const resourceAccessChecker = createResourceAccessChecker({
           projectIds: null,
           datasourceIds: null,
           workbookIds: new Set([mockWorkbook.id]),
@@ -191,7 +191,7 @@ describe('ResourceAccessChecker', () => {
       it('should return allowed when the view exists in a workbook that is allowed by the projects in the bounded context', async () => {
         mocks.mockGetView.mockResolvedValue(mockView);
 
-        const resourceAccessChecker = new ResourceAccessChecker({
+        const resourceAccessChecker = createResourceAccessChecker({
           projectIds: new Set([mockView.project.id]),
           datasourceIds: null,
           workbookIds: null,
@@ -218,7 +218,7 @@ describe('ResourceAccessChecker', () => {
       it('should return allowed when the view exists in a workbook that is allowed by the workbooks and the projects in the bounded context', async () => {
         mocks.mockGetView.mockResolvedValue(mockView);
 
-        const resourceAccessChecker = new ResourceAccessChecker({
+        const resourceAccessChecker = createResourceAccessChecker({
           projectIds: new Set([mockView.project.id]),
           datasourceIds: null,
           workbookIds: new Set([mockWorkbook.id]),
