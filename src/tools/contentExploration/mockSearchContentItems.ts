@@ -1,5 +1,3 @@
-import { ReducedSearchContentResponse } from './searchContentUtils.js';
-
 export const mockSearchContentItems = [
   {
     uri: 'test-uri-1',
@@ -42,4 +40,4 @@ export const mockSearchContentItems = [
       createdTime: '2023-11-15T11:30:00Z',
     },
   },
-] satisfies Array<ReducedSearchContentResponse>;
+];
