@@ -599,6 +599,28 @@ describe('getDatasourceMetadataTool', () => {
     expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
+
+  it('should return data source not allowed error when datasource is not allowed', async () => {
+    mocks.mockGetConfig.mockReturnValue({
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: new Set(['some-other-datasource-luid']),
+        workbookIds: null,
+      },
+    });
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(
+      [
+        'The set of allowed data sources that can be queried is limited by the server configuration.',
+        'Querying the datasource with LUID test-luid is not allowed.',
+      ].join(' '),
+    );
+
+    expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
+  });
 });
 
 async function getToolResult(): Promise<CallToolResult> {
