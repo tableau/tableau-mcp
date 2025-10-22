@@ -1,8 +1,10 @@
+import { BoundedContext } from '../../config.js';
 import {
   OrderBy,
   SearchContentFilter,
   SearchContentResponse,
 } from '../../sdks/tableau/types/contentExploration.js';
+import { ConstrainedResult } from '../tool.js';
 
 export type ReducedSearchContentResponse = Partial<Record<SearchItemContent, unknown>>;
 
@@ -224,4 +226,78 @@ function getReducedSearchItemContent(
     reducedContent.hasActiveDataQualityWarning = content.hasActiveDataQualityWarning;
   }
   return reducedContent;
+}
+
+export function constrainSearchContent({
+  items,
+  boundedContext,
+}: {
+  items: Array<ReducedSearchContentResponse>;
+  boundedContext: BoundedContext;
+}): ConstrainedResult<Array<ReducedSearchContentResponse>> {
+  if (items.length === 0) {
+    return {
+      type: 'empty',
+      message:
+        'No search results were found. Either none exist or you do not have permission to view them',
+    };
+  }
+
+  const { projectIds, datasourceIds, workbookIds } = boundedContext;
+
+  if (projectIds) {
+    items = items.filter((item) => {
+      if (typeof item.projectId === 'number' && projectIds.has(item.projectId.toString())) {
+        // ⚠️ The Search API returns the project "id" (e.g. 861566)
+        // but the Project REST APIs return the project "LUID" and there is no good way to look up one from the other.
+        // Admins who want to use a project filter here will need to provide both the id and LUID in their bounded context.
+        return true;
+      }
+
+      return false;
+    });
+  }
+
+  if (datasourceIds) {
+    items = items.filter((item) => {
+      if (
+        (item.type === 'datasource' || item.type === 'unifieddatasource') &&
+        typeof item.datasourceLuid === 'string' &&
+        !datasourceIds.has(item.datasourceLuid)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  if (workbookIds) {
+    items = items.filter((item) => {
+      if (
+        item.type === 'workbook' &&
+        typeof item.luid === 'string' &&
+        !workbookIds.has(item.luid)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  if (items.length === 0) {
+    return {
+      type: 'empty',
+      message: [
+        'The set of allowed content that can be queried is limited by the server configuration.',
+        'While search results were found, they were all filtered out by the server configuration.',
+      ].join(' '),
+    };
+  }
+
+  return {
+    type: 'success',
+    result: items,
+  };
 }
