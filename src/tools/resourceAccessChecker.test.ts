@@ -54,6 +54,16 @@ describe('ResourceAccessChecker', () => {
             restApiArgs,
           }),
         ).toEqual({ allowed: true });
+
+        // Check again to exercise the cache.
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            restApiArgs,
+          }),
+        ).toEqual({ allowed: true });
+
+        expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
       });
 
       it('should return allowed when the datasource exists in a project that is allowed by the projects in the bounded context', async () => {
@@ -203,6 +213,16 @@ describe('ResourceAccessChecker', () => {
             restApiArgs,
           }),
         ).toEqual({ allowed: true });
+
+        // Check again to exercise the cache.
+        expect(
+          await resourceAccessChecker.isWorkbookAllowed({
+            workbookId: mockWorkbook.id,
+            restApiArgs,
+          }),
+        ).toEqual({ allowed: true });
+
+        expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
       });
 
       it('should return allowed when the workbook is in a project that is allowed by the projects in the bounded context', async () => {
