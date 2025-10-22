@@ -304,6 +304,12 @@ class ResourceAccessChecker {
   }
 }
 
-const resourceAccessChecker = ResourceAccessChecker.create();
-const exportedForTesting = { createResourceAccessChecker: ResourceAccessChecker.createForTesting };
+let resourceAccessChecker = ResourceAccessChecker.create();
+const exportedForTesting = {
+  createResourceAccessChecker: ResourceAccessChecker.createForTesting,
+  resetResourceAccessCheckerSingleton: () => {
+    resourceAccessChecker = ResourceAccessChecker.create();
+  },
+};
+
 export { exportedForTesting, resourceAccessChecker };

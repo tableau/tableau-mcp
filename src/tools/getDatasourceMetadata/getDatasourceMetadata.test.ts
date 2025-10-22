@@ -3,7 +3,10 @@ import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../server.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
+import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata.js';
+
+const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
 
 const mockReadMetadataResponses = vi.hoisted(() => ({
   success: {
@@ -164,6 +167,7 @@ describe('getDatasourceMetadataTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Set default config for existing tests
+    resetResourceAccessCheckerSingleton();
     mocks.mockGetConfig.mockReturnValue({
       disableMetadataApiRequests: false,
       boundedContext: {
