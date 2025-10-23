@@ -1,4 +1,6 @@
 import {
+  PulseMetric,
+  PulseMetricDefinition,
   pulseMetricDefinitionSchema,
   pulseMetricDefinitionViewEnum,
   pulseMetricSchema,
@@ -20,8 +22,9 @@ describe('PulseMetricDefinition schema', () => {
   it('rejects a PulseMetricDefinition with invalid metrics', () => {
     const data = createValidPulseMetricDefinition({
       // is_default should be boolean
+      // @ts-expect-error - is_default should be boolean
       metrics: [createValidPulseMetric({ is_default: 'yes' })],
-      total_metrics: '1',
+      total_metrics: 1,
     });
     expect(() => pulseMetricDefinitionSchema.parse(data)).toThrow();
   });
@@ -41,6 +44,7 @@ describe('PulseMetric schema', () => {
 
   it('rejects a PulseMetric with non-boolean is_default', () => {
     // is_default should be boolean
+    // @ts-expect-error - is_default should be boolean
     const data = createValidPulseMetric({ is_default: 'yes' });
     expect(() => pulseMetricSchema.parse(data)).toThrow();
   });
@@ -100,7 +104,7 @@ describe('PulseMetricSubscription schema', () => {
   });
 });
 
-function createValidPulseMetric(overrides = {}): any {
+export function createValidPulseMetric(overrides: Partial<PulseMetric> = {}): PulseMetric {
   return {
     id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
     specification: {
@@ -118,22 +122,24 @@ function createValidPulseMetric(overrides = {}): any {
     datasource_luid: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
     is_default: true,
     schema_version: '1.0',
-    metric_version: '1',
+    metric_version: 1,
     goals: { target: { value: 100 } },
     is_followed: false,
     ...overrides,
   };
 }
 
-function createValidPulseMetricDefinition(overrides = {}): any {
+export function createValidPulseMetricDefinition(
+  overrides: Partial<PulseMetricDefinition> = {},
+): PulseMetricDefinition {
   return {
     metadata: {
       name: 'Test Metric',
       description: 'A test metric',
       id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
       schema_version: '1.0',
-      metric_version: '1',
-      definition_version: '1',
+      metric_version: 1,
+      definition_version: 1,
       last_updated_user: { id: 'USER-1234' },
     },
     specification: {
@@ -165,7 +171,7 @@ function createValidPulseMetricDefinition(overrides = {}): any {
         is_followed: true,
       }),
     ],
-    total_metrics: '2',
+    total_metrics: 2,
     representation_options: {
       type: 'number',
       number_units: { singular_noun: 'unit', plural_noun: 'units' },
@@ -179,7 +185,7 @@ function createValidPulseMetricDefinition(overrides = {}): any {
       settings: [{ type: 'trend', disabled: false }],
     },
     comparisons: {
-      comparisons: [{ compare_config: { comparison: 'previous_period' }, index: '0' }],
+      comparisons: [{ compare_config: { comparison: 'previous_period' }, index: 0 }],
     },
     datasource_goals: [
       {

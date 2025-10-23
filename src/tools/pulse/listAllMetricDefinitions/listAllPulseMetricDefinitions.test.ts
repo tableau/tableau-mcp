@@ -1,30 +1,47 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { randomUUID } from 'crypto';
 import { Err, Ok } from 'ts-results-es';
 
 import type { PulseMetricDefinition } from '../../../sdks/tableau/types/pulse.js';
+import {
+  createValidPulseMetric,
+  createValidPulseMetricDefinition,
+} from '../../../sdks/tableau/types/pulse.test.js';
 import { Server } from '../../../server.js';
+import { mockDatasources } from '../../listDatasources/mockDatasources.js';
 import { getListAllPulseMetricDefinitionsTool } from './listAllPulseMetricDefinitions.js';
 
-const mockPulseMetricDefinitions: PulseMetricDefinition[] = [
-  {
-    metadata: { name: 'Pulse Metric 1', id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C4' },
-    specification: { datasource: { id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11' } },
-    metrics: [
-      { id: 'CF32DDCC-362B-4869-9487-37DA4D152552', is_default: true, is_followed: false },
-      { id: 'CF32DDCC-362B-4869-9487-37DA4D152553', is_default: false, is_followed: true },
-    ],
-  } as PulseMetricDefinition,
-  {
-    metadata: { name: 'Pulse Metric 2', id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C5' },
-    specification: { datasource: { id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A12' } },
-    metrics: [{ id: 'CF32DDCC-362B-4869-9487-37DA4D152554', is_default: true, is_followed: false }],
-  } as PulseMetricDefinition,
-  {
-    metadata: { name: 'Pulse Metric 3', id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C6' },
-    specification: { datasource: { id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11' } },
-    metrics: [],
-  } as unknown as PulseMetricDefinition,
-];
+export const mockPulseMetricDefinitions: Array<PulseMetricDefinition> =
+  mockDatasources.datasources.map((datasource, index) =>
+    createValidPulseMetricDefinition({
+      metadata: {
+        name: `Pulse Metric ${index + 1}`,
+        id: randomUUID(),
+        description: `Pulse Metric ${index + 1} Description`,
+        schema_version: '1.0',
+        metric_version: 1,
+        definition_version: 1,
+      },
+      specification: {
+        datasource: {
+          id: datasource.id,
+        },
+        basic_specification: {
+          measure: { field: 'sales', aggregation: 'SUM' },
+          time_dimension: { field: 'order_date' },
+          filters: [],
+        },
+        is_running_total: false,
+      },
+      metrics: [1, 2].map((i) =>
+        createValidPulseMetric({
+          id: randomUUID(),
+          is_default: i === 1,
+          is_followed: i === 2,
+        }),
+      ),
+    }),
+  );
 
 const mocks = vi.hoisted(() => ({
   mockListAllPulseMetricDefinitions: vi.fn(),

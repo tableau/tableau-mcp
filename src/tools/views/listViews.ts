@@ -107,7 +107,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
           );
         },
         constrainSuccessResult: (views) =>
-          constrainViews({ views, boundedContext: getConfig().boundedContext }),
+          constrainViews({ views, boundedContext: config.boundedContext }),
       });
     },
   });

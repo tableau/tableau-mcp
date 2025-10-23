@@ -117,7 +117,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
           return new Ok(datasources);
         },
         constrainSuccessResult: (datasources) =>
-          constrainDatasources({ datasources, boundedContext: getConfig().boundedContext }),
+          constrainDatasources({ datasources, boundedContext: config.boundedContext }),
       });
     },
   });

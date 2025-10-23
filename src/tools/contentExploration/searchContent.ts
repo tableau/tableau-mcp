@@ -90,7 +90,7 @@ This tool searches across all supported content types for objects relevant to th
           );
         },
         constrainSuccessResult: (items) =>
-          constrainSearchContent({ items, boundedContext: getConfig().boundedContext }),
+          constrainSearchContent({ items, boundedContext: config.boundedContext }),
       });
     },
   });

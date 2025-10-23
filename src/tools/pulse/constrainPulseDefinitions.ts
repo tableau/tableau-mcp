@@ -1,10 +1,14 @@
-import { getConfig } from '../../config.js';
+import { BoundedContext } from '../../config.js';
 import { PulseMetricDefinition } from '../../sdks/tableau/types/pulse.js';
 import { ConstrainedResult } from '../tool.js';
 
-export function constrainPulseDefinitions(
-  definitions: Array<PulseMetricDefinition>,
-): ConstrainedResult<Array<PulseMetricDefinition>> {
+export function constrainPulseDefinitions({
+  boundedContext,
+  definitions,
+}: {
+  boundedContext: BoundedContext;
+  definitions: Array<PulseMetricDefinition>;
+}): ConstrainedResult<Array<PulseMetricDefinition>> {
   if (definitions.length === 0) {
     return {
       type: 'empty',
@@ -13,7 +17,7 @@ export function constrainPulseDefinitions(
     };
   }
 
-  const { datasourceIds } = getConfig().boundedContext;
+  const { datasourceIds } = boundedContext;
 
   if (datasourceIds) {
     definitions = definitions.filter((definition) =>

@@ -103,7 +103,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
           );
         },
         constrainSuccessResult: (workbooks) =>
-          constrainWorkbooks({ workbooks, boundedContext: getConfig().boundedContext }),
+          constrainWorkbooks({ workbooks, boundedContext: config.boundedContext }),
       });
     },
   });
