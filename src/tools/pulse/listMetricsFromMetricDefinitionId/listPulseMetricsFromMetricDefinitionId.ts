@@ -56,7 +56,8 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
             },
           });
         },
-        constrainSuccessResult: constrainPulseMetrics,
+        constrainSuccessResult: (metrics) =>
+          constrainPulseMetrics({ metrics, boundedContext: config.boundedContext }),
         getErrorText: getPulseDisabledError,
       });
     },

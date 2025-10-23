@@ -4,7 +4,7 @@ import { constrainPulseDefinitions } from './constrainPulseDefinitions.js';
 import { mockPulseMetricDefinitions } from './listAllMetricDefinitions/listAllPulseMetricDefinitions.test.js';
 
 describe('constrainPulseDefinitions', () => {
-  it('should return empty result when no datasources are found', () => {
+  it('should return empty result when no definitions are found', () => {
     const result = constrainPulseDefinitions({
       definitions: [],
       boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
@@ -31,7 +31,7 @@ describe('constrainPulseDefinitions', () => {
     );
   });
 
-  it('should return success result when no datasources were filtered out by the bounded context', () => {
+  it('should return success result when no definitions were filtered out by the bounded context', () => {
     const result = constrainPulseDefinitions({
       definitions: mockPulseMetricDefinitions,
       boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
@@ -41,7 +41,7 @@ describe('constrainPulseDefinitions', () => {
     expect(result.result).toBe(mockPulseMetricDefinitions);
   });
 
-  it('should return success result when some datasources were filtered out by the bounded context', () => {
+  it('should return success result when some definitions were filtered out by the bounded context', () => {
     const result = constrainPulseDefinitions({
       definitions: mockPulseMetricDefinitions,
       boundedContext: {
