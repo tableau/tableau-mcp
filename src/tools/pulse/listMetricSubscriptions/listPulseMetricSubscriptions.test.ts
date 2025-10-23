@@ -1,15 +1,15 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
+import { getConfig } from '../../../config.js';
 import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import invariant from '../../../utils/invariant.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import {
   constrainPulseMetricSubscriptions,
   getListPulseMetricSubscriptionsTool,
 } from './listPulseMetricSubscriptions.js';
-import { getConfig } from '../../../config.js';
-import invariant from '../../../utils/invariant.js';
 
 const mockPulseMetrics = mockPulseMetricDefinitions.flatMap((definition) => definition.metrics);
 
