@@ -136,7 +136,7 @@ export function constrainDatasources({
     return {
       type: 'empty',
       message:
-        'No datasources were found. Either none exist or you do not have permission to view them',
+        'No datasources were found. Either none exist or you do not have permission to view them.',
     };
   }
 

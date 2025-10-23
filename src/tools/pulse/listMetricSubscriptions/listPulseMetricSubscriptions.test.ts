@@ -98,7 +98,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
 
       invariant(result.type === 'empty');
       expect(result.message).toBe(
-        'No Pulse Metric Subscriptions were found. Either none exist or you do not have permission to view them',
+        'No Pulse Metric Subscriptions were found. Either none exist or you do not have permission to view them.',
       );
     });
 

@@ -239,7 +239,7 @@ export function constrainSearchContent({
     return {
       type: 'empty',
       message:
-        'No search results were found. Either none exist or you do not have permission to view them',
+        'No search results were found. Either none exist or you do not have permission to view them.',
     };
   }
 

@@ -73,7 +73,7 @@ describe('listWorkbooksTool', () => {
 
       invariant(result.type === 'empty');
       expect(result.message).toBe(
-        'No workbooks were found. Either none exist or you do not have permission to view them',
+        'No workbooks were found. Either none exist or you do not have permission to view them.',
       );
     });
 

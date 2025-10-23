@@ -62,7 +62,7 @@ describe('listDatasourcesTool', () => {
 
       invariant(result.type === 'empty');
       expect(result.message).toBe(
-        'No datasources were found. Either none exist or you do not have permission to view them',
+        'No datasources were found. Either none exist or you do not have permission to view them.',
       );
     });
 

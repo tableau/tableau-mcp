@@ -122,7 +122,7 @@ export function constrainWorkbooks({
     return {
       type: 'empty',
       message:
-        'No workbooks were found. Either none exist or you do not have permission to view them',
+        'No workbooks were found. Either none exist or you do not have permission to view them.',
     };
   }
 

@@ -74,7 +74,7 @@ describe('listViewsTool', () => {
 
       invariant(result.type === 'empty');
       expect(result.message).toBe(
-        'No views were found. Either none exist or you do not have permission to view them',
+        'No views were found. Either none exist or you do not have permission to view them.',
       );
     });
 

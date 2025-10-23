@@ -312,7 +312,7 @@ describe('searchContentTool', () => {
     expect(result.isError).toBe(false);
     const responseData = result.content[0].text as string;
     expect(responseData).toEqual(
-      'No search results were found. Either none exist or you do not have permission to view them',
+      'No search results were found. Either none exist or you do not have permission to view them.',
     );
   });
 });

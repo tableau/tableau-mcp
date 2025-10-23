@@ -125,7 +125,7 @@ export function constrainViews({
   if (views.length === 0) {
     return {
       type: 'empty',
-      message: 'No views were found. Either none exist or you do not have permission to view them',
+      message: 'No views were found. Either none exist or you do not have permission to view them.',
     };
   }
 

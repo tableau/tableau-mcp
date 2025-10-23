@@ -13,7 +13,7 @@ export function constrainPulseMetrics({
     return {
       type: 'empty',
       message:
-        'No Pulse Metrics were found. Either none exist or you do not have permission to view them',
+        'No Pulse Metrics were found. Either none exist or you do not have permission to view them.',
     };
   }
 
