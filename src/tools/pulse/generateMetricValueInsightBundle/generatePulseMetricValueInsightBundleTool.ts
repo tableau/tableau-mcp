@@ -167,8 +167,9 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               return new Err({
                 type: 'datasource-not-allowed',
                 message: [
-                  'The set of allowed data sources that can be queried is limited by the server configuration.',
-                  `Generating the Pulse Metric Value Insight Bundle is not allowed because its definition's datasource with LUID ${datasourceLuid} is not in the allowed set of data sources.`,
+                  'The set of allowed metric insights that can be queried is limited by the server configuration.',
+                  'Generating the Pulse Metric Value Insight Bundle is not allowed because the definition is derived',
+                  `from the data source with LUID ${datasourceLuid}, which is not in the allowed set of data sources.`,
                 ].join(' '),
               });
             }

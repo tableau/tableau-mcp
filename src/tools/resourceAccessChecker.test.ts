@@ -129,7 +129,7 @@ describe('ResourceAccessChecker', () => {
         });
 
         const expectedMessage = [
-          'The set of allowed projects that can be queried is limited by the server configuration.',
+          'The set of allowed data sources that can be queried is limited by the server configuration.',
           `The datasource with LUID ${mockDatasource.id} cannot be queried because it does not belong to an allowed project.`,
         ].join(' ');
 
@@ -168,7 +168,7 @@ describe('ResourceAccessChecker', () => {
         });
 
         const expectedMessage = [
-          'The set of allowed projects that can be queried is limited by the server configuration.',
+          'The set of allowed data sources that can be queried is limited by the server configuration.',
           `The datasource with LUID ${mockDatasource.id} cannot be queried because it does not belong to an allowed project.`,
         ].join(' ');
 
@@ -312,7 +312,7 @@ describe('ResourceAccessChecker', () => {
         });
 
         const expectedMessage = [
-          'The set of allowed projects that can be queried is limited by the server configuration.',
+          'The set of allowed workbooks that can be queried is limited by the server configuration.',
           `The workbook with LUID ${mockWorkbook.id} cannot be queried because it does not belong to an allowed project.`,
         ].join(' ');
 
@@ -349,7 +349,7 @@ describe('ResourceAccessChecker', () => {
         });
 
         const expectedMessage = [
-          'The set of allowed projects that can be queried is limited by the server configuration.',
+          'The set of allowed workbooks that can be queried is limited by the server configuration.',
           `The workbook with LUID ${mockWorkbook.id} cannot be queried because it does not belong to an allowed project.`,
         ].join(' ');
 
@@ -510,7 +510,7 @@ describe('ResourceAccessChecker', () => {
         });
 
         const expectedMessage = [
-          'The set of allowed projects that can be queried is limited by the server configuration.',
+          'The set of allowed views that can be queried is limited by the server configuration.',
           `The view with LUID ${mockView.id} cannot be queried because it does not belong to an allowed project.`,
         ].join(' ');
 
@@ -547,7 +547,7 @@ describe('ResourceAccessChecker', () => {
         });
 
         const expectedMessage = [
-          'The set of allowed projects that can be queried is limited by the server configuration.',
+          'The set of allowed views that can be queried is limited by the server configuration.',
           `The view with LUID ${mockView.id} cannot be queried because it does not belong to an allowed project.`,
         ].join(' ');
 
