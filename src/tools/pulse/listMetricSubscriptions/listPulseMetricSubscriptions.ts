@@ -1,9 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { getConfig } from '../../../config.js';
+import { BoundedContext, getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { Tool } from '../../tool.js';
+import { RestApiArgs } from '../../resourceAccessChecker.js';
+import { ConstrainedResult, Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {};
@@ -47,70 +49,11 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
           });
         },
         constrainSuccessResult: async (subscriptions) => {
-          if (subscriptions.length === 0) {
-            return {
-              type: 'empty',
-              message:
-                'No Pulse Metric Subscriptions were found. Either none exist or you do not have permission to view them',
-            };
-          }
-
-          const { datasourceIds } = getConfig().boundedContext;
-
-          if (!datasourceIds) {
-            // No datasource IDs to filter by, return all subscriptions.
-            return {
-              type: 'success',
-              result: subscriptions,
-            };
-          }
-
-          const metricsResult = await useRestApi({
-            config,
-            requestId,
-            server,
-            jwtScopes: ['tableau:insight_metrics:read'],
-            callback: async (restApi) => {
-              return await restApi.pulseMethods.listPulseMetricsFromMetricIds(
-                subscriptions.map((subscription) => subscription.metric_id),
-              );
-            },
+          return await constrainPulseMetricSubscriptions({
+            subscriptions,
+            boundedContext: config.boundedContext,
+            restApiArgs: { config, requestId, server },
           });
-
-          if (metricsResult.isErr()) {
-            return {
-              type: 'error',
-              message: [
-                'The set of allowed Pulse Metric Subscriptions that can be queried is limited by the server configuration.',
-                'While Pulse Metric Subscriptions were found, retrieving information about them to determine if they are allowed to be viewed failed.',
-              ].join(' '),
-            };
-          }
-
-          const allowedMetricIds = new Set(
-            metricsResult.value
-              .filter((metric) => datasourceIds.has(metric.datasource_luid))
-              .map((metric) => metric.id),
-          );
-
-          subscriptions = subscriptions.filter((subscription) =>
-            allowedMetricIds.has(subscription.metric_id),
-          );
-
-          if (subscriptions.length === 0) {
-            return {
-              type: 'empty',
-              message: [
-                'The set of allowed Pulse Metric Subscriptions that can be queried is limited by the server configuration.',
-                'While Pulse Metric Subscriptions were found, they were all filtered out by the server configuration.',
-              ].join(' '),
-            };
-          }
-
-          return {
-            type: 'success',
-            result: subscriptions,
-          };
         },
         getErrorText: getPulseDisabledError,
       });
@@ -119,3 +62,79 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
 
   return listPulseMetricSubscriptionsTool;
 };
+
+export async function constrainPulseMetricSubscriptions({
+  subscriptions,
+  boundedContext,
+  restApiArgs,
+}: {
+  subscriptions: Array<PulseMetricSubscription>;
+  boundedContext: BoundedContext;
+  restApiArgs: RestApiArgs;
+}): Promise<ConstrainedResult<Array<PulseMetricSubscription>>> {
+  if (subscriptions.length === 0) {
+    return {
+      type: 'empty',
+      message:
+        'No Pulse Metric Subscriptions were found. Either none exist or you do not have permission to view them',
+    };
+  }
+
+  const { datasourceIds } = boundedContext;
+
+  if (!datasourceIds) {
+    // No datasource IDs to filter by, return all subscriptions.
+    return {
+      type: 'success',
+      result: subscriptions,
+    };
+  }
+
+  const { config, requestId, server } = restApiArgs;
+  const metricsResult = await useRestApi({
+    config,
+    requestId,
+    server,
+    jwtScopes: ['tableau:insight_metrics:read'],
+    callback: async (restApi) => {
+      return await restApi.pulseMethods.listPulseMetricsFromMetricIds(
+        subscriptions.map((subscription) => subscription.metric_id),
+      );
+    },
+  });
+
+  if (metricsResult.isErr()) {
+    return {
+      type: 'error',
+      message: [
+        'The set of allowed Pulse Metric Subscriptions that can be queried is limited by the server configuration.',
+        'While Pulse Metric Subscriptions were found, retrieving information about them to determine if they are allowed to be viewed failed.',
+      ].join(' '),
+    };
+  }
+
+  const allowedMetricIds = new Set(
+    metricsResult.value
+      .filter((metric) => datasourceIds.has(metric.datasource_luid))
+      .map((metric) => metric.id),
+  );
+
+  subscriptions = subscriptions.filter((subscription) =>
+    allowedMetricIds.has(subscription.metric_id),
+  );
+
+  if (subscriptions.length === 0) {
+    return {
+      type: 'empty',
+      message: [
+        'The set of allowed Pulse Metric Subscriptions that can be queried is limited by the server configuration.',
+        'While Pulse Metric Subscriptions were found, they were all filtered out by the server configuration.',
+      ].join(' '),
+    };
+  }
+
+  return {
+    type: 'success',
+    result: subscriptions,
+  };
+}

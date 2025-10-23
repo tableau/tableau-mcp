@@ -5,7 +5,7 @@ import { useRestApi } from '../restApiInstance.js';
 import { Server } from '../server.js';
 
 type AllowedResult = { allowed: true } | { allowed: false; message: string };
-type RestApiArgs = {
+export type RestApiArgs = {
   config: Config;
   requestId: RequestId;
   server: Server;

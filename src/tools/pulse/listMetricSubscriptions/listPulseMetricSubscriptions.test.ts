@@ -4,17 +4,23 @@ import { Err, Ok } from 'ts-results-es';
 import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
-import { getListPulseMetricSubscriptionsTool } from './listPulseMetricSubscriptions.js';
+import {
+  constrainPulseMetricSubscriptions,
+  getListPulseMetricSubscriptionsTool,
+} from './listPulseMetricSubscriptions.js';
+import { getConfig } from '../../../config.js';
+import invariant from '../../../utils/invariant.js';
 
 const mockPulseMetrics = mockPulseMetricDefinitions.flatMap((definition) => definition.metrics);
 
 const mockPulseMetricSubscriptions: PulseMetricSubscription[] = [
   { id: '2FDE35F3-602E-43D9-981A-A2A5AC1DE7BD', metric_id: mockPulseMetrics[0].id },
-  { id: '2FDE35F3-602E-43D9-981A-A2A5AC1DE7BE', metric_id: mockPulseMetrics[1].id },
+  { id: '2FDE35F3-602E-43D9-981A-A2A5AC1DE7BE', metric_id: mockPulseMetrics[2].id },
 ];
 
 const mocks = vi.hoisted(() => ({
   mockListPulseMetricSubscriptionsForCurrentUser: vi.fn(),
+  mockListPulseMetricsFromMetricIds: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -23,6 +29,7 @@ vi.mock('../../../restApiInstance.js', () => ({
       pulseMethods: {
         listPulseMetricSubscriptionsForCurrentUser:
           mocks.mockListPulseMetricSubscriptionsForCurrentUser,
+        listPulseMetricsFromMetricIds: mocks.mockListPulseMetricsFromMetricIds,
       },
     }),
   ),
@@ -78,6 +85,77 @@ describe('listPulseMetricSubscriptionsTool', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
   });
+
+  describe('constrainPulseMetricSubscriptions', () => {
+    const restApiArgs = { config: getConfig(), requestId: 'request-id', server: getServer() };
+
+    it('should return empty result when no subscriptions are found', async () => {
+      const result = await constrainPulseMetricSubscriptions({
+        subscriptions: [],
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+        restApiArgs,
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        'No Pulse Metric Subscriptions were found. Either none exist or you do not have permission to view them',
+      );
+    });
+
+    it('should return empty results when all subscriptions were filtered out by the bounded context', async () => {
+      mocks.mockListPulseMetricsFromMetricIds.mockResolvedValue(
+        new Ok([mockPulseMetrics[0], mockPulseMetrics[1]]),
+      );
+
+      const result = await constrainPulseMetricSubscriptions({
+        subscriptions: mockPulseMetricSubscriptions,
+        boundedContext: { projectIds: null, datasourceIds: new Set(['123']), workbookIds: null },
+        restApiArgs,
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        [
+          'The set of allowed Pulse Metric Subscriptions that can be queried is limited by the server configuration.',
+          'While Pulse Metric Subscriptions were found, they were all filtered out by the server configuration.',
+        ].join(' '),
+      );
+    });
+
+    it('should return success result when no subscriptions were filtered out by the bounded context', async () => {
+      mocks.mockListPulseMetricsFromMetricIds.mockResolvedValue(
+        new Ok([mockPulseMetrics[0], mockPulseMetrics[1]]),
+      );
+
+      const result = await constrainPulseMetricSubscriptions({
+        subscriptions: mockPulseMetricSubscriptions,
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+        restApiArgs,
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toBe(mockPulseMetricSubscriptions);
+    });
+
+    it('should return success result when some subscriptions were filtered out by the bounded context', async () => {
+      mocks.mockListPulseMetricsFromMetricIds.mockResolvedValue(
+        new Ok([mockPulseMetrics[0], mockPulseMetrics[1]]),
+      );
+
+      const result = await constrainPulseMetricSubscriptions({
+        subscriptions: mockPulseMetricSubscriptions,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: new Set([mockPulseMetrics[0].datasource_luid]),
+          workbookIds: null,
+        },
+        restApiArgs,
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual([mockPulseMetricSubscriptions[0]]);
+    });
+  });
 });
 
 async function getToolResult(): Promise<CallToolResult> {
@@ -91,4 +169,10 @@ async function getToolResult(): Promise<CallToolResult> {
       sendRequest: vi.fn(),
     },
   );
+}
+
+function getServer(): InstanceType<typeof Server> {
+  const server = new Server();
+  server.tool = vi.fn();
+  return server;
 }
