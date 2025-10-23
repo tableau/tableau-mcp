@@ -5,28 +5,29 @@ sidebar_position: 6
 # Tool Scoping
 
 The Tableau MCP server can be configured to limit the scope of its tools to a set of data sources,
-workbooks, or projects. This applies both to:
+workbooks, or projects.
 
-1. Tools that query a specific data source, workbook, or view e.g. the
-   [Query Data Source](../../tools/data-qna/query-datasource.md) tool, and
-2. Tools that return a list of that content e.g. the
-   [List Data Sources](../../tools/data-qna/list-datasources.md) tool.
+Enabling tool scoping can cause:
+
+1. Tools to return an error if they are called with arguments that are not within the allowed scope,
+   and
+2. Tools to respond with results that have been filtered to only include content from the allowed
+   scope.
 
 ## Examples use-cases
 
 - Only allow clients to query a single data source with the
   [Query Data Source](../../tools/data-qna/query-datasource.md) tool. A client attempting to query
   any other data source will result in an error.
-- Scope the results of the [List Workbooks](../../tools/workbooks/list-workbooks.md) tool to only
-  workbooks that exist in a single project. A client calling this tool will only see workbooks that
-  exist in that project in its results.
+- Filter the results of the [List Workbooks](../../tools/workbooks/list-workbooks.md) tool to only
+  include workbooks that exist in a single project. Workbooks from other projects will not be
+  included in the results.
 
 ## Environment variables
 
-The following environment variables can be used to configure the tool scoping. They are all
-optional.
+The following optional environment variables can be used to configure the tool scoping.
 
-## `INCLUDE_PROJECT_IDS`
+### `INCLUDE_PROJECT_IDS`
 
 A comma-separated list of project IDs by which to constrain tool arguments and results. Only data
 sources and workbooks (or views from those workbooks) that are members of the provided projects can
@@ -38,6 +39,7 @@ be queried or will be included in the results of the tools.
   REST API or by the [List Data Sources](../../tools/data-qna/list-datasources.md),
   [List Workbooks](../../tools/workbooks/list-workbooks.md), and
   [List Views](../../tools/views/list-views.md) tools (assuming tool scoping is disabled).
+- Has no impact on the results of the Pulse-related tools.
 
 Example: `d87d843b-4326-4ce3-bc50-a68c1e6c9ca5`
 
@@ -54,7 +56,7 @@ Example: `d87d843b-4326-4ce3-bc50-a68c1e6c9ca5,861566`
 
 <hr />
 
-## `INCLUDE_DATASOURCE_IDS`
+### `INCLUDE_DATASOURCE_IDS`
 
 A comma-separated list of data source IDs by which to constrain tool arguments and results. Only
 data sources or Pulse metrics and definitions derived from those data sources can be queried or will
@@ -70,7 +72,7 @@ Example: `2d935df8-fe7e-4fd8-bb14-35eb4ba31d4`
 
 <hr />
 
-## `INCLUDE_WORKBOOK_IDS`
+### `INCLUDE_WORKBOOK_IDS`
 
 A comma-separated list of workbook IDs by which to constrain tool arguments and results. Only
 workbooks or views from those workbooks can be queried or will be included in the results of the
@@ -82,6 +84,7 @@ tools.
   REST API or the [List Workbooks](../../tools/workbooks/list-workbooks.md) tool (assuming tool
   scoping is disabled). The [List Views](../../tools/views/list-views.md) tools also return workbook
   IDs.
+- Has no impact on the results of the Pulse-related tools.
 
 Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
 
