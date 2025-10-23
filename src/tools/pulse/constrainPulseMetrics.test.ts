@@ -1,16 +1,9 @@
-import { randomUUID } from 'crypto';
-
 import invariant from '../../utils/invariant.js';
 import { constrainPulseMetrics } from './constrainPulseMetrics.js';
-import { mockPulseMetricDefinitions } from './listAllMetricDefinitions/listAllPulseMetricDefinitions.test.js';
+import { mockPulseMetricDefinitions } from './mockPulseMetricDefinitions.js';
 
 describe('constrainPulseMetrics', () => {
-  const mockPulseMetrics = mockPulseMetricDefinitions.flatMap((definition) =>
-    definition.metrics.map((metric) => ({
-      ...metric,
-      datasource_luid: randomUUID(),
-    })),
-  );
+  const mockPulseMetrics = mockPulseMetricDefinitions.flatMap((definition) => definition.metrics);
 
   it('should return empty result when no metrics are found', () => {
     const result = constrainPulseMetrics({
@@ -60,6 +53,10 @@ describe('constrainPulseMetrics', () => {
     });
 
     invariant(result.type === 'success');
-    expect(result.result).toEqual([mockPulseMetrics[0]]);
+    expect(result.result).toEqual(
+      mockPulseMetrics.filter(
+        (metric) => metric.datasource_luid === mockPulseMetrics[0].datasource_luid,
+      ),
+    );
   });
 });

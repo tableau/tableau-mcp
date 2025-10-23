@@ -1,47 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { randomUUID } from 'crypto';
 import { Err, Ok } from 'ts-results-es';
 
-import type { PulseMetricDefinition } from '../../../sdks/tableau/types/pulse.js';
-import {
-  createValidPulseMetric,
-  createValidPulseMetricDefinition,
-} from '../../../sdks/tableau/types/pulse.test.js';
 import { Server } from '../../../server.js';
-import { mockDatasources } from '../../listDatasources/mockDatasources.js';
+import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import { getListAllPulseMetricDefinitionsTool } from './listAllPulseMetricDefinitions.js';
-
-export const mockPulseMetricDefinitions: Array<PulseMetricDefinition> =
-  mockDatasources.datasources.map((datasource, index) =>
-    createValidPulseMetricDefinition({
-      metadata: {
-        name: `Pulse Metric ${index + 1}`,
-        id: randomUUID(),
-        description: `Pulse Metric ${index + 1} Description`,
-        schema_version: '1.0',
-        metric_version: 1,
-        definition_version: 1,
-      },
-      specification: {
-        datasource: {
-          id: datasource.id,
-        },
-        basic_specification: {
-          measure: { field: 'sales', aggregation: 'SUM' },
-          time_dimension: { field: 'order_date' },
-          filters: [],
-        },
-        is_running_total: false,
-      },
-      metrics: [1, 2].map((i) =>
-        createValidPulseMetric({
-          id: randomUUID(),
-          is_default: i === 1,
-          is_followed: i === 2,
-        }),
-      ),
-    }),
-  );
 
 const mocks = vi.hoisted(() => ({
   mockListAllPulseMetricDefinitions: vi.fn(),

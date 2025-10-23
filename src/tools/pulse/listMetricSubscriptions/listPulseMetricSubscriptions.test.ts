@@ -3,11 +3,14 @@ import { Err, Ok } from 'ts-results-es';
 
 import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import { getListPulseMetricSubscriptionsTool } from './listPulseMetricSubscriptions.js';
 
+const mockPulseMetrics = mockPulseMetricDefinitions.flatMap((definition) => definition.metrics);
+
 const mockPulseMetricSubscriptions: PulseMetricSubscription[] = [
-  { id: '2FDE35F3-602E-43D9-981A-A2A5AC1DE7BD', metric_id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C5' },
-  { id: '2FDE35F3-602E-43D9-981A-A2A5AC1DE7BE', metric_id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C6' },
+  { id: '2FDE35F3-602E-43D9-981A-A2A5AC1DE7BD', metric_id: mockPulseMetrics[0].id },
+  { id: '2FDE35F3-602E-43D9-981A-A2A5AC1DE7BE', metric_id: mockPulseMetrics[1].id },
 ];
 
 const mocks = vi.hoisted(() => ({

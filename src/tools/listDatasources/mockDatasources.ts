@@ -17,6 +17,14 @@ const datasources = [
       id: '4862efd9-3c24-4053-ae1f-18caf18b6ffe',
     },
   },
+  {
+    id: 'a6fc3c9f-4f40-4906-8db0-ac70c5fb5a11',
+    name: 'Sales Datasource',
+    project: {
+      name: 'Finance',
+      id: '4862efd9-3c24-4053-ae1f-18caf18b6ffe',
+    },
+  },
 ] satisfies Array<DataSource>;
 
 export const mockDatasources = {

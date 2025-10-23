@@ -1,7 +1,7 @@
 import invariant from '../../utils/invariant.js';
 import { mockDatasources } from '../listDatasources/mockDatasources.js';
 import { constrainPulseDefinitions } from './constrainPulseDefinitions.js';
-import { mockPulseMetricDefinitions } from './listAllMetricDefinitions/listAllPulseMetricDefinitions.test.js';
+import { mockPulseMetricDefinitions } from './mockPulseMetricDefinitions.js';
 
 describe('constrainPulseDefinitions', () => {
   it('should return empty result when no definitions are found', () => {
