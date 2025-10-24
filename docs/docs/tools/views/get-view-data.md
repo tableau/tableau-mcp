@@ -9,6 +9,8 @@ Retrieves data in comma separated value (CSV) format for the specified view in a
 ## APIs called
 
 - [Query View Data](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_view_data)
+- [Get View](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_view)
+  (if workbook or project [tool scoping](../../configuration/mcp-config/tool-scoping.md) is enabled)
 
 ## Required arguments
 

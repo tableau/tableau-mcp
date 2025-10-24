@@ -1,8 +1,12 @@
+import { BoundedContext } from '../../config.js';
 import {
   OrderBy,
   SearchContentFilter,
   SearchContentResponse,
 } from '../../sdks/tableau/types/contentExploration.js';
+import { ConstrainedResult } from '../tool.js';
+
+export type ReducedSearchContentResponse = Partial<Record<SearchItemContent, unknown>>;
 
 export function buildOrderByString(orderBy: OrderBy): string {
   const methodsUsed = new Set<string>();
@@ -74,8 +78,8 @@ export function buildFilterString(filter: SearchContentFilter): string {
 
 export function reduceSearchContentResponse(
   response: SearchContentResponse,
-): Array<Record<string, unknown>> {
-  const searchResults: Array<Record<string, unknown>> = [];
+): Array<ReducedSearchContentResponse> {
+  const searchResults: Array<ReducedSearchContentResponse> = [];
   if (response.items) {
     for (const item of response.items) {
       searchResults.push(getReducedSearchItemContent(item.content));
@@ -84,8 +88,46 @@ export function reduceSearchContentResponse(
   return searchResults;
 }
 
-function getReducedSearchItemContent(content: Record<string, any>): Record<string, unknown> {
-  const reducedContent: Record<string, unknown> = {};
+type SearchItemContent =
+  | 'caption'
+  | 'comments'
+  | 'connectedWorkbooksCount'
+  | 'connectionType'
+  | 'containerName'
+  | 'datasourceIsPublished'
+  | 'datasourceLuid'
+  | 'downstreamWorkbookCount'
+  | 'extractCreationPending'
+  | 'extractRefreshedAt'
+  | 'extractUpdatedAt'
+  | 'favoritesTotal'
+  | 'hasActiveDataQualityWarning'
+  | 'hasExtracts'
+  | 'hasSevereDataQualityWarning'
+  | 'hitsSmallSpanTotal'
+  | 'hitsTotal'
+  | 'isCertified'
+  | 'isConnectable'
+  | 'locationName'
+  | 'luid'
+  | 'modifiedTime'
+  | 'ownerId'
+  | 'ownerName'
+  | 'parentWorkbookName'
+  | 'projectId'
+  | 'projectName'
+  | 'sheetType'
+  | 'tags'
+  | 'title'
+  | 'totalViewCount'
+  | 'viewCountLastMonth'
+  | 'type'
+  | 'workbookDescription';
+
+function getReducedSearchItemContent(
+  content: Record<any, any>,
+): Partial<Record<SearchItemContent, unknown>> {
+  const reducedContent: ReducedSearchContentResponse = {};
   if (content.modifiedTime) {
     reducedContent.modifiedTime = content.modifiedTime;
   }
@@ -135,6 +177,9 @@ function getReducedSearchItemContent(content: Record<string, any>): Record<strin
   if (content.tags?.length) {
     reducedContent.tags = content.tags;
   }
+  if (content.projectId) {
+    reducedContent.projectId = content.projectId;
+  }
   if (content.projectName) {
     reducedContent.projectName = content.projectName;
   }
@@ -181,4 +226,78 @@ function getReducedSearchItemContent(content: Record<string, any>): Record<strin
     reducedContent.hasActiveDataQualityWarning = content.hasActiveDataQualityWarning;
   }
   return reducedContent;
+}
+
+export function constrainSearchContent({
+  items,
+  boundedContext,
+}: {
+  items: Array<ReducedSearchContentResponse>;
+  boundedContext: BoundedContext;
+}): ConstrainedResult<Array<ReducedSearchContentResponse>> {
+  if (items.length === 0) {
+    return {
+      type: 'empty',
+      message:
+        'No search results were found. Either none exist or you do not have permission to view them.',
+    };
+  }
+
+  const { projectIds, datasourceIds, workbookIds } = boundedContext;
+
+  if (projectIds) {
+    items = items.filter((item) => {
+      if (typeof item.projectId === 'number' && projectIds.has(item.projectId.toString())) {
+        // ⚠️ The Search API returns the project "id" (e.g. 861566)
+        // but the Project REST APIs return the project "LUID" and there is no good way to look up one from the other.
+        // Admins who want to use a project filter here will need to provide both the id and LUID in their bounded context.
+        return true;
+      }
+
+      return false;
+    });
+  }
+
+  if (datasourceIds) {
+    items = items.filter((item) => {
+      if (
+        (item.type === 'datasource' || item.type === 'unifieddatasource') &&
+        typeof item.datasourceLuid === 'string' &&
+        !datasourceIds.has(item.datasourceLuid)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  if (workbookIds) {
+    items = items.filter((item) => {
+      if (
+        item.type === 'workbook' &&
+        typeof item.luid === 'string' &&
+        !workbookIds.has(item.luid)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  if (items.length === 0) {
+    return {
+      type: 'empty',
+      message: [
+        'The set of allowed content that can be queried is limited by the server configuration.',
+        'While search results were found, they were all filtered out by the server configuration.',
+      ].join(' '),
+    };
+  }
+
+  return {
+    type: 'success',
+    result: items,
+  };
 }

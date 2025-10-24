@@ -9,6 +9,8 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user.
 ## APIs called
 
 - [List subscriptions](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#PulseSubscriptionService_ListSubscriptions)
+- [Batch list metrics](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#MetricQueryService_BatchGetMetricsByPost)
+  (if data source [tool scoping](../../configuration/mcp-config/tool-scoping.md) is enabled)
 
 ## Example result
 

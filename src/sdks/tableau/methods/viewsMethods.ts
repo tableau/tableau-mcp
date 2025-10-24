@@ -19,6 +19,19 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
   }
 
   /**
+   * Gets the details of a specific view.
+   *
+   * Required scopes: `tableau:content:read`
+   *
+   * @param {string} viewId The ID of the view to get.
+   * @param {string} siteId - The Tableau site ID
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_view
+   */
+  getView = async ({ viewId, siteId }: { viewId: string; siteId: string }): Promise<View> => {
+    return (await this._apiClient.getView({ params: { siteId, viewId }, ...this.authHeader })).view;
+  };
+
+  /**
    * Returns a specified view rendered as data in comma separated value (CSV) format.
    *
    * Required scopes: `tableau:views:download`

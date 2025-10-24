@@ -2,12 +2,13 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getConfig } from '../../config.js';
+import { BoundedContext, getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
+import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { Server } from '../../server.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
-import { Tool } from '../tool.js';
+import { ConstrainedResult, Tool } from '../tool.js';
 import { parseAndValidateDatasourcesFilterString } from './datasourcesFilterUtils.js';
 
 const paramsSchema = {
@@ -115,9 +116,51 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
 
           return new Ok(datasources);
         },
+        constrainSuccessResult: (datasources) =>
+          constrainDatasources({ datasources, boundedContext: config.boundedContext }),
       });
     },
   });
 
   return listDatasourcesTool;
 };
+
+export function constrainDatasources({
+  datasources,
+  boundedContext,
+}: {
+  datasources: Array<DataSource>;
+  boundedContext: BoundedContext;
+}): ConstrainedResult<Array<DataSource>> {
+  if (datasources.length === 0) {
+    return {
+      type: 'empty',
+      message:
+        'No datasources were found. Either none exist or you do not have permission to view them.',
+    };
+  }
+
+  const { projectIds, datasourceIds } = boundedContext;
+  if (projectIds) {
+    datasources = datasources.filter((datasource) => projectIds.has(datasource.project.id));
+  }
+
+  if (datasourceIds) {
+    datasources = datasources.filter((datasource) => datasourceIds.has(datasource.id));
+  }
+
+  if (datasources.length === 0) {
+    return {
+      type: 'empty',
+      message: [
+        'The set of allowed data sources that can be queried is limited by the server configuration.',
+        'While data sources were found, they were all filtered out by the server configuration.',
+      ].join(' '),
+    };
+  }
+
+  return {
+    type: 'success',
+    result: datasources,
+  };
+}

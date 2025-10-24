@@ -67,6 +67,7 @@ export const pulseMetricSchema = z.object({
   metric_version: z.coerce.number(),
   goals: pulseGoalsSchema.optional(),
   is_followed: z.boolean(),
+  datasource_luid: z.string(),
 });
 
 export const pulseRepresentationOptionsSchema = z.object({
@@ -338,6 +339,8 @@ export const pulseBundleResponseSchema = z.object({
     }),
   }),
 });
+
+export type PulseBundleResponse = z.infer<typeof pulseBundleResponseSchema>;
 
 export const pulseInsightBundleTypeEnum = ['ban', 'springboard', 'basic', 'detail'] as const;
 export type PulseInsightBundleType = (typeof pulseInsightBundleTypeEnum)[number];

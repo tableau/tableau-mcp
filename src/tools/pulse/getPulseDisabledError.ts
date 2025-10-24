@@ -1,4 +1,6 @@
-export function getPulseDisabledError(reason: 'tableau-server' | 'pulse-disabled'): string {
+import { PulseDisabledError } from '../../sdks/tableau/methods/pulseMethods.js';
+
+export function getPulseDisabledError(reason: PulseDisabledError): string {
   switch (reason) {
     case 'tableau-server':
       return [

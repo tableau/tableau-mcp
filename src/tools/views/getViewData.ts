@@ -1,14 +1,20 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
+import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
 const paramsSchema = {
   viewId: z.string(),
+};
+
+export type GetViewDataError = {
+  type: 'view-not-allowed';
+  message: string;
 };
 
 export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -25,10 +31,22 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
     callback: async ({ viewId }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
 
-      return await getViewDataTool.logAndExecute({
+      return await getViewDataTool.logAndExecute<string, GetViewDataError>({
         requestId,
         args: { viewId },
         callback: async () => {
+          const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
+            viewId,
+            restApiArgs: { config, requestId, server },
+          });
+
+          if (!isViewAllowedResult.allowed) {
+            return new Err({
+              type: 'view-not-allowed',
+              message: isViewAllowedResult.message,
+            });
+          }
+
           return new Ok(
             await useRestApi({
               config,
@@ -43,6 +61,18 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
               },
             }),
           );
+        },
+        constrainSuccessResult: (viewData) => {
+          return {
+            type: 'success',
+            result: viewData,
+          };
+        },
+        getErrorText: (error: GetViewDataError) => {
+          switch (error.type) {
+            case 'view-not-allowed':
+              return error.message;
+          }
         },
       });
     },

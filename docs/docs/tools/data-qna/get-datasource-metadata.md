@@ -10,6 +10,8 @@ Fetches field metadata for the specified datasource.
 
 - [Request data source metadata](https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/ReadMetadata)
 - [Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/index.html)
+- [Query Data Source](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source)
+  (if data source [tool scoping](../../configuration/mcp-config/tool-scoping.md) is enabled)
 
 ## Environment variables
 

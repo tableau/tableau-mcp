@@ -8,7 +8,7 @@ Retrieves a list of published Pulse metrics from a list of metric IDs.
 
 ## APIs called
 
-- [Batch list metrics](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#MetricQueryService_BatchGetMetrics)
+- [Batch list metrics](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#MetricQueryService_BatchGetMetricsByPost)
 
 ## Required arguments
 

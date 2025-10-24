@@ -7,7 +7,7 @@ import { pulseApis } from '../apis/pulseApi.js';
 import { Credentials } from '../types/credentials.js';
 import {
   pulseBundleRequestSchema,
-  pulseBundleResponseSchema,
+  PulseBundleResponse,
   PulseInsightBundleType,
   PulseMetric,
   PulseMetricDefinition,
@@ -139,7 +139,7 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
   generatePulseMetricValueInsightBundle = async (
     bundleRequest: z.infer<typeof pulseBundleRequestSchema>,
     bundleType: PulseInsightBundleType,
-  ): Promise<PulseResult<z.infer<typeof pulseBundleResponseSchema>>> => {
+  ): Promise<PulseResult<PulseBundleResponse>> => {
     return await guardAgainstPulseDisabled(async () => {
       const response = await this._apiClient.generatePulseMetricValueInsightBundle(
         { bundle_request: bundleRequest.bundle_request },
@@ -150,7 +150,8 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
   };
 }
 
-type PulseResult<T> = Result<T, 'tableau-server' | 'pulse-disabled'>;
+export type PulseDisabledError = 'tableau-server' | 'pulse-disabled';
+type PulseResult<T> = Result<T, PulseDisabledError>;
 async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise<PulseResult<T>> {
   try {
     return new Ok(await callback());

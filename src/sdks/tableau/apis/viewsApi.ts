@@ -5,6 +5,14 @@ import { paginationSchema } from '../types/pagination.js';
 import { viewSchema } from '../types/view.js';
 import { paginationParameters } from './paginationParameters.js';
 
+const getViewEndpoint = makeEndpoint({
+  method: 'get',
+  path: `/sites/:siteId/views/:viewId`,
+  alias: 'getView',
+  description: 'Gets the details of a specific view.',
+  response: z.object({ view: viewSchema }),
+});
+
 const queryViewDataEndpoint = makeEndpoint({
   method: 'get',
   path: `/sites/:siteId/views/:viewId/data`,
@@ -90,6 +98,7 @@ const queryViewsForSiteEndpoint = makeEndpoint({
 });
 
 const viewsApi = makeApi([
+  getViewEndpoint,
   queryViewDataEndpoint,
   queryViewImageEndpoint,
   queryViewsForWorkbookEndpoint,
