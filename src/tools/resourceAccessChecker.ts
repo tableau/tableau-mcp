@@ -4,6 +4,7 @@ import { BoundedContext, Config, getConfig } from '../config.js';
 import { useRestApi } from '../restApiInstance.js';
 import { Workbook } from '../sdks/tableau/types/workbook.js';
 import { Server } from '../server.js';
+import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
 type AllowedResult<T = unknown> =
   | { allowed: true; content?: T }
@@ -151,27 +152,38 @@ class ResourceAccessChecker {
     }
 
     if (this.allowedProjectIds) {
-      const datasourceProjectId = await useRestApi({
-        config,
-        requestId,
-        server,
-        jwtScopes: ['tableau:content:read'],
-        callback: async (restApi) => {
-          const datasource = await restApi.datasourcesMethods.queryDatasource({
-            siteId: restApi.siteId,
-            datasourceId: datasourceLuid,
-          });
+      try {
+        const datasourceProjectId = await useRestApi({
+          config,
+          requestId,
+          server,
+          jwtScopes: ['tableau:content:read'],
+          callback: async (restApi) => {
+            const datasource = await restApi.datasourcesMethods.queryDatasource({
+              siteId: restApi.siteId,
+              datasourceId: datasourceLuid,
+            });
 
-          return datasource.project.id;
-        },
-      });
+            return datasource.project.id;
+          },
+        });
 
-      if (!this.allowedProjectIds.has(datasourceProjectId)) {
+        if (!this.allowedProjectIds.has(datasourceProjectId)) {
+          return {
+            allowed: false,
+            message: [
+              'The set of allowed data sources that can be queried is limited by the server configuration.',
+              `The datasource with LUID ${datasourceLuid} cannot be queried because it does not belong to an allowed project.`,
+            ].join(' '),
+          };
+        }
+      } catch (error) {
         return {
           allowed: false,
           message: [
             'The set of allowed data sources that can be queried is limited by the server configuration.',
-            `The datasource with LUID ${datasourceLuid} cannot be queried because it does not belong to an allowed project.`,
+            `An error occurred while checking if the datasource with LUID ${datasourceLuid} is in an allowed project:`,
+            getExceptionMessage(error),
           ].join(' '),
         };
       }
@@ -204,27 +216,38 @@ class ResourceAccessChecker {
 
     let workbook: Workbook | undefined;
     if (this.allowedProjectIds) {
-      workbook = await useRestApi({
-        config,
-        requestId,
-        server,
-        jwtScopes: ['tableau:content:read'],
-        callback: async (restApi) => {
-          const workbook = await restApi.workbooksMethods.getWorkbook({
-            siteId: restApi.siteId,
-            workbookId,
-          });
+      try {
+        workbook = await useRestApi({
+          config,
+          requestId,
+          server,
+          jwtScopes: ['tableau:content:read'],
+          callback: async (restApi) => {
+            const workbook = await restApi.workbooksMethods.getWorkbook({
+              siteId: restApi.siteId,
+              workbookId,
+            });
 
-          return workbook;
-        },
-      });
+            return workbook;
+          },
+        });
 
-      if (!this.allowedProjectIds.has(workbook.project?.id ?? '')) {
+        if (!this.allowedProjectIds.has(workbook.project?.id ?? '')) {
+          return {
+            allowed: false,
+            message: [
+              'The set of allowed workbooks that can be queried is limited by the server configuration.',
+              `The workbook with LUID ${workbookId} cannot be queried because it does not belong to an allowed project.`,
+            ].join(' '),
+          };
+        }
+      } catch (error) {
         return {
           allowed: false,
           message: [
             'The set of allowed workbooks that can be queried is limited by the server configuration.',
-            `The workbook with LUID ${workbookId} cannot be queried because it does not belong to an allowed project.`,
+            `An error occurred while checking if the workbook with LUID ${workbookId} is in an allowed project:`,
+            getExceptionMessage(error),
           ].join(' '),
         };
       }
@@ -249,57 +272,79 @@ class ResourceAccessChecker {
     let viewProjectId = '';
 
     if (this.allowedWorkbookIds) {
-      const view = await useRestApi({
-        config,
-        requestId,
-        server,
-        jwtScopes: ['tableau:content:read'],
-        callback: async (restApi) => {
-          return await restApi.viewsMethods.getView({
-            siteId: restApi.siteId,
-            viewId,
-          });
-        },
-      });
+      try {
+        const view = await useRestApi({
+          config,
+          requestId,
+          server,
+          jwtScopes: ['tableau:content:read'],
+          callback: async (restApi) => {
+            return await restApi.viewsMethods.getView({
+              siteId: restApi.siteId,
+              viewId,
+            });
+          },
+        });
 
-      viewWorkbookId = view.workbook?.id ?? '';
-      viewProjectId = view.project?.id ?? '';
+        viewWorkbookId = view.workbook?.id ?? '';
+        viewProjectId = view.project?.id ?? '';
 
-      if (!this.allowedWorkbookIds.has(viewWorkbookId)) {
+        if (!this.allowedWorkbookIds.has(viewWorkbookId)) {
+          return {
+            allowed: false,
+            message: [
+              'The set of allowed workbooks that can be queried is limited by the server configuration.',
+              `The view with LUID ${viewId} cannot be queried because it does not belong to an allowed workbook.`,
+            ].join(' '),
+          };
+        }
+      } catch (error) {
         return {
           allowed: false,
           message: [
             'The set of allowed workbooks that can be queried is limited by the server configuration.',
-            `The view with LUID ${viewId} cannot be queried because it does not belong to an allowed workbook.`,
+            `An error occurred while checking if the workbook containing the view with LUID ${viewId} is in an allowed workbook:`,
+            getExceptionMessage(error),
           ].join(' '),
         };
       }
     }
 
     if (this.allowedProjectIds) {
-      viewProjectId =
-        viewProjectId ||
-        (await useRestApi({
-          config,
-          requestId,
-          server,
-          jwtScopes: ['tableau:content:read'],
-          callback: async (restApi) => {
-            const view = await restApi.viewsMethods.getView({
-              siteId: restApi.siteId,
-              viewId,
-            });
+      try {
+        viewProjectId =
+          viewProjectId ||
+          (await useRestApi({
+            config,
+            requestId,
+            server,
+            jwtScopes: ['tableau:content:read'],
+            callback: async (restApi) => {
+              const view = await restApi.viewsMethods.getView({
+                siteId: restApi.siteId,
+                viewId,
+              });
 
-            return view.project?.id ?? '';
-          },
-        }));
+              return view.project?.id ?? '';
+            },
+          }));
 
-      if (!this.allowedProjectIds.has(viewProjectId)) {
+        if (!this.allowedProjectIds.has(viewProjectId)) {
+          return {
+            allowed: false,
+            message: [
+              'The set of allowed views that can be queried is limited by the server configuration.',
+              `The view with LUID ${viewId} cannot be queried because it does not belong to an allowed project.`,
+            ].join(' '),
+          };
+        }
+      } catch (error) {
         return {
           allowed: false,
           message: [
             'The set of allowed views that can be queried is limited by the server configuration.',
-            `The view with LUID ${viewId} cannot be queried because it does not belong to an allowed project.`,
+            `An error occurred while checking if the workbook containing the view with LUID ${viewId} is in an allowed project:`,
+            getExceptionMessage(error),
           ].join(' '),
         };
       }
