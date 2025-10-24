@@ -55,10 +55,13 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
               server,
               jwtScopes: ['tableau:content:read'],
               callback: async (restApi) => {
-                const workbook = await restApi.workbooksMethods.getWorkbook({
-                  workbookId,
-                  siteId: restApi.siteId,
-                });
+                // Notice that we already have the workbook if it had been allowed by a project scope.
+                const workbook =
+                  isWorkbookAllowedResult.content ??
+                  (await restApi.workbooksMethods.getWorkbook({
+                    workbookId,
+                    siteId: restApi.siteId,
+                  }));
 
                 // The views returned by the getWorkbook API do not include usage statistics.
                 // Query the views for the workbook to get each view's usage statistics.

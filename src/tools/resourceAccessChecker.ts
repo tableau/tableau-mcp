@@ -2,9 +2,13 @@ import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { BoundedContext, Config, getConfig } from '../config.js';
 import { useRestApi } from '../restApiInstance.js';
+import { Workbook } from '../sdks/tableau/types/workbook.js';
 import { Server } from '../server.js';
 
-type AllowedResult = { allowed: true } | { allowed: false; message: string };
+type AllowedResult<T = unknown> =
+  | { allowed: true; content?: T }
+  | { allowed: false; message: string };
+
 export type RestApiArgs = {
   config: Config;
   requestId: RequestId;
@@ -17,7 +21,7 @@ class ResourceAccessChecker {
   private _allowedWorkbookIds: Set<string> | null | undefined;
 
   private readonly _cachedDatasourceIds: Map<string, AllowedResult>;
-  private readonly _cachedWorkbookIds: Map<string, AllowedResult>;
+  private readonly _cachedWorkbookIds: Map<string, AllowedResult<Workbook>>;
   private readonly _cachedViewIds: Map<string, AllowedResult>;
 
   static create(): ResourceAccessChecker {
@@ -90,7 +94,7 @@ class ResourceAccessChecker {
   }: {
     workbookId: string;
     restApiArgs: RestApiArgs;
-  }): Promise<AllowedResult> {
+  }): Promise<AllowedResult<Workbook>> {
     const result = await this._isWorkbookAllowed({
       workbookId,
       restApiArgs,
@@ -182,7 +186,7 @@ class ResourceAccessChecker {
   }: {
     workbookId: string;
     restApiArgs: RestApiArgs;
-  }): Promise<AllowedResult> {
+  }): Promise<AllowedResult<Workbook>> {
     const cachedResult = this._cachedWorkbookIds.get(workbookId);
     if (cachedResult) {
       return cachedResult;
@@ -198,8 +202,9 @@ class ResourceAccessChecker {
       };
     }
 
+    let workbook: Workbook | undefined;
     if (this.allowedProjectIds) {
-      const workbookProjectId = await useRestApi({
+      workbook = await useRestApi({
         config,
         requestId,
         server,
@@ -210,11 +215,11 @@ class ResourceAccessChecker {
             workbookId,
           });
 
-          return workbook.project?.id ?? '';
+          return workbook;
         },
       });
 
-      if (!this.allowedProjectIds.has(workbookProjectId)) {
+      if (!this.allowedProjectIds.has(workbook.project?.id ?? '')) {
         return {
           allowed: false,
           message: [
@@ -225,7 +230,7 @@ class ResourceAccessChecker {
       }
     }
 
-    return { allowed: true };
+    return { allowed: true, content: workbook };
   }
 
   private async _isViewAllowed({

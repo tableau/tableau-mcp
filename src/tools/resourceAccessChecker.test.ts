@@ -239,14 +239,14 @@ describe('ResourceAccessChecker', () => {
             workbookId: mockWorkbook.id,
             restApiArgs,
           }),
-        ).toEqual({ allowed: true });
+        ).toEqual({ allowed: true, content: mockWorkbook });
 
         expect(
           await resourceAccessChecker.isWorkbookAllowed({
             workbookId: mockWorkbook.id,
             restApiArgs,
           }),
-        ).toEqual({ allowed: true });
+        ).toEqual({ allowed: true, content: mockWorkbook });
 
         // Since project filtering is enabled, we cannot cache the result so we need to call the "Get Workbook" API each time.
         expect(mocks.mockGetWorkbook).toHaveBeenCalledTimes(2);
@@ -266,14 +266,14 @@ describe('ResourceAccessChecker', () => {
             workbookId: mockWorkbook.id,
             restApiArgs,
           }),
-        ).toEqual({ allowed: true });
+        ).toEqual({ allowed: true, content: mockWorkbook });
 
         expect(
           await resourceAccessChecker.isWorkbookAllowed({
             workbookId: mockWorkbook.id,
             restApiArgs,
           }),
-        ).toEqual({ allowed: true });
+        ).toEqual({ allowed: true, content: mockWorkbook });
 
         // Since project filtering is enabled, we cannot cache the result so we need to call the "Get Workbook" API each time.
         expect(mocks.mockGetWorkbook).toHaveBeenCalledTimes(2);
