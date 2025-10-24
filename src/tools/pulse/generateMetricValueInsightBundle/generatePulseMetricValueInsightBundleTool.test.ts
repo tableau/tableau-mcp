@@ -222,9 +222,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toBe(
       [
-        'The set of allowed data sources that can be queried is limited by the server configuration.',
-        "Generating the Pulse Metric Value Insight Bundle is not allowed because its definition's datasource",
-        'with LUID A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11 is not in the allowed set of data sources.',
+        'The set of allowed metric insights that can be queried is limited by the server configuration.',
+        'Generating the Pulse Metric Value Insight Bundle is not allowed because the definition is derived from the',
+        'data source with LUID A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11, which is not in the allowed set of data sources.',
       ].join(' '),
     );
 
