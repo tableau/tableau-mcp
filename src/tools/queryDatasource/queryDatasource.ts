@@ -12,6 +12,7 @@ import {
   TableauError,
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/schemas.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { Tool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
@@ -52,10 +53,14 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
       openWorldHint: false,
     },
     argsValidator: validateQuery,
-    callback: async ({ datasourceLuid, query }, { requestId }): Promise<CallToolResult> => {
+    callback: async (
+      { datasourceLuid, query },
+      { requestId, authInfo },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
+        authInfo,
         args: { datasourceLuid, query },
         callback: async () => {
           const datasource: Datasource = { datasourceLuid };
@@ -81,6 +86,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             requestId,
             server,
             jwtScopes: ['tableau:viz_data_service:read'],
+            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               if (!config.disableQueryDatasourceFilterValidation) {
                 // Validate filters values for SET and MATCH filters
