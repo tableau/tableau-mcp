@@ -14,15 +14,19 @@ const mockReadMetadataResponses = vi.hoisted(() => ({
       {
         fieldName: 'Calculation_123456789',
         fieldCaption: 'Profit Ratio',
+        columnClass: 'CALCULATION',
         dataType: 'REAL',
         defaultAggregation: 'SUM',
         logicalTableId: '',
+        formula: 'SUM([Profit])/SUM([Sales])',
       },
       {
         fieldName: 'Product Name',
         fieldCaption: 'Product Name',
         dataType: 'STRING',
+        defaultAggregation: 'COUNT',
         logicalTableId: 'Orders_123456789',
+        columnClass: 'COLUMN',
       },
       {
         fieldName: 'Quantity',
@@ -30,8 +34,49 @@ const mockReadMetadataResponses = vi.hoisted(() => ({
         dataType: 'INTEGER',
         defaultAggregation: 'SUM',
         logicalTableId: 'Orders_123456789',
+        columnClass: 'COLUMN',
       },
     ],
+    extraData: {
+      parameters: [
+        {
+          parameterType: 'QUANTITATIVE_DATE',
+          parameterName: 'Parameter 1',
+          parameterCaption: 'Test Date',
+          dataType: 'DATE',
+          value: '2025-10-17',
+          minDate: '2024-01-01',
+          maxDate: '2026-01-01',
+          periodType: null,
+          periodValue: null,
+        },
+        {
+          parameterType: 'QUANTITATIVE_RANGE',
+          parameterName: 'Parameter 2',
+          parameterCaption: 'Test Float',
+          dataType: 'REAL',
+          value: 2.5,
+          min: 1.5,
+          max: null,
+          step: 1,
+        },
+        {
+          parameterType: 'LIST',
+          parameterName: 'Parameter 3',
+          parameterCaption: 'Test Int',
+          dataType: 'INTEGER',
+          value: 1,
+          members: [1, 2, 3],
+        },
+        {
+          parameterType: 'ANY_VALUE',
+          parameterName: 'Parameter 4',
+          parameterCaption: 'Test String',
+          dataType: 'STRING',
+          value: 'Hello World!',
+        },
+      ],
+    },
   },
   empty: {
     data: [],
@@ -238,6 +283,40 @@ describe('getDatasourceMetadataTool', () => {
           defaultFormat: '#,##0',
         },
       ],
+      parameters: [
+        {
+          dataType: 'DATE',
+          maxDate: '2026-01-01',
+          minDate: '2024-01-01',
+          name: 'Test Date',
+          parameterType: 'QUANTITATIVE_DATE',
+          periodType: null,
+          periodValue: null,
+          value: '2025-10-17',
+        },
+        {
+          dataType: 'REAL',
+          min: 1.5,
+          max: null,
+          step: 1,
+          name: 'Test Float',
+          parameterType: 'QUANTITATIVE_RANGE',
+          value: 2.5,
+        },
+        {
+          dataType: 'INTEGER',
+          members: [1, 2, 3],
+          name: 'Test Int',
+          parameterType: 'LIST',
+          value: 1,
+        },
+        {
+          dataType: 'STRING',
+          name: 'Test String',
+          parameterType: 'ANY_VALUE',
+          value: 'Hello World!',
+        },
+      ],
     });
 
     expect(mocks.mockReadMetadata).toHaveBeenCalledWith({
@@ -258,6 +337,7 @@ describe('getDatasourceMetadataTool', () => {
     const responseData = JSON.parse(result.content[0].text as string);
     expect(responseData).toEqual({
       fields: [],
+      parameters: [],
     });
   });
 
@@ -315,6 +395,7 @@ describe('getDatasourceMetadataTool', () => {
           role: 'DIMENSION',
         },
       ],
+      parameters: [],
     });
   });
 
@@ -334,6 +415,8 @@ describe('getDatasourceMetadataTool', () => {
           name: 'Profit Ratio',
           dataType: 'REAL',
           defaultAggregation: 'SUM',
+          columnClass: 'CALCULATION',
+          formula: 'SUM([Profit])/SUM([Sales])',
         },
         {
           name: 'Product Name',
@@ -343,6 +426,40 @@ describe('getDatasourceMetadataTool', () => {
           name: 'Quantity',
           dataType: 'INTEGER',
           defaultAggregation: 'SUM',
+        },
+      ],
+      parameters: [
+        {
+          dataType: 'DATE',
+          maxDate: '2026-01-01',
+          minDate: '2024-01-01',
+          name: 'Test Date',
+          parameterType: 'QUANTITATIVE_DATE',
+          periodType: null,
+          periodValue: null,
+          value: '2025-10-17',
+        },
+        {
+          dataType: 'REAL',
+          min: 1.5,
+          max: null,
+          step: 1,
+          name: 'Test Float',
+          parameterType: 'QUANTITATIVE_RANGE',
+          value: 2.5,
+        },
+        {
+          dataType: 'INTEGER',
+          members: [1, 2, 3],
+          name: 'Test Int',
+          parameterType: 'LIST',
+          value: 1,
+        },
+        {
+          dataType: 'STRING',
+          name: 'Test String',
+          parameterType: 'ANY_VALUE',
+          value: 'Hello World!',
         },
       ],
     });

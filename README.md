@@ -44,3 +44,52 @@ Standard config works in most MCP clients:
 ## Deploy to Heroku
 
 [![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://www.heroku.com/deploy?template=https://github.com/tableau/tableau-mcp)
+
+## Example Prompts to Client
+
+#### Prompt #1: Querying Data
+
+```
+For the Superstore Datasource, what are the top 5 states with the most sales in 2025?
+```
+
+#### Response
+
+```
+Based on the Superstore Datasource, here are the top 5 states with the most sales in 2025:
+  1. California - $146,388.34
+  2. New York - $93,922.99
+  3. Washington - $65,539.90
+  4. Texas - $43,421.76
+  5. Pennsylvania - $42,688.31
+California leads by a significant margin with over $146,000 in sales, followed by New York with nearly $94,000. These two states alone account for a substantial portion of the total sales across the top 5 states.
+```
+
+#### Prompt #2: Content Exploration
+
+```
+Find me the most viewed workbook within the last year.
+```
+
+#### Response
+
+```
+The most viewed workbook within the last year is:
+
+Global Connections
+- Owner: John Doe
+- Project: Marketing
+- Views in last year: 523
+- Last Modified: September 2, 2025
+- Workbook ID: 111fb672-9401-4913-a167-17b3d89a3e4f
+```
+
+#### Prompt #3: Getting a View
+
+```
+Show me an image of the "Economy" view in the "Finances" project.
+```
+
+#### Response
+
+![Economy View Image](docs/static/img/economy-view.png)
