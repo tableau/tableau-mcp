@@ -97,7 +97,7 @@ describe('listViewsTool', () => {
       );
     });
 
-    it('should return success result when no datasources were filtered out by the bounded context', () => {
+    it('should return success result when no views were filtered out by the bounded context', () => {
       const result = constrainViews({
         views: mockViews.views,
         boundedContext: {
@@ -111,7 +111,7 @@ describe('listViewsTool', () => {
       expect(result.result).toBe(mockViews.views);
     });
 
-    it('should return success result when some datasources were filtered out by the bounded context', () => {
+    it('should return success result when some views were filtered out by the bounded context', () => {
       const result = constrainViews({
         views: mockViews.views,
         boundedContext: {
