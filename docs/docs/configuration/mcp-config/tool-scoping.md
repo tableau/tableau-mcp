@@ -89,5 +89,3 @@ tools.
 Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
 
 <hr />
-
-[cors]: https://expressjs.com/en/resources/middleware/cors.html#configuration-options
