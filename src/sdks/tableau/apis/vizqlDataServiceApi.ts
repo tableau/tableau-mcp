@@ -141,24 +141,31 @@ export type TableauError = z.infer<typeof TableauError>;
 
 const SortDirection = z.enum(['ASC', 'DESC']);
 
+// Field schemas
 const FieldBase = z.object({
   fieldCaption: z.string(),
   fieldAlias: z.string().optional(),
-  maxDecimalPlaces: z.number().int().optional(),
+  maxDecimalPlaces: z.number().int().gte(0).optional(),
   sortDirection: SortDirection.optional(),
   sortPriority: z.number().int().optional(),
 });
 
-export const Field = z.union([
-  FieldBase.strict(),
-  FieldBase.extend({ function: Function }).strict(),
-  FieldBase.extend({ calculation: z.string() }).strict(),
-]);
+const DimensionField = FieldBase.strict();
+const MeasureField = FieldBase.extend({ function: Function }).strict();
+const CalculatedField = FieldBase.extend({ calculation: z.string() }).strict();
+const BinField = FieldBase.extend({ binSize: z.number().int().gte(0) }).strict();
+
+export const Field = z.union([DimensionField, MeasureField, CalculatedField, BinField]);
+
+// Filter schemas
+const DimensionFilterField = z.object({ fieldCaption: z.string() }).strict();
+const MeasureFilterField = z.object({ fieldCaption: z.string(), function: Function }).strict();
+const CalculatedFilterField = z.object({ calculation: z.string() }).strict();
 
 export const FilterField = z.union([
-  z.object({ fieldCaption: z.string() }).strict(),
-  z.object({ fieldCaption: z.string(), function: Function }).strict(),
-  z.object({ calculation: z.string() }).strict(),
+  DimensionFilterField,
+  MeasureFilterField,
+  CalculatedFilterField,
 ]);
 
 const FilterBase = z.object({
