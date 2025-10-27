@@ -9,8 +9,7 @@ workbooks, or projects.
 
 Enabling tool scoping can cause:
 
-1. Tools to return an error if they are called with arguments that are not within the allowed scope,
-   and
+1. Tools to return an error if they are called with arguments that are not within the allowed scope.
 2. Tools to respond with results that have been filtered to only include content from the allowed
    scope.
 
@@ -67,6 +66,7 @@ be included in the results of the tools.
   [Query Data Sources](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources)
   REST API or the [List Data Sources](../../tools/data-qna/list-datasources.md) tool (assuming tool
   scoping is disabled).
+- Has no impact on tools that return information about workbooks or views.
 
 Example: `2d935df8-fe7e-4fd8-bb14-35eb4ba31d4`
 

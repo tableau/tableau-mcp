@@ -21,7 +21,6 @@ describe('PulseMetricDefinition schema', () => {
 
   it('rejects a PulseMetricDefinition with invalid metrics', () => {
     const data = createValidPulseMetricDefinition({
-      // is_default should be boolean
       // @ts-expect-error - is_default should be boolean
       metrics: [createValidPulseMetric({ is_default: 'yes' })],
       total_metrics: 1,
@@ -43,7 +42,6 @@ describe('PulseMetric schema', () => {
   });
 
   it('rejects a PulseMetric with non-boolean is_default', () => {
-    // is_default should be boolean
     // @ts-expect-error - is_default should be boolean
     const data = createValidPulseMetric({ is_default: 'yes' });
     expect(() => pulseMetricSchema.parse(data)).toThrow();
