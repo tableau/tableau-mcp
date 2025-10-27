@@ -147,13 +147,13 @@ const FieldBase = z.object({
   fieldAlias: z.string().optional(),
   maxDecimalPlaces: z.number().int().gte(0).optional(),
   sortDirection: SortDirection.optional(),
-  sortPriority: z.number().int().optional(),
+  sortPriority: z.number().int().gt(0).optional(),
 });
 
 const DimensionField = FieldBase.strict();
 const MeasureField = FieldBase.extend({ function: Function }).strict();
 const CalculatedField = FieldBase.extend({ calculation: z.string() }).strict();
-const BinField = FieldBase.extend({ binSize: z.number().int().gte(0) }).strict();
+const BinField = FieldBase.extend({ binSize: z.number().int().gt(0) }).strict();
 
 export const Field = z.union([DimensionField, MeasureField, CalculatedField, BinField]);
 
@@ -294,9 +294,15 @@ export const Filter = z.union([
   ...RelativeDateFilter.options,
 ]);
 
+const QueryParameter = z.object({
+  name: z.string(),
+  value: ParameterValue,
+});
+
 export const Query = z.strictObject({
   fields: z.array(Field),
   filters: z.array(Filter).optional(),
+  parameters: z.array(QueryParameter).optional(),
 });
 
 const QueryDatasourceOptions = QueryOptions.and(
