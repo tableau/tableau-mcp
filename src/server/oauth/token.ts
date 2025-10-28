@@ -76,6 +76,8 @@ export function token(
 
           // Verify PKCE
           const challengeFromVerifier = generateCodeChallenge(codeVerifier);
+          console.log('debug remove -- challengeFromVerifier', challengeFromVerifier);
+          console.log('debug remove -- authCode.codeChallenge', authCode.codeChallenge);
           if (challengeFromVerifier !== authCode.codeChallenge) {
             res.status(400).json({
               error: 'invalid_grant',
