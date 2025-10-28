@@ -63,6 +63,12 @@ describe('Tool', () => {
       requestId: '2',
       args: { param1: 'test' },
       callback,
+      constrainSuccessResult: (result) => {
+        return {
+          type: 'success',
+          result,
+        };
+      },
     });
 
     expect(result.isError).toBe(false);
@@ -88,6 +94,12 @@ describe('Tool', () => {
       requestId: '2',
       args: { param1: 'test' },
       callback,
+      constrainSuccessResult: (result) => {
+        return {
+          type: 'success',
+          result,
+        };
+      },
     });
 
     expect(result.isError).toBe(true);
@@ -103,6 +115,12 @@ describe('Tool', () => {
       requestId: '2',
       args,
       callback: vi.fn(),
+      constrainSuccessResult: (result) => {
+        return {
+          type: 'success',
+          result,
+        };
+      },
     });
 
     expect(mockParams.argsValidator).toHaveBeenCalledWith(args);
@@ -130,10 +148,85 @@ describe('Tool', () => {
       requestId: '2',
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok('test')),
+      constrainSuccessResult: (result) => {
+        return {
+          type: 'success',
+          result,
+        };
+      },
     });
 
     expect(result.isError).toBe(true);
     expect(result.content[0].type).toBe('text');
     expect(result.content[0].text).toBe('requestId: 2, error: Test error');
+  });
+
+  it('should constrain the success result', async () => {
+    const tool = new Tool(mockParams);
+    const successResult = { data: 'success' };
+
+    const result = await tool.logAndExecute({
+      requestId: '2',
+      args: { param1: 'test' },
+      callback: () => Promise.resolve(Ok(successResult)),
+      constrainSuccessResult: (result) => {
+        return {
+          type: 'success',
+          result: {
+            ...result,
+            additionalField: 'extra',
+          },
+        };
+      },
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].type).toBe('text');
+    expect(JSON.parse(result.content[0].text as string)).toEqual({
+      ...successResult,
+      additionalField: 'extra',
+    });
+  });
+
+  it('should return empty result when the constrained result is empty', async () => {
+    const tool = new Tool(mockParams);
+    const successResult = { data: 'success' };
+
+    const result = await tool.logAndExecute({
+      requestId: '2',
+      args: { param1: 'test' },
+      callback: () => Promise.resolve(Ok(successResult)),
+      constrainSuccessResult: (_result) => {
+        return {
+          type: 'empty',
+          message: 'No data found',
+        };
+      },
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.content[0].type).toBe('text');
+    expect(result.content[0].text).toBe('No data found');
+  });
+
+  it('should return error result when the constrained result is error', async () => {
+    const tool = new Tool(mockParams);
+    const successResult = { data: 'success' };
+
+    const result = await tool.logAndExecute({
+      requestId: '2',
+      args: { param1: 'test' },
+      callback: () => Promise.resolve(Ok(successResult)),
+      constrainSuccessResult: (_result) => {
+        return {
+          type: 'error',
+          message: 'An error occurred',
+        };
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].type).toBe('text');
+    expect(result.content[0].text).toBe('An error occurred');
   });
 });

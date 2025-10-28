@@ -3,7 +3,10 @@ import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../server.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
+import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata.js';
+
+const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
 
 const mockReadMetadataResponses = vi.hoisted(() => ({
   success: {
@@ -209,8 +212,14 @@ describe('getDatasourceMetadataTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Set default config for existing tests
+    resetResourceAccessCheckerSingleton();
     mocks.mockGetConfig.mockReturnValue({
       disableMetadataApiRequests: false,
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+      },
     });
   });
 
@@ -623,6 +632,11 @@ describe('getDatasourceMetadataTool', () => {
     // Configure to disable metadata API requests
     mocks.mockGetConfig.mockReturnValue({
       disableMetadataApiRequests: true,
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+      },
     });
 
     mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
@@ -671,6 +685,11 @@ describe('getDatasourceMetadataTool', () => {
     // Configure to disable metadata API requests
     mocks.mockGetConfig.mockReturnValue({
       disableMetadataApiRequests: true,
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+      },
     });
 
     const errorMessage = 'ReadMetadata API Error';
@@ -699,6 +718,28 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
+  });
+
+  it('should return data source not allowed error when datasource is not allowed', async () => {
+    mocks.mockGetConfig.mockReturnValue({
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: new Set(['some-other-datasource-luid']),
+        workbookIds: null,
+      },
+    });
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(
+      [
+        'The set of allowed data sources that can be queried is limited by the server configuration.',
+        'Querying the datasource with LUID test-luid is not allowed.',
+      ].join(' '),
+    );
+
+    expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
 });
