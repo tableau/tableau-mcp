@@ -72,6 +72,34 @@ describe('ResourceAccessChecker', () => {
 
         const resourceAccessChecker = createResourceAccessChecker({
           projectIds: new Set([mockDatasource.project.id]),
+          datasourceIds: null,
+          workbookIds: null,
+        });
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            restApiArgs,
+          }),
+        ).toEqual({ allowed: true });
+
+        expect(
+          await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: mockDatasource.id,
+            restApiArgs,
+          }),
+        ).toEqual({ allowed: true });
+
+        // Since project filtering is enabled, we cannot cache the result so we need to call the "Query Datasource" API each time.
+        expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
+      });
+
+      it('should return allowed when the datasource is allowed by the datasources in the bounded context and exists in a project that is allowed by the projects in the bounded context', async () => {
+        const mockDatasource = mockDatasources.datasources[0];
+        mocks.mockQueryDatasource.mockResolvedValue(mockDatasource);
+
+        const resourceAccessChecker = createResourceAccessChecker({
+          projectIds: new Set([mockDatasource.project.id]),
           datasourceIds: new Set([mockDatasource.id]),
           workbookIds: null,
         });
@@ -300,6 +328,22 @@ describe('ResourceAccessChecker', () => {
             `Querying the workbook with LUID ${mockWorkbook.id} is not allowed.`,
           ].join(' '),
         });
+
+        // Check again to exercise the cache.
+        expect(
+          await resourceAccessChecker.isWorkbookAllowed({
+            workbookId: mockWorkbook.id,
+            restApiArgs,
+          }),
+        ).toEqual({
+          allowed: false,
+          message: [
+            'The set of allowed workbooks that can be queried is limited by the server configuration.',
+            `Querying the workbook with LUID ${mockWorkbook.id} is not allowed.`,
+          ].join(' '),
+        });
+
+        expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
       });
 
       it('should return not allowed when the workbook is in a project that is not allowed by the projects in the bounded context', async () => {

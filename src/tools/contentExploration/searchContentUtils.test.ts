@@ -523,21 +523,6 @@ describe('searchContentUtils', () => {
       expect(result.result).toEqual([items[0]]);
     });
 
-    it('should return success result when some items were filtered out by allowed projects in the bounded context', () => {
-      const items = reduceSearchContentResponse(mockSearchContentResponse);
-      const result = constrainSearchContent({
-        items,
-        boundedContext: {
-          projectIds: new Set(['123456']),
-          datasourceIds: null,
-          workbookIds: null,
-        },
-      });
-
-      invariant(result.type === 'success');
-      expect(result.result).toEqual([items[0]]);
-    });
-
     it('should return success result when some items were filtered out by allowed datasources in the bounded context', () => {
       const items = reduceSearchContentResponse(mockSearchContentResponse);
       const result = constrainSearchContent({

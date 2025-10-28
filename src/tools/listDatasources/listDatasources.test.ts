@@ -91,7 +91,21 @@ describe('listDatasourcesTool', () => {
       expect(result.result).toBe(mockDatasources.datasources);
     });
 
-    it('should return success result when some datasources were filtered out by the bounded context', () => {
+    it('should return success result when some datasources were filtered out by a bounded context with a project filter', () => {
+      const result = constrainDatasources({
+        datasources: mockDatasources.datasources,
+        boundedContext: {
+          projectIds: new Set([mockDatasources.datasources[0].project.id]),
+          datasourceIds: null,
+          workbookIds: null,
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual([mockDatasources.datasources[0]]);
+    });
+
+    it('should return success result when some datasources were filtered out by a bounded context including both project and datasource filters', () => {
       const result = constrainDatasources({
         datasources: mockDatasources.datasources,
         boundedContext: {
