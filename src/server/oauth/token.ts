@@ -225,14 +225,16 @@ async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject)
     tableauServer: tokenData.server,
     tableauUserId: tokenData.user.id,
     iat: Math.floor(Date.now() / 1000),
-    exp: Date.now() + config.oauth.accessTokenTimeoutMs,
+    exp: Math.floor((Date.now() + config.oauth.accessTokenTimeoutMs) / 1000),
     aud: AUDIENCE,
     iss: config.oauth.issuer,
     ...(config.auth === 'oauth'
       ? {
           tableauAccessToken: tokenData.tokens.accessToken,
           tableauRefreshToken: tokenData.tokens.refreshToken,
-          tableauExpiresAt: Date.now() + tokenData.tokens.expiresInSeconds * 1000,
+          tableauExpiresAt: Math.floor(
+            (Date.now() + tokenData.tokens.expiresInSeconds * 1000) / 1000,
+          ),
         }
       : {}),
   });
