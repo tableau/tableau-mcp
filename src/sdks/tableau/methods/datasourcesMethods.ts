@@ -50,4 +50,28 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
       datasources: response.datasources.datasource ?? [],
     };
   };
+
+  /**
+   * Returns information about the specified data source.
+   *
+   * Required scopes: `tableau:content:read`
+   *
+   * @param siteId - The Tableau site ID
+   * @param datasourceId - The ID of the data source
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source
+   */
+  queryDatasource = async ({
+    siteId,
+    datasourceId,
+  }: {
+    siteId: string;
+    datasourceId: string;
+  }): Promise<DataSource> => {
+    return (
+      await this._apiClient.queryDatasource({
+        params: { siteId, datasourceId },
+        ...this.authHeader,
+      })
+    ).datasource;
+  };
 }
