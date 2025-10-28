@@ -98,6 +98,43 @@ tsm pending-changes apply
 
 <hr />
 
+### `OAUTH_CLIENT_ID_SECRET_PAIRS`
+
+A comma-separated list of client ID and secret pairs to be used for OAuth clients that require the
+use of the client credentials grant type.
+
+- Optional.
+- Example: `client1:secret1,client2:secret2`
+- Client IDs and secrets must be unique and cannot contain colons or commas.
+- The `/oauth/token` endpoint accepts client credentials in the request body or the authorization
+  header. If both are provided, the request body takes precedence.
+- When an access token is requested with the client credentials grant type:
+  - No refresh token is issued to the client.
+  - `AUTH` must not be set to `oauth` since there is no Tableau user associated with the access
+    token. The user context must come from the user who owns the
+    [Personal Access Token](authentication/pat) or from the value of the
+    [`JWT_SUB_CLAIM`](authentication/direct-trust#jwt_sub_claim) environment variable.
+
+Example `/oauth/token` request body:
+
+```json
+{
+  "grant_type": "client_credentials",
+  "client_id": "clientId",
+  "client_secret": "secret"
+}
+```
+
+Example `/oauth/token` request header:
+
+```
+Authorization: Basic Y2xpZW50SWQ6c2VjcmV0
+```
+
+Where `Y2xpZW50SWQ6c2VjcmV0` is the base64 encoding of `clientId:secret`.
+
+<hr />
+
 ### `OAUTH_JWE_PRIVATE_KEY`
 
 The RSA private key used to decrypt the OAuth access token.
