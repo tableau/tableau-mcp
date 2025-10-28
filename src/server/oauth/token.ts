@@ -303,18 +303,20 @@ function verifyClientCredentials({
   authorizationHeader: string | undefined;
 }): Result<{ clientId: string }, string> {
   if (!clientId && !clientSecret) {
-    if (!authorizationHeader) {
-      return Err('Authorization header is required');
-    }
+    if (required) {
+      if (!authorizationHeader) {
+        return Err('Authorization header is required');
+      }
 
-    const [type, credentials] = authorizationHeader.split(' ');
-    if (type !== 'Basic') {
-      return Err('Invalid authorization type');
-    }
+      const [type, credentials] = authorizationHeader.split(' ');
+      if (type !== 'Basic') {
+        return Err('Invalid authorization type');
+      }
 
-    [clientId, clientSecret] = Buffer.from(credentials, 'base64').toString().split(':');
-    if (!clientId || !clientSecret) {
-      return Err('Invalid client credentials');
+      [clientId, clientSecret] = Buffer.from(credentials, 'base64').toString().split(':');
+      if (!clientId || !clientSecret) {
+        return Err('Invalid client credentials');
+      }
     }
   }
 
