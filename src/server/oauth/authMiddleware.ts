@@ -3,6 +3,7 @@ import { KeyObject } from 'crypto';
 import express, { RequestHandler } from 'express';
 import { compactDecrypt } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
+import { fromError } from 'zod-validation-error';
 
 import { getConfig } from '../../config.js';
 import { AUDIENCE } from './provider.js';
@@ -125,9 +126,7 @@ async function verifyAccessToken(
     if (config.auth === 'oauth') {
       const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
       if (!mcpAccessToken.success) {
-        return Err(
-          `Invalid access token: ${mcpAccessToken.error.errors.map((e) => e.message).join(', ')}`,
-        );
+        return Err(`Invalid access token: ${fromError(mcpAccessToken.error).toString()}`);
       }
 
       const {
@@ -153,22 +152,22 @@ async function verifyAccessToken(
     } else {
       const mcpAccessToken = mcpAccessTokenUserOnlySchema.safeParse(payload);
       if (!mcpAccessToken.success) {
-        return Err(
-          `Invalid access token: ${mcpAccessToken.error.errors.map((e) => e.message).join(', ')}`,
-        );
+        return Err(`Invalid access token: ${fromError(mcpAccessToken.error).toString()}`);
       }
 
       const { tableauUserId, tableauServer, sub } = mcpAccessToken.data;
       authInfo = {
         username: sub,
-        userId: tableauUserId,
         server: tableauServer,
+        ...(tableauUserId ? { userId: tableauUserId } : {}),
       };
     }
 
     return Ok({
       token,
+      // TODO: Include the client ID in the access token
       clientId: 'mcp-client',
+      // TODO: Implement scopes
       scopes: ['read'],
       expiresAt: payload.exp,
       extra: authInfo,

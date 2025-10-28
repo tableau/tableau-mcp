@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import express from 'express';
 import { Err, Ok, Result } from 'ts-results-es';
+import { fromError } from 'zod-validation-error';
 
 import { getConfig } from '../../config.js';
 import RestApi from '../../sdks/tableau/restApi.js';
@@ -35,7 +36,7 @@ export function callback(
     if (!result.success) {
       res.status(400).json({
         error: 'invalid_request',
-        error_description: result.error.errors.map((e) => e.message).join(', '),
+        error_description: fromError(result.error).toString(),
       });
       return;
     }

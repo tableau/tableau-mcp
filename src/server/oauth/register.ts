@@ -63,9 +63,9 @@ export function register(app: express.Application): void {
     res.json({
       client_id: 'mcp-public-client',
       redirect_uris: validatedRedirectUris,
-      grant_types: ['authorization_code'],
+      grant_types: ['authorization_code', 'client_credentials'],
       response_types: ['code'],
-      token_endpoint_auth_method: 'none',
+      token_endpoint_auth_method: 'client_secret_basic',
       application_type: 'native',
     });
   });

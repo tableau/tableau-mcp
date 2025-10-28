@@ -24,6 +24,11 @@ export type PendingAuthorization = {
   tableauClientId: string;
 };
 
+export type ClientCredentials = {
+  clientId: string;
+  server: string;
+};
+
 export type UserAndTokens = {
   user: User;
   server: string;

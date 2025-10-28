@@ -57,6 +57,7 @@ export class Config {
     authzCodeTimeoutMs: number;
     accessTokenTimeoutMs: number;
     refreshTokenTimeoutMs: number;
+    clientIdSecretPairs: Record<string, string> | null;
   };
 
   constructor() {
@@ -86,6 +87,7 @@ export class Config {
       OAUTH_JWE_PRIVATE_KEY_PATH: oauthJwePrivateKeyPath,
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
       OAUTH_REDIRECT_URI: redirectUri,
+      OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
@@ -139,6 +141,13 @@ export class Config {
         minValue: 0,
         maxValue: ONE_YEAR_IN_MS,
       }),
+      clientIdSecretPairs: oauthClientIdSecretPairs
+        ? oauthClientIdSecretPairs.split(',').reduce<Record<string, string>>((acc, curr) => {
+            const [clientId, secret] = curr.split(':');
+            acc[clientId] = secret;
+            return acc;
+          }, {})
+        : null,
     };
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';

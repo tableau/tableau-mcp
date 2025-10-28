@@ -32,11 +32,13 @@ export const mcpTokenSchema = z
         code: requiredString('code'),
         redirect_uri: requiredString('redirect_uri'),
         code_verifier: requiredString('code_verifier'),
-        client_id: requiredString('client_id'),
       }),
       z.object({
         grant_type: z.literal('refresh_token'),
         refresh_token: requiredString('refresh_token'),
+      }),
+      z.object({
+        grant_type: z.literal('client_credentials'),
       }),
     ],
     {
@@ -48,20 +50,41 @@ export const mcpTokenSchema = z
       }),
     },
   )
+  .and(
+    z.object({
+      // Optional because client/secret pair may be provided in the request body instead of the query string
+      client_id: z.string().optional(),
+      client_secret: z.string().optional(),
+    }),
+  )
   .transform((data) => {
+    const { client_id, client_secret } = data;
+    const clientIdSecretPair = {
+      clientId: client_id,
+      clientSecret: client_secret,
+    };
+
     if (data.grant_type === 'authorization_code') {
       return {
         grantType: data.grant_type,
         code: data.code,
         redirectUri: data.redirect_uri,
         codeVerifier: data.code_verifier,
-        clientId: data.client_id,
+        ...clientIdSecretPair,
+      };
+    }
+
+    if (data.grant_type === 'refresh_token') {
+      return {
+        grantType: data.grant_type,
+        refreshToken: data.refresh_token,
+        ...clientIdSecretPair,
       };
     }
 
     return {
       grantType: data.grant_type,
-      refreshToken: data.refresh_token,
+      ...clientIdSecretPair,
     };
   });
 
@@ -74,13 +97,16 @@ export const callbackSchema = z.object({
 export const mcpAccessTokenUserOnlySchema = z.object({
   sub: requiredString('sub'),
   tableauServer: requiredString('tableauServer'),
-  tableauUserId: requiredString('tableauUserId'),
+  // Optional because there may not be a user associated with the access token, e.g. for client credentials grant type
+  tableauUserId: z.string().optional(),
 });
 
 export const mcpAccessTokenSchema = mcpAccessTokenUserOnlySchema.extend({
   tableauAccessToken: requiredString('tableauAccessToken'),
   tableauRefreshToken: requiredString('tableauRefreshToken'),
   tableauExpiresAt: z.number().int().nonnegative(),
+  // Required because it is always available when a user's Tableau access token is available
+  tableauUserId: requiredString('tableauUserId'),
 });
 
 export type McpAccessToken = z.infer<typeof mcpAccessTokenSchema>;

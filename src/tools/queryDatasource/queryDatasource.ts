@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { z } from 'zod';
+import { fromError } from 'zod-validation-error';
 
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
@@ -99,7 +100,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
 
                 if (filterValidationResult.isErr()) {
                   const errors = filterValidationResult.error;
-                  const errorMessage = errors.map((error) => error.message).join('\n\n');
+                  const errorMessage = fromError(errors).toString();
                   return new Err({
                     type: 'filter-validation',
                     message: errorMessage,

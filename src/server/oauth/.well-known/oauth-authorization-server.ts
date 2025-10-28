@@ -20,10 +20,10 @@ export function oauthAuthorizationServer(app: express.Application): void {
       token_endpoint: `${origin}/oauth/token`,
       registration_endpoint: `${origin}/oauth/register`,
       response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token'],
+      grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
       code_challenge_methods_supported: ['S256'],
       scopes_supported: ['mcp:tools:tableau:read'],
-      token_endpoint_auth_methods_supported: ['none'],
+      token_endpoint_auth_methods_supported: ['client_secret_basic'],
       subject_types_supported: ['public'],
     });
   });

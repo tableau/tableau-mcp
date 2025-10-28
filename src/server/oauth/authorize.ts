@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from 'crypto';
 import express from 'express';
+import { fromError } from 'zod-validation-error';
 
 import { getConfig } from '../../config.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
@@ -29,7 +30,7 @@ export function authorize(
     if (!result.success) {
       res.status(400).json({
         error: 'invalid_request',
-        error_description: result.error.errors.map((e) => e.message).join(', '),
+        error_description: fromError(result.error).toString(),
       });
       return;
     }
