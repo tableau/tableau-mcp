@@ -241,7 +241,7 @@ sequenceDiagram
     participant Tableau as Tableau Server<br/>(OAuth Authorization Server)
     participant User as User<br/>(Browser)
 
-    Note over Client, User: MCP OAuth 2.1 Flow with PKCE
+    Note over Client, User: MCP OAuth 2.1 Authentication Flows
 
     %% Step 1: Initial Request (401 Unauthorized)
     Client->>MCP: 1. Request to protected resource<br/>(no Bearer token)
@@ -259,50 +259,78 @@ sequenceDiagram
     Client->>MCP: 7. POST /oauth/register<br/>{redirect_uris}
     MCP->>Client: 8. Client registration response<br/>{client_id, redirect_uris,<br/>grant_types, response_types, token_endpoint_auth_method}
 
-    %% Step 5: Authorization Request with PKCE
-    Note over Client:Generate code_verifier and code_challenge (S256)
-    Client->>MCP: 9. GET /oauth/authorize?<br/>client_id=...<br />&redirect_uri=...<br />&response_type=code<br/>&code_challenge=...<br/>&code_challenge_method=S256<br/>&state=...
+    %% Choose Authentication Flow
+    Note over Client: Client chooses authentication method
 
-    Note over MCP: Generate tableauState, authKey<br/>Store pending authorization<br/>Generate tableauClientId
-    MCP->>Tableau: 10. Redirect to Tableau OAuth<br/>GET /oauth2/v1/auth?<br/>client_id=...<br/>&code_challenge=...<br/>&response_type=code<br/>&redirect_uri=/Callback<br/>&state=...<br/>&device_id=...<br/>&target_site=...<br/>&device_name=...<br/>&client_type=tableau-mcp
+    %% Authorization Code Flow (User Authentication Required)
+    alt Authorization Code Flow (Interactive)
+        rect rgb(240, 248, 255)
+            Note over Client, User: Authorization Code Flow (User Authentication Required)
 
-    %% User Authorization
-    Tableau->>User: 11. OAuth login page
-    User->>Tableau: 12. Enter credentials & authorize
-    Tableau->>MCP: 13. Redirect to /Callback<br/>?code=tableauAuthZCode<br/>&state=...
+            %% Step 5: Authorization Request with PKCE
+            Note over Client:Generate code_verifier and code_challenge (S256)
+            Client->>MCP: 9. GET /oauth/authorize?<br/>client_id=...<br />&redirect_uri=...<br />&response_type=code<br/>&code_challenge=...<br/>&code_challenge_method=S256<br/>&state=...
 
-    %% Step 6: OAuth Callback
-    Note over MCP: Validate state parameter<br/>Exchange Tableau authz code for tokens<br/>Get user session info
-    MCP->>Tableau: 14. POST /oauth2/v1/token<br/>{grant_type: "authorization_code",<br/>code: tableauAuthZCode,<br/>redirect_uri: /Callback,<br/>client_id: "...",<br/>code_verifier: "S256"}
-    Tableau->>MCP: 15. Token response<br/>{access_token, refresh_token, expires_in, origin_host}
+            Note over MCP: Generate tableauState, authKey<br/>Store pending authorization<br/>Generate tableauClientId
+            MCP->>Tableau: 10. Redirect to Tableau OAuth<br/>GET /oauth2/v1/auth?<br/>client_id=...<br/>&code_challenge=...<br/>&response_type=code<br/>&redirect_uri=/Callback<br/>&state=...<br/>&device_id=...<br/>&target_site=...<br/>&device_name=...<br/>&client_type=tableau-mcp
 
-    Note over MCP: get server session to verify authentication
-    MCP->>Tableau: 16. GET /api/3.26/sessions/current
+            %% User Authorization
+            Tableau->>User: 11. OAuth login page
+            User->>Tableau: 12. Enter credentials & authorize
+            Tableau->>MCP: 13. Redirect to /Callback<br/>?code=tableauAuthZCode<br/>&state=...
 
-    Note over MCP: Generate MCP authorization code<br/>Store authorization code with user info & tokens
-    MCP->>Client: 17. Redirect to client callback<br/>?code=mcpAuthCode<br/>&state=originalState
+            %% Step 6: OAuth Callback
+            Note over MCP: Validate state parameter<br/>Exchange Tableau authz code for tokens<br/>Get user session info
+            MCP->>Tableau: 14. POST /oauth2/v1/token<br/>{grant_type: "authorization_code",<br/>code: tableauAuthZCode,<br/>redirect_uri: /Callback,<br/>client_id: "...",<br/>code_verifier: "S256"}
+            Tableau->>MCP: 15. Token response<br/>{access_token, refresh_token, expires_in, origin_host}
 
-    %% Step 7: Token Exchange with PKCE Verification
-    Client->>MCP: 18. POST /oauth/token<br/>{grant_type: "authorization_code",<br/>code: mcpAuthCode,<br/>redirect_uri: ...,<br/>code_verifier: originalCodeVerifier,<br/>client_id: ...}
+            Note over MCP: get server session to verify authentication
+            MCP->>Tableau: 16. GET /api/3.26/sessions/current
 
-    Note over MCP: Verify PKCE code_verifier<br/>Generate JWE access token<br/>Store refresh token
-    MCP->>Client: 19. Token response<br/>{access_token: JWE,<br />token_type: "Bearer",<br/>expires_in: ...,<br />refresh_token: ...,<br/>scope: "read"}
+            Note over MCP: Generate MCP authorization code<br/>Store authorization code with user info & tokens
+            MCP->>Client: 17. Redirect to client callback<br/>?code=mcpAuthCode<br/>&state=originalState
+
+            %% Step 7: Token Exchange with PKCE Verification
+            Client->>MCP: 18. POST /oauth/token<br/>{grant_type: "authorization_code",<br/>code: mcpAuthCode,<br/>redirect_uri: ...,<br/>code_verifier: originalCodeVerifier,<br/>client_id: ...}
+
+            Note over MCP: Verify PKCE code_verifier<br/>Generate JWE access token<br/>Store refresh token
+            MCP->>Client: 19. Token response<br/>{access_token: JWE,<br />token_type: "Bearer",<br/>expires_in: ...,<br />refresh_token: ...,<br/>scope: "read"}
+        end
+    else Client Credentials Flow (Non-Interactive)
+        rect rgb(255, 248, 240)
+            Note over Client, MCP: Client Credentials Flow (No User Authentication Required)
+
+            %% Direct Token Request
+            Client->>MCP: 9. POST /oauth/token<br/>{grant_type: "client_credentials",<br/>client_id: "clientId",<br/>client_secret: "secret"}
+
+            Note over MCP: Verify client credentials<br/>Generate JWE access token<br/>(No refresh token issued)
+            MCP->>Client: 10. Token response<br/>{access_token: JWE,<br/>token_type: "Bearer",<br/>expires_in: ...,<br/>scope: "read"}
+
+            Note over Client, MCP: Alternative: Authorization Header
+            Client->>MCP: 11. POST /oauth/token<br/>{grant_type: "client_credentials"}<br/>Authorization: Basic Y2xpZW50SWQ6c2VjcmV0
+            MCP->>Client: 12. Token response<br/>{access_token: JWE,<br/>token_type: "Bearer",<br/>expires_in: ...,<br/>scope: "read"}
+        end
+    end
 
     %% Step 8: Authenticated MCP Requests
     Note over Client, MCP: Client can now make authenticated requests
     Client->>MCP: 20. Request to protected resource<br/>Authorization: Bearer JWE_TOKEN
-    Note over MCP: Decrypt JWE, validate JWT<br/>Extract Tableau tokens & user info
-    MCP->>Tableau: 21. API call using Tableau access token
+    Note over MCP: Decrypt JWE, validate JWT<br/>Extract Tableau tokens & user info (if auth_code)<br/>or use configured auth method (if client_credentials)
+    MCP->>Tableau: 21. API call using Tableau access token<br/>or configured auth method
     Tableau->>MCP: 22. API response
     MCP->>Client: 23. MCP response with data
 
-    %% Token Refresh Flow (when needed)
-    Note over Client, MCP: When access token expires
-    Client->>MCP: 24. POST /oauth/token<br/>{grant_type: "refresh_token",<br/>refresh_token: refreshTokenId}
-    Note over MCP: Validate refresh token<br/>Try to refresh Tableau tokens<br/>Generate new JWE access token
-    MCP->>Tableau: 25. POST /oauth2/v1/token<br/>{grant_type: "refresh_token",<br/>refresh_token: ...,<br/>client_id: ...}
-    Tableau->>MCP: 26. New token response (or error)
-    MCP->>Client: 27. New access token or error
+    %% Token Refresh Flow (Authorization Code only)
+    alt Token Refresh (Authorization Code Grant Only)
+        rect rgb(248, 255, 248)
+            Note over Client, MCP: Token Refresh Flow
+            Client->>MCP: 24. POST /oauth/token<br/>{grant_type: "refresh_token",<br/>refresh_token: refreshTokenId}
+            Note over MCP: Validate refresh token<br/>Try to refresh Tableau tokens<br/>Generate new JWE access token
+            MCP->>Tableau: 25. POST /oauth2/v1/token<br/>{grant_type: "refresh_token",<br/>refresh_token: ...,<br/>client_id: ...}
+            Tableau->>MCP: 26. New token response (or error)
+            MCP->>Client: 27. New access token or error
+        end
+    end
 
     %% Error Handling
     Note over Client, MCP: Error scenarios
@@ -310,6 +338,12 @@ sequenceDiagram
         Client->>MCP: Request with invalid token
         MCP->>Client: 401 Unauthorized<br/>{error: "invalid_token"}
         Note over Client: Client should refresh token or re-authenticate
+    end
+
+    alt Invalid Client Credentials
+        Client->>MCP: POST /oauth/token with invalid credentials
+        MCP->>Client: 401 Unauthorized<br/>{error: "invalid_client"}
+        Note over Client: Client should check credentials
     end
 
     alt Tableau API Error
@@ -321,26 +355,50 @@ sequenceDiagram
 
 ### Key Components
 
+#### Grant Types
+
+The MCP server supports three OAuth 2.1 grant types:
+
+1. **Authorization Code Grant** (with PKCE): Interactive flow requiring user authentication
+
+   - User must authenticate with Tableau Server
+   - Supports refresh tokens for long-term access
+   - Uses PKCE for security
+   - Suitable for interactive applications
+
+2. **Client Credentials Grant**: Non-interactive flow for service-to-service authentication
+
+   - No user authentication required
+   - No refresh tokens issued
+   - Uses pre-configured client ID/secret pairs
+   - Suitable for automated systems and APIs
+
+3. **Refresh Token Grant**: Used to obtain new access tokens
+   - Only available for authorization code grants
+   - Automatically refreshes Tableau tokens when possible
+   - Falls back to existing tokens if refresh fails
+
 #### Security Features
 
-- **PKCE (RFC 7636)**: Code challenge/verifier for public clients
+- **PKCE (RFC 7636)**: Code challenge/verifier for public clients (authorization code only)
 - **JWE Encryption**: Access tokens encrypted with RSA-OAEP-256/A256GCM
-- **State Validation**: Prevents CSRF attacks
+- **State Validation**: Prevents CSRF attacks (authorization code only)
 - **Time-limited Tokens**: Authorization codes (10 seconds), access tokens (1 hour), refresh tokens
   (30 days)
+- **Client Credential Verification**: Secure comparison using timing-safe operations
 
 #### Token Types
 
-1. **Tableau OAuth Tokens**: Direct from Tableau Server
-2. **MCP Authorization Code**: Short-lived code for token exchange
-3. **MCP Access Token**: JWE-encrypted token containing Tableau credentials
-4. **MCP Refresh Token**: For obtaining new access tokens
+1. **Tableau OAuth Tokens**: Direct from Tableau Server (authorization code only)
+2. **MCP Authorization Code**: Short-lived code for token exchange (authorization code only)
+3. **MCP Access Token**: JWE-encrypted token containing Tableau credentials or client info
+4. **MCP Refresh Token**: For obtaining new access tokens (authorization code only)
 
 #### Endpoints
 
 - `/.well-known/oauth-protected-resource`: Resource metadata discovery
 - `/.well-known/oauth-authorization-server`: Authorization server metadata
 - `/oauth/register`: Dynamic client registration
-- `/oauth/authorize`: Authorization endpoint with PKCE
-- `/Callback`: OAuth callback handler
-- `/oauth/token`: Token exchange and refresh
+- `/oauth/authorize`: Authorization endpoint with PKCE (authorization code only)
+- `/Callback`: OAuth callback handler (authorization code only)
+- `/oauth/token`: Token exchange and refresh (all grant types)
