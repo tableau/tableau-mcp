@@ -20,7 +20,7 @@ export interface ProcessEnvEx {
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
-  DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: string | undefined;
+  DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: string | undefined;
   DISABLE_METADATA_API_REQUESTS: string | undefined;
   ENABLE_SERVER_LOGGING: string | undefined;
   SERVER_LOG_DIRECTORY: string | undefined;

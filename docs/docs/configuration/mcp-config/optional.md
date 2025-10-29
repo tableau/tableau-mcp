@@ -160,7 +160,9 @@ If a tool has a `limit` parameter and returns an array of items, the maximum len
 
 <hr />
 
-## `DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION`
+## `DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`
+
+TODO: Update this
 
 Disable validation of SET and MATCH filter values in the
 [`query-datasource`](../../tools/data-qna/query-datasource.md) tool.
