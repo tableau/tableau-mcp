@@ -717,10 +717,12 @@ describe('Config', () => {
 
     const defaultOAuthConfig = {
       enabled: true,
+      clientIdSecretPairs: null,
       issuer: defaultOAuthEnvVars.OAUTH_ISSUER,
       redirectUri: `${defaultOAuthEnvVars.OAUTH_ISSUER}/Callback`,
       jwePrivateKey: '',
       jwePrivateKeyPath: defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH,
+      jwePrivateKeyPassphrase: undefined,
       ...defaultOAuthTimeoutMs,
     } as const;
 
@@ -734,9 +736,11 @@ describe('Config', () => {
       expect(config.oauth).toEqual({
         enabled: false,
         issuer: '',
+        clientIdSecretPairs: null,
         redirectUri: '',
         jwePrivateKey: '',
         jwePrivateKeyPath: '',
+        jwePrivateKeyPassphrase: undefined,
         ...defaultOAuthTimeoutMs,
       });
     });
