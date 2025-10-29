@@ -13,12 +13,16 @@ describe('OAuth', () => {
   beforeAll(setEnv);
   afterAll(resetEnv);
 
-  beforeEach(async () => {
+  beforeEach(() => {
     _server = undefined;
   });
 
   afterEach(async () => {
-    _server?.close();
+    return new Promise<void>((resolve) => {
+      _server?.close(() => {
+        resolve();
+      });
+    });
   });
 
   async function startServer(): Promise<{ app: express.Application }> {
@@ -80,56 +84,196 @@ describe('OAuth', () => {
     });
   });
 
-  it('should support the client credentials grant type', async () => {
-    const { app } = await startServer();
+  describe('client credentials grant type', () => {
+    it('should support the client credentials grant type', async () => {
+      const { app } = await startServer();
 
-    const response = await request(app).post('/oauth/token').send({
-      grant_type: 'client_credentials',
-      client_id: 'test-client-id',
-      client_secret: 'test-client-secret',
+      const response = await request(app).post('/oauth/token').send({
+        grant_type: 'client_credentials',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+      expect(response.body).toEqual({
+        access_token: expect.any(String),
+        token_type: 'Bearer',
+        expires_in: 3600,
+        scope: 'read',
+      });
     });
 
-    expect(response.status).toBe(200);
-    expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
-    expect(response.body).toEqual({
-      access_token: expect.any(String),
-      token_type: 'Bearer',
-      expires_in: 3600,
-      scope: 'read',
+    it('should reject invalid client credentials of the same length', async () => {
+      const { app } = await startServer();
+
+      const response = await request(app).post('/oauth/token').send({
+        grant_type: 'client_credentials',
+        client_id: 'test-client-id',
+        client_secret: 'test-cl1ent-secret',
+      });
+
+      expect(response.status).toBe(401);
+      expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+      expect(response.body).toEqual({
+        error: 'invalid_client',
+        error_description: 'Invalid client credentials',
+      });
+    });
+
+    it('should reject invalid client credentials of different lengths', async () => {
+      const { app } = await startServer();
+
+      const response = await request(app).post('/oauth/token').send({
+        grant_type: 'client_credentials',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret-123',
+      });
+
+      expect(response.status).toBe(401);
+      expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+      expect(response.body).toEqual({
+        error: 'invalid_client',
+        error_description: 'Invalid client credentials',
+      });
     });
   });
 
-  it('should reject invalid client credentials of the same length', async () => {
-    const { app } = await startServer();
+  describe('dynamic client registration', () => {
+    it('should support dynamic client registration', async () => {
+      const { app } = await startServer();
 
-    const response = await request(app).post('/oauth/token').send({
-      grant_type: 'client_credentials',
-      client_id: 'test-client-id',
-      client_secret: 'test-cl1ent-secret',
+      const response = await request(app)
+        .post('/oauth/register')
+        .send({
+          redirect_uris: ['https://example.com'],
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+      expect(response.body).toEqual({
+        client_id: 'mcp-public-client',
+        redirect_uris: ['https://example.com'],
+        grant_types: ['authorization_code', 'client_credentials'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'client_secret_basic',
+        application_type: 'native',
+      });
     });
 
-    expect(response.status).toBe(401);
-    expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
-    expect(response.body).toEqual({
-      error: 'invalid_client',
-      error_description: 'Invalid client credentials',
+    it('should support localhost over http', async () => {
+      const { app } = await startServer();
+
+      const response = await request(app)
+        .post('/oauth/register')
+        .send({
+          redirect_uris: ['http://localhost:3000'],
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+      expect(response.body).toEqual({
+        client_id: 'mcp-public-client',
+        redirect_uris: ['http://localhost:3000'],
+        grant_types: ['authorization_code', 'client_credentials'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'client_secret_basic',
+        application_type: 'native',
+      });
     });
-  });
 
-  it('should reject invalid client credentials of different lengths', async () => {
-    const { app } = await startServer();
+    it('should support 127.0.0.1 over http', async () => {
+      const { app } = await startServer();
 
-    const response = await request(app).post('/oauth/token').send({
-      grant_type: 'client_credentials',
-      client_id: 'test-client-id',
-      client_secret: 'test-client-secret-123',
+      const response = await request(app)
+        .post('/oauth/register')
+        .send({
+          redirect_uris: ['http://127.0.0.1:3000'],
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+      expect(response.body).toEqual({
+        client_id: 'mcp-public-client',
+        redirect_uris: ['http://127.0.0.1:3000'],
+        grant_types: ['authorization_code', 'client_credentials'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'client_secret_basic',
+        application_type: 'native',
+      });
     });
 
-    expect(response.status).toBe(401);
-    expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
-    expect(response.body).toEqual({
-      error: 'invalid_client',
-      error_description: 'Invalid client credentials',
+    it('should support custom schemes', async () => {
+      const { app } = await startServer();
+
+      const response = await request(app)
+        .post('/oauth/register')
+        .send({
+          redirect_uris: ['vscode://oauth/callback'],
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+      expect(response.body).toEqual({
+        client_id: 'mcp-public-client',
+        redirect_uris: ['vscode://oauth/callback'],
+        grant_types: ['authorization_code', 'client_credentials'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'client_secret_basic',
+        application_type: 'native',
+      });
+    });
+
+    it('should reject redirect URIs that are not strings', async () => {
+      const { app } = await startServer();
+
+      const response = await request(app)
+        .post('/oauth/register')
+        .send({
+          redirect_uris: [123],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+      expect(response.body).toEqual({
+        error: 'invalid_redirect_uri',
+        error_description: 'redirect_uris must be an array of strings',
+      });
+    });
+
+    it('should reject redirect URIs with invalid format', async () => {
+      const { app } = await startServer();
+
+      const response = await request(app)
+        .post('/oauth/register')
+        .send({
+          redirect_uris: ['🍔'],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+      expect(response.body).toEqual({
+        error: 'invalid_redirect_uri',
+        error_description: 'Invalid redirect URI format: 🍔',
+      });
+    });
+
+    it('should reject redirect URIs that are http but not localhost', async () => {
+      const { app } = await startServer();
+
+      const response = await request(app)
+        .post('/oauth/register')
+        .send({
+          redirect_uris: ['http://example.com'],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+      expect(response.body).toEqual({
+        error: 'invalid_redirect_uri',
+        error_description:
+          'Invalid redirect URI: http://example.com. HTTP URIs must be localhost or 127.0.0.1',
+      });
     });
   });
 });

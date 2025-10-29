@@ -32,10 +32,14 @@ export function register(app: express.Application): void {
           if (url.protocol === 'https:') {
             // Allow HTTPS URLs
             validatedRedirectUris.push(uri);
-          } else if (
-            url.protocol === 'http:' &&
-            (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
-          ) {
+          } else if (url.protocol === 'http:') {
+            if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
+              res.status(400).json({
+                error: 'invalid_redirect_uri',
+                error_description: `Invalid redirect URI: ${uri}. HTTP URIs must be localhost or 127.0.0.1`,
+              });
+              return;
+            }
             // Allow HTTP only for localhost
             validatedRedirectUris.push(uri);
           } else if (url.protocol.match(/^[a-zA-Z][a-zA-Z0-9+.-]*:$/)) {
