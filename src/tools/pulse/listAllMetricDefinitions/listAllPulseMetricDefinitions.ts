@@ -6,6 +6,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
+import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
@@ -60,6 +61,8 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
             },
           });
         },
+        constrainSuccessResult: (definitions) =>
+          constrainPulseDefinitions({ definitions, boundedContext: config.boundedContext }),
         getErrorText: getPulseDisabledError,
       });
     },

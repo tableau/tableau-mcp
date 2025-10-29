@@ -37,6 +37,18 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
         requestId,
         args: { url },
         callback: async () => {
+          // const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
+          //   viewId,
+          //   restApiArgs: { config, requestId, server },
+          // });
+
+          // if (!isViewAllowedResult.allowed) {
+          //   return new Err({
+          //     type: 'view-not-allowed',
+          //     message: isViewAllowedResult.message,
+          //   });
+          // }
+
           let parsedUrl: URL;
           try {
             parsedUrl = new URL(url);
@@ -115,6 +127,12 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
                 mimeType: 'image/png',
               },
             ],
+          };
+        },
+        constrainSuccessResult: (viewImage) => {
+          return {
+            type: 'success',
+            result: viewImage,
           };
         },
         getErrorText: (error: GetViewImageError) => {

@@ -1,14 +1,21 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
+import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
+import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
 const paramsSchema = {
   workbookId: z.string(),
+};
+
+export type GetWorkbookError = {
+  type: 'workbook-not-allowed';
+  message: string;
 };
 
 export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -25,10 +32,22 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
     callback: async ({ workbookId }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
 
-      return await getWorkbookTool.logAndExecute({
+      return await getWorkbookTool.logAndExecute<Workbook, GetWorkbookError>({
         requestId,
         args: { workbookId },
         callback: async () => {
+          const isWorkbookAllowedResult = await resourceAccessChecker.isWorkbookAllowed({
+            workbookId,
+            restApiArgs: { config, requestId, server },
+          });
+
+          if (!isWorkbookAllowedResult.allowed) {
+            return new Err({
+              type: 'workbook-not-allowed',
+              message: isWorkbookAllowedResult.message,
+            });
+          }
+
           return new Ok(
             await useRestApi({
               config,
@@ -36,10 +55,13 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
               server,
               jwtScopes: ['tableau:content:read'],
               callback: async (restApi) => {
-                const workbook = await restApi.workbooksMethods.getWorkbook({
-                  workbookId,
-                  siteId: restApi.siteId,
-                });
+                // Notice that we already have the workbook if it had been allowed by a project scope.
+                const workbook =
+                  isWorkbookAllowedResult.content ??
+                  (await restApi.workbooksMethods.getWorkbook({
+                    workbookId,
+                    siteId: restApi.siteId,
+                  }));
 
                 // The views returned by the getWorkbook API do not include usage statistics.
                 // Query the views for the workbook to get each view's usage statistics.
@@ -57,6 +79,18 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
               },
             }),
           );
+        },
+        constrainSuccessResult: (workbook) => {
+          return {
+            type: 'success',
+            result: workbook,
+          };
+        },
+        getErrorText: (error: GetWorkbookError) => {
+          switch (error.type) {
+            case 'workbook-not-allowed':
+              return error.message;
+          }
         },
       });
     },

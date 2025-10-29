@@ -39,6 +39,18 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
         requestId,
         args: { url, sheetName },
         callback: async () => {
+          // const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
+          //   viewId,
+          //   restApiArgs: { config, requestId, server },
+          // });
+
+          // if (!isViewAllowedResult.allowed) {
+          //   return new Err({
+          //     type: 'view-not-allowed',
+          //     message: isViewAllowedResult.message,
+          //   });
+          // }
+
           let parsedUrl: URL;
           try {
             parsedUrl = new URL(url);
@@ -151,6 +163,12 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
 
           fs.rmdirSync(downloadPath, { recursive: true });
           return Ok(fileContents);
+        },
+        constrainSuccessResult: (viewData) => {
+          return {
+            type: 'success',
+            result: viewData,
+          };
         },
         getErrorText: (error: GetViewDataError) => {
           return JSON.stringify({

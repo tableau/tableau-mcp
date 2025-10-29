@@ -4,7 +4,8 @@ import dotenv from 'dotenv';
 import express from 'express';
 
 import { getConfig } from './config.js';
-import { isLoggingLevel, log, setLogLevel, writeToStderr } from './logging/log.js';
+import { isLoggingLevel, log, setLogLevel, setServerLogger, writeToStderr } from './logging/log.js';
+import { ServerLogger } from './logging/serverLogger.js';
 import { Server, serverName, serverVersion } from './server.js';
 import { startExpressServer } from './server/express.js';
 import { embedHtml } from './tools/views/embed.html.js';
@@ -15,6 +16,9 @@ async function startServer(): Promise<void> {
   const config = getConfig();
 
   const logLevel = isLoggingLevel(config.defaultLogLevel) ? config.defaultLogLevel : 'debug';
+  if (config.enableServerLogging) {
+    setServerLogger(new ServerLogger({ logDirectory: config.serverLogDirectory }));
+  }
 
   switch (config.transport) {
     case 'stdio': {

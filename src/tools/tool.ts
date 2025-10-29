@@ -14,6 +14,20 @@ type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args exte
   ? (args: z.objectOutputType<Args, ZodTypeAny>) => void
   : never;
 
+export type ConstrainedResult<T> =
+  | {
+      type: 'success';
+      result: T;
+    }
+  | {
+      type: 'empty';
+      message: string;
+    }
+  | {
+      type: 'error';
+      message: string;
+    };
+
 /**
  * The parameters for creating a tool instance
  *
@@ -65,6 +79,9 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
   // A function that can transform an error result of the callback into a string.
   // Required if the callback can return an error result.
   getErrorText?: (error: E) => string;
+
+  // A function that constrains the success result of the tool
+  constrainSuccessResult: (result: T) => ConstrainedResult<T> | Promise<ConstrainedResult<T>>;
 };
 
 /**
@@ -125,6 +142,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     callback,
     getSuccessResult,
     getErrorText,
+    constrainSuccessResult,
   }: LogAndExecuteParams<T, E, Args>): Promise<CallToolResult> {
     this.logInvocation({ requestId, args });
 
@@ -140,8 +158,17 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       const result = await callback();
 
       if (result.isOk()) {
+        const constrainedResult = await constrainSuccessResult(result.value);
+
+        if (constrainedResult.type !== 'success') {
+          return {
+            isError: constrainedResult.type === 'error',
+            content: [{ type: 'text', text: constrainedResult.message }],
+          };
+        }
+
         if (getSuccessResult) {
-          return getSuccessResult(result.value);
+          return getSuccessResult(constrainedResult.result);
         }
 
         return {
@@ -149,7 +176,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
           content: [
             {
               type: 'text',
-              text: JSON.stringify(result.value),
+              text: JSON.stringify(constrainedResult.result),
             },
           ],
         };

@@ -1,11 +1,21 @@
 import { CorsOptions } from 'cors';
+import { join } from 'path';
+import { fileURLToPath } from 'url';
 
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
 
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
+
 const authTypes = ['pat', 'direct-trust'] as const;
 type AuthType = (typeof authTypes)[number];
+
+export type BoundedContext = {
+  projectIds: Set<string> | null;
+  datasourceIds: Set<string> | null;
+  workbookIds: Set<string> | null;
+};
 
 export class Config {
   auth: AuthType;
@@ -31,6 +41,9 @@ export class Config {
   maxResultLimit: number | null;
   disableQueryDatasourceFilterValidation: boolean;
   disableMetadataApiRequests: boolean;
+  enableServerLogging: boolean;
+  serverLogDirectory: string;
+  boundedContext: BoundedContext;
   useHeadedBrowser: boolean;
 
   constructor() {
@@ -59,6 +72,11 @@ export class Config {
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
+      ENABLE_SERVER_LOGGING: enableServerLogging,
+      SERVER_LOG_DIRECTORY: serverLogDirectory,
+      INCLUDE_PROJECT_IDS: includeProjectIds,
+      INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
+      INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
       USE_HEADED_BROWSER: useHeadedBrowser,
     } = cleansedVars;
 
@@ -79,6 +97,31 @@ export class Config {
     this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
     this.disableMetadataApiRequests = disableMetadataApiRequests === 'true';
     this.useHeadedBrowser = useHeadedBrowser === 'true';
+    this.enableServerLogging = enableServerLogging === 'true';
+    this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
+    this.boundedContext = {
+      projectIds: createSetFromCommaSeparatedString(includeProjectIds),
+      datasourceIds: createSetFromCommaSeparatedString(includeDatasourceIds),
+      workbookIds: createSetFromCommaSeparatedString(includeWorkbookIds),
+    };
+
+    if (this.boundedContext.projectIds?.size === 0) {
+      throw new Error(
+        'When set, the environment variable INCLUDE_PROJECT_IDS must have at least one value',
+      );
+    }
+
+    if (this.boundedContext.datasourceIds?.size === 0) {
+      throw new Error(
+        'When set, the environment variable INCLUDE_DATASOURCE_IDS must have at least one value',
+      );
+    }
+
+    if (this.boundedContext.workbookIds?.size === 0) {
+      throw new Error(
+        'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
+      );
+    }
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =
@@ -172,6 +215,22 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
       `The environment variable CORS_ORIGIN_CONFIG is not a valid URL: ${corsOriginConfig}`,
     );
   }
+}
+
+// Creates a set from a comma-separated string of values.
+// Returns null if the value is undefined.
+function createSetFromCommaSeparatedString(value: string | undefined): Set<string> | null {
+  if (value === undefined) {
+    return null;
+  }
+
+  return new Set(
+    value
+      .trim()
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
 }
 
 // When the user does not provide a site name in the Claude MCP Bundle configuration,

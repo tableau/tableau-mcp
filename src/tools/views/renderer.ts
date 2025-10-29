@@ -222,7 +222,7 @@ function isPageLoadedAndStable():
 
   const errorDiv = document.querySelector('div[id="error"]');
   if (errorDiv) {
-    return { state: 'error', message: errorDiv.textContent };
+    return { state: 'error', message: errorDiv.textContent ?? '' };
   }
 
   return false;

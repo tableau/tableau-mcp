@@ -1,7 +1,10 @@
 import { OrderBy, SearchContentFilter } from '../../sdks/tableau/types/contentExploration.js';
+import invariant from '../../utils/invariant.js';
+import { mockSearchContentResponse } from './searchContent.test.js';
 import {
   buildFilterString,
   buildOrderByString,
+  constrainSearchContent,
   reduceSearchContentResponse,
 } from './searchContentUtils.js';
 
@@ -448,6 +451,106 @@ describe('searchContentUtils', () => {
         title: 'Datasource 1',
         ownerId: 456,
       });
+    });
+  });
+
+  describe('constrainSearchContent', () => {
+    it('should return empty result when no items are found', () => {
+      const result = constrainSearchContent({
+        items: [],
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+        },
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        'No search results were found. Either none exist or you do not have permission to view them.',
+      );
+    });
+
+    it('should return empty result when all items were filtered out by the bounded context', () => {
+      const items = reduceSearchContentResponse(mockSearchContentResponse);
+
+      const result = constrainSearchContent({
+        items,
+        boundedContext: {
+          projectIds: new Set(['123']),
+          datasourceIds: null,
+          workbookIds: null,
+        },
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        [
+          'The set of allowed content that can be queried is limited by the server configuration.',
+          'While search results were found, they were all filtered out by the server configuration.',
+        ].join(' '),
+      );
+    });
+
+    it('should return success result when no items were filtered out by the bounded context', () => {
+      const items = reduceSearchContentResponse(mockSearchContentResponse);
+
+      const result = constrainSearchContent({
+        items,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toBe(items);
+    });
+
+    it('should return success result when some items were filtered out by allowed projects in the bounded context', () => {
+      const items = reduceSearchContentResponse(mockSearchContentResponse);
+      const result = constrainSearchContent({
+        items,
+        boundedContext: {
+          projectIds: new Set(['123456']),
+          datasourceIds: null,
+          workbookIds: null,
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual([items[0]]);
+    });
+
+    it('should return success result when some items were filtered out by allowed datasources in the bounded context', () => {
+      const items = reduceSearchContentResponse(mockSearchContentResponse);
+      const result = constrainSearchContent({
+        items,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: new Set(['some-other-datasource-luid']),
+          workbookIds: null,
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual([items[0]]);
+    });
+
+    it('should return success result when some items were filtered out by allowed workbooks in the bounded context', () => {
+      const items = reduceSearchContentResponse(mockSearchContentResponse);
+      const result = constrainSearchContent({
+        items,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: new Set(['some-other-workbook-luid']),
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual([items[1]]);
     });
   });
 });

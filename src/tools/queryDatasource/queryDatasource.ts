@@ -13,6 +13,7 @@ import {
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
+import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
@@ -30,6 +31,10 @@ const paramsSchema = {
 export type QueryDatasourceError =
   | {
       type: 'feature-disabled';
+    }
+  | {
+      type: 'datasource-not-allowed';
+      message: string;
     }
   | {
       type: 'filter-validation';
@@ -58,6 +63,18 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
         requestId,
         args: { datasourceLuid, query },
         callback: async () => {
+          const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid,
+            restApiArgs: { config, requestId, server },
+          });
+
+          if (!isDatasourceAllowedResult.allowed) {
+            return new Err({
+              type: 'datasource-not-allowed',
+              message: isDatasourceAllowedResult.message,
+            });
+          }
+
           const datasource: Datasource = { datasourceLuid };
           const options = {
             returnFormat: 'OBJECTS',
@@ -118,10 +135,18 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             },
           });
         },
+        constrainSuccessResult: (queryOutput) => {
+          return {
+            type: 'success',
+            result: queryOutput,
+          };
+        },
         getErrorText: (error: QueryDatasourceError) => {
           switch (error.type) {
             case 'feature-disabled':
               return getVizqlDataServiceDisabledError();
+            case 'datasource-not-allowed':
+              return error.message;
             case 'filter-validation':
               return JSON.stringify({
                 requestId,
