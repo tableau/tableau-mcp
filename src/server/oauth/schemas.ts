@@ -88,11 +88,16 @@ export const mcpTokenSchema = z
     };
   });
 
-export const callbackSchema = z.object({
-  code: requiredString('code'),
-  state: requiredString('state'),
-  error: z.string().optional(),
-});
+export const callbackSchema = z
+  .object({
+    code: requiredString('code'),
+    state: requiredString('state'),
+  })
+  .or(
+    z.object({
+      error: z.string(),
+    }),
+  );
 
 export const mcpAccessTokenUserOnlySchema = z.object({
   sub: requiredString('sub'),

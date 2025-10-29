@@ -41,8 +41,7 @@ export function callback(
       return;
     }
 
-    const { code, state, error } = result.data;
-    if (error) {
+    if ('error' in result.data) {
       res.status(400).json({
         error: 'access_denied',
         error_description: 'User denied authorization',
@@ -50,6 +49,7 @@ export function callback(
       return;
     }
 
+    const { code, state } = result.data;
     try {
       // Parse state to get auth key and Tableau state
       const [authKey, tableauState] = state.split(':');
@@ -89,7 +89,7 @@ export function callback(
           // this would fail downstream when attempting to authenticate to the REST API.
           res.status(400).json({
             error: 'invalid_request',
-            error_description: `Invalid origin host: ${originHost}. Expected: ${config.server}`,
+            error_description: `Invalid origin host: ${originHost}. Expected: ${new URL(config.server).hostname}`,
           });
           return;
         }
