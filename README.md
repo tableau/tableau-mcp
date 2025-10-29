@@ -19,7 +19,7 @@ https://tableau.github.io/tableau-mcp/
 
 ### Requirements
 
-- Node.js 20 or newer
+- Node.js 22.7.5 or newer
 - An MCP client e.g. Claude Desktop, Cursor, VS Code, MCP Inspector, etc.
 
 Standard config works in most MCP clients:
