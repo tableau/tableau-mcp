@@ -70,10 +70,11 @@ export function authorize(
         // HTTPS is always allowed
       }
       // Allow HTTP only for localhost
-      else if (
-        url.protocol === 'http:' &&
-        (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
-      ) {
+      else if (url.protocol === 'http:') {
+        if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
+          throw new Error('Invalid hostname over http');
+        }
+
         // Localhost HTTP is allowed
       }
       // Allow custom schemes (like systemprompt://)
