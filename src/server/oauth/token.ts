@@ -335,14 +335,18 @@ function verifyClientCredentials({
   }
 
   const expectedClientSecret = clientIdSecretPairs?.[clientId];
-  const isMatch = expectedClientSecret
-    ? timingSafeEqual(
-        new TextEncoder().encode(clientSecret),
-        new TextEncoder().encode(expectedClientSecret),
-      )
-    : false;
+  if (!expectedClientSecret || clientSecret.length !== expectedClientSecret.length) {
+    return Err('Invalid client credentials');
+  }
 
-  if (!isMatch) {
+  const textEncoder = new TextEncoder();
+  const clientSecretBuffer = textEncoder.encode(clientSecret);
+  const expectedClientSecretBuffer = textEncoder.encode(expectedClientSecret);
+
+  if (
+    clientSecretBuffer.byteLength !== expectedClientSecretBuffer.byteLength ||
+    !timingSafeEqual(clientSecretBuffer, expectedClientSecretBuffer)
+  ) {
     return Err('Invalid client credentials');
   }
 

@@ -20,7 +20,7 @@ export async function startExpressServer({
   basePath: string;
   config: Config;
   logLevel: LoggingLevel;
-}): Promise<{ url: string }> {
+}): Promise<{ url: string; app: express.Application; server: http.Server }> {
   const app = express();
 
   app.use(express.json());
@@ -57,10 +57,10 @@ export async function startExpressServer({
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
     return new Promise((resolve) => {
-      http
+      const server = http
         .createServer(app)
         .listen(config.httpPort, () =>
-          resolve({ url: `http://localhost:${config.httpPort}/${basePath}` }),
+          resolve({ url: `http://localhost:${config.httpPort}/${basePath}`, app, server }),
         );
     });
   }
@@ -79,10 +79,10 @@ export async function startExpressServer({
   };
 
   return new Promise((resolve) => {
-    https
+    const server = https
       .createServer(options, app)
       .listen(config.httpPort, () =>
-        resolve({ url: `https://localhost:${config.httpPort}/${basePath}` }),
+        resolve({ url: `https://localhost:${config.httpPort}/${basePath}`, app, server }),
       );
   });
 
