@@ -7,7 +7,7 @@ import { Server } from '../../server.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getJwt, getJwtAdditionalPayload, getJwtSubClaim } from '../../utils/getJwt.js';
 import { Tool } from '../tool.js';
-import { Renderer, RendererError, RendererOptions } from './renderer.js';
+import { BrowserOptions, Renderer, RendererError } from './renderer.js';
 
 type GetViewImageError =
   | RendererError
@@ -80,7 +80,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
             });
           }
 
-          const rendererOptions: RendererOptions = {
+          const rendererOptions: BrowserOptions = {
             width: width || 800,
             height: height || 800,
           };
@@ -106,14 +106,20 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
           // TODO: https
           const embedUrl = `http://localhost:${config.httpPort}/embed#?url=${url}&token=${token}`;
 
-          const renderer = await Renderer.create({ headless: !config.useHeadedBrowser });
-          const result = await renderer.screenshot(server, embedUrl, rendererOptions);
+          const result = await Renderer.create({ headless: !config.useHeadedBrowser })
+            .then((builder) => builder.createBrowserContext())
+            .then((builder) => builder.createNewPage(rendererOptions))
+            .then((builder) => builder.enableDownloads())
+            .then((builder) => builder.navigate(embedUrl))
+            .then((builder) => builder.waitForPageLoad())
+            .then((builder) => builder.takeScreenshot())
+            .then((builder) => builder.getResult());
+
           if (result.isErr()) {
             return result;
           }
 
-          const screenshot = result.value;
-          await renderer.close();
+          const { screenshot } = result.value;
           return Ok(screenshot);
         },
         getSuccessResult: (screenshot: Uint8Array): CallToolResult => {

@@ -102,14 +102,21 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
 
           // TODO: https
           const embedUrl = `http://localhost:${config.httpPort}/embed#?url=${url}&token=${token}`;
-          const renderer = await Renderer.create({ headless: !config.useHeadedBrowser });
-          const result = await renderer.embedAndWaitForInteractive(server, embedUrl);
+
+          const result = await Renderer.create({ headless: !config.useHeadedBrowser })
+            .then((builder) => builder.createBrowserContext())
+            .then((builder) => builder.createNewPage({ width: 800, height: 600 }))
+            .then((builder) => builder.enableDownloads())
+            .then((builder) => builder.navigate(embedUrl))
+            .then((builder) => builder.waitForPageLoad())
+            .then((builder) => builder.takeScreenshot())
+            .then((builder) => builder.getResult());
 
           if (result.isErr()) {
             return result;
           }
 
-          const { page, browserSession, downloadPath } = result.value;
+          const { page, browserCDPSession, downloadPath } = result.value;
 
           await page.evaluate(
             async ({ sheetName, SheetType }) => {
@@ -144,7 +151,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
           );
 
           await new Promise<void>((resolve, reject) => {
-            browserSession.on('Browser.downloadProgress', (e) => {
+            browserCDPSession.on('Browser.downloadProgress', (e) => {
               if (e.state === 'completed') {
                 resolve();
               } else if (e.state === 'canceled') {
@@ -153,8 +160,6 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
             });
           });
 
-          await renderer.close();
-
           const files = fs.readdirSync(downloadPath);
           const fileContents = files.reduce<Record<string, string>>((acc, file) => {
             acc[file] = fs.readFileSync(path.join(downloadPath, file), 'utf8');
@@ -162,6 +167,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
           }, {});
 
           fs.rmdirSync(downloadPath, { recursive: true });
+
           return Ok(fileContents);
         },
         constrainSuccessResult: (viewData) => {

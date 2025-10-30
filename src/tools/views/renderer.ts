@@ -1,204 +1,232 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path, { dirname } from 'path';
-import puppeteer, { Browser, BrowserContext, CDPSession, Page, ScreenshotOptions } from 'puppeteer';
+import { Browser, BrowserContext, CDPSession, Page } from 'puppeteer';
+import puppeteer, { ScreenshotOptions } from 'puppeteer-core';
 import { Err, Ok, Result } from 'ts-results-es';
 import { fileURLToPath } from 'url';
-
-import { Server } from '../../server.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-export type RendererOptions = {
-  width: number;
-  height: number;
+export type BrowserOptions = {
+  width?: number;
+  height?: number;
 };
 
 export type RendererError = {
   type:
-    | 'navigation-failed'
-    | 'page-failed-to-load'
     | 'browser-context-creation-failed'
     | 'page-creation-failed'
-    | 'screenshot-failed';
+    | 'enable-downloads-failed'
+    | 'navigation-failed'
+    | 'page-failed-to-load'
+    | 'viz-load-error'
+    | 'screenshot-failed'
+    | 'unknown';
   error: unknown;
 };
 
-type BrowserSession = {
-  page: Page;
-  pageSession: CDPSession;
-  browserSession: CDPSession;
-  downloadPath: string;
-};
-
 export class Renderer {
-  private browser: Browser;
+  private _browser: Browser;
+  private _error: RendererError | null = null;
+  private _browserContext: BrowserContext | null = null;
+  private _page: Page | null = null;
+  private _pageCDPSession: CDPSession | null = null;
+  private _browserCDPSession: CDPSession | null = null;
+  private _downloadPath: string | null = null;
+  private _screenshot: Uint8Array | null = null;
 
   private constructor(browser: Browser) {
-    this.browser = browser;
+    this._browser = browser;
   }
 
   static async create({ headless = true }: { headless?: boolean } = {}): Promise<Renderer> {
     const browser = await puppeteer.launch({
       headless,
     });
-
     return new Renderer(browser);
   }
 
-  private async _getBrowserContext(): Promise<Result<BrowserContext, unknown>> {
-    try {
-      const context = await this.browser.createBrowserContext();
-      return Ok(context);
-    } catch (error) {
-      return Err(error);
+  get page(): Page {
+    if (!this._page) {
+      throw new Error('Page not created');
     }
+
+    return this._page;
   }
 
-  private async _getPage(
-    context: BrowserContext,
-    options: RendererOptions,
-  ): Promise<Result<BrowserSession, unknown>> {
-    try {
-      const page = await context.newPage();
-      await page.setViewport({
-        width: options.width,
-        height: options.height,
-      });
+  get screenshot(): Uint8Array {
+    if (!this._screenshot) {
+      throw new Error('Screenshot not taken');
+    }
 
-      const browserSession = await this.browser.target().createCDPSession();
-      const downloadPath = path.resolve(__dirname, 'downloads', randomUUID());
-      if (!fs.existsSync(downloadPath)) {
-        fs.mkdirSync(downloadPath, { recursive: true });
+    return this._screenshot;
+  }
+
+  get browserCDPSession(): CDPSession {
+    if (!this._browserCDPSession) {
+      throw new Error('Browser CDP session not created');
+    }
+
+    return this._browserCDPSession;
+  }
+
+  get downloadPath(): string {
+    if (!this._downloadPath) {
+      throw new Error('Download path not set');
+    }
+
+    return this._downloadPath;
+  }
+
+  async createBrowserContext(): Promise<this> {
+    if (this._error) {
+      return this;
+    }
+
+    try {
+      this._browserContext = await this._browser.createBrowserContext();
+    } catch (error) {
+      this._error = { type: 'browser-context-creation-failed', error };
+    }
+
+    return this;
+  }
+
+  async createNewPage(options: BrowserOptions): Promise<this> {
+    if (this._error) {
+      return this;
+    }
+
+    if (!this._browserContext) {
+      throw new Error('Browser context not created');
+    }
+
+    try {
+      this._page = await this._browserContext.newPage();
+      await this._page.setViewport({
+        width: options.width ?? 800,
+        height: options.height ?? 600,
+      });
+    } catch (error) {
+      this._error = { type: 'page-creation-failed', error };
+    }
+
+    return this;
+  }
+
+  async enableDownloads(): Promise<this> {
+    if (this._error) {
+      return this;
+    }
+
+    if (!this._page) {
+      throw new Error('Page not created');
+    }
+
+    try {
+      this._browserCDPSession = await this._browser.target().createCDPSession();
+      this._downloadPath = path.resolve(__dirname, 'downloads', randomUUID());
+      if (!fs.existsSync(this._downloadPath)) {
+        fs.mkdirSync(this._downloadPath, { recursive: true });
       }
 
-      const pageSession = await page.createCDPSession();
-      await pageSession.send('Page.setDownloadBehavior', {
+      this._pageCDPSession = await this._page.createCDPSession();
+      await this._pageCDPSession.send('Page.setDownloadBehavior', {
         behavior: 'allow',
-        downloadPath,
+        downloadPath: this._downloadPath,
       });
 
-      await browserSession.send('Browser.setDownloadBehavior', {
+      await this._browserCDPSession.send('Browser.setDownloadBehavior', {
         behavior: 'allowAndName',
-        downloadPath,
+        downloadPath: this._downloadPath,
         eventsEnabled: true,
       });
-
-      return Ok({ page, pageSession, browserSession, downloadPath });
     } catch (error) {
-      return Err(error);
-    }
-  }
-
-  private async _navigate(page: Page, url: string): Promise<Result<void, unknown>> {
-    try {
-      await page.goto(url, { waitUntil: 'networkidle2' });
-    } catch (error) {
-      return Err(error);
+      this._error = { type: 'enable-downloads-failed', error };
     }
 
-    return Ok.EMPTY;
+    return this;
   }
 
-  private async _waitForPageLoad(
-    page: Page,
-  ): Promise<Result<void, { type: 'viz-load-error' | 'unknown'; error: unknown }>> {
+  async navigate(url: string): Promise<this> {
+    if (this._error) {
+      return this;
+    }
+
+    if (!this._page) {
+      throw new Error('Page not created');
+    }
+
     try {
-      const handle = await page.waitForFunction(isPageLoadedAndStable, { timeout: 10000 });
+      await this._page.goto(url, { waitUntil: 'networkidle2' });
+    } catch (error) {
+      this._error = { type: 'navigation-failed', error };
+    }
+
+    return this;
+  }
+
+  async waitForPageLoad(): Promise<this> {
+    if (this._error) {
+      return this;
+    }
+
+    if (!this._page) {
+      throw new Error('Page not created');
+    }
+
+    try {
+      const handle = await this._page.waitForFunction(isPageLoadedAndStable, { timeout: 10000 });
       const result = await handle.jsonValue();
       if (result && result.state === 'error') {
-        return Err({ type: 'viz-load-error', error: JSON.parse(result.message) });
+        this._error = { type: 'viz-load-error', error: JSON.parse(result.message) };
       }
     } catch (error) {
-      return Err({ type: 'unknown', error });
+      this._error = { type: 'unknown', error };
     }
 
-    return Ok.EMPTY;
+    return this;
   }
 
-  private async _finalizePage(page: Page): Promise<void> {
-    await page.emulateMediaType('screen');
-  }
-
-  private async _createPage(
-    server: Server,
-    url: string,
-    options: RendererOptions,
-  ): Promise<Result<BrowserSession, RendererError>> {
-    const context = await this._getBrowserContext();
-    if (context.isErr()) {
-      return Err({ type: 'browser-context-creation-failed', error: context.error });
+  async takeScreenshot(): Promise<this> {
+    if (this._error) {
+      return this;
     }
 
-    const pageResult = await this._getPage(context.value, options);
-    if (pageResult.isErr()) {
-      return Err({ type: 'page-creation-failed', error: pageResult.error });
+    if (!this._page) {
+      throw new Error('Page not created');
     }
-
-    const navigateResult = await this._navigate(pageResult.value.page, url);
-    if (navigateResult.isErr()) {
-      return Err({ type: 'navigation-failed', error: navigateResult.error });
-    }
-
-    const pageLoadResult = await this._waitForPageLoad(pageResult.value.page);
-    if (pageLoadResult.isErr()) {
-      return Err({ type: 'page-failed-to-load', error: pageLoadResult.error });
-    }
-
-    await this._finalizePage(pageResult.value.page);
-    return Ok(pageResult.value);
-  }
-
-  async embedAndWaitForInteractive(
-    server: Server,
-    url: string,
-    options?: RendererOptions,
-  ): Promise<Result<BrowserSession, RendererError>> {
-    return await this._createPage(server, url, options ?? { width: 800, height: 800 });
-  }
-
-  async screenshot(
-    server: Server,
-    url: string,
-    options: RendererOptions,
-  ): Promise<Result<Uint8Array, RendererError>> {
-    let page: Page | null = null;
-    let screenshot: Uint8Array | null = null;
 
     try {
-      const pageResult = await this._createPage(server, url, options);
-      if (pageResult.isErr()) {
-        return pageResult;
-      }
-
-      page = pageResult.value.page;
-
       const screenshotOptions: ScreenshotOptions = {
         type: 'png',
         fullPage: true,
         omitBackground: false,
       };
 
-      screenshot = await page.screenshot(screenshotOptions);
+      this._screenshot = await this._page.screenshot(screenshotOptions);
     } catch (error) {
-      return Err({ type: 'screenshot-failed', error });
-    } finally {
-      if (page) {
-        try {
-          const context = page.browserContext();
-          await page.close();
-          await context.close();
-        } catch {
-          // ignore
-        }
-      }
+      this._error = { type: 'screenshot-failed', error };
     }
-    return Ok(screenshot);
+
+    return this;
   }
 
-  async close(): Promise<void> {
-    await this.browser.close();
+  async getResult(): Promise<Result<this, RendererError>> {
+    if (this._error) {
+      return Err(this._error);
+    }
+
+    try {
+      await this._page?.close();
+      await this._browserContext?.close();
+    } catch {
+      // ignore
+    }
+
+    return Ok(this);
   }
 }
 
