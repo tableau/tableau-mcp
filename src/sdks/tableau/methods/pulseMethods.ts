@@ -24,8 +24,8 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm
  */
 export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis> {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, pulseApis), creds);
+  constructor(baseUrl: string, creds: Credentials, timeout?: number) {
+    super(new Zodios(baseUrl, pulseApis, { timeout }), creds);
   }
 
   /**

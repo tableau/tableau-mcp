@@ -42,6 +42,7 @@ const getNewRestApiInstanceAsync = async (
       getResponseInterceptor(server, requestId),
       getResponseErrorInterceptor(server, requestId),
     ],
+    requestTimeout: config.requestTimeout,
   });
 
   if (config.auth === 'pat') {

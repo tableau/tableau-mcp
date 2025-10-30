@@ -14,8 +14,8 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm
  */
 export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbooksApis> {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, workbooksApis), creds);
+  constructor(baseUrl: string, creds: Credentials, timeout?: number) {
+    super(new Zodios(baseUrl, workbooksApis, { timeout }), creds);
   }
 
   /**

@@ -15,8 +15,8 @@ import Methods from './methods.js';
  * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm
  */
 export default class AuthenticationMethods extends Methods<typeof authenticationApis> {
-  constructor(baseUrl: string) {
-    super(new Zodios(baseUrl, authenticationApis));
+  constructor(baseUrl: string, timeout?: number) {
+    super(new Zodios(baseUrl, authenticationApis, { timeout }));
   }
 
   /**
@@ -70,8 +70,8 @@ export default class AuthenticationMethods extends Methods<typeof authentication
 export class AuthenticatedAuthenticationMethods extends AuthenticatedMethods<
   typeof authenticationApis
 > {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, authenticationApis), creds);
+  constructor(baseUrl: string, creds: Credentials, timeout?: number) {
+    super(new Zodios(baseUrl, authenticationApis, { timeout }), creds);
   }
 
   /**
