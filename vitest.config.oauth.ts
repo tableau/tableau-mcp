@@ -7,6 +7,7 @@ export default mergeConfig(
   defineConfig({
     test: {
       dir: 'tests/oauth',
+      fileParallelism: false,
       outputFile: 'junit/oauth.xml',
     },
   }),
