@@ -14,6 +14,39 @@ make it easier for developers to build AI applications that integrate with Table
 ## Official Documentation
 
 https://tableau.github.io/tableau-mcp/
+## New Tool: Generate Workbook XML
+
+The `generate-workbook-xml` tool creates a Tableau TWB (XML) string that connects to a published data source on Data Server.
+
+Parameters:
+
+- `datasourceName` (required): The published data source display name (friendly name).
+- `datasourceCaption` (optional): Caption in the workbook; defaults to `datasourceName`.
+- `repositoryId` (optional): Identifier used in repository location/dbname; defaults to a sanitized `datasourceName`.
+- `revision` (optional): Revision string; defaults to `1.0`.
+- `worksheetName` (optional): The initial sheet name; defaults to `Sheet 1`.
+- `savedCredentialsViewerId` (optional): If provided, sets `saved-credentials-viewerid` on the connection.
+
+Output is a TWB XML string you can save to a `.twb` file. Server URL and site are taken from the MCP server configuration (`SERVER`, `SITE_NAME`).
+
+## New Tool: Inject Viz Into Workbook XML
+
+The `inject-viz-into-workbook-xml` tool accepts an existing TWB XML string and injects a basic visualization into a worksheet by:
+- Referencing the datasource in the sheet's `<view>` block
+- Adding `<datasource-dependencies>` for the specified fields
+- Binding fields to the `<rows>` and `<cols>` shelves
+
+Parameters:
+
+- `workbookXml` (required): The TWB XML string to modify.
+- `worksheetName` (optional): Target sheet; default is the first.
+- `datasourceConnectionName` (optional): Datasource `name` to reference; default is the first found.
+- `datasourceCaption` (optional): Datasource caption used in `<view>`.
+- `columns` (required): Array of dimensions for the Columns shelf.
+- `rows` (required): Array of `{ field, aggregation? }` measures for the Rows shelf.
+
+Returns an updated TWB XML string you can save to `.twb`.
+
 
 ## Quick Start
 
