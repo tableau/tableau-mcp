@@ -21,6 +21,7 @@
   "scripts": {
     ":build": "npx rimraf ./build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --minify --outdir=build --sourcemap",
     "build": "run-s :build exec-perms",
+    "prepare": "npm run build",
     "build:watch": "npm run :build -- --watch",
     "build:docker": "docker build -t tableau-mcp .",
     ":build:mcpb": "npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb",
