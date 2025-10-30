@@ -115,7 +115,7 @@ async function verifyAccessToken(
       payload.iss !== config.oauth.issuer ||
       payload.aud !== AUDIENCE ||
       !payload.exp ||
-      payload.exp < Date.now()
+      payload.exp < Math.floor(Date.now() / 1000)
     ) {
       // https://github.com/modelcontextprotocol/inspector/issues/608
       // MCP Inspector Not Using Refresh Token for Token Validation

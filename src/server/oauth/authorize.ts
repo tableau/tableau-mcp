@@ -3,6 +3,7 @@ import express from 'express';
 import { fromError } from 'zod-validation-error';
 
 import { getConfig } from '../../config.js';
+import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { mcpAuthorizeSchema } from './schemas.js';
@@ -108,7 +109,7 @@ export function authorize(
     });
 
     // Clean up expired authorizations
-    setTimeout(() => pendingAuthorizations.delete(authKey), config.oauth.authzCodeTimeoutMs);
+    setLongTimeout(() => pendingAuthorizations.delete(authKey), config.oauth.authzCodeTimeoutMs);
 
     // Redirect to Tableau OAuth
     const server = config.server || TABLEAU_CLOUD_SERVER_URL;

@@ -7,6 +7,7 @@ import { getConfig } from '../../src/config.js';
 import { serverName } from '../../src/server.js';
 import { startExpressServer } from '../../src/server/express.js';
 import { generateCodeChallenge } from '../../src/server/oauth/generateCodeChallenge.js';
+import { AwaitableWritableStream } from './awaitableWriteableStream.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
 const mocks = vi.hoisted(() => ({
@@ -105,6 +106,37 @@ describe('OAuth', () => {
       token_endpoint_auth_methods_supported: ['client_secret_basic'],
       subject_types_supported: ['public'],
     });
+  });
+
+  it('should allow authenticated requests', async () => {
+    const { app } = await startServer();
+    const { access_token } = await exchangeAuthzCodeForAccessToken(app);
+
+    const awaitableWritableStream = new AwaitableWritableStream();
+
+    request(app)
+      .post(`/${serverName}`)
+      .set('Authorization', `Bearer ${access_token}`)
+      .set('Content-Type', 'application/json')
+      .set('Accept', 'application/json, text/event-stream')
+      .send({
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'ping',
+      })
+      .pipe(awaitableWritableStream.stream);
+
+    const messages = await awaitableWritableStream.getChunks((chunk) =>
+      Buffer.from(chunk).toString('utf-8'),
+    );
+
+    expect(messages).toHaveLength(1);
+    const message = messages[0];
+    const lines = message.split('\n').filter(Boolean);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe('event: message');
+    const data = JSON.parse(lines[1].split('data: ')[1]);
+    expect(data).toEqual({ result: {}, jsonrpc: '2.0', id: '1' });
   });
 
   describe('dynamic client registration', () => {
@@ -431,19 +463,6 @@ describe('OAuth', () => {
   });
 
   describe('authorization code callback', () => {
-    it('should reject invalid request with missing parameters', async () => {
-      const { app } = await startServer();
-
-      const response = await request(app).get('/Callback');
-      expect(response.status).toBe(400);
-      expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
-      expect(response.body).toEqual({
-        error: 'invalid_request',
-        error_description:
-          'Validation error: Code is required at "code"; State is required at "state"',
-      });
-    });
-
     it('should reject if user denies authorization', async () => {
       const { app } = await startServer();
 
@@ -779,65 +798,63 @@ describe('OAuth', () => {
 
       it('should issue an access token when the authorization code is successfully exchanged', async () => {
         const { app } = await startServer();
+        await exchangeAuthzCodeForAccessToken(app);
+      });
+    });
 
-        const codeChallenge = 'test-code-challenge';
-        const authzResponse = await request(app)
-          .get('/oauth/authorize')
-          .query({
-            client_id: 'test-client-id',
-            redirect_uri: 'http://localhost:3000',
-            response_type: 'code',
-            code_challenge: generateCodeChallenge(codeChallenge),
-            code_challenge_method: 'S256',
-            state: 'test-state',
-          });
-
-        const authzLocation = new URL(authzResponse.headers['location']);
-        const [authKey, tableauState] = authzLocation.searchParams.get('state')?.split(':') ?? [];
-
-        mocks.mockGetTokenResult.mockResolvedValue({
-          accessToken: 'test-access-token',
-          refreshToken: 'test-refresh-token',
-          expiresInSeconds: 3600,
-          originHost: '10ax.online.tableau.com',
-        });
-
-        mocks.mockGetCurrentServerSession.mockResolvedValue(
-          Ok({
-            site: {
-              id: 'site_id',
-              name: 'test-site',
-            },
-            user: {
-              id: 'user_id',
-              name: 'test-user',
-            },
-          }),
-        );
-
-        const response = await request(app)
-          .get('/Callback')
-          .query({
-            code: 'test-code',
-            state: `${authKey}:${tableauState}`,
-          });
-
-        expect(response.status).toBe(302);
-        const location = new URL(response.headers['location']);
-        const code = location.searchParams.get('code');
+    describe('refresh token grant type', () => {
+      it('should reject if the refresh token is invalid', async () => {
+        const { app } = await startServer();
 
         const tokenResponse = await request(app).post('/oauth/token').send({
-          grant_type: 'authorization_code',
-          code,
-          code_verifier: codeChallenge,
-          redirect_uri: 'http://localhost:3000',
+          grant_type: 'refresh_token',
+          refresh_token: 'invalid-refresh-token',
+        });
+
+        expect(tokenResponse.status).toBe(400);
+        expect(tokenResponse.headers['content-type']).toBe('application/json; charset=utf-8');
+        expect(tokenResponse.body).toEqual({
+          error: 'invalid_grant',
+          error_description: 'Invalid or expired refresh token',
+        });
+      });
+
+      it('should reject if the refresh token is expired', async () => {
+        process.env.OAUTH_REFRESH_TOKEN_TIMEOUT_MS = '0';
+        try {
+          const { app } = await startServer();
+
+          const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
+
+          const tokenResponse = await request(app).post('/oauth/token').send({
+            grant_type: 'refresh_token',
+            refresh_token,
+          });
+
+          expect(tokenResponse.status).toBe(400);
+          expect(tokenResponse.headers['content-type']).toBe('application/json; charset=utf-8');
+          expect(tokenResponse.body).toEqual({
+            error: 'invalid_grant',
+            error_description: 'Invalid or expired refresh token',
+          });
+        } finally {
+          process.env.OAUTH_REFRESH_TOKEN_TIMEOUT_MS = undefined;
+        }
+      });
+
+      it('should issue an access token when the refresh token is successfully exchanged', async () => {
+        const { app } = await startServer();
+        const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
+
+        const tokenResponse = await request(app).post('/oauth/token').send({
+          grant_type: 'refresh_token',
+          refresh_token,
         });
 
         expect(tokenResponse.status).toBe(200);
         expect(tokenResponse.headers['content-type']).toBe('application/json; charset=utf-8');
         expect(tokenResponse.body).toEqual({
           access_token: expect.any(String),
-          refresh_token: expect.any(String),
           token_type: 'Bearer',
           expires_in: 3600,
           scope: 'read',
@@ -845,4 +862,77 @@ describe('OAuth', () => {
       });
     });
   });
+
+  async function exchangeAuthzCodeForAccessToken(app: express.Application): Promise<{
+    access_token: string;
+    refresh_token: string;
+    token_type: 'Bearer';
+    expires_in: number;
+    scope: string;
+  }> {
+    const codeChallenge = 'test-code-challenge';
+    const authzResponse = await request(app)
+      .get('/oauth/authorize')
+      .query({
+        client_id: 'test-client-id',
+        redirect_uri: 'http://localhost:3000',
+        response_type: 'code',
+        code_challenge: generateCodeChallenge(codeChallenge),
+        code_challenge_method: 'S256',
+        state: 'test-state',
+      });
+
+    const authzLocation = new URL(authzResponse.headers['location']);
+    const [authKey, tableauState] = authzLocation.searchParams.get('state')?.split(':') ?? [];
+
+    mocks.mockGetTokenResult.mockResolvedValue({
+      accessToken: 'test-access-token',
+      refreshToken: 'test-refresh-token',
+      expiresInSeconds: 3600,
+      originHost: '10ax.online.tableau.com',
+    });
+
+    mocks.mockGetCurrentServerSession.mockResolvedValue(
+      Ok({
+        site: {
+          id: 'site_id',
+          name: 'test-site',
+        },
+        user: {
+          id: 'user_id',
+          name: 'test-user',
+        },
+      }),
+    );
+
+    const response = await request(app)
+      .get('/Callback')
+      .query({
+        code: 'test-code',
+        state: `${authKey}:${tableauState}`,
+      });
+
+    expect(response.status).toBe(302);
+    const location = new URL(response.headers['location']);
+    const code = location.searchParams.get('code');
+
+    const tokenResponse = await request(app).post('/oauth/token').send({
+      grant_type: 'authorization_code',
+      code,
+      code_verifier: codeChallenge,
+      redirect_uri: 'http://localhost:3000',
+    });
+
+    expect(tokenResponse.status).toBe(200);
+    expect(tokenResponse.headers['content-type']).toBe('application/json; charset=utf-8');
+    expect(tokenResponse.body).toEqual({
+      access_token: expect.any(String),
+      refresh_token: expect.any(String),
+      token_type: 'Bearer',
+      expires_in: 3600,
+      scope: 'read',
+    });
+
+    return tokenResponse.body;
+  }
 });

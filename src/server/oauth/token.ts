@@ -9,6 +9,7 @@ import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { isAxiosError } from '../../utils/isAxiosError.js';
+import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { AUDIENCE } from './provider.js';
 import { mcpTokenSchema } from './schemas.js';
@@ -96,7 +97,7 @@ export function token(
             tableauClientId: authCode.tableauClientId,
           });
 
-          setTimeout(
+          setLongTimeout(
             () => refreshTokens.delete(refreshTokenId),
             config.oauth.refreshTokenTimeoutMs,
           );
@@ -232,9 +233,7 @@ async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject)
       ? {
           tableauAccessToken: tokenData.tokens.accessToken,
           tableauRefreshToken: tokenData.tokens.refreshToken,
-          tableauExpiresAt: Math.floor(
-            (Date.now() + tokenData.tokens.expiresInSeconds * 1000) / 1000,
-          ),
+          tableauExpiresAt: Date.now() + tokenData.tokens.expiresInSeconds * 1000,
         }
       : {}),
   });

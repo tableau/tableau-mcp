@@ -41,7 +41,9 @@ export function callback(
       return;
     }
 
-    if ('error' in result.data) {
+    const { error, code, state } = result.data;
+
+    if (error) {
       res.status(400).json({
         error: 'access_denied',
         error_description: 'User denied authorization',
@@ -49,10 +51,9 @@ export function callback(
       return;
     }
 
-    const { code, state } = result.data;
     try {
       // Parse state to get auth key and Tableau state
-      const [authKey, tableauState] = state.split(':');
+      const [authKey, tableauState] = state?.split(':') ?? [];
       const pendingAuth = pendingAuthorizations.get(authKey);
 
       if (!pendingAuth || pendingAuth.tableauState !== tableauState) {
@@ -65,7 +66,7 @@ export function callback(
 
       const tokensResult = await exchangeAuthorizationCode({
         server: config.server || TABLEAU_CLOUD_SERVER_URL,
-        code,
+        code: code ?? '',
         redirectUri: config.oauth.redirectUri,
         clientId: pendingAuth.tableauClientId,
         codeVerifier: pendingAuth.codeChallenge,
