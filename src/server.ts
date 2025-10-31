@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { InitializeRequest, SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import pkg from '../package.json' with { type: 'json' };
 import { getConfig } from './config.js';
@@ -11,9 +11,18 @@ import { toolFactories } from './tools/tools.js';
 export const serverName = 'tableau-mcp';
 export const serverVersion = pkg.version;
 
+type ClientInfo = InitializeRequest['params']['clientInfo'];
+
 export class Server extends McpServer {
   readonly name: string;
   readonly version: string;
+
+  get clientInfo(): ClientInfo | undefined {
+    // As part of the initialization lifecycle request, the client will send its name and version.
+    // The SDK exposes this in the getClientVersion() method, but it should be named getClientInfo().
+    // https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle#initialization
+    return this.server.getClientVersion();
+  }
 
   constructor() {
     super(
