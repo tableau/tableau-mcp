@@ -19,10 +19,14 @@ export class Server extends McpServer {
 
   // Note that the McpServer class does expose a (poorly named) "getClientVersion()" method that returns the client info,
   // but the value of the field it returns is only set during the initialization lifecycle request.
-  // Since we create a new instance of the Server class for *each* request, we store the client info
+  // With HTTP transport, we create a new instance of the Server class for *each* request, so we store the client info
   // provided by the client in its initialization lifecycle request in the session store,
   // and pass it to the constructor with each post-initialization request.
-  readonly clientInfo: ClientInfo | undefined;
+  readonly _clientInfo: ClientInfo | undefined;
+
+  get clientInfo(): ClientInfo | undefined {
+    return this._clientInfo ?? this.server.getClientVersion();
+  }
 
   constructor({ clientInfo }: { clientInfo?: ClientInfo } = {}) {
     super(
@@ -40,7 +44,7 @@ export class Server extends McpServer {
 
     this.name = serverName;
     this.version = serverVersion;
-    this.clientInfo = clientInfo;
+    this._clientInfo = clientInfo;
   }
 
   registerTools = (): void => {
