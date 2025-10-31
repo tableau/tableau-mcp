@@ -16,6 +16,7 @@ import {
 import RestApi from './sdks/tableau/restApi.js';
 import { Server } from './server.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
+import { getJwtAdditionalPayload, getJwtSubClaim } from './utils/getJwt.js';
 import { isAxiosError } from './utils/isAxiosError.js';
 
 type JwtScopes =
@@ -195,13 +196,4 @@ function logResponse(
   } as const;
 
   log.info(server, messageObj, { logger: 'rest-api', requestId });
-}
-
-function getJwtSubClaim(config: Config): string {
-  return config.jwtSubClaim;
-}
-
-function getJwtAdditionalPayload(config: Config): Record<string, unknown> {
-  const json = config.jwtAdditionalPayload;
-  return JSON.parse(json || '{}');
 }

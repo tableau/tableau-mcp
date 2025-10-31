@@ -59,7 +59,7 @@ describe('getViewImageTool', () => {
 
   it('should successfully get view image', async () => {
     mocks.mockQueryViewImage.mockResolvedValue(mockPngData);
-    const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
+    const result = await getToolResult({ url: 'https://example.com' });
     expect(result.isError).toBe(false);
     expect(result.content).toHaveLength(1);
     expect(result.content[0]).toMatchObject({
@@ -79,7 +79,7 @@ describe('getViewImageTool', () => {
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
     mocks.mockQueryViewImage.mockRejectedValue(new Error(errorMessage));
-    const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
+    const result = await getToolResult({ url: 'https://example.com' });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(errorMessage);
   });
@@ -108,7 +108,7 @@ describe('getViewImageTool', () => {
   });
 });
 
-async function getToolResult(params: { viewId: string }): Promise<CallToolResult> {
+async function getToolResult(params: { url: string }): Promise<CallToolResult> {
   const getViewImageTool = getGetViewImageTool(new Server());
   return await getViewImageTool.callback(params, {
     signal: new AbortController().signal,

@@ -44,6 +44,7 @@ export class Config {
   enableServerLogging: boolean;
   serverLogDirectory: string;
   boundedContext: BoundedContext;
+  useHeadedBrowser: boolean;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -76,6 +77,7 @@ export class Config {
       INCLUDE_PROJECT_IDS: includeProjectIds,
       INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
       INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
+      USE_HEADED_BROWSER: useHeadedBrowser,
     } = cleansedVars;
 
     const defaultPort = 3927;
@@ -94,6 +96,7 @@ export class Config {
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
     this.disableMetadataApiRequests = disableMetadataApiRequests === 'true';
+    this.useHeadedBrowser = useHeadedBrowser === 'true';
     this.enableServerLogging = enableServerLogging === 'true';
     this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
     this.boundedContext = {

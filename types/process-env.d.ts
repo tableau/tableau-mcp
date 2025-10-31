@@ -27,6 +27,7 @@ export interface ProcessEnvEx {
   INCLUDE_PROJECT_IDS: string | undefined;
   INCLUDE_DATASOURCE_IDS: string | undefined;
   INCLUDE_WORKBOOK_IDS: string | undefined;
+  USE_HEADED_BROWSER: string | undefined;
 }
 
 declare global {

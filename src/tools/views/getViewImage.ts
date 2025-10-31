@@ -3,21 +3,26 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
-import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
-import { convertPngDataToToolResult } from '../convertPngDataToToolResult.js';
-import { resourceAccessChecker } from '../resourceAccessChecker.js';
+import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
+import { getJwt, getJwtAdditionalPayload, getJwtSubClaim } from '../../utils/getJwt.js';
 import { Tool } from '../tool.js';
+import {
+  BrowserController,
+  BrowserControllerError,
+  BrowserOptions,
+  getBrowserControllerErrorMessage,
+  isBrowserControllerErrorType,
+} from './browserController.js';
+
+type GetViewImageError =
+  | BrowserControllerError
+  | { type: 'invalid-url' | 'embedding-api-not-found'; url: string; error: unknown };
 
 const paramsSchema = {
-  viewId: z.string(),
+  url: z.string(),
   width: z.number().gt(0).optional(),
   height: z.number().gt(0).optional(),
-};
-
-export type GetViewImageError = {
-  type: 'view-not-allowed';
-  message: string;
 };
 
 export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -31,42 +36,109 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ viewId, width, height }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ url, width, height }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
 
-      return await getViewImageTool.logAndExecute<string, GetViewImageError>({
+      return await getViewImageTool.logAndExecute<Uint8Array, GetViewImageError>({
         requestId,
-        args: { viewId },
+        args: { url },
         callback: async () => {
-          const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
-            viewId,
-            restApiArgs: { config, requestId, server },
-          });
+          // const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
+          //   viewId,
+          //   restApiArgs: { config, requestId, server },
+          // });
 
-          if (!isViewAllowedResult.allowed) {
-            return new Err({
-              type: 'view-not-allowed',
-              message: isViewAllowedResult.message,
+          // if (!isViewAllowedResult.allowed) {
+          //   return new Err({
+          //     type: 'view-not-allowed',
+          //     message: isViewAllowedResult.message,
+          //   });
+          // }
+
+          let parsedUrl: URL;
+          try {
+            parsedUrl = new URL(url);
+          } catch (error) {
+            return Err({
+              type: 'invalid-url',
+              url,
+              error,
             });
           }
 
-          return new Ok(
-            await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: ['tableau:views:download'],
-              callback: async (restApi) => {
-                return await restApi.viewsMethods.queryViewImage({
-                  viewId,
-                  siteId: restApi.siteId,
-                  width,
-                  height,
-                  resolution: 'high',
+          const embeddingApiUrl = `${parsedUrl.origin}/javascripts/api/tableau.embedding.3.latest.js`;
+          try {
+            const response = await fetch(embeddingApiUrl);
+            if (!response.ok) {
+              return Err({
+                type: 'embedding-api-not-found',
+                url: embeddingApiUrl,
+                error: new Error(
+                  `Failed to fetch embedding API JavaScript module: ${response.status} ${response.statusText}`,
+                ),
+              });
+            }
+          } catch (error) {
+            return Err({
+              type: 'embedding-api-not-found',
+              url: embeddingApiUrl,
+              error,
+            });
+          }
+
+          const rendererOptions: BrowserOptions = {
+            width: width || 800,
+            height: height || 800,
+          };
+
+          const token =
+            parsedUrl.host === 'public.tableau.com'
+              ? ''
+              : await getJwt({
+                  username: getJwtSubClaim(config),
+                  connectedApp: {
+                    clientId: config.connectedAppClientId,
+                    secretId: config.connectedAppSecretId,
+                    secretValue: config.connectedAppSecretValue,
+                  },
+                  scopes: new Set([
+                    'tableau:views:embed',
+                    'tableau:views:embed_authoring',
+                    'tableau:insights:embed',
+                  ]),
+                  additionalPayload: getJwtAdditionalPayload(config),
                 });
+
+          // TODO: https
+          const embedUrl = `http://localhost:${config.httpPort}/embed#?url=${url}&token=${token}`;
+
+          const result = await BrowserController.create({ headless: !config.useHeadedBrowser })
+            .then((b) => b.createNewPage(rendererOptions))
+            .then((b) => b.enableDownloads())
+            .then((b) => b.navigate(embedUrl))
+            .then((b) => b.waitForPageLoad())
+            .then((b) => b.takeScreenshot())
+            .then((b) => b.getResult());
+
+          if (result.isErr()) {
+            return result;
+          }
+
+          const { screenshot } = result.value;
+          return Ok(screenshot);
+        },
+        getSuccessResult: (screenshot: Uint8Array): CallToolResult => {
+          const base64Data = Buffer.from(screenshot).toString('base64');
+          return {
+            isError: false,
+            content: [
+              {
+                type: 'image',
+                data: base64Data,
+                mimeType: 'image/png',
               },
-            }),
-          );
+            ],
+          };
         },
         constrainSuccessResult: (viewImage) => {
           return {
@@ -74,12 +146,11 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
             result: viewImage,
           };
         },
-        getSuccessResult: convertPngDataToToolResult,
         getErrorText: (error: GetViewImageError) => {
-          switch (error.type) {
-            case 'view-not-allowed':
-              return error.message;
-          }
+          return JSON.stringify({
+            reason: getErrorMessage(error),
+            exception: getExceptionMessage(error.error),
+          });
         },
       });
     },
@@ -87,3 +158,16 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
 
   return getViewImageTool;
 };
+
+function getErrorMessage(error: GetViewImageError): string {
+  if (isBrowserControllerErrorType(error.type)) {
+    return getBrowserControllerErrorMessage(error.type);
+  }
+
+  switch (error.type) {
+    case 'invalid-url':
+      return `The URL is invalid: ${error.url}`;
+    case 'embedding-api-not-found':
+      return `The Embedding API JavaScript module was not found at ${error.url}.`;
+  }
+}
