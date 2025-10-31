@@ -7,10 +7,16 @@ import { Server } from '../../server.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getJwt, getJwtAdditionalPayload, getJwtSubClaim } from '../../utils/getJwt.js';
 import { Tool } from '../tool.js';
-import { BrowserOptions, Renderer, RendererError } from './renderer.js';
+import {
+  BrowserController,
+  BrowserControllerError,
+  BrowserOptions,
+  getBrowserControllerErrorMessage,
+  isBrowserControllerErrorType,
+} from './browserController.js';
 
 type GetViewImageError =
-  | RendererError
+  | BrowserControllerError
   | { type: 'invalid-url' | 'embedding-api-not-found'; url: string; error: unknown };
 
 const paramsSchema = {
@@ -106,14 +112,13 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
           // TODO: https
           const embedUrl = `http://localhost:${config.httpPort}/embed#?url=${url}&token=${token}`;
 
-          const result = await Renderer.create({ headless: !config.useHeadedBrowser })
-            .then((builder) => builder.createBrowserContext())
-            .then((builder) => builder.createNewPage(rendererOptions))
-            .then((builder) => builder.enableDownloads())
-            .then((builder) => builder.navigate(embedUrl))
-            .then((builder) => builder.waitForPageLoad())
-            .then((builder) => builder.takeScreenshot())
-            .then((builder) => builder.getResult());
+          const result = await BrowserController.create({ headless: !config.useHeadedBrowser })
+            .then((b) => b.createNewPage(rendererOptions))
+            .then((b) => b.enableDownloads())
+            .then((b) => b.navigate(embedUrl))
+            .then((b) => b.waitForPageLoad())
+            .then((b) => b.takeScreenshot())
+            .then((b) => b.getResult());
 
           if (result.isErr()) {
             return result;
@@ -143,24 +148,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
         },
         getErrorText: (error: GetViewImageError) => {
           return JSON.stringify({
-            reason: (() => {
-              switch (error.type) {
-                case 'invalid-url':
-                  return `The URL is invalid: ${error.url}`;
-                case 'embedding-api-not-found':
-                  return `The Embedding API JavaScript module was not found at ${error.url}.`;
-                case 'screenshot-failed':
-                  return 'Failed to take screenshot of the view.';
-                case 'navigation-failed':
-                  return 'Failed to navigate to the view.';
-                case 'page-failed-to-load':
-                  return 'Failed to load the view.';
-                case 'browser-context-creation-failed':
-                  return 'Failed to create browser context.';
-                case 'page-creation-failed':
-                  return 'Failed to create page.';
-              }
-            })(),
+            reason: getErrorMessage(error),
             exception: getExceptionMessage(error.error),
           });
         },
@@ -170,3 +158,16 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
 
   return getViewImageTool;
 };
+
+function getErrorMessage(error: GetViewImageError): string {
+  if (isBrowserControllerErrorType(error.type)) {
+    return getBrowserControllerErrorMessage(error.type);
+  }
+
+  switch (error.type) {
+    case 'invalid-url':
+      return `The URL is invalid: ${error.url}`;
+    case 'embedding-api-not-found':
+      return `The Embedding API JavaScript module was not found at ${error.url}.`;
+  }
+}

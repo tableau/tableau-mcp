@@ -1,7 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Dashboard, SheetType, Story, TableauViz } from '@tableau/embedding-api';
-import fs from 'fs';
-import path from 'path';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -10,10 +8,15 @@ import { Server } from '../../server.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getJwt, getJwtAdditionalPayload, getJwtSubClaim } from '../../utils/getJwt.js';
 import { Tool } from '../tool.js';
-import { Renderer, RendererError } from './renderer.js';
+import {
+  BrowserController,
+  BrowserControllerError,
+  getBrowserControllerErrorMessage,
+  isBrowserControllerErrorType,
+} from './browserController.js';
 
 type GetViewDataError =
-  | RendererError
+  | BrowserControllerError
   | { type: 'invalid-url' | 'embedding-api-not-found'; url: string; error: unknown };
 
 const paramsSchema = {
@@ -35,7 +38,10 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
     callback: async ({ url, sheetName }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
 
-      return await getViewDataTool.logAndExecute<Record<string, string>, GetViewDataError>({
+      return await getViewDataTool.logAndExecute<
+        Array<{ filename: string; content: string }>,
+        GetViewDataError
+      >({
         requestId,
         args: { url, sheetName },
         callback: async () => {
@@ -103,22 +109,20 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
           // TODO: https
           const embedUrl = `http://localhost:${config.httpPort}/embed#?url=${url}&token=${token}`;
 
-          const result = await Renderer.create({ headless: !config.useHeadedBrowser })
-            .then((builder) => builder.createBrowserContext())
-            .then((builder) => builder.createNewPage({ width: 800, height: 600 }))
-            .then((builder) => builder.enableDownloads())
-            .then((builder) => builder.navigate(embedUrl))
-            .then((builder) => builder.waitForPageLoad())
-            .then((builder) => builder.takeScreenshot())
-            .then((builder) => builder.getResult());
+          const result = await BrowserController.create({ headless: !config.useHeadedBrowser })
+            .then((b) => b.createNewPage({ width: 800, height: 600 }))
+            .then((b) => b.enableDownloads())
+            .then((b) => b.navigate(embedUrl))
+            .then((b) => b.waitForPageLoad())
+            .then((b) => b.takeScreenshot())
+            .then((b) => b.getResult());
 
           if (result.isErr()) {
             return result;
           }
 
-          const { page, browserCDPSession, downloadPath } = result.value;
-
-          await page.evaluate(
+          const browserController = result.value;
+          await browserController.page.evaluate(
             async ({ sheetName, SheetType }) => {
               const viz = document.getElementById('viz') as TableauViz;
               const activeSheet = viz.workbook.activeSheet;
@@ -150,24 +154,8 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
             { sheetName, SheetType },
           );
 
-          await new Promise<void>((resolve, reject) => {
-            browserCDPSession.on('Browser.downloadProgress', (e) => {
-              if (e.state === 'completed') {
-                resolve();
-              } else if (e.state === 'canceled') {
-                reject('Download canceled');
-              }
-            });
-          });
-
-          const files = fs.readdirSync(downloadPath);
-          const fileContents = files.reduce<Record<string, string>>((acc, file) => {
-            acc[file] = fs.readFileSync(path.join(downloadPath, file), 'utf8');
-            return acc;
-          }, {});
-
-          fs.rmdirSync(downloadPath, { recursive: true });
-
+          await browserController.waitForDownloads();
+          const fileContents = await browserController.getAndDeleteDownloads();
           return Ok(fileContents);
         },
         constrainSuccessResult: (viewData) => {
@@ -178,24 +166,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
         },
         getErrorText: (error: GetViewDataError) => {
           return JSON.stringify({
-            reason: (() => {
-              switch (error.type) {
-                case 'invalid-url':
-                  return `The URL is invalid: ${error.url}`;
-                case 'embedding-api-not-found':
-                  return `The Embedding API JavaScript module was not found at ${error.url}.`;
-                case 'screenshot-failed':
-                  return 'Failed to take screenshot of the view.';
-                case 'navigation-failed':
-                  return 'Failed to navigate to the view.';
-                case 'page-failed-to-load':
-                  return 'Failed to load the view.';
-                case 'browser-context-creation-failed':
-                  return 'Failed to create browser context.';
-                case 'page-creation-failed':
-                  return 'Failed to create page.';
-              }
-            })(),
+            reason: getErrorMessage(error),
             exception: getExceptionMessage(error.error),
           });
         },
@@ -205,3 +176,16 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
 
   return getViewDataTool;
 };
+
+function getErrorMessage(error: GetViewDataError): string {
+  if (isBrowserControllerErrorType(error.type)) {
+    return getBrowserControllerErrorMessage(error.type);
+  }
+
+  switch (error.type) {
+    case 'invalid-url':
+      return `The URL is invalid: ${error.url}`;
+    case 'embedding-api-not-found':
+      return `The Embedding API JavaScript module was not found at ${error.url}.`;
+  }
+}
