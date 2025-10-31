@@ -1,5 +1,5 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import cors from 'cors';
 import express, { Request, Response } from 'express';
 import fs, { existsSync } from 'fs';
@@ -8,7 +8,8 @@ import https from 'https';
 
 import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
-import { Server } from '../server.js';
+import { ClientInfo, Server } from '../server.js';
+import { createSession, getSession, hasSession } from '../sessions.js';
 
 export async function startExpressServer({
   basePath,
@@ -41,8 +42,8 @@ export async function startExpressServer({
 
   const path = `/${basePath}`;
   app.post(path, createMcpServer);
-  app.get(path, methodNotAllowed);
-  app.delete(path, methodNotAllowed);
+  app.get(path, handleSessionRequest);
+  app.delete(path, handleSessionRequest);
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
@@ -78,21 +79,35 @@ export async function startExpressServer({
 
   async function createMcpServer(req: Request, res: Response): Promise<void> {
     try {
-      const server = new Server();
-      const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-      });
+      const sessionId = req.headers['mcp-session-id'] as string | undefined;
+      let transport: StreamableHTTPServerTransport;
+      let clientInfo: ClientInfo | undefined;
 
-      res.on('close', () => {
-        transport.close();
-        server.close();
-      });
+      if (sessionId && hasSession(sessionId)) {
+        ({ transport, clientInfo } = getSession(sessionId));
+      } else if (!sessionId && isInitializeRequest(req.body)) {
+        clientInfo = req.body.params.clientInfo;
+        transport = createSession({ clientInfo });
 
-      server.registerTools();
-      server.registerRequestHandlers();
+        const server = new Server({ clientInfo });
 
-      await server.connect(transport);
-      setLogLevel(server, logLevel);
+        server.registerTools();
+        server.registerRequestHandlers();
+
+        await server.connect(transport);
+        setLogLevel(server, logLevel);
+      } else {
+        // Invalid request
+        res.status(400).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32000,
+            message: 'Bad Request: No valid session ID provided',
+          },
+          id: null,
+        });
+        return;
+      }
 
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
@@ -112,15 +127,12 @@ export async function startExpressServer({
   }
 }
 
-async function methodNotAllowed(_req: Request, res: Response): Promise<void> {
-  res.writeHead(405).end(
-    JSON.stringify({
-      jsonrpc: '2.0',
-      error: {
-        code: -32000,
-        message: 'Method not allowed.',
-      },
-      id: null,
-    }),
-  );
+async function handleSessionRequest(req: express.Request, res: express.Response): Promise<void> {
+  const sessionId = req.headers['mcp-session-id'] as string | undefined;
+  if (!sessionId || !hasSession(sessionId)) {
+    res.status(400).send('Invalid or missing session ID');
+    return;
+  }
+
+  await getSession(sessionId).transport.handleRequest(req, res);
 }
