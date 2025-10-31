@@ -11,20 +11,20 @@ import { toolFactories } from './tools/tools.js';
 export const serverName = 'tableau-mcp';
 export const serverVersion = pkg.version;
 
-type ClientInfo = InitializeRequest['params']['clientInfo'];
+export type ClientInfo = InitializeRequest['params']['clientInfo'];
 
 export class Server extends McpServer {
   readonly name: string;
   readonly version: string;
 
-  get clientInfo(): ClientInfo | undefined {
-    // As part of the initialization lifecycle request, the client will send its name and version.
-    // The SDK exposes this in the getClientVersion() method, but it should be named getClientInfo().
-    // https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle#initialization
-    return this.server.getClientVersion();
-  }
+  // Note that the McpServer class does expose a (poorly named) "getClientVersion()" method that returns the client info,
+  // but the value of the field it returns is only set during the initialization lifecycle request.
+  // Since we create a new instance of the Server class for *each* request, we store the client info
+  // provided by the client in its initialization lifecycle request in the session store,
+  // and pass it to the constructor with each post-initialization request.
+  readonly clientInfo: ClientInfo | undefined;
 
-  constructor() {
+  constructor({ clientInfo }: { clientInfo?: ClientInfo } = {}) {
     super(
       {
         name: serverName,
@@ -40,6 +40,7 @@ export class Server extends McpServer {
 
     this.name = serverName;
     this.version = serverVersion;
+    this.clientInfo = clientInfo;
   }
 
   registerTools = (): void => {
