@@ -9,7 +9,7 @@ export const multipartRequestSchema = z.object({
   contentDispositionName: z.literal('tableau_file'),
   contentType: z.literal('application/xml'),
   filename: z.string(),
-  fileBuffer: z.instanceof(Buffer),
+  contents: z.instanceof(Buffer),
 });
 
 type MultipartRequest = z.infer<typeof multipartRequestSchema>;
@@ -50,7 +50,7 @@ function getMultipartRequestData({
   contentDispositionName,
   contentType,
   filename,
-  fileBuffer,
+  contents,
 }: MultipartRequest): Buffer<ArrayBuffer> {
   const requestBodyStart = `--${boundaryString}
 Content-Disposition: name="request_payload"
@@ -69,7 +69,7 @@ Content-Type: application/octet-stream
 
   const data = Buffer.concat([
     Buffer.from(requestBodyStart, 'utf8'),
-    fileBuffer,
+    contents,
     Buffer.from(requestBodyEnd, 'utf8'),
   ]);
 

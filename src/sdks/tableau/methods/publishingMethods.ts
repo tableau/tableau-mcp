@@ -44,19 +44,25 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
    * @param {string} siteId - The Tableau site ID
    * @param {string} uploadSessionId - The upload session ID
    * @param {string} filename - The filename
-   * @param {Buffer} fileBuffer - The XML to upload
+   * @param {Buffer} contents - The contents of the file to upload
+   * @param {string} contentDispositionName - The content disposition name. Defaults to 'tableau_file'.
+   * @param {string} contentType - The content type. Defaults to 'application/xml'.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_publishing.htm#append_to_file_upload
    */
   appendToFileUpload = async ({
     siteId,
     uploadSessionId,
     filename,
-    fileBuffer,
+    contents,
+    contentDispositionName = 'tableau_file',
+    contentType = 'application/xml',
   }: {
     siteId: string;
     uploadSessionId: string;
     filename: string;
-    fileBuffer: Buffer;
+    contents: Buffer;
+    contentDispositionName?: 'tableau_file';
+    contentType?: 'application/xml';
   }): Promise<Result<FileUpload, unknown>> => {
     return await useMultipartPluginAsync({
       apiClient: this._apiClient,
@@ -66,10 +72,10 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
           await this._apiClient.appendToFileUpload(
             {
               filename,
-              fileBuffer,
+              contents,
               boundaryString,
-              contentDispositionName: 'tableau_file',
-              contentType: 'application/xml',
+              contentDispositionName,
+              contentType,
             },
             {
               params: { siteId, uploadSessionId },

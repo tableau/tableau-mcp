@@ -8,7 +8,7 @@ import { Tool } from '../tool.js';
 const aggEnum = z.enum(['SUM', 'AVG', 'MIN', 'MAX', 'COUNT', 'COUNTD']);
 
 const paramsSchema = {
-  workbookXml: z.string().min(1),
+  workbookXml: z.string().trim().nonempty(),
   // Optional: target a specific worksheet; if omitted, uses the first worksheet
   worksheetName: z.string().trim().nonempty().optional(),
   // Optional: target a specific datasource connection name; if omitted, uses the first datasource's name

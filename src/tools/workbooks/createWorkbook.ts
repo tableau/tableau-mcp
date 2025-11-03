@@ -1,20 +1,23 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import { Ok } from 'ts-results-es';
+import z from 'zod';
 
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
 
-const paramsSchema = {};
+const paramsSchema = {
+  workbookXml: z.string().trim().nonempty(),
+  workbookFilename: z.string().trim().nonempty(),
+};
 
 export const getCreateWorkbookTool = (server: Server): Tool<typeof paramsSchema> => {
   const createWorkbookTool = new Tool({
     server,
     name: 'create-workbook',
-    description: `Authors a workbook.`,
+    description:
+      'Publishes a Tableau workbook XML string to the Tableau server. The workbook will be saved as a file with the given filename. ',
     paramsSchema,
     annotations: {
       title: 'Create Workbook',
@@ -23,12 +26,12 @@ export const getCreateWorkbookTool = (server: Server): Tool<typeof paramsSchema>
       idempotentHint: false,
       openWorldHint: false,
     },
-    callback: async (_, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ workbookXml, workbookFilename }, { requestId }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await createWorkbookTool.logAndExecute({
         requestId,
-        args: {},
+        args: { workbookXml, workbookFilename },
         callback: async () => {
           return new Ok(
             await useRestApi({
@@ -41,23 +44,26 @@ export const getCreateWorkbookTool = (server: Server): Tool<typeof paramsSchema>
                   siteId: restApi.siteId,
                 });
 
-                const filename = 'superstore.twb';
-                const path = join('src/tools/workbooks', filename);
-
-                return await restApi.publishingMethods.appendToFileUpload({
+                const result = await restApi.publishingMethods.appendToFileUpload({
                   siteId: restApi.siteId,
                   uploadSessionId,
-                  filename,
-                  fileBuffer: readFileSync(path),
+                  filename: workbookFilename,
+                  contents: Buffer.from(workbookXml),
                 });
+
+                if (result.isErr()) {
+                  return result;
+                }
+
+                return new Ok(result.value.uploadSessionId);
               },
             }),
           );
         },
-        constrainSuccessResult: (uploadSession) => {
+        constrainSuccessResult: (uploadSessionId) => {
           return {
             type: 'success',
-            result: uploadSession,
+            result: uploadSessionId,
           };
         },
       });
