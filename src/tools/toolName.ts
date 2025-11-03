@@ -30,7 +30,12 @@ export type ToolGroupName = (typeof toolGroupNames)[number];
 
 export const toolGroups = {
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
-  workbook: ['list-workbooks', 'get-workbook', 'generate-workbook-xml', 'inject-viz-into-workbook-xml'],
+  workbook: [
+    'list-workbooks',
+    'get-workbook',
+    'generate-workbook-xml',
+    'inject-viz-into-workbook-xml',
+  ],
   view: ['list-views', 'get-view-data', 'get-view-image'],
   pulse: [
     'list-all-pulse-metric-definitions',

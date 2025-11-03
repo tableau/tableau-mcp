@@ -131,7 +131,12 @@ function buildViewBlock({
   ].join('\n');
 }
 
-function buildShelfToken(connectionName: string, field: string, kind: 'dimension' | 'measure', aggregation?: z.infer<typeof aggEnum>): string {
+function buildShelfToken(
+  connectionName: string,
+  field: string,
+  kind: 'dimension' | 'measure',
+  aggregation?: z.infer<typeof aggEnum>,
+): string {
   if (kind === 'dimension') {
     return `[${connectionName}].[none:${field}:nk]`;
   }
@@ -192,14 +197,11 @@ function replaceWorksheetContents({
   return xml.replace(worksheetBlock, updatedBlock);
 }
 
-export const getInjectVizIntoWorkbookXmlTool = (
-  server: Server,
-): Tool<typeof paramsSchema> => {
+export const getInjectVizIntoWorkbookXmlTool = (server: Server): Tool<typeof paramsSchema> => {
   const injectTool = new Tool({
     server,
     name: 'inject-viz-into-workbook-xml',
-    description:
-      `Takes a TWB XML workbook string and injects a basic visualization by wiring columns (dimensions) and rows (measures) into the first or named worksheet. It adds <datasources> and <datasource-dependencies> into the sheet's <view>, and sets <rows>/<cols> shelves.`,
+    description: `Takes a TWB XML workbook string and injects a basic visualization by wiring columns (dimensions) and rows (measures) into the first or named worksheet. It adds <datasources> and <datasource-dependencies> into the sheet's <view>, and sets <rows>/<cols> shelves.`,
     paramsSchema,
     annotations: {
       title: 'Inject Viz Into Workbook XML',
@@ -212,7 +214,14 @@ export const getInjectVizIntoWorkbookXmlTool = (
     ): Promise<CallToolResult> => {
       return await injectTool.logAndExecute<string>({
         requestId,
-        args: { workbookXml, worksheetName, datasourceConnectionName, datasourceCaption, columns, rows },
+        args: {
+          workbookXml,
+          worksheetName,
+          datasourceConnectionName,
+          datasourceCaption,
+          columns,
+          rows,
+        },
         callback: async () => {
           const baseDs = getDatasourceInfo(workbookXml);
           const connectionName = datasourceConnectionName?.trim() || baseDs.connectionName;
@@ -225,7 +234,9 @@ export const getInjectVizIntoWorkbookXmlTool = (
             rows,
           });
 
-          const colsTokens = columns.map((c) => buildShelfToken(connectionName, c, 'dimension')).join(' / ');
+          const colsTokens = columns
+            .map((c) => buildShelfToken(connectionName, c, 'dimension'))
+            .join(' / ');
           const rowsTokens = rows
             .map((r) => buildShelfToken(connectionName, r.field, 'measure', r.aggregation))
             .join(' / ');
@@ -240,21 +251,15 @@ export const getInjectVizIntoWorkbookXmlTool = (
 
           return new Ok(updatedXml);
         },
-        getSuccessResult: (xml) => ({
-          isError: false,
-          content: [
-            {
-              type: 'text',
-              text: xml,
-            },
-          ],
-        }),
+        constrainSuccessResult: (xml) => {
+          return {
+            type: 'success',
+            result: xml,
+          };
+        },
       });
     },
   });
 
   return injectTool;
 };
-
-
-

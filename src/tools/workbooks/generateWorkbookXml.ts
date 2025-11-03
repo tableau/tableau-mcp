@@ -1,6 +1,7 @@
+import { randomUUID } from 'node:crypto';
+
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
@@ -42,7 +43,6 @@ function buildWorkbookXml({
   hostname,
   port,
   channel,
-  datasourceName,
   datasourceCaption,
   repositoryId,
   revision,
@@ -53,7 +53,6 @@ function buildWorkbookXml({
   hostname: string;
   port: string;
   channel: 'http' | 'https';
-  datasourceName: string;
   datasourceCaption: string;
   repositoryId: string;
   revision: string;
@@ -153,8 +152,7 @@ export const getGenerateWorkbookXmlTool = (server: Server): Tool<typeof paramsSc
   const generateWorkbookXmlTool = new Tool({
     server,
     name: 'generate-workbook-xml',
-    description:
-      `Generates a Tableau TWB (workbook) XML string that connects to a specified published datasource (Data Server). Use the output to save a .twb file.`,
+    description: `Generates a Tableau TWB (workbook) XML string that connects to a specified published datasource (Data Server). Use the output to save a .twb file.`,
     paramsSchema,
     annotations: {
       title: 'Generate Workbook XML',
@@ -162,16 +160,30 @@ export const getGenerateWorkbookXmlTool = (server: Server): Tool<typeof paramsSc
       openWorldHint: false,
     },
     callback: async (
-      { datasourceName, datasourceCaption, repositoryId, revision, worksheetName, savedCredentialsViewerId },
+      {
+        datasourceName,
+        datasourceCaption,
+        repositoryId,
+        revision,
+        worksheetName,
+        savedCredentialsViewerId,
+      },
       { requestId },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       return await generateWorkbookXmlTool.logAndExecute<string>({
         requestId,
-        args: { datasourceName, datasourceCaption, repositoryId, revision, worksheetName, savedCredentialsViewerId },
+        args: {
+          datasourceName,
+          datasourceCaption,
+          repositoryId,
+          revision,
+          worksheetName,
+          savedCredentialsViewerId,
+        },
         callback: async () => {
           const url = new URL(config.server);
-          const channel = (url.protocol === 'https:') ? 'https' : 'http';
+          const channel = url.protocol === 'https:' ? 'https' : 'http';
           const defaultPort = channel === 'https' ? '443' : '80';
           const port = url.port && url.port !== '0' ? url.port : defaultPort;
           const siteName = config.siteName ?? '';
@@ -186,7 +198,6 @@ export const getGenerateWorkbookXmlTool = (server: Server): Tool<typeof paramsSc
             hostname: url.hostname,
             port,
             channel,
-            datasourceName,
             datasourceCaption: finalCaption,
             repositoryId: finalRepositoryId,
             revision: finalRevision,
@@ -196,20 +207,15 @@ export const getGenerateWorkbookXmlTool = (server: Server): Tool<typeof paramsSc
 
           return new Ok(xml);
         },
-        getSuccessResult: (xml) => ({
-          isError: false,
-          content: [
-            {
-              type: 'text',
-              text: xml,
-            },
-          ],
-        }),
+        constrainSuccessResult: (xml) => {
+          return {
+            type: 'success',
+            result: xml,
+          };
+        },
       });
     },
   });
 
   return generateWorkbookXmlTool;
 };
-
-
