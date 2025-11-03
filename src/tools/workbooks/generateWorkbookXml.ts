@@ -9,13 +9,11 @@ import { Tool } from '../tool.js';
 
 const paramsSchema = {
   datasourceName: z.string().trim().nonempty(),
+  publishedDatasourceId: z.string().trim().nonempty(),
   // Optional overrides; sensible defaults are derived from config and datasourceName
   datasourceCaption: z.string().trim().nonempty().optional(),
-  repositoryId: z.string().trim().nonempty().optional(),
   revision: z.string().trim().nonempty().default('1.0').optional(),
   worksheetName: z.string().trim().nonempty().default('Sheet 1').optional(),
-  // Optional: provide a viewer id if saved credentials are desired; omitted if not provided
-  savedCredentialsViewerId: z.string().trim().nonempty().optional(),
 } as const;
 
 function sanitizeForId(input: string): string {
@@ -44,10 +42,9 @@ function buildWorkbookXml({
   channel,
   datasourceName,
   datasourceCaption,
-  repositoryId,
+  publishedDatasourceId,
   revision,
   worksheetName,
-  savedCredentialsViewerId,
 }: {
   siteName: string;
   hostname: string;
@@ -55,10 +52,9 @@ function buildWorkbookXml({
   channel: 'http' | 'https';
   datasourceName: string;
   datasourceCaption: string;
-  repositoryId: string;
+  publishedDatasourceId: string;
   revision: string;
   worksheetName: string;
-  savedCredentialsViewerId?: string;
 }): string {
   const connectionName = generateSqlProxyConnectionName();
   const uuid = randomUUID().toUpperCase();
@@ -66,11 +62,7 @@ function buildWorkbookXml({
   const pathDatasources = siteName
     ? `/t/${escapeXmlAttribute(siteName)}/datasources`
     : `/datasources`;
-  const derivedFrom = `${siteName ? `/t/${escapeXmlAttribute(siteName)}` : ''}/datasources/${escapeXmlAttribute(repositoryId)}?rev=${escapeXmlAttribute(revision)}`;
   const siteAttr = siteName ? ` site='${escapeXmlAttribute(siteName)}'` : '';
-  const savedCredsAttr = savedCredentialsViewerId
-    ? ` saved-credentials-viewerid='${escapeXmlAttribute(savedCredentialsViewerId)}'`
-    : '';
 
   return `<?xml version='1.0' encoding='utf-8' ?>
 
@@ -86,14 +78,10 @@ function buildWorkbookXml({
     <SheetIdentifierTracking />
     <WindowsPersistSimpleIdentifiers />
   </document-format-change-manifest>
-  <preferences>
-    <preference name='ui.encoding.shelf.height' value='24' />
-    <preference name='ui.shelf.height' value='26' />
-  </preferences>
   <datasources>
     <datasource caption='${escapeXmlAttribute(datasourceCaption)}' inline='true' name='${escapeXmlAttribute(connectionName)}' version='18.1'>
-      <repository-location derived-from='${derivedFrom}' id='${escapeXmlAttribute(repositoryId)}' path='${pathDatasources}' revision='${escapeXmlAttribute(revision)}'${siteAttr} />
-      <connection channel='${channel}' class='sqlproxy' dbname='${escapeXmlAttribute(repositoryId)}' local-dataserver='' port='${escapeXmlAttribute(port)}' server='${escapeXmlAttribute(hostname)}' username=''${savedCredsAttr}>
+      <repository-location id='${escapeXmlAttribute(publishedDatasourceId)}' path='${pathDatasources}' revision='${escapeXmlAttribute(revision)}'${siteAttr} />
+      <connection channel='${channel}' class='sqlproxy' dbname='${escapeXmlAttribute(datasourceName)}' local-dataserver='' port='${escapeXmlAttribute(port)}' server='${escapeXmlAttribute(hostname)}' username=''>
         <relation name='sqlproxy' table='[sqlproxy]' type='table' />
       </connection>
       <aliases enabled='yes' />
@@ -162,13 +150,13 @@ export const getGenerateWorkbookXmlTool = (server: Server): Tool<typeof paramsSc
       openWorldHint: false,
     },
     callback: async (
-      { datasourceName, datasourceCaption, repositoryId, revision, worksheetName, savedCredentialsViewerId },
+      { datasourceName, publishedDatasourceId, datasourceCaption, revision, worksheetName },
       { requestId },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       return await generateWorkbookXmlTool.logAndExecute<string>({
         requestId,
-        args: { datasourceName, datasourceCaption, repositoryId, revision, worksheetName, savedCredentialsViewerId },
+        args: { datasourceName, publishedDatasourceId, datasourceCaption, revision, worksheetName },
         callback: async () => {
           const url = new URL(config.server);
           const channel = (url.protocol === 'https:') ? 'https' : 'http';
@@ -177,7 +165,6 @@ export const getGenerateWorkbookXmlTool = (server: Server): Tool<typeof paramsSc
           const siteName = config.siteName ?? '';
 
           const finalCaption = datasourceCaption?.trim() || datasourceName;
-          const finalRepositoryId = repositoryId?.trim() || sanitizeForId(datasourceName);
           const finalRevision = (revision ?? '1.0').trim();
           const finalWorksheetName = (worksheetName ?? 'Sheet 1').trim();
 
@@ -186,12 +173,11 @@ export const getGenerateWorkbookXmlTool = (server: Server): Tool<typeof paramsSc
             hostname: url.hostname,
             port,
             channel,
-            datasourceName,
+            datasourceName: sanitizeForId(datasourceName),
             datasourceCaption: finalCaption,
-            repositoryId: finalRepositoryId,
+            publishedDatasourceId,
             revision: finalRevision,
             worksheetName: finalWorksheetName,
-            savedCredentialsViewerId,
           });
 
           return new Ok(xml);
