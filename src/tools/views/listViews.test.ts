@@ -1,7 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
-import { getListViewsTool } from './listViews.js';
+import invariant from '../../utils/invariant.js';
+import { constrainViews, getListViewsTool } from './listViews.js';
+import { mockView } from './mockView.js';
 
 const mockViews = {
   pagination: {
@@ -9,21 +11,7 @@ const mockViews = {
     pageSize: 10,
     totalAvailable: 1,
   },
-  views: [
-    {
-      id: 'be75437c-fa5c-4218-914c-8c3efcf6a59c',
-      name: 'Overview',
-      createdAt: '2024-06-10T23:23:23Z',
-      updatedAt: '2024-06-10T23:23:23Z',
-      tags: {
-        tag: [
-          {
-            label: 'tag-1',
-          },
-        ],
-      },
-    },
-  ],
+  views: [mockView],
 };
 
 const mocks = vi.hoisted(() => ({
@@ -75,6 +63,67 @@ describe('listViewsTool', () => {
     const result = await getToolResult({ filter: 'name:eq:Overview' });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(errorMessage);
+  });
+
+  describe('constrainViews', () => {
+    it('should return empty result when no views are found', () => {
+      const result = constrainViews({
+        views: [],
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        'No views were found. Either none exist or you do not have permission to view them.',
+      );
+    });
+
+    it('should return empty results when all views were filtered out by the bounded context', () => {
+      const result = constrainViews({
+        views: mockViews.views,
+        boundedContext: {
+          projectIds: new Set(['123']),
+          datasourceIds: null,
+          workbookIds: null,
+        },
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        [
+          'The set of allowed views that can be queried is limited by the server configuration.',
+          'While views were found, they were all filtered out by the server configuration.',
+        ].join(' '),
+      );
+    });
+
+    it('should return success result when no views were filtered out by the bounded context', () => {
+      const result = constrainViews({
+        views: mockViews.views,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toBe(mockViews.views);
+    });
+
+    it('should return success result when some views were filtered out by the bounded context', () => {
+      const result = constrainViews({
+        views: mockViews.views,
+        boundedContext: {
+          projectIds: new Set([mockViews.views[0].project.id]),
+          datasourceIds: null,
+          workbookIds: new Set([mockViews.views[0].workbook.id]),
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual([mockViews.views[0]]);
+    });
   });
 });
 

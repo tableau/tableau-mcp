@@ -6,6 +6,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/schemas.js';
 import { Tool } from '../../tool.js';
+import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
@@ -55,6 +56,8 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
             },
           });
         },
+        constrainSuccessResult: (metrics) =>
+          constrainPulseMetrics({ metrics, boundedContext: config.boundedContext }),
         getErrorText: getPulseDisabledError,
       });
     },

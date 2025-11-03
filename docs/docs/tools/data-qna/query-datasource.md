@@ -10,6 +10,10 @@ data.
 ## APIs called
 
 - [Query Data Source](https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/QueryDatasource)
+  from VizQL Data Service
+- [Query Data Source](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source)
+  from REST API (if data source [tool scoping](../../configuration/mcp-config/tool-scoping.md) is
+  enabled)
 
 ## Environment variables
 

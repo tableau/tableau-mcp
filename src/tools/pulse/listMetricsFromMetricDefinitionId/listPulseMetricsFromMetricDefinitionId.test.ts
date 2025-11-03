@@ -1,22 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import type { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import { getListPulseMetricsFromMetricDefinitionIdTool } from './listPulseMetricsFromMetricDefinitionId.js';
-
-const mockPulseMetrics: PulseMetric[] = [
-  {
-    id: 'CF32DDCC-362B-4869-9487-37DA4D152550',
-    is_default: true,
-    is_followed: false,
-  } as PulseMetric,
-  {
-    id: 'CF32DDCC-362B-4869-9487-37DA4D152551',
-    is_default: false,
-    is_followed: true,
-  } as PulseMetric,
-];
 
 const mocks = vi.hoisted(() => ({
   mockListPulseMetricsFromMetricDefinitionId: vi.fn(),
@@ -34,6 +21,8 @@ vi.mock('../../../restApiInstance.js', () => ({
 }));
 
 describe('listPulseMetricsFromMetricDefinitionIdTool', () => {
+  const mockPulseMetrics = mockPulseMetricDefinitions.flatMap((definition) => definition.metrics);
+
   beforeEach(() => {
     vi.clearAllMocks();
   });

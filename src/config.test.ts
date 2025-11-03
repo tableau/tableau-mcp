@@ -41,6 +41,11 @@ describe('Config', () => {
       MAX_RESULT_LIMIT: undefined,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: undefined,
       DISABLE_METADATA_API_REQUESTS: undefined,
+      ENABLE_SERVER_LOGGING: undefined,
+      SERVER_LOG_DIRECTORY: undefined,
+      INCLUDE_PROJECT_IDS: undefined,
+      INCLUDE_DATASOURCE_IDS: undefined,
+      INCLUDE_WORKBOOK_IDS: undefined,
       DISABLE_OAUTH: undefined,
       OAUTH_ISSUER: undefined,
       OAUTH_REDIRECT_URI: undefined,
@@ -702,6 +707,75 @@ describe('Config', () => {
     });
   });
 
+  describe('Bounded context parsing', () => {
+    it('should set boundedContext to null sets when no project, datasource, or workbook IDs are provided', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.boundedContext).toEqual({
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+      });
+    });
+
+    it('should set boundedContext to the specified project, datasource, and workbook IDs when provided', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        INCLUDE_PROJECT_IDS: ' 123, 456, 123   ', // spacing is intentional here to test trimming
+        INCLUDE_DATASOURCE_IDS: '789,101',
+        INCLUDE_WORKBOOK_IDS: '112,113',
+      };
+
+      const config = new Config();
+      expect(config.boundedContext).toEqual({
+        projectIds: new Set(['123', '456']),
+        datasourceIds: new Set(['789', '101']),
+        workbookIds: new Set(['112', '113']),
+      });
+    });
+
+    it('should throw error when INCLUDE_PROJECT_IDS is set to an empty string', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        INCLUDE_PROJECT_IDS: '',
+      };
+
+      expect(() => new Config()).toThrow(
+        'When set, the environment variable INCLUDE_PROJECT_IDS must have at least one value',
+      );
+    });
+
+    it('should throw error when INCLUDE_DATASOURCE_IDS is set to an empty string', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        INCLUDE_DATASOURCE_IDS: '',
+      };
+
+      expect(() => new Config()).toThrow(
+        'When set, the environment variable INCLUDE_DATASOURCE_IDS must have at least one value',
+      );
+    });
+
+    it('should throw error when INCLUDE_WORKBOOK_IDS is set to an empty string', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        INCLUDE_WORKBOOK_IDS: '',
+      };
+
+      expect(() => new Config()).toThrow(
+        'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
+      );
+    });
+  });
+
   describe('OAuth configuration', () => {
     const defaultOAuthEnvVars = {
       ...defaultEnvVars,
@@ -965,6 +1039,103 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.siteName).toBe('');
+    });
+  });
+
+  describe('parseNumber', () => {
+    it('should return defaultValue when value is undefined', () => {
+      const result = parseNumber(undefined, { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is empty string', () => {
+      const result = parseNumber('', { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is whitespace', () => {
+      const result = parseNumber('   ', { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is not a number', () => {
+      const result = parseNumber('abc', { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is NaN', () => {
+      const result = parseNumber('NaN', { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should parse valid integer string', () => {
+      const result = parseNumber('123', { defaultValue: 42 });
+      expect(result).toBe(123);
+    });
+
+    it('should parse valid integer string with leading zeros', () => {
+      const result = parseNumber('007', { defaultValue: 42 });
+      expect(result).toBe(7);
+    });
+
+    it('should parse valid integer string with whitespace', () => {
+      const result = parseNumber('  456  ', { defaultValue: 42 });
+      expect(result).toBe(456);
+    });
+
+    it('should parse valid decimal string', () => {
+      const result = parseNumber('123.45', { defaultValue: 42 });
+      expect(result).toBe(123.45);
+    });
+
+    it('should parse valid decimal string with whitespace', () => {
+      const result = parseNumber('  123.45  ', { defaultValue: 42 });
+      expect(result).toBe(123.45);
+    });
+
+    it('should return defaultValue when value is below minValue', () => {
+      const result = parseNumber('5', { defaultValue: 42, minValue: 10 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is above maxValue', () => {
+      const result = parseNumber('100', { defaultValue: 42, maxValue: 50 });
+      expect(result).toBe(42);
+    });
+
+    it('should parse valid number when within minValue and maxValue range', () => {
+      const result = parseNumber('25', { defaultValue: 42, minValue: 10, maxValue: 50 });
+      expect(result).toBe(25);
+    });
+
+    it('should parse valid number when value equals minValue', () => {
+      const result = parseNumber('10', { defaultValue: 42, minValue: 10, maxValue: 50 });
+      expect(result).toBe(10);
+    });
+
+    it('should parse valid number when value equals maxValue', () => {
+      const result = parseNumber('50', { defaultValue: 42, minValue: 10, maxValue: 50 });
+      expect(result).toBe(50);
+    });
+
+    it('should use default options when no options provided', () => {
+      const result = parseNumber('123');
+      expect(result).toBe(123);
+    });
+
+    it('should use default defaultValue of 0 when no options provided', () => {
+      const result = parseNumber('abc');
+      expect(result).toBe(0);
+    });
+
+    it('should handle negative numbers with appropriate minValue', () => {
+      const result = parseNumber('-5', { defaultValue: 42, minValue: -10 });
+      expect(result).toBe(-5);
+    });
+
+    it('should return defaultValue for negative numbers when minValue is 0', () => {
+      const result = parseNumber('-5', { defaultValue: 42, minValue: 0 });
+      expect(result).toBe(42);
     });
   });
 

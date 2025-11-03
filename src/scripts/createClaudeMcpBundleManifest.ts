@@ -166,6 +166,30 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  INCLUDE_PROJECT_IDS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'IDs of projects to constrain tool results by',
+    description: 'A comma-separated list of project IDs to constrain tool results by.',
+    required: false,
+    sensitive: false,
+  },
+  INCLUDE_DATASOURCE_IDS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'IDs of datasources to constrain tool results by',
+    description: 'A comma-separated list of datasource IDs to constrain tool results by.',
+    required: false,
+    sensitive: false,
+  },
+  INCLUDE_WORKBOOK_IDS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'IDs of workbooks to constrain tool results by',
+    description: 'A comma-separated list of workbook IDs to constrain tool results by.',
+    required: false,
+    sensitive: false,
+  },
   MAX_RESULT_LIMIT: {
     includeInUserConfig: false,
     type: 'number',
@@ -343,7 +367,7 @@ const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>
 );
 
 const manifest = {
-  dxt_version: '0.2', // Replace with manifest_version this once Claude Desktop understands it
+  manifest_version: '0.2',
   name: 'Tableau',
   version: packageJson.version,
   description: packageJson.description,

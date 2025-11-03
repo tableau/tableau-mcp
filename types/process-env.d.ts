@@ -27,6 +27,9 @@ export interface ProcessEnvEx {
   DISABLE_METADATA_API_REQUESTS: string | undefined;
   ENABLE_SERVER_LOGGING: string | undefined;
   SERVER_LOG_DIRECTORY: string | undefined;
+  INCLUDE_PROJECT_IDS: string | undefined;
+  INCLUDE_DATASOURCE_IDS: string | undefined;
+  INCLUDE_WORKBOOK_IDS: string | undefined;
   DISABLE_OAUTH: string | undefined;
   OAUTH_ISSUER: string | undefined;
   OAUTH_JWE_PRIVATE_KEY_PATH: string | undefined;

@@ -11,7 +11,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20.x, 22.x, 24.x]
+        node-version: ['>=22.7.5 <23', '24.x']
     steps:
       - uses: actions/checkout@v4
 
@@ -64,7 +64,7 @@ jobs:
           npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb
 
       - name: Report code coverage
-        if: matrix.node-version == '20.x'
+        if: matrix.node-version == '>=22.7.5 <23'
         uses: irongut/CodeCoverageSummary@v1.3.0
         with:
           filename: coverage/**/cobertura-coverage.xml
@@ -80,7 +80,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts-node${{ matrix.node-version }}
+          name: artifacts-node${{ matrix.node-version == '>=22.7.5 <23' && '22.x' || matrix.node-version }}
           if-no-files-found: error
           path: |
             build/

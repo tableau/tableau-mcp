@@ -14,6 +14,8 @@ import { Tool } from '../tool.js';
 import {
   buildFilterString,
   buildOrderByString,
+  constrainSearchContent,
+  ReducedSearchContentResponse,
   reduceSearchContentResponse,
 } from './searchContentUtils.js';
 
@@ -66,7 +68,7 @@ This tool searches across all supported content types for objects relevant to th
       const config = getConfig();
       const orderByString = orderBy ? buildOrderByString(orderBy) : undefined;
       const filterString = filter ? buildFilterString(filter) : undefined;
-      return await searchContentTool.logAndExecute({
+      return await searchContentTool.logAndExecute<Array<ReducedSearchContentResponse>>({
         requestId,
         authInfo,
         args: {},
@@ -93,6 +95,8 @@ This tool searches across all supported content types for objects relevant to th
             }),
           );
         },
+        constrainSuccessResult: (items) =>
+          constrainSearchContent({ items, boundedContext: config.boundedContext }),
       });
     },
   });

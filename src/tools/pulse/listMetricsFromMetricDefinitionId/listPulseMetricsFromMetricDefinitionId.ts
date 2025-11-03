@@ -3,9 +3,12 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
+import { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/schemas.js';
 import { Tool } from '../../tool.js';
+import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
@@ -38,7 +41,10 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
       { requestId, authInfo },
     ): Promise<CallToolResult> => {
       const config = getConfig();
-      return await listPulseMetricsFromMetricDefinitionIdTool.logAndExecute({
+      return await listPulseMetricsFromMetricDefinitionIdTool.logAndExecute<
+        Array<PulseMetric>,
+        PulseDisabledError
+      >({
         requestId,
         authInfo,
         args: { pulseMetricDefinitionID },
@@ -56,6 +62,8 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
             },
           });
         },
+        constrainSuccessResult: (metrics) =>
+          constrainPulseMetrics({ metrics, boundedContext: config.boundedContext }),
         getErrorText: getPulseDisabledError,
       });
     },
