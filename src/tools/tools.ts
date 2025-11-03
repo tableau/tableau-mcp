@@ -11,6 +11,7 @@ import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { getGetViewDataTool } from './views/getViewData.js';
 import { getGetViewImageTool } from './views/getViewImage.js';
 import { getListViewsTool } from './views/listViews.js';
+import { getCreateWorkbookTool } from './workbooks/createWorkbook.js';
 import { getGenerateWorkbookXmlTool } from './workbooks/generateWorkbookXml.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getInjectVizIntoWorkbookXmlTool } from './workbooks/injectVizIntoWorkbookXml.js';
@@ -26,6 +27,7 @@ export const toolFactories = [
   getListPulseMetricsFromMetricIdsTool,
   getListPulseMetricSubscriptionsTool,
   getGeneratePulseMetricValueInsightBundleTool,
+  getCreateWorkbookTool,
   getGetWorkbookTool,
   getGenerateWorkbookXmlTool,
   getInjectVizIntoWorkbookXmlTool,

@@ -5,6 +5,7 @@ export const toolNames = [
   'query-datasource',
   'get-datasource-metadata',
   'get-workbook',
+  'create-workbook',
   'generate-workbook-xml',
   'inject-viz-into-workbook-xml',
   'get-view-data',
@@ -33,6 +34,7 @@ export const toolGroups = {
   workbook: [
     'list-workbooks',
     'get-workbook',
+    'create-workbook',
     'generate-workbook-xml',
     'inject-viz-into-workbook-xml',
   ],
