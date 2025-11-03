@@ -26,9 +26,6 @@ export function token(
   /**
    * OAuth 2.1 Token Endpoint
    *
-   * @remarks
-   * MCP OAuth Step 7: Token Exchange with PKCE Verification
-   *
    * Exchanges authorization code for access token.
    * Verifies PKCE code_verifier matches the original challenge.
    * Returns JWT containing tokens for API access.
@@ -211,11 +208,8 @@ export function token(
 /**
  * Creates JWE access token containing credentials
  *
- * @remarks
- * Part of MCP OAuth Step 7: Token Exchange
- * JWE contains tokens for making API calls
- *
  * @param tokenData - token data
+ * @param publicKey - public key for encrypting the token
  * @returns Encrypted JWE token for MCP authentication
  */
 async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject): Promise<string> {

@@ -13,9 +13,6 @@ import { AuthenticatedRequest } from './types.js';
 /**
  * Express middleware for OAuth authentication
  *
- * @remarks
- * MCP OAuth Step 1: Initial Request (401 Unauthorized)
- *
  * This middleware checks for Bearer token authorization.
  * If no token is present, returns 401 with WWW-Authenticate header
  * pointing to resource metadata endpoint.
@@ -91,13 +88,12 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
 /**
  * Verifies JWE access token and extracts credentials
  *
- * @remarks
- * MCP OAuth Step 8: Authenticated MCP Request
- *
  * Decrypts and validates JWE signature and expiration.
  * Extracts access/refresh tokens for API calls.
  *
  * @param token - JWT access token from Authorization header
+ * @param jwePrivateKey - Private key for decrypting the token
+ *
  * @returns AuthInfo with user details and tokens
  */
 async function verifyAccessToken(
@@ -110,19 +106,19 @@ async function verifyAccessToken(
     const { plaintext } = await compactDecrypt(token, privateKey);
     const payload = JSON.parse(new TextDecoder().decode(plaintext));
 
-    if (
-      !payload ||
-      payload.iss !== config.oauth.issuer ||
-      payload.aud !== AUDIENCE ||
-      !payload.exp ||
-      payload.exp < Math.floor(Date.now() / 1000)
-    ) {
+    const mcpAccessToken = mcpAccessTokenUserOnlySchema.safeParse(payload);
+    if (!mcpAccessToken.success) {
+      return Err(`Invalid access token: ${fromError(mcpAccessToken.error).toString()}`);
+    }
+
+    const { iss, aud, exp } = mcpAccessToken.data;
+    if (iss !== config.oauth.issuer || aud !== AUDIENCE || exp < Math.floor(Date.now() / 1000)) {
       // https://github.com/modelcontextprotocol/inspector/issues/608
       // MCP Inspector Not Using Refresh Token for Token Validation
       return new Err('Invalid or expired access token');
     }
 
-    let authInfo: TableauAuthInfo;
+    let tableauAuthInfo: TableauAuthInfo;
     if (config.auth === 'oauth') {
       const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
       if (!mcpAccessToken.success) {
@@ -142,7 +138,7 @@ async function verifyAccessToken(
         return new Err('Invalid or expired access token');
       }
 
-      authInfo = {
+      tableauAuthInfo = {
         username: sub,
         userId: tableauUserId,
         server: tableauServer,
@@ -150,13 +146,8 @@ async function verifyAccessToken(
         refreshToken: tableauRefreshToken,
       };
     } else {
-      const mcpAccessToken = mcpAccessTokenUserOnlySchema.safeParse(payload);
-      if (!mcpAccessToken.success) {
-        return Err(`Invalid access token: ${fromError(mcpAccessToken.error).toString()}`);
-      }
-
       const { tableauUserId, tableauServer, sub } = mcpAccessToken.data;
-      authInfo = {
+      tableauAuthInfo = {
         username: sub,
         server: tableauServer,
         ...(tableauUserId ? { userId: tableauUserId } : {}),
@@ -167,10 +158,9 @@ async function verifyAccessToken(
       token,
       // TODO: Include the client ID in the access token
       clientId: 'mcp-client',
-      // TODO: Implement scopes
-      scopes: ['read'],
+      scopes: [],
       expiresAt: payload.exp,
-      extra: authInfo,
+      extra: tableauAuthInfo,
     });
   } catch {
     return new Err('Invalid or expired access token');

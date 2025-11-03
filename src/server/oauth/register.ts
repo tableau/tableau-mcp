@@ -4,9 +4,6 @@ export function register(app: express.Application): void {
   /**
    * Dynamic Client Registration Endpoint
    *
-   * @remarks
-   * MCP OAuth Step 4: Dynamic Client Registration (Optional)
-   *
    * Allows clients to dynamically register with the authorization
    * server. For public clients (like desktop apps), no client
    * secret is required - security comes from PKCE.

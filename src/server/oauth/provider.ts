@@ -18,24 +18,9 @@ export const AUDIENCE = 'tableau-mcp-server';
 /**
  * OAuth 2.1 Provider
  *
- * @remarks
  * Implements the complete MCP OAuth 2.1 flow with PKCE
  * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
  *
- * This provider handles:
- * - Step 1: Initial 401 response with WWW-Authenticate
- * - Step 2: Resource metadata discovery
- * - Step 3: Authorization server metadata
- * - Step 4: Dynamic client registration
- * - Step 5: Authorization with PKCE
- * - Step 6: OAuth callback
- * - Step 7: Token exchange
- * - Step 8: Authenticated requests
- *
- * Security features:
- * - PKCE (RFC 7636) for authorization code flow
- * - Secure state parameter validation
- * - Time-limited authorization codes
  */
 export class OAuthProvider {
   private readonly config = getConfig();

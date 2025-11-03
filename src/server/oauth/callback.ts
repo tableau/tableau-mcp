@@ -23,10 +23,7 @@ export function callback(
   /**
    * OAuth Callback Handler
    *
-   * @remarks
-   * MCP OAuth Step 6: OAuth Callback
-   *
-   * Receives callback from after user authorization.
+   * Receives callback from Tableau OAuth after user authorization.
    * Exchanges code for tokens, generates MCP authorization
    * code, and redirects back to client with code.
    */
@@ -154,11 +151,7 @@ export function callback(
 }
 
 /**
- * Exchanges authorization code for access tokens
- *
- * @remarks
- * Part of MCP OAuth Step 6: OAuth Callback
- * Uses token endpoint with basic auth
+ * Exchanges authorization code for Tableau access tokens
  *
  * @param server - Tableau server host
  * @param code - Authorization code

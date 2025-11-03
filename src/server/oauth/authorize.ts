@@ -18,12 +18,9 @@ export function authorize(
   /**
    * OAuth 2.1 Authorization Endpoint
    *
-   * @remarks
-   * MCP OAuth Step 5: Authorization Request with PKCE
-   *
    * Handles authorization requests with PKCE parameters.
    * Validates request, stores pending authorization, and
-   * redirects to OAuth for user consent.
+   * redirects to Tableau OAuth.
    */
   app.get('/oauth/authorize', (req, res) => {
     const result = mcpAuthorizeSchema.safeParse(req.query);

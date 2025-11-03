@@ -95,6 +95,9 @@ export const callbackSchema = z.object({
 });
 
 export const mcpAccessTokenUserOnlySchema = z.object({
+  iss: requiredString('iss'),
+  aud: requiredString('aud'),
+  exp: z.number().int().nonnegative(),
   sub: requiredString('sub'),
   tableauServer: requiredString('tableauServer'),
   // Optional because there may not be a user associated with the access token, e.g. for client credentials grant type

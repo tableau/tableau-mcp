@@ -7,9 +7,6 @@ export function oauthProtectedResource(app: express.Application): void {
   /**
    * OAuth 2.0 Protected Resource Metadata
    *
-   * @remarks
-   * MCP OAuth Step 2: Resource Metadata Discovery
-   *
    * Returns metadata about the protected resource and its
    * authorization servers. Client discovers this URL from
    * WWW-Authenticate header in 401 response.

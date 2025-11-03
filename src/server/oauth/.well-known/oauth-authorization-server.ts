@@ -5,9 +5,6 @@ import { getConfig } from '../../../config.js';
 /**
  * OAuth 2.0 Authorization Server Metadata
  *
- * @remarks
- * MCP OAuth Step 3: Authorization Server Metadata
- *
  * Returns metadata about the authorization server including
  * available endpoints, supported flows, and capabilities.
  */
