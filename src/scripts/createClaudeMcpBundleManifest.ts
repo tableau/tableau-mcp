@@ -304,6 +304,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  OAUTH_CLIENT_ID_SECRET_PAIRS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth Client ID Secret Pairs',
+    description:
+      'A comma-separated list of client ID and secret pairs for the OAuth client. The format is `clientId:secret`.',
+    required: false,
+    sensitive: true,
+  },
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: {
     includeInUserConfig: false,
     type: 'number',
@@ -327,15 +336,6 @@ const envVars = {
     description: 'The OAuth refresh token timeout.',
     required: false,
     sensitive: false,
-  },
-  OAUTH_CLIENT_ID_SECRET_PAIRS: {
-    includeInUserConfig: false,
-    type: 'string',
-    title: 'OAuth Client ID Secret Pairs',
-    description:
-      'A comma-separated list of client ID and secret pairs for the OAuth client. The format is `clientId:secret`.',
-    required: false,
-    sensitive: true,
   },
 } satisfies EnvVars;
 
