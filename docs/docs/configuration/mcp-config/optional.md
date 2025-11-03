@@ -28,6 +28,45 @@ The Tableau authentication method to use by the server.
 
 <hr />
 
+## `ENABLE_SERVER_LOGGING`
+
+When `true`, the server will continue sending notifications to MCP clients, but will now also write
+them to local files in the directory specified in the
+[`SERVER_LOG_DIRECTORY`](#server_log_directory) environment variable. Notifications include tool
+calls and their arguments as well as HTTP traces for the requests and responses to the Tableau REST
+APIs.
+
+- Default: `false`
+- The log file names are in the format `YYYY-MM-DDTHH-00-00-000Z.log` e.g.
+  `2025-10-15T22-00-00-000Z.log` meaning this log file contains all log messages for hour 22 of
+  2025-10-15 in UTC time. All log entries for a given hour of the day are appended to the same file.
+- Each line in the log file is a JSON object with the following properties:
+
+  - `timestamp`: The timestamp of the log message in UTC time.
+  - `level`: The logging level of the log message.
+  - `logger`: The logger of the log message. This is typically `rest-api` for HTTP traces or
+    `tableau-mcp` for tool calls.
+  - `message`: The log message itself. This may be a string or a JSON object.
+
+- All notifications are written to the local log files regardless of the server's currently
+  configured minimum logging level, since that only applies to notifications sent to MCP clients.
+  See [`DEFAULT_LOG_LEVEL`](#default_log_level) for more information.
+- Secrets are masked by default in the log files. To reveal them for debugging purposes, set the
+  [`DISABLE_LOG_MASKING`](#disable_log_masking) environment variable to `true`.
+
+<hr />
+
+## `SERVER_LOG_DIRECTORY`
+
+The directory server logs are written to when [`ENABLE_SERVER_LOGGING`](#enable_server_logging) is
+`true`.
+
+- Default: `[build directory]/logs` i.e. `build/logs`.
+- The server will attempt to create the directory if it does not exist.
+- There is no cleanup of old log files. The server will continue to create log files indefinitely.
+
+<hr />
+
 ## `DEFAULT_LOG_LEVEL`
 
 The default logging level of the server.
@@ -43,7 +82,20 @@ The default logging level of the server.
   - `alert`
   - `emergency`
 
-MCP logs are written by your AI client, so check that documentation to find their location.
+This value determines the minimum log level in which to send notifications to MCP clients. That is,
+if the server's currently configured minimum logging level is `debug`, all log messages will be sent
+to MCP clients. If the level is set to `error`, only log messages with a level of `error` or higher
+will be sent. Note that MCP clients can
+[change the minimum log level](https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/logging#setting-log-level)
+any time they want.
+
+<hr />
+
+## `DISABLE_LOG_MASKING`
+
+Disable masking of credentials in MCP client notifications and server logs. For debug purposes only.
+
+- Default: `false`
 
 <hr />
 
@@ -74,14 +126,6 @@ API][tab-ds-connections].
 
 Future work will include a tool to automate this process. For more information, see [Connect to your
 data source][tab-connect-ds].
-
-<hr />
-
-## `DISABLE_LOG_MASKING`
-
-Disable masking of credentials in logs. For debug purposes only.
-
-- Default: `false`
 
 <hr />
 
