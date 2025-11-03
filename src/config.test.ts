@@ -1040,6 +1040,20 @@ describe('Config', () => {
       const config = new Config();
       expect(config.siteName).toBe('');
     });
+
+    it('should set clientIdSecretPairs to the specified value when OAUTH_CLIENT_ID_SECRET_PAIRS is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_CLIENT_ID_SECRET_PAIRS: 'client1:secret1,client2:secret2',
+      };
+
+      const config = new Config();
+      expect(config.oauth.clientIdSecretPairs).toEqual({
+        client1: 'secret1',
+        client2: 'secret2',
+      });
+    });
   });
 
   describe('parseNumber', () => {
