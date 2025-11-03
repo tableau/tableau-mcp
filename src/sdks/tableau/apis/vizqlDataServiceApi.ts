@@ -330,6 +330,9 @@ export const QueryOutput = z
   .passthrough();
 
 export type QueryOutput = z.infer<typeof QueryOutput>;
+export type Parameter = z.infer<typeof Parameter>;
+export type QueryParameter = z.infer<typeof QueryParameter>;
+export type DataType = z.infer<typeof DataType>;
 
 const vizqlDataServiceApi = makeApi([
   {

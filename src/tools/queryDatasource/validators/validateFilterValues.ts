@@ -14,6 +14,7 @@ import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServ
 import { Server } from '../../../server.js';
 import { Query } from '../queryDatasourceValidator.js';
 
+// TODO: move types to a separate file
 type MatchFilter = z.infer<typeof MatchFilter>;
 type SetFilter = z.infer<typeof SetFilter>;
 

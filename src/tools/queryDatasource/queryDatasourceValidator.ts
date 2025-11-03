@@ -5,6 +5,7 @@ import { validateDatasourceLuid } from '../validateDatasourceLuid.js';
 import { validateFields } from './validators/validateFields.js';
 import { validateFilters } from './validators/validateFilters.js';
 
+// TODO: move types to a separate file
 export type Query = z.infer<typeof Query>;
 export type FilterField = z.infer<typeof FilterField>;
 

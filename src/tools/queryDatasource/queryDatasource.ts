@@ -20,7 +20,9 @@ import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { validateQuery } from './queryDatasourceValidator.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
 import { validateFilterValues } from './validators/validateFilterValues.js';
+import { validateQueryAgainstDatasourceMetadata } from './validators/validateQueryAgainstDatasourceMetadata.js';
 
+// TODO: move types to a separate file
 type Datasource = z.infer<typeof Datasource>;
 
 const paramsSchema = {
@@ -34,6 +36,10 @@ export type QueryDatasourceError =
     }
   | {
       type: 'datasource-not-allowed';
+      message: string;
+    }
+  | {
+      type: 'metadata-validation';
       message: string;
     }
   | {
@@ -99,7 +105,23 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             server,
             jwtScopes: ['tableau:viz_data_service:read'],
             callback: async (restApi) => {
-              if (!config.disableQueryDatasourceFilterValidation) {
+              if (!config.disableQueryDatasourceValidationRequests) {
+                // Validate query against metadata
+                const metadataValidationResult = await validateQueryAgainstDatasourceMetadata(
+                  query,
+                  restApi.vizqlDataServiceMethods,
+                  datasource,
+                );
+
+                if (metadataValidationResult.isErr()) {
+                  const errors = metadataValidationResult.error;
+                  const errorMessage = errors.map((error) => error.message).join('\n\n');
+                  return new Err({
+                    type: 'metadata-validation',
+                    message: errorMessage,
+                  });
+                }
+
                 // Validate filters values for SET and MATCH filters
                 const filterValidationResult = await validateFilterValues(
                   server,
@@ -148,6 +170,12 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             case 'datasource-not-allowed':
               return error.message;
             case 'filter-validation':
+              return JSON.stringify({
+                requestId,
+                errorType: 'validation',
+                message: error.message,
+              });
+            case 'metadata-validation':
               return JSON.stringify({
                 requestId,
                 errorType: 'validation',
