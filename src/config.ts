@@ -177,7 +177,9 @@ export class Config {
       clientIdSecretPairs: oauthClientIdSecretPairs
         ? oauthClientIdSecretPairs.split(',').reduce<Record<string, string>>((acc, curr) => {
             const [clientId, secret] = curr.split(':');
-            acc[clientId] = secret;
+            if (clientId && secret) {
+              acc[clientId] = secret;
+            }
             return acc;
           }, {})
         : null,
