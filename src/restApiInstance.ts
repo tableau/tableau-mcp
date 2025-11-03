@@ -14,7 +14,7 @@ import {
   ResponseInterceptorConfig,
 } from './sdks/tableau/interceptors.js';
 import RestApi from './sdks/tableau/restApi.js';
-import { Server } from './server.js';
+import { Server, userAgent } from './server.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import { isAxiosError } from './utils/isAxiosError.js';
 
@@ -91,7 +91,7 @@ export const useRestApi = async <T>({
 export const getRequestInterceptor =
   (server: Server, requestId: RequestId): RequestInterceptor =>
   (request) => {
-    request.headers['User-Agent'] = `${server.name}/${server.version}`;
+    request.headers['User-Agent'] = userAgent;
     logRequest(server, request, requestId);
     return request;
   };
