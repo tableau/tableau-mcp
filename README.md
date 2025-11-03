@@ -21,11 +21,10 @@ The `generate-workbook-xml` tool creates a Tableau TWB (XML) string that connect
 Parameters:
 
 - `datasourceName` (required): The published data source display name (friendly name).
+- `publishedDatasourceId` (required): The published datasource's repository ID.
 - `datasourceCaption` (optional): Caption in the workbook; defaults to `datasourceName`.
-- `repositoryId` (optional): Identifier used in repository location/dbname; defaults to a sanitized `datasourceName`.
 - `revision` (optional): Revision string; defaults to `1.0`.
 - `worksheetName` (optional): The initial sheet name; defaults to `Sheet 1`.
-- `savedCredentialsViewerId` (optional): If provided, sets `saved-credentials-viewerid` on the connection.
 
 Output is a TWB XML string you can save to a `.twb` file. Server URL and site are taken from the MCP server configuration (`SERVER`, `SITE_NAME`).
 
