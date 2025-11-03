@@ -45,7 +45,7 @@ describe('parseAndValidateFilterString', () => {
         filterFieldSchema: FilterFieldSchema,
       }),
     ).toThrowError(
-      `Invalid enum value. Expected 'name' | 'projectName' | 'createdAt' | 'updatedAt', received 'notAField'`,
+      "Invalid enum value. Expected 'name' | 'projectName' | 'createdAt' | 'updatedAt', received 'notAField'",
     );
   });
 
@@ -57,7 +57,7 @@ describe('parseAndValidateFilterString', () => {
         filterFieldSchema: FilterFieldSchema,
       }),
     ).toThrowError(
-      `Invalid enum value. Expected 'eq' | 'in' | 'gt' | 'gte' | 'lt' | 'lte', received 'badop'`,
+      "Invalid enum value. Expected 'eq' | 'in' | 'gt' | 'gte' | 'lt' | 'lte', received 'badop'",
     );
   });
 
@@ -68,7 +68,7 @@ describe('parseAndValidateFilterString', () => {
         allowedOperatorsByField,
         filterFieldSchema: FilterFieldSchema,
       }),
-    ).toThrowError(`Operator 'gt' is not allowed for field 'name'. Allowed operators: eq`);
+    ).toThrowError("Operator 'gt' is not allowed for field 'name'. Allowed operators: eq");
   });
 
   it('throws on invalid format', () => {
@@ -78,7 +78,7 @@ describe('parseAndValidateFilterString', () => {
         allowedOperatorsByField,
         filterFieldSchema: FilterFieldSchema,
       }),
-    ).toThrowError(`Invalid filter expression format: "nameeqvalue"`);
+    ).toThrowError('Invalid filter expression format: "nameeqvalue"');
 
     expect(() =>
       parseAndValidateFilterString({
@@ -86,7 +86,7 @@ describe('parseAndValidateFilterString', () => {
         allowedOperatorsByField,
         filterFieldSchema: FilterFieldSchema,
       }),
-    ).toThrowError(`Invalid filter expression format: "name:eq"`);
+    ).toThrowError('Invalid filter expression format: "name:eq"');
   });
 
   it('keeps only the last filter for duplicate fields', () => {

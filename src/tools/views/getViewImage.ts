@@ -24,7 +24,8 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
   const getViewImageTool = new Tool({
     server,
     name: 'get-view-image',
-    description: `Retrieves an image of the specified view in a Tableau workbook. The width and height in pixels can be provided. The default width and height are both 800 pixels.`,
+    description:
+      'Retrieves an image of the specified view in a Tableau workbook. The width and height in pixels can be provided. The default width and height are both 800 pixels.',
     paramsSchema,
     annotations: {
       title: 'Get View Image',

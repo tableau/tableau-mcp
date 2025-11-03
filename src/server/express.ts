@@ -96,7 +96,6 @@ export async function startExpressServer({
 
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
-      // eslint-disable-next-line no-console -- console.error is intentional here since the transport is not stdio.
       console.error('Error handling MCP request:', error);
       if (!res.headersSent) {
         res.status(500).json({

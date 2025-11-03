@@ -21,7 +21,8 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
   const getViewDataTool = new Tool({
     server,
     name: 'get-view-data',
-    description: `Retrieves data in comma separated value (CSV) format for the specified view in a Tableau workbook.`,
+    description:
+      'Retrieves data in comma separated value (CSV) format for the specified view in a Tableau workbook.',
     paramsSchema,
     annotations: {
       title: 'Get View Data',
