@@ -182,15 +182,12 @@ export const getGenerateWorkbookXmlTool = (server: Server): Tool<typeof paramsSc
 
           return new Ok(xml);
         },
-        getSuccessResult: (xml) => ({
-          isError: false,
-          content: [
-            {
-              type: 'text',
-              text: xml,
-            },
-          ],
-        }),
+        constrainSuccessResult: (generateWorkbookXml) => {
+          return {
+            type: 'success',
+            result: generateWorkbookXml,
+          };
+        },
       });
     },
   });

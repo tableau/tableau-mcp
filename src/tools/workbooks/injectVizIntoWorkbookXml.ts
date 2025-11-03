@@ -240,15 +240,12 @@ export const getInjectVizIntoWorkbookXmlTool = (
 
           return new Ok(updatedXml);
         },
-        getSuccessResult: (xml) => ({
-          isError: false,
-          content: [
-            {
-              type: 'text',
-              text: xml,
-            },
-          ],
-        }),
+        constrainSuccessResult: (injectVizIntoWorkbookXml) => {
+          return {
+            type: 'success',
+            result: injectVizIntoWorkbookXml,
+          };
+        },
       });
     },
   });
