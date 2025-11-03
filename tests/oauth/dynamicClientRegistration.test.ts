@@ -134,7 +134,7 @@ describe('dynamic client registration', () => {
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
       error: 'invalid_redirect_uri',
-      error_description: 'redirect_uris must be an array of strings',
+      error_description: 'Invalid redirect URI: 123',
     });
   });
 
@@ -151,7 +151,7 @@ describe('dynamic client registration', () => {
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
       error: 'invalid_redirect_uri',
-      error_description: 'Invalid redirect URI format: 🍔',
+      error_description: 'Invalid redirect URI: 🍔',
     });
   });
 
@@ -168,8 +168,7 @@ describe('dynamic client registration', () => {
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
       error: 'invalid_redirect_uri',
-      error_description:
-        'Invalid redirect URI: http://example.com. HTTP URIs must be localhost or 127.0.0.1',
+      error_description: 'Invalid redirect URI: http://example.com',
     });
   });
 
@@ -186,7 +185,7 @@ describe('dynamic client registration', () => {
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
       error: 'invalid_redirect_uri',
-      error_description: 'Invalid redirect URI format: 123abc://example.com',
+      error_description: 'Invalid redirect URI: 123abc://example.com',
     });
   });
 });

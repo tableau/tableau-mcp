@@ -1,5 +1,7 @@
 import express from 'express';
 
+import { isValidRedirectUri } from './isValidRedirectUri.js';
+
 export function register(app: express.Application): void {
   /**
    * Dynamic Client Registration Endpoint
@@ -14,48 +16,15 @@ export function register(app: express.Application): void {
     const validatedRedirectUris = [];
     if (redirect_uris && Array.isArray(redirect_uris)) {
       for (const uri of redirect_uris) {
-        if (typeof uri !== 'string') {
+        if (!isValidRedirectUri(uri)) {
           res.status(400).json({
             error: 'invalid_redirect_uri',
-            error_description: 'redirect_uris must be an array of strings',
+            error_description: `Invalid redirect URI: ${uri}`,
           });
           return;
         }
 
-        // Validate using same security rules as authorization endpoint
-        try {
-          const url = new URL(uri);
-
-          if (url.protocol === 'https:') {
-            // Allow HTTPS URLs
-            validatedRedirectUris.push(uri);
-          } else if (url.protocol === 'http:') {
-            if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
-              res.status(400).json({
-                error: 'invalid_redirect_uri',
-                error_description: `Invalid redirect URI: ${uri}. HTTP URIs must be localhost or 127.0.0.1`,
-              });
-              return;
-            }
-            // Allow HTTP only for localhost
-            validatedRedirectUris.push(uri);
-          } else if (url.protocol.match(/^[a-zA-Z][a-zA-Z0-9+.-]*:$/)) {
-            // Allow custom schemes
-            validatedRedirectUris.push(uri);
-          } else {
-            res.status(400).json({
-              error: 'invalid_redirect_uri',
-              error_description: `Invalid redirect URI: ${uri}. Must use HTTPS, localhost HTTP, or custom scheme`,
-            });
-            return;
-          }
-        } catch {
-          res.status(400).json({
-            error: 'invalid_redirect_uri',
-            error_description: `Invalid redirect URI format: ${uri}`,
-          });
-          return;
-        }
+        validatedRedirectUris.push(uri);
       }
     }
 

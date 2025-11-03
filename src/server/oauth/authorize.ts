@@ -5,6 +5,7 @@ import { fromError } from 'zod-validation-error';
 import { getConfig } from '../../config.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
+import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { mcpAuthorizeSchema } from './schemas.js';
 import { PendingAuthorization } from './types.js';
@@ -59,32 +60,10 @@ export function authorize(
       return;
     }
 
-    // Validate redirect URI using security rules (for public clients)
-    try {
-      const url = new URL(redirectUri);
-
-      // Allow HTTPS URLs
-      if (url.protocol === 'https:') {
-        // HTTPS is always allowed
-      }
-      // Allow HTTP only for localhost
-      else if (url.protocol === 'http:') {
-        if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
-          throw new Error('Invalid hostname over http');
-        }
-
-        // Localhost HTTP is allowed
-      }
-      // Allow custom schemes (like systemprompt://)
-      else if (url.protocol.match(/^[a-zA-Z][a-zA-Z0-9+.-]*:$/)) {
-        // Custom schemes are allowed
-      } else {
-        throw new Error('Invalid protocol');
-      }
-    } catch {
+    if (!isValidRedirectUri(redirectUri)) {
       res.status(400).json({
         error: 'invalid_request',
-        error_description: 'Invalid redirect URI: must use HTTPS, localhost HTTP, or custom scheme',
+        error_description: `Invalid redirect URI: ${redirectUri}`,
       });
       return;
     }

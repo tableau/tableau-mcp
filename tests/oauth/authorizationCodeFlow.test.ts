@@ -137,8 +137,7 @@ describe('authorization code flow', () => {
         expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
         expect(response.body).toEqual({
           error: 'invalid_request',
-          error_description:
-            'Invalid redirect URI: must use HTTPS, localhost HTTP, or custom scheme',
+          error_description: 'Invalid redirect URI: 123',
         });
       });
 
@@ -157,8 +156,7 @@ describe('authorization code flow', () => {
         expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
         expect(response.body).toEqual({
           error: 'invalid_request',
-          error_description:
-            'Invalid redirect URI: must use HTTPS, localhost HTTP, or custom scheme',
+          error_description: 'Invalid redirect URI: 🍔',
         });
       });
 
@@ -177,8 +175,7 @@ describe('authorization code flow', () => {
         expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
         expect(response.body).toEqual({
           error: 'invalid_request',
-          error_description:
-            'Invalid redirect URI: must use HTTPS, localhost HTTP, or custom scheme',
+          error_description: 'Invalid redirect URI: http://example.com',
         });
       });
 
@@ -187,7 +184,7 @@ describe('authorization code flow', () => {
 
         const response = await request(app).get('/oauth/authorize').query({
           client_id: 'test-client-id',
-          redirect_uri: '🤷‍♂️://example.com',
+          redirect_uri: '123http://example.com',
           response_type: 'code',
           code_challenge: 'test-code-challenge',
           code_challenge_method: 'S256',
@@ -197,8 +194,7 @@ describe('authorization code flow', () => {
         expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
         expect(response.body).toEqual({
           error: 'invalid_request',
-          error_description:
-            'Invalid redirect URI: must use HTTPS, localhost HTTP, or custom scheme',
+          error_description: 'Invalid redirect URI: 123http://example.com',
         });
       });
     });
