@@ -17,7 +17,7 @@ export const getCreateWorkbookTool = (server: Server): Tool<typeof paramsSchema>
     server,
     name: 'create-workbook',
     description:
-      'Publishes a Tableau workbook XML string to the Tableau server. The workbook will be saved as a file with the given filename. ',
+      'Creates a Tableau workbook by uploading the TWB (workbook) XML string to the Tableau server. The workbook will be saved as a file with the given filename.',
     paramsSchema,
     annotations: {
       title: 'Create Workbook',
