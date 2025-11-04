@@ -11,5 +11,5 @@ export function setEnv(): void {
 export function resetEnv(): void {
   resetBaseEnv();
   dotenv.config({ path: 'tests/oauth/.env.oauth.reset', override: true });
-  process.env.OAUTH_CLIENT_ID_SECRET_PAIRS = undefined;
+  delete process.env.OAUTH_CLIENT_ID_SECRET_PAIRS;
 }
