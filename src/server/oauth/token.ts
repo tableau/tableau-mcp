@@ -243,7 +243,7 @@ async function createClientCredentialsAccessToken(
     sub: clientCredentials.clientId,
     tableauServer: clientCredentials.server,
     iat: Math.floor(Date.now() / 1000),
-    exp: Date.now() + config.oauth.accessTokenTimeoutMs,
+    exp: Math.floor((Date.now() + config.oauth.accessTokenTimeoutMs) / 1000),
     aud: AUDIENCE,
     iss: config.oauth.issuer,
   });
