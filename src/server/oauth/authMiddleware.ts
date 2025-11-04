@@ -111,7 +111,7 @@ async function verifyAccessToken(
       return Err(`Invalid access token: ${fromError(mcpAccessToken.error).toString()}`);
     }
 
-    const { iss, aud, exp } = mcpAccessToken.data;
+    const { iss, aud, exp, clientId } = mcpAccessToken.data;
     if (iss !== config.oauth.issuer || aud !== AUDIENCE || exp < Math.floor(Date.now() / 1000)) {
       // https://github.com/modelcontextprotocol/inspector/issues/608
       // MCP Inspector Not Using Refresh Token for Token Validation
@@ -156,8 +156,7 @@ async function verifyAccessToken(
 
     return Ok({
       token,
-      // TODO: Include the client ID in the access token
-      clientId: 'mcp-client',
+      clientId,
       scopes: [],
       expiresAt: payload.exp,
       extra: tableauAuthInfo,

@@ -97,6 +97,7 @@ export const mcpAccessTokenUserOnlySchema = z.object({
   aud: requiredString('aud'),
   exp: z.number().int().nonnegative(),
   sub: requiredString('sub'),
+  clientId: requiredString('clientId'),
   tableauServer: requiredString('tableauServer'),
   // Optional because there may not be a user associated with the access token, e.g. for client credentials grant type
   tableauUserId: z.string().optional(),

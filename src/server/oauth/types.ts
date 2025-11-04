@@ -30,6 +30,7 @@ export type ClientCredentials = {
 
 export type UserAndTokens = {
   user: User;
+  clientId: string;
   server: string;
   tokens: Tokens;
 };
