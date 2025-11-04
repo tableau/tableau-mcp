@@ -6,9 +6,9 @@ sidebar_position: 4
 
 :::warning
 
-Tableau Server 2025.3+ only. Tableau Cloud is not supported yet but is coming soon ETA Q2 2026.
-
-Otherwise, you can still test by running the MCP server locally.
+Tableau Server 2025.3+ only. Full Tableau Cloud is not supported yet but is coming soon ETA Q2 2026.
+Until then, enabling OAuth support against a Tableau Cloud site will only work when the MCP server
+is accessed using a local development URL e.g. `http://127.0.0.1:3927/tableau-mcp`.
 
 :::
 
@@ -206,6 +206,21 @@ The timeout for the OAuth access tokens.
 <hr />
 
 ### `OAUTH_REFRESH_TOKEN_TIMEOUT_MS`
+
+:::warning
+
+OAuth support is currently in beta, and the present implementation retains refresh tokens in memory.
+Consequently, a server administrator's action of stopping and restarting the server, potentially
+during an upgrade, will result in the loss of all refresh tokens.
+
+Any access tokens actively utilized by MCP clients will remain functional until their expiration,
+but subsequent attempts to refresh these tokens will fail, requiring the user to sign out and then
+sign back in.
+
+This issue also pertains to authorization codes, though its impact is less likely due to their
+significantly shorter expiration window. This limitation will be addressed in a later release.
+
+:::
 
 The timeout for the OAuth refresh tokens.
 

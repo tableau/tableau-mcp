@@ -7,8 +7,8 @@ sidebar_position: 3
 :::warning
 
 Tableau Server 2025.3+ only. Full Tableau Cloud is not supported yet but is coming soon ETA Q2 2026.
-Until then, enabling OAuth support againt a Tableau Cloud site will only work when the MCP server is
-accessed using a local development URL e.g. `http://127.0.0.1:3927/tableau-mcp`.
+Until then, enabling OAuth support against a Tableau Cloud site will only work when the MCP server
+is accessed using a local development URL e.g. `http://127.0.0.1:3927/tableau-mcp`.
 
 :::
 
