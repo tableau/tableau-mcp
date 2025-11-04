@@ -101,9 +101,9 @@ async function verifyAccessToken(
   jwePrivateKey: KeyObject,
 ): Promise<Result<AuthInfo, string>> {
   const config = getConfig();
-  const privateKey = jwePrivateKey;
+
   try {
-    const { plaintext } = await compactDecrypt(token, privateKey);
+    const { plaintext } = await compactDecrypt(token, jwePrivateKey);
     const payload = JSON.parse(new TextDecoder().decode(plaintext));
 
     const mcpAccessToken = mcpAccessTokenUserOnlySchema.safeParse(payload);
