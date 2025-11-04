@@ -134,7 +134,7 @@ async function verifyAccessToken(
         sub,
       } = mcpAccessToken.data;
 
-      if (Date.now() > tableauExpiresAt) {
+      if (tableauExpiresAt < Math.floor(Date.now() / 1000)) {
         return new Err('Invalid or expired access token');
       }
 

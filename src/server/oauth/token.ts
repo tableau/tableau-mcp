@@ -225,7 +225,8 @@ async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject)
       ? {
           tableauAccessToken: tokenData.tokens.accessToken,
           tableauRefreshToken: tokenData.tokens.refreshToken,
-          tableauExpiresAt: Date.now() + tokenData.tokens.expiresInSeconds * 1000,
+          tableauExpiresAt: Math.floor(Date.now() / 1000) + tokenData.tokens.expiresInSeconds,
+          tableauUserId: tokenData.user.id,
         }
       : {}),
   });
