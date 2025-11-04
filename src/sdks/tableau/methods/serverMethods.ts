@@ -1,8 +1,8 @@
 import { isErrorFromAlias, Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { isAxiosError } from '../../../../node_modules/axios/index.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { isAxiosError } from '../../../utils/isAxiosError.js';
 import { serverApis, Session } from '../apis/serverApi.js';
 import { Credentials } from '../types/credentials.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
