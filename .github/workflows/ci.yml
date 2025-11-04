@@ -56,6 +56,22 @@ jobs:
           CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
           CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
 
+      - name: OAuth Tests
+        run: npm run test:oauth
+        env:
+          TRANSPORT: http
+          SERVER: ${{ secrets.E2E_TEST_SERVER }}
+          SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
+          AUTH: ${{ secrets.E2E_TEST_AUTH }}
+          JWT_SUB_CLAIM: ${{ secrets.E2E_TEST_JWT_SUB_CLAIM }}
+          CONNECTED_APP_CLIENT_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}
+          CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
+          CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
+          OAUTH_ISSUER: http://127.0.0.1:3927
+          OAUTH_JWE_PRIVATE_KEY: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY }}
+          OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY_PASSPHRASE }}
+          OAUTH_CLIENT_ID_SECRET_PAIRS: ${{ secrets.OAUTH_TEST_OAUTH_CLIENT_ID_SECRET_PAIRS }}
+
       - name: Build Claude MCP Bundle
         run: |
           npm run build:manifest:script
