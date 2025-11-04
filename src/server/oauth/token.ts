@@ -151,7 +151,7 @@ export function token(
 
           if (tokensResult.isErr()) {
             // If the refresh token exchange fails, reuse the existing Tableau access token
-            // which may nor may not be expired.
+            // which may or may not be expired.
             accessToken = await createAccessToken(
               {
                 user: tokenData.user,
