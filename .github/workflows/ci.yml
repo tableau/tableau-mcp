@@ -70,7 +70,6 @@ jobs:
           OAUTH_ISSUER: http://127.0.0.1:3927
           OAUTH_JWE_PRIVATE_KEY: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY }}
           OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY_PASSPHRASE }}
-          OAUTH_CLIENT_ID_SECRET_PAIRS: ${{ secrets.OAUTH_TEST_OAUTH_CLIENT_ID_SECRET_PAIRS }}
 
       - name: Build Claude MCP Bundle
         run: |
