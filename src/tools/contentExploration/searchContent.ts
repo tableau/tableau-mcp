@@ -9,6 +9,7 @@ import {
   searchContentFilterSchema,
 } from '../../sdks/tableau/types/contentExploration.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { Tool } from '../tool.js';
 import {
   buildFilterString,
@@ -60,12 +61,16 @@ This tool searches across all supported content types for objects relevant to th
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ terms, limit, orderBy, filter }, { requestId }): Promise<CallToolResult> => {
+    callback: async (
+      { terms, limit, orderBy, filter },
+      { requestId, authInfo },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       const orderByString = orderBy ? buildOrderByString(orderBy) : undefined;
       const filterString = filter ? buildFilterString(filter) : undefined;
       return await searchContentTool.logAndExecute<Array<ReducedSearchContentResponse>>({
         requestId,
+        authInfo,
         args: {},
         callback: async () => {
           return new Ok(
@@ -74,6 +79,7 @@ This tool searches across all supported content types for objects relevant to th
               requestId,
               server,
               jwtScopes: ['tableau:content:read'],
+              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 const response = await restApi.contentExplorationMethods.searchContent({
                   terms,
