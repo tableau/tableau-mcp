@@ -155,6 +155,7 @@ export function token(
             accessToken = await createAccessToken(
               {
                 user: tokenData.user,
+                clientId: tokenData.clientId,
                 server: tokenData.server,
                 tokens: tokenData.tokens,
               },
@@ -170,6 +171,7 @@ export function token(
             accessToken = await createAccessToken(
               {
                 user: tokenData.user,
+                clientId: tokenData.clientId,
                 server: tokenData.server,
                 tokens: {
                   accessToken: newTableauAccessToken,
@@ -212,6 +214,7 @@ async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject)
 
   const payload = JSON.stringify({
     sub: tokenData.user.name,
+    clientId: tokenData.clientId,
     tableauServer: tokenData.server,
     tableauUserId: tokenData.user.id,
     iat: Math.floor(Date.now() / 1000),
@@ -241,6 +244,7 @@ async function createClientCredentialsAccessToken(
   const config = getConfig();
   const payload = JSON.stringify({
     sub: clientCredentials.clientId,
+    clientId: clientCredentials.clientId,
     tableauServer: clientCredentials.server,
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor((Date.now() + config.oauth.accessTokenTimeoutMs) / 1000),
