@@ -104,7 +104,6 @@ export function token(
             token_type: 'Bearer',
             expires_in: config.oauth.accessTokenTimeoutMs / 1000,
             refresh_token: refreshTokenId,
-            scope: 'read',
           });
           return;
         }
@@ -124,7 +123,6 @@ export function token(
             access_token: accessToken,
             token_type: 'Bearer',
             expires_in: config.oauth.accessTokenTimeoutMs / 1000,
-            scope: 'read',
           });
           return;
         }
@@ -187,7 +185,6 @@ export function token(
             access_token: accessToken,
             token_type: 'Bearer',
             expires_in: config.oauth.accessTokenTimeoutMs / 1000,
-            scope: 'read',
           });
           return;
         }

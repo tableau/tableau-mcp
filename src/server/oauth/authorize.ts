@@ -34,15 +34,8 @@ export function authorize(
       return;
     }
 
-    const {
-      clientId,
-      redirectUri,
-      responseType,
-      codeChallenge,
-      codeChallengeMethod,
-      state,
-      scope = 'read',
-    } = result.data;
+    const { clientId, redirectUri, responseType, codeChallenge, codeChallengeMethod, state } =
+      result.data;
 
     if (responseType !== 'code') {
       res.status(400).json({
@@ -79,7 +72,6 @@ export function authorize(
       codeChallenge,
       codeChallengeMethod,
       state: state ?? '',
-      scope,
       tableauState,
       tableauClientId,
     });

@@ -12,7 +12,6 @@ export type PendingAuthorization = {
   codeChallenge: string;
   codeChallengeMethod: string;
   state: string;
-  scope: string;
   tableauState: string;
   tableauClientId: string;
 };

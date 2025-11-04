@@ -10,7 +10,6 @@ export const mcpAuthorizeSchema = z
     code_challenge: requiredString('code_challenge'),
     code_challenge_method: requiredString('code_challenge_method'),
     state: z.string().optional(),
-    scope: z.string().optional(),
   })
   .transform((data) => ({
     clientId: data.client_id,
@@ -19,7 +18,6 @@ export const mcpAuthorizeSchema = z
     codeChallenge: data.code_challenge,
     codeChallengeMethod: data.code_challenge_method,
     state: data.state,
-    scope: data.scope,
   }));
 
 export const mcpTokenSchema = z
