@@ -41,7 +41,7 @@ describe('refresh token grant type', () => {
   });
 
   afterEach(async () => {
-    return new Promise<void>((resolve) => {
+    await new Promise<void>((resolve) => {
       _server?.close(() => {
         resolve();
       });
