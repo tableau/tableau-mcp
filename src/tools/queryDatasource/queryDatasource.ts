@@ -7,8 +7,8 @@ import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import {
   Datasource,
-  Query,
   QueryOutput,
+  querySchema,
   TableauError,
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
@@ -22,12 +22,9 @@ import { queryDatasourceToolDescription } from './queryDescription.js';
 import { validateFilterValues } from './validators/validateFilterValues.js';
 import { validateQueryAgainstDatasourceMetadata } from './validators/validateQueryAgainstDatasourceMetadata.js';
 
-// TODO: move types to a separate file
-type Datasource = z.infer<typeof Datasource>;
-
 const paramsSchema = {
   datasourceLuid: z.string().nonempty(),
-  query: Query,
+  query: querySchema,
 };
 
 export type QueryDatasourceError =
@@ -48,7 +45,7 @@ export type QueryDatasourceError =
     }
   | {
       type: 'tableau-error';
-      error: z.infer<typeof TableauError>;
+      error: TableauError;
     };
 
 export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema> => {

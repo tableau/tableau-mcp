@@ -1,17 +1,13 @@
 import { Err, Ok, Result } from 'ts-results-es';
-import { z } from 'zod';
 
 import {
   Datasource,
   DataType,
   MetadataResponse,
+  Query,
   QueryParameter,
 } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
-import { Query } from '../queryDatasourceValidator.js';
-
-// TODO: move this type to a separate file
-type Datasource = z.infer<typeof Datasource>;
 
 type FieldValidationError = {
   field: string;
