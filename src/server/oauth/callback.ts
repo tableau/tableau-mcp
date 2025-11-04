@@ -125,7 +125,7 @@ export function callback(
           refreshToken,
           expiresInSeconds,
         },
-        expiresAt: Date.now() + config.oauth.authzCodeTimeoutMs,
+        expiresAt: Math.floor((Date.now() + config.oauth.authzCodeTimeoutMs) / 1000),
       });
 
       // Clean up

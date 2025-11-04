@@ -61,7 +61,7 @@ export function token(
           // Handle authorization code exchange
           const { code, codeVerifier } = result.data;
           const authCode = authorizationCodes.get(code);
-          if (!authCode || authCode.expiresAt < Date.now()) {
+          if (!authCode || authCode.expiresAt < Math.floor(Date.now() / 1000)) {
             authorizationCodes.delete(code);
             res.status(400).json({
               error: 'invalid_grant',
@@ -88,7 +88,7 @@ export function token(
             server: authCode.server,
             clientId: authCode.clientId,
             tokens: authCode.tokens,
-            expiresAt: Date.now() + config.oauth.refreshTokenTimeoutMs,
+            expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
             tableauClientId: authCode.tableauClientId,
           });
 
@@ -130,7 +130,7 @@ export function token(
           // Handle refresh token
           const { refreshToken } = result.data;
           const tokenData = refreshTokens.get(refreshToken);
-          if (!tokenData || tokenData.expiresAt < Date.now()) {
+          if (!tokenData || tokenData.expiresAt < Math.floor(Date.now() / 1000)) {
             // Refresh token is expired
             refreshTokens.delete(refreshToken);
             res.status(400).json({
