@@ -1,4 +1,3 @@
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { z } from 'zod';
 
 import { requiredString } from '../../utils/requiredString.js';
@@ -125,16 +124,3 @@ export const tableauAuthInfoSchema = z
   .partial();
 
 export type TableauAuthInfo = z.infer<typeof tableauAuthInfoSchema>;
-
-export const getTableauAuthInfo = (authInfo: AuthInfo | undefined): TableauAuthInfo | undefined => {
-  if (!authInfo) {
-    return;
-  }
-
-  const tableauAuthInfo = tableauAuthInfoSchema.safeParse(authInfo.extra);
-  if (!tableauAuthInfo.success) {
-    return;
-  }
-
-  return tableauAuthInfo.data;
-};
