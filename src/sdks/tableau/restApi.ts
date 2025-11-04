@@ -181,6 +181,24 @@ export default class RestApi {
     this._creds = undefined;
   };
 
+  setCredentials = (accessToken: string, userId: string): void => {
+    const parts = accessToken.split('|');
+    if (parts.length < 3) {
+      throw new Error('Could not determine site ID. Access token must have 3 parts.');
+    }
+
+    const siteId = parts[2];
+    this._creds = {
+      site: {
+        id: siteId,
+      },
+      user: {
+        id: userId,
+      },
+      token: accessToken,
+    };
+  };
+
   private _addInterceptors = (baseUrl: string, interceptors: AxiosInterceptor): void => {
     interceptors.request.use(
       (config) => {
