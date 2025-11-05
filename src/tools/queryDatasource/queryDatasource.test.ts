@@ -4,7 +4,6 @@ import { Err, Ok } from 'ts-results-es';
 
 import { QueryOutput } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
-import { testProductVersion } from '../../testShared.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
@@ -79,7 +78,7 @@ describe('queryDatasourceTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+    const queryDatasourceTool = getQueryDatasourceTool(new Server());
     expect(queryDatasourceTool.name).toBe('query-datasource');
     expect(queryDatasourceTool.description).toEqual(expect.any(String));
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
@@ -253,7 +252,7 @@ describe('queryDatasourceTool', () => {
             ],
           }),
         );
-      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const queryDatasourceTool = getQueryDatasourceTool(new Server());
       const result = await queryDatasourceTool.callback(
         {
           datasourceLuid: 'test-datasource-luid',
@@ -302,7 +301,7 @@ describe('queryDatasourceTool', () => {
             ],
           }),
         );
-      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const queryDatasourceTool = getQueryDatasourceTool(new Server());
       const result = await queryDatasourceTool.callback(
         {
           datasourceLuid: 'test-datasource-luid',
@@ -344,7 +343,7 @@ describe('queryDatasourceTool', () => {
       // Mock main query only
       mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
 
-      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const queryDatasourceTool = getQueryDatasourceTool(new Server());
       const result = await queryDatasourceTool.callback(
         {
           datasourceLuid: 'test-datasource-luid',
@@ -385,7 +384,7 @@ describe('queryDatasourceTool', () => {
       // Mock main query only
       mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
 
-      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const queryDatasourceTool = getQueryDatasourceTool(new Server());
       const result = await queryDatasourceTool.callback(
         {
           datasourceLuid: 'test-datasource-luid',
@@ -441,7 +440,7 @@ describe('queryDatasourceTool', () => {
           }),
         );
 
-      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const queryDatasourceTool = getQueryDatasourceTool(new Server());
       const result = await queryDatasourceTool.callback(
         {
           datasourceLuid: 'test-datasource-luid',
@@ -513,7 +512,7 @@ describe('queryDatasourceTool', () => {
 });
 
 async function getToolResult(): Promise<CallToolResult> {
-  const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+  const queryDatasourceTool = getQueryDatasourceTool(new Server());
   return await queryDatasourceTool.callback(
     {
       datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',

@@ -11,16 +11,14 @@ import {
   QueryOutput,
   TableauError,
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
-import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
-import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { validateQuery } from './queryDatasourceValidator.js';
-import { getQueryDatasourceToolDescription } from './queryDescription.js';
+import { queryDatasourceToolDescription } from './queryDescription.js';
 import { validateFilterValues } from './validators/validateFilterValues.js';
 
 type Datasource = z.infer<typeof Datasource>;
@@ -47,14 +45,11 @@ export type QueryDatasourceError =
       error: z.infer<typeof TableauError>;
     };
 
-export const getQueryDatasourceTool = (
-  server: Server,
-  productVersion: ProductVersion,
-): Tool<typeof paramsSchema> => {
+export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema> => {
   const queryDatasourceTool = new Tool({
     server,
     name: 'query-datasource',
-    description: new Provider(() => getQueryDatasourceToolDescription(productVersion)),
+    description: queryDatasourceToolDescription,
     paramsSchema,
     annotations: {
       title: 'Query Datasource',
