@@ -5,6 +5,7 @@ build/
 node_modules/
 junit/
 coverage/
+test-logs/
 config.json
 env.list
 manifest.json

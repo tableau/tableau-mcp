@@ -10,6 +10,7 @@ import {
 import AuthenticationMethods, {
   AuthenticatedAuthenticationMethods,
 } from './methods/authenticationMethods.js';
+import ContentExplorationMethods from './methods/contentExplorationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import PulseMethods from './methods/pulseMethods.js';
@@ -33,6 +34,7 @@ export class RestApi {
 
   private _authenticationMethods?: AuthenticationMethods;
   private _authenticatedAuthenticationMethods?: AuthenticatedAuthenticationMethods;
+  private _contentExplorationMethods?: ContentExplorationMethods;
   private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
   private _pulseMethods?: PulseMethods;
@@ -88,6 +90,21 @@ export class RestApi {
       this._addInterceptors(this._baseUrl, this._authenticatedAuthenticationMethods.interceptors);
     }
     return this._authenticatedAuthenticationMethods;
+  }
+
+  get contentExplorationMethods(): ContentExplorationMethods {
+    if (!this._contentExplorationMethods) {
+      this._contentExplorationMethods = new ContentExplorationMethods(
+        this._baseUrlWithoutVersion,
+        this.creds,
+      );
+      this._addInterceptors(
+        this._baseUrlWithoutVersion,
+        this._contentExplorationMethods.interceptors,
+      );
+    }
+
+    return this._contentExplorationMethods;
   }
 
   get datasourcesMethods(): DatasourcesMethods {

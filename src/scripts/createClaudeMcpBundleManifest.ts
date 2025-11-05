@@ -115,6 +115,22 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  ENABLE_SERVER_LOGGING: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Enable Server Logging',
+    description: 'Enable logging of server activity to local files.',
+    required: false,
+    sensitive: false,
+  },
+  SERVER_LOG_DIRECTORY: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Server Log Directory',
+    description: 'The directory to write the server logs to when ENABLE_SERVER_LOGGING is true.',
+    required: false,
+    sensitive: false,
+  },
   DEFAULT_LOG_LEVEL: {
     includeInUserConfig: false,
     type: 'string',
@@ -147,6 +163,30 @@ const envVars = {
     title: 'Excluded Tools',
     description:
       'A comma-separated list of tool names to exclude from the server. All other tools will be available.',
+    required: false,
+    sensitive: false,
+  },
+  INCLUDE_PROJECT_IDS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'IDs of projects to constrain tool results by',
+    description: 'A comma-separated list of project IDs to constrain tool results by.',
+    required: false,
+    sensitive: false,
+  },
+  INCLUDE_DATASOURCE_IDS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'IDs of datasources to constrain tool results by',
+    description: 'A comma-separated list of datasource IDs to constrain tool results by.',
+    required: false,
+    sensitive: false,
+  },
+  INCLUDE_WORKBOOK_IDS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'IDs of workbooks to constrain tool results by',
+    description: 'A comma-separated list of workbook IDs to constrain tool results by.',
     required: false,
     sensitive: false,
   },
@@ -246,7 +286,7 @@ const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>
 );
 
 const manifest = {
-  dxt_version: '0.1', // Replace with manifest_version this once Claude Desktop understands it
+  manifest_version: '0.2',
   name: 'Tableau',
   version: packageJson.version,
   description: packageJson.description,

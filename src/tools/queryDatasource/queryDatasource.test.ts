@@ -6,10 +6,12 @@ import { QueryOutput } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { testProductVersion } from '../../testShared.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
+import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
 import { getQueryDatasourceTool } from './queryDatasource.js';
 
 const { resetDatasourceCredentials } = datasourceCredentialsExportedForTesting;
+const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
 
 const mockVdsResponses = vi.hoisted(() => ({
   success: {
@@ -42,6 +44,7 @@ const mockVdsResponses = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   mockQueryDatasource: vi.fn(),
+  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -56,19 +59,23 @@ vi.mock('../../restApiInstance.js', () => ({
   ),
 }));
 
-describe('queryDatasourceTool', () => {
-  const originalEnv = process.env;
+vi.mock('../../config.js', () => ({
+  getConfig: mocks.mockGetConfig,
+}));
 
+describe('queryDatasourceTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetDatasourceCredentials();
-    process.env = {
-      ...originalEnv,
-    };
-  });
-
-  afterEach(() => {
-    process.env = { ...originalEnv };
+    resetResourceAccessCheckerSingleton();
+    mocks.mockGetConfig.mockReturnValue({
+      datasourceCredentials: undefined,
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+      },
+    });
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -137,11 +144,17 @@ describe('queryDatasourceTool', () => {
 
   it('should add datasource credentials to the request when provided', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
-
-    process.env.DATASOURCE_CREDENTIALS = JSON.stringify({
-      '71db762b-6201-466b-93da-57cc0aec8ed9': [
-        { luid: 'test-luid', u: 'test-user', p: 'test-pass' },
-      ],
+    mocks.mockGetConfig.mockReturnValue({
+      datasourceCredentials: JSON.stringify({
+        '71db762b-6201-466b-93da-57cc0aec8ed9': [
+          { luid: 'test-luid', u: 'test-user', p: 'test-pass' },
+        ],
+      }),
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+      },
     });
 
     const result = await getToolResult();
@@ -474,6 +487,28 @@ describe('queryDatasourceTool', () => {
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
+  });
+
+  it('should return data source not allowed error when datasource is not allowed', async () => {
+    mocks.mockGetConfig.mockReturnValue({
+      datasourceCredentials: undefined,
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: new Set(['some-other-datasource-luid']),
+        workbookIds: null,
+      },
+    });
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe(
+      [
+        'The set of allowed data sources that can be queried is limited by the server configuration.',
+        'Querying the datasource with LUID 71db762b-6201-466b-93da-57cc0aec8ed9 is not allowed.',
+      ].join(' '),
+    );
+
+    expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
   });
 });
 

@@ -6,7 +6,7 @@ export default mergeConfig(
   defineConfig(configShared),
   defineConfig({
     test: {
-      dir: 'e2e',
+      dir: 'tests/e2e',
       testTimeout: 30_000,
       outputFile: 'junit/e2e.xml',
     },
