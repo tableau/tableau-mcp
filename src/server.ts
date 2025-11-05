@@ -3,6 +3,7 @@ import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import pkg from '../package.json' with { type: 'json' };
 import { getConfig } from './config.js';
+import { getTableauServerVersion } from './getTableauServerVersion.js';
 import { setLogLevel } from './logging/log.js';
 import { Tool } from './tools/tool.js';
 import { toolNames } from './tools/toolName.js';
@@ -33,14 +34,14 @@ export class Server extends McpServer {
     this.version = serverVersion;
   }
 
-  registerTools = async (): Promise<void> => {
+  registerTools = async ({ tableauServer }: { tableauServer: string }): Promise<void> => {
     for (const {
       name,
       description,
       paramsSchema,
       annotations,
       callback,
-    } of await this._getToolsToRegister()) {
+    } of await this._getToolsToRegister(tableauServer)) {
       this.tool(name, description, paramsSchema, annotations, callback);
     }
   };
@@ -52,9 +53,9 @@ export class Server extends McpServer {
     });
   };
 
-  private _getToolsToRegister = async (): Promise<Array<Tool<any>>> => {
+  private _getToolsToRegister = async (tableauServer: string): Promise<Array<Tool<any>>> => {
     const { includeTools, excludeTools } = getConfig();
-    const productVersion = await getConfig().getTableauServerVersion();
+    const productVersion = await getTableauServerVersion(tableauServer);
 
     const tools = toolFactories.map((tool) => tool(this, productVersion));
     const toolsToRegister = tools.filter((tool) => {

@@ -20,8 +20,10 @@
   },
   "scripts": {
     ":build": "npx rimraf ./build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --minify --outdir=build --sourcemap",
+    ":build:dev": "npx rimraf ./build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap",
     "build": "run-s :build exec-perms",
-    "build:watch": "npm run :build -- --watch",
+    "build:dev": "run-s :build:dev exec-perms",
+    "build:watch": "npm run :build:dev -- --watch",
     "build:docker": "docker build -t tableau-mcp .",
     ":build:mcpb": "npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb",
     "build:mcpb": "run-s build:manifest:script build:manifest :build:mcpb",

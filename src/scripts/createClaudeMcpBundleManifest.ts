@@ -256,6 +256,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'Tableau Server Version Check Interval in Hours',
+    description: 'The interval in hours to check the Tableau server version.',
+    required: false,
+    sensitive: false,
+  },
 } satisfies EnvVars;
 
 const userConfig = Object.entries(envVars).reduce<Record<string, McpbUserConfigurationOption>>(

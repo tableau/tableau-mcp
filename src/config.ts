@@ -1,14 +1,10 @@
-import { ZodiosError } from '@zodios/core';
 import { CorsOptions } from 'cors';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
-import { fromError, isZodErrorLike } from 'zod-validation-error';
 
-import { RestApi } from './sdks/tableau/restApi.js';
 import { ProductVersion } from './sdks/tableau/types/serverInfo.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
-import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -51,6 +47,7 @@ export class Config {
   enableServerLogging: boolean;
   serverLogDirectory: string;
   boundedContext: BoundedContext;
+  tableauServerVersionCheckIntervalInHours: number;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -83,11 +80,23 @@ export class Config {
       INCLUDE_PROJECT_IDS: includeProjectIds,
       INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
       INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
+      TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
     } = cleansedVars;
 
     const defaultPort = 3927;
     const httpPort = cleansedVars[httpPortEnvVarName?.trim() || 'PORT'] || defaultPort.toString();
     const httpPortNumber = parseInt(httpPort, 10);
+
+    const defaultTableauServerVersionCheckIntervalInHours = 1;
+    const tableauServerVersionCheckIntervalInHoursNumber = tableauServerVersionCheckIntervalInHours
+      ? parseFloat(tableauServerVersionCheckIntervalInHours)
+      : defaultTableauServerVersionCheckIntervalInHours;
+
+    this.tableauServerVersionCheckIntervalInHours =
+      isNaN(tableauServerVersionCheckIntervalInHoursNumber) ||
+      tableauServerVersionCheckIntervalInHoursNumber <= 0
+        ? defaultTableauServerVersionCheckIntervalInHours
+        : tableauServerVersionCheckIntervalInHoursNumber;
 
     this.siteName = siteName ?? '';
     this.auth = authTypes.find((type) => type === auth) ?? 'pat';
@@ -171,24 +180,6 @@ export class Config {
     this.connectedAppSecretValue = secretValue ?? '';
     this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
   }
-
-  getTableauServerVersion = async (): Promise<ProductVersion> => {
-    if (!Config._serverVersion) {
-      const restApi = new RestApi(this.server);
-      try {
-        Config._serverVersion = (await restApi.serverMethods.getServerInfo()).productVersion;
-      } catch (error) {
-        const reason =
-          error instanceof ZodiosError && isZodErrorLike(error.cause)
-            ? fromError(error.cause).toString()
-            : getExceptionMessage(error);
-
-        throw new Error(`Failed to get server version: ${reason}`);
-      }
-    }
-
-    return Config._serverVersion;
-  };
 }
 
 function validateServer(server: string): void {

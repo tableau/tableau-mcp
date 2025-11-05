@@ -88,7 +88,12 @@ export async function startExpressServer({
         server.close();
       });
 
-      await server.registerTools();
+      // TODO: Once OAuth is available and enabled, the SERVER environment variable may be empty.
+      // This implies the server host name comes from the Tableau Cloud session of the user,
+      // which we include in the MCP access token.
+      // Get the server host name from `req.auth.extra.server` set by the auth middleware.
+      const tableauServer = config.server;
+      await server.registerTools({ tableauServer });
       server.registerRequestHandlers();
 
       await server.connect(transport);

@@ -21,7 +21,7 @@ async function startServer(): Promise<void> {
   switch (config.transport) {
     case 'stdio': {
       const server = new Server();
-      await server.registerTools();
+      await server.registerTools({ tableauServer: config.server });
       server.registerRequestHandlers();
 
       const transport = new StdioServerTransport();
