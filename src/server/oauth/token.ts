@@ -183,10 +183,24 @@ export function token(
             );
           }
 
+          // Rotate the refresh token and extend its expiration time
+          refreshTokens.delete(refreshToken);
+          const refreshTokenId = randomBytes(32).toString('hex');
+
+          refreshTokens.set(refreshTokenId, {
+            user: tokenData.user,
+            server: tokenData.server,
+            clientId: tokenData.clientId,
+            tokens: tokenData.tokens,
+            expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
+            tableauClientId: tokenData.tableauClientId,
+          });
+
           res.json({
             access_token: accessToken,
             token_type: 'Bearer',
             expires_in: config.oauth.accessTokenTimeoutMs / 1000,
+            refresh_token: refreshTokenId,
           });
           return;
         }
