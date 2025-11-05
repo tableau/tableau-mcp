@@ -184,6 +184,18 @@ Disables `graphql` requests to the Tableau Metadata API in the
 
 <hr />
 
+## `TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS`
+
+Some tools may have behavior or arguments that depend on the Tableau Server or Cloud version the MCP
+server is connected to. Rather than checking the Tableau version with every request, the MCP server
+will cache the version and only check it again after the interval specified by this environment
+variable.
+
+- Default: `1` hour
+- Must be a positive number.
+
+<hr />
+
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [tab-ds-connections]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source_connections
