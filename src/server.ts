@@ -3,7 +3,6 @@ import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import pkg from '../package.json' with { type: 'json' };
 import { getConfig } from './config.js';
-import { getTableauServerVersion } from './getTableauServerVersion.js';
 import { setLogLevel } from './logging/log.js';
 import { Tool } from './tools/tool.js';
 import { toolNames } from './tools/toolName.js';
@@ -53,11 +52,15 @@ export class Server extends McpServer {
     });
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- remove this eslint comment once a tool exists whose behavior depends on the Tableau server version
   private _getToolsToRegister = async (tableauServer: string): Promise<Array<Tool<any>>> => {
     const { includeTools, excludeTools } = getConfig();
-    const productVersion = await getTableauServerVersion(tableauServer);
 
-    const tools = toolFactories.map((tool) => tool(this, productVersion));
+    // TODO: Once a tool exists whose behavior depends on the Tableau server version,
+    // we should get the product version here.
+    // const productVersion = await getTableauServerVersion(tableauServer);
+
+    const tools = toolFactories.map((tool) => tool(this /*,  productVersion */));
     const toolsToRegister = tools.filter((tool) => {
       if (includeTools.length > 0) {
         return includeTools.includes(tool.name);

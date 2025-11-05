@@ -1,7 +1,6 @@
 import { ZodObject } from 'zod';
 
 import { exportedForTesting as serverExportedForTesting } from './server.js';
-import { testProductVersion } from './testShared.js';
 import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
 import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
@@ -27,7 +26,7 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools({ tableauServer: 'https://10ax.online.tableau.com' });
 
-    const tools = toolFactories.map((tool) => tool(server, testProductVersion));
+    const tools = toolFactories.map((tool) => tool(server));
     for (const tool of tools) {
       expect(server.tool).toHaveBeenCalledWith(
         tool.name,
@@ -44,7 +43,7 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools({ tableauServer: 'https://10ax.online.tableau.com' });
 
-    const tool = getQueryDatasourceTool(server, testProductVersion);
+    const tool = getQueryDatasourceTool(server);
     expect(server.tool).toHaveBeenCalledWith(
       tool.name,
       tool.description,
@@ -59,7 +58,7 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools({ tableauServer: 'https://10ax.online.tableau.com' });
 
-    const tools = toolFactories.map((tool) => tool(server, testProductVersion));
+    const tools = toolFactories.map((tool) => tool(server));
     for (const tool of tools) {
       if (tool.name === 'query-datasource') {
         expect(server.tool).not.toHaveBeenCalledWith(
