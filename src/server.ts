@@ -33,14 +33,14 @@ export class Server extends McpServer {
     this.version = serverVersion;
   }
 
-  registerTools = async ({ tableauServer }: { tableauServer: string }): Promise<void> => {
+  registerTools = (): void => {
     for (const {
       name,
       description,
       paramsSchema,
       annotations,
       callback,
-    } of await this._getToolsToRegister(tableauServer)) {
+    } of this._getToolsToRegister()) {
       this.tool(name, description, paramsSchema, annotations, callback);
     }
   };
@@ -52,15 +52,10 @@ export class Server extends McpServer {
     });
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- remove this eslint comment once a tool exists whose behavior depends on the Tableau server version
-  private _getToolsToRegister = async (tableauServer: string): Promise<Array<Tool<any>>> => {
+  private _getToolsToRegister = (): Array<Tool<any>> => {
     const { includeTools, excludeTools } = getConfig();
 
-    // TODO: Once a tool exists whose behavior depends on the Tableau server version,
-    // we should get the product version here.
-    // const productVersion = await getTableauServerVersion(tableauServer);
-
-    const tools = toolFactories.map((tool) => tool(this /*,  productVersion */));
+    const tools = toolFactories.map((tool) => tool(this));
     const toolsToRegister = tools.filter((tool) => {
       if (includeTools.length > 0) {
         return includeTools.includes(tool.name);

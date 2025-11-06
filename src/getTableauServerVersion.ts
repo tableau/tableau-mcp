@@ -9,7 +9,22 @@ import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 let tableauServerVersions: ExpiringMap<string, ProductVersion> | undefined;
 
+/**
+ * Get the version of the Tableau Server or Cloud.
+ *
+ * @param server - The host name of the Tableau Server or Cloud pod.
+ * @returns The version of the Tableau Server or Cloud pod.
+ */
 export const getTableauServerVersion = async (server: string): Promise<ProductVersion> => {
+  if (!server) {
+    // TODO: Once OAuth is available and enabled, the SERVER environment variable may be empty.
+    // This implies the server host name comes from the Tableau Cloud session of the user,
+    // which we include in the MCP access token.
+    // Get the server host name from `req.auth.extra.server` set by the auth middleware.
+    // Remove this condition once this TODO is resolved.
+    throw new Error('server cannot be empty');
+  }
+
   if (!tableauServerVersions) {
     tableauServerVersions = new ExpiringMap<string, ProductVersion>({
       expirationTimeMs: getConfig().tableauServerVersionCheckIntervalInHours * 60 * 60 * 1000,

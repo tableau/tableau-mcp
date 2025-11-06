@@ -24,7 +24,7 @@ describe('server', () => {
 
   it('should register tools', async () => {
     const server = getServer();
-    await server.registerTools({ tableauServer: 'https://10ax.online.tableau.com' });
+    server.registerTools();
 
     const tools = toolFactories.map((tool) => tool(server));
     for (const tool of tools) {
@@ -41,7 +41,7 @@ describe('server', () => {
   it('should register tools filtered by includeTools', async () => {
     process.env.INCLUDE_TOOLS = 'query-datasource';
     const server = getServer();
-    await server.registerTools({ tableauServer: 'https://10ax.online.tableau.com' });
+    server.registerTools();
 
     const tool = getQueryDatasourceTool(server);
     expect(server.tool).toHaveBeenCalledWith(
@@ -56,7 +56,7 @@ describe('server', () => {
   it('should register tools filtered by excludeTools', async () => {
     process.env.EXCLUDE_TOOLS = 'query-datasource';
     const server = getServer();
-    await server.registerTools({ tableauServer: 'https://10ax.online.tableau.com' });
+    server.registerTools();
 
     const tools = toolFactories.map((tool) => tool(server));
     for (const tool of tools) {
@@ -93,10 +93,7 @@ describe('server', () => {
     ];
 
     for (const sentence of sentences) {
-      expect(
-        async () =>
-          await server.registerTools({ tableauServer: 'https://10ax.online.tableau.com' }),
-      ).rejects.toThrow(sentence);
+      expect(() => server.registerTools()).toThrow(sentence);
     }
   });
 
