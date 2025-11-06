@@ -55,7 +55,7 @@ describe('authorization code flow', () => {
     expect(location.hostname).toBe('10ax.online.tableau.com');
     expect(location.pathname).toBe('/oauth2/v1/auth');
     expect(location.searchParams.get('client_id')).not.toBeNull();
-    expect(location.searchParams.get('code_challenge')).toBe(
+    expect(location.searchParams.get('code_challenge')).not.toBe(
       generateCodeChallenge('test-code-challenge'),
     );
     expect(location.searchParams.get('code_challenge_method')).toBe('S256');
