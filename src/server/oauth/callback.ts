@@ -64,7 +64,7 @@ export function callback(
         code: code ?? '',
         redirectUri: config.oauth.redirectUri,
         clientId: pendingAuth.tableauClientId,
-        codeVerifier: pendingAuth.codeChallenge,
+        codeVerifier: pendingAuth.tableauCodeVerifier,
       });
 
       if (tokensResult.isErr()) {

@@ -17,10 +17,10 @@ export type PendingAuthorization = {
   clientId: string;
   redirectUri: string;
   codeChallenge: string;
-  codeChallengeMethod: string;
   state: string;
   tableauState: string;
   tableauClientId: string;
+  tableauCodeVerifier: string;
 };
 
 export type ClientCredentials = {
