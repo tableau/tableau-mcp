@@ -19,8 +19,6 @@ export type BoundedContext = {
 };
 
 export class Config {
-  private static _serverVersion: ProductVersion | undefined;
-
   auth: AuthType;
   server: string;
   transport: TransportName;
