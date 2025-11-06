@@ -10,7 +10,8 @@ export class ExpiringMap<K, V> extends Map<K, V> {
     }
 
     if (expirationTimeMs > 2 ** 31 - 1) {
-      throw new Error(`Expiration time must be less than ${2 ** 31 - 1}ms`);
+      // https://developer.mozilla.org/en-US/docs/Web/API/Window/setTimeout#maximum_delay_value
+      throw new Error(`Expiration time must be at most ${2 ** 31 - 1}`);
     }
 
     this.timeouts = new Map();

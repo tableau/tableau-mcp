@@ -50,7 +50,7 @@ describe('ExpiringMap', () => {
 
   it('should throw error when expiration time is greater than 2**31 - 1', () => {
     expect(() => new ExpiringMap<string, string>({ expirationTimeMs: 2 ** 31 })).toThrow(
-      'Expiration time must be less than 2147483647ms',
+      'Expiration time must be at most 2147483647',
     );
   });
 });
