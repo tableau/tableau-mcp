@@ -184,6 +184,21 @@ Disables `graphql` requests to the Tableau Metadata API in the
 
 <hr />
 
+## `REQUEST_TIMEOUT`
+
+The timeout value in milliseconds for HTTP requests to Tableau Server.
+
+- Default: `600000` (10 minutes)
+- Must be a non-negative integer. Set to `0` to disable timeout (not recommended for production).
+- This timeout applies to all HTTP requests made to Tableau Server APIs, including REST API calls
+  and VizQL Data Service queries.
+- Increase this value if you have slow-loading views or expensive queries that take longer than 10
+  minutes to complete.
+- Decrease this value if you want faster failure detection for network issues or unresponsive
+  servers.
+
+<hr />
+
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [tab-ds-connections]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source_connections

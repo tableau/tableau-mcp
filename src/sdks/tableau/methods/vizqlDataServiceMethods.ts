@@ -24,8 +24,8 @@ import AuthenticatedMethods from './authenticatedMethods.js';
 export default class VizqlDataServiceMethods extends AuthenticatedMethods<
   typeof vizqlDataServiceApis
 > {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, vizqlDataServiceApis), creds);
+  constructor(baseUrl: string, creds: Credentials, timeout?: number) {
+    super(new Zodios(baseUrl, vizqlDataServiceApis, { timeout }), creds);
   }
 
   /**

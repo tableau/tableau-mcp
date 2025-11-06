@@ -15,8 +15,8 @@ import AuthenticatedMethods from './authenticatedMethods.js';
 export default class ContentExplorationMethods extends AuthenticatedMethods<
   typeof contentExplorationApis
 > {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, contentExplorationApis), creds);
+  constructor(baseUrl: string, creds: Credentials, timeout?: number) {
+    super(new Zodios(baseUrl, contentExplorationApis, { timeout }), creds);
   }
 
   /**

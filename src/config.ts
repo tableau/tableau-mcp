@@ -44,6 +44,7 @@ export class Config {
   enableServerLogging: boolean;
   serverLogDirectory: string;
   boundedContext: BoundedContext;
+  requestTimeout: number;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -76,6 +77,7 @@ export class Config {
       INCLUDE_PROJECT_IDS: includeProjectIds,
       INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
       INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
+      REQUEST_TIMEOUT: requestTimeout,
     } = cleansedVars;
 
     const defaultPort = 3927;
@@ -123,6 +125,11 @@ export class Config {
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =
       isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
+
+    // Set request timeout with default of 10 minutes (600000ms) for slow-loading views
+    // Set to 0 to disable timeout (not recommended for production)
+    const requestTimeoutNumber = requestTimeout ? parseInt(requestTimeout) : 600000;
+    this.requestTimeout = isNaN(requestTimeoutNumber) || requestTimeoutNumber < 0 ? 600000 : requestTimeoutNumber;
 
     this.includeTools = includeTools
       ? includeTools.split(',').flatMap((s) => {

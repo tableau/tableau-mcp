@@ -14,8 +14,8 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm
  */
 export default class DatasourcesMethods extends AuthenticatedMethods<typeof datasourcesApis> {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, datasourcesApis), creds);
+  constructor(baseUrl: string, creds: Credentials, timeout?: number) {
+    super(new Zodios(baseUrl, datasourcesApis, { timeout }), creds);
   }
 
   /**
