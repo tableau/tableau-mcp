@@ -66,14 +66,18 @@ export function authorize(
     const authKey = randomBytes(32).toString('hex');
 
     const tableauClientId = randomUUID();
+    // 22-64 bytes (44-128 chars) is the recommended length for code verifiers
+    const numCodeVerifierBytes = Math.floor(Math.random() * (64 - 22 + 1)) + 22;
+    const tableauCodeVerifier = randomBytes(numCodeVerifierBytes).toString('hex');
+    const tableauCodeChallenge = generateCodeChallenge(tableauCodeVerifier);
     pendingAuthorizations.set(authKey, {
       clientId,
       redirectUri,
       codeChallenge,
-      codeChallengeMethod,
       state: state ?? '',
       tableauState,
       tableauClientId,
+      tableauCodeVerifier,
     });
 
     // Clean up expired authorizations
@@ -81,11 +85,10 @@ export function authorize(
 
     // Redirect to Tableau OAuth
     const server = config.server || TABLEAU_CLOUD_SERVER_URL;
-    const tableauCodeChallenge = generateCodeChallenge(codeChallenge);
     const oauthUrl = new URL(`${server}/oauth2/v1/auth`);
     oauthUrl.searchParams.set('client_id', tableauClientId);
     oauthUrl.searchParams.set('code_challenge', tableauCodeChallenge);
-    oauthUrl.searchParams.set('code_challenge_method', codeChallengeMethod);
+    oauthUrl.searchParams.set('code_challenge_method', 'S256');
     oauthUrl.searchParams.set('response_type', 'code');
     oauthUrl.searchParams.set('redirect_uri', config.oauth.redirectUri);
     oauthUrl.searchParams.set('state', `${authKey}:${tableauState}`);
