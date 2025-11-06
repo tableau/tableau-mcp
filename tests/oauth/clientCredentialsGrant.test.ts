@@ -70,6 +70,7 @@ describe('client credentials grant type', () => {
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
       access_token: expect.any(String),
+      refresh_token: undefined,
       token_type: 'Bearer',
       expires_in: 3600,
     });
@@ -92,6 +93,7 @@ describe('client credentials grant type', () => {
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
       access_token: expect.any(String),
+      refresh_token: undefined,
       token_type: 'Bearer',
       expires_in: 3600,
     });

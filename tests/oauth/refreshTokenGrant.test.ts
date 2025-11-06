@@ -152,8 +152,12 @@ describe('refresh token grant type', () => {
     expect(tokenResponse.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(tokenResponse.body).toEqual({
       access_token: expect.any(String),
+      refresh_token: expect.any(String),
       token_type: 'Bearer',
       expires_in: 3600,
     });
+
+    // Verify that the refresh token is rotated
+    expect(tokenResponse.body.refresh_token).not.toBe(refresh_token);
   });
 });
