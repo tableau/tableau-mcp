@@ -2,7 +2,6 @@ import { CorsOptions } from 'cors';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 
-import { ProductVersion } from './sdks/tableau/types/serverInfo.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
