@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import dotenv from 'dotenv';
-import readline from 'readline/promises';
 
 import { getConfig } from './config.js';
 import { isLoggingLevel, log, setLogLevel, setServerLogger, writeToStderr } from './logging/log.js';
@@ -37,26 +36,8 @@ async function startServer(): Promise<void> {
 
       if (!config.oauth.enabled) {
         console.warn(
-          '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access!',
+          '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access! By having explicitly disabled OAuth by setting the DANGEROUSLY_DISABLE_OAUTH environment variable to "true", you accept any and all risks associated with this decision.',
         );
-
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout,
-        });
-
-        const input = (
-          await rl.question('⚠️ To accept these risks, please type "I accept" and press Enter.\n> ')
-        )
-          .toLocaleLowerCase()
-          .replaceAll('"', '')
-          .trim();
-
-        if (input !== 'i accept') {
-          // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
-          console.log('Goodbye 👋');
-          process.exit(1);
-        }
       }
 
       // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
