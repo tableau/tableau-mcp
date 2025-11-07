@@ -39,7 +39,7 @@ export class Config {
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
   maxResultLimit: number | null;
-  disableQueryDatasourceFilterValidation: boolean;
+  disableQueryDatasourceValidationRequests: boolean;
   disableMetadataApiRequests: boolean;
   enableServerLogging: boolean;
   serverLogDirectory: string;
@@ -69,7 +69,7 @@ export class Config {
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
       MAX_RESULT_LIMIT: maxResultLimit,
-      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
+      DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: disableQueryDatasourceValidationRequests,
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
       ENABLE_SERVER_LOGGING: enableServerLogging,
       SERVER_LOG_DIRECTORY: serverLogDirectory,
@@ -92,7 +92,8 @@ export class Config {
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
-    this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
+    this.disableQueryDatasourceValidationRequests =
+      disableQueryDatasourceValidationRequests === 'true';
     this.disableMetadataApiRequests = disableMetadataApiRequests === 'true';
     this.enableServerLogging = enableServerLogging === 'true';
     this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');

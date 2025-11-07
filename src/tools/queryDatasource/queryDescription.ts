@@ -5,7 +5,7 @@ Executes VizQL queries against Tableau data sources to answer business questions
 ## Prerequisites
 Before using this tool, you should:
 1. Understand available fields and their types
-3. Understand the data structure and field relationships
+2. Understand the data structure and field relationships
 
 ## Best Practices
 

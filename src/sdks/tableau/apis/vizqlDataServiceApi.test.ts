@@ -1,34 +1,34 @@
-import { Field, Filter } from './vizqlDataServiceApi.js';
+import { fieldSchema, filterSchema } from './vizqlDataServiceApi.js';
 
 describe('Field schema', () => {
   it('accepts a minimal valid Field', () => {
     const data = { fieldCaption: 'Sales' };
-    expect(() => Field.parse(data)).not.toThrow();
+    expect(() => fieldSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a Field with a function', () => {
     const data = { fieldCaption: 'Profit', function: 'SUM' };
-    expect(() => Field.parse(data)).not.toThrow();
+    expect(() => fieldSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a Field with a calculation', () => {
     const data = { fieldCaption: 'Profit', calculation: 'SUM([Profit])' };
-    expect(() => Field.parse(data)).not.toThrow();
+    expect(() => fieldSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a Field missing fieldCaption', () => {
     const data = { function: 'SUM' };
-    expect(() => Field.parse(data)).toThrow();
+    expect(() => fieldSchema.parse(data)).toThrow();
   });
 
   it('rejects a Field with extra properties (strict mode)', () => {
     const data = { fieldCaption: 'Sales', extra: 123 };
-    expect(() => Field.parse(data)).toThrow();
+    expect(() => fieldSchema.parse(data)).toThrow();
   });
 
   it('rejects a Field with both function and calculation', () => {
     const data = { fieldCaption: 'Profit', function: 'SUM', calculation: 'SUM([Profit])' };
-    expect(() => Field.parse(data)).toThrow();
+    expect(() => fieldSchema.parse(data)).toThrow();
   });
 });
 
@@ -39,7 +39,7 @@ describe('SET Filter schema', () => {
       field: { fieldCaption: 'Category' },
       values: ['Technology', 'Furniture'],
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid SET filter that excludes values', () => {
@@ -49,7 +49,7 @@ describe('SET Filter schema', () => {
       values: ['Technology', 'Furniture'],
       exclude: true,
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a SET filter with a function', () => {
@@ -58,7 +58,7 @@ describe('SET Filter schema', () => {
       field: { fieldCaption: 'Category', function: 'SUM' },
       values: ['Technology', 'Furniture'],
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a SET filter with a calculation', () => {
@@ -67,7 +67,7 @@ describe('SET Filter schema', () => {
       field: { fieldCaption: 'Category', calculation: 'SUM([Sales])' },
       values: ['Technology', 'Furniture'],
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a SET filter with no values', () => {
@@ -76,7 +76,7 @@ describe('SET Filter schema', () => {
       field: { fieldCaption: 'Category' },
       exclude: true,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a SET filter with extra properties (strict mode)', () => {
@@ -86,7 +86,7 @@ describe('SET Filter schema', () => {
       values: ['A', 'B'],
       extra: 123,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 });
 
@@ -98,7 +98,7 @@ describe('TOP N Filter schema', () => {
       howMany: 5,
       fieldToMeasure: { fieldCaption: 'Sales', function: 'SUM' },
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid TOP N filter with a calculation', () => {
@@ -109,7 +109,7 @@ describe('TOP N Filter schema', () => {
       fieldToMeasure: { calculation: 'SUM([Revenue]) - SUM([Cost])' },
       direction: 'BOTTOM',
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid TOP N filter with a function', () => {
@@ -120,7 +120,7 @@ describe('TOP N Filter schema', () => {
       fieldToMeasure: { fieldCaption: 'Sales', function: 'SUM' },
       direction: 'BOTTOM',
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a TOP N filter with no fieldToMeasure', () => {
@@ -129,7 +129,7 @@ describe('TOP N Filter schema', () => {
       field: { fieldCaption: 'State' },
       howMany: 5,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a TOP N filter with no howMany', () => {
@@ -138,7 +138,7 @@ describe('TOP N Filter schema', () => {
       field: { fieldCaption: 'State' },
       fieldToMeasure: { fieldCaption: 'Sales', function: 'SUM' },
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a TOP N filter with no field', () => {
@@ -147,7 +147,7 @@ describe('TOP N Filter schema', () => {
       howMany: 5,
       fieldToMeasure: { fieldCaption: 'Sales', function: 'SUM' },
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a TOP N filter with extra properties (strict mode)', () => {
@@ -158,7 +158,7 @@ describe('TOP N Filter schema', () => {
       fieldToMeasure: { fieldCaption: 'Profit', function: 'SUM' },
       extra: 123,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 });
 
@@ -169,7 +169,7 @@ describe('MATCH Filter schema', () => {
       field: { fieldCaption: 'Product Name' },
       contains: 'Desk',
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid MATCH filter (startsWith)', () => {
@@ -178,7 +178,7 @@ describe('MATCH Filter schema', () => {
       field: { fieldCaption: 'Product Name' },
       startsWith: 'Desk',
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid MATCH filter (endsWith)', () => {
@@ -187,7 +187,7 @@ describe('MATCH Filter schema', () => {
       field: { fieldCaption: 'Product Name' },
       endsWith: 'Chair',
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid MATCH filter with startsWith, endsWith, and contains', () => {
@@ -198,7 +198,7 @@ describe('MATCH Filter schema', () => {
       endsWith: 'Chair',
       contains: 'Office',
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a MATCH filter with none of startsWith, endsWith, or contains', () => {
@@ -206,7 +206,7 @@ describe('MATCH Filter schema', () => {
       filterType: 'MATCH',
       field: { fieldCaption: 'Product Name' },
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a MATCH filter if the field has a function', () => {
@@ -215,7 +215,7 @@ describe('MATCH Filter schema', () => {
       field: { fieldCaption: 'Product Name', function: 'SUM' },
       contains: 'Desk',
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a MATCH filter if the field has a calculation', () => {
@@ -224,7 +224,7 @@ describe('MATCH Filter schema', () => {
       field: { fieldCaption: 'Product Name', calculation: 'SUM([Sales])' },
       contains: 'Desk',
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a MATCH filter with extra properties (strict mode)', () => {
@@ -234,7 +234,7 @@ describe('MATCH Filter schema', () => {
       contains: 'Desk',
       extra: 123,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 });
 
@@ -247,7 +247,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       min: 100,
       max: 1000,
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid QUANTITATIVE_NUMERICAL filter (RANGE) which includes nulls', () => {
@@ -259,7 +259,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       max: 1000,
       includeNulls: true,
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a QUANTITATIVE_NUMERICAL filter (RANGE) if missing min', () => {
@@ -269,7 +269,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       field: { fieldCaption: 'Sales' },
       max: 1000,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a QUANTITATIVE_NUMERICAL filter (RANGE) if missing max', () => {
@@ -279,7 +279,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       field: { fieldCaption: 'Sales' },
       min: 100,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a QUANTITATIVE_NUMERICAL filter (RANGE) if missing min and max', () => {
@@ -288,7 +288,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       quantitativeFilterType: 'RANGE',
       field: { fieldCaption: 'Sales' },
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('accepts a valid QUANTITATIVE_NUMERICAL filter (MIN)', () => {
@@ -298,7 +298,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       field: { fieldCaption: 'Sales' },
       min: 100,
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid QUANTITATIVE_NUMERICAL filter (MIN) which includes nulls', () => {
@@ -309,7 +309,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       min: 100,
       includeNulls: true,
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a QUANTITATIVE_NUMERICAL filter (MIN) if missing min', () => {
@@ -318,7 +318,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       quantitativeFilterType: 'MIN',
       field: { fieldCaption: 'Sales' },
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a QUANTITATIVE_NUMERICAL filter (MIN) which includes max', () => {
@@ -329,7 +329,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       min: 100,
       max: 1000,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('accepts a valid QUANTITATIVE_NUMERICAL filter (MAX)', () => {
@@ -339,7 +339,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       field: { fieldCaption: 'Sales' },
       max: 1000,
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid QUANTITATIVE_NUMERICAL filter (MAX) which includes nulls', () => {
@@ -350,7 +350,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       max: 1000,
       includeNulls: true,
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a QUANTITATIVE_NUMERICAL filter (MAX) if missing max', () => {
@@ -359,7 +359,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       quantitativeFilterType: 'MAX',
       field: { fieldCaption: 'Sales' },
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a QUANTITATIVE_NUMERICAL filter (MAX) which includes min', () => {
@@ -370,7 +370,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       min: 100,
       max: 1000,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('accepts a valid QUANTITATIVE_NUMERICAL filter (ONLY_NULL)', () => {
@@ -379,7 +379,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       quantitativeFilterType: 'ONLY_NULL',
       field: { fieldCaption: 'Sales' },
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a QUANTITATIVE_NUMERICAL filter (ONLY_NULL) if it uses includeNulls', () => {
@@ -389,7 +389,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       field: { fieldCaption: 'Sales' },
       includeNulls: true,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('accepts a valid QUANTITATIVE_NUMERICAL filter (ONLY_NON_NULL)', () => {
@@ -398,7 +398,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       quantitativeFilterType: 'ONLY_NON_NULL',
       field: { fieldCaption: 'Sales' },
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a QUANTITATIVE_NUMERICAL filter (ONLY_NON_NULL) if it uses includeNulls', () => {
@@ -408,7 +408,7 @@ describe('QUANTITATIVE_NUMERICAL Filter schema', () => {
       field: { fieldCaption: 'Sales' },
       includeNulls: false,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 });
 
@@ -421,7 +421,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       minDate: '2023-01-01',
       maxDate: '2023-12-31',
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid QUANTITATIVE_DATE filter (RANGE) with includeNulls', () => {
@@ -433,7 +433,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       maxDate: '2023-12-31',
       includeNulls: true,
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a QUANTITATIVE_DATE filter (RANGE) missing minDate', () => {
@@ -443,7 +443,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       field: { fieldCaption: 'Order Date' },
       maxDate: '2023-12-31',
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a QUANTITATIVE_DATE filter (RANGE) missing maxDate', () => {
@@ -453,7 +453,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       field: { fieldCaption: 'Order Date' },
       minDate: '2023-01-01',
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a QUANTITATIVE_DATE filter (RANGE) missing minDate and maxDate', () => {
@@ -462,7 +462,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       quantitativeFilterType: 'RANGE',
       field: { fieldCaption: 'Order Date' },
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('accepts a valid QUANTITATIVE_DATE filter (MIN)', () => {
@@ -472,7 +472,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       field: { fieldCaption: 'Order Date' },
       minDate: '2023-01-01',
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid QUANTITATIVE_DATE filter (MIN) which includes nulls', () => {
@@ -483,7 +483,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       minDate: '2023-01-01',
       includeNulls: true,
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a QUANTITATIVE_DATE filter (MIN) missing minDate', () => {
@@ -492,7 +492,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       quantitativeFilterType: 'MIN',
       field: { fieldCaption: 'Order Date' },
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a QUANTITATIVE_DATE filter (MIN) which includes max', () => {
@@ -503,7 +503,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       minDate: '2023-01-01',
       maxDate: '2023-12-31',
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('accepts a valid QUANTITATIVE_DATE filter (MAX)', () => {
@@ -513,7 +513,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       field: { fieldCaption: 'Order Date' },
       maxDate: '2023-12-31',
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid QUANTITATIVE_DATE filter (MAX) which includes nulls', () => {
@@ -524,7 +524,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       maxDate: '2023-12-31',
       includeNulls: true,
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a QUANTITATIVE_DATE filter (MAX) missing maxDate', () => {
@@ -533,7 +533,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       quantitativeFilterType: 'MAX',
       field: { fieldCaption: 'Order Date' },
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a QUANTITATIVE_DATE filter (MAX) which includes min', () => {
@@ -544,7 +544,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       minDate: '2023-01-01',
       maxDate: '2023-12-31',
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('accepts a valid QUANTITATIVE_DATE filter (ONLY_NULL)', () => {
@@ -553,7 +553,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       quantitativeFilterType: 'ONLY_NULL',
       field: { fieldCaption: 'Order Date' },
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects an QUANTITATIVE_DATE filter (ONLY_NULL) with includeNulls', () => {
@@ -563,7 +563,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       field: { fieldCaption: 'Order Date' },
       includeNulls: true,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('accepts a valid QUANTITATIVE_DATE filter (ONLY_NON_NULL)', () => {
@@ -572,7 +572,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       quantitativeFilterType: 'ONLY_NON_NULL',
       field: { fieldCaption: 'Order Date' },
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects an QUANTITATIVE_DATE filter (ONLY_NON_NULL) with includeNulls', () => {
@@ -582,7 +582,7 @@ describe('QUANTITATIVE_DATE Filter schema', () => {
       field: { fieldCaption: 'Order Date' },
       includeNulls: false,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 });
 
@@ -594,7 +594,7 @@ describe('DATE Filter schema', () => {
       periodType: 'YEARS',
       dateRangeType: 'CURRENT',
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid DATE filter (LAST)', () => {
@@ -604,7 +604,7 @@ describe('DATE Filter schema', () => {
       periodType: 'MONTHS',
       dateRangeType: 'LAST',
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid DATE filter (NEXT)', () => {
@@ -614,7 +614,7 @@ describe('DATE Filter schema', () => {
       periodType: 'MONTHS',
       dateRangeType: 'NEXT',
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid DATE filter (TODATE)', () => {
@@ -625,7 +625,7 @@ describe('DATE Filter schema', () => {
       dateRangeType: 'TODATE',
       anchorDate: '2025-01-01',
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid DATE filter (LASTN)', () => {
@@ -636,7 +636,7 @@ describe('DATE Filter schema', () => {
       dateRangeType: 'LASTN',
       rangeN: 3,
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('accepts a valid DATE filter (NEXTN)', () => {
@@ -647,7 +647,7 @@ describe('DATE Filter schema', () => {
       dateRangeType: 'NEXTN',
       rangeN: 2,
     };
-    expect(() => Filter.parse(data)).not.toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a DATE filter missing periodType', () => {
@@ -656,7 +656,7 @@ describe('DATE Filter schema', () => {
       field: { fieldCaption: 'Order Date' },
       dateRangeType: 'CURRENT',
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a DATE filter (TODATE) missing dateRangeType', () => {
@@ -665,7 +665,7 @@ describe('DATE Filter schema', () => {
       field: { fieldCaption: 'Order Date' },
       periodType: 'DAYS',
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a DATE filter (LASTN) missing rangeN', () => {
@@ -675,7 +675,7 @@ describe('DATE Filter schema', () => {
       periodType: 'MONTHS',
       dateRangeType: 'LASTN',
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a DATE filter (NEXTN) missing rangeN', () => {
@@ -685,7 +685,7 @@ describe('DATE Filter schema', () => {
       periodType: 'MONTHS',
       dateRangeType: 'NEXTN',
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a DATE filter with rangeN (not NEXTN or LASTN)', () => {
@@ -696,7 +696,7 @@ describe('DATE Filter schema', () => {
       dateRangeType: 'CURRENT',
       rangeN: 1,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a DATE filter with function', () => {
@@ -707,7 +707,7 @@ describe('DATE Filter schema', () => {
       dateRangeType: 'NEXT',
       rangeN: 1,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 
   it('rejects a DATE filter with calculation', () => {
@@ -718,6 +718,6 @@ describe('DATE Filter schema', () => {
       dateRangeType: 'NEXT',
       rangeN: 1,
     };
-    expect(() => Filter.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).toThrow();
   });
 });

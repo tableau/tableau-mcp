@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
-import { QueryOutput } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { queryOutputSchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
@@ -126,7 +126,7 @@ describe('queryDatasourceTool', () => {
         'Zodios: Invalid response from endpoint',
         undefined,
         badResponse,
-        QueryOutput.safeParse(badResponse).error,
+        queryOutputSchema.safeParse(badResponse).error,
       );
 
       return new Err(zodiosError);
@@ -374,8 +374,8 @@ describe('queryDatasourceTool', () => {
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
     });
 
-    it('should not run SET/MATCH filters validation when DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION environment variable is true', async () => {
-      process.env.DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION = 'true';
+    it('should not run SET/MATCH filters validation when DISABLE_QUERY_VALIDATION_REQUESTS environment variable is true', async () => {
+      process.env.DISABLE_QUERY_VALIDATION_REQUESTS = 'true';
 
       const mockMainQueryResult = {
         data: [{ Region: 'East', 'SUM(Sales)': 100000 }],

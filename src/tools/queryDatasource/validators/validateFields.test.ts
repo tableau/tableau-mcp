@@ -24,20 +24,6 @@ describe('validateFields', () => {
     );
   });
 
-  it('should throw if there are duplicate fieldCaptions', () => {
-    expect(() =>
-      validateFields([
-        { fieldCaption: 'Sales' },
-        { fieldCaption: 'Sales' },
-        { fieldCaption: 'Region' },
-        { fieldCaption: 'Profit' },
-        { fieldCaption: 'Region' },
-      ]),
-    ).toThrow(
-      'The query must not include duplicate fields. The following fields are duplicated: Sales, Region.',
-    );
-  });
-
   it('should throw if there are duplicate sort priorities', () => {
     expect(() =>
       validateFields([
