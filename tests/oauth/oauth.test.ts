@@ -163,4 +163,26 @@ describe('OAuth', () => {
     const data = JSON.parse(lines[1].split('data: ')[1]);
     expect(data).toEqual({ result: {}, jsonrpc: '2.0', id: '1' });
   });
+
+  it('should reject if the access token is invalid or expired', async () => {
+    const { app } = await startServer();
+
+    const response = await request(app)
+      .post(`/${serverName}`)
+      .set('Authorization', 'Bearer invalid-token')
+      .set('Content-Type', 'application/json')
+      .set('Accept', 'application/json, text/event-stream')
+      .send({
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'ping',
+      });
+
+    expect(response.status).toBe(401);
+    expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+    expect(response.body).toEqual({
+      error: 'invalid_token',
+      error_description: 'Invalid or expired access token',
+    });
+  });
 });
