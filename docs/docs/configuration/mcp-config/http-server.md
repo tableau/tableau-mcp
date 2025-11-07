@@ -13,7 +13,7 @@ When `TRANSPORT` is `http`, the default behavior changes to require protecting y
 OAuth as a security best practice.
 
 To opt out of this behavior at your own risk, please see the entry on
-[`DISABLE_OAUTH`](oauth.md#disable_oauth).
+[`DANGEROUSLY_DISABLE_OAUTH`](oauth.md#dangerously_disable_oauth).
 
 :::
 

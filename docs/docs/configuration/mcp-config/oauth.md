@@ -43,7 +43,8 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 The issuer of the OAuth server. This should be the host of the MCP server.
 
 - Required if `AUTH` is `oauth`. For testing, use `http://127.0.0.1:3927`.
-- Required if `TRANSPORT` is `http` unless opted out with [`DISABLE_OAUTH`](#disable_oauth).
+- Required if `TRANSPORT` is `http` unless opted out with
+  [`DANGEROUSLY_DISABLE_OAUTH`](#dangerously_disable_oauth).
 
 <hr />
 
@@ -229,17 +230,17 @@ The timeout for the OAuth refresh tokens.
 
 <hr />
 
-### `DISABLE_OAUTH`
+### `DANGEROUSLY_DISABLE_OAUTH`
 
 :::warning
 
 When `TRANSPORT` is `http`, the default behavior changes to require protecting your MCP server with
 OAuth as a security best practice.
 
-To opt out of this behavior at your own risk, set `DISABLE_OAUTH` to `true`.
+To opt out of this behavior at your own risk, set `DANGEROUSLY_DISABLE_OAUTH` to `true`.
 
-This is not recommended as your MCP server will not be protected from unauthorized access. You will
-be prompted to accept these risks when you start the MCP server.
+This is not recommended as your MCP server will not be protected from unauthorized access. By
+explicitly disabling OAuth, you accept any and all risks associated with this decision.
 
 :::
 
