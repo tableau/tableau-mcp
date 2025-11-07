@@ -40,9 +40,13 @@ describe('client credentials grant type', () => {
 
   afterEach(async () => {
     await new Promise<void>((resolve) => {
-      _server?.close(() => {
+      if (_server) {
+        _server.close(() => {
+          resolve();
+        });
+      } else {
         resolve();
-      });
+      }
     });
   });
 
