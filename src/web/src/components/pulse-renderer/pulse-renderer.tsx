@@ -36,7 +36,7 @@ export function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/:planet?" element={<PulseRenderer />} />
+        <Route path="/" element={<PulseRenderer />} />
       </Routes>
     </BrowserRouter>
   );
