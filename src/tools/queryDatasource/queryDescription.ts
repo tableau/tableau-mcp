@@ -30,7 +30,41 @@ Before using this tool, you should:
 ### Field Usage Guidelines
 - **Prefer existing fields** - Use fields already modeled in the data source rather than creating custom calculations
 - **Use calculations sparingly** - Only create calculated fields when absolutely necessary and the calculation cannot be achieved through existing fields and aggregations
+- **Use bins for distribution analysis** - Create bins to group continuous data into discrete ranges (e.g., age groups, price ranges)
 - **Validate field availability** - Always check field metadata before constructing queries
+
+### Field Types
+
+#### Dimension Fields
+Basic fields without aggregation:
+\`\`\`json
+{
+  "fieldCaption": "Category",
+  "fieldAlias": "Product Category"
+}
+\`\`\`
+
+#### Measure Fields
+Fields with aggregation functions (SUM, AVG, COUNT, etc.):
+\`\`\`json
+{
+  "fieldCaption": "Sales",
+  "function": "SUM",
+  "fieldAlias": "Total Sales",
+  "maxDecimalPlaces": 2
+}
+\`\`\`
+
+#### Bin Fields
+Group continuous data into discrete ranges:
+\`\`\`json
+{
+  "fieldCaption": "Sales",
+  "binSize": 1000,
+  "fieldAlias": "Sales Range"
+}
+\`\`\`
+This creates bins of $1,000 intervals (0-1000, 1000-2000, etc.)
 
 ### Query Construction
 - **Group by meaningful dimensions** - Ensure grouping supports the business question being asked
@@ -73,6 +107,93 @@ When a query might return large amounts of data, follow this profiling approach:
 \`\`\`
 
 **Step 3: Apply appropriate aggregation or filtering based on counts**
+
+## Parameters
+
+Parameters are dynamic values defined in the Tableau datasource that can be used to control calculations, filters, and query behavior. They allow for interactive, user-controlled queries without modifying the query structure.
+
+### When to Use Parameters
+- **Dynamic filtering** - Let users control date ranges, regions, or categories
+- **What-if analysis** - Adjust values like growth rates, targets, or thresholds
+- **Calculation control** - Switch between different metrics or calculation methods
+- **User preferences** - Currency selection, display units, or other settings
+
+### Parameter Types
+
+#### LIST Parameters
+Parameters with a predefined set of allowed values:
+\`\`\`json
+{
+  "name": "Selected Region",
+  "value": "West"
+}
+\`\`\`
+The value must be one of the allowed values defined in the datasource (e.g., "East", "West", "North", "South").
+
+#### ANY_VALUE Parameters
+Free-form parameters that accept any value matching the data type:
+\`\`\`json
+{
+  "name": "Product Name",
+  "value": "Laptop"
+}
+\`\`\`
+Value is validated against the parameter's data type (string, number, date, boolean).
+
+#### QUANTITATIVE_RANGE Parameters
+Numeric parameters with optional min/max/step constraints:
+\`\`\`json
+{
+  "name": "Minimum Sales Threshold",
+  "value": 50000
+}
+\`\`\`
+
+#### QUANTITATIVE_DATE Parameters
+Date parameters with optional date range constraints:
+\`\`\`json
+{
+  "name": "Analysis Start Date",
+  "value": "2024-01-01"
+}
+\`\`\`
+
+### Parameter Usage in Queries
+Parameters are included in the query alongside fields and filters:
+\`\`\`json
+{
+  "datasourceLuid": "abc123",
+  "query": {
+    "fields": [...],
+    "filters": [...],
+    "parameters": [
+      {
+        "name": "Selected Year",
+        "value": 2024
+      },
+      {
+        "name": "Currency",
+        "value": "USD"
+      }
+    ]
+  }
+}
+\`\`\`
+
+### Important Notes
+- Parameters must be defined in the Tableau datasource before they can be used
+- Parameter names are case-sensitive and must match exactly
+- For LIST parameters, the value must be from the allowed list
+- Parameters affect the entire query execution, not just specific fields
+- Use \`get-datasource-metadata\` to see available parameters and their allowed values
+
+### Parameters vs Filters
+| Aspect | Parameters | Filters |
+|--------|-----------|---------|
+| **Definition** | Pre-defined in datasource | Created in query |
+| **Purpose** | Control calculations/behavior | Restrict returned data |
+| **Scope** | Entire datasource/workbook | Specific query |
+| **Validation** | Against datasource metadata | Against field values |
 
 ## Filter Types and Usage
 
@@ -286,6 +407,89 @@ Filter relative date periods:
   }
 }
 \`\`\`
+
+### Example 5: Distribution Analysis Using Bins
+**Question:** "How are our sales distributed across different price ranges?"
+
+\`\`\`json
+{
+  "datasourceLuid": "abc123",
+  "query": {
+    "fields": [
+      {
+        "fieldCaption": "Sales",
+        "binSize": 1000,
+        "fieldAlias": "Sales Range",
+        "sortDirection": "ASC",
+        "sortPriority": 1
+      },
+      {
+        "fieldCaption": "Order ID",
+        "function": "COUNT",
+        "fieldAlias": "Number of Orders"
+      },
+      {
+        "fieldCaption": "Sales",
+        "function": "SUM",
+        "fieldAlias": "Total Sales in Range"
+      }
+    ]
+  }
+}
+\`\`\`
+
+**Use bins when:**
+- Analyzing distribution patterns (age groups, price ranges, score brackets)
+- Creating histograms or frequency distributions
+- Grouping continuous numerical data into meaningful categories
+- User asks questions like "How many customers in each age range?" or "What's the distribution of order sizes?"
+
+### Example 6: Using Parameters for Dynamic Analysis
+**Question:** "Show me sales for the selected region and year"
+
+First, check available parameters using \`get-datasource-metadata\`:
+\`\`\`json
+{
+  "datasourceLuid": "abc123"
+}
+\`\`\`
+
+Then use parameters in your query:
+\`\`\`json
+{
+  "datasourceLuid": "abc123",
+  "query": {
+    "fields": [
+      {
+        "fieldCaption": "Category"
+      },
+      {
+        "fieldCaption": "Sales",
+        "function": "SUM",
+        "fieldAlias": "Total Sales",
+        "sortDirection": "DESC",
+        "sortPriority": 1
+      }
+    ],
+    "parameters": [
+      {
+        "name": "Selected Region",
+        "value": "West"
+      },
+      {
+        "name": "Analysis Year",
+        "value": 2024
+      }
+    ]
+  }
+}
+\`\`\`
+
+**When to use parameters:**
+- Datasource has pre-defined parameters for user control
+- Need to apply the same value across multiple calculations
+- User wants to perform what-if analysis by changing parameter values
+- Creating interactive queries where users can adjust values
 
 ## Error Prevention and Data Management
 
