@@ -5,10 +5,16 @@ import express, { Request, Response } from 'express';
 import fs, { existsSync } from 'fs';
 import http from 'http';
 import https from 'https';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 
 import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
+import { pulseInsightBundleSchema } from '../sdks/tableau/types/pulse.js';
 import { Server } from '../server.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export async function startExpressServer({
   basePath,
@@ -43,6 +49,7 @@ export async function startExpressServer({
   app.post(path, createMcpServer);
   app.get(path, methodNotAllowed);
   app.delete(path, methodNotAllowed);
+  app.use(express.static(join(__dirname, 'web')));
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
@@ -87,6 +94,69 @@ export async function startExpressServer({
         transport.close();
         server.close();
       });
+
+      server.registerResource(
+        'pulse-renderer',
+        'ui://widget/pulse-renderer.html',
+        {},
+        async () => ({
+          contents: [
+            {
+              uri: 'ui://widget/pulse-renderer.html',
+              mimeType: 'text/html+skybridge',
+              text: fs.readFileSync(join(__dirname, 'web', 'pulse-renderer.html'), 'utf8'),
+              _meta: {
+                /* 
+                  Renders the widget within a rounded border and shadow. 
+                  Otherwise, the HTML is rendered full-bleed in the conversation
+                */
+                'openai/widgetPrefersBorder': true,
+
+                /* 
+                  Assigns a subdomain for the HTML. 
+                  When set, the HTML is rendered within `chatgpt-com.web-sandbox.oaiusercontent.com`
+                  It's also used to configure the base url for external links.
+                */
+                'openai/widgetDomain': 'https://chatgpt.com',
+
+                /*
+                  Required to make external network requests from the HTML code. 
+                  Also used to validate `openai.openExternal()` requests. 
+                */
+                'openai/widgetCSP': {
+                  // Maps to `connect-src` rule in the iframe CSP
+                  connect_domains: ['https://chatgpt.com'],
+                  // Maps to style-src, style-src-elem, img-src, font-src, media-src etc. in the iframe CSP
+                  resource_domains: ['https://*.oaistatic.com'],
+                },
+              },
+            },
+          ],
+        }),
+      );
+
+      server.registerTool(
+        'render-pulse-insight',
+        {
+          title: 'Render Pulse Insight',
+          _meta: {
+            // associate this tool with the HTML template
+            'openai/outputTemplate': 'ui://widget/pulse-renderer.html',
+            // labels to display in ChatGPT when the tool is called
+            'openai/toolInvocation/invoking': 'Rendering the Pulse insight',
+            'openai/toolInvocation/invoked': 'Rendered the Pulse insight',
+          },
+          inputSchema: { bundle: pulseInsightBundleSchema },
+        },
+        async ({ bundle }) => {
+          return {
+            content: [{ type: 'text', text: 'Rendered the Pulse insight!' }],
+            structuredContent: {
+              bundle,
+            },
+          };
+        },
+      );
 
       server.registerTools();
       server.registerRequestHandlers();

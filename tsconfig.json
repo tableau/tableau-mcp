@@ -13,5 +13,5 @@
     "types": ["vitest/globals"]
   },
   "include": ["src/**/*", "tests/**/*", "types", "eslint.config.mjs"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "src/web/**/*"]
 }
