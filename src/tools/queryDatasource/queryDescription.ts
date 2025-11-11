@@ -440,12 +440,6 @@ Then use parameters in your query:
 }
 \`\`\`
 
-**When to use parameters:**
-- Datasource has pre-defined parameters for user control
-- Need to apply the same value across multiple calculations
-- User wants to perform what-if analysis by changing parameter values
-- Creating interactive queries where users can adjust values
-
 ## Error Prevention and Data Management
 
 **When to profile data first:**
