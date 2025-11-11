@@ -44,6 +44,7 @@ export class Config {
   enableServerLogging: boolean;
   serverLogDirectory: string;
   boundedContext: BoundedContext;
+  stateful: boolean;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -76,6 +77,7 @@ export class Config {
       INCLUDE_PROJECT_IDS: includeProjectIds,
       INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
       INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
+      STATEFUL: stateful,
     } = cleansedVars;
 
     const defaultPort = 3927;
@@ -101,6 +103,7 @@ export class Config {
       datasourceIds: createSetFromCommaSeparatedString(includeDatasourceIds),
       workbookIds: createSetFromCommaSeparatedString(includeWorkbookIds),
     };
+    this.stateful = stateful === 'true';
 
     if (this.boundedContext.projectIds?.size === 0) {
       throw new Error(
