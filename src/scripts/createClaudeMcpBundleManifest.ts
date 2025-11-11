@@ -256,11 +256,11 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  DISABLE_OAUTH: {
+  DANGEROUSLY_DISABLE_OAUTH: {
     includeInUserConfig: false,
     type: 'boolean',
-    title: 'Disable OAuth',
-    description: 'Disable OAuth when transport is http.',
+    title: 'Dangerously Disable OAuth',
+    description: 'Dangerously disable OAuth when transport is http.',
     required: false,
     sensitive: false,
   },

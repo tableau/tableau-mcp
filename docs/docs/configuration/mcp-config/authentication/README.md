@@ -9,3 +9,4 @@ There are a couple different ways to authenticate to Tableau.
 
 1. Provide your Tableau [Personal Access Token](pat.md) (PAT).
 2. Use Tableau [Connected Apps](direct-trust.md).
+3. Use Tableau [OAuth](oauth.md).

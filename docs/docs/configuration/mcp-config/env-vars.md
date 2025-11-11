@@ -1,10 +1,30 @@
 ---
-sidebar_position: 2
+sidebar_position: 1
 ---
 
-# Optional Environment Variables
+# Environment Variables
 
-Values for the following environment variables are optional.
+Values for the following environment variables can be provided to configure the Tableau MCP server.
+
+## `SERVER`
+
+The URL of the Tableau server.
+
+- For Tableau Cloud, specify your site's specific pod e.g.
+  `https://prod-useast-c.online.tableau.com`
+- Required unless [`AUTH`](#auth) is `oauth`.
+
+<hr />
+
+## `SITE_NAME`
+
+The name of the Tableau site to use.
+
+- For Tableau Cloud, specify your site name.
+- For Tableau Server, you may leave this value blank to use the default site.
+- Required unless [`AUTH`](#auth) is `oauth`.
+
+<hr />
 
 ## `TRANSPORT`
 
@@ -19,10 +39,10 @@ The MCP transport type to use for the server.
 
 ## `AUTH`
 
-The Tableau authentication method to use by the server.
+The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 - Default: `pat`
-- Possible values: `pat` or `direct-trust`
+- Possible values: `pat`, `direct-trust`, or `oauth`
 - See [Authentication](authentication) for additional required variables depending on the desired
   method.
 
@@ -43,6 +63,8 @@ APIs.
 - Each line in the log file is a JSON object with the following properties:
 
   - `timestamp`: The timestamp of the log message in UTC time.
+  - `username`: For tool calls, the username of the user who made the call. This is only present
+    when OAuth is enabled and has the user context.
   - `level`: The logging level of the log message.
   - `logger`: The logger of the log message. This is typically `rest-api` for HTTP traces or
     `tableau-mcp` for tool calls.
