@@ -188,14 +188,14 @@ function validateParametersAgainstDatasourceMetadata(
 ): void {
   for (const parameter of parameters) {
     const matchingParameter = datasourceMetadata.extraData?.parameters?.find(
-      (p) => p.parameterCaption === parameter.name,
+      (p) => p.parameterCaption === parameter.parameterCaption,
     );
 
     // Parameters used in the query must exist in the datasource metadata.
     if (!matchingParameter) {
       validationErrors.push({
-        parameter: parameter.name,
-        message: `Parameter '${parameter.name}' was not found in the datasource. Only parameters that are defined in the datasource can be used in a query.`,
+        parameter: parameter.parameterCaption,
+        message: `Parameter '${parameter.parameterCaption}' was not found in the datasource. Only parameters that are defined in the datasource can be used in a query.`,
       });
       continue;
     }
@@ -204,24 +204,24 @@ function validateParametersAgainstDatasourceMetadata(
       case 'ANY_VALUE':
         if (!parameterValueMatchesDataType(parameter.value, matchingParameter.dataType)) {
           validationErrors.push({
-            parameter: parameter.name,
-            message: `Parameter '${parameter.name}' has a data type of '${matchingParameter.dataType}' but was provided a value that does not match the data type: ${parameter.value}.`,
+            parameter: parameter.parameterCaption,
+            message: `Parameter '${parameter.parameterCaption}' has a data type of '${matchingParameter.dataType}' but was provided a value that does not match the data type: ${parameter.value}.`,
           });
         }
         break;
       case 'LIST':
         if (!matchingParameter.members.includes(parameter.value)) {
           validationErrors.push({
-            parameter: parameter.name,
-            message: `Parameter '${parameter.name}' has a value that is not in the list of allowed values for the parameter. The list of allowed values is: ${matchingParameter.members.join(', ')}.`,
+            parameter: parameter.parameterCaption,
+            message: `Parameter '${parameter.parameterCaption}' has a value that is not in the list of allowed values for the parameter. The list of allowed values is: ${matchingParameter.members.join(', ')}.`,
           });
         }
         break;
       case 'QUANTITATIVE_DATE':
         if (typeof parameter.value !== 'string' || isNaN(Date.parse(parameter.value))) {
           validationErrors.push({
-            parameter: parameter.name,
-            message: `Parameter '${parameter.name}' was provided a value that is not a valid date. Dates must use the RFC 3339 standard. Example: 2025-03-14`,
+            parameter: parameter.parameterCaption,
+            message: `Parameter '${parameter.parameterCaption}' was provided a value that is not a valid date. Dates must use the RFC 3339 standard. Example: 2025-03-14`,
           });
           continue;
         }
@@ -230,8 +230,8 @@ function validateParametersAgainstDatasourceMetadata(
           new Date(parameter.value) < new Date(matchingParameter.minDate)
         ) {
           validationErrors.push({
-            parameter: parameter.name,
-            message: `Parameter '${parameter.name}' was provided a value that is less than the minimum date for the parameter.`,
+            parameter: parameter.parameterCaption,
+            message: `Parameter '${parameter.parameterCaption}' was provided a value that is less than the minimum date for the parameter.`,
           });
           continue;
         }
@@ -240,8 +240,8 @@ function validateParametersAgainstDatasourceMetadata(
           new Date(parameter.value) > new Date(matchingParameter.maxDate)
         ) {
           validationErrors.push({
-            parameter: parameter.name,
-            message: `Parameter '${parameter.name}' was provided a value that is greater than the maximum date for the parameter.`,
+            parameter: parameter.parameterCaption,
+            message: `Parameter '${parameter.parameterCaption}' was provided a value that is greater than the maximum date for the parameter.`,
           });
           continue;
         }
@@ -249,30 +249,30 @@ function validateParametersAgainstDatasourceMetadata(
       case 'QUANTITATIVE_RANGE':
         if (typeof parameter.value !== 'number') {
           validationErrors.push({
-            parameter: parameter.name,
-            message: `Parameter '${parameter.name}'. This parameter is a quantitative range parameter, and can only be assigned numerical values.`,
+            parameter: parameter.parameterCaption,
+            message: `Parameter '${parameter.parameterCaption}'. This parameter is a quantitative range parameter, and can only be assigned numerical values.`,
           });
           continue;
         }
         if (matchingParameter.min != undefined && parameter.value < matchingParameter.min) {
           validationErrors.push({
-            parameter: parameter.name,
-            message: `Parameter '${parameter.name}' was provided a value that is less than the minimum value for the parameter.`,
+            parameter: parameter.parameterCaption,
+            message: `Parameter '${parameter.parameterCaption}' was provided a value that is less than the minimum value for the parameter.`,
           });
           continue;
         }
         if (matchingParameter.max != undefined && parameter.value > matchingParameter.max) {
           validationErrors.push({
-            parameter: parameter.name,
-            message: `Parameter '${parameter.name}' was provided a value that is greater than the maximum value for the parameter.`,
+            parameter: parameter.parameterCaption,
+            message: `Parameter '${parameter.parameterCaption}' was provided a value that is greater than the maximum value for the parameter.`,
           });
           continue;
         }
         // TODO: account for floating point precision issues.
         if (matchingParameter.step != undefined && parameter.value % matchingParameter.step !== 0) {
           validationErrors.push({
-            parameter: parameter.name,
-            message: `Parameter '${parameter.name}' was provided a value that is not a multiple of the step value for the parameter.`,
+            parameter: parameter.parameterCaption,
+            message: `Parameter '${parameter.parameterCaption}' was provided a value that is not a multiple of the step value for the parameter.`,
           });
           continue;
         }

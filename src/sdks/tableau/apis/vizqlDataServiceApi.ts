@@ -116,7 +116,7 @@ const fieldBaseSchema = z.object({
 const dimensionFieldSchema = fieldBaseSchema.strict();
 const measureFieldSchema = fieldBaseSchema.extend({ function: functionSchema }).strict();
 const calculatedFieldSchema = fieldBaseSchema.extend({ calculation: z.string() }).strict();
-const binFieldSchema = fieldBaseSchema.extend({ binSize: z.number().int().gt(0) }).strict();
+const binFieldSchema = fieldBaseSchema.extend({ binSize: z.number().gt(0) }).strict();
 
 export const fieldSchema = z.union([
   dimensionFieldSchema,
@@ -290,7 +290,7 @@ export const filterSchema = z.union([
 
 // VDS API schemas
 const queryParameterSchema = z.object({
-  name: z.string(),
+  parameterCaption: z.string(),
   value: parameterValueSchema,
 });
 
