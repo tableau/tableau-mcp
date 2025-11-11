@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
+import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -37,10 +38,11 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ metricIds }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ metricIds }, { requestId, authInfo }): Promise<CallToolResult> => {
       const config = getConfig();
       return await listPulseMetricsFromMetricIdsTool.logAndExecute({
         requestId,
+        authInfo,
         args: { metricIds },
         callback: async () => {
           return await useRestApi({
@@ -48,6 +50,7 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
             requestId,
             server,
             jwtScopes: ['tableau:insight_metrics:read'],
+            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricsFromMetricIds(metricIds);
             },

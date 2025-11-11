@@ -15,7 +15,7 @@ Fetches field metadata for the specified datasource.
 
 ## Environment variables
 
-- [`DISABLE_METADATA_API_REQUESTS`](../../configuration/mcp-config/optional.md#disable_metadata_api_requests)
+- [`DISABLE_METADATA_API_REQUESTS`](../../configuration/mcp-config/env-vars.md#disable_metadata_api_requests)
 
 ## Required arguments
 
