@@ -6,6 +6,7 @@ import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
@@ -30,11 +31,12 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ workbookId }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ workbookId }, { requestId, authInfo }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getWorkbookTool.logAndExecute<Workbook, GetWorkbookError>({
         requestId,
+        authInfo,
         args: { workbookId },
         callback: async () => {
           const isWorkbookAllowedResult = await resourceAccessChecker.isWorkbookAllowed({
@@ -55,6 +57,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
               requestId,
               server,
               jwtScopes: ['tableau:content:read'],
+              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 // Notice that we already have the workbook if it had been allowed by a project scope.
                 const workbook =

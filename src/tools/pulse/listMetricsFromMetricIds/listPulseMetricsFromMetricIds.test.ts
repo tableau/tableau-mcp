@@ -15,6 +15,7 @@ vi.mock('../../../restApiInstance.js', () => ({
       pulseMethods: {
         listPulseMetricsFromMetricIds: mocks.mockListPulseMetricsFromMetricIds,
       },
+      siteId: 'test-site-id',
     }),
   ),
 }));
