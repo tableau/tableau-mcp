@@ -7,6 +7,16 @@ sidebar_position: 5
 The Tableau MCP server can be configured to run as an HTTP server, leveraging the Streaming HTTP MCP
 transport. This is useful for deploying the server remotely and exposing it to multiple clients.
 
+:::warning
+
+When `TRANSPORT` is `http`, the default behavior changes to require protecting your MCP server with
+OAuth as a security best practice.
+
+To opt out of this behavior at your own risk, please see the entry on
+[`DANGEROUSLY_DISABLE_OAUTH`](oauth.md#dangerously_disable_oauth).
+
+:::
+
 When `TRANSPORT` is `http`, the following environment variables can be used to configure the HTTP
 server. They are all optional.
 
