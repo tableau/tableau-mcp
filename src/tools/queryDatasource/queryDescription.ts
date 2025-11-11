@@ -119,47 +119,12 @@ Parameters are dynamic values defined in the Tableau datasource that can be used
 - **User preferences** - Currency selection, display units, or other settings
 
 ### Parameter Types
+- **LIST** - Predefined values (e.g., regions, categories)
+- **ANY_VALUE** - Free-form values matching data type
+- **QUANTITATIVE_RANGE** - Numeric values with optional min/max/step
+- **QUANTITATIVE_DATE** - Date values with optional range constraints
 
-#### LIST Parameters
-Parameters with a predefined set of allowed values:
-\`\`\`json
-{
-  "name": "Selected Region",
-  "value": "West"
-}
-\`\`\`
-The value must be one of the allowed values defined in the datasource (e.g., "East", "West", "North", "South").
-
-#### ANY_VALUE Parameters
-Free-form parameters that accept any value matching the data type:
-\`\`\`json
-{
-  "name": "Product Name",
-  "value": "Laptop"
-}
-\`\`\`
-Value is validated against the parameter's data type (string, number, date, boolean).
-
-#### QUANTITATIVE_RANGE Parameters
-Numeric parameters with optional min/max/step constraints:
-\`\`\`json
-{
-  "name": "Minimum Sales Threshold",
-  "value": 50000
-}
-\`\`\`
-
-#### QUANTITATIVE_DATE Parameters
-Date parameters with optional date range constraints:
-\`\`\`json
-{
-  "name": "Analysis Start Date",
-  "value": "2024-01-01"
-}
-\`\`\`
-
-### Parameter Usage in Queries
-Parameters are included in the query alongside fields and filters:
+### Usage Example
 \`\`\`json
 {
   "datasourceLuid": "abc123",
@@ -180,20 +145,10 @@ Parameters are included in the query alongside fields and filters:
 }
 \`\`\`
 
-### Important Notes
-- Parameters must be defined in the Tableau datasource before they can be used
-- Parameter names are case-sensitive and must match exactly
-- For LIST parameters, the value must be from the allowed list
-- Parameters affect the entire query execution, not just specific fields
-- Use \`get-datasource-metadata\` to see available parameters and their allowed values
-
-### Parameters vs Filters
-| Aspect | Parameters | Filters |
-|--------|-----------|---------|
-| **Definition** | Pre-defined in datasource | Created in query |
-| **Purpose** | Control calculations/behavior | Restrict returned data |
-| **Scope** | Entire datasource/workbook | Specific query |
-| **Validation** | Against datasource metadata | Against field values |
+**Notes:**
+- Parameters must be pre-defined in the datasource
+- Names are case-sensitive
+- Parameters affect entire query; filters restrict returned data
 
 ## Filter Types and Usage
 
