@@ -27,6 +27,16 @@ export interface ProcessEnvEx {
   INCLUDE_PROJECT_IDS: string | undefined;
   INCLUDE_DATASOURCE_IDS: string | undefined;
   INCLUDE_WORKBOOK_IDS: string | undefined;
+  DANGEROUSLY_DISABLE_OAUTH: string | undefined;
+  OAUTH_ISSUER: string | undefined;
+  OAUTH_JWE_PRIVATE_KEY: string | undefined;
+  OAUTH_JWE_PRIVATE_KEY_PATH: string | undefined;
+  OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: string | undefined;
+  OAUTH_REDIRECT_URI: string | undefined;
+  OAUTH_CLIENT_ID_SECRET_PAIRS: string | undefined;
+  OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: string | undefined;
+  OAUTH_ACCESS_TOKEN_TIMEOUT_MS: string | undefined;
+  OAUTH_REFRESH_TOKEN_TIMEOUT_MS: string | undefined;
 }
 
 declare global {
