@@ -90,3 +90,37 @@ export const callbackSchema = z.object({
   state: z.string().optional(),
   error: z.string().optional(),
 });
+
+export const mcpAccessTokenUserOnlySchema = z.object({
+  iss: requiredString('iss'),
+  aud: requiredString('aud'),
+  exp: z.number().int().nonnegative(),
+  sub: requiredString('sub'),
+  clientId: requiredString('clientId'),
+  tableauServer: requiredString('tableauServer'),
+  // Optional because there may not be a user associated with the access token, e.g. for client credentials grant type
+  tableauUserId: z.string().optional(),
+});
+
+export const mcpAccessTokenSchema = mcpAccessTokenUserOnlySchema.extend({
+  tableauAccessToken: requiredString('tableauAccessToken'),
+  tableauRefreshToken: requiredString('tableauRefreshToken'),
+  tableauExpiresAt: z.number().int().nonnegative(),
+  // Required because it is always available when a user's Tableau access token is available
+  tableauUserId: requiredString('tableauUserId'),
+});
+
+export type McpAccessToken = z.infer<typeof mcpAccessTokenSchema>;
+export type McpAccessTokenSubOnly = z.infer<typeof mcpAccessTokenUserOnlySchema>;
+
+export const tableauAuthInfoSchema = z
+  .object({
+    username: z.string(),
+    userId: z.string(),
+    server: z.string(),
+    accessToken: z.string(),
+    refreshToken: z.string(),
+  })
+  .partial();
+
+export type TableauAuthInfo = z.infer<typeof tableauAuthInfoSchema>;

@@ -240,6 +240,7 @@ async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject)
           tableauAccessToken: tokenData.tokens.accessToken,
           tableauRefreshToken: tokenData.tokens.refreshToken,
           tableauExpiresAt: Math.floor(Date.now() / 1000) + tokenData.tokens.expiresInSeconds,
+          tableauUserId: tokenData.user.id,
         }
       : {}),
   });

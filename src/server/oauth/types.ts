@@ -1,4 +1,11 @@
+import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import express from 'express';
+
 import { User } from '../../sdks/tableau/types/user.js';
+
+export type AuthenticatedRequest = express.Request & {
+  auth?: AuthInfo;
+};
 
 export type Tokens = {
   accessToken: string;
