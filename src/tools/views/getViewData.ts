@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
@@ -29,11 +30,12 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ viewId }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ viewId }, { requestId, authInfo }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getViewDataTool.logAndExecute<string, GetViewDataError>({
         requestId,
+        authInfo,
         args: { viewId },
         callback: async () => {
           const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
@@ -54,6 +56,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
               requestId,
               server,
               jwtScopes: ['tableau:views:download'],
+              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 return await restApi.viewsMethods.queryViewData({
                   viewId,

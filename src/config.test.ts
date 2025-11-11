@@ -46,7 +46,7 @@ describe('Config', () => {
       INCLUDE_PROJECT_IDS: undefined,
       INCLUDE_DATASOURCE_IDS: undefined,
       INCLUDE_WORKBOOK_IDS: undefined,
-      DISABLE_OAUTH: undefined,
+      DANGEROUSLY_DISABLE_OAUTH: undefined,
       OAUTH_ISSUER: undefined,
       OAUTH_REDIRECT_URI: undefined,
       OAUTH_JWE_PRIVATE_KEY: undefined,
@@ -288,7 +288,7 @@ describe('Config', () => {
       ...process.env,
       ...defaultEnvVars,
       TRANSPORT: 'http',
-      DISABLE_OAUTH: 'true',
+      DANGEROUSLY_DISABLE_OAUTH: 'true',
     };
 
     const config = new Config();
@@ -831,11 +831,11 @@ describe('Config', () => {
       expect(config.oauth).toEqual(defaultOAuthConfig);
     });
 
-    it('should disable OAuth when DISABLE_OAUTH is "true"', () => {
+    it('should disable OAuth when DANGEROUSLY_DISABLE_OAUTH is "true"', () => {
       process.env = {
         ...process.env,
         ...defaultOAuthEnvVars,
-        DISABLE_OAUTH: 'true',
+        DANGEROUSLY_DISABLE_OAUTH: 'true',
       };
 
       const config = new Config();
@@ -935,7 +935,7 @@ describe('Config', () => {
       };
 
       expect(() => new Config()).toThrow(
-        'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DISABLE_OAUTH is "true"',
+        'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true"',
       );
     });
 
@@ -975,15 +975,17 @@ describe('Config', () => {
       expect(() => new Config()).toThrow('When AUTH is "oauth", OAUTH_ISSUER must be set');
     });
 
-    it('should throw error when AUTH is "oauth" and DISABLE_OAUTH is set', () => {
+    it('should throw error when AUTH is "oauth" and DANGEROUSLY_DISABLE_OAUTH is set', () => {
       process.env = {
         ...process.env,
         ...defaultOAuthEnvVars,
         AUTH: 'oauth',
-        DISABLE_OAUTH: 'true',
+        DANGEROUSLY_DISABLE_OAUTH: 'true',
       };
 
-      expect(() => new Config()).toThrow('When AUTH is "oauth", DISABLE_OAUTH cannot be "true"');
+      expect(() => new Config()).toThrow(
+        'When AUTH is "oauth", DANGEROUSLY_DISABLE_OAUTH cannot be "true"',
+      );
     });
 
     it('should default transport to "http" when OAUTH_ISSUER is set', () => {

@@ -6,6 +6,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -35,13 +36,17 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ pulseMetricDefinitionID }, { requestId }): Promise<CallToolResult> => {
+    callback: async (
+      { pulseMetricDefinitionID },
+      { requestId, authInfo },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       return await listPulseMetricsFromMetricDefinitionIdTool.logAndExecute<
         Array<PulseMetric>,
         PulseDisabledError
       >({
         requestId,
+        authInfo,
         args: { pulseMetricDefinitionID },
         callback: async () => {
           return await useRestApi({
@@ -49,6 +54,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
             requestId,
             server,
             jwtScopes: ['tableau:insight_definitions_metrics:read'],
+            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricsFromMetricDefinitionId(
                 pulseMetricDefinitionID,

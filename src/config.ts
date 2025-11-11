@@ -98,7 +98,7 @@ export class Config {
       INCLUDE_PROJECT_IDS: includeProjectIds,
       INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
       INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
-      DISABLE_OAUTH: disableOauth,
+      DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
       OAUTH_JWE_PRIVATE_KEY: oauthJwePrivateKey,
       OAUTH_JWE_PRIVATE_KEY_PATH: oauthJwePrivateKeyPath,
@@ -190,13 +190,13 @@ export class Config {
 
     if (this.transport === 'http' && !disableOauthOverride && !this.oauth.issuer) {
       throw new Error(
-        'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DISABLE_OAUTH is "true"',
+        'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true"',
       );
     }
 
     if (this.auth === 'oauth') {
       if (disableOauthOverride) {
-        throw new Error('When AUTH is "oauth", DISABLE_OAUTH cannot be "true"');
+        throw new Error('When AUTH is "oauth", DANGEROUSLY_DISABLE_OAUTH cannot be "true"');
       }
 
       if (!this.oauth.issuer) {

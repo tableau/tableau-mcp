@@ -38,12 +38,13 @@ describe('Tool', () => {
     const tool = new Tool(mockParams);
     const testArgs = { param1: 'test' };
 
-    tool.logInvocation({ requestId: '2', args: testArgs });
+    tool.logInvocation({ requestId: '2', args: testArgs, username: 'test-user' });
 
     const server = expect.any(Object);
     expect(spy).toHaveBeenCalledExactlyOnceWith(server, {
       type: 'tool',
       requestId: '2',
+      username: 'test-user',
       tool: {
         name: 'get-datasource-metadata',
         args: testArgs,
@@ -61,6 +62,7 @@ describe('Tool', () => {
     const spy = vi.spyOn(tool, 'logInvocation');
     const result = await tool.logAndExecute({
       requestId: '2',
+      authInfo: undefined,
       args: { param1: 'test' },
       callback,
       constrainSuccessResult: (result) => {
@@ -92,6 +94,7 @@ describe('Tool', () => {
 
     const result = await tool.logAndExecute({
       requestId: '2',
+      authInfo: undefined,
       args: { param1: 'test' },
       callback,
       constrainSuccessResult: (result) => {
@@ -113,6 +116,7 @@ describe('Tool', () => {
 
     await tool.logAndExecute({
       requestId: '2',
+      authInfo: undefined,
       args,
       callback: vi.fn(),
       constrainSuccessResult: (result) => {
@@ -146,6 +150,7 @@ describe('Tool', () => {
 
     const result = await tool.logAndExecute({
       requestId: '2',
+      authInfo: undefined,
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok('test')),
       constrainSuccessResult: (result) => {
@@ -167,6 +172,7 @@ describe('Tool', () => {
 
     const result = await tool.logAndExecute({
       requestId: '2',
+      authInfo: undefined,
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok(successResult)),
       constrainSuccessResult: (result) => {
@@ -194,6 +200,7 @@ describe('Tool', () => {
 
     const result = await tool.logAndExecute({
       requestId: '2',
+      authInfo: undefined,
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok(successResult)),
       constrainSuccessResult: (_result) => {
@@ -215,6 +222,7 @@ describe('Tool', () => {
 
     const result = await tool.logAndExecute({
       requestId: '2',
+      authInfo: undefined,
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok(successResult)),
       constrainSuccessResult: (_result) => {
