@@ -10,11 +10,14 @@ import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
 import { tableauAuthInfoSchema } from '../server/oauth/schemas.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
+import { Provider } from '../utils/provider.js';
 import { ToolName } from './toolName.js';
 
 type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args extends ZodRawShape
   ? (args: z.objectOutputType<Args, ZodTypeAny>) => void
   : never;
+
+type TypeOrProvider<T> = T | Provider<T>;
 
 export type ConstrainedResult<T> =
   | {
@@ -43,19 +46,19 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   name: ToolName;
 
   // The description of the tool
-  description: string;
+  description: TypeOrProvider<string>;
 
   // The schema of the tool's parameters
-  paramsSchema: Args;
+  paramsSchema: TypeOrProvider<Args>;
 
   // The annotations of the tool
-  annotations: ToolAnnotations;
+  annotations: TypeOrProvider<ToolAnnotations>;
 
   // A function that validates the tool's arguments provided by the client
-  argsValidator?: ArgsValidator<Args>;
+  argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
 
   // The implementation of the tool itself
-  callback: ToolCallback<Args>;
+  callback: TypeOrProvider<ToolCallback<Args>>;
 };
 
 /**
@@ -114,11 +117,11 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   }: ToolParams<Args>) {
     this.server = server;
     this.name = name;
-    this.description = description;
-    this.paramsSchema = paramsSchema;
-    this.annotations = annotations;
-    this.argsValidator = argsValidator;
-    this.callback = callback;
+    this.description = description instanceof Provider ? description.get() : description;
+    this.paramsSchema = paramsSchema instanceof Provider ? paramsSchema.get() : paramsSchema;
+    this.annotations = annotations instanceof Provider ? annotations.get() : annotations;
+    this.argsValidator = argsValidator instanceof Provider ? argsValidator.get() : argsValidator;
+    this.callback = callback instanceof Provider ? callback.get() : callback;
   }
 
   logInvocation({

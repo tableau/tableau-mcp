@@ -10,15 +10,8 @@ import {
   useRestApi,
 } from './restApiInstance.js';
 import { AuthConfig } from './sdks/tableau/authConfig.js';
-import RestApi from './sdks/tableau/restApi.js';
+import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
-
-vi.mock('./sdks/tableau/restApi.js', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    signIn: vi.fn().mockResolvedValue(undefined),
-    signOut: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
 
 vi.mock('./logging/log.js', () => ({
   log: {

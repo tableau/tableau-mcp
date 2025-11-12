@@ -13,7 +13,7 @@ import {
   ResponseInterceptor,
   ResponseInterceptorConfig,
 } from './sdks/tableau/interceptors.js';
-import RestApi from './sdks/tableau/restApi.js';
+import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';

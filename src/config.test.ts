@@ -46,6 +46,7 @@ describe('Config', () => {
       INCLUDE_PROJECT_IDS: undefined,
       INCLUDE_DATASOURCE_IDS: undefined,
       INCLUDE_WORKBOOK_IDS: undefined,
+      TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: undefined,
       DANGEROUSLY_DISABLE_OAUTH: undefined,
       OAUTH_ISSUER: undefined,
       OAUTH_REDIRECT_URI: undefined,
@@ -293,6 +294,28 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.transport).toBe('http');
+  });
+
+  it('should set tableauServerVersionCheckIntervalInHours to default when not specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: undefined,
+    };
+
+    const config = new Config();
+    expect(config.tableauServerVersionCheckIntervalInHours).toBe(1);
+  });
+
+  it('should set tableauServerVersionCheckIntervalInHours to the specified value when specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: '2',
+    };
+
+    const config = new Config();
+    expect(config.tableauServerVersionCheckIntervalInHours).toBe(2);
   });
 
   describe('Tool filtering', () => {

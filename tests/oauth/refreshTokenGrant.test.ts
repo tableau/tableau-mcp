@@ -1,7 +1,6 @@
 import express from 'express';
 import http from 'http';
 import request from 'supertest';
-import { Ok } from 'ts-results-es';
 
 import { getConfig } from '../../src/config.js';
 import { serverName } from '../../src/server.js';
@@ -11,22 +10,10 @@ import { resetEnv, setEnv } from './testEnv.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
-  mockGetCurrentServerSession: vi.fn(),
 }));
 
 vi.mock('../../src/sdks/tableau-oauth/methods.js', () => ({
   getTokenResult: mocks.mockGetTokenResult,
-}));
-
-vi.mock('../../src/sdks/tableau/restApi.js', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    signIn: vi.fn().mockResolvedValue(undefined),
-    signOut: vi.fn().mockResolvedValue(undefined),
-    setCredentials: vi.fn().mockResolvedValue(undefined),
-    serverMethods: {
-      getCurrentServerSession: mocks.mockGetCurrentServerSession,
-    },
-  })),
 }));
 
 describe('refresh token grant type', () => {
@@ -91,19 +78,6 @@ describe('refresh token grant type', () => {
         originHost: '10ax.online.tableau.com',
       });
 
-      mocks.mockGetCurrentServerSession.mockResolvedValue(
-        Ok({
-          site: {
-            id: 'site_id',
-            name: 'test-site',
-          },
-          user: {
-            id: 'user_id',
-            name: 'test-user',
-          },
-        }),
-      );
-
       const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
 
       const tokenResponse = await request(app).post('/oauth/token').send({
@@ -131,19 +105,6 @@ describe('refresh token grant type', () => {
       expiresInSeconds: 3600,
       originHost: '10ax.online.tableau.com',
     });
-
-    mocks.mockGetCurrentServerSession.mockResolvedValue(
-      Ok({
-        site: {
-          id: 'site_id',
-          name: 'test-site',
-        },
-        user: {
-          id: 'user_id',
-          name: 'test-user',
-        },
-      }),
-    );
 
     const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
 

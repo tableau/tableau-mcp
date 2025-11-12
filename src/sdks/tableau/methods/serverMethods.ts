@@ -5,6 +5,7 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { isAxiosError } from '../../../utils/isAxiosError.js';
 import { serverApis, Session } from '../apis/serverApi.js';
 import { Credentials } from '../types/credentials.js';
+import { ServerInfo } from '../types/serverInfo.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 /**
@@ -19,6 +20,15 @@ export default class ServerMethods extends AuthenticatedMethods<typeof serverApi
   constructor(baseUrl: string, creds: Credentials) {
     super(new Zodios(baseUrl, serverApis), creds);
   }
+
+  /**
+   * Returns the version of Tableau Server and the supported version of the REST API.
+   *
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_server.htm#get_server_info
+   */
+  getServerInfo = async (): Promise<ServerInfo> => {
+    return (await this._apiClient.getServerInfo()).serverInfo;
+  };
 
   /**
    * Returns details of the current session of Tableau Server.

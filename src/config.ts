@@ -54,6 +54,7 @@ export class Config {
   enableServerLogging: boolean;
   serverLogDirectory: string;
   boundedContext: BoundedContext;
+  tableauServerVersionCheckIntervalInHours: number;
   oauth: {
     enabled: boolean;
     issuer: string;
@@ -98,6 +99,7 @@ export class Config {
       INCLUDE_PROJECT_IDS: includeProjectIds,
       INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
       INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
+      TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
       OAUTH_JWE_PRIVATE_KEY: oauthJwePrivateKey,
@@ -150,6 +152,15 @@ export class Config {
         'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
       );
     }
+
+    this.tableauServerVersionCheckIntervalInHours = parseNumber(
+      tableauServerVersionCheckIntervalInHours,
+      {
+        defaultValue: 1,
+        minValue: 1,
+        maxValue: 24 * 7, // 7 days
+      },
+    );
 
     const disableOauthOverride = disableOauth === 'true';
     this.oauth = {
