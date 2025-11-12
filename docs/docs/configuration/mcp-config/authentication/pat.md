@@ -27,6 +27,8 @@ client-side code where it could accidentally be revealed.
 
 :::
 
+<hr />
+
 :::danger
 
 Do not use a PAT if [`TRANSPORT`](../env-vars.md#transport) is `http` if you expect simultaneous
