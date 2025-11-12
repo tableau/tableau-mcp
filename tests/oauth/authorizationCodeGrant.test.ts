@@ -1,7 +1,6 @@
 import express from 'express';
 import http from 'http';
 import request from 'supertest';
-import { Ok } from 'ts-results-es';
 
 import { getConfig } from '../../src/config.js';
 import { serverName } from '../../src/server.js';
@@ -12,22 +11,10 @@ import { resetEnv, setEnv } from './testEnv.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
-  mockGetCurrentServerSession: vi.fn(),
 }));
 
 vi.mock('../../src/sdks/tableau-oauth/methods.js', () => ({
   getTokenResult: mocks.mockGetTokenResult,
-}));
-
-vi.mock('../../src/sdks/tableau/restApi.js', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    signIn: vi.fn().mockResolvedValue(undefined),
-    signOut: vi.fn().mockResolvedValue(undefined),
-    setCredentials: vi.fn().mockResolvedValue(undefined),
-    serverMethods: {
-      getCurrentServerSession: mocks.mockGetCurrentServerSession,
-    },
-  })),
 }));
 
 describe('authorization code grant type', () => {
@@ -107,19 +94,6 @@ describe('authorization code grant type', () => {
         expiresInSeconds: 3600,
         originHost: '10ax.online.tableau.com',
       });
-
-      mocks.mockGetCurrentServerSession.mockResolvedValue(
-        Ok({
-          site: {
-            id: 'site_id',
-            name: 'test-site',
-          },
-          user: {
-            id: 'user_id',
-            name: 'test-user',
-          },
-        }),
-      );
 
       const response = await request(app)
         .get('/Callback')

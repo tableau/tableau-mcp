@@ -9,22 +9,10 @@ import { resetEnv, setEnv } from './testEnv.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
-  mockGetCurrentServerSession: vi.fn(),
 }));
 
 vi.mock('../../src/sdks/tableau-oauth/methods.js', () => ({
   getTokenResult: mocks.mockGetTokenResult,
-}));
-
-vi.mock('../../src/sdks/tableau/restApi.js', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    signIn: vi.fn().mockResolvedValue(undefined),
-    signOut: vi.fn().mockResolvedValue(undefined),
-    setCredentials: vi.fn().mockResolvedValue(undefined),
-    serverMethods: {
-      getCurrentServerSession: mocks.mockGetCurrentServerSession,
-    },
-  })),
 }));
 
 describe('client credentials grant type', () => {
