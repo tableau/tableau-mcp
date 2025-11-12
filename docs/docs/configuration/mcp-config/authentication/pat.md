@@ -27,4 +27,19 @@ client-side code where it could accidentally be revealed.
 
 :::
 
+<hr />
+
+:::danger
+
+Do not use a PAT when [`TRANSPORT`](../env-vars.md#transport) is `http` if you expect simultaneous
+requests from multiple clients since PATs cannot be used concurrently. Signing in multiple times
+with the same PAT at the same time will terminate any prior session and will result in an
+authentication error. See
+[Understand personal access tokens](https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm#understand-personal-access-tokens)
+for more details.
+
+[OAuth](oauth.md) is recommended but [Direct Trust](direct-trust.md) can also be used.
+
+:::
+
 [pat]: https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm
