@@ -112,16 +112,6 @@ export class Config {
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
     } = cleansedVars;
 
-    const defaultTableauServerVersionCheckIntervalInHours = 1;
-    const tableauServerVersionCheckIntervalInHoursNumber = tableauServerVersionCheckIntervalInHours
-      ? parseFloat(tableauServerVersionCheckIntervalInHours)
-      : defaultTableauServerVersionCheckIntervalInHours;
-
-    this.tableauServerVersionCheckIntervalInHours =
-      isNaN(tableauServerVersionCheckIntervalInHoursNumber) ||
-      tableauServerVersionCheckIntervalInHoursNumber <= 0
-        ? defaultTableauServerVersionCheckIntervalInHours
-        : tableauServerVersionCheckIntervalInHoursNumber;
     this.siteName = siteName ?? '';
 
     this.sslKey = sslKey?.trim() ?? '';
@@ -162,6 +152,15 @@ export class Config {
         'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
       );
     }
+
+    this.tableauServerVersionCheckIntervalInHours = parseNumber(
+      tableauServerVersionCheckIntervalInHours,
+      {
+        defaultValue: 1,
+        minValue: 1,
+        maxValue: 2 ** 31 - 1,
+      },
+    );
 
     const disableOauthOverride = disableOauth === 'true';
     this.oauth = {
