@@ -158,7 +158,7 @@ export class Config {
       {
         defaultValue: 1,
         minValue: 1,
-        maxValue: 2 ** 31 - 1,
+        maxValue: 24 * 7, // 7 days
       },
     );
 

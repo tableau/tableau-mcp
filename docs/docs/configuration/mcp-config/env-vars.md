@@ -214,7 +214,7 @@ will cache the version and only check it again after the interval specified by t
 variable.
 
 - Default: `1` hour
-- Must be a positive number.
+- Must be a positive number between `1` and `168` (7 days).
 
 <hr />
 
