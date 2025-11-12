@@ -12,6 +12,15 @@ describe('isTableauVersionAtLeast', () => {
     expect(isTableauVersionAtLeast({ productVersion, minVersion: '2025.3.0' })).toBe(true);
   });
 
+  it('should return true when version value is in some unknown format', () => {
+    const productVersion = {
+      value: 'unknown',
+      build: 'unknown.25.0804.1416',
+    };
+
+    expect(isTableauVersionAtLeast({ productVersion, minVersion: '2025.3.0' })).toBe(true);
+  });
+
   describe('when comparing release versions', () => {
     it('should return true when year is greater', () => {
       const productVersion = {

@@ -15,8 +15,13 @@ export function isTableauVersionAtLeast({
     return true;
   }
 
-  // Build is from a release branch, so the release version is the value and looks like "2025.3.0"
   const [year, major, minor] = versionValue.split('.').map(Number);
+  if ([year, major, minor].some(isNaN)) {
+    // The version is in some unknown format, so we'll assume it's a fresh build and pass the check.
+    return true;
+  }
+
+  // Build is from a release branch, so the release version is the value and looks like "2025.3.0"
   const [minYear, minMajor, minMinor] = minVersion.split('.').map(Number);
 
   if (
