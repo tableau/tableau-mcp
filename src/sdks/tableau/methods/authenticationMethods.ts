@@ -76,10 +76,10 @@ export class AuthenticatedAuthenticationMethods extends AuthenticatedMethods<
 
   /**
    * Signs you out of the current session. This call invalidates the authentication token that is created by a call to Sign In.
-   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#sign_out
    *
    * Required scopes: none
    *
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#sign_out
    */
   signOut = async (): Promise<void> => {
     await this._apiClient.signOut(undefined, {

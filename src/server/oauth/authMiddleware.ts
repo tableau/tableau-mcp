@@ -1,0 +1,167 @@
+import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { KeyObject } from 'crypto';
+import express, { RequestHandler } from 'express';
+import { compactDecrypt } from 'jose';
+import { Err, Ok, Result } from 'ts-results-es';
+import { fromError } from 'zod-validation-error';
+
+import { getConfig } from '../../config.js';
+import { AUDIENCE } from './provider.js';
+import { mcpAccessTokenSchema, mcpAccessTokenUserOnlySchema, TableauAuthInfo } from './schemas.js';
+import { AuthenticatedRequest } from './types.js';
+
+/**
+ * Express middleware for OAuth authentication
+ *
+ * This middleware checks for Bearer token authorization.
+ * If no token is present, returns 401 with WWW-Authenticate header
+ * pointing to resource metadata endpoint.
+ *
+ * @returns Express middleware function
+ */
+export function authMiddleware(privateKey: KeyObject): RequestHandler {
+  return async (
+    req: AuthenticatedRequest,
+    res: express.Response,
+    next: express.NextFunction,
+  ): Promise<void> => {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      // For SSE requests (GET), provide proper SSE error response
+      if (req.method === 'GET' && req.headers.accept?.includes('text/event-stream')) {
+        res.writeHead(401, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        });
+        res.write('event: error\n');
+        res.write(
+          'data: {"error": "unauthorized", "error_description": "Authorization required"}\n\n',
+        );
+        res.end();
+        return;
+      }
+
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      res
+        .status(401)
+        .header(
+          'WWW-Authenticate',
+          `Bearer realm="MCP", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
+        )
+        .json({
+          error: 'unauthorized',
+          error_description: 'Authorization required. Use OAuth 2.1 flow.',
+        });
+      return;
+    }
+
+    const token = authHeader.slice(7);
+    const result = await verifyAccessToken(token, privateKey);
+
+    if (result.isErr()) {
+      // For SSE requests (GET), provide proper SSE error response
+      if (req.method === 'GET' && req.headers.accept?.includes('text/event-stream')) {
+        res.writeHead(401, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        });
+        res.write('event: error\n');
+        res.write(`data: {"error": "invalid_token", "error_description": "${result.error}"}\n\n`);
+        res.end();
+        return;
+      }
+
+      res.status(401).json({
+        error: 'invalid_token',
+        error_description: result.error,
+      });
+      return;
+    }
+    req.auth = result.value;
+    next();
+  };
+}
+
+/**
+ * Verifies JWE access token and extracts credentials
+ *
+ * Decrypts and validates JWE signature and expiration.
+ * Extracts access/refresh tokens for API calls.
+ *
+ * @param token - JWT access token from Authorization header
+ * @param jwePrivateKey - Private key for decrypting the token
+ *
+ * @returns AuthInfo with user details and tokens
+ */
+async function verifyAccessToken(
+  token: string,
+  jwePrivateKey: KeyObject,
+): Promise<Result<AuthInfo, string>> {
+  const config = getConfig();
+
+  try {
+    const { plaintext } = await compactDecrypt(token, jwePrivateKey);
+    const payload = JSON.parse(new TextDecoder().decode(plaintext));
+
+    const mcpAccessToken = mcpAccessTokenUserOnlySchema.safeParse(payload);
+    if (!mcpAccessToken.success) {
+      return Err(`Invalid access token: ${fromError(mcpAccessToken.error).toString()}`);
+    }
+
+    const { iss, aud, exp, clientId } = mcpAccessToken.data;
+    if (iss !== config.oauth.issuer || aud !== AUDIENCE || exp < Math.floor(Date.now() / 1000)) {
+      // https://github.com/modelcontextprotocol/inspector/issues/608
+      // MCP Inspector Not Using Refresh Token for Token Validation
+      return new Err('Invalid or expired access token');
+    }
+
+    let tableauAuthInfo: TableauAuthInfo;
+    if (config.auth === 'oauth') {
+      const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
+      if (!mcpAccessToken.success) {
+        return Err(`Invalid access token: ${fromError(mcpAccessToken.error).toString()}`);
+      }
+
+      const {
+        tableauAccessToken,
+        tableauRefreshToken,
+        tableauExpiresAt,
+        tableauUserId,
+        tableauServer,
+        sub,
+      } = mcpAccessToken.data;
+
+      if (tableauExpiresAt < Math.floor(Date.now() / 1000)) {
+        return new Err('Invalid or expired access token');
+      }
+
+      tableauAuthInfo = {
+        username: sub,
+        userId: tableauUserId,
+        server: tableauServer,
+        accessToken: tableauAccessToken,
+        refreshToken: tableauRefreshToken,
+      };
+    } else {
+      const { tableauUserId, tableauServer, sub } = mcpAccessToken.data;
+      tableauAuthInfo = {
+        username: sub,
+        server: tableauServer,
+        ...(tableauUserId ? { userId: tableauUserId } : {}),
+      };
+    }
+
+    return Ok({
+      token,
+      clientId,
+      scopes: [],
+      expiresAt: payload.exp,
+      extra: tableauAuthInfo,
+    });
+  } catch {
+    return new Err('Invalid or expired access token');
+  }
+}
