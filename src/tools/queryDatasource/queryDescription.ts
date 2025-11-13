@@ -56,6 +56,16 @@ Fields with aggregation functions (SUM, AVG, COUNT, etc.):
 }
 \`\`\`
 
+#### Calculated Fields
+Custom fields defined using Tableau calculation syntax:
+\`\`\`json
+{
+  "fieldCaption": "Profit Margin",
+  "calculation": "SUM([Profit]) / SUM([Sales])",
+  "fieldAlias": "Margin %"
+}
+\`\`\`
+
 #### Bin Fields
 Group continuous data into discrete ranges:
 \`\`\`json
