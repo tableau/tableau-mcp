@@ -466,14 +466,6 @@ Filter relative date periods:
 ### Example 6: Using Parameters for Dynamic Analysis
 **Question:** "Show me sales for the selected region and year"
 
-First, check available parameters using \`get-datasource-metadata\`:
-\`\`\`json
-{
-  "datasourceLuid": "abc123"
-}
-\`\`\`
-
-Then use parameters in your query:
 \`\`\`json
 {
   "datasourceLuid": "abc123",
