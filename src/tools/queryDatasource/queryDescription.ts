@@ -5,7 +5,8 @@ Executes VizQL queries against Tableau data sources to answer business questions
 ## Prerequisites
 Before using this tool, you should:
 1. Understand available fields and their types
-2. Understand the data structure and field relationships
+2. Understand what parameters are available and their types
+3. Understand the data structure and field relationships
 
 ## Best Practices
 
@@ -145,10 +146,69 @@ Parameters are dynamic values defined in the Tableau datasource that can be used
 }
 \`\`\`
 
-**Notes:**
-- Parameters must be pre-defined in the datasource
-- Names are case-sensitive
 - Parameters affect entire query; filters restrict returned data
+
+## Bins
+
+Bins group continuous numerical data into discrete ranges, enabling distribution analysis and histogram creation. Unlike parameters and filters, bins are created dynamically in the query.
+
+### Creating Bin Fields
+
+To create a bin field in a query, you **must** include:
+1. A **measure field** with the base field and aggregation function
+2. A **bin field** with the same fieldCaption and a binSize property
+
+**Example:**
+\`\`\`json
+{
+  "fields": [
+    {
+      "fieldCaption": "Sales",
+      "function": "SUM",
+      "fieldAlias": "Total Sales"
+    },
+    {
+      "fieldCaption": "Sales",
+      "binSize": 1000,
+      "fieldAlias": "Sales Range"
+    }
+  ]
+}
+\`\`\`
+
+This creates bins of $1,000 intervals (0-1000, 1000-2000, etc.)
+
+### When to Use Bins
+- Analyzing distribution patterns (age groups, price ranges, score brackets)
+- Creating histograms or frequency distributions
+- Grouping continuous numerical data into meaningful categories
+- User asks questions like "How many customers in each age range?" or "What's the distribution of order sizes?"
+
+### Bin Restrictions
+- **Cannot override existing bin fields** - If a bin field already exists in the datasource, query it without binSize
+- **binSize must be positive** - Only values > 0 are allowed
+- **Measure fields only** - Can only bin numeric/quantitative fields
+- **Choose appropriate bin sizes** - Consider your data range (e.g., bin size 100 for values 0-10,000)
+
+### Querying Existing Bin Fields
+
+If a bin field already exists in the datasource (e.g., "Profit (bin)"), query it as a regular dimension field:
+
+\`\`\`json
+{
+  "fields": [
+    {
+      "fieldCaption": "Profit (bin)"
+    },
+    {
+      "fieldCaption": "Profit",
+      "function": "SUM"
+    }
+  ]
+}
+\`\`\`
+
+To control existing bin field behavior, use parameters if available (e.g., "Profit Bin Size").
 
 ## Filter Types and Usage
 
@@ -392,12 +452,6 @@ Filter relative date periods:
   }
 }
 \`\`\`
-
-**Use bins when:**
-- Analyzing distribution patterns (age groups, price ranges, score brackets)
-- Creating histograms or frequency distributions
-- Grouping continuous numerical data into meaningful categories
-- User asks questions like "How many customers in each age range?" or "What's the distribution of order sizes?"
 
 ### Example 6: Using Parameters for Dynamic Analysis
 **Question:** "Show me sales for the selected region and year"
