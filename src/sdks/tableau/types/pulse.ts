@@ -265,6 +265,53 @@ export const outputFormatEnumSchema = z.enum([
 ]);
 export type OutputFormatEnumType = z.infer<typeof outputFormatEnumSchema>;
 
+// Tableau datetime format: YYYY-MM-DD HH:MM:SS or YYYY-MM-DD
+// If no time is specified, midnight (00:00:00) is used
+export const tableauDateTimeSchema = z
+  .string()
+  .regex(
+    /^(\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?)?$/,
+    'Format must be YYYY-MM-DD HH:MM:SS, YYYY-MM-DD, or empty. If no time is specified, midnight (00:00:00) is used.',
+  );
+
+export const actionTypeEnumSchema = z.enum([
+  'ACTION_TYPE_UNDEFINED',
+  'ACTION_TYPE_ANSWER',
+  'ACTION_TYPE_SUMMARIZE',
+  'ACTION_TYPE_ADVISE',
+]);
+export type ActionTypeEnumType = z.infer<typeof actionTypeEnumSchema>;
+
+export const roleEnumSchema = z.enum([
+  'ROLE_UNDEFINED',
+  'ROLE_USER',
+  'ROLE_ASSISTANT',
+]);
+export type RoleEnumType = z.infer<typeof roleEnumSchema>;
+
+export const metricGroupContextSchema = z.array(
+  z.object({
+    metadata: pulseMetadataSchema,
+    metric: pulseMetricSchema,
+  }),
+);
+
+export const messagesSchema = z.object({
+  action_type: actionTypeEnumSchema,
+  content: z.string(),
+  metric_group_context: metricGroupContextSchema,
+  metric_group_context_resolved: z.boolean(),
+  role: roleEnumSchema,
+});
+
+export const pulseInsightBriefRequestSchema = z.object({
+  language: languageEnumSchema,
+  locale: localeEnumSchema,
+  messages: z.array(messagesSchema),
+  now: tableauDateTimeSchema.optional(),
+  time_zone: z.string().optional(),
+});
+
 export const pulseBundleRequestSchema = z.object({
   bundle_request: z.object({
     version: z.number(),
@@ -298,21 +345,23 @@ export const pulseBundleRequestSchema = z.object({
   }),
 });
 
+export const insightSchema = z.object({
+  type: z.string(),
+  version: z.number(),
+  content: z.string().optional(),
+  markup: z.string().optional(),
+  viz: z.any().optional(),
+  facts: z.any().optional(),
+  characterization: z.string().optional(),
+  question: z.string(),
+  score: z.number(),
+})
+
 export const popcBanInsightGroupSchema = z.object({
   type: z.string(),
   insights: z.array(
     z.object({
-      result: z.object({
-        type: z.string(),
-        version: z.number(),
-        content: z.string().optional(),
-        markup: z.string().optional(),
-        viz: z.any().optional(),
-        facts: z.any().optional(),
-        characterization: z.string().optional(),
-        question: z.string(),
-        score: z.number(),
-      }),
+      result: insightSchema,
       insight_type: z.string(),
     }),
   ),
@@ -340,7 +389,19 @@ export const pulseBundleResponseSchema = z.object({
   }),
 });
 
+
+export const pulseInsightBriefResponseSchema = z.object({
+  follow_up_questions: z.array(z.string()),
+  generation_id: z.string(),
+  group_context: metricGroupContextSchema,
+  markup: z.string(),
+  not_enough_information: z.boolean(),
+  source_insights: z.array(insightSchema),
+})
+
+
 export type PulseBundleResponse = z.infer<typeof pulseBundleResponseSchema>;
+export type PulseInsightBriefResponse = z.infer<typeof pulseInsightBriefResponseSchema>;
 
 export const pulseInsightBundleTypeEnum = ['ban', 'springboard', 'basic', 'detail'] as const;
 export type PulseInsightBundleType = (typeof pulseInsightBundleTypeEnum)[number];
