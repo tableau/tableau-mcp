@@ -113,14 +113,39 @@ describe('OAuth', () => {
 
     const awaitableWritableStream = new AwaitableWritableStream();
 
-    request(app)
+    const response = await request(app)
       .post(`/${serverName}`)
       .set('Authorization', `Bearer ${access_token}`)
       .set('Content-Type', 'application/json')
       .set('Accept', 'application/json, text/event-stream')
       .send({
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {
+            elicitation: {},
+          },
+          clientInfo: {
+            name: 'tableau-mcp-tests',
+            version: '1.0.0',
+          },
+        },
         jsonrpc: '2.0',
-        id: '1',
+        id: 0,
+      })
+      .expect(200);
+
+    const sessionId = response.headers['mcp-session-id'];
+
+    request(app)
+      .post(`/${serverName}`)
+      .set('Authorization', `Bearer ${access_token}`)
+      .set('Content-Type', 'application/json')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('mcp-session-id', sessionId)
+      .send({
+        jsonrpc: '2.0',
+        id: '2',
         method: 'ping',
       })
       .pipe(awaitableWritableStream.stream);
@@ -135,7 +160,7 @@ describe('OAuth', () => {
     expect(lines).toHaveLength(2);
     expect(lines[0]).toBe('event: message');
     const data = JSON.parse(lines[1].split('data: ')[1]);
-    expect(data).toEqual({ result: {}, jsonrpc: '2.0', id: '1' });
+    expect(data).toEqual({ result: {}, jsonrpc: '2.0', id: '2' });
   });
 
   it('should reject if the access token is invalid or expired', async () => {
