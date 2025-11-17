@@ -145,7 +145,7 @@ describe('OAuth', () => {
       .set('mcp-session-id', sessionId)
       .send({
         jsonrpc: '2.0',
-        id: '2',
+        id: '1',
         method: 'ping',
       })
       .pipe(awaitableWritableStream.stream);
@@ -160,7 +160,7 @@ describe('OAuth', () => {
     expect(lines).toHaveLength(2);
     expect(lines[0]).toBe('event: message');
     const data = JSON.parse(lines[1].split('data: ')[1]);
-    expect(data).toEqual({ result: {}, jsonrpc: '2.0', id: '2' });
+    expect(data).toEqual({ result: {}, jsonrpc: '2.0', id: '1' });
   });
 
   it('should reject if the access token is invalid or expired', async () => {
