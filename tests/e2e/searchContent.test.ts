@@ -22,6 +22,6 @@ describe('search-content', () => {
 
     const searchResultContentTypes = searchResults.map((result) => result.type);
     expect(searchResultContentTypes).toContain('workbook');
-    expect(searchResultContentTypes).toContain('datasource');
+    expect(searchResultContentTypes).toContain('unifieddatasource');
   });
 });
