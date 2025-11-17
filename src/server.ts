@@ -20,10 +20,13 @@ export class Server extends McpServer {
 
   // Note that the McpServer class does expose a (poorly named) "getClientVersion()" method that returns the client info,
   // but the value of the field it returns is only set during the initialization lifecycle request.
+  //
   // With HTTP transport, we create a new instance of the Server class for *each* request, so we store the client info
   // provided by the client in its initialization lifecycle request in the session store,
   // and pass it to the constructor with each post-initialization request.
-  readonly _clientInfo: ClientInfo | undefined;
+  //
+  // With stdio transport, we can use the getClientVersion() method to get the client info.
+  private readonly _clientInfo: ClientInfo | undefined;
 
   get clientInfo(): ClientInfo | undefined {
     return this._clientInfo ?? this.server.getClientVersion();
