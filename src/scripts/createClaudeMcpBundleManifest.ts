@@ -216,6 +216,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  DISABLE_SESSION_MANAGEMENT: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Disable Session Management',
+    description: 'Disable session management.',
+    required: false,
+    sensitive: false,
+  },
   SSL_KEY: {
     includeInUserConfig: false,
     type: 'string',

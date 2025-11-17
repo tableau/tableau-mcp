@@ -8,7 +8,7 @@ import https from 'https';
 
 import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
-import { ClientInfo, Server } from '../server.js';
+import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
 import { validateProtocolVersion } from './middleware.js';
 import { OAuthProvider } from './oauth/provider.js';
@@ -52,8 +52,16 @@ export async function startExpressServer({
 
   const path = `/${basePath}`;
   app.post(path, ...middleware, createMcpServer);
-  app.get(path, ...middleware, handleSessionRequest);
-  app.delete(path, ...middleware, handleSessionRequest);
+  app.get(
+    path,
+    ...middleware,
+    config.disableSessionManagement ? methodNotAllowed : handleSessionRequest,
+  );
+  app.delete(
+    path,
+    ...middleware,
+    config.disableSessionManagement ? methodNotAllowed : handleSessionRequest,
+  );
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
@@ -89,35 +97,44 @@ export async function startExpressServer({
 
   async function createMcpServer(req: Request, res: Response): Promise<void> {
     try {
-      const sessionId = req.headers['mcp-session-id'] as string | undefined;
       let transport: StreamableHTTPServerTransport;
-      let clientInfo: ClientInfo | undefined;
 
-      let session: Session | undefined;
-      if (sessionId && (session = getSession(sessionId))) {
-        ({ transport, clientInfo } = session);
-      } else if (!sessionId && isInitializeRequest(req.body)) {
-        clientInfo = req.body.params.clientInfo;
-        transport = createSession({ clientInfo });
-
-        const server = new Server({ clientInfo });
-
-        server.registerTools();
-        server.registerRequestHandlers();
-
-        await server.connect(transport);
-        setLogLevel(server, logLevel);
-      } else {
-        // Invalid request
-        res.status(400).json({
-          jsonrpc: '2.0',
-          error: {
-            code: -32000,
-            message: 'Bad Request: No valid session ID provided',
-          },
-          id: null,
+      if (config.disableSessionManagement) {
+        const server = new Server();
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: undefined,
         });
-        return;
+
+        res.on('close', () => {
+          transport.close();
+          server.close();
+        });
+
+        await connect(server, transport, logLevel);
+      } else {
+        const sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+        let session: Session | undefined;
+        if (sessionId && (session = getSession(sessionId))) {
+          transport = session.transport;
+        } else if (!sessionId && isInitializeRequest(req.body)) {
+          const clientInfo = req.body.params.clientInfo;
+          transport = createSession({ clientInfo });
+
+          const server = new Server({ clientInfo });
+          await connect(server, transport, logLevel);
+        } else {
+          // Invalid request
+          res.status(400).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32000,
+              message: 'Bad Request: No valid session ID provided',
+            },
+            id: null,
+          });
+          return;
+        }
       }
 
       await transport.handleRequest(req, res, req.body);
@@ -135,6 +152,31 @@ export async function startExpressServer({
       }
     }
   }
+}
+
+async function connect(
+  server: Server,
+  transport: StreamableHTTPServerTransport,
+  logLevel: LoggingLevel,
+): Promise<void> {
+  server.registerTools();
+  server.registerRequestHandlers();
+
+  await server.connect(transport);
+  setLogLevel(server, logLevel);
+}
+
+async function methodNotAllowed(_req: Request, res: Response): Promise<void> {
+  res.writeHead(405).end(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: 'Method not allowed.',
+      },
+      id: null,
+    }),
+  );
 }
 
 async function handleSessionRequest(req: express.Request, res: express.Response): Promise<void> {

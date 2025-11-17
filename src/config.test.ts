@@ -41,6 +41,7 @@ describe('Config', () => {
       MAX_RESULT_LIMIT: undefined,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: undefined,
       DISABLE_METADATA_API_REQUESTS: undefined,
+      DISABLE_SESSION_MANAGEMENT: undefined,
       ENABLE_SERVER_LOGGING: undefined,
       SERVER_LOG_DIRECTORY: undefined,
       INCLUDE_PROJECT_IDS: undefined,
@@ -272,6 +273,27 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.disableMetadataApiRequests).toBe(true);
+  });
+
+  it('should set disableSessionManagement to false by default', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+    };
+
+    const config = new Config();
+    expect(config.disableSessionManagement).toBe(false);
+  });
+
+  it('should set disableMetadataApiRequests to true when specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      DISABLE_SESSION_MANAGEMENT: 'true',
+    };
+
+    const config = new Config();
+    expect(config.disableSessionManagement).toBe(true);
   });
 
   it('should default transport to stdio when not specified', () => {
