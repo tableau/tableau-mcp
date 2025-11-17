@@ -505,7 +505,7 @@ describe('searchContentUtils', () => {
       });
 
       invariant(result.type === 'success');
-      expect(result.result).toBe(items);
+      expect(result.result).toEqual([items[0], items[2]]);
     });
 
     it('should return success result when some items were filtered out by allowed projects in the bounded context', () => {
@@ -550,7 +550,7 @@ describe('searchContentUtils', () => {
       });
 
       invariant(result.type === 'success');
-      expect(result.result).toEqual([items[1]]);
+      expect(result.result).toEqual([items[2]]);
     });
   });
 });

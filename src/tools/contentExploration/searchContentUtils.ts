@@ -260,15 +260,14 @@ export function constrainSearchContent({
 
   if (datasourceIds) {
     items = items.filter((item) => {
-      if (
-        (item.type === 'datasource' || item.type === 'unifieddatasource') &&
-        typeof item.datasourceLuid === 'string' &&
-        !datasourceIds.has(item.datasourceLuid)
-      ) {
-        return false;
+      switch (item.type) {
+        case 'unifieddatasource':
+          return typeof item.datasourceLuid === 'string' && datasourceIds.has(item.datasourceLuid);
+        case 'datasource':
+          return typeof item.luid === 'string' && datasourceIds.has(item.luid);
+        default:
+          return true;
       }
-
-      return true;
     });
   }
 
@@ -285,6 +284,18 @@ export function constrainSearchContent({
       return true;
     });
   }
+
+  // Remove duplicate datasources with luid matching a unifieddatasource's datasourceLuid
+  items = items.filter((item) => {
+    if (item.type === 'datasource') {
+      return !items.some(
+        (otherItem) =>
+          otherItem.type === 'unifieddatasource' && otherItem.datasourceLuid === item.luid,
+      );
+    }
+
+    return true;
+  });
 
   if (items.length === 0) {
     return {
