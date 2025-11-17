@@ -13,6 +13,8 @@ import { createSession, getSession, Session } from '../sessions.js';
 import { validateProtocolVersion } from './middleware.js';
 import { OAuthProvider } from './oauth/provider.js';
 
+const SESSION_ID_HEADER = 'mcp-session-id';
+
 export async function startExpressServer({
   basePath,
   config,
@@ -38,7 +40,7 @@ export async function startExpressServer({
         'Accept',
         'MCP-Protocol-Version',
       ],
-      exposedHeaders: ['mcp-session-id', 'x-session-id'],
+      exposedHeaders: [SESSION_ID_HEADER, 'x-session-id'],
     }),
   );
 
@@ -112,7 +114,7 @@ export async function startExpressServer({
 
         await connect(server, transport, logLevel);
       } else {
-        const sessionId = req.headers['mcp-session-id'] as string | undefined;
+        const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
 
         let session: Session | undefined;
         if (sessionId && (session = getSession(sessionId))) {
@@ -180,7 +182,7 @@ async function methodNotAllowed(_req: Request, res: Response): Promise<void> {
 }
 
 async function handleSessionRequest(req: express.Request, res: express.Response): Promise<void> {
-  const sessionId = req.headers['mcp-session-id'] as string | undefined;
+  const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
 
   let session: Session | undefined;
   if (!sessionId || !(session = getSession(sessionId))) {
