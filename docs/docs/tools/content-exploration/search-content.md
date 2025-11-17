@@ -148,12 +148,12 @@ Example:
   },
   {
     "modifiedTime": "2025-09-24T20:10:35.437Z",
-    "type": "unifieddatasource",
+    "type": "datasource",
     "ownerId": 411957,
     "title": "Test Report Data",
     "ownerName": "Bruce Springtail",
     "containerName": "Data Sources",
-    "luid": "86712226-f5d6-4712-8426-074e5070fb77",
+    "luid": "a9af708b-0d44-48f8-23e2-4ee4b12446b2",
     "totalViewCount": 42260,
     "favoritesTotal": 3,
     "viewCountLastMonth": 1947,
@@ -167,7 +167,6 @@ Example:
     "connectedWorkbooksCount": 228,
     "extractCreationPending": false,
     "hasSevereDataQualityWarning": false,
-    "datasourceLuid": "a9af708b-0d44-48f8-23e2-4ee4b12446b2",
     "hasActiveDataQualityWarning": false
   }
 ]
