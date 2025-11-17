@@ -456,6 +456,40 @@ describe('searchContentUtils', () => {
         luid: 'test-luid',
       });
     });
+
+    it('should combine unifieddatasource entries with correspdonding datasource entries', () => {
+      const response = {
+        total: 1,
+        items: [
+          {
+            uri: 'test-uri',
+            content: {
+              type: 'unifieddatasource',
+              title: 'Test Unified Datasource',
+              datasourceLuid: 'test-datasource-luid',
+              luid: 'test-unifieddatasource-luid',
+              ownerId: 123,
+            },
+          },
+          {
+            uri: 'test-uri-2',
+            content: {
+              type: 'datasource',
+              title: 'Test Datasource',
+              luid: 'test-datasource-luid',
+            },
+          },
+        ],
+      };
+      const result = reduceSearchContentResponse(response);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        type: 'datasource',
+        title: 'Test Unified Datasource',
+        luid: 'test-datasource-luid',
+        ownerId: 123,
+      });
+    });
   });
 
   describe('constrainSearchContent', () => {
