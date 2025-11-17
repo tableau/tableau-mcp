@@ -286,12 +286,16 @@ export function constrainSearchContent({
   }
 
   // Remove duplicate datasources with luid matching a unifieddatasource's datasourceLuid
+  const unifiedDatasourceLuids = new Set(
+    items
+      .filter((item) => item.type === 'unifieddatasource')
+      .map((item) => item.datasourceLuid)
+      .filter((luid): luid is string => typeof luid === 'string'),
+  );
+
   items = items.filter((item) => {
     if (item.type === 'datasource') {
-      return !items.some(
-        (otherItem) =>
-          otherItem.type === 'unifieddatasource' && otherItem.datasourceLuid === item.luid,
-      );
+      return typeof item.luid === 'string' && !unifiedDatasourceLuids.has(item.luid);
     }
 
     return true;
