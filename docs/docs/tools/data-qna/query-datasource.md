@@ -17,7 +17,7 @@ data.
 
 ## Environment variables
 
-- [`DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`](../../configuration/mcp-config/optional.md#disable_query_datasource_validation_requests)
+- [`DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`](../../configuration/mcp-config/env-vars.md#disable_query_datasource_validation_requests)
 
 ## Required arguments
 

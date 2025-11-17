@@ -12,6 +12,7 @@ import {
   TableauError,
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -60,10 +61,14 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
       openWorldHint: false,
     },
     argsValidator: validateQuery,
-    callback: async ({ datasourceLuid, query }, { requestId }): Promise<CallToolResult> => {
+    callback: async (
+      { datasourceLuid, query },
+      { requestId, authInfo },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
+        authInfo,
         args: { datasourceLuid, query },
         callback: async () => {
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
@@ -101,6 +106,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             requestId,
             server,
             jwtScopes: ['tableau:viz_data_service:read'],
+            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               if (!config.disableQueryDatasourceValidationRequests) {
                 // Validate query against metadata
@@ -129,7 +135,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
 
                 if (filterValidationResult.isErr()) {
                   const errors = filterValidationResult.error;
-                  const errorMessage = errors.map((error) => error.message).join('\n\n');
+                  const errorMessage = errors.map((error) => error.message).join(', ');
                   return new Err({
                     type: 'filter-validation',
                     message: errorMessage,

@@ -10,15 +10,8 @@ import {
   useRestApi,
 } from './restApiInstance.js';
 import { AuthConfig } from './sdks/tableau/authConfig.js';
-import RestApi from './sdks/tableau/restApi.js';
-import { Server } from './server.js';
-
-vi.mock('./sdks/tableau/restApi.js', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    signIn: vi.fn().mockResolvedValue(undefined),
-    signOut: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
+import { RestApi } from './sdks/tableau/restApi.js';
+import { Server, userAgent } from './server.js';
 
 vi.mock('./logging/log.js', () => ({
   log: {
@@ -71,7 +64,7 @@ describe('restApiInstance', () => {
 
       interceptor(mockRequest);
 
-      expect(mockRequest.headers['User-Agent']).toBe(`${server.name}/${server.version}`);
+      expect(mockRequest.headers['User-Agent']).toBe(userAgent);
       expect(log.info).toHaveBeenCalledWith(
         server,
         expect.objectContaining({

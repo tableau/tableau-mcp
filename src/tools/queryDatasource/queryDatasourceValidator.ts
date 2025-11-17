@@ -18,6 +18,6 @@ export function validateQuery({
 
   const result = querySchema.safeParse(query);
   if (!result.success) {
-    throw new Error(`The query does not match the expected schema.`);
+    throw new Error('The query does not match the expected schema.');
   }
 }
