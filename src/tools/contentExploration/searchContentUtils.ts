@@ -91,7 +91,7 @@ export function reduceSearchContentResponse(
     searchResults
       .filter((item) => item.type === 'unifieddatasource')
       .map((item) => item.datasourceLuid)
-      .filter((luid): luid is string => typeof luid === 'string'),
+      .filter((datasourceLuid): datasourceLuid is string => typeof datasourceLuid === 'string'),
   );
 
   searchResults = searchResults.filter((item) => {
