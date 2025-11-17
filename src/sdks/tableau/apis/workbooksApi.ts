@@ -7,7 +7,7 @@ import { paginationParameters } from './paginationParameters.js';
 
 const getWorkbookEndpoint = makeEndpoint({
   method: 'get',
-  path: `/sites/:siteId/workbooks/:workbookId`,
+  path: '/sites/:siteId/workbooks/:workbookId',
   alias: 'getWorkbook',
   description:
     'Returns information about the specified workbook, including information about views and tags.',
@@ -16,7 +16,7 @@ const getWorkbookEndpoint = makeEndpoint({
 
 const queryWorkbooksForSiteEndpoint = makeEndpoint({
   method: 'get',
-  path: `/sites/:siteId/workbooks`,
+  path: '/sites/:siteId/workbooks',
   alias: 'queryWorkbooksForSite',
   description: 'Returns the workbooks on a site.',
   parameters: [

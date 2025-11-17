@@ -38,7 +38,8 @@ describe('get-datasource-metadata', () => {
   });
 
   it('should call get_datasource_metadata tool', async () => {
-    const prompt = `For the Superstore data source, get its metadata. Do not perform any analysis on the metadata, just show it.`;
+    const prompt =
+      'For the Superstore data source, get its metadata. Do not perform any analysis on the metadata, just show it.';
 
     const { agentResult } = await grade({
       mcpServer,

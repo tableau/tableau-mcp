@@ -13,9 +13,11 @@ import {
   ResponseInterceptor,
   ResponseInterceptorConfig,
 } from './sdks/tableau/interceptors.js';
-import RestApi from './sdks/tableau/restApi.js';
-import { Server } from './server.js';
+import { RestApi } from './sdks/tableau/restApi.js';
+import { Server, userAgent } from './server.js';
+import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
+import invariant from './utils/invariant.js';
 import { isAxiosError } from './utils/isAxiosError.js';
 
 type JwtScopes =
@@ -32,8 +34,12 @@ const getNewRestApiInstanceAsync = async (
   requestId: RequestId,
   server: Server,
   jwtScopes: Set<JwtScopes>,
+  authInfo?: TableauAuthInfo,
 ): Promise<RestApi> => {
-  const restApi = new RestApi(config.server, {
+  const tableauServer = config.server || authInfo?.server;
+  invariant(tableauServer, 'Tableau server could not be determined');
+
+  const restApi = new RestApi(tableauServer, {
     requestInterceptor: [
       getRequestInterceptor(server, requestId),
       getRequestErrorInterceptor(server, requestId),
@@ -55,13 +61,19 @@ const getNewRestApiInstanceAsync = async (
     await restApi.signIn({
       type: 'direct-trust',
       siteName: config.siteName,
-      username: getJwtSubClaim(config),
+      username: getJwtSubClaim(config, authInfo),
       clientId: config.connectedAppClientId,
       secretId: config.connectedAppSecretId,
       secretValue: config.connectedAppSecretValue,
       scopes: jwtScopes,
-      additionalPayload: getJwtAdditionalPayload(config),
+      additionalPayload: getJwtAdditionalPayload(config, authInfo),
     });
+  } else {
+    if (!authInfo?.accessToken || !authInfo?.userId) {
+      throw new Error('Auth info is required when not signing in first.');
+    }
+
+    restApi.setCredentials(authInfo.accessToken, authInfo.userId);
   }
 
   return restApi;
@@ -73,18 +85,31 @@ export const useRestApi = async <T>({
   server,
   callback,
   jwtScopes,
+  authInfo,
 }: {
   config: Config;
   requestId: RequestId;
   server: Server;
   jwtScopes: Array<JwtScopes>;
   callback: (restApi: RestApi) => Promise<T>;
+  authInfo?: TableauAuthInfo;
 }): Promise<T> => {
-  const restApi = await getNewRestApiInstanceAsync(config, requestId, server, new Set(jwtScopes));
+  const restApi = await getNewRestApiInstanceAsync(
+    config,
+    requestId,
+    server,
+    new Set(jwtScopes),
+    authInfo,
+  );
   try {
     return await callback(restApi);
   } finally {
-    await restApi.signOut();
+    if (config.auth !== 'oauth') {
+      // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.
+      // Sessions for 'oauth' are not. Signing out would invalidate the session,
+      // preventing the access token from being reused for subsequent requests.
+      await restApi.signOut();
+    }
   }
 };
 
@@ -198,7 +223,7 @@ function logResponse(
 }
 
 function getUserAgent(server: Server): string {
-  const userAgentParts = [`${server.name}/${server.version}`];
+  const userAgentParts = [userAgent];
   if (server.clientInfo) {
     const { name, version } = server.clientInfo;
     if (name && version) {
@@ -208,11 +233,14 @@ function getUserAgent(server: Server): string {
   return userAgentParts.join(' ');
 }
 
-function getJwtSubClaim(config: Config): string {
-  return config.jwtSubClaim;
+function getJwtSubClaim(config: Config, authInfo: TableauAuthInfo | undefined): string {
+  return config.jwtSubClaim.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
 }
 
-function getJwtAdditionalPayload(config: Config): Record<string, unknown> {
-  const json = config.jwtAdditionalPayload;
+function getJwtAdditionalPayload(
+  config: Config,
+  authInfo: TableauAuthInfo | undefined,
+): Record<string, unknown> {
+  const json = config.jwtAdditionalPayload.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
   return JSON.parse(json || '{}');
 }

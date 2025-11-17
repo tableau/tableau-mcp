@@ -10,6 +10,7 @@ import { toolFactories } from './tools/tools.js';
 
 export const serverName = 'tableau-mcp';
 export const serverVersion = pkg.version;
+export const userAgent = `${serverName}/${serverVersion}`;
 
 export type ClientInfo = InitializeRequest['params']['clientInfo'];
 

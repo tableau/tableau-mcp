@@ -1,7 +1,7 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import cors from 'cors';
-import express, { Request, Response } from 'express';
+import express, { Request, RequestHandler, Response } from 'express';
 import fs, { existsSync } from 'fs';
 import http from 'http';
 import https from 'https';
@@ -10,6 +10,8 @@ import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { ClientInfo, Server } from '../server.js';
 import { createSession, getSession, hasSession } from '../sessions.js';
+import { validateProtocolVersion } from './middleware.js';
+import { OAuthProvider } from './oauth/provider.js';
 
 export async function startExpressServer({
   basePath,
@@ -19,7 +21,7 @@ export async function startExpressServer({
   basePath: string;
   config: Config;
   logLevel: LoggingLevel;
-}): Promise<{ url: string }> {
+}): Promise<{ url: string; app: express.Application; server: http.Server }> {
   const app = express();
 
   app.use(express.json());
@@ -40,18 +42,26 @@ export async function startExpressServer({
     }),
   );
 
+  const middleware: Array<RequestHandler> = [];
+  if (config.oauth.enabled) {
+    const oauthProvider = new OAuthProvider();
+    oauthProvider.setupRoutes(app);
+    middleware.push(oauthProvider.authMiddleware);
+    middleware.push(validateProtocolVersion);
+  }
+
   const path = `/${basePath}`;
-  app.post(path, createMcpServer);
-  app.get(path, handleSessionRequest);
-  app.delete(path, handleSessionRequest);
+  app.post(path, ...middleware, createMcpServer);
+  app.get(path, ...middleware, handleSessionRequest);
+  app.delete(path, ...middleware, handleSessionRequest);
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
     return new Promise((resolve) => {
-      http
+      const server = http
         .createServer(app)
         .listen(config.httpPort, () =>
-          resolve({ url: `http://localhost:${config.httpPort}/${basePath}` }),
+          resolve({ url: `http://localhost:${config.httpPort}/${basePath}`, app, server }),
         );
     });
   }
@@ -70,10 +80,10 @@ export async function startExpressServer({
   };
 
   return new Promise((resolve) => {
-    https
+    const server = https
       .createServer(options, app)
       .listen(config.httpPort, () =>
-        resolve({ url: `https://localhost:${config.httpPort}/${basePath}` }),
+        resolve({ url: `https://localhost:${config.httpPort}/${basePath}`, app, server }),
       );
   });
 
@@ -111,7 +121,6 @@ export async function startExpressServer({
 
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
-      // eslint-disable-next-line no-console -- console.error is intentional here since the transport is not stdio.
       console.error('Error handling MCP request:', error);
       if (!res.headersSent) {
         res.status(500).json({
