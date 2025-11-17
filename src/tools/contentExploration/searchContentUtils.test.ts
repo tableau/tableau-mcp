@@ -258,6 +258,7 @@ describe('searchContentUtils', () => {
             content: {
               type: 'datasource',
               title: 'Test Datasource',
+              luid: 'test-luid',
               ownerId: 456,
             },
           },
@@ -271,6 +272,7 @@ describe('searchContentUtils', () => {
         type: 'datasource',
         title: 'Test Datasource',
         ownerId: 456,
+        luid: 'test-luid',
       });
     });
 
@@ -433,6 +435,7 @@ describe('searchContentUtils', () => {
               type: 'datasource',
               title: 'Datasource 1',
               ownerId: 456,
+              luid: 'test-luid',
             },
           },
         ],
@@ -450,6 +453,7 @@ describe('searchContentUtils', () => {
         type: 'datasource',
         title: 'Datasource 1',
         ownerId: 456,
+        luid: 'test-luid',
       });
     });
   });
@@ -550,7 +554,7 @@ describe('searchContentUtils', () => {
       });
 
       invariant(result.type === 'success');
-      expect(result.result).toEqual([items[2]]);
+      expect(result.result).toEqual([items[1]]);
     });
   });
 });
