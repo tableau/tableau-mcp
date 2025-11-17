@@ -226,8 +226,8 @@ function getUserAgent(server: Server): string {
   const userAgentParts = [userAgent];
   if (server.clientInfo) {
     const { name, version } = server.clientInfo;
-    if (name && version) {
-      userAgentParts.push(`(${name} ${version})`);
+    if (name) {
+      userAgentParts.push(version ? `(${name} ${version})` : `(${name})`);
     }
   }
   return userAgentParts.join(' ');
