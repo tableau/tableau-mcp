@@ -37,11 +37,7 @@ export type QueryDatasourceError =
       message: string;
     }
   | {
-      type: 'metadata-validation';
-      message: string;
-    }
-  | {
-      type: 'filter-validation';
+      type: 'query-validation';
       message: string;
     }
   | {
@@ -120,7 +116,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
                   const errors = metadataValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join('\n\n');
                   return new Err({
-                    type: 'metadata-validation',
+                    type: 'query-validation',
                     message: errorMessage,
                   });
                 }
@@ -137,7 +133,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
                   const errors = filterValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join(', ');
                   return new Err({
-                    type: 'filter-validation',
+                    type: 'query-validation',
                     message: errorMessage,
                   });
                 }
@@ -172,13 +168,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
               return getVizqlDataServiceDisabledError();
             case 'datasource-not-allowed':
               return error.message;
-            case 'filter-validation':
-              return JSON.stringify({
-                requestId,
-                errorType: 'validation',
-                message: error.message,
-              });
-            case 'metadata-validation':
+            case 'query-validation':
               return JSON.stringify({
                 requestId,
                 errorType: 'validation',
