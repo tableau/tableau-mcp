@@ -301,6 +301,15 @@ export function constrainSearchContent({
     return true;
   });
 
+  // Normalize unifieddatasource entries to datasource entries
+  for (const item of items) {
+    if (item.type === 'unifieddatasource') {
+      item.type = 'datasource';
+      item.luid = item.datasourceLuid;
+      delete item.datasourceLuid;
+    }
+  }
+
   if (items.length === 0) {
     return {
       type: 'empty',

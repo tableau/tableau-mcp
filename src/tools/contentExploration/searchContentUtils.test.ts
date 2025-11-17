@@ -505,7 +505,7 @@ describe('searchContentUtils', () => {
       });
 
       invariant(result.type === 'success');
-      expect(result.result).toEqual([items[0], items[2]]);
+      expect(result.result).toEqual([items[0], items[1]]);
     });
 
     it('should return success result when some items were filtered out by allowed projects in the bounded context', () => {
