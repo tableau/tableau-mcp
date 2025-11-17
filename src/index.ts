@@ -41,7 +41,9 @@ async function startServer(): Promise<void> {
       }
 
       // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
-      console.log(`${serverName} v${serverVersion} streamable HTTP server available at ${url}`);
+      console.log(
+        `${serverName} v${serverVersion} ${config.disableSessionManagement ? 'stateless ' : ''}session management streamable HTTP server available at ${url}`,
+      );
       break;
     }
   }
