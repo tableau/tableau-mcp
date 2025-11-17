@@ -9,7 +9,7 @@ import https from 'https';
 import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { ClientInfo, Server } from '../server.js';
-import { createSession, getSession, hasSession } from '../sessions.js';
+import { createSession, getSession, Session } from '../sessions.js';
 import { validateProtocolVersion } from './middleware.js';
 import { OAuthProvider } from './oauth/provider.js';
 
@@ -93,8 +93,9 @@ export async function startExpressServer({
       let transport: StreamableHTTPServerTransport;
       let clientInfo: ClientInfo | undefined;
 
-      if (sessionId && hasSession(sessionId)) {
-        ({ transport, clientInfo } = getSession(sessionId));
+      let session: Session | undefined;
+      if (sessionId && (session = getSession(sessionId))) {
+        ({ transport, clientInfo } = session);
       } else if (!sessionId && isInitializeRequest(req.body)) {
         clientInfo = req.body.params.clientInfo;
         transport = createSession({ clientInfo });
@@ -138,10 +139,12 @@ export async function startExpressServer({
 
 async function handleSessionRequest(req: express.Request, res: express.Response): Promise<void> {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
-  if (!sessionId || !hasSession(sessionId)) {
+
+  let session: Session | undefined;
+  if (!sessionId || !(session = getSession(sessionId))) {
     res.status(400).send('Invalid or missing session ID');
     return;
   }
 
-  await getSession(sessionId).transport.handleRequest(req, res);
+  await session.transport.handleRequest(req, res);
 }

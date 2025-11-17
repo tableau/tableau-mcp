@@ -3,14 +3,12 @@ import { randomUUID } from 'crypto';
 
 import { ClientInfo } from './server.js';
 
-type Session = {
+export type Session = {
   transport: StreamableHTTPServerTransport;
   clientInfo: ClientInfo;
 };
 
 const sessions: { [sessionId: string]: Session } = {};
-
-export const hasSession = (sessionId: string): boolean => !!sessions[sessionId];
 
 export const createSession = ({
   clientInfo,
@@ -33,7 +31,7 @@ export const createSession = ({
   return transport;
 };
 
-export const getSession = (sessionId: string): Session => {
+export const getSession = (sessionId: string): Session | undefined => {
   return sessions[sessionId];
 };
 
