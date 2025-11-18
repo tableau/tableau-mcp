@@ -63,7 +63,7 @@ export class Server extends McpServer {
   private _getToolsToRegister = (): Array<Tool<any>> => {
     const { includeTools, excludeTools } = getConfig();
 
-    const tools = toolFactories.map((tool) => tool(this));
+    const tools = toolFactories.map((toolFactory) => toolFactory(this));
     const toolsToRegister = tools.filter((tool) => {
       if (includeTools.length > 0) {
         return includeTools.includes(tool.name);
