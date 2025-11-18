@@ -7,7 +7,9 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "build": "tsx ./build-components.mts"
+    "setup": "npm install",
+    ":build": "tsx ./build-components.mts",
+    "build": "run-s setup :build"
   },
   "devDependencies": {
     "@types/react": "^19.2.2",
