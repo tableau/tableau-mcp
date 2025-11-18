@@ -93,7 +93,7 @@ describe('server', () => {
     ];
 
     for (const sentence of sentences) {
-      expect(async () => await server.registerTools()).rejects.toThrow(sentence);
+      await expect(server.registerTools).rejects.toThrow(sentence);
     }
   });
 
