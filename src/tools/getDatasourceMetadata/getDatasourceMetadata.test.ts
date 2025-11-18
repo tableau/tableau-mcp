@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../server.js';
+import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata.js';
@@ -746,7 +747,8 @@ describe('getDatasourceMetadataTool', () => {
 
 async function getToolResult(): Promise<CallToolResult> {
   const getDatasourceMetadataTool = getGetDatasourceMetadataTool(new Server());
-  return await getDatasourceMetadataTool.callback(
+  const callback = await Provider.from(getDatasourceMetadataTool.callback);
+  return callback(
     { datasourceLuid: 'test-luid' },
     {
       signal: new AbortController().signal,

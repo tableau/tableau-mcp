@@ -7,6 +7,7 @@ import { setLogLevel } from './logging/log.js';
 import { Tool } from './tools/tool.js';
 import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
+import { Provider } from './utils/provider.js';
 
 export const serverName = 'tableau-mcp';
 export const serverVersion = pkg.version;
@@ -34,7 +35,7 @@ export class Server extends McpServer {
     this.version = serverVersion;
   }
 
-  registerTools = (): void => {
+  registerTools = async (): Promise<void> => {
     for (const {
       name,
       description,
@@ -42,7 +43,13 @@ export class Server extends McpServer {
       annotations,
       callback,
     } of this._getToolsToRegister()) {
-      this.tool(name, description, paramsSchema, annotations, callback);
+      this.tool(
+        name,
+        await Provider.from(description),
+        await Provider.from(paramsSchema),
+        await Provider.from(annotations),
+        await Provider.from(callback),
+      );
     }
   };
 
