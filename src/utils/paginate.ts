@@ -61,7 +61,8 @@ type PulsePaginateArgs<T> = {
 };
 
 export async function pulsePaginate<T>({ config, getDataFn }: PulsePaginateArgs<T>): Promise<Array<T>> {
-  const limit = config?.limit;
+  const validatedConfig = pulsePaginateConfigSchema.parse(config);
+  const limit = validatedConfig?.limit;
   const { pagination, data } = await getDataFn();
   const result = [...data];
   
