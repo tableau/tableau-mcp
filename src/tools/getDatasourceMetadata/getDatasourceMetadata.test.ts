@@ -748,7 +748,7 @@ describe('getDatasourceMetadataTool', () => {
 async function getToolResult(): Promise<CallToolResult> {
   const getDatasourceMetadataTool = getGetDatasourceMetadataTool(new Server());
   const callback = await Provider.from(getDatasourceMetadataTool.callback);
-  return callback(
+  return await callback(
     { datasourceLuid: 'test-luid' },
     {
       signal: new AbortController().signal,
