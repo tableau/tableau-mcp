@@ -17,6 +17,7 @@ import {
   PulseMetricSubscription,
 } from '../types/pulse.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
+import { PulsePagination } from '../types/pagination.js';
 
 /**
  * Pulse methods of the Tableau Server REST API
@@ -40,13 +41,23 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
    */
   listAllPulseMetricDefinitions = async (
     view?: PulseMetricDefinitionView,
-  ): Promise<PulseResult<PulseMetricDefinition[]>> => {
+    pageToken?: string,
+  ): Promise<PulseResult<{
+    pagination: PulsePagination, definitions: PulseMetricDefinition[] 
+}>> => {
     return await guardAgainstPulseDisabled(async () => {
       const response = await this._apiClient.listAllPulseMetricDefinitions({
-        queries: { view },
+        queries: { view, page_token: pageToken },
         ...this.authHeader,
       });
-      return response.definitions ?? [];
+      return {
+        pagination: {
+          next_page_token: response.next_page_token,
+          offset: response.offset,
+          total_available: response.total_available,
+        },
+        definitions: response.definitions ?? [],
+      };
     });
   };
 
