@@ -155,6 +155,8 @@ export async function startExpressServer({
         'render-pulse-insight',
         {
           title: 'Render Pulse Insight',
+          description:
+            'Render a Pulse insight given an insight bundle. Use this tool to render a Pulse insight in a chat window.',
           _meta: {
             // associate this tool with the HTML template
             'openai/outputTemplate': 'ui://widget/pulse-renderer.html',
