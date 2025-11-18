@@ -1,13 +1,13 @@
 export type TypeOrProvider<T> = T | Provider<T>;
 
 export class Provider<T> {
-  private readonly _provider: () => Promise<T>;
+  private readonly _provider: () => T | Promise<T>;
 
-  constructor(provider: () => Promise<T>) {
+  constructor(provider: () => T | Promise<T>) {
     this._provider = provider;
   }
 
-  get(): Promise<T> {
+  private get(): T | Promise<T> {
     return this._provider();
   }
 
