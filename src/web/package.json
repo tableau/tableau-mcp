@@ -13,17 +13,17 @@
   },
   "devDependencies": {
     "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
-    "@vitejs/plugin-react": "^5.1.0",
-    "vite": "^7.2.2"
+    "@types/react-dom": "^19.2.2"
   },
   "dependencies": {
     "@tableau/ntbue-visualization-renderer": "file:modules/@tableau/ntbue-visualization-renderer/ntbue-visualization-renderer-0.71.0.tgz",
+    "@vitejs/plugin-react": "^5.1.0",
     "classnames": "^2.5.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.5",
     "tsx": "^4.20.6",
+    "vite": "^7.2.2",
     "zod": "^4.1.12"
   }
 }
