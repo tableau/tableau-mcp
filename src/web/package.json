@@ -7,7 +7,9 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "build": "tsx ./build-components.mts"
+    "setup": "npm install",
+    ":build": "tsx ./build-components.mts",
+    "build": "run-s setup :build"
   },
   "devDependencies": {
     "@types/react": "^19.2.2",
@@ -22,6 +24,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.5",
+    "tableau-mcp-web-components": "file:",
     "zod": "^4.1.12"
   }
 }
