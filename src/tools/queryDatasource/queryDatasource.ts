@@ -59,7 +59,7 @@ export const getQueryDatasourceTool = (
     server,
     name: 'query-datasource',
     description: new Provider(async () => {
-      const productVersion = await getTableauServerVersion(config.server ?? authInfo?.server);
+      const productVersion = await getTableauServerVersion(config.server || authInfo?.server);
       if (isTableauVersionAtLeast({ productVersion, minVersion: '2025.3.0' })) {
         return queryDatasourceToolDescription;
       }
