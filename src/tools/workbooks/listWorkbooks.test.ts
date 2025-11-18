@@ -122,7 +122,7 @@ describe('listWorkbooksTool', () => {
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
   const listWorkbooksTool = getListWorkbooksTool(new Server());
   const callback = await Provider.from(listWorkbooksTool.callback);
-  return callback(params, {
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),
