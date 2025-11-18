@@ -343,7 +343,7 @@ describe('searchContentTool', () => {
 async function getToolResult(params: any): Promise<CallToolResult> {
   const searchContentTool = getSearchContentTool(new Server());
   const callback = await Provider.from(searchContentTool.callback);
-  return callback(params, {
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),
