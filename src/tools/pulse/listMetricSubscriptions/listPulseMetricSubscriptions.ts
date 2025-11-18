@@ -4,6 +4,7 @@ import { BoundedContext, getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { RestApiArgs } from '../../resourceAccessChecker.js';
 import { ConstrainedResult, Tool } from '../../tool.js';
@@ -33,10 +34,11 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (_, { requestId }): Promise<CallToolResult> => {
+    callback: async (_, { requestId, authInfo }): Promise<CallToolResult> => {
       const config = getConfig();
       return await listPulseMetricSubscriptionsTool.logAndExecute({
         requestId,
+        authInfo,
         args: {},
         callback: async () => {
           return await useRestApi({
@@ -44,6 +46,7 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
             requestId,
             server,
             jwtScopes: ['tableau:metric_subscriptions:read'],
+            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
             },
