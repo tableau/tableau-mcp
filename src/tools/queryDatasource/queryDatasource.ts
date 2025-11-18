@@ -4,6 +4,7 @@ import { Err } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
+import { getTableauServerVersion } from '../../getTableauServerVersion.js';
 import { useRestApi } from '../../restApiInstance.js';
 import {
   Datasource,
@@ -13,6 +14,9 @@ import {
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { TableauAuthInfo } from '../../server/oauth/schemas.js';
+import { isTableauVersionAtLeast } from '../../utils/isTableauVersionAtLeast.js';
+import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -45,11 +49,23 @@ export type QueryDatasourceError =
       error: TableauError;
     };
 
-export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema> => {
+export const getQueryDatasourceTool = (
+  server: Server,
+  authInfo?: TableauAuthInfo,
+): Tool<typeof paramsSchema> => {
+  const config = getConfig();
+
   const queryDatasourceTool = new Tool({
     server,
     name: 'query-datasource',
-    description: queryDatasourceToolDescription,
+    description: new Provider(async () => {
+      const productVersion = await getTableauServerVersion(config.server ?? authInfo?.server);
+      if (isTableauVersionAtLeast({ productVersion, minVersion: '2025.3.0' })) {
+        return queryDatasourceToolDescription;
+      }
+
+      return queryDatasourceToolDescription;
+    }),
     paramsSchema,
     annotations: {
       title: 'Query Datasource',
@@ -61,7 +77,6 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
       { datasourceLuid, query },
       { requestId, authInfo },
     ): Promise<CallToolResult> => {
-      const config = getConfig();
       return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
         authInfo,

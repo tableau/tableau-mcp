@@ -10,7 +10,9 @@ import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
 import { validateProtocolVersion } from './middleware.js';
+import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
+import { AuthenticatedRequest } from './oauth/types.js';
 
 export async function startExpressServer({
   basePath,
@@ -86,7 +88,7 @@ export async function startExpressServer({
       );
   });
 
-  async function createMcpServer(req: Request, res: Response): Promise<void> {
+  async function createMcpServer(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const server = new Server();
       const transport = new StreamableHTTPServerTransport({
@@ -98,7 +100,7 @@ export async function startExpressServer({
         server.close();
       });
 
-      await server.registerTools();
+      await server.registerTools(getTableauAuthInfo(req.auth));
       server.registerRequestHandlers();
 
       await server.connect(transport);

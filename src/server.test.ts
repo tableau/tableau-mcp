@@ -4,6 +4,7 @@ import { exportedForTesting as serverExportedForTesting } from './server.js';
 import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
 import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
+import { Provider } from './utils/provider.js';
 
 const { Server } = serverExportedForTesting;
 
@@ -30,7 +31,7 @@ describe('server', () => {
     for (const tool of tools) {
       expect(server.tool).toHaveBeenCalledWith(
         tool.name,
-        tool.description,
+        await Provider.from(tool.description),
         expect.any(Object),
         expect.any(Object),
         expect.any(Function),
@@ -46,7 +47,7 @@ describe('server', () => {
     const tool = getQueryDatasourceTool(server);
     expect(server.tool).toHaveBeenCalledWith(
       tool.name,
-      tool.description,
+      await Provider.from(tool.description),
       expect.any(Object),
       expect.any(Object),
       expect.any(Function),
