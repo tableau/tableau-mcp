@@ -135,9 +135,15 @@ export async function startExpressServer({
                 */
                 'openai/widgetCSP': {
                   // Maps to `connect-src` rule in the iframe CSP
-                  connect_domains: ['https://chatgpt.com'],
+                  connect_domains: [
+                    'https://chatgpt.com',
+                    'https://tableau-mcp-oauth-4cfa19926d6e.herokuapp.com',
+                  ],
                   // Maps to style-src, style-src-elem, img-src, font-src, media-src etc. in the iframe CSP
-                  resource_domains: ['https://*.oaistatic.com'],
+                  resource_domains: [
+                    'https://*.oaistatic.com',
+                    'https://tableau-mcp-oauth-4cfa19926d6e.herokuapp.com',
+                  ],
                 },
               },
             },
