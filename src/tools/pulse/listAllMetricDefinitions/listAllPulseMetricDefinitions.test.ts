@@ -45,7 +45,10 @@ describe('listAllPulseMetricDefinitionsTool', () => {
     { view: 'DEFINITION_VIEW_DEFAULT', label: 'default view' },
   ])('should list pulse metric definitions with $label', async ({ view }) => {
     mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(
-      new Ok({ pagination: { next_page_token: undefined }, definitions: mockPulseMetricDefinitions }),
+      new Ok({
+        pagination: { next_page_token: undefined },
+        definitions: mockPulseMetricDefinitions,
+      }),
     );
     const result = await getToolResult({ view });
     expect(result.isError).toBe(false);
@@ -56,7 +59,10 @@ describe('listAllPulseMetricDefinitionsTool', () => {
 
   it('should list pulse metric definitions with no view (default)', async () => {
     mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(
-      new Ok({ pagination: { next_page_token: undefined }, definitions: mockPulseMetricDefinitions }),
+      new Ok({
+        pagination: { next_page_token: undefined },
+        definitions: mockPulseMetricDefinitions,
+      }),
     );
     const result = await getToolResult({});
     expect(result.isError).toBe(false);

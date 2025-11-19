@@ -1,8 +1,8 @@
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { Pagination, PulsePagination } from '../sdks/tableau/types/pagination.js';
 import { PulseResult } from '../sdks/tableau/methods/pulseMethods.js';
-import { Ok } from 'ts-results-es';
+import { Pagination, PulsePagination } from '../sdks/tableau/types/pagination.js';
 
 const pageConfigSchema = z
   .object({
@@ -59,10 +59,15 @@ type PulsePaginateConfig = z.infer<typeof pulsePaginateConfigSchema>;
 
 type PulsePaginateArgs<T> = {
   config: PulsePaginateConfig;
-  getDataFn: (pageToken?: string) => Promise<PulseResult<{ pagination: PulsePagination; definitions: Array<T> }>>;
+  getDataFn: (
+    pageToken?: string,
+  ) => Promise<PulseResult<{ pagination: PulsePagination; definitions: Array<T> }>>;
 };
 
-export async function pulsePaginate<T>({ config, getDataFn }: PulsePaginateArgs<T>): Promise<PulseResult<Array<T>>> {
+export async function pulsePaginate<T>({
+  config,
+  getDataFn,
+}: PulsePaginateArgs<T>): Promise<PulseResult<Array<T>>> {
   const validatedConfig = pulsePaginateConfigSchema.parse(config);
   const limit = validatedConfig?.limit;
   const result = await getDataFn();
@@ -71,7 +76,7 @@ export async function pulsePaginate<T>({ config, getDataFn }: PulsePaginateArgs<
   }
   const { pagination, definitions } = result.value;
   const resultArray = [...definitions];
-  
+
   let { next_page_token } = pagination;
   while (next_page_token && (!limit || limit > resultArray.length)) {
     const result = await getDataFn(next_page_token);
@@ -81,9 +86,7 @@ export async function pulsePaginate<T>({ config, getDataFn }: PulsePaginateArgs<
     const { pagination: nextPagination, definitions: nextDefinitions } = result.value;
 
     if (nextDefinitions.length === 0) {
-      throw new Error(
-        `No more data available. Total fetched: ${resultArray.length}`,
-      );
+      throw new Error(`No more data available. Total fetched: ${resultArray.length}`);
     }
 
     ({ next_page_token } = nextPagination);

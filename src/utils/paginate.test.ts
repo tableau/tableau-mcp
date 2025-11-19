@@ -1,4 +1,5 @@
 import { Ok } from 'ts-results-es';
+
 import type { Pagination, PulsePagination } from '../sdks/tableau/types/pagination.js';
 import { paginate, pulsePaginate } from './paginate.js';
 

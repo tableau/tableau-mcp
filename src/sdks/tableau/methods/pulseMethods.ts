@@ -5,6 +5,7 @@ import z from 'zod';
 import { isAxiosError } from '../../../utils/isAxiosError.js';
 import { pulseApis } from '../apis/pulseApi.js';
 import { Credentials } from '../types/credentials.js';
+import { PulsePagination } from '../types/pagination.js';
 import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
@@ -15,7 +16,6 @@ import {
   PulseMetricSubscription,
 } from '../types/pulse.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
-import { PulsePagination } from '../types/pagination.js';
 
 /**
  * Pulse methods of the Tableau Server REST API
@@ -40,9 +40,12 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
   listAllPulseMetricDefinitions = async (
     view?: PulseMetricDefinitionView,
     pageToken?: string,
-  ): Promise<PulseResult<{
-    pagination: PulsePagination, definitions: PulseMetricDefinition[] 
-}>> => {
+  ): Promise<
+    PulseResult<{
+      pagination: PulsePagination;
+      definitions: PulseMetricDefinition[];
+    }>
+  > => {
     return await guardAgainstPulseDisabled(async () => {
       const response = await this._apiClient.listAllPulseMetricDefinitions({
         queries: { view, page_token: pageToken },

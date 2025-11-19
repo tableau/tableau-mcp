@@ -1,7 +1,6 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
-import { pulsePaginationSchema } from '../types/pagination.js';
 import {
   pulseBundleRequestSchema,
   pulseBundleResponseSchema,
@@ -39,7 +38,7 @@ const listAllPulseMetricDefinitionsRestEndpoint = makeEndpoint({
     next_page_token: z.string().optional(),
     offset: z.coerce.number(),
     total_available: z.coerce.number(),
-  })
+  }),
 });
 
 const listPulseMetricDefinitionsFromMetricDefinitionIdsRestEndpoint = makeEndpoint({

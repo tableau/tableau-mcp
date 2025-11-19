@@ -1,10 +1,12 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { PulseMetricDefinition, pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse.js';
+import {
+  PulseMetricDefinition,
+  pulseMetricDefinitionViewEnum,
+} from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
 import { pulsePaginate } from '../../../utils/paginate.js';
@@ -67,16 +69,16 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               const definitions = await pulsePaginate({
-                config: { 
+                config: {
                   limit: config.maxResultLimit
-                  ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
-                  : limit, 
+                    ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                    : limit,
                 },
                 getDataFn: async (pageToken) => {
                   return await restApi.pulseMethods.listAllPulseMetricDefinitions(view, pageToken);
                 },
               });
-              return definitions
+              return definitions;
             },
           });
         },
