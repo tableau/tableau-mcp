@@ -51,7 +51,7 @@ describe('listAllPulseMetricDefinitionsTool', () => {
     expect(result.isError).toBe(false);
     const parsedValue = JSON.parse(result.content[0].text as string);
     expect(parsedValue).toEqual(mockPulseMetricDefinitions);
-    expect(mocks.mockListAllPulseMetricDefinitions).toHaveBeenCalledWith(view);
+    expect(mocks.mockListAllPulseMetricDefinitions).toHaveBeenCalledWith(view, undefined);
   });
 
   it('should list pulse metric definitions with no view (default)', async () => {
@@ -62,7 +62,7 @@ describe('listAllPulseMetricDefinitionsTool', () => {
     expect(result.isError).toBe(false);
     const parsedValue = JSON.parse(result.content[0].text as string);
     expect(parsedValue).toEqual(mockPulseMetricDefinitions);
-    expect(mocks.mockListAllPulseMetricDefinitions).toHaveBeenCalledWith(undefined);
+    expect(mocks.mockListAllPulseMetricDefinitions).toHaveBeenCalledWith(undefined, undefined);
   });
 
   it('should handle API errors gracefully', async () => {
