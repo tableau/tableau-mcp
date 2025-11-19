@@ -44,7 +44,7 @@ export async function startExpressServer({
     }),
   );
 
-  if (config.trustProxyConfig) {
+  if (config.trustProxyConfig !== null) {
     // https://expressjs.com/en/guide/behind-proxies.html
     app.set('trust proxy', config.trustProxyConfig);
   }
