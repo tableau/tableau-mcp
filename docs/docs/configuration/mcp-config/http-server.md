@@ -80,4 +80,19 @@ The origin or origins to allow CORS requests from.
 - Acceptable values include `true`, `false`, `*`, or a URL or array of URLs. See [cors config
   options][cors] for details.
 
+<hr />
+
+## `TRUST_PROXY_CONFIG`
+
+The value to provide to the `trust proxy` setting in the Express application.
+
+- Default: None (no trust proxy config)
+- Acceptable values include `true`, `false`, `number`, or `string`. See [Express trust
+  proxy][express-trust-proxy] for details.
+- Example: Set this to `1` to use the address that is at most 1 hop away from the Express
+  application.
+- This is useful to configure Express in your hosting environment (e.g. Heroku) in order to access
+  client IP addresses while preventing IP spoofing.
+
 [cors]: https://expressjs.com/en/resources/middleware/cors.html#configuration-options
+[express-trust-proxy]: https://expressjs.com/en/guide/behind-proxies.html

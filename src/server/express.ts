@@ -44,6 +44,11 @@ export async function startExpressServer({
     }),
   );
 
+  if (config.trustProxyConfig) {
+    // https://expressjs.com/en/guide/behind-proxies.html
+    app.set('trust proxy', config.trustProxyConfig);
+  }
+
   const middleware: Array<RequestHandler> = [];
   if (config.oauth.enabled) {
     const oauthProvider = new OAuthProvider();
