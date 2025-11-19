@@ -72,15 +72,26 @@ export async function pulsePaginate<T>({
 }: PulsePaginateArgs<T>): Promise<PulseResult<Array<T>>> {
   const validatedConfig = pulsePaginateConfigSchema.parse(config);
   const limit = validatedConfig?.limit;
-  const pageSize = validatedConfig?.pageSize;
+  let pageSize = validatedConfig?.pageSize;
+
   const result = await getDataFn(undefined, pageSize);
   if (result.isErr()) {
     return result;
   }
   const { pagination, data } = result.value;
   const resultArray = [...data];
+  const total_available = pagination.total_available;
 
-  let { next_page_token } = pagination;
+  let next_page_token = pagination.next_page_token;
+
+  // If pageSize is not provided, set it to the minimum of the total available data and the remaining limit
+  if (!pageSize && total_available) {
+    pageSize = Math.min(
+      total_available - resultArray.length,
+      limit ? limit - resultArray.length : Number.MAX_SAFE_INTEGER,
+    );
+  }
+
   while (next_page_token && (!limit || limit > resultArray.length)) {
     const result = await getDataFn(next_page_token, pageSize);
     if (result.isErr()) {

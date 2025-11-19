@@ -57,7 +57,10 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ view, limit, pageSize }, { requestId, authInfo }): Promise<CallToolResult> => {
+    callback: async (
+      { view, limit, pageSize },
+      { requestId, authInfo },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       return await listAllPulseMetricDefinitionsTool.logAndExecute({
         requestId,
