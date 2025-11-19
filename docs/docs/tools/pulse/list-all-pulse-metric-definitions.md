@@ -26,11 +26,22 @@ Possible values:
 
 ### `limit`
 
-The maximum number of metric definitions to return. The tool will return at most this many metric definitions.
+The maximum number of metric definitions to return. The tool will return at most this many metric
+definitions.
 
 Example: `2000`
 
 See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
+
+### `pageSize`
+
+The number of results per page. Controls how many definitions are fetched in each API request during
+pagination.
+
+Example: `25`
+
+**Note:** This parameter is optional. If not specified, the API will use its default page size.
+Larger page sizes can reduce the number of API calls but may increase response time per request.
 
 ## Example result
 

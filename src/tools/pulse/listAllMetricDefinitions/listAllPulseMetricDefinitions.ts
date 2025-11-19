@@ -18,6 +18,7 @@ import { getPulseDisabledError } from '../getPulseDisabledError.js';
 const paramsSchema = {
   view: z.optional(z.enum(pulseMetricDefinitionViewEnum)),
   limit: z.coerce.number().gt(0).optional(),
+  pageSize: z.coerce.number().gt(0).optional(),
 };
 
 export const getListAllPulseMetricDefinitionsTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -33,6 +34,7 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
   - \`DEFINITION_VIEW_FULL\` - Return the metric definition and the specified number of metrics.
   - \`DEFINITION_VIEW_DEFAULT\` - Return the metric definition and the default metric.
 - \`limit\` (optional): Maximum number of metric definitions to return. If not specified, all definitions are returned.
+- \`pageSize\` (optional): Number of results per page. Controls how many definitions are fetched in each API request during pagination.
 
 **Example Usage:**
 - List all Pulse Metric Definitions on the current site
@@ -55,12 +57,12 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ view, limit }, { requestId, authInfo }): Promise<CallToolResult> => {
+    callback: async ({ view, limit, pageSize }, { requestId, authInfo }): Promise<CallToolResult> => {
       const config = getConfig();
       return await listAllPulseMetricDefinitionsTool.logAndExecute({
         requestId,
         authInfo,
-        args: { view, limit },
+        args: { view, limit, pageSize },
         callback: async () => {
           return await useRestApi({
             config,
@@ -74,11 +76,13 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
                   limit: config.maxResultLimit
                     ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
                     : limit,
+                  pageSize,
                 },
-                getDataFn: async (pageToken) => {
+                getDataFn: async (pageToken, pageSize) => {
                   const apiResult = await restApi.pulseMethods.listAllPulseMetricDefinitions(
                     view,
                     pageToken,
+                    pageSize,
                   );
 
                   if (apiResult.isOk()) {

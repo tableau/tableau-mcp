@@ -52,6 +52,7 @@ export async function paginate<T>({ pageConfig, getDataFn }: PaginateArgs<T>): P
 const pulsePaginateConfigSchema = z
   .object({
     limit: z.coerce.number().gt(0).optional(),
+    pageSize: z.coerce.number().gt(0).optional(),
   })
   .optional();
 
@@ -61,6 +62,7 @@ type PulsePaginateArgs<T> = {
   config: PulsePaginateConfig;
   getDataFn: (
     pageToken?: string,
+    pageSize?: number,
   ) => Promise<PulseResult<{ pagination: PulsePagination; data: Array<T> }>>;
 };
 
@@ -70,7 +72,8 @@ export async function pulsePaginate<T>({
 }: PulsePaginateArgs<T>): Promise<PulseResult<Array<T>>> {
   const validatedConfig = pulsePaginateConfigSchema.parse(config);
   const limit = validatedConfig?.limit;
-  const result = await getDataFn();
+  const pageSize = validatedConfig?.pageSize;
+  const result = await getDataFn(undefined, pageSize);
   if (result.isErr()) {
     return result;
   }
@@ -79,7 +82,7 @@ export async function pulsePaginate<T>({
 
   let { next_page_token } = pagination;
   while (next_page_token && (!limit || limit > resultArray.length)) {
-    const result = await getDataFn(next_page_token);
+    const result = await getDataFn(next_page_token, pageSize);
     if (result.isErr()) {
       return result;
     }

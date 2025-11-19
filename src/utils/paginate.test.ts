@@ -308,7 +308,7 @@ describe('pulsePaginate', () => {
 
     expect(result.unwrap()).toEqual(mockData);
     expect(getDataFn).toHaveBeenCalledTimes(1);
-    expect(getDataFn).toHaveBeenCalledWith();
+    expect(getDataFn).toHaveBeenCalledWith(undefined, undefined);
   });
 
   it('should paginate through multiple pages when more data is available', async () => {
@@ -344,9 +344,9 @@ describe('pulsePaginate', () => {
 
     expect(result.unwrap()).toEqual([...page1Data, ...page2Data, ...page3Data]);
     expect(getDataFn).toHaveBeenCalledTimes(3);
-    expect(getDataFn).toHaveBeenNthCalledWith(1);
-    expect(getDataFn).toHaveBeenNthCalledWith(2, 'token1');
-    expect(getDataFn).toHaveBeenNthCalledWith(3, 'token2');
+    expect(getDataFn).toHaveBeenNthCalledWith(1, undefined, undefined);
+    expect(getDataFn).toHaveBeenNthCalledWith(2, 'token1', undefined);
+    expect(getDataFn).toHaveBeenNthCalledWith(3, 'token2', undefined);
   });
 
   it('should respect the limit parameter and stop paginating when limit is reached', async () => {
@@ -547,6 +547,59 @@ describe('pulsePaginate', () => {
     });
 
     expect(result.unwrap()).toEqual(mockData);
-    expect(getDataFn).toHaveBeenCalledWith();
+    expect(getDataFn).toHaveBeenCalledWith(undefined, undefined);
+  });
+
+  it('should pass pageSize parameter to getDataFn when specified', async () => {
+    const mockData = [{ id: 1 }, { id: 2 }];
+    const mockPagination: PulsePagination = {
+      next_page_token: undefined,
+    };
+
+    const getDataFn = vi.fn().mockResolvedValue(
+      new Ok({
+        pagination: mockPagination,
+        data: mockData,
+      }),
+    );
+
+    const result = await pulsePaginate({
+      config: { pageSize: 50 },
+      getDataFn,
+    });
+
+    expect(result.unwrap()).toEqual(mockData);
+    expect(getDataFn).toHaveBeenCalledTimes(1);
+    expect(getDataFn).toHaveBeenCalledWith(undefined, 50);
+  });
+
+  it('should pass pageSize parameter through pagination', async () => {
+    const page1Data = [{ id: 1 }, { id: 2 }];
+    const page2Data = [{ id: 3 }, { id: 4 }];
+
+    const getDataFn = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: { next_page_token: 'token1' },
+          data: page1Data,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: { next_page_token: undefined },
+          data: page2Data,
+        }),
+      );
+
+    const result = await pulsePaginate({
+      config: { pageSize: 100 },
+      getDataFn,
+    });
+
+    expect(result.unwrap()).toEqual([...page1Data, ...page2Data]);
+    expect(getDataFn).toHaveBeenCalledTimes(2);
+    expect(getDataFn).toHaveBeenNthCalledWith(1, undefined, 100);
+    expect(getDataFn).toHaveBeenNthCalledWith(2, 'token1', 100);
   });
 });

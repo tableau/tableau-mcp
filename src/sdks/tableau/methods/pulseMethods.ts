@@ -35,11 +35,14 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
    * Required scopes: `tableau:insight_definitions_metrics:read`
    *
    * @param view - The view of the definition to return. If not specified, the default view is returned.
+   * @param pageToken - Token for retrieving the next page of results. Omit for the first page.
+   * @param pageSize - Specifies the number of results in a paged response.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#MetricQueryService_ListDefinitions
    */
   listAllPulseMetricDefinitions = async (
     view?: PulseMetricDefinitionView,
     pageToken?: string,
+    pageSize?: number,
   ): Promise<
     PulseResult<{
       pagination: PulsePagination;
@@ -48,7 +51,7 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
   > => {
     return await guardAgainstPulseDisabled(async () => {
       const response = await this._apiClient.listAllPulseMetricDefinitions({
-        queries: { view, page_token: pageToken },
+        queries: { view, page_token: pageToken, page_size: pageSize },
         ...this.authHeader,
       });
       return {

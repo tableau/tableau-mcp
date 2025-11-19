@@ -27,6 +27,12 @@ const listAllPulseMetricDefinitionsRestEndpoint = makeEndpoint({
         - 'DEFINITION_VIEW_DEFAULT' - Return the metric definition and the default metric.`,
     },
     {
+      name: 'page_size',
+      type: 'Query',
+      schema: z.optional(z.coerce.number().int().positive()),
+      description: 'Specifies the number of results in a paged response.',
+    },
+    {
       name: 'page_token',
       type: 'Query',
       schema: z.optional(z.string()),
