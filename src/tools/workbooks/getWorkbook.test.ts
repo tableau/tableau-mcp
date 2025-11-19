@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { mockView } from '../views/mockView.js';
 import { getGetWorkbookTool } from './getWorkbook.js';
@@ -100,7 +101,8 @@ describe('getWorkbookTool', () => {
 
 async function getToolResult(params: { workbookId: string }): Promise<CallToolResult> {
   const getWorkbookTool = getGetWorkbookTool(new Server());
-  return await getWorkbookTool.callback(params, {
+  const callback = await Provider.from(getWorkbookTool.callback);
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

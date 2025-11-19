@@ -98,8 +98,9 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
     server,
     name: 'get-datasource-metadata',
     description: `
-    This tool retrieves field metadata for a specified datasource by taking the basic, high level, metadata results from Tableau's VizQL Data Service and enriches them with additional context provided by Tableau's Metadata API.
-    The fields provided by this tool will contain properties such as name and dataType, but may also expose richer context such as descriptions, dataCategories, roles, etc.
+    This tool retrieves metadata for a specified datasource by taking the basic, high level, metadata results from Tableau's VizQL Data Service and enriches them with additional context provided by Tableau's Metadata API.
+    The metadata provided by this tool consists of the fields and parameters that belong to the datasource.
+    Fields will contain properties such as name and dataType, but may also expose richer context such as descriptions, dataCategories, roles, etc.
     This tool should be used for getting the metadata to ground the use of a tool that queries Tableau published data sources.
     `,
     paramsSchema,

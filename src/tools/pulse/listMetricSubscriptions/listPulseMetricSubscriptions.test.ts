@@ -5,6 +5,7 @@ import { getConfig } from '../../../config.js';
 import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import invariant from '../../../utils/invariant.js';
+import { Provider } from '../../../utils/provider.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import {
   constrainPulseMetricSubscriptions,
@@ -161,7 +162,8 @@ describe('listPulseMetricSubscriptionsTool', () => {
 
 async function getToolResult(): Promise<CallToolResult> {
   const listPulseMetricSubscriptionsTool = getListPulseMetricSubscriptionsTool(new Server());
-  return await listPulseMetricSubscriptionsTool.callback(
+  const callback = await Provider.from(listPulseMetricSubscriptionsTool.callback);
+  return await callback(
     {},
     {
       signal: new AbortController().signal,

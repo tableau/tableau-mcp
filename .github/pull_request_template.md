@@ -34,11 +34,13 @@ request! -->
 
 ## Checklist
 
-- [ ] I have updated the version in the package.json file by using `npm run version`.
-      For example, use `npm run version:patch` for a patch version bump.
+- [ ] I have updated the version in the package.json file by using `npm run version`. For example,
+      use `npm run version:patch` for a patch version bump.
 - [ ] I have made any necessary changes to the documentation
 - [ ] I have added tests that prove my fix is effective or that my feature works
 - [ ] New and existing unit tests pass locally with my changes
+- [ ] I have documented any breaking changes in the PR description. For example, renaming a config
+      environment variable or changing its default value.
 
 ## Contributor Agreement
 

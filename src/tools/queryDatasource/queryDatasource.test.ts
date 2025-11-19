@@ -2,8 +2,9 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
-import { QueryOutput } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { queryOutputSchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
+import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
@@ -80,7 +81,7 @@ describe('queryDatasourceTool', () => {
   it('should create a tool instance with correct properties', () => {
     const queryDatasourceTool = getQueryDatasourceTool(new Server());
     expect(queryDatasourceTool.name).toBe('query-datasource');
-    expect(queryDatasourceTool.description).toEqual(expect.any(String));
+    expect(queryDatasourceTool.description).toBeInstanceOf(Provider);
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
   });
 
@@ -126,7 +127,7 @@ describe('queryDatasourceTool', () => {
         'Zodios: Invalid response from endpoint',
         undefined,
         badResponse,
-        QueryOutput.safeParse(badResponse).error,
+        queryOutputSchema.safeParse(badResponse).error,
       );
 
       return new Err(zodiosError);
@@ -253,7 +254,8 @@ describe('queryDatasourceTool', () => {
           }),
         );
       const queryDatasourceTool = getQueryDatasourceTool(new Server());
-      const result = await queryDatasourceTool.callback(
+      const callback = await Provider.from(queryDatasourceTool.callback);
+      const result = await callback(
         {
           datasourceLuid: 'test-datasource-luid',
           query: {
@@ -302,7 +304,8 @@ describe('queryDatasourceTool', () => {
           }),
         );
       const queryDatasourceTool = getQueryDatasourceTool(new Server());
-      const result = await queryDatasourceTool.callback(
+      const callback = await Provider.from(queryDatasourceTool.callback);
+      const result = await callback(
         {
           datasourceLuid: 'test-datasource-luid',
           query: {
@@ -344,7 +347,8 @@ describe('queryDatasourceTool', () => {
       mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
 
       const queryDatasourceTool = getQueryDatasourceTool(new Server());
-      const result = await queryDatasourceTool.callback(
+      const callback = await Provider.from(queryDatasourceTool.callback);
+      const result = await callback(
         {
           datasourceLuid: 'test-datasource-luid',
           query: {
@@ -374,8 +378,8 @@ describe('queryDatasourceTool', () => {
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
     });
 
-    it('should not run SET/MATCH filters validation when DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION environment variable is true', async () => {
-      process.env.DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION = 'true';
+    it('should not run SET/MATCH filters validation when DISABLE_QUERY_VALIDATION_REQUESTS environment variable is true', async () => {
+      process.env.DISABLE_QUERY_VALIDATION_REQUESTS = 'true';
 
       const mockMainQueryResult = {
         data: [{ Region: 'East', 'SUM(Sales)': 100000 }],
@@ -385,7 +389,8 @@ describe('queryDatasourceTool', () => {
       mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
 
       const queryDatasourceTool = getQueryDatasourceTool(new Server());
-      const result = await queryDatasourceTool.callback(
+      const callback = await Provider.from(queryDatasourceTool.callback);
+      const result = await callback(
         {
           datasourceLuid: 'test-datasource-luid',
           query: {
@@ -441,7 +446,8 @@ describe('queryDatasourceTool', () => {
         );
 
       const queryDatasourceTool = getQueryDatasourceTool(new Server());
-      const result = await queryDatasourceTool.callback(
+      const callback = await Provider.from(queryDatasourceTool.callback);
+      const result = await callback(
         {
           datasourceLuid: 'test-datasource-luid',
           query: {
@@ -513,7 +519,8 @@ describe('queryDatasourceTool', () => {
 
 async function getToolResult(): Promise<CallToolResult> {
   const queryDatasourceTool = getQueryDatasourceTool(new Server());
-  return await queryDatasourceTool.callback(
+  const callback = await Provider.from(queryDatasourceTool.callback);
+  return await callback(
     {
       datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
       query: {

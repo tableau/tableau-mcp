@@ -10,14 +10,12 @@ import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
 import { tableauAuthInfoSchema } from '../server/oauth/schemas.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
-import { Provider } from '../utils/provider.js';
+import { Provider, TypeOrProvider } from '../utils/provider.js';
 import { ToolName } from './toolName.js';
 
 type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args extends ZodRawShape
   ? (args: z.objectOutputType<Args, ZodTypeAny>) => void
   : never;
-
-type TypeOrProvider<T> = T | Provider<T>;
 
 export type ConstrainedResult<T> =
   | {
@@ -100,11 +98,11 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
 export class Tool<Args extends ZodRawShape | undefined = undefined> {
   server: Server;
   name: ToolName;
-  description: string;
-  paramsSchema: Args;
-  annotations: ToolAnnotations;
-  argsValidator?: ArgsValidator<Args>;
-  callback: ToolCallback<Args>;
+  description: TypeOrProvider<string>;
+  paramsSchema: TypeOrProvider<Args>;
+  annotations: TypeOrProvider<ToolAnnotations>;
+  argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
+  callback: TypeOrProvider<ToolCallback<Args>>;
 
   constructor({
     server,
@@ -117,11 +115,11 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   }: ToolParams<Args>) {
     this.server = server;
     this.name = name;
-    this.description = description instanceof Provider ? description.get() : description;
-    this.paramsSchema = paramsSchema instanceof Provider ? paramsSchema.get() : paramsSchema;
-    this.annotations = annotations instanceof Provider ? annotations.get() : annotations;
-    this.argsValidator = argsValidator instanceof Provider ? argsValidator.get() : argsValidator;
-    this.callback = callback instanceof Provider ? callback.get() : callback;
+    this.description = description;
+    this.paramsSchema = paramsSchema;
+    this.annotations = annotations;
+    this.argsValidator = argsValidator;
+    this.callback = callback;
   }
 
   logInvocation({
@@ -177,7 +175,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
 
     if (args) {
       try {
-        this.argsValidator?.(args);
+        (await Provider.from(this.argsValidator))?.(args);
       } catch (error) {
         return getErrorResult(requestId, error);
       }

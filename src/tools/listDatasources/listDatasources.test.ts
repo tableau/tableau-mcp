@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
 import invariant from '../../utils/invariant.js';
+import { Provider } from '../../utils/provider.js';
 import { constrainDatasources, getListDatasourcesTool } from './listDatasources.js';
 import { mockDatasources } from './mockDatasources.js';
 
@@ -123,7 +124,8 @@ describe('listDatasourcesTool', () => {
 
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
   const listDatasourcesTool = getListDatasourcesTool(new Server());
-  return await listDatasourcesTool.callback(params, {
+  const callback = await Provider.from(listDatasourcesTool.callback);
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

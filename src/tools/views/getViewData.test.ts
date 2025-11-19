@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getGetViewDataTool as getGetViewDataTool } from './getViewData.js';
 import { mockView } from './mockView.js';
@@ -101,7 +102,8 @@ describe('getViewDataTool', () => {
 
 async function getToolResult(params: { viewId: string }): Promise<CallToolResult> {
   const getViewDataTool = getGetViewDataTool(new Server());
-  return await getViewDataTool.callback(params, {
+  const callback = await Provider.from(getViewDataTool.callback);
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

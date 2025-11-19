@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getGetViewImageTool } from './getViewImage.js';
 import { mockView } from './mockView.js';
@@ -110,7 +111,8 @@ describe('getViewImageTool', () => {
 
 async function getToolResult(params: { viewId: string }): Promise<CallToolResult> {
   const getViewImageTool = getGetViewImageTool(new Server());
-  return await getViewImageTool.callback(params, {
+  const callback = await Provider.from(getViewImageTool.callback);
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

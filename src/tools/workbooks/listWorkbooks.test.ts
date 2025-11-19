@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
 import invariant from '../../utils/invariant.js';
+import { Provider } from '../../utils/provider.js';
 import { constrainWorkbooks, getListWorkbooksTool } from './listWorkbooks.js';
 import { mockWorkbook, mockWorkbook2 } from './mockWorkbook.js';
 
@@ -120,7 +121,8 @@ describe('listWorkbooksTool', () => {
 
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
   const listWorkbooksTool = getListWorkbooksTool(new Server());
-  return await listWorkbooksTool.callback(params, {
+  const callback = await Provider.from(listWorkbooksTool.callback);
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),
