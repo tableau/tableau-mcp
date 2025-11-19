@@ -297,7 +297,7 @@ describe('pulsePaginate', () => {
     const getDataFn = vi.fn().mockResolvedValue(
       new Ok({
         pagination: mockPagination,
-        definitions: mockData,
+        data: mockData,
       }),
     );
 
@@ -321,19 +321,19 @@ describe('pulsePaginate', () => {
       .mockResolvedValueOnce(
         new Ok({
           pagination: { next_page_token: 'token1' },
-          definitions: page1Data,
+          data: page1Data,
         }),
       )
       .mockResolvedValueOnce(
         new Ok({
           pagination: { next_page_token: 'token2' },
-          definitions: page2Data,
+          data: page2Data,
         }),
       )
       .mockResolvedValueOnce(
         new Ok({
           pagination: { next_page_token: undefined },
-          definitions: page3Data,
+          data: page3Data,
         }),
       );
 
@@ -358,13 +358,13 @@ describe('pulsePaginate', () => {
       .mockResolvedValueOnce(
         new Ok({
           pagination: { next_page_token: 'token1' },
-          definitions: page1Data,
+          data: page1Data,
         }),
       )
       .mockResolvedValueOnce(
         new Ok({
           pagination: { next_page_token: undefined },
-          definitions: page2Data,
+          data: page2Data,
         }),
       );
 
@@ -387,13 +387,13 @@ describe('pulsePaginate', () => {
       .mockResolvedValueOnce(
         new Ok({
           pagination: { next_page_token: 'token1' },
-          definitions: page1Data,
+          data: page1Data,
         }),
       )
       .mockResolvedValueOnce(
         new Ok({
           pagination: { next_page_token: 'token2' },
-          definitions: [], // No more data
+          data: [], // No more data
         }),
       );
 
@@ -438,13 +438,13 @@ describe('pulsePaginate', () => {
       .mockResolvedValueOnce(
         new Ok({
           pagination: { next_page_token: 'token1' },
-          definitions: page1Data,
+          data: page1Data,
         }),
       )
       .mockResolvedValueOnce(
         new Ok({
           pagination: { next_page_token: undefined },
-          definitions: page2Data,
+          data: page2Data,
         }),
       );
 
@@ -468,7 +468,7 @@ describe('pulsePaginate', () => {
     const getDataFn = vi.fn().mockResolvedValue(
       new Ok({
         pagination: mockPagination,
-        definitions: mockData,
+        data: mockData,
       }),
     );
 
@@ -493,19 +493,19 @@ describe('pulsePaginate', () => {
       .mockResolvedValueOnce(
         new Ok({
           pagination: { next_page_token: 'token1' },
-          definitions: page1Data,
+          data: page1Data,
         }),
       )
       .mockResolvedValueOnce(
         new Ok({
           pagination: { next_page_token: 'token2' },
-          definitions: page2Data,
+          data: page2Data,
         }),
       )
       .mockResolvedValueOnce(
         new Ok({
           pagination: { next_page_token: undefined },
-          definitions: page3Data,
+          data: page3Data,
         }),
       );
 
@@ -537,7 +537,7 @@ describe('pulsePaginate', () => {
     const getDataFn = vi.fn().mockResolvedValue(
       new Ok({
         pagination: mockPagination,
-        definitions: mockData,
+        data: mockData,
       }),
     );
 

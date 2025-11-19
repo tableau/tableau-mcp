@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
@@ -75,7 +76,19 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
                     : limit,
                 },
                 getDataFn: async (pageToken) => {
-                  return await restApi.pulseMethods.listAllPulseMetricDefinitions(view, pageToken);
+                  const apiResult = await restApi.pulseMethods.listAllPulseMetricDefinitions(
+                    view,
+                    pageToken,
+                  );
+
+                  if (apiResult.isOk()) {
+                    return new Ok({
+                      pagination: apiResult.value.pagination,
+                      data: apiResult.value.definitions,
+                    });
+                  }
+
+                  return apiResult;
                 },
               });
               return definitions;

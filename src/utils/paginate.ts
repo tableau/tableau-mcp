@@ -61,7 +61,7 @@ type PulsePaginateArgs<T> = {
   config: PulsePaginateConfig;
   getDataFn: (
     pageToken?: string,
-  ) => Promise<PulseResult<{ pagination: PulsePagination; definitions: Array<T> }>>;
+  ) => Promise<PulseResult<{ pagination: PulsePagination; data: Array<T> }>>;
 };
 
 export async function pulsePaginate<T>({
@@ -74,8 +74,8 @@ export async function pulsePaginate<T>({
   if (result.isErr()) {
     return result;
   }
-  const { pagination, definitions } = result.value;
-  const resultArray = [...definitions];
+  const { pagination, data } = result.value;
+  const resultArray = [...data];
 
   let { next_page_token } = pagination;
   while (next_page_token && (!limit || limit > resultArray.length)) {
@@ -83,14 +83,14 @@ export async function pulsePaginate<T>({
     if (result.isErr()) {
       return result;
     }
-    const { pagination: nextPagination, definitions: nextDefinitions } = result.value;
+    const { pagination: nextPagination, data: nextData } = result.value;
 
-    if (nextDefinitions.length === 0) {
+    if (nextData.length === 0) {
       throw new Error(`No more data available. Total fetched: ${resultArray.length}`);
     }
 
     ({ next_page_token } = nextPagination);
-    resultArray.push(...nextDefinitions);
+    resultArray.push(...nextData);
   }
 
   if (limit && limit < resultArray.length) {
