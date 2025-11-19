@@ -29,6 +29,9 @@ export async function startExpressServer({
 }): Promise<{ url: string; app: express.Application; server: http.Server }> {
   const app = express();
 
+  // https://expressjs.com/en/guide/behind-proxies.html
+  app.set('trust proxy', 1);
+
   app.use(express.json());
   app.use(express.urlencoded());
 
