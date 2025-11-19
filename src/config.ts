@@ -51,6 +51,7 @@ export class Config {
   maxResultLimit: number | null;
   disableQueryDatasourceFilterValidation: boolean;
   disableMetadataApiRequests: boolean;
+  disableSessionManagement: boolean;
   enableServerLogging: boolean;
   serverLogDirectory: string;
   boundedContext: BoundedContext;
@@ -94,6 +95,7 @@ export class Config {
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
+      DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
       ENABLE_SERVER_LOGGING: enableServerLogging,
       SERVER_LOG_DIRECTORY: serverLogDirectory,
       INCLUDE_PROJECT_IDS: includeProjectIds,
@@ -127,6 +129,7 @@ export class Config {
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
     this.disableMetadataApiRequests = disableMetadataApiRequests === 'true';
+    this.disableSessionManagement = disableSessionManagement === 'true';
     this.enableServerLogging = enableServerLogging === 'true';
     this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
     this.boundedContext = {
