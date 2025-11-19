@@ -11,6 +11,8 @@ import { isValidRedirectUri } from './isValidRedirectUri.js';
  */
 export function register(app: express.Application): void {
   app.post('/oauth/register', express.json(), (req, res) => {
+    // eslint-disable-next-line no-console
+    console.log('register request body', JSON.stringify(req.body));
     const { redirect_uris } = req.body;
 
     const validatedRedirectUris = [];
