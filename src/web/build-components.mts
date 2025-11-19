@@ -85,8 +85,7 @@ for (const file of entries) {
       outDir,
       emptyOutDir: false,
       chunkSizeWarningLimit: 2000,
-      minify: 'esbuild',
-      sourcemap: 'inline',
+      minify: false,
       cssCodeSplit: false,
       rollupOptions: {
         input: virtualId,
