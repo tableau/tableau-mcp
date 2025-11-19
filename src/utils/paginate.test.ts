@@ -1,3 +1,4 @@
+import { Ok } from 'ts-results-es';
 import type { Pagination, PulsePagination } from '../sdks/tableau/types/pagination.js';
 import { paginate, pulsePaginate } from './paginate.js';
 
@@ -292,17 +293,19 @@ describe('pulsePaginate', () => {
       next_page_token: undefined,
     };
 
-    const getDataFn = vi.fn().mockResolvedValue({
-      pagination: mockPagination,
-      data: mockData,
-    });
+    const getDataFn = vi.fn().mockResolvedValue(
+      new Ok({
+        pagination: mockPagination,
+        definitions: mockData,
+      }),
+    );
 
     const result = await pulsePaginate({
       config: {},
       getDataFn,
     });
 
-    expect(result).toEqual(mockData);
+    expect(result.unwrap()).toEqual(mockData);
     expect(getDataFn).toHaveBeenCalledTimes(1);
     expect(getDataFn).toHaveBeenCalledWith();
   });
@@ -314,25 +317,31 @@ describe('pulsePaginate', () => {
 
     const getDataFn = vi
       .fn()
-      .mockResolvedValueOnce({
-        pagination: { next_page_token: 'token1' },
-        data: page1Data,
-      })
-      .mockResolvedValueOnce({
-        pagination: { next_page_token: 'token2' },
-        data: page2Data,
-      })
-      .mockResolvedValueOnce({
-        pagination: { next_page_token: undefined },
-        data: page3Data,
-      });
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: { next_page_token: 'token1' },
+          definitions: page1Data,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: { next_page_token: 'token2' },
+          definitions: page2Data,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: { next_page_token: undefined },
+          definitions: page3Data,
+        }),
+      );
 
     const result = await pulsePaginate({
       config: {},
       getDataFn,
     });
 
-    expect(result).toEqual([...page1Data, ...page2Data, ...page3Data]);
+    expect(result.unwrap()).toEqual([...page1Data, ...page2Data, ...page3Data]);
     expect(getDataFn).toHaveBeenCalledTimes(3);
     expect(getDataFn).toHaveBeenNthCalledWith(1);
     expect(getDataFn).toHaveBeenNthCalledWith(2, 'token1');
@@ -345,22 +354,27 @@ describe('pulsePaginate', () => {
 
     const getDataFn = vi
       .fn()
-      .mockResolvedValueOnce({
-        pagination: { next_page_token: 'token1' },
-        data: page1Data,
-      })
-      .mockResolvedValueOnce({
-        pagination: { next_page_token: undefined },
-        data: page2Data,
-      });
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: { next_page_token: 'token1' },
+          definitions: page1Data,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: { next_page_token: undefined },
+          definitions: page2Data,
+        }),
+      );
 
     const result = await pulsePaginate({
       config: { limit: 3 },
       getDataFn,
     });
 
-    expect(result).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
-    expect(result).toHaveLength(3);
+    const unwrapped = result.unwrap();
+    expect(unwrapped).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    expect(unwrapped).toHaveLength(3);
     expect(getDataFn).toHaveBeenCalledTimes(2);
   });
 
@@ -369,14 +383,18 @@ describe('pulsePaginate', () => {
 
     const getDataFn = vi
       .fn()
-      .mockResolvedValueOnce({
-        pagination: { next_page_token: 'token1' },
-        data: page1Data,
-      })
-      .mockResolvedValueOnce({
-        pagination: { next_page_token: 'token2' },
-        data: [], // No more data
-      });
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: { next_page_token: 'token1' },
+          definitions: page1Data,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: { next_page_token: 'token2' },
+          definitions: [], // No more data
+        }),
+      );
 
     await expect(
       pulsePaginate({
@@ -416,22 +434,27 @@ describe('pulsePaginate', () => {
 
     const getDataFn = vi
       .fn()
-      .mockResolvedValueOnce({
-        pagination: { next_page_token: 'token1' },
-        data: page1Data,
-      })
-      .mockResolvedValueOnce({
-        pagination: { next_page_token: undefined },
-        data: page2Data,
-      });
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: { next_page_token: 'token1' },
+          definitions: page1Data,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: { next_page_token: undefined },
+          definitions: page2Data,
+        }),
+      );
 
     const result = await pulsePaginate({
       config: { limit: 4 },
       getDataFn,
     });
 
-    expect(result).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }]);
-    expect(result).toHaveLength(4);
+    const unwrapped = result.unwrap();
+    expect(unwrapped).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }]);
+    expect(unwrapped).toHaveLength(4);
     expect(getDataFn).toHaveBeenCalledTimes(2);
   });
 
@@ -441,18 +464,21 @@ describe('pulsePaginate', () => {
       next_page_token: undefined,
     };
 
-    const getDataFn = vi.fn().mockResolvedValue({
-      pagination: mockPagination,
-      data: mockData,
-    });
+    const getDataFn = vi.fn().mockResolvedValue(
+      new Ok({
+        pagination: mockPagination,
+        definitions: mockData,
+      }),
+    );
 
     const result = await pulsePaginate({
       config: { limit: 10 },
       getDataFn,
     });
 
-    expect(result).toEqual(mockData);
-    expect(result).toHaveLength(2);
+    const unwrapped = result.unwrap();
+    expect(unwrapped).toEqual(mockData);
+    expect(unwrapped).toHaveLength(2);
     expect(getDataFn).toHaveBeenCalledTimes(1);
   });
 
@@ -463,25 +489,32 @@ describe('pulsePaginate', () => {
 
     const getDataFn = vi
       .fn()
-      .mockResolvedValueOnce({
-        pagination: { next_page_token: 'token1' },
-        data: page1Data,
-      })
-      .mockResolvedValueOnce({
-        pagination: { next_page_token: 'token2' },
-        data: page2Data,
-      })
-      .mockResolvedValueOnce({
-        pagination: { next_page_token: undefined },
-        data: page3Data,
-      });
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: { next_page_token: 'token1' },
+          definitions: page1Data,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: { next_page_token: 'token2' },
+          definitions: page2Data,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: { next_page_token: undefined },
+          definitions: page3Data,
+        }),
+      );
 
     const result = await pulsePaginate({
       config: { limit: 7 },
       getDataFn,
     });
 
-    expect(result).toEqual([
+    const unwrapped = result.unwrap();
+    expect(unwrapped).toEqual([
       { id: 1 },
       { id: 2 },
       { id: 3 },
@@ -490,7 +523,7 @@ describe('pulsePaginate', () => {
       { id: 6 },
       { id: 7 },
     ]);
-    expect(result).toHaveLength(7);
+    expect(unwrapped).toHaveLength(7);
     expect(getDataFn).toHaveBeenCalledTimes(3);
   });
 
@@ -500,17 +533,19 @@ describe('pulsePaginate', () => {
       next_page_token: undefined,
     };
 
-    const getDataFn = vi.fn().mockResolvedValue({
-      pagination: mockPagination,
-      data: mockData,
-    });
+    const getDataFn = vi.fn().mockResolvedValue(
+      new Ok({
+        pagination: mockPagination,
+        definitions: mockData,
+      }),
+    );
 
     const result = await pulsePaginate({
       config: undefined,
       getDataFn,
     });
 
-    expect(result).toEqual(mockData);
+    expect(result.unwrap()).toEqual(mockData);
     expect(getDataFn).toHaveBeenCalledWith();
   });
 });

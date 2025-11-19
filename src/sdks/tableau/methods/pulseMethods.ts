@@ -176,7 +176,7 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
 }
 
 export type PulseDisabledError = 'tableau-server' | 'pulse-disabled';
-type PulseResult<T> = Result<T, PulseDisabledError>;
+export type PulseResult<T> = Result<T, PulseDisabledError>;
 async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise<PulseResult<T>> {
   try {
     return new Ok(await callback());

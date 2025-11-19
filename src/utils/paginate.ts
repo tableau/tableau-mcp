@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 import { Pagination, PulsePagination } from '../sdks/tableau/types/pagination.js';
+import { PulseResult } from '../sdks/tableau/methods/pulseMethods.js';
+import { Ok } from 'ts-results-es';
 
 const pageConfigSchema = z
   .object({
@@ -57,32 +59,40 @@ type PulsePaginateConfig = z.infer<typeof pulsePaginateConfigSchema>;
 
 type PulsePaginateArgs<T> = {
   config: PulsePaginateConfig;
-  getDataFn: (pageToken?: string) => Promise<{ pagination: PulsePagination; data: Array<T> }>;
+  getDataFn: (pageToken?: string) => Promise<PulseResult<{ pagination: PulsePagination; definitions: Array<T> }>>;
 };
 
-export async function pulsePaginate<T>({ config, getDataFn }: PulsePaginateArgs<T>): Promise<Array<T>> {
+export async function pulsePaginate<T>({ config, getDataFn }: PulsePaginateArgs<T>): Promise<PulseResult<Array<T>>> {
   const validatedConfig = pulsePaginateConfigSchema.parse(config);
   const limit = validatedConfig?.limit;
-  const { pagination, data } = await getDataFn();
-  const result = [...data];
+  const result = await getDataFn();
+  if (result.isErr()) {
+    return result;
+  }
+  const { pagination, definitions } = result.value;
+  const resultArray = [...definitions];
   
   let { next_page_token } = pagination;
-  while (next_page_token && (!limit || limit > result.length)) {
-    const { pagination: nextPagination, data: nextData } = await getDataFn(next_page_token);
+  while (next_page_token && (!limit || limit > resultArray.length)) {
+    const result = await getDataFn(next_page_token);
+    if (result.isErr()) {
+      return result;
+    }
+    const { pagination: nextPagination, definitions: nextDefinitions } = result.value;
 
-    if (nextData.length === 0) {
+    if (nextDefinitions.length === 0) {
       throw new Error(
-        `No more data available. Total fetched: ${result.length}`,
+        `No more data available. Total fetched: ${resultArray.length}`,
       );
     }
 
     ({ next_page_token } = nextPagination);
-    result.push(...nextData);
+    resultArray.push(...nextDefinitions);
   }
 
-  if (limit && limit < result.length) {
-    result.length = limit;
+  if (limit && limit < resultArray.length) {
+    resultArray.length = limit;
   }
 
-  return result;
+  return new Ok(resultArray);
 }
