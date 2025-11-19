@@ -24,6 +24,14 @@ Possible values:
 | `DEFINITION_VIEW_FULL`    | Return the metric definition and the specified number of metrics.                  |
 | `DEFINITION_VIEW_DEFAULT` | Return the metric definition and the default metric.                               |
 
+### `limit`
+
+The maximum number of metric definitions to return. The tool will return at most this many metric definitions.
+
+Example: `2000`
+
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
+
 ## Example result
 
 ```json
