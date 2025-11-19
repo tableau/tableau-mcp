@@ -11,8 +11,6 @@ import { isValidRedirectUri } from './isValidRedirectUri.js';
  */
 export function register(app: express.Application): void {
   app.post('/oauth/register', express.json(), (req, res) => {
-    // eslint-disable-next-line no-console
-    console.log('register request body', JSON.stringify(req.body));
     const { redirect_uris } = req.body;
 
     const validatedRedirectUris = [];
@@ -30,6 +28,15 @@ export function register(app: express.Application): void {
       }
     }
 
+    let { token_endpoint_auth_method } = req.body;
+    if (
+      !token_endpoint_auth_method ||
+      typeof token_endpoint_auth_method !== 'string' ||
+      !['client_secret_basic', 'client_secret_post'].includes(token_endpoint_auth_method)
+    ) {
+      token_endpoint_auth_method = 'client_secret_basic';
+    }
+
     // For public clients, we use a fixed client ID since no authentication is required
     // The security comes from PKCE (code challenge/verifier) at authorization time
     res.json({
@@ -37,7 +44,7 @@ export function register(app: express.Application): void {
       redirect_uris: validatedRedirectUris,
       grant_types: ['authorization_code', 'client_credentials'],
       response_types: ['code'],
-      token_endpoint_auth_method: 'client_secret_basic',
+      token_endpoint_auth_method,
       application_type: 'native',
     });
   });

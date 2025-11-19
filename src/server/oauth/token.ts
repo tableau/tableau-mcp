@@ -29,6 +29,11 @@ export function token(
   const config = getConfig();
 
   app.post('/oauth/token', async (req, res) => {
+    // eslint-disable-next-line no-console
+    console.log('token request body', JSON.stringify(req.body));
+    // eslint-disable-next-line no-console
+    console.log('token request headers', JSON.stringify(req.headers));
+
     const result = mcpTokenSchema.safeParse(req.body);
 
     if (!result.success) {
