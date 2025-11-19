@@ -8,8 +8,6 @@ import { Credentials } from '../types/credentials.js';
 import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
-  pulseInsightBriefRequestSchema,
-  PulseInsightBriefResponse,
   PulseInsightBundleType,
   PulseMetric,
   PulseMetricDefinition,
@@ -138,18 +136,6 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
         ...this.authHeader,
       });
       return response.subscriptions ?? [];
-    });
-  };
-
-  generatePulseInsightBrief = async (
-    briefRequest: z.infer<typeof pulseInsightBriefRequestSchema>,
-  ): Promise<PulseResult<PulseInsightBriefResponse>> => {
-    return await guardAgainstPulseDisabled(async () => {
-      const response = await this._apiClient.generatePulseInsightBrief(
-        briefRequest,
-        this.authHeader,
-      );
-      return response ?? {};
     });
   };
 
