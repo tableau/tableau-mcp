@@ -194,6 +194,8 @@ export function createValidPulseMetricDefinition(
         },
         viz_state_specification: { viz_state_string: 'goal_state' },
         minimum_granularity: 'day',
+        benchmark_sentiment_type: 'BENCHMARK_SENTIMENT_TYPE_ABOVE_THRESHOLD_IS_FAVORABLE',
+        name: 'Test Goal',
       },
     ],
     ...overrides,
