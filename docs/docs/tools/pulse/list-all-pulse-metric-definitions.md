@@ -40,8 +40,9 @@ pagination.
 
 Example: `25`
 
-**Note:** This parameter is optional. If not specified, the API will use its default page size.
-Larger page sizes can reduce the number of API calls but may increase response time per request.
+**Note:** This parameter is optional. If not specified, the API will use its default page size. You
+may want to provide a larger value if you know in advance that you have more than the 10 (default
+page size) definitions to retrieve.
 
 ## Example result
 
