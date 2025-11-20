@@ -602,4 +602,83 @@ describe('pulsePaginate', () => {
     expect(getDataFn).toHaveBeenNthCalledWith(1, undefined, 100);
     expect(getDataFn).toHaveBeenNthCalledWith(2, 'token1', 100);
   });
+
+  it('should use smart pageSize with limit applied', async () => {
+    // Simulate: First call returns 2 items, but total_available is 10
+    // With limit of 5, smart pageSize should be min(10 - 2, 5 - 2) = 3
+    const page1Data = [{ id: 1 }, { id: 2 }];
+    const page2Data = [{ id: 3 }, { id: 4 }, { id: 5 }];
+
+    const getDataFn = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: {
+            next_page_token: 'token1',
+            total_available: 10,
+          },
+          data: page1Data,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: {
+            next_page_token: undefined,
+            total_available: 10,
+          },
+          data: page2Data,
+        }),
+      );
+
+    const result = await pulsePaginate({
+      config: { limit: 5 },
+      getDataFn,
+    });
+
+    expect(result.unwrap()).toEqual([...page1Data, ...page2Data]);
+    expect(getDataFn).toHaveBeenCalledTimes(2);
+    // First call: no pageSize specified (uses API default)
+    expect(getDataFn).toHaveBeenNthCalledWith(1, undefined, undefined);
+    // Second call: smart pageSize = min(10 - 2, 5 - 2) = 3
+    expect(getDataFn).toHaveBeenNthCalledWith(2, 'token1', 3);
+  });
+
+  it('should use smart pageSize when no limit specified', async () => {
+    // With no limit, smart pageSize should be total_available - already_fetched
+    const page1Data = [{ id: 1 }, { id: 2 }];
+    const page2Data = [{ id: 3 }, { id: 4 }, { id: 5 }];
+
+    const getDataFn = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: {
+            next_page_token: 'token1',
+            total_available: 5,
+          },
+          data: page1Data,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Ok({
+          pagination: {
+            next_page_token: undefined,
+            total_available: 5,
+          },
+          data: page2Data,
+        }),
+      );
+
+    const result = await pulsePaginate({
+      config: {},
+      getDataFn,
+    });
+
+    expect(result.unwrap()).toEqual([...page1Data, ...page2Data]);
+    expect(getDataFn).toHaveBeenCalledTimes(2);
+    // First call: no pageSize specified
+    expect(getDataFn).toHaveBeenNthCalledWith(1, undefined, undefined);
+    // Second call: smart pageSize = 5 - 2 = 3
+    expect(getDataFn).toHaveBeenNthCalledWith(2, 'token1', 3);
+  });
 });
