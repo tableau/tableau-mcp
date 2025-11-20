@@ -40,9 +40,8 @@ pagination.
 
 Example: `25`
 
-**Note:** This parameter is optional. If not specified, the API will use its default page size. You
-may want to provide a larger value if you know in advance that you have more than the 10 (default
-page size) definitions to retrieve.
+**Note:** This parameter is optional. If not specified, the API will use its default page size of 10 definitions. You
+may want to provide a larger value if you know in advance that you have more than the 10 definitions to retrieve.
 
 ## Example result
 
