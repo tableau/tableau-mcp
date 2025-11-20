@@ -1,3 +1,4 @@
+import { Decimal } from 'decimal.js-light';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import {
@@ -268,8 +269,10 @@ function validateParametersAgainstDatasourceMetadata(
           });
           continue;
         }
-        // TODO: account for floating point precision issues.
-        if (matchingParameter.step != undefined && parameter.value % matchingParameter.step !== 0) {
+        if (
+          matchingParameter.step != undefined &&
+          new Decimal(parameter.value).modulo(matchingParameter.step).toNumber() !== 0
+        ) {
           validationErrors.push({
             parameter: parameter.parameterCaption,
             message: `Parameter '${parameter.parameterCaption}' was provided a value that is not a multiple of the step value for the parameter.`,
