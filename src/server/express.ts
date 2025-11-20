@@ -1,5 +1,6 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Request, RequestHandler, Response } from 'express';
 import fs, { existsSync } from 'fs';
@@ -10,7 +11,7 @@ import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
-import { validateProtocolVersion } from './middleware.js';
+import { validateProtocolVersion, validateTableauSessionCookie } from './middleware.js';
 import { OAuthProvider } from './oauth/provider.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
@@ -50,6 +51,9 @@ export async function startExpressServer({
     oauthProvider.setupRoutes(app);
     middleware.push(oauthProvider.authMiddleware);
     middleware.push(validateProtocolVersion);
+  } else if (config.auth === 'cookie') {
+    app.use(cookieParser());
+    middleware.push(validateTableauSessionCookie);
   }
 
   const path = `/${basePath}`;

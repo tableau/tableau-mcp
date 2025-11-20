@@ -53,6 +53,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@zodios/core": "^10.9.6",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
@@ -68,6 +69,7 @@
     "@eslint/js": "^9.25.1",
     "@modelcontextprotocol/inspector": "^0.16.6",
     "@openai/agents": "^0.1.9",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/eslint__js": "^8.42.3",
     "@types/express": "^5.0.3",
