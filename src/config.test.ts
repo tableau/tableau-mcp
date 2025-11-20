@@ -24,6 +24,7 @@ describe('Config', () => {
       PORT: undefined,
       CUSTOM_PORT: undefined,
       CORS_ORIGIN_CONFIG: undefined,
+      TRUST_PROXY_CONFIG: undefined,
       SERVER: undefined,
       SITE_NAME: undefined,
       PAT_NAME: undefined,
@@ -639,6 +640,62 @@ describe('Config', () => {
       expect(() => new Config()).toThrow(
         'The environment variable CORS_ORIGIN_CONFIG is not a valid array of URLs: ["https://example.com", "invalid"]',
       );
+    });
+  });
+
+  describe('Trust proxy config parsing', () => {
+    it('should set trustProxyConfig to null when TRUST_PROXY_CONFIG is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe(null);
+    });
+
+    it('should set trustProxyConfig to true when TRUST_PROXY_CONFIG is "true"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        TRUST_PROXY_CONFIG: 'true',
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe(true);
+    });
+
+    it('should set trustProxyConfig to false when TRUST_PROXY_CONFIG is "false"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        TRUST_PROXY_CONFIG: 'false',
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe(false);
+    });
+
+    it('should set trustProxyConfig to the specified number when TRUST_PROXY_CONFIG is a valid number', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        TRUST_PROXY_CONFIG: '1',
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe(1);
+    });
+
+    it('should set trustProxyConfig to the specified string when TRUST_PROXY_CONFIG is a valid string', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        TRUST_PROXY_CONFIG: 'loopback, linklocal, uniquelocal',
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe('loopback, linklocal, uniquelocal');
     });
   });
 
