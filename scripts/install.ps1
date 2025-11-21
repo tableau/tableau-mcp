@@ -235,7 +235,7 @@ function Expand-TableauMCP {
 
   if ((Test-Path $buildPath) -and (Test-Path $nodeModulesPath)) {
     $choice = Read-Host "It looks like the Tableau MCP has already been extracted. Do you want to delete the existing files and extract it again? (y/N)"
-    if ($choice -ieq 'n') {
+    if ($choice -ine 'y') {
       return
     }
   }
