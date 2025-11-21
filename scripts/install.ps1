@@ -1,4 +1,5 @@
 $installerVersion = "1.0.0"
+$minNodejsVersion = "22.7.5"
 
 function Show-Menu {
   param(
@@ -22,11 +23,30 @@ function Show-Menu {
 
 function Use-NodeJS {
   Write-Host "`nStage: Node.js installation check" -ForegroundColor Magenta
-  $choice = Read-Host "Do you already have Node.js installed? (Y/n)"
-  if ($choice -ine 'n') {
-    Write-Host "Node.js is already installed" -ForegroundColor Green
+
+  $installNodejs = $true
+  $nodejsVersion = ""
+  try {
+    $nodejsVersion = (node --version) -replace 'v', ''
+  }
+  catch {}
+
+  if ($nodejsVersion -eq "") {
+    Write-Host "Node.js is not installed" -ForegroundColor Red
   }
   else {
+    Write-Host "Node.js $nodejsVersion is installed" -ForegroundColor Green
+    $version = $nodejsVersion.Split("v")[1]
+    if ([Version]$nodejsVersion -lt [Version]$minNodejsVersion) {
+      Write-Host "Node.js $nodejsVersion is too old. Please uninstall it and run this script again." -ForegroundColor Red
+      exit 1
+    }
+    else {
+      $installNodejs = $false
+    }
+  }
+
+  if ($installNodejs) {
     Write-Host "How do you want to install Node.js?" -ForegroundColor Yellow
     Show-Menu @(
       @{
@@ -90,6 +110,11 @@ function Use-NodeJS {
         }
       }
     )
+
+    Write-Host "Node.js installation completed successfully!" -ForegroundColor Green
+    Write-Host "You need to restart your terminal or PowerShell session to use the new Node.js version." -ForegroundColor Yellow
+    Write-Host "Please restart your terminal or PowerShell session and run this script again after the restart." -ForegroundColor Yellow
+    exit 1
   }
 
   Get-TableauMCP
@@ -97,6 +122,8 @@ function Use-NodeJS {
   New-EnvFile
   Start-Node
 }
+
+
 
 function New-EnvFile {
   Write-Host "`nStage: Create .env file" -ForegroundColor Magenta
@@ -218,29 +245,12 @@ DANGEROUSLY_DISABLE_OAUTH=true
 
 function Start-Node {
   Write-Host "`nStage: Start Node.js server" -ForegroundColor Magenta
-  $pidFile = Join-Path -Path $PWD -ChildPath "pid.txt"
-  if (Test-Path $pidFile) {
-    $nodePid = Get-Content -Path $pidFile
-    # get process by pid
-    $process = Get-Process -Id $nodePid
-    if ($process) {
-      Write-Host "Looks like the MCP server is already running with PID $nodePid. You should stop it before starting a new one." -ForegroundColor Green
-      $choice = Read-Host "Do you want to stop the server? (Y/n)"
-      if ($choice -ine 'n') {
-        Write-Host "Stopping Node.js server with PID $nodePid" -ForegroundColor Magenta
-        Stop-Process -Id $nodePid
-        Write-Host "Node.js server stopped successfully" -ForegroundColor Green
-        Remove-Item -Path $pidFile
-      }
-      else {
-        exit 1
-      }
-    }
-  }
-
   Write-Host "Starting Node.js server" -ForegroundColor Magenta
-  $process = Start-Process -FilePath "node" -ArgumentList "build/index.js" -NoNewWindow -PassThru
+  $path = Join-Path -Path $PWD -ChildPath "build/index.js"
+  $process = Start-Process -FilePath "node" -ArgumentList $path -NoNewWindow -PassThru
   Write-Host "Node.js server started successfully! Enjoy!!" -ForegroundColor Green
+
+  $pidFile = Join-Path -Path $PWD -ChildPath "pid.txt"
   Set-Content -Path $pidFile -Value $process.Id
 }
 
@@ -357,11 +367,34 @@ function Expand-TableauMCP {
   Write-Host "Tableau MCP extracted successfully!" -ForegroundColor Green
 }
 
+function Stop-CurrentServer {
+  $pidFile = Join-Path -Path $PWD -ChildPath "pid.txt"
+  if (Test-Path $pidFile) {
+    $nodePid = Get-Content -Path $pidFile
+    $process = Get-Process -Id $nodePid
+    if ($process) {
+      Write-Host "Looks like the MCP server is already running with PID $nodePid. You should stop it before starting a new one." -ForegroundColor Green
+      $choice = Read-Host "Do you want to stop the server? (Y/n)"
+      if ($choice -ine 'n') {
+        Write-Host "Stopping Node.js server with PID $nodePid" -ForegroundColor Magenta
+        Stop-Process -Id $nodePid
+        Write-Host "Node.js server stopped successfully" -ForegroundColor Green
+        Remove-Item -Path $pidFile
+      }
+      else {
+        exit 1
+      }
+    }
+  }
+}
+
 Clear-Host
+Stop-CurrentServer
+
 Write-Host "Tableau MCP Server Installer v$installerVersion" -ForegroundColor Cyan
 Write-Host
 
-Write-Host "Tableau MCP requires Node.js >= 22.7.5 or Docker to be installed" -ForegroundColor Yellow
+Write-Host "Tableau MCP requires Node.js >= $minNodejsVersion or Docker to be installed" -ForegroundColor Yellow
 Write-Host "How do you plan to run the Tableau MCP Server?" -ForegroundColor Yellow
 Show-Menu @(
   @{
