@@ -291,7 +291,6 @@ function parameterValueMatchesDataType(
   value: QueryParameter['value'],
   dataType: DataType,
 ): boolean {
-  // TODO: Determine when parameter values are nullable.
   if (value === null) {
     return true;
   }
