@@ -109,18 +109,7 @@ function New-EnvFile {
     }
   }
 
-  $server = Read-Host "Enter the URL of your Tableau Server"
-  $port = Read-Host "What port do you want to use for the Tableau MCP Server? (default: 3927)"
-  if ($port -eq "") {
-    $port = "3927"
-  }
-  $envContent = @"
-SERVER=$server
-AUTH=cookie
-TRANSPORT=http
-PORT=$port
-DANGEROUSLY_DISABLE_OAUTH=true
-"@
+  $envContent = Get-EnvContent
 
   Write-Host "Contents of the .env file:" -ForegroundColor Magenta
   Write-Host "--------------------------------" -ForegroundColor Magenta
@@ -137,19 +126,123 @@ DANGEROUSLY_DISABLE_OAUTH=true
   }
 }
 
-function Start-Node {
-  Write-Host "`nStage: Start Node.js server" -ForegroundColor Magenta
-  $process = Start-Process -FilePath "node" -ArgumentList "build/index.js" -NoNewWindow -PassThru
-  if ($process.ExitCode -ne 0) {
-    Write-Host "Failed to start the Node.js server`n`n" -ForegroundColor Red
-    exit 1
+function Get-EnvContent {
+  $server = Read-Host "Enter the URL of your Tableau Server"
+  $port = Read-Host "What port do you want to use for the Tableau MCP Server? (default: 3927)"
+  if ($port -eq "") {
+    $port = "3927"
   }
-  else {
-    Write-Host "Node.js server started successfully! Enjoy!!" -ForegroundColor Green
-  }
+
+  Write-Host "What authentication method do you want to use for the MCP server?" -ForegroundColor Yellow
+  Show-Menu @(
+    @{
+      label  = "PAT"
+      action = {
+        $patName = Read-Host "PAT Name"
+        $patValue = Read-Host "PAT Value"
+        return @"
+SERVER=$server
+TRANSPORT=http
+PORT=$port
+AUTH=pat
+PAT_NAME=$patName
+PAT_VALUE=$patValue
+DANGEROUSLY_DISABLE_OAUTH=true
+"@
+      }
+    }
+    @{
+      label  = "Direct Trust"
+      action = {
+        $username = Read-Host "Username for JWT sub claim"
+        $clientId = Read-Host "Connected App Client ID"
+        $secretId = Read-Host "Connected App Secret ID"
+        $secretValue = Read-Host "Connected App Secret Value"
+        return @"
+SERVER=$server
+TRANSPORT=http
+PORT=$port
+AUTH=direct-trust
+JWT_SUB_CLAIM=$username
+CONNECTED_APP_CLIENT_ID=$clientId
+CONNECTED_APP_SECRET_ID=$secretId
+CONNECTED_APP_SECRET_VALUE=$secretValue
+DANGEROUSLY_DISABLE_OAUTH=true
+"@
+      }
+    }
+    @{
+      label  = "OAuth (Tableau Server 2025.3+ only)"
+      action = {
+        $oauthIssuer = Read-Host "OAuth Issuer"
+        $oauthRedirectUri = Read-Host "OAuth Redirect URI ([ENTER] to use default)"
+        $oauthJwePrivateKey = Read-Host "OAuth JWE Private Key ([ENTER] to provide path instead)"
+        $oauthJwePrivateKeyPath = Read-Host "OAuth JWE Private Key Path"
+        $oauthJwePrivateKeyPassphrase = Read-Host "OAuth JWE Private Key Passphrase ([ENTER] to leave blank)"
+        $oauthAuthzCodeTimeoutMs = Read-Host "OAuth Authz Code Timeout MS ([ENTER] to use default)"
+        $oauthAccessTokenTimeoutMs = Read-Host "OAuth Access Token Timeout MS ([ENTER] to use default)"
+        $oauthRefreshTokenTimeoutMs = Read-Host "OAuth Refresh Token Timeout MS ([ENTER] to use default)"
+        $oauthClientIdSecretPairs = Read-Host "OAuth Client ID Secret Pairs ([ENTER] to leave blank)"
+        return @"
+SERVER=$server
+TRANSPORT=http
+PORT=$port
+AUTH=oauth
+OAUTH_ISSUER=$oauthIssuer
+OAUTH_REDIRECT_URI=$oauthRedirectUri
+OAUTH_JWE_PRIVATE_KEY=$oauthJwePrivateKey
+OAUTH_JWE_PRIVATE_KEY_PATH=$oauthJwePrivateKeyPath
+OAUTH_JWE_PRIVATE_KEY_PASSPHRASE=$oauthJwePrivateKeyPassphrase
+OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS=$oauthAuthzCodeTimeoutMs
+OAUTH_ACCESS_TOKEN_TIMEOUT_MS=$oauthAccessTokenTimeoutMs
+OAUTH_REFRESH_TOKEN_TIMEOUT_MS=$oauthRefreshTokenTimeoutMs
+OAUTH_CLIENT_ID_SECRET_PAIRS=$oauthClientIdSecretPairs
+DANGEROUSLY_DISABLE_OAUTH=true
+"@
+      }
+    }
+    @{
+      label  = "Auth Cookie"
+      action = {
+        return @"
+SERVER=$server
+TRANSPORT=http
+PORT=$port
+AUTH=cookie
+DANGEROUSLY_DISABLE_OAUTH=true
+"@
+      }
+    }
+  )
 }
 
+function Start-Node {
+  Write-Host "`nStage: Start Node.js server" -ForegroundColor Magenta
+  $pidFile = Join-Path -Path $PWD -ChildPath "pid.txt"
+  if (Test-Path $pidFile) {
+    $nodePid = Get-Content -Path $pidFile
+    # get process by pid
+    $process = Get-Process -Id $nodePid
+    if ($process) {
+      Write-Host "Looks like the MCP server is already running with PID $nodePid. You should stop it before starting a new one." -ForegroundColor Green
+      $choice = Read-Host "Do you want to stop the server? (Y/n)"
+      if ($choice -ine 'n') {
+        Write-Host "Stopping Node.js server with PID $nodePid" -ForegroundColor Magenta
+        Stop-Process -Id $nodePid
+        Write-Host "Node.js server stopped successfully" -ForegroundColor Green
+        Remove-Item -Path $pidFile
+      }
+      else {
+        exit 1
+      }
+    }
+  }
 
+  Write-Host "Starting Node.js server" -ForegroundColor Magenta
+  $process = Start-Process -FilePath "node" -ArgumentList "build/index.js" -NoNewWindow -PassThru
+  Write-Host "Node.js server started successfully! Enjoy!!" -ForegroundColor Green
+  Set-Content -Path $pidFile -Value $process.Id
+}
 
 function Get-NodeJS {
   param(
