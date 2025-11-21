@@ -1,13 +1,13 @@
 import { CorsOptions } from 'cors';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { fileURLToPath } from 'url';
 
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
+import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const __dirname = getDirname();
 
 const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
