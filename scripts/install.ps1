@@ -12,8 +12,8 @@ function Show-Menu {
   Write-Host ""
 
   $choice = Read-Host "Enter your choice [1-$($menuItems.Length)] or [Q] to quit"
-  if ($choice -ieq 'Q') {
-    Write-Host "Goodbye!" -ForegroundColor Yellow
+  if ($choice -ieq 'Q' -or $choice -eq '') {
+    Write-Host "Goodbye!`n" -ForegroundColor Yellow
     exit
   }
 
@@ -21,6 +21,7 @@ function Show-Menu {
 }
 
 function Use-NodeJS {
+  Write-Host "`nStage: Node.js installation check" -ForegroundColor Magenta
   $choice = Read-Host "Do you already have Node.js installed? (Y/n)"
   if ($choice -ine 'n') {
     Write-Host "Node.js is already installed" -ForegroundColor Green
@@ -98,7 +99,7 @@ function Use-NodeJS {
 }
 
 function New-EnvFile {
-  Write-Host "Let's create the .env file for the Tableau MCP Server" -ForegroundColor Yellow
+  Write-Host "`nStage: Create .env file" -ForegroundColor Magenta
 
   $envFile = Join-Path -Path $PWD -ChildPath ".env"
   if (Test-Path $envFile) {
@@ -137,7 +138,15 @@ DANGEROUSLY_DISABLE_OAUTH=true
 }
 
 function Start-Node {
-  Start-Process -FilePath "node" -ArgumentList "build/index.js" -NoNewWindow -PassThru | Out-Null
+  Write-Host "`nStage: Start Node.js server" -ForegroundColor Magenta
+  $process = Start-Process -FilePath "node" -ArgumentList "build/index.js" -NoNewWindow -PassThru
+  if ($process.ExitCode -ne 0) {
+    Write-Host "Failed to start the Node.js server`n`n" -ForegroundColor Red
+    exit 1
+  }
+  else {
+    Write-Host "Node.js server started successfully! Enjoy!!" -ForegroundColor Green
+  }
 }
 
 
@@ -155,7 +164,7 @@ function Get-NodeJS {
 }
 
 function Use-Docker {
-  Write-Host "Checking if Docker is installed..." -ForegroundColor Magenta
+  Write-Host "`nStage: Check if Docker is installed" -ForegroundColor Magenta
   if (Get-Command docker) {
     Write-Host "Docker is already installed" -ForegroundColor Green
     Get-TableauMCP
@@ -170,7 +179,7 @@ function Use-Docker {
 }
 
 function New-Dockerfile {
-  Write-Host "Let's create the Dockerfile for the Tableau MCP Server" -ForegroundColor Yellow
+  Write-Host "`nStage: Create Dockerfile" -ForegroundColor Magenta
   $dockerfile = Join-Path -Path $PWD -ChildPath "Dockerfile"
   if (Test-Path $dockerfile) {
     $choice = Read-Host "$($dockerfile) already exists, skip re-creation? (Y/n)"
@@ -206,12 +215,16 @@ ENTRYPOINT ["node", "build/index.js"]
 }
 
 function Start-Docker {
-  Write-Host "Starting the Docker container" -ForegroundColor Magenta
-  Start-Process -FilePath "docker" -ArgumentList "build -t tableau-mcp ." -NoNewWindow -Wait -PassThru
-  Start-Process -FilePath "docker" -ArgumentList "run -p 3927:3927 -i --rm --env-file .env tableau-mcp" -NoNewWindow -Wait -PassThru
+  Write-Host "`nStage: Build Docker image" -ForegroundColor Magenta
+  Start-Process -FilePath "docker" -ArgumentList "build -t tableau-mcp ." -NoNewWindow -Wait -PassThru | Out-Null
+
+  Write-Host "`nStage: Run Docker container" -ForegroundColor Magenta
+  Start-Process -FilePath "docker" -ArgumentList "run -p 3927:3927 -i --rm --env-file .env tableau-mcp" -NoNewWindow -Wait -PassThru | Out-Null
 }
 
 function Get-TableauMCP {
+  Write-Host "`nStage: Download Tableau MCP from GitHub" -ForegroundColor Magenta
+
   $tableauMCPUrl = "https://github.com/tableau/tableau-mcp/releases/latest/download/tableau-mcp.zip"
   $tableauMCPZip = Join-Path -Path $PWD -ChildPath "tableau-mcp.zip"
 
@@ -222,12 +235,14 @@ function Get-TableauMCP {
     }
   }
 
-  Write-Host "Downloading Tableau MCP from $tableauMCPUrl" -ForegroundColor Magenta
+  Write-Host "Downloading Tableau MCP from $tableauMCPUrl..." -ForegroundColor Magenta
   Write-Host "Downloading to $tableauMCPZip" -ForegroundColor Magenta
   Invoke-WebRequest -Uri $tableauMCPUrl -OutFile $tableauMCPZip
 }
 
 function Expand-TableauMCP {
+  Write-Host "`nStage: Expand Tableau MCP ZIP file" -ForegroundColor Magenta
+
   $tableauMCPZip = Join-Path -Path $PWD -ChildPath "tableau-mcp.zip"
 
   $buildPath = Join-Path -Path $PWD -ChildPath "build"
@@ -243,7 +258,7 @@ function Expand-TableauMCP {
   Remove-Item -Path $buildPath -Recurse -Force
   Remove-Item -Path $nodeModulesPath -Recurse -Force
 
-  Write-Host "Expanding archive to $PWD" -ForegroundColor Magenta
+  Write-Host "Expanding archive to $PWD..." -ForegroundColor Magenta
   Expand-Archive -Path $tableauMCPZip -DestinationPath $PWD
 
   Write-Host "Tableau MCP extracted successfully!" -ForegroundColor Green
