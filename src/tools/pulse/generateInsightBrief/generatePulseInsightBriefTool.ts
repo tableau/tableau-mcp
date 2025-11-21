@@ -47,6 +47,25 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
 - **Ban**: Current value with period-over-period change and top dimensional insights
 - **Breakdown**: Emphasizes categorical dimension analysis and distributions
 
+**IMPORTANT Requirements:**
+
+1. **Same Datasource Recommendation**: The API works best when all metrics in \`metric_group_context\` come from the same datasource,
+   as this allows the backend to apply consistent filters across metrics. While the API may accept metrics from different datasources,
+   it is recommended to group metrics by datasource and make separate API calls per datasource for optimal results.
+
+2. **Complete Metric Data**: The \`metric_group_context\` must include complete metric data from the metric definition:
+   - \`extension_options\` with actual \`allowed_dimensions\` and \`allowed_granularities\` arrays (not empty)
+   - \`representation_options\` with correct \`sentiment_type\`, \`currency_code\`, and format settings
+   - \`insights_options.settings\` with all insight types and their enabled/disabled state
+   - Incomplete data will cause API errors even if it passes schema validation
+
+3. **Multi-Turn Conversations**: To enable follow-up questions and conversational analysis, include the full conversation 
+   history in the \`messages\` array:
+   - Add the initial user question with \`role: 'ROLE_USER'\`
+   - Add the assistant's response with \`role: 'ROLE_ASSISTANT'\` and \`content\` containing the previous response text
+   - Add the follow-up question with \`role: 'ROLE_USER'\`
+   - Without conversation history, follow-up questions may lack context
+
 **Parameters:**
 - \`briefRequest\` (required): The request to generate a brief for. This includes:
   - \`language\`: Language for the response (e.g., 'LANGUAGE_EN_US')
@@ -59,15 +78,6 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
     - \`metric_group_context_resolved\`: Whether the metric context has been resolved (boolean)
   - \`now\`: Optional current time in 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DD' format (defaults to midnight if time omitted)
   - \`time_zone\`: Optional timezone for date/time calculations
-
-**Important: Multi-Turn Conversations**
-To enable follow-up questions and conversational analysis, you MUST include the full conversation history in the \`messages\` array:
-1. Add the initial user question with \`role: 'ROLE_USER'\`
-2. Add the assistant's response with \`role: 'ROLE_ASSISTANT'\` and \`content\` containing the previous response text
-3. Add the follow-up question with \`role: 'ROLE_USER'\`
-
-This allows the AI to generate richer insights by understanding the conversation context. Without the conversation history, 
-follow-up questions may not have enough context to provide detailed answers.
 
 **Action Types:**
 - \`ACTION_TYPE_ANSWER\`: Answer a specific question about the metric
