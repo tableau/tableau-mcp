@@ -371,7 +371,7 @@ function Stop-CurrentServer {
   $pidFile = Join-Path -Path $PWD -ChildPath "pid.txt"
   if (Test-Path $pidFile) {
     $nodePid = Get-Content -Path $pidFile
-    $process = Get-Process -Id $nodePid
+    $process = Get-Process -Id $nodePid -ErrorAction SilentlyContinue
     if ($process) {
       Write-Host "Looks like the MCP server is already running with PID $nodePid. You should stop it before starting a new one." -ForegroundColor Green
       $choice = Read-Host "Do you want to stop the server? (Y/n)"
