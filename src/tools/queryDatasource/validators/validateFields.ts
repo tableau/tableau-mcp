@@ -21,25 +21,6 @@ export function validateFields(fields: Fields): void {
   }
 
   {
-    // You can't query the same field twice.
-    const fieldCounts = fields.reduce<Record<string, number>>((acc, field) => {
-      if (!acc[field.fieldCaption]) {
-        acc[field.fieldCaption] = 0;
-      }
-
-      acc[field.fieldCaption]++;
-      return acc;
-    }, {});
-
-    const duplicateFields = Object.entries(fieldCounts).filter(([_, count]) => count > 1);
-    if (duplicateFields.length > 0) {
-      throw new Error(
-        `The query must not include duplicate fields. The following fields are duplicated: ${duplicateFields.map(([field]) => field).join(', ')}.`,
-      );
-    }
-  }
-
-  {
     // You can't have duplicate sort priorities.
     const sortPriorities = fields.reduce<Record<number, Array<string>>>((acc, field) => {
       if (field.sortPriority === undefined) {
