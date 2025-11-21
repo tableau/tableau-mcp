@@ -153,7 +153,8 @@ const generatePulseInsightBriefRestEndpoint = makeEndpoint({
   method: 'post',
   path: '/pulse/insights/brief',
   alias: 'generatePulseInsightBrief',
-  description: 'Generates an AI-powered insight brief for Pulse metrics based on natural language questions.',
+  description:
+    'Generates an AI-powered insight brief for Pulse metrics based on natural language questions.',
   parameters: [
     {
       name: 'brief_request',

@@ -1,6 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err } from 'ts-results-es';
-import z from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -231,4 +230,3 @@ follow-up questions may not have enough context to provide detailed answers.
 
   return generatePulseInsightBriefTool;
 };
-

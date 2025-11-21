@@ -286,11 +286,7 @@ export const actionTypeEnumSchema = z.enum([
 ]);
 export type ActionTypeEnumType = z.infer<typeof actionTypeEnumSchema>;
 
-export const roleEnumSchema = z.enum([
-  'ROLE_UNDEFINED',
-  'ROLE_USER',
-  'ROLE_ASSISTANT',
-]);
+export const roleEnumSchema = z.enum(['ROLE_UNDEFINED', 'ROLE_USER', 'ROLE_ASSISTANT']);
 export type RoleEnumType = z.infer<typeof roleEnumSchema>;
 
 export const metricGroupContextSchema = z.array(
@@ -306,10 +302,12 @@ export const metricGroupContextSchema = z.array(
       extension_options: pulseExtensionOptionsSchema,
       representation_options: pulseRepresentationOptionsSchema,
       insights_options: insightOptionsSchema,
-      goals: z.object({
-        datasource_goals: datasourceGoalsSchema.optional(),
-        metric_goals: pulseGoalsSchema.optional(),
-      }).optional(),
+      goals: z
+        .object({
+          datasource_goals: datasourceGoalsSchema.optional(),
+          metric_goals: pulseGoalsSchema.optional(),
+        })
+        .optional(),
       candidates: z.array(z.any()).optional(),
     }),
   }),
@@ -374,43 +372,51 @@ export const insightSchema = z.object({
   characterization: z.string().optional(),
   question: z.string(),
   score: z.number(),
-})
+});
 
-export const sourceInsightSchema = z.object({
-  type: z.string(),
-  version: z.number(),
-  content: z.string(),
-  markup: z.string(),
-  viz: z.any(),
-  facts: z.any(),
-  characterization: z.string(),
-  question: z.string(),
-  score: z.number(),
-  id: z.string(),
-  generation_id: z.string(),
-  insight_feedback_metadata: z.object({
-    candidate_definition_id: z.string(),
-    dimension_hash: z.string(),
-    score: z.number(),
+export const sourceInsightSchema = z
+  .object({
     type: z.string(),
-  }),
-  table: z.object({
-    columns: z.array(z.object({
-      label: z.string(),
-    })),
-    rows: z.array(z.object({
-      entries: z.array(z.object({
-        error: z.object({
-          code: z.string(),
-          message: z.string(),
+    version: z.number(),
+    content: z.string(),
+    markup: z.string(),
+    viz: z.any(),
+    facts: z.any(),
+    characterization: z.string(),
+    question: z.string(),
+    score: z.number(),
+    id: z.string(),
+    generation_id: z.string(),
+    insight_feedback_metadata: z.object({
+      candidate_definition_id: z.string(),
+      dimension_hash: z.string(),
+      score: z.number(),
+      type: z.string(),
+    }),
+    table: z.object({
+      columns: z.array(
+        z.object({
+          label: z.string(),
         }),
-        value: z.object({
-          formatted_value: z.string(),
+      ),
+      rows: z.array(
+        z.object({
+          entries: z.array(
+            z.object({
+              error: z.object({
+                code: z.string(),
+                message: z.string(),
+              }),
+              value: z.object({
+                formatted_value: z.string(),
+              }),
+            }),
+          ),
         }),
-      })),
-    })),
-  }),
-}).partial()
+      ),
+    }),
+  })
+  .partial();
 
 export const popcBanInsightGroupSchema = z.object({
   type: z.string(),
@@ -444,19 +450,19 @@ export const pulseBundleResponseSchema = z.object({
   }),
 });
 
-
 export const pulseInsightBriefResponseSchema = z.object({
-  follow_up_questions: z.array(z.object({
-    content: z.string(),
-    metric_group_context_resolved: z.boolean().optional(),
-  })),
+  follow_up_questions: z.array(
+    z.object({
+      content: z.string(),
+      metric_group_context_resolved: z.boolean().optional(),
+    }),
+  ),
   generation_id: z.string(),
   group_context: metricGroupContextSchema,
   markup: z.string(),
   not_enough_information: z.boolean(),
   source_insights: z.array(sourceInsightSchema),
-})
-
+});
 
 export type PulseBundleResponse = z.infer<typeof pulseBundleResponseSchema>;
 export type PulseInsightBriefResponse = z.infer<typeof pulseInsightBriefResponseSchema>;

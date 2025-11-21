@@ -29,76 +29,78 @@ describe('getGeneratePulseInsightBriefTool', () => {
   const briefRequest = {
     language: 'LANGUAGE_EN_US' as const,
     locale: 'LOCALE_EN_US' as const,
-    messages: [{
-      action_type: 'ACTION_TYPE_SUMMARIZE' as const,
-      content: 'What are the key insights for my sales metric?',
-      role: 'ROLE_USER' as const,
-      metric_group_context: [
-        {
-          metadata: {
-            name: 'Sales Metric',
-            metric_id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
-            definition_id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
-          },
-          metric: {
-            definition: {
-              datasource: {
-                id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
+    messages: [
+      {
+        action_type: 'ACTION_TYPE_SUMMARIZE' as const,
+        content: 'What are the key insights for my sales metric?',
+        role: 'ROLE_USER' as const,
+        metric_group_context: [
+          {
+            metadata: {
+              name: 'Sales Metric',
+              metric_id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
+              definition_id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
+            },
+            metric: {
+              definition: {
+                datasource: {
+                  id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
+                },
+                basic_specification: {
+                  measure: {
+                    field: 'Sales',
+                    aggregation: 'AGGREGATION_SUM' as const,
+                  },
+                  time_dimension: {
+                    field: 'Order Date',
+                  },
+                  filters: [],
+                },
+                is_running_total: false,
               },
-              basic_specification: {
-                measure: {
-                  field: 'Sales',
-                  aggregation: 'AGGREGATION_SUM' as const,
-                },
-                time_dimension: {
-                  field: 'Order Date',
-                },
+              metric_specification: {
                 filters: [],
+                measurement_period: {
+                  granularity: 'GRANULARITY_BY_MONTH' as const,
+                  range: 'RANGE_CURRENT_PARTIAL' as const,
+                },
+                comparison: {
+                  comparison: 'TIME_COMPARISON_PREVIOUS_PERIOD' as const,
+                },
               },
-              is_running_total: false,
-            },
-            metric_specification: {
-              filters: [],
-              measurement_period: {
-                granularity: 'GRANULARITY_BY_MONTH' as const,
-                range: 'RANGE_CURRENT_PARTIAL' as const,
+              extension_options: {
+                allowed_dimensions: [],
+                allowed_granularities: [],
+                offset_from_today: 0,
               },
-              comparison: {
-                comparison: 'TIME_COMPARISON_PREVIOUS_PERIOD' as const,
+              representation_options: {
+                type: 'NUMBER_FORMAT_TYPE_NUMBER' as const,
+                number_units: {
+                  singular_noun: 'dollar',
+                  plural_noun: 'dollars',
+                },
+                sentiment_type: 'SENTIMENT_TYPE_NONE' as const,
+                row_level_id_field: {
+                  identifier_col: 'Order ID',
+                },
+                row_level_entity_names: {
+                  entity_name_singular: 'Order',
+                  entity_name_plural: 'Orders',
+                },
+                row_level_name_field: {
+                  name_col: 'Order Name',
+                },
+                currency_code: 'CURRENCY_CODE_USD' as const,
               },
-            },
-            extension_options: {
-              allowed_dimensions: [],
-              allowed_granularities: [],
-              offset_from_today: 0,
-            },
-            representation_options: {
-              type: 'NUMBER_FORMAT_TYPE_NUMBER' as const,
-              number_units: {
-                singular_noun: 'dollar',
-                plural_noun: 'dollars',
+              insights_options: {
+                settings: [],
               },
-              sentiment_type: 'SENTIMENT_TYPE_NONE' as const,
-              row_level_id_field: {
-                identifier_col: 'Order ID',
-              },
-              row_level_entity_names: {
-                entity_name_singular: 'Order',
-                entity_name_plural: 'Orders',
-              },
-              row_level_name_field: {
-                name_col: 'Order Name',
-              },
-              currency_code: 'CURRENCY_CODE_USD' as const,
-            },
-            insights_options: {
-              settings: [],
             },
           },
-        },
-      ],
-      metric_group_context_resolved: true,
-    }],
+        ],
+        metric_group_context_resolved: true,
+      },
+    ],
     now: '2025-11-15 00:00:00',
     time_zone: 'UTC',
   };
@@ -114,7 +116,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
     ],
     follow_up_questions: [
       { content: 'What factors contributed to the increase?' },
-      { content: 'How does this compare to last year?' }
+      { content: 'How does this compare to last year?' },
     ],
     group_context: briefRequest.messages[0].metric_group_context,
     not_enough_information: false,
