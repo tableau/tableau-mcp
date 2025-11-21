@@ -77,14 +77,58 @@ function Use-NodeJS {
         label  = "Use NVM for Windows"
         action = {
           $nodejsVersion = "22.21.1"
-          Write-Host "Using NVM for Windows" -ForegroundColor Magenta
-          Start-Process -FilePath "nvm.exe" -ArgumentList "install $nodejsVersion" -NoNewWindow -Wait -PassThru
-          Start-Process -FilePath "nvm.exe" -ArgumentList "list" -NoNewWindow -Wait -PassThru
-          Start-Process -FilePath "nvm.exe" -ArgumentList "use $nodejsVersion" -NoNewWindow -Wait -PassThru
+          Write-Host "nvm install $nodejsVersion" -ForegroundColor Magenta
+          Start-Process -FilePath "nvm" -ArgumentList "install $nodejsVersion" -NoNewWindow -Wait -PassThru
+
+          Write-Host "nvm use $nodejsVersion" -ForegroundColor Magenta
+          $process = Start-Process -FilePath "nvm" -ArgumentList "use $nodejsVersion" -NoNewWindow -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            Write-Host "Failed to use Node.js version $nodejsVersion" -ForegroundColor Red
+            exit 1
+          }
         }
       }
     )
   }
+
+  Get-TableauMCP
+  New-EnvFile
+  Start-Node
+}
+
+function New-EnvFile {
+  $envFile = Join-Path -Path $PWD -ChildPath ".env"
+  Write-Host "Let's create the .env file for the Tableau MCP Server" -ForegroundColor Yellow
+  $server = Read-Host "Enter the URL of your Tableau Server"
+  $port = Read-Host "What port do you want to use for the Tableau MCP Server? (default: 3927)"
+  if ($port -eq "") {
+    $port = "3927"
+  }
+  $envContent = @"
+SERVER=$server
+AUTH=cookie
+TRANSPORT=http
+PORT=$port
+DANGEROUSLY_DISABLE_OAUTH=true
+"@
+
+  Write-Host "Contents of the .env file:" -ForegroundColor Magenta
+  Write-Host "--------------------------------" -ForegroundColor Magenta
+  Write-Host $envContent -ForegroundColor Magenta
+  Write-Host "--------------------------------" -ForegroundColor Magenta
+  Write-Host ""
+  $choice = Read-Host "Do you want to create the .env file? (Y/n)"
+  if ($choice -ine 'n') {
+    Set-Content -Path $envFile -Value $envContent
+  }
+  else {
+    Write-Host "No .env file created" -ForegroundColor Red
+    exit 1
+  }
+}
+
+function Start-Node {
+  Start-Process -FilePath "node" -ArgumentList "build/index.js" -NoNewWindow -PassThru | Out-Null
 }
 
 function Get-NodeJS {
@@ -120,7 +164,7 @@ function Get-TableauMCP {
   Invoke-WebRequest -Uri $tableauMCPUrl -OutFile $tableauMCP
 
   Write-Host "Expanding archive to $PWD" -ForegroundColor Magenta
-  Expand-Archive -Path $tableauMCP -DestinationPath $PWD
+  Expand-Archive -Path $tableauMCP -DestinationPath $PWD -Confirm
 
   Write-Host "Tableau MCP extracted successfully!" -ForegroundColor Green
 }
