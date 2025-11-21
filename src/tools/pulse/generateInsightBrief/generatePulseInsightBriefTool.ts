@@ -54,12 +54,21 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
   - \`locale\`: Locale for formatting (e.g., 'LOCALE_EN_US')
   - \`messages\`: Array of conversation messages containing:
     - \`action_type\`: Type of action ('ACTION_TYPE_ANSWER', 'ACTION_TYPE_SUMMARIZE', 'ACTION_TYPE_ADVISE')
-    - \`content\`: The user's question or prompt (natural language)
+    - \`content\`: The user's question or prompt (string, natural language)
     - \`role\`: Who initiated the request ('ROLE_USER' or 'ROLE_ASSISTANT')
     - \`metric_group_context\`: Array of metrics to analyze (metadata + metric specification)
     - \`metric_group_context_resolved\`: Whether the metric context has been resolved (boolean)
   - \`now\`: Optional current time in 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DD' format (defaults to midnight if time omitted)
   - \`time_zone\`: Optional timezone for date/time calculations
+
+**Important: Multi-Turn Conversations**
+To enable follow-up questions and conversational analysis, you MUST include the full conversation history in the \`messages\` array:
+1. Add the initial user question with \`role: 'ROLE_USER'\`
+2. Add the assistant's response with \`role: 'ROLE_ASSISTANT'\` and \`content\` containing the previous response text
+3. Add the follow-up question with \`role: 'ROLE_USER'\`
+
+This allows the AI to generate richer insights by understanding the conversation context. Without the conversation history, 
+follow-up questions may not have enough context to provide detailed answers.
 
 **Action Types:**
 - \`ACTION_TYPE_ANSWER\`: Answer a specific question about the metric
@@ -132,6 +141,35 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
       ],
     }
 
+- Ask a follow-up question (includes conversation history):
+    briefRequest: {
+      language: 'LANGUAGE_EN_US',
+      locale: 'LOCALE_EN_US',
+      messages: [
+        {
+          action_type: 'ACTION_TYPE_SUMMARIZE',
+          content: 'What are the key insights for Sales?',
+          role: 'ROLE_USER',
+          metric_group_context: [ { metadata: { /* ... */ }, metric: { /* ... */ } } ],
+          metric_group_context_resolved: true,
+        },
+        {
+          action_type: 'ACTION_TYPE_SUMMARIZE',
+          content: 'Sales increased 5% with growth in Region A and B...',
+          role: 'ROLE_ASSISTANT',
+          metric_group_context: [ { metadata: { /* ... */ }, metric: { /* ... */ } } ],
+          metric_group_context_resolved: true,
+        },
+        {
+          action_type: 'ACTION_TYPE_ANSWER',
+          content: 'What factors contributed to the increase?',
+          role: 'ROLE_USER',
+          metric_group_context: [ { metadata: { /* ... */ }, metric: { /* ... */ } } ],
+          metric_group_context_resolved: true,
+        }
+      ],
+    }
+
 **Use Cases:**
 - **Conversational analytics** - Natural language Q&A about metrics
 - **ChatGPT/Claude integration** - AI-powered metric insights
@@ -156,31 +194,11 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
         authInfo,
         args: { briefRequest },
         callback: async () => {
-        //   const { datasourceIds } = config.boundedContext;
-        //   if (datasourceIds) {
-        //     // Validate all datasources in the metric group context
-        //     const metricsContext = briefRequest.messages.metric_group_context;
-        //     for (const metricContext of metricsContext) {
-        //       const datasourceLuid = metricContext.metric.datasource_luid;
-
-        //       if (!datasourceIds.has(datasourceLuid)) {
-        //         return new Err({
-        //           type: 'datasource-not-allowed',
-        //           message: [
-        //             'The set of allowed metric insights that can be queried is limited by the server configuration.',
-        //             'Generating the Pulse Insight Brief is not allowed because one or more metrics are derived',
-        //             `from the data source with LUID ${datasourceLuid}, which is not in the allowed set of data sources.`,
-        //           ].join(' '),
-        //         });
-        //       }
-        //     }
-        //   }
-
           const result = await useRestApi({
             config,
             requestId,
             server,
-            jwtScopes: ['tableau:insights:read'],
+            jwtScopes: ['tableau:insight_brief:create'],
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseInsightBrief(briefRequest),

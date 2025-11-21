@@ -295,8 +295,23 @@ export type RoleEnumType = z.infer<typeof roleEnumSchema>;
 
 export const metricGroupContextSchema = z.array(
   z.object({
-    metadata: pulseMetadataSchema,
-    metric: pulseMetricSchema,
+    metadata: z.object({
+      name: z.string(),
+      metric_id: z.string(),
+      definition_id: z.string(),
+    }),
+    metric: z.object({
+      definition: pulseSpecificationSchema,
+      metric_specification: pulseMetricSpecificationSchema,
+      extension_options: pulseExtensionOptionsSchema,
+      representation_options: pulseRepresentationOptionsSchema,
+      insights_options: insightOptionsSchema,
+      goals: z.object({
+        datasource_goals: datasourceGoalsSchema.optional(),
+        metric_goals: pulseGoalsSchema.optional(),
+      }).optional(),
+      candidates: z.array(z.any()).optional(),
+    }),
   }),
 );
 
