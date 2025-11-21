@@ -1,6 +1,32 @@
 import { describe, expect, it } from 'vitest';
 
-import { isTableauVersionAtLeast } from './isTableauVersionAtLeast.js';
+import { exportedForTesting, getResultForTableauVersion } from './isTableauVersionAtLeast.js';
+
+const { isTableauVersionAtLeast } = exportedForTesting;
+
+describe('getResultForTableauVersion', () => {
+  it('should return the result for the given tableau version', async () => {
+    const result = await getResultForTableauVersion({
+      mappings: {
+        '2025.3.0': 'result for 2025.3.0',
+        default: 'default result',
+      },
+      server: 'https://test-server.com',
+    });
+    expect(result).toBe('result for 2025.3.0');
+  });
+
+  it('should return the default result for the given tableau version', async () => {
+    const result = await getResultForTableauVersion({
+      mappings: {
+        '2058.1.0': 'result for 2058.1.0',
+        default: 'default result',
+      },
+      server: 'https://test-server.com',
+    });
+    expect(result).toBe('default result');
+  });
+});
 
 describe('isTableauVersionAtLeast', () => {
   it('should return true when version value is "main"', () => {

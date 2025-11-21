@@ -1,10 +1,11 @@
-export const queryDatasourceToolDescription = `# Query Tableau Data Source Tool
+export const queryDatasourceToolDescription20253 = `# Query Tableau Data Source Tool
 
 Executes VizQL queries against Tableau data sources to answer business questions from published data. This tool allows you to retrieve aggregated and filtered data with proper sorting and grouping.
 
 ## Prerequisites
 Before using this tool, you should:
 1. Understand available fields and their types
+2. Understand what parameters are available and their types
 3. Understand the data structure and field relationships
 
 ## Best Practices
@@ -30,7 +31,51 @@ Before using this tool, you should:
 ### Field Usage Guidelines
 - **Prefer existing fields** - Use fields already modeled in the data source rather than creating custom calculations
 - **Use calculations sparingly** - Only create calculated fields when absolutely necessary and the calculation cannot be achieved through existing fields and aggregations
+- **Use bins for distribution analysis** - Create bins to group continuous data into discrete ranges (e.g., age groups, price ranges)
 - **Validate field availability** - Always check field metadata before constructing queries
+
+### Field Types
+
+#### Dimension Fields
+Basic fields without aggregation:
+\`\`\`json
+{
+  "fieldCaption": "Category",
+  "fieldAlias": "Product Category"
+}
+\`\`\`
+
+#### Measure Fields
+Fields with aggregation functions (SUM, AVG, COUNT, etc.):
+\`\`\`json
+{
+  "fieldCaption": "Sales",
+  "function": "SUM",
+  "fieldAlias": "Total Sales",
+  "maxDecimalPlaces": 2
+}
+\`\`\`
+
+#### Calculated Fields
+Custom fields defined using Tableau calculation syntax:
+\`\`\`json
+{
+  "fieldCaption": "Profit Margin",
+  "calculation": "SUM([Profit]) / SUM([Sales])",
+  "fieldAlias": "Margin %"
+}
+\`\`\`
+
+#### Bin Fields
+Group continuous data into discrete ranges:
+\`\`\`json
+{
+  "fieldCaption": "Sales",
+  "binSize": 1000,
+  "fieldAlias": "Sales Range"
+}
+\`\`\`
+This creates bins of $1,000 intervals (0-1000, 1000-2000, etc.)
 
 ### Query Construction
 - **Group by meaningful dimensions** - Ensure grouping supports the business question being asked
@@ -73,6 +118,107 @@ When a query might return large amounts of data, follow this profiling approach:
 \`\`\`
 
 **Step 3: Apply appropriate aggregation or filtering based on counts**
+
+## Parameters
+
+Parameters are dynamic values defined in the Tableau datasource that can be used to control calculations, filters, and query behavior. They allow for interactive, user-controlled queries without modifying the query structure.
+
+### When to Use Parameters
+- **Dynamic filtering** - Let users control date ranges, regions, or categories
+- **What-if analysis** - Adjust values like growth rates, targets, or thresholds
+- **Calculation control** - Switch between different metrics or calculation methods
+- **User preferences** - Currency selection, display units, or other settings
+
+### Parameter Types
+- **LIST** - Predefined values (e.g., regions, categories)
+- **ANY_VALUE** - Free-form values matching data type
+- **QUANTITATIVE_RANGE** - Numeric values with optional min/max/step
+- **QUANTITATIVE_DATE** - Date values with optional range constraints
+
+### Usage Example
+\`\`\`json
+{
+  "datasourceLuid": "abc123",
+  "query": {
+    "fields": [...],
+    "filters": [...],
+    "parameters": [
+      {
+        "name": "Selected Year",
+        "value": 2024
+      },
+      {
+        "name": "Currency",
+        "value": "USD"
+      }
+    ]
+  }
+}
+\`\`\`
+
+- Parameters affect entire query; filters restrict returned data
+
+## Bins
+
+Bins group continuous numerical data into discrete ranges, enabling distribution analysis and histogram creation. Unlike parameters and filters, bins are created dynamically in the query.
+
+### Creating Bin Fields
+
+To create a bin field in a query, you **must** include:
+1. A **measure field** with the base field and aggregation function
+2. A **bin field** with the same fieldCaption and a binSize property
+
+**Example:**
+\`\`\`json
+{
+  "fields": [
+    {
+      "fieldCaption": "Sales",
+      "function": "SUM",
+      "fieldAlias": "Total Sales"
+    },
+    {
+      "fieldCaption": "Sales",
+      "binSize": 1000,
+      "fieldAlias": "Sales Range"
+    }
+  ]
+}
+\`\`\`
+
+This creates bins of $1,000 intervals (0-1000, 1000-2000, etc.)
+
+### When to Use Bins
+- Analyzing distribution patterns (age groups, price ranges, score brackets)
+- Creating histograms or frequency distributions
+- Grouping continuous numerical data into meaningful categories
+- User asks questions like "How many customers in each age range?" or "What's the distribution of order sizes?"
+
+### Bin Restrictions
+- **Cannot override existing bin fields** - If a bin field already exists in the datasource, query it without binSize
+- **binSize must be positive** - Only values > 0 are allowed
+- **Measure fields only** - Can only bin numeric/quantitative fields
+- **Choose appropriate bin sizes** - Consider your data range (e.g., bin size 100 for values 0-10,000)
+
+### Querying Existing Bin Fields
+
+If a bin field already exists in the datasource (e.g., "Profit (bin)"), query it as a regular dimension field:
+
+\`\`\`json
+{
+  "fields": [
+    {
+      "fieldCaption": "Profit (bin)"
+    },
+    {
+      "fieldCaption": "Profit",
+      "function": "SUM"
+    }
+  ]
+}
+\`\`\`
+
+To control existing bin field behavior, use parameters if available (e.g., "Profit Bin Size").
 
 ## Filter Types and Usage
 
@@ -281,6 +427,69 @@ Filter relative date periods:
         "filterType": "QUANTITATIVE_NUMERICAL",
         "quantitativeFilterType": "MIN",
         "min": 500
+      }
+    ]
+  }
+}
+\`\`\`
+
+### Example 5: Distribution Analysis Using Bins
+**Question:** "How are our sales distributed across different price ranges?"
+
+\`\`\`json
+{
+  "datasourceLuid": "abc123",
+  "query": {
+    "fields": [
+      {
+        "fieldCaption": "Sales",
+        "binSize": 1000,
+        "fieldAlias": "Sales Range",
+        "sortDirection": "ASC",
+        "sortPriority": 1
+      },
+      {
+        "fieldCaption": "Order ID",
+        "function": "COUNT",
+        "fieldAlias": "Number of Orders"
+      },
+      {
+        "fieldCaption": "Sales",
+        "function": "SUM",
+        "fieldAlias": "Total Sales in Range"
+      }
+    ]
+  }
+}
+\`\`\`
+
+### Example 6: Using Parameters for Dynamic Analysis
+**Question:** "Show me sales for the selected region and year"
+
+\`\`\`json
+{
+  "datasourceLuid": "abc123",
+  "query": {
+    "fields": [
+      {
+        "fieldCaption": "Category"
+      },
+      {
+        "fieldCaption": "Sales",
+        "function": "SUM",
+        "fieldAlias": "Total Sales",
+        "sortDirection": "DESC",
+        "sortPriority": 1
+      }
+    ],
+    "parameters": [
+      {
+        "name": "Selected Region",
+        "value": "West"
+      },
+      {
+        "name": "Analysis Year",
+        "value": 2024
       }
     ]
   }
