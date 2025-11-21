@@ -9,6 +9,7 @@ test-logs/
 config.json
 env.list
 manifest.json
+scripts/Dockerfile
 tableau-mcp.dxt
 tableau-mcp.mcpb
 *.pem

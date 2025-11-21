@@ -97,8 +97,16 @@ function Use-NodeJS {
 }
 
 function New-EnvFile {
-  $envFile = Join-Path -Path $PWD -ChildPath ".env"
   Write-Host "Let's create the .env file for the Tableau MCP Server" -ForegroundColor Yellow
+
+  $envFile = Join-Path -Path $PWD -ChildPath ".env"
+  if (Test-Path $envFile) {
+    $choice = Read-Host "$($envFile) already exists, skip re-creation? (Y/n)"
+    if ($choice -ine 'n') {
+      return
+    }
+  }
+
   $server = Read-Host "Enter the URL of your Tableau Server"
   $port = Read-Host "What port do you want to use for the Tableau MCP Server? (default: 3927)"
   if ($port -eq "") {
@@ -131,6 +139,8 @@ function Start-Node {
   Start-Process -FilePath "node" -ArgumentList "build/index.js" -NoNewWindow -PassThru | Out-Null
 }
 
+
+
 function Get-NodeJS {
   param(
     [string]$nodejsVersion,
@@ -148,11 +158,53 @@ function Use-Docker {
   if (Get-Command docker) {
     Write-Host "Docker is already installed" -ForegroundColor Green
     Get-TableauMCP
+    New-EnvFile
+    New-Dockerfile
   }
   else {
     Write-Host "Docker is not installed. Please install Docker Desktop from https://docs.docker.com/desktop/setup/install/windows-install/" -ForegroundColor Red
     exit 1
   }
+}
+
+function New-Dockerfile {
+  Write-Host "Let's create the Dockerfile for the Tableau MCP Server" -ForegroundColor Yellow
+  $dockerfile = Join-Path -Path $PWD -ChildPath "Dockerfile"
+  if (Test-Path $dockerfile) {
+    $choice = Read-Host "$($dockerfile) already exists, skip re-creation? (Y/n)"
+    if ($choice -ine 'n') {
+      Start-Docker
+      return
+    }
+  }
+
+  $dockerfileContent = @"
+FROM node:22-alpine
+COPY ./build /build
+RUN chmod +x build/index.js
+ENTRYPOINT ["node", "build/index.js"]
+"@
+
+  Write-Host "Contents of the Dockerfile:" -ForegroundColor Magenta
+  Write-Host "--------------------------------" -ForegroundColor Magenta
+  Write-Host $dockerfileContent -ForegroundColor Magenta
+  Write-Host "--------------------------------" -ForegroundColor Magenta
+  Write-Host ""
+  $choice = Read-Host "Do you want to create the Dockerfile? (Y/n)"
+  if ($choice -ine 'n') {
+    Set-Content -Path $dockerfile -Value $dockerfileContent
+  }
+  else {
+    Write-Host "No Dockerfile created" -ForegroundColor Red
+    exit 1
+  }
+
+  Start-Docker
+}
+
+function Start-Docker {
+  Write-Host "Starting the Docker container" -ForegroundColor Magenta
+  Start-Process -FilePath "docker" -ArgumentList "run -p 3927:3927 -i --rm --env-file .env tableau-mcp" -NoNewWindow -Wait -PassThru
 }
 
 function Get-TableauMCP {
