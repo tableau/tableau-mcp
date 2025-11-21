@@ -209,31 +209,6 @@ User: "What factors contributed to the increase?"
 AI: "The increase was driven by Technology category growth..."
 ```
 
-### ChatGPT/Claude Integration
-
-Build AI-powered metric exploration:
-
-```typescript
-// Example integration
-const response = await generatePulseInsightBrief({
-  language: 'LANGUAGE_EN_US',
-  locale: 'LOCALE_EN_US',
-  messages: conversationHistory,
-});
-```
-
-### Slack/Teams Bots
-
-Interactive metric exploration in chat:
-
-```
-/pulse ask "Why did revenue drop this week?"
-→ "Revenue decreased 8% due to lower activity in the Enterprise segment..."
-
-/pulse followup "How does this compare to last year?"
-→ "This is actually 12% higher than the same week last year..."
-```
-
 ### Executive Briefings
 
 Natural language metric summaries:

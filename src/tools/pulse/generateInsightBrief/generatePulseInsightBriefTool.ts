@@ -172,8 +172,6 @@ follow-up questions may not have enough context to provide detailed answers.
 
 **Use Cases:**
 - **Conversational analytics** - Natural language Q&A about metrics
-- **ChatGPT/Claude integration** - AI-powered metric insights
-- **Slack/Teams bots** - Interactive metric exploration
 - **Executive briefings** - "What should I know about my metrics today?"
 - **Intelligent alerts** - Context-aware notifications with explanations
 - **Multi-metric analysis** - Ask questions across multiple metrics at once
