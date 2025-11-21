@@ -92,6 +92,7 @@ function Use-NodeJS {
   }
 
   Get-TableauMCP
+  Expand-TableauMCP
   New-EnvFile
   Start-Node
 }
@@ -158,6 +159,7 @@ function Use-Docker {
   if (Get-Command docker) {
     Write-Host "Docker is already installed" -ForegroundColor Green
     Get-TableauMCP
+    Expand-TableauMCP
     New-EnvFile
     New-Dockerfile
   }
@@ -181,6 +183,7 @@ function New-Dockerfile {
   $dockerfileContent = @"
 FROM node:22-alpine
 COPY ./build /build
+COPY ./node_modules /node_modules
 RUN chmod +x build/index.js
 ENTRYPOINT ["node", "build/index.js"]
 "@
@@ -204,19 +207,44 @@ ENTRYPOINT ["node", "build/index.js"]
 
 function Start-Docker {
   Write-Host "Starting the Docker container" -ForegroundColor Magenta
+  Start-Process -FilePath "docker" -ArgumentList "build -t tableau-mcp ." -NoNewWindow -Wait -PassThru
   Start-Process -FilePath "docker" -ArgumentList "run -p 3927:3927 -i --rm --env-file .env tableau-mcp" -NoNewWindow -Wait -PassThru
 }
 
 function Get-TableauMCP {
   $tableauMCPUrl = "https://github.com/tableau/tableau-mcp/releases/latest/download/tableau-mcp.zip"
-  $tableauMCP = Join-Path -Path $PWD -ChildPath "tableau-mcp.zip"
+  $tableauMCPZip = Join-Path -Path $PWD -ChildPath "tableau-mcp.zip"
+
+  if (Test-Path $tableauMCPZip) {
+    $choice = Read-Host "$($tableauMCPZip) already exists, skip re-download? (Y/n)"
+    if ($choice -ine 'n') {
+      return
+    }
+  }
 
   Write-Host "Downloading Tableau MCP from $tableauMCPUrl" -ForegroundColor Magenta
-  Write-Host "Downloading to $tableauMCP" -ForegroundColor Magenta
-  Invoke-WebRequest -Uri $tableauMCPUrl -OutFile $tableauMCP
+  Write-Host "Downloading to $tableauMCPZip" -ForegroundColor Magenta
+  Invoke-WebRequest -Uri $tableauMCPUrl -OutFile $tableauMCPZip
+}
+
+function Expand-TableauMCP {
+  $tableauMCPZip = Join-Path -Path $PWD -ChildPath "tableau-mcp.zip"
+
+  $buildPath = Join-Path -Path $PWD -ChildPath "build"
+  $nodeModulesPath = Join-Path -Path $PWD -ChildPath "node_modules"
+
+  if ((Test-Path $buildPath) -and (Test-Path $nodeModulesPath)) {
+    $choice = Read-Host "It looks like the Tableau MCP has already been extracted. Do you want to delete the existing files and extract it again? (y/N)"
+    if ($choice -ieq 'n') {
+      return
+    }
+  }
+
+  Remove-Item -Path $buildPath -Recurse -Force
+  Remove-Item -Path $nodeModulesPath -Recurse -Force
 
   Write-Host "Expanding archive to $PWD" -ForegroundColor Magenta
-  Expand-Archive -Path $tableauMCP -DestinationPath $PWD -Confirm
+  Expand-Archive -Path $tableauMCPZip -DestinationPath $PWD
 
   Write-Host "Tableau MCP extracted successfully!" -ForegroundColor Green
 }

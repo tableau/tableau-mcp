@@ -40,7 +40,7 @@ jobs:
           npm run build:manifest
           npm ci --omit=dev
           npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb
-          zip -r tableau-mcp.zip build/
+          zip -r tableau-mcp.zip build/ node_modules/ >/dev/null 2>&1
       - name: Upload artifacts to release
         run: |
           gh release upload ${{github.event.release.tag_name}} tableau-mcp.zip
