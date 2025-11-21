@@ -376,6 +376,42 @@ export const insightSchema = z.object({
   score: z.number(),
 })
 
+export const sourceInsightSchema = z.object({
+  type: z.string(),
+  version: z.number(),
+  content: z.string(),
+  markup: z.string(),
+  viz: z.any(),
+  facts: z.any(),
+  characterization: z.string(),
+  question: z.string(),
+  score: z.number(),
+  id: z.string(),
+  generation_id: z.string(),
+  insight_feedback_metadata: z.object({
+    candidate_definition_id: z.string(),
+    dimension_hash: z.string(),
+    score: z.number(),
+    type: z.string(),
+  }),
+  table: z.object({
+    columns: z.array(z.object({
+      label: z.string(),
+    })),
+    rows: z.array(z.object({
+      entries: z.array(z.object({
+        error: z.object({
+          code: z.string(),
+          message: z.string(),
+        }),
+        value: z.object({
+          formatted_value: z.string(),
+        }),
+      })),
+    })),
+  }),
+}).partial()
+
 export const popcBanInsightGroupSchema = z.object({
   type: z.string(),
   insights: z.array(
@@ -410,12 +446,15 @@ export const pulseBundleResponseSchema = z.object({
 
 
 export const pulseInsightBriefResponseSchema = z.object({
-  follow_up_questions: z.array(z.string()),
+  follow_up_questions: z.array(z.object({
+    content: z.string(),
+    metric_group_context_resolved: z.boolean().optional(),
+  })),
   generation_id: z.string(),
   group_context: metricGroupContextSchema,
   markup: z.string(),
   not_enough_information: z.boolean(),
-  source_insights: z.array(insightSchema),
+  source_insights: z.array(sourceInsightSchema),
 })
 
 

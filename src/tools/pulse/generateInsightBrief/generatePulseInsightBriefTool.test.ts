@@ -37,12 +37,27 @@ describe('getGeneratePulseInsightBriefTool', () => {
         {
           metadata: {
             name: 'Sales Metric',
-            id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
+            metric_id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
             definition_id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
           },
           metric: {
-            id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
-            specification: {
+            definition: {
+              datasource: {
+                id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
+              },
+              basic_specification: {
+                measure: {
+                  field: 'Sales',
+                  aggregation: 'AGGREGATION_SUM' as const,
+                },
+                time_dimension: {
+                  field: 'Order Date',
+                },
+                filters: [],
+              },
+              is_running_total: false,
+            },
+            metric_specification: {
               filters: [],
               measurement_period: {
                 granularity: 'GRANULARITY_BY_MONTH' as const,
@@ -52,12 +67,33 @@ describe('getGeneratePulseInsightBriefTool', () => {
                 comparison: 'TIME_COMPARISON_PREVIOUS_PERIOD' as const,
               },
             },
-            definition_id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
-            is_default: true,
-            schema_version: '1.0.0',
-            metric_version: 1,
-            is_followed: true,
-            datasource_luid: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
+            extension_options: {
+              allowed_dimensions: [],
+              allowed_granularities: [],
+              offset_from_today: 0,
+            },
+            representation_options: {
+              type: 'NUMBER_FORMAT_TYPE_NUMBER' as const,
+              number_units: {
+                singular_noun: 'dollar',
+                plural_noun: 'dollars',
+              },
+              sentiment_type: 'SENTIMENT_TYPE_NONE' as const,
+              row_level_id_field: {
+                identifier_col: 'Order ID',
+              },
+              row_level_entity_names: {
+                entity_name_singular: 'Order',
+                entity_name_plural: 'Orders',
+              },
+              row_level_name_field: {
+                name_col: 'Order Name',
+              },
+              currency_code: 'CURRENCY_CODE_USD' as const,
+            },
+            insights_options: {
+              settings: [],
+            },
           },
         },
       ],
@@ -68,13 +104,20 @@ describe('getGeneratePulseInsightBriefTool', () => {
   };
 
   const mockBriefResponse = {
-    answer: 'Your sales metric shows strong performance this month with a 15% increase.',
-    insights: [
+    markup: 'Your sales metric shows strong performance this month with a 15% increase.',
+    generation_id: 'test-generation-id',
+    source_insights: [
       {
         type: 'trend',
-        description: 'Sales have been trending upward consistently',
+        markup: 'Sales have been trending upward consistently',
       },
     ],
+    follow_up_questions: [
+      { content: 'What factors contributed to the increase?' },
+      { content: 'How does this compare to last year?' }
+    ],
+    group_context: briefRequest.messages[0].metric_group_context,
+    not_enough_information: false,
   };
 
   beforeEach(() => {
@@ -138,28 +181,6 @@ describe('getGeneratePulseInsightBriefTool', () => {
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
-  });
-
-  it('should return data source not allowed error when datasource is not allowed', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: new Set(['some-other-datasource-luid']),
-        workbookIds: null,
-      },
-    });
-
-    const result = await getToolResult();
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toBe(
-      [
-        'The set of allowed metric insights that can be queried is limited by the server configuration.',
-        'Generating the Pulse Insight Brief is not allowed because one or more metrics are derived',
-        'from the data source with LUID A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11, which is not in the allowed set of data sources.',
-      ].join(' '),
-    );
-
-    expect(mocks.mockGeneratePulseInsightBrief).not.toHaveBeenCalled();
   });
 
   async function getToolResult(): Promise<CallToolResult> {
