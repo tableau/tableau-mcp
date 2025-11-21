@@ -20,7 +20,7 @@ function Show-Menu {
   $menuItems[$choice - 1].action.Invoke()
 }
 
-function Install-NodeJS {
+function Use-NodeJS {
   $choice = Read-Host "Do you already have Node.js installed? (Y/n)"
   if ($choice -ine 'n') {
     Write-Host "Node.js is already installed" -ForegroundColor Green
@@ -99,6 +99,32 @@ function Get-NodeJS {
   Invoke-WebRequest -Uri $nodejsUrl -OutFile $nodejsMsi
 }
 
+function Use-Docker {
+  Write-Host "Checking if Docker is installed..." -ForegroundColor Magenta
+  if (Get-Command docker) {
+    Write-Host "Docker is already installed" -ForegroundColor Green
+    Get-TableauMCP
+  }
+  else {
+    Write-Host "Docker is not installed. Please install Docker Desktop from https://docs.docker.com/desktop/setup/install/windows-install/" -ForegroundColor Red
+    exit 1
+  }
+}
+
+function Get-TableauMCP {
+  $tableauMCPUrl = "https://github.com/tableau/tableau-mcp/releases/latest/download/tableau-mcp.zip"
+  $tableauMCP = Join-Path -Path $PWD -ChildPath "tableau-mcp.zip"
+
+  Write-Host "Downloading Tableau MCP from $tableauMCPUrl" -ForegroundColor Magenta
+  Write-Host "Downloading to $tableauMCP" -ForegroundColor Magenta
+  Invoke-WebRequest -Uri $tableauMCPUrl -OutFile $tableauMCP
+
+  Write-Host "Expanding archive to $PWD" -ForegroundColor Magenta
+  Expand-Archive -Path $tableauMCP -DestinationPath $PWD
+
+  Write-Host "Tableau MCP extracted successfully!" -ForegroundColor Green
+}
+
 Clear-Host
 Write-Host "Tableau MCP Server Installer v$installerVersion" -ForegroundColor Cyan
 Write-Host
@@ -108,10 +134,10 @@ Write-Host "How do you plan to run the Tableau MCP Server?" -ForegroundColor Yel
 Show-Menu @(
   @{
     label  = "Node.js"
-    action = { Install-NodeJS }
+    action = { Use-NodeJS }
   }
   @{
     label  = "Docker"
-    action = { Install-Docker }
+    action = { Use-Docker }
   }
 )
