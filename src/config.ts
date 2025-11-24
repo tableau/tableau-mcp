@@ -14,7 +14,7 @@ const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
 const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
-const authTypes = ['pat', 'direct-trust', 'oauth', 'cookie'] as const;
+const authTypes = ['pat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
 
 function isAuthType(auth: unknown): auth is AuthType {

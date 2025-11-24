@@ -5,6 +5,8 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error';
 
 import { getConfig } from '../../config.js';
+import { RestApi } from '../../sdks/tableau/restApi.js';
+import { User } from '../../sdks/tableau/types/user.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
@@ -126,6 +128,57 @@ export function token(
           });
           return;
         }
+        case 'tableau_access_token': {
+          // Handle Tableau access token grant type.
+          const tableauAccessToken =
+            req.cookies.workgroup_session_id || req.headers['x-tableau-auth'] || '';
+
+          if (!tableauAccessToken) {
+            res.status(400).json({
+              error: 'invalid_request',
+              error_description: 'Tableau access token is required',
+            });
+            return;
+          }
+
+          const restApi = new RestApi(config.server);
+          restApi.setCredentials(tableauAccessToken, 'unknown user id');
+          const sessionResult = await restApi.serverMethods.getCurrentServerSession();
+          if (sessionResult.isErr()) {
+            if (sessionResult.error.type === 'unauthorized') {
+              res.status(401).json({
+                error: 'unauthorized',
+                error_description: `Unable to get the Tableau server session. Error: ${JSON.stringify(sessionResult.error)}`,
+              });
+            } else {
+              res.status(500).json({
+                error: 'server_error',
+                error_description:
+                  'Internal server error during authorization. Unable to get the Tableau server session. Contact your administrator.',
+              });
+            }
+
+            return;
+          }
+
+          const refreshTokenId = randomBytes(32).toString('hex');
+          const accessToken = await createAccessTokenFromTableauAccessToken({
+            user: { name: sessionResult.value.user.name, id: sessionResult.value.user.id },
+            clientId: 'mcp-public-client',
+            tableauAccessToken,
+            tableauServer: config.server,
+            publicKey,
+          });
+
+          res.json({
+            access_token: accessToken,
+            token_type: 'Bearer',
+            expires_in: config.oauth.accessTokenTimeoutMs / 1000,
+            refresh_token: refreshTokenId,
+          });
+
+          return;
+        }
         case 'refresh_token': {
           // Handle refresh token
           const { refreshToken } = result.data;
@@ -240,7 +293,6 @@ async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject)
           tableauAccessToken: tokenData.tokens.accessToken,
           tableauRefreshToken: tokenData.tokens.refreshToken,
           tableauExpiresAt: Math.floor(Date.now() / 1000) + tokenData.tokens.expiresInSeconds,
-          tableauUserId: tokenData.user.id,
         }
       : {}),
   });
@@ -265,6 +317,40 @@ async function createClientCredentialsAccessToken(
     exp: Math.floor((Date.now() + config.oauth.accessTokenTimeoutMs) / 1000),
     aud: AUDIENCE,
     iss: config.oauth.issuer,
+  });
+
+  const jwe = await new CompactEncrypt(new TextEncoder().encode(payload))
+    .setProtectedHeader({ alg: 'RSA-OAEP-256', enc: 'A256GCM' })
+    .encrypt(publicKey);
+
+  return jwe;
+}
+
+async function createAccessTokenFromTableauAccessToken({
+  user,
+  clientId,
+  tableauAccessToken,
+  tableauServer,
+  publicKey,
+}: {
+  user: User;
+  clientId: string;
+  tableauAccessToken: string;
+  tableauServer: string;
+  publicKey: KeyObject;
+}): Promise<string> {
+  const config = getConfig();
+
+  const payload = JSON.stringify({
+    sub: user.name,
+    clientId,
+    tableauServer,
+    tableauUserId: user.id,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor((Date.now() + config.oauth.accessTokenTimeoutMs) / 1000),
+    aud: AUDIENCE,
+    iss: config.oauth.issuer,
+    tableauAccessToken: tableauAccessToken,
   });
 
   const jwe = await new CompactEncrypt(new TextEncoder().encode(payload))

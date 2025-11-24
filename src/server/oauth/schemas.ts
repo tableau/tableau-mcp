@@ -37,6 +37,9 @@ export const mcpTokenSchema = z
       z.object({
         grant_type: z.literal('client_credentials'),
       }),
+      z.object({
+        grant_type: z.literal('tableau_access_token'),
+      }),
     ],
     {
       errorMap: (issue, ctx) => ({
@@ -104,8 +107,8 @@ export const mcpAccessTokenUserOnlySchema = z.object({
 
 export const mcpAccessTokenSchema = mcpAccessTokenUserOnlySchema.extend({
   tableauAccessToken: requiredString('tableauAccessToken'),
-  tableauRefreshToken: requiredString('tableauRefreshToken'),
-  tableauExpiresAt: z.number().int().nonnegative(),
+  tableauRefreshToken: z.string().optional(),
+  tableauExpiresAt: z.number().int().nonnegative().optional(),
   // Required because it is always available when a user's Tableau access token is available
   tableauUserId: requiredString('tableauUserId'),
 });
@@ -119,7 +122,7 @@ export const tableauAuthInfoSchema = z
     userId: z.string(),
     server: z.string(),
     accessToken: z.string(),
-    refreshToken: z.string(),
+    refreshToken: z.string().optional(),
   })
   .partial();
 
