@@ -1,9 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
 
-import { getConfig } from '../config.js';
-import { RestApi } from '../sdks/tableau/restApi.js';
-import { AuthenticatedRequest } from './oauth/types.js';
-
 /**
  * Validate MCP protocol version
  */
