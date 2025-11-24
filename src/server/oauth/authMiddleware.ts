@@ -6,6 +6,8 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error';
 
 import { getConfig } from '../../config.js';
+import { signInRequestSchema } from '../../sdks/tableau/apis/authenticationApi.js';
+import { RestApi } from '../../sdks/tableau/restApi.js';
 import { AUDIENCE } from './provider.js';
 import { mcpAccessTokenSchema, mcpAccessTokenUserOnlySchema, TableauAuthInfo } from './schemas.js';
 import { AuthenticatedRequest } from './types.js';
@@ -25,6 +27,48 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
     res: express.Response,
     next: express.NextFunction,
   ): Promise<void> => {
+    const signInRequestResult = signInRequestSchema.safeParse(req.body);
+    if (signInRequestResult.success) {
+      let tableauAccessToken = '';
+      const credentials = signInRequestResult.data.credentials;
+      if (credentials) {
+        const restApi = new RestApi(getConfig().server);
+        tableauAccessToken = (
+          await restApi.authenticationMethods.signIn({
+            credentials,
+          })
+        ).token;
+      }
+
+      tableauAccessToken =
+        tableauAccessToken ||
+        req.cookies.workgroup_session_id ||
+        req.headers['x-tableau-auth'] ||
+        '';
+
+      if (tableauAccessToken) {
+        const restApi = new RestApi(getConfig().server);
+        restApi.setCredentials(tableauAccessToken, 'unknown user id');
+        const sessionResult = await restApi.serverMethods.getCurrentServerSession();
+        if (sessionResult.isOk()) {
+          req.auth = {
+            token: '',
+            clientId: '',
+            scopes: [],
+            expiresAt: Math.floor(Date.now() / 1000) + 3600,
+            extra: {
+              username: sessionResult.value.user.name,
+              userId: sessionResult.value.user.id,
+              server: getConfig().server,
+              token: tableauAccessToken,
+            },
+          };
+          next();
+          return;
+        }
+      }
+    }
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
