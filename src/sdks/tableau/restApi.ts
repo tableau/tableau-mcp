@@ -73,7 +73,7 @@ export class RestApi {
     return this.creds.site.id;
   }
 
-  private get authenticationMethods(): AuthenticationMethods {
+  get authenticationMethods(): AuthenticationMethods {
     if (!this._authenticationMethods) {
       this._authenticationMethods = new AuthenticationMethods(this._baseUrl);
       this._addInterceptors(this._baseUrl, this._authenticationMethods.interceptors);
@@ -173,7 +173,8 @@ export class RestApi {
   }
 
   signIn = async (authConfig: AuthConfig): Promise<void> => {
-    this._creds = await this.authenticationMethods.signIn(authConfig);
+    const request = await this.authenticationMethods.getAuthRequestFromAuthConfig(authConfig);
+    this._creds = await this.authenticationMethods.signIn(request);
   };
 
   signOut = async (): Promise<void> => {

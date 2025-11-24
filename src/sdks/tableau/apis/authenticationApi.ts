@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { credentialsSchema } from '../types/credentials.js';
 
-const signInRequestSchema = z.object({
+export const signInRequestSchema = z.object({
   credentials: z
     .object({
       site: z.object({
@@ -23,6 +23,8 @@ const signInRequestSchema = z.object({
         ),
     ),
 });
+
+export type SignInRequest = z.infer<typeof signInRequestSchema>;
 
 const signInEndpoint = makeEndpoint({
   method: 'post',

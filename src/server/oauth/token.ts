@@ -130,8 +130,22 @@ export function token(
         }
         case 'tableau_access_token': {
           // Handle Tableau access token grant type.
-          const tableauAccessToken =
-            req.cookies.workgroup_session_id || req.headers['x-tableau-auth'] || '';
+          let tableauAccessToken = '';
+          const credentials = result.data.credentials;
+          if (credentials) {
+            const restApi = new RestApi(config.server);
+            tableauAccessToken = (
+              await restApi.authenticationMethods.signIn({
+                credentials,
+              })
+            ).token;
+          }
+
+          tableauAccessToken =
+            tableauAccessToken ||
+            req.cookies.workgroup_session_id ||
+            req.headers['x-tableau-auth'] ||
+            '';
 
           if (!tableauAccessToken) {
             res.status(400).json({

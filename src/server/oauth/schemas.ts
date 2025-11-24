@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { signInRequestSchema } from '../../sdks/tableau/apis/authenticationApi.js';
 import { requiredString } from '../../utils/requiredString.js';
 
 export const mcpAuthorizeSchema = z
@@ -39,6 +40,7 @@ export const mcpTokenSchema = z
       }),
       z.object({
         grant_type: z.literal('tableau_access_token'),
+        credentials: signInRequestSchema.shape.credentials.optional(),
       }),
     ],
     {
@@ -70,6 +72,14 @@ export const mcpTokenSchema = z
         code: data.code,
         redirectUri: data.redirect_uri,
         codeVerifier: data.code_verifier,
+        ...clientIdSecretPair,
+      };
+    }
+
+    if (data.grant_type === 'tableau_access_token') {
+      return {
+        grantType: data.grant_type,
+        credentials: data.credentials,
         ...clientIdSecretPair,
       };
     }

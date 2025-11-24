@@ -1,7 +1,7 @@
 import { Zodios } from '@zodios/core';
 
 import { getJwt } from '../../../utils/getJwt.js';
-import { authenticationApis } from '../apis/authenticationApi.js';
+import { authenticationApis, SignInRequest } from '../apis/authenticationApi.js';
 import { AuthConfig } from '../authConfig.js';
 import { Credentials } from '../types/credentials.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
@@ -19,44 +19,46 @@ export default class AuthenticationMethods extends Methods<typeof authentication
     super(new Zodios(baseUrl, authenticationApis));
   }
 
+  getAuthRequestFromAuthConfig = async (authConfig: AuthConfig): Promise<SignInRequest> => {
+    return {
+      credentials: {
+        site: {
+          contentUrl: authConfig.siteName,
+        },
+        ...(await (async () => {
+          switch (authConfig.type) {
+            case 'pat':
+              return {
+                personalAccessTokenName: authConfig.patName,
+                personalAccessTokenSecret: authConfig.patValue,
+              };
+            case 'direct-trust':
+              return {
+                jwt: await getJwt({
+                  username: authConfig.username,
+                  connectedApp: {
+                    clientId: authConfig.clientId,
+                    secretId: authConfig.secretId,
+                    secretValue: authConfig.secretValue,
+                  },
+                  scopes: authConfig.scopes,
+                  additionalPayload: authConfig.additionalPayload,
+                }),
+              };
+          }
+        })()),
+      },
+    };
+  };
+
   /**
    * Signs you in as a user on the specified site on Tableau Server or Tableau Cloud.
    *
-   * @param {AuthConfig} authConfig - The authentication configuration
+   * @param {AuthConfig} request - The sign in request body
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#sign_in
    */
-  signIn = async (authConfig: AuthConfig): Promise<Credentials> => {
-    return (
-      await this._apiClient.signIn({
-        credentials: {
-          site: {
-            contentUrl: authConfig.siteName,
-          },
-          ...(await (async () => {
-            switch (authConfig.type) {
-              case 'pat':
-                return {
-                  personalAccessTokenName: authConfig.patName,
-                  personalAccessTokenSecret: authConfig.patValue,
-                };
-              case 'direct-trust':
-                return {
-                  jwt: await getJwt({
-                    username: authConfig.username,
-                    connectedApp: {
-                      clientId: authConfig.clientId,
-                      secretId: authConfig.secretId,
-                      secretValue: authConfig.secretValue,
-                    },
-                    scopes: authConfig.scopes,
-                    additionalPayload: authConfig.additionalPayload,
-                  }),
-                };
-            }
-          })()),
-        },
-      })
-    ).credentials;
+  signIn = async (request: SignInRequest): Promise<Credentials> => {
+    return (await this._apiClient.signIn(request)).credentials;
   };
 }
 
