@@ -125,14 +125,6 @@ describe('getGeneratePulseInsightBriefTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      disableMetadataApiRequests: false,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-      },
-    });
   });
 
   it('should have correct tool name', () => {

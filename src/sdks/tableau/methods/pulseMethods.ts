@@ -155,7 +155,7 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
         briefRequest,
         this.authHeader,
       );
-      return response ?? {};
+      return response;
     });
   };
 
