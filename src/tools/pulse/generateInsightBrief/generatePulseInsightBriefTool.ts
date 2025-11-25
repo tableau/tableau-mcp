@@ -208,7 +208,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
               if (message.metric_group_context) {
                 for (const metricContext of message.metric_group_context) {
                   const datasourceLuid = metricContext.metric.definition.datasource.id;
-                  
+
                   if (!datasourceIds.has(datasourceLuid)) {
                     return new Err({
                       type: 'datasource-not-allowed',
