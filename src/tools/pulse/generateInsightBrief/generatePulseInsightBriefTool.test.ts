@@ -2,10 +2,8 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../../server.js';
-import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
 import { getGeneratePulseInsightBriefTool } from './generatePulseInsightBriefTool.js';
 
-const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
 const mocks = vi.hoisted(() => ({
   mockGeneratePulseInsightBrief: vi.fn(),
   mockGetConfig: vi.fn(),
@@ -124,7 +122,6 @@ describe('getGeneratePulseInsightBriefTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetResourceAccessCheckerSingleton();
     mocks.mockGetConfig.mockReturnValue({
       boundedContext: {
         projectIds: null,
