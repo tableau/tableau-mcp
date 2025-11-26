@@ -2,23 +2,27 @@ export class ExpiringMap<K, V> extends Map<K, V> {
   private timeouts: Map<K, NodeJS.Timeout>;
   private expirationTimeMs: number;
 
-  constructor({ expirationTimeMs }: { expirationTimeMs: number }) {
+  constructor({ defaultExpirationTimeMs }: { defaultExpirationTimeMs: number }) {
     super();
 
-    if (expirationTimeMs <= 0) {
+    if (defaultExpirationTimeMs <= 0) {
       throw new Error('Expiration time must be greater than 0');
     }
 
-    if (expirationTimeMs > 2 ** 31 - 1) {
+    if (defaultExpirationTimeMs > 2 ** 31 - 1) {
       // https://developer.mozilla.org/en-US/docs/Web/API/Window/setTimeout#maximum_delay_value
       throw new Error(`Expiration time must be at most ${2 ** 31 - 1}`);
     }
 
     this.timeouts = new Map();
-    this.expirationTimeMs = expirationTimeMs;
+    this.expirationTimeMs = defaultExpirationTimeMs;
   }
 
-  set = (key: K, value: V): this => {
+  get defaultExpirationTimeMs(): number {
+    return this.expirationTimeMs;
+  }
+
+  set = (key: K, value: V, expirationTimeMs = this.expirationTimeMs): this => {
     // Clear any existing timeout for this key
     const currentTimeout = this.timeouts.get(key);
     if (currentTimeout) {
@@ -30,7 +34,7 @@ export class ExpiringMap<K, V> extends Map<K, V> {
     // Set a timeout to delete the key
     const timeout = setTimeout(() => {
       this.delete(key);
-    }, this.expirationTimeMs);
+    }, expirationTimeMs);
 
     this.timeouts.set(key, timeout);
 

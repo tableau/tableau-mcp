@@ -27,7 +27,8 @@ export const getTableauServerVersion = async (server: string): Promise<ProductVe
 
   if (!tableauServerVersions) {
     tableauServerVersions = new ExpiringMap<string, ProductVersion>({
-      expirationTimeMs: getConfig().tableauServerVersionCheckIntervalInHours * 60 * 60 * 1000,
+      defaultExpirationTimeMs:
+        getConfig().tableauServerVersionCheckIntervalInHours * 60 * 60 * 1000,
     });
   }
 

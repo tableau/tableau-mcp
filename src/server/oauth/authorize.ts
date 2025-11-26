@@ -1,13 +1,20 @@
 import { randomBytes, randomUUID } from 'crypto';
 import express from 'express';
+import { isIP } from 'net';
+import { isSSRFSafeURL } from 'ssrfcheck';
+import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error';
 
-import { getConfig } from '../../config.js';
+import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
+import { axios, AxiosResponse } from '../../utils/axios.js';
+import { parseUrl } from '../../utils/isUrl.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
+import { clientMetadataCache } from './clientMetadataCache.js';
+import { dnsResolver } from './dnsResolver.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
-import { mcpAuthorizeSchema } from './schemas.js';
+import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
 import { PendingAuthorization } from './types.js';
 
 /**
@@ -23,7 +30,7 @@ export function authorize(
 ): void {
   const config = getConfig();
 
-  app.get('/oauth/authorize', (req, res) => {
+  app.get('/oauth/authorize', async (req, res) => {
     const result = mcpAuthorizeSchema.safeParse(req.query);
 
     if (!result.success) {
@@ -34,10 +41,40 @@ export function authorize(
       return;
     }
 
-    const { clientId, redirectUri, responseType, codeChallenge, codeChallengeMethod, state } =
+    const { client_id, redirect_uri, response_type, code_challenge, code_challenge_method, state } =
       result.data;
 
-    if (responseType !== 'code') {
+    const clientIdUrl = parseUrl(client_id);
+    if (clientIdUrl) {
+      // Client ID is a URL, so we need to attempt to fetch the client metadata from the URL
+      const clientResult = await getClientFromMetadataDoc(clientIdUrl);
+      if (clientResult.isErr()) {
+        res.status(400).json(clientResult.error);
+        return;
+      }
+
+      if (clientResult.value) {
+        const { redirect_uris, response_types } = clientResult.value;
+
+        if (response_types && !response_types.find((type) => type === response_type)) {
+          res.status(400).json({
+            error: 'unsupported_response_type',
+            error_description: `Unsupported response type: ${response_type}`,
+          });
+          return;
+        }
+
+        if (redirect_uris && !redirect_uris.includes(redirect_uri)) {
+          res.status(400).json({
+            error: 'invalid_request',
+            error_description: `Invalid redirect URI: ${redirect_uri}`,
+          });
+          return;
+        }
+      }
+    }
+
+    if (response_type !== 'code') {
       res.status(400).json({
         error: 'unsupported_response_type',
         error_description: 'Only authorization code flow is supported',
@@ -45,7 +82,7 @@ export function authorize(
       return;
     }
 
-    if (codeChallengeMethod !== 'S256') {
+    if (code_challenge_method !== 'S256') {
       res.status(400).json({
         error: 'invalid_request',
         error_description: 'Only S256 code challenge method is supported',
@@ -53,10 +90,10 @@ export function authorize(
       return;
     }
 
-    if (!isValidRedirectUri(redirectUri)) {
+    if (!isValidRedirectUri(redirect_uri)) {
       res.status(400).json({
         error: 'invalid_request',
-        error_description: `Invalid redirect URI: ${redirectUri}`,
+        error_description: `Invalid redirect URI: ${redirect_uri}`,
       });
       return;
     }
@@ -71,9 +108,9 @@ export function authorize(
     const tableauCodeVerifier = randomBytes(numCodeVerifierBytes).toString('hex');
     const tableauCodeChallenge = generateCodeChallenge(tableauCodeVerifier);
     pendingAuthorizations.set(authKey, {
-      clientId,
-      redirectUri,
-      codeChallenge,
+      clientId: client_id,
+      redirectUri: redirect_uri,
+      codeChallenge: code_challenge,
       state: state ?? '',
       tableauState,
       tableauClientId,
@@ -94,11 +131,122 @@ export function authorize(
     oauthUrl.searchParams.set('state', `${authKey}:${tableauState}`);
     oauthUrl.searchParams.set('device_id', randomUUID());
     oauthUrl.searchParams.set('target_site', config.siteName);
-    oauthUrl.searchParams.set('device_name', getDeviceName(redirectUri, state ?? ''));
+    oauthUrl.searchParams.set('device_name', getDeviceName(redirect_uri, state ?? ''));
     oauthUrl.searchParams.set('client_type', 'tableau-mcp');
 
     res.redirect(oauthUrl.toString());
   });
+}
+
+// https://client.dev/servers
+async function getClientFromMetadataDoc(
+  clientMetadataUrl: URL,
+): Promise<Result<ClientMetadata, { error: string; error_description: string }>> {
+  const cacheKey = clientMetadataUrl.toString();
+  const cache = clientMetadataCache.get(cacheKey);
+  if (cache) {
+    return Ok(cache);
+  }
+
+  const originalHostname = clientMetadataUrl.hostname;
+  if (!isIP(clientMetadataUrl.hostname)) {
+    // Resolve the IP from DNS
+    const resolvedIps = await dnsResolver.resolve4(clientMetadataUrl.hostname);
+    let ipAddress = resolvedIps.find(Boolean);
+    if (!ipAddress) {
+      const resolvedIps = await dnsResolver.resolve6(clientMetadataUrl.hostname);
+      ipAddress = resolvedIps.find(Boolean);
+      if (!ipAddress) {
+        return Err({
+          error: 'invalid_request',
+          error_description: 'Client URL is not valid',
+        });
+      }
+    }
+    // Replace the hostname with the resolved IP Address
+    clientMetadataUrl.hostname = ipAddress;
+  }
+
+  const isSafe = isSSRFSafeURL(clientMetadataUrl.toString(), {
+    allowedProtocols: ['https'],
+    autoPrependProtocol: false,
+  });
+
+  if (!isSafe) {
+    return Err({
+      error: 'invalid_request',
+      error_description: 'Client Metadata URL is not allowed',
+    });
+  }
+
+  let response: AxiosResponse;
+  try {
+    response = await axios.get(clientMetadataUrl.toString(), {
+      timeout: 5000,
+      maxContentLength: 5 * 1024, // 5 KB
+      maxRedirects: 3,
+      headers: {
+        Accept: 'application/json',
+        Host: originalHostname,
+      },
+    });
+  } catch {
+    return Err({
+      error: 'invalid_request',
+      error_description: 'Unable to fetch client metadata',
+    });
+  }
+
+  const contentType = response.headers['Content-Type'] || '';
+  if (typeof contentType !== 'string' || !contentType) {
+    return Err({
+      error: 'invalid_client_metadata',
+      error_description: 'Client Metadata URL must return a valid Content-Type header',
+    });
+  }
+
+  const contentTypes = contentType.split(';').map((s) => s.trim());
+  if (!contentTypes.includes('application/json')) {
+    return Err({
+      error: 'invalid_client_metadata',
+      error_description: 'Client Metadata URL must return a JSON response',
+    });
+  }
+
+  const clientMetadataResult = cimdMetadataSchema.safeParse(response.data);
+  if (!clientMetadataResult.success) {
+    return Err({
+      error: 'invalid_client_metadata',
+      error_description: `Client metadata is invalid: ${fromError(clientMetadataResult.error).toString()}`,
+    });
+  }
+
+  if (clientMetadataResult.data.client_id !== clientMetadataUrl.toString()) {
+    return Err({
+      error: 'invalid_client_metadata',
+      error_description: 'Client ID mismatch',
+    });
+  }
+
+  let cacheControl = response.headers['Cache-Control'] || '';
+  if (typeof cacheControl !== 'string') {
+    cacheControl = '';
+  }
+  const cacheControlMaxAge = cacheControl
+    .split(';')
+    .find((s) => s.trim().startsWith('max-age='))
+    ?.split('=')[1];
+
+  let cacheExpiryMilliseconds = clientMetadataCache.defaultExpirationTimeMs;
+  if (cacheControlMaxAge) {
+    const cacheControlMaxAgeSeconds = parseInt(cacheControlMaxAge);
+    if (!isNaN(cacheControlMaxAgeSeconds)) {
+      cacheExpiryMilliseconds = Math.min(ONE_DAY_IN_MS, cacheControlMaxAgeSeconds * 1000);
+    }
+  }
+
+  clientMetadataCache.set(cacheKey, clientMetadataResult.data, cacheExpiryMilliseconds);
+  return Ok(clientMetadataResult.data);
 }
 
 function getDeviceName(redirectUri: string, state: string): string {

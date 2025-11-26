@@ -9,10 +9,11 @@ import invariant from './utils/invariant.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
-const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
-const ONE_HOUR_IN_MS = 60 * 60 * 1000;
-const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
-const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
+export const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+export const ONE_HOUR_IN_MS = 60 * 60 * 1000;
+export const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
+export const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
+export const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
 const authTypes = ['pat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
