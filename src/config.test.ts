@@ -54,11 +54,12 @@ describe('Config', () => {
       OAUTH_REDIRECT_URI: undefined,
       OAUTH_JWE_PRIVATE_KEY: undefined,
       OAUTH_JWE_PRIVATE_KEY_PATH: undefined,
-      OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: undefined,
+      OAUTH_CIMD_DNS_SERVERS: undefined,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: undefined,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: undefined,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: undefined,
       OAUTH_CLIENT_ID_SECRET_PAIRS: undefined,
+      OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: undefined,
     };
   });
 
@@ -901,6 +902,7 @@ describe('Config', () => {
       jwePrivateKey: '',
       jwePrivateKeyPath: defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH,
       jwePrivateKeyPassphrase: undefined,
+      dnsServers: ['1.1.1.1'],
       ...defaultOAuthTimeoutMs,
     } as const;
 
@@ -919,6 +921,7 @@ describe('Config', () => {
         jwePrivateKey: '',
         jwePrivateKeyPath: '',
         jwePrivateKeyPassphrase: undefined,
+        dnsServers: ['1.1.1.1'],
         ...defaultOAuthTimeoutMs,
       });
     });
@@ -1159,6 +1162,17 @@ describe('Config', () => {
         client1: 'secret1',
         client2: 'secret2',
       });
+    });
+
+    it('should set dnsServers to the specified value when OAUTH_CIMD_DNS_SERVERS is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_CIMD_DNS_SERVERS: '8.8.8.8,8.8.4.4',
+      };
+
+      const config = new Config();
+      expect(config.oauth.dnsServers).toEqual(['8.8.8.8', '8.8.4.4']);
     });
   });
 
