@@ -69,6 +69,7 @@ export class Config {
     accessTokenTimeoutMs: number;
     refreshTokenTimeoutMs: number;
     clientIdSecretPairs: Record<string, string> | null;
+    dnsServers: string[];
   };
 
   constructor() {
@@ -112,6 +113,7 @@ export class Config {
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
+      OAUTH_CIMD_DNS_SERVERS: dnsServers,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
@@ -177,6 +179,9 @@ export class Config {
       jwePrivateKey: oauthJwePrivateKey ?? '',
       jwePrivateKeyPath: oauthJwePrivateKeyPath ?? '',
       jwePrivateKeyPassphrase: oauthJwePrivateKeyPassphrase || undefined,
+      dnsServers: dnsServers
+        ? dnsServers.split(',').map((ip) => ip.trim())
+        : ['1.1.1.1' /* Cloudflare public DNS */],
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
         defaultValue: TEN_MINUTES_IN_MS,
         minValue: 0,

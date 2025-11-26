@@ -202,6 +202,25 @@ The passphrase for the private key if it is encrypted.
 
 <hr />
 
+### `OAUTH_CIMD_DNS_SERVERS`
+
+The Tableau MCP server supports MCP clients that register using a Client ID Metadata Document (CIMD)
+URL. Part of this process requires resolving the IP address of the host of the document to protect
+against DNS rebinding and Server-Side Request Forgery (SSRF) attacks.
+
+By default, the MCP server will use
+[Cloudflare's Public DNS](https://developers.cloudflare.com/1.1.1.1/ip-addresses/) (1.1.1.1) but you
+can override this using the `OAUTH_CIMD_DNS_SERVERS` environment variable.
+
+- Default: `1.1.1.1`
+- Format is a comma-separated list of IP addresses.
+- Example: `8.8.8.8,8.8.4.4` (Google's Public DNS)
+
+References:
+
+- https://blog.modelcontextprotocol.io/posts/client_registration/
+- https://client.dev/
+
 ### `OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS`
 
 The timeout for the OAuth authorization codes.

@@ -337,6 +337,15 @@ const envVars = {
     required: false,
     sensitive: true,
   },
+  OAUTH_CIMD_DNS_SERVERS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth CIMD DNS Servers',
+    description:
+      'A comma-separated list of DNS server IP addresses to resolve the IP addresses of the client metadata document URLs.',
+    required: false,
+    sensitive: false,
+  },
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: {
     includeInUserConfig: false,
     type: 'number',
