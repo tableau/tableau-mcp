@@ -181,18 +181,139 @@ describe('getGeneratePulseInsightBriefTool', () => {
     expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
   });
 
-  it('should return an error when datasource is not in the allowed set', async () => {
+  it('should filter out metrics when datasource is not in the allowed set', async () => {
+    const allowedDatasourceId = 'ALLOWED-DATASOURCE-ID';
+    const notAllowedDatasourceId = 'NOT-ALLOWED-DATASOURCE-ID';
+
+    const twoMetricRequest = {
+      ...briefRequest,
+      messages: [
+        {
+          ...briefRequest.messages[0],
+          metric_group_context: [
+            {
+              metadata: {
+                name: 'Allowed Metric',
+                metric_id: 'METRIC-1',
+                definition_id: 'DEF-1',
+              },
+              metric: {
+                definition: {
+                  datasource: { id: allowedDatasourceId },
+                  basic_specification: {
+                    measure: { field: 'Sales', aggregation: 'AGGREGATION_SUM' as const },
+                    time_dimension: { field: 'Order Date' },
+                    filters: [],
+                  },
+                  is_running_total: false,
+                },
+                metric_specification: {
+                  filters: [],
+                  measurement_period: {
+                    granularity: 'GRANULARITY_BY_MONTH' as const,
+                    range: 'RANGE_CURRENT_PARTIAL' as const,
+                  },
+                  comparison: { comparison: 'TIME_COMPARISON_PREVIOUS_PERIOD' as const },
+                },
+                extension_options: {
+                  allowed_dimensions: [],
+                  allowed_granularities: [],
+                  offset_from_today: 0,
+                },
+                representation_options: {
+                  type: 'NUMBER_FORMAT_TYPE_NUMBER' as const,
+                  number_units: { singular_noun: 'unit', plural_noun: 'units' },
+                  sentiment_type: 'SENTIMENT_TYPE_NONE' as const,
+                  row_level_id_field: { identifier_col: 'ID' },
+                  row_level_entity_names: {
+                    entity_name_singular: 'Item',
+                    entity_name_plural: 'Items',
+                  },
+                  row_level_name_field: { name_col: 'Name' },
+                  currency_code: 'CURRENCY_CODE_USD' as const,
+                },
+                insights_options: { settings: [] },
+              },
+            },
+            {
+              metadata: {
+                name: 'Not Allowed Metric',
+                metric_id: 'METRIC-2',
+                definition_id: 'DEF-2',
+              },
+              metric: {
+                definition: {
+                  datasource: { id: notAllowedDatasourceId },
+                  basic_specification: {
+                    measure: { field: 'Profit', aggregation: 'AGGREGATION_SUM' as const },
+                    time_dimension: { field: 'Order Date' },
+                    filters: [],
+                  },
+                  is_running_total: false,
+                },
+                metric_specification: {
+                  filters: [],
+                  measurement_period: {
+                    granularity: 'GRANULARITY_BY_MONTH' as const,
+                    range: 'RANGE_CURRENT_PARTIAL' as const,
+                  },
+                  comparison: { comparison: 'TIME_COMPARISON_PREVIOUS_PERIOD' as const },
+                },
+                extension_options: {
+                  allowed_dimensions: [],
+                  allowed_granularities: [],
+                  offset_from_today: 0,
+                },
+                representation_options: {
+                  type: 'NUMBER_FORMAT_TYPE_NUMBER' as const,
+                  number_units: { singular_noun: 'unit', plural_noun: 'units' },
+                  sentiment_type: 'SENTIMENT_TYPE_NONE' as const,
+                  row_level_id_field: { identifier_col: 'ID' },
+                  row_level_entity_names: {
+                    entity_name_singular: 'Item',
+                    entity_name_plural: 'Items',
+                  },
+                  row_level_name_field: { name_col: 'Name' },
+                  currency_code: 'CURRENCY_CODE_USD' as const,
+                },
+                insights_options: { settings: [] },
+              },
+            },
+          ],
+        },
+      ],
+    };
+
     mocks.mockGetConfig.mockReturnValue({
       boundedContext: {
         projectIds: null,
-        datasourceIds: new Set(['some-other-datasource-luid']),
+        datasourceIds: new Set([allowedDatasourceId]),
         workbookIds: null,
       },
     });
-    const result = await getToolResult();
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain(
-      'The set of allowed metric insights that can be queried is limited by the server configuration.',
+    mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Ok(mockBriefResponse));
+
+    const tool = getGeneratePulseInsightBriefTool(new Server());
+    const result = await tool.callback(
+      { briefRequest: twoMetricRequest },
+      {
+        signal: new AbortController().signal,
+        requestId: 'test-request-id',
+        sendNotification: vi.fn(),
+        sendRequest: vi.fn(),
+      },
+    );
+
+    // Should succeed
+    expect(result.isError).toBe(false);
+
+    // Verify that the API was called with only the allowed metric
+    expect(mocks.mockGeneratePulseInsightBrief).toHaveBeenCalled();
+    const calledWith = mocks.mockGeneratePulseInsightBrief.mock.calls[0][0];
+    expect(calledWith.messages[0].metric_group_context).toHaveLength(1);
+    expect(calledWith.messages[0].metric_group_context[0].metadata.name).toBe('Allowed Metric');
+    expect(calledWith.messages[0].metric_group_context[0].metric.definition.datasource.id).toBe(
+      allowedDatasourceId,
     );
   });
 

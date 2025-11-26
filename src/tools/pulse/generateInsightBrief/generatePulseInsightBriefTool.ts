@@ -201,25 +201,15 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
         authInfo,
         args: { briefRequest },
         callback: async () => {
-          // Check datasource access for all metrics in all messages
+          // Filter out metrics that are not in the allowed datasource set
           const { datasourceIds } = config.boundedContext;
           if (datasourceIds) {
             for (const message of briefRequest.messages) {
               if (message.metric_group_context) {
-                for (const metricContext of message.metric_group_context) {
-                  const datasourceLuid = metricContext.metric.definition.datasource.id;
-
-                  if (!datasourceIds.has(datasourceLuid)) {
-                    return new Err({
-                      type: 'datasource-not-allowed',
-                      message: [
-                        'The set of allowed metric insights that can be queried is limited by the server configuration.',
-                        'Generating the Pulse Insight Brief is not allowed because one or more metrics are derived',
-                        `from the data source with LUID ${datasourceLuid}, which is not in the allowed set of data sources.`,
-                      ].join(' '),
-                    });
-                  }
-                }
+                message.metric_group_context = message.metric_group_context.filter(
+                  (metricContext) =>
+                    datasourceIds.has(metricContext.metric.definition.datasource.id),
+                );
               }
             }
           }
