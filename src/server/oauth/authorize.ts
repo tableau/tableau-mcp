@@ -6,7 +6,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error';
 
 import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
-import { axios, AxiosResponse } from '../../utils/axios.js';
+import { axios, AxiosResponse, getStringResponseHeader } from '../../utils/axios.js';
 import { parseUrl } from '../../utils/isUrl.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { clientMetadataCache } from './clientMetadataCache.js';
@@ -142,8 +142,8 @@ export function authorize(
 async function getClientFromMetadataDoc(
   clientMetadataUrl: URL,
 ): Promise<Result<ClientMetadata, { error: string; error_description: string }>> {
-  const cacheKey = clientMetadataUrl.toString();
-  const cache = clientMetadataCache.get(cacheKey);
+  const originalUrl = clientMetadataUrl.toString();
+  const cache = clientMetadataCache.get(originalUrl);
   if (cache) {
     return Ok(cache);
   }
@@ -197,8 +197,8 @@ async function getClientFromMetadataDoc(
     });
   }
 
-  const contentType = response.headers['Content-Type'] || '';
-  if (typeof contentType !== 'string' || !contentType) {
+  const contentType = getStringResponseHeader(response.headers, 'content-type');
+  if (!contentType) {
     return Err({
       error: 'invalid_client_metadata',
       error_description: 'Client Metadata URL must return a valid Content-Type header',
@@ -221,19 +221,16 @@ async function getClientFromMetadataDoc(
     });
   }
 
-  if (clientMetadataResult.data.client_id !== clientMetadataUrl.toString()) {
+  if (clientMetadataResult.data.client_id !== originalUrl) {
     return Err({
       error: 'invalid_client_metadata',
       error_description: 'Client ID mismatch',
     });
   }
 
-  let cacheControl = response.headers['Cache-Control'] || '';
-  if (typeof cacheControl !== 'string') {
-    cacheControl = '';
-  }
+  const cacheControl = getStringResponseHeader(response.headers, 'cache-control');
   const cacheControlMaxAge = cacheControl
-    .split(';')
+    .split(',')
     .find((s) => s.trim().startsWith('max-age='))
     ?.split('=')[1];
 
@@ -245,7 +242,7 @@ async function getClientFromMetadataDoc(
     }
   }
 
-  clientMetadataCache.set(cacheKey, clientMetadataResult.data, cacheExpiryMilliseconds);
+  clientMetadataCache.set(originalUrl, clientMetadataResult.data, cacheExpiryMilliseconds);
   return Ok(clientMetadataResult.data);
 }
 
