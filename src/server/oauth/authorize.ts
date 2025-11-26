@@ -1,3 +1,4 @@
+import axiosRetry from 'axios-retry';
 import { randomBytes, randomUUID } from 'crypto';
 import express from 'express';
 import { isIP } from 'net';
@@ -10,7 +11,7 @@ import { axios, AxiosResponse, getStringResponseHeader } from '../../utils/axios
 import { parseUrl } from '../../utils/isUrl.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { clientMetadataCache } from './clientMetadataCache.js';
-import { dnsResolver } from './dnsResolver.js';
+import { getDnsResolver } from './dnsResolver.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
@@ -151,6 +152,7 @@ async function getClientFromMetadataDoc(
   const originalHostname = clientMetadataUrl.hostname;
   if (!isIP(clientMetadataUrl.hostname)) {
     // Resolve the IP from DNS
+    const dnsResolver = getDnsResolver();
     const resolvedIps = await dnsResolver.resolve4(clientMetadataUrl.hostname);
     let ipAddress = resolvedIps.find(Boolean);
     if (!ipAddress) {
@@ -181,13 +183,18 @@ async function getClientFromMetadataDoc(
 
   let response: AxiosResponse;
   try {
-    response = await axios.get(clientMetadataUrl.toString(), {
+    const client = axios.create();
+    response = await client.get(clientMetadataUrl.toString(), {
       timeout: 5000,
       maxContentLength: 5 * 1024, // 5 KB
       maxRedirects: 3,
       headers: {
         Accept: 'application/json',
         Host: originalHostname,
+      },
+      'axios-retry': {
+        retries: 3,
+        retryDelay: axiosRetry.exponentialDelay,
       },
     });
   } catch {
