@@ -210,6 +210,17 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
                   (metricContext) =>
                     datasourceIds.has(metricContext.metric.definition.datasource.id),
                 );
+
+                // If filtering removed all metrics from this message, return an error
+                if (message.metric_group_context.length === 0) {
+                  return new Err({
+                    type: 'datasource-not-allowed',
+                    message: [
+                      'The set of allowed metric insights that can be queried is limited by the server configuration.',
+                      'One or more messages in the request contain only metrics derived from data sources that are not in the allowed set.',
+                    ].join(' '),
+                  });
+                }
               }
             }
           }

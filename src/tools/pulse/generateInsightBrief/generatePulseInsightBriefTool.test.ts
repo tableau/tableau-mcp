@@ -317,6 +317,24 @@ describe('getGeneratePulseInsightBriefTool', () => {
     );
   });
 
+  it('should return an error when all metrics are filtered out', async () => {
+    mocks.mockGetConfig.mockReturnValue({
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: new Set(['ALLOWED-DATASOURCE-ID']),
+        workbookIds: null,
+      },
+    });
+    mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Ok(mockBriefResponse));
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain(
+      'All metrics in the request are derived from data sources that are not in the allowed set.',
+    );
+  });
+
   async function getToolResult(): Promise<CallToolResult> {
     const tool = getGeneratePulseInsightBriefTool(new Server());
     return await tool.callback(
