@@ -331,7 +331,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(
-      'All metrics in the request are derived from data sources that are not in the allowed set.',
+      'One or more messages in the request contain only metrics derived from data sources that are not in the allowed set.',
     );
   });
 
