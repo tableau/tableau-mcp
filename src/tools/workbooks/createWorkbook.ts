@@ -78,9 +78,20 @@ export const getCreateWorkbookTool = (
 
                 const server = config.server || tableauAuthInfo?.server;
                 const workbookId = randomUUID();
-                return new Ok(
-                  `${server}/vizql/show/authoring/newWorkbook/${workbookId}/fromFileUpload/${uploadSessionId}`,
+                const pathParts = ['vizql', 'show'];
+                if (config.siteName) {
+                  pathParts.push('t', config.siteName);
+                }
+
+                pathParts.push(
+                  'authoring',
+                  'newWorkbook',
+                  workbookId,
+                  'fromFileUpload',
+                  uploadSessionId,
                 );
+
+                return new Ok(`${server}/${pathParts.join('/')}`);
               },
             }),
           );
