@@ -55,6 +55,9 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   // A function that validates the tool's arguments provided by the client
   argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
 
+  // Whether the tool is disabled, defaults to false if not provided
+  disabled?: TypeOrProvider<boolean>;
+
   // The implementation of the tool itself
   callback: TypeOrProvider<ToolCallback<Args>>;
 };
@@ -102,6 +105,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   paramsSchema: TypeOrProvider<Args>;
   annotations: TypeOrProvider<ToolAnnotations>;
   argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
+  disabled?: TypeOrProvider<boolean>;
   callback: TypeOrProvider<ToolCallback<Args>>;
 
   constructor({
@@ -111,6 +115,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     paramsSchema,
     annotations,
     argsValidator,
+    disabled,
     callback,
   }: ToolParams<Args>) {
     this.server = server;
@@ -119,6 +124,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.paramsSchema = paramsSchema;
     this.annotations = annotations;
     this.argsValidator = argsValidator;
+    this.disabled = disabled;
     this.callback = callback;
   }
 

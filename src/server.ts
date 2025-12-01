@@ -59,8 +59,13 @@ export class Server extends McpServer {
       description,
       paramsSchema,
       annotations,
+      disabled,
       callback,
     } of this._getToolsToRegister(authInfo)) {
+      if (await Provider.from(disabled)) {
+        continue;
+      }
+
       this.tool(
         name,
         await Provider.from(description),

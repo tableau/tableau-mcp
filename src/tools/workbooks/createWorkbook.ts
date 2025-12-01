@@ -6,6 +6,9 @@ import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { TableauAuthInfo } from '../../server/oauth/schemas.js';
+import { isFeatureEnabled } from '../../utils/featureEnabledCache.js';
+import { Provider } from '../../utils/provider.js';
 import { Tool } from '../tool.js';
 
 const paramsSchema = {
@@ -13,13 +16,23 @@ const paramsSchema = {
   workbookFilename: z.string().trim().nonempty(),
 };
 
-export const getCreateWorkbookTool = (server: Server): Tool<typeof paramsSchema> => {
+export const getCreateWorkbookTool = (
+  server: Server,
+  authInfo?: TableauAuthInfo,
+): Tool<typeof paramsSchema> => {
+  const config = getConfig();
   const createWorkbookTool = new Tool({
     server,
     name: 'create-workbook',
     description:
       'Creates a Tableau workbook by uploading the TWB (workbook) XML string to the Tableau server. The workbook will be saved as a file with the given filename.',
     paramsSchema,
+    disabled: new Provider(async () => {
+      return !(await isFeatureEnabled({
+        featureName: 'AuthoringNewWorkbookFromFileUpload',
+        server: (config.server || authInfo?.server) ?? '',
+      }));
+    }),
     annotations: {
       title: 'Create Workbook',
       readOnlyHint: false, // This tool uploads files to the server
