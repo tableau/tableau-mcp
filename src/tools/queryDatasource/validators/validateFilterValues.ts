@@ -1,16 +1,21 @@
 import levenshtein from 'fast-levenshtein';
 import { Err, Ok, Result } from 'ts-results-es';
+import { z } from 'zod';
 
 import { log } from '../../../logging/log.js';
 import {
   Datasource,
   MatchFilter,
-  Query,
+  Query as QueryType,
   QueryRequest,
   SetFilter,
 } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
 import { Server } from '../../../server.js';
+import { Query } from '../queryDatasourceValidator.js';
+
+type MatchFilter = z.infer<typeof MatchFilter>;
+type SetFilter = z.infer<typeof SetFilter>;
 
 interface FilterValidationError {
   field: string;
@@ -27,7 +32,7 @@ export async function validateFilterValues(
   server: Server,
   query: Query,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
-  datasource: Datasource,
+  datasource: z.infer<typeof Datasource>,
 ): Promise<Result<void, FilterValidationError[]>> {
   if (!query.filters) {
     return Ok.EMPTY;
@@ -81,13 +86,13 @@ export async function validateFilterValues(
 async function validateSetFilter(
   filter: SetFilter,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
-  datasource: Datasource,
+  datasource: z.infer<typeof Datasource>,
 ): Promise<Result<void, FilterValidationError>> {
   const fieldCaption = filter.field.fieldCaption;
   const filterValues = filter.values.map((v) => String(v));
 
   // Query to get distinct values from the field
-  const distinctValuesQuery: Query = {
+  const distinctValuesQuery: z.infer<typeof QueryType> = {
     fields: [
       {
         fieldCaption: fieldCaption,
@@ -96,7 +101,7 @@ async function validateSetFilter(
     ],
   };
 
-  const queryRequest: QueryRequest = {
+  const queryRequest: z.infer<typeof QueryRequest> = {
     datasource,
     query: distinctValuesQuery,
     options: {
@@ -156,12 +161,12 @@ async function validateSetFilter(
 async function validateMatchFilter(
   filter: MatchFilter,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
-  datasource: Datasource,
+  datasource: z.infer<typeof Datasource>,
 ): Promise<Result<void, FilterValidationError>> {
   const fieldCaption = filter.field.fieldCaption;
 
   // Query to get a sample of values from the field
-  const sampleValuesQuery: Query = {
+  const sampleValuesQuery: z.infer<typeof QueryType> = {
     fields: [
       {
         fieldCaption: fieldCaption,
@@ -170,7 +175,7 @@ async function validateMatchFilter(
     ],
   };
 
-  const queryRequest: QueryRequest = {
+  const queryRequest: z.infer<typeof QueryRequest> = {
     datasource,
     query: sampleValuesQuery,
     options: {

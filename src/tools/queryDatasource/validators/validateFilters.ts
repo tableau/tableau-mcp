@@ -1,9 +1,9 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { Filter, FilterField } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { FilterField, Query } from '../queryDatasourceValidator.js';
 import { hasFieldCaptionAndCalculation, hasFunctionAndCalculation } from './validateFields.js';
 
-export function validateFilters(filters: Filter[] | undefined): void {
+export function validateFilters(filters: Query['filters']): void {
   if (!filters) {
     return;
   }

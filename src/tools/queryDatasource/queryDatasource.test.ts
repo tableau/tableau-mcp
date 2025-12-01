@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
-import { queryOutputSchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { QueryOutput } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
@@ -127,7 +127,7 @@ describe('queryDatasourceTool', () => {
         'Zodios: Invalid response from endpoint',
         undefined,
         badResponse,
-        queryOutputSchema.safeParse(badResponse).error,
+        QueryOutput.safeParse(badResponse).error,
       );
 
       return new Err(zodiosError);

@@ -5,7 +5,7 @@ Executes VizQL queries against Tableau data sources to answer business questions
 ## Prerequisites
 Before using this tool, you should:
 1. Understand available fields and their types
-2. Understand the data structure and field relationships
+3. Understand the data structure and field relationships
 
 ## Best Practices
 
@@ -87,7 +87,7 @@ Filter by specific values:
 }
 \`\`\`
 
-### TOP Filters  
+### TOP Filters
 Get top/bottom N records by a measure:
 \`\`\`json
 {

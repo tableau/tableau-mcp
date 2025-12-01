@@ -199,12 +199,11 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: {
+  DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: {
     includeInUserConfig: false,
     type: 'boolean',
-    title: 'Disable Query Datasource Validation Requests',
-    description:
-      'Disable extra requests made to the VizQL Data Service used for validating queries provided to the query-datasource tool. Does not disable the ability to query the datasource.',
+    title: 'Disable Query Datasource Filter Validation',
+    description: 'Disable validation of SET and MATCH filter values in query-datasource tool.',
     required: false,
     sensitive: false,
   },

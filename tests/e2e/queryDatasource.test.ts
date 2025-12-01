@@ -1,6 +1,6 @@
 import z from 'zod';
 
-import { queryOutputSchema } from '../../src/sdks/tableau/apis/vizqlDataServiceApi.js';
+import { QueryOutput } from '../../src/sdks/tableau/apis/vizqlDataServiceApi.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../testEnv.js';
 import { callTool } from './client.js';
 
@@ -14,7 +14,7 @@ describe('query-datasource', () => {
 
     const { data } = await callTool('query-datasource', {
       env,
-      schema: queryOutputSchema,
+      schema: QueryOutput,
       toolArgs: {
         datasourceLuid: superstore.id,
         query: { fields: [{ fieldCaption: 'Postal Code' }] },

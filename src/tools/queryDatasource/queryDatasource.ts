@@ -4,19 +4,15 @@ import { Err } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
-import { getTableauServerVersion } from '../../getTableauServerVersion.js';
 import { useRestApi } from '../../restApiInstance.js';
 import {
   Datasource,
+  Query,
   QueryOutput,
-  querySchema,
   TableauError,
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
-import { TableauAuthInfo } from '../../server/oauth/schemas.js';
-import { isTableauVersionAtLeast } from '../../utils/isTableauVersionAtLeast.js';
-import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -25,11 +21,12 @@ import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { validateQuery } from './queryDatasourceValidator.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
 import { validateFilterValues } from './validators/validateFilterValues.js';
-import { validateQueryAgainstDatasourceMetadata } from './validators/validateQueryAgainstDatasourceMetadata.js';
+
+type Datasource = z.infer<typeof Datasource>;
 
 const paramsSchema = {
   datasourceLuid: z.string().nonempty(),
-  query: querySchema,
+  query: Query,
 };
 
 export type QueryDatasourceError =
@@ -41,31 +38,19 @@ export type QueryDatasourceError =
       message: string;
     }
   | {
-      type: 'query-validation';
+      type: 'filter-validation';
       message: string;
     }
   | {
       type: 'tableau-error';
-      error: TableauError;
+      error: z.infer<typeof TableauError>;
     };
 
-export const getQueryDatasourceTool = (
-  server: Server,
-  authInfo?: TableauAuthInfo,
-): Tool<typeof paramsSchema> => {
-  const config = getConfig();
-
+export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema> => {
   const queryDatasourceTool = new Tool({
     server,
     name: 'query-datasource',
-    description: new Provider(async () => {
-      const productVersion = await getTableauServerVersion(config.server || authInfo?.server);
-      if (isTableauVersionAtLeast({ productVersion, minVersion: '2025.3.0' })) {
-        return queryDatasourceToolDescription;
-      }
-
-      return queryDatasourceToolDescription;
-    }),
+    description: queryDatasourceToolDescription,
     paramsSchema,
     annotations: {
       title: 'Query Datasource',
@@ -77,6 +62,7 @@ export const getQueryDatasourceTool = (
       { datasourceLuid, query },
       { requestId, authInfo },
     ): Promise<CallToolResult> => {
+      const config = getConfig();
       return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
         authInfo,
@@ -119,23 +105,7 @@ export const getQueryDatasourceTool = (
             jwtScopes: ['tableau:viz_data_service:read'],
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
-              if (!config.disableQueryDatasourceValidationRequests) {
-                // Validate query against metadata
-                const metadataValidationResult = await validateQueryAgainstDatasourceMetadata(
-                  query,
-                  restApi.vizqlDataServiceMethods,
-                  datasource,
-                );
-
-                if (metadataValidationResult.isErr()) {
-                  const errors = metadataValidationResult.error;
-                  const errorMessage = errors.map((error) => error.message).join('\n\n');
-                  return new Err({
-                    type: 'query-validation',
-                    message: errorMessage,
-                  });
-                }
-
+              if (!config.disableQueryDatasourceFilterValidation) {
                 // Validate filters values for SET and MATCH filters
                 const filterValidationResult = await validateFilterValues(
                   server,
@@ -148,7 +118,7 @@ export const getQueryDatasourceTool = (
                   const errors = filterValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join(', ');
                   return new Err({
-                    type: 'query-validation',
+                    type: 'filter-validation',
                     message: errorMessage,
                   });
                 }
@@ -183,7 +153,7 @@ export const getQueryDatasourceTool = (
               return getVizqlDataServiceDisabledError();
             case 'datasource-not-allowed':
               return error.message;
-            case 'query-validation':
+            case 'filter-validation':
               return JSON.stringify({
                 requestId,
                 errorType: 'validation',

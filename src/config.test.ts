@@ -40,7 +40,7 @@ describe('Config', () => {
       INCLUDE_TOOLS: undefined,
       EXCLUDE_TOOLS: undefined,
       MAX_RESULT_LIMIT: undefined,
-      DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: undefined,
+      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: undefined,
       DISABLE_METADATA_API_REQUESTS: undefined,
       DISABLE_SESSION_MANAGEMENT: undefined,
       ENABLE_SERVER_LOGGING: undefined,
@@ -234,25 +234,25 @@ describe('Config', () => {
     expect(config.maxResultLimit).toBe(100);
   });
 
-  it('should set disableQueryDatasourceValidationRequests to false by default', () => {
+  it('should set disableQueryDatasourceFilterValidation to false by default', () => {
     process.env = {
       ...process.env,
       ...defaultEnvVars,
     };
 
     const config = new Config();
-    expect(config.disableQueryDatasourceValidationRequests).toBe(false);
+    expect(config.disableQueryDatasourceFilterValidation).toBe(false);
   });
 
-  it('should set disableQueryDatasourceValidationRequests to true when specified', () => {
+  it('should set disableQueryDatasourceFilterValidation to true when specified', () => {
     process.env = {
       ...process.env,
       ...defaultEnvVars,
-      DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: 'true',
+      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: 'true',
     };
 
     const config = new Config();
-    expect(config.disableQueryDatasourceValidationRequests).toBe(true);
+    expect(config.disableQueryDatasourceFilterValidation).toBe(true);
   });
 
   it('should set disableMetadataApiRequests to false by default', () => {
