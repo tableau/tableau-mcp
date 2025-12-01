@@ -37,10 +37,13 @@ async function _isFeatureEnabled({
   try {
     switch (featureName) {
       case 'AuthoringNewWorkbookFromFileUpload': {
-        const response = await fetch(
-          `${server}/vizql/show/authoring/newWorkbook/testWorkbookId/fromFileUpload/testFileUploadId`,
-        );
-        return response.ok;
+        // TODO: Figure this out or fallback to version detection instead of feature detection
+        return true;
+        // const response = await fetch(
+        //   `${server}/vizql/show/authoring/newWorkbook/testWorkbookId/fromFileUpload/testFileUploadId`,
+        //   { redirect: 'manual' },
+        // );
+        // return response.ok;
       }
     }
   } catch {

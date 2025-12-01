@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { randomUUID } from 'crypto';
 import { Ok } from 'ts-results-es';
 import z from 'zod';
 
@@ -51,13 +52,14 @@ export const getCreateWorkbookTool = (
         authInfo,
         args: { workbookXml, workbookFilename },
         callback: async () => {
+          const tableauAuthInfo = getTableauAuthInfo(authInfo);
           return new Ok(
             await useRestApi({
               config,
               requestId,
               server,
               jwtScopes: ['tableau:file_uploads:create'],
-              authInfo: getTableauAuthInfo(authInfo),
+              authInfo: tableauAuthInfo,
               callback: async (restApi) => {
                 const { uploadSessionId } = await restApi.publishingMethods.initiateFileUpload({
                   siteId: restApi.siteId,
@@ -74,7 +76,11 @@ export const getCreateWorkbookTool = (
                   return result;
                 }
 
-                return new Ok(result.value.uploadSessionId);
+                const server = config.server || tableauAuthInfo?.server;
+                const workbookId = randomUUID();
+                return new Ok(
+                  `${server}/vizql/show/authoring/newWorkbook/${workbookId}/fromFileUpload/${uploadSessionId}`,
+                );
               },
             }),
           );
