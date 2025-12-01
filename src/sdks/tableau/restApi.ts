@@ -7,15 +7,16 @@ import {
   RequestInterceptor,
   ResponseInterceptor,
 } from './interceptors.js';
-import AuthenticationMethods, {
+import {
   AuthenticatedAuthenticationMethods,
+  AuthenticationMethods,
 } from './methods/authenticationMethods.js';
 import ContentExplorationMethods from './methods/contentExplorationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import PublishingMethods from './methods/publishingMethods.js';
 import PulseMethods from './methods/pulseMethods.js';
-import ServerMethods from './methods/serverMethods.js';
+import { AuthenticatedServerMethods, ServerMethods } from './methods/serverMethods.js';
 import ViewsMethods from './methods/viewsMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
 import WorkbooksMethods from './methods/workbooksMethods.js';
@@ -35,6 +36,7 @@ export class RestApi {
 
   private _authenticationMethods?: AuthenticationMethods;
   private _authenticatedAuthenticationMethods?: AuthenticatedAuthenticationMethods;
+  private _authenticatedServerMethods?: AuthenticatedServerMethods;
   private _contentExplorationMethods?: ContentExplorationMethods;
   private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
@@ -94,6 +96,14 @@ export class RestApi {
     return this._authenticatedAuthenticationMethods;
   }
 
+  get authenticatedServerMethods(): AuthenticatedServerMethods {
+    if (!this._authenticatedServerMethods) {
+      this._authenticatedServerMethods = new AuthenticatedServerMethods(this._baseUrl, this.creds);
+      this._addInterceptors(this._baseUrl, this._authenticatedServerMethods.interceptors);
+    }
+    return this._authenticatedServerMethods;
+  }
+
   get contentExplorationMethods(): ContentExplorationMethods {
     if (!this._contentExplorationMethods) {
       this._contentExplorationMethods = new ContentExplorationMethods(
@@ -148,7 +158,7 @@ export class RestApi {
 
   get serverMethods(): ServerMethods {
     if (!this._serverMethods) {
-      this._serverMethods = new ServerMethods(this._baseUrl, this.creds);
+      this._serverMethods = new ServerMethods(this._baseUrl);
       this._addInterceptors(this._baseUrl, this._serverMethods.interceptors);
     }
 
