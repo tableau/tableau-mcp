@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { Server } from '../../server.js';
+import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
 const paramsSchema = {
@@ -16,6 +17,11 @@ const paramsSchema = {
   revision: z.string().trim().nonempty().default('1.0').optional(),
   worksheetName: z.string().trim().nonempty().default('Sheet 1').optional(),
 } as const;
+
+export type GenerateWorkbookXmlError = {
+  type: 'datasource-not-allowed';
+  message: string;
+};
 
 function sanitizeForId(input: string): string {
   return input.replace(/[^A-Za-z0-9_-]/g, '');
@@ -163,11 +169,23 @@ Generates a Tableau TWB (workbook) XML string that connects to a specified publi
       { requestId, authInfo },
     ): Promise<CallToolResult> => {
       const config = getConfig();
-      return await generateWorkbookXmlTool.logAndExecute<string>({
+      return await generateWorkbookXmlTool.logAndExecute<string, GenerateWorkbookXmlError>({
         requestId,
         authInfo,
         args: { datasourceName, publishedDatasourceId, datasourceCaption, revision, worksheetName },
         callback: async () => {
+          const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
+            datasourceLuid: publishedDatasourceId,
+            restApiArgs: { config, requestId, server },
+          });
+
+          if (!isDatasourceAllowedResult.allowed) {
+            return new Err({
+              type: 'datasource-not-allowed',
+              message: isDatasourceAllowedResult.message,
+            });
+          }
+
           const url = new URL(config.server);
           const channel = url.protocol === 'https:' ? 'https' : 'http';
           const defaultPort = channel === 'https' ? '443' : '80';
@@ -197,6 +215,12 @@ Generates a Tableau TWB (workbook) XML string that connects to a specified publi
             type: 'success',
             result: xml,
           };
+        },
+        getErrorText: (error: GenerateWorkbookXmlError) => {
+          switch (error.type) {
+            case 'datasource-not-allowed':
+              return error.message;
+          }
         },
       });
     },
