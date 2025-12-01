@@ -201,7 +201,8 @@ export const getInjectVizIntoWorkbookXmlTool = (server: Server): Tool<typeof par
   const injectTool = new Tool({
     server,
     name: 'inject-viz-into-workbook-xml',
-    description: `Takes a TWB XML workbook string and injects a basic visualization by wiring columns (dimensions) and rows (measures) into the first or named worksheet. It adds <datasources> and <datasource-dependencies> into the sheet's <view>, and sets <rows>/<cols> shelves.`,
+    description:
+      "Takes a TWB XML workbook string and injects a basic visualization by wiring columns (dimensions) and rows (measures) into the first or named worksheet. It adds <datasources> and <datasource-dependencies> into the sheet's <view>, and sets <rows>/<cols> shelves.",
     paramsSchema,
     annotations: {
       title: 'Inject Viz Into Workbook XML',
@@ -210,10 +211,11 @@ export const getInjectVizIntoWorkbookXmlTool = (server: Server): Tool<typeof par
     },
     callback: async (
       { workbookXml, worksheetName, datasourceConnectionName, datasourceCaption, columns, rows },
-      { requestId },
+      { requestId, authInfo },
     ): Promise<CallToolResult> => {
       return await injectTool.logAndExecute<string>({
         requestId,
+        authInfo,
         args: {
           workbookXml,
           worksheetName,

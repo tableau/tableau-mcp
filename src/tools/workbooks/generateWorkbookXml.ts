@@ -62,7 +62,7 @@ function buildWorkbookXml({
 
   const pathDatasources = siteName
     ? `/t/${escapeXmlAttribute(siteName)}/datasources`
-    : `/datasources`;
+    : '/datasources';
   const siteAttr = siteName ? ` site='${escapeXmlAttribute(siteName)}'` : '';
 
   return `<?xml version='1.0' encoding='utf-8' ?>
@@ -142,7 +142,8 @@ export const getGenerateWorkbookXmlTool = (server: Server): Tool<typeof paramsSc
   const generateWorkbookXmlTool = new Tool({
     server,
     name: 'generate-workbook-xml',
-    description: `Generates a Tableau TWB (workbook) XML string that connects to a specified published datasource (Data Server). Use the output to save a .twb file.`,
+    description:
+      'Generates a Tableau TWB (workbook) XML string that connects to a specified published datasource (Data Server). Use the output to save a .twb file.',
     paramsSchema,
     annotations: {
       title: 'Generate Workbook XML',
@@ -151,11 +152,12 @@ export const getGenerateWorkbookXmlTool = (server: Server): Tool<typeof paramsSc
     },
     callback: async (
       { datasourceName, publishedDatasourceId, datasourceCaption, revision, worksheetName },
-      { requestId },
+      { requestId, authInfo },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       return await generateWorkbookXmlTool.logAndExecute<string>({
         requestId,
+        authInfo,
         args: { datasourceName, publishedDatasourceId, datasourceCaption, revision, worksheetName },
         callback: async () => {
           const url = new URL(config.server);

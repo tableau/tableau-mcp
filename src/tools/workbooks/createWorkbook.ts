@@ -5,6 +5,7 @@ import z from 'zod';
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { Tool } from '../tool.js';
 
 const paramsSchema = {
@@ -26,11 +27,15 @@ export const getCreateWorkbookTool = (server: Server): Tool<typeof paramsSchema>
       idempotentHint: false,
       openWorldHint: false,
     },
-    callback: async ({ workbookXml, workbookFilename }, { requestId }): Promise<CallToolResult> => {
+    callback: async (
+      { workbookXml, workbookFilename },
+      { requestId, authInfo },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await createWorkbookTool.logAndExecute({
         requestId,
+        authInfo,
         args: { workbookXml, workbookFilename },
         callback: async () => {
           return new Ok(
@@ -39,6 +44,7 @@ export const getCreateWorkbookTool = (server: Server): Tool<typeof paramsSchema>
               requestId,
               server,
               jwtScopes: ['tableau:file_uploads:create'],
+              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 const { uploadSessionId } = await restApi.publishingMethods.initiateFileUpload({
                   siteId: restApi.siteId,
