@@ -142,8 +142,16 @@ export const getGenerateWorkbookXmlTool = (server: Server): Tool<typeof paramsSc
   const generateWorkbookXmlTool = new Tool({
     server,
     name: 'generate-workbook-xml',
-    description:
-      'Generates a Tableau TWB (workbook) XML string that connects to a specified published datasource (Data Server). Use the output to save a .twb file.',
+    description: `
+Generates a Tableau TWB (workbook) XML string that connects to a specified published datasource (Data Server). Use the output to save a .twb file.
+
+**Parameters:**
+- \`datasourceName\` (required): The name of the data source the workbook will connect to.
+- \`publishedDatasourceId\` (required): The published datasource's ID.
+- \`datasourceCaption\` (optional): The caption of the data source in the workbook.  Defaults to \`datasourceName\`.
+- \`revision\` (optional): The revision of the data source.  Defaults to \`1.0\`.
+- \`worksheetName\` (optional): The name of the worksheet in the workbook.  Defaults to \`Sheet 1\`.
+`,
     paramsSchema,
     annotations: {
       title: 'Generate Workbook XML',
