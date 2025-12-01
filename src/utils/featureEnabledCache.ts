@@ -12,9 +12,11 @@ const featureEnabledCache = new ExpiringMap<MapKey, boolean>({
 export async function isFeatureEnabled({
   featureName,
   server,
+  siteName,
 }: {
   featureName: FeatureName;
   server: string;
+  siteName: string;
 }): Promise<boolean> {
   const key = getMapKey({ featureName, server });
   let enabled = featureEnabledCache.get(key);
@@ -22,7 +24,7 @@ export async function isFeatureEnabled({
     return enabled;
   }
 
-  enabled = await _isFeatureEnabled({ featureName, server });
+  enabled = await _isFeatureEnabled({ featureName, server, siteName });
   featureEnabledCache.set(key, enabled);
   return enabled;
 }
@@ -30,20 +32,26 @@ export async function isFeatureEnabled({
 async function _isFeatureEnabled({
   featureName,
   server,
+  siteName,
 }: {
   featureName: FeatureName;
   server: string;
+  siteName: string;
 }): Promise<boolean> {
   try {
     switch (featureName) {
       case 'AuthoringNewWorkbookFromFileUpload': {
-        // TODO: Figure this out or fallback to version detection instead of feature detection
+        const response = await fetch(
+          `${server}/vizql/show${siteName ? `/t/${siteName}` : ''}/authoring/newWorkbook/testWorkbookId/fromFileUpload/testFileUploadId`,
+        );
+
+        if (response.status === 404) {
+          return false;
+        }
+
+        // Assume a non-404 means the feature is enabled, even for error responses.
+        // This is a best-effort approach to determine if the feature is enabled, and may not be 100% accurate.
         return true;
-        // const response = await fetch(
-        //   `${server}/vizql/show/authoring/newWorkbook/testWorkbookId/fromFileUpload/testFileUploadId`,
-        //   { redirect: 'manual' },
-        // );
-        // return response.ok;
       }
     }
   } catch {

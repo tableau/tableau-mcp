@@ -32,6 +32,7 @@ export const getCreateWorkbookTool = (
       return !(await isFeatureEnabled({
         featureName: 'AuthoringNewWorkbookFromFileUpload',
         server: (config.server || authInfo?.server) ?? '',
+        siteName: config.siteName,
       }));
     }),
     annotations: {
