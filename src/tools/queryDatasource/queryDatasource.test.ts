@@ -81,7 +81,7 @@ describe('queryDatasourceTool', () => {
   it('should create a tool instance with correct properties', () => {
     const queryDatasourceTool = getQueryDatasourceTool(new Server());
     expect(queryDatasourceTool.name).toBe('query-datasource');
-    expect(queryDatasourceTool.description).toBeInstanceOf(Provider);
+    expect(queryDatasourceTool.description).toEqual(expect.any(String));
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
   });
 

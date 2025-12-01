@@ -28,3 +28,9 @@ vi.mock('./sdks/tableau/restApi.js', async (importOriginal) => ({
     },
   })),
 }));
+
+vi.mock('./utils/featureEnabledCache.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  // Consider all features enabled for testing purposes
+  isFeatureEnabled: vi.fn().mockResolvedValue(true),
+}));

@@ -372,7 +372,14 @@ describe('Config', () => {
       };
 
       const config = new Config();
-      expect(config.includeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
+      expect(config.includeTools).toEqual([
+        'query-datasource',
+        'list-workbooks',
+        'get-workbook',
+        'create-workbook',
+        'generate-workbook-xml',
+        'inject-viz-into-workbook-xml',
+      ]);
     });
 
     it('should parse EXCLUDE_TOOLS into an array of valid tool names', () => {
@@ -394,7 +401,14 @@ describe('Config', () => {
       };
 
       const config = new Config();
-      expect(config.excludeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
+      expect(config.excludeTools).toEqual([
+        'query-datasource',
+        'list-workbooks',
+        'get-workbook',
+        'create-workbook',
+        'generate-workbook-xml',
+        'inject-viz-into-workbook-xml',
+      ]);
     });
 
     it('should filter out invalid tool names from INCLUDE_TOOLS', () => {
