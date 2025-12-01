@@ -25,8 +25,13 @@ export const getCreateWorkbookTool = (
   const createWorkbookTool = new Tool({
     server,
     name: 'create-workbook',
-    description:
-      'Creates a Tableau workbook by uploading the TWB (workbook) XML string to the Tableau server. The workbook will be saved as a file with the given filename.',
+    description: `
+Creates a Tableau workbook by uploading the TWB (workbook) XML string to the Tableau server.
+This does not publish the workbook but a URL will be provided that can be used to open the workbook in the Tableau authoring web application for further editing.
+
+**Parameters:**
+- \`workbookXml\` (required): The TWB (workbook) XML string to upload.
+`,
     paramsSchema,
     disabled: new Provider(async () => {
       return !(await isFeatureEnabled({

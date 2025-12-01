@@ -1,4 +1,5 @@
 import { ExpiringMap } from './expiringMap.js';
+import invariant from './invariant.js';
 
 const TEN_MINUTES_IN_MS = 1000 * 60 * 10;
 
@@ -18,6 +19,7 @@ export async function isFeatureEnabled({
   server: string;
   siteName: string;
 }): Promise<boolean> {
+  invariant(server, 'Tableau server is required');
   const key = getMapKey({ featureName, server });
   let enabled = featureEnabledCache.get(key);
   if (enabled !== undefined) {
