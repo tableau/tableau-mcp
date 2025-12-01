@@ -5,6 +5,7 @@ import z from 'zod';
 import { isAxiosError } from '../../../utils/isAxiosError.js';
 import { pulseApis } from '../apis/pulseApi.js';
 import { Credentials } from '../types/credentials.js';
+import { PulsePagination } from '../types/pagination.js';
 import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
@@ -34,17 +35,33 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
    * Required scopes: `tableau:insight_definitions_metrics:read`
    *
    * @param view - The view of the definition to return. If not specified, the default view is returned.
+   * @param pageToken - Token for retrieving the next page of results. Omit for the first page.
+   * @param pageSize - Specifies the number of results in a paged response.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#MetricQueryService_ListDefinitions
    */
   listAllPulseMetricDefinitions = async (
     view?: PulseMetricDefinitionView,
-  ): Promise<PulseResult<PulseMetricDefinition[]>> => {
+    pageToken?: string,
+    pageSize?: number,
+  ): Promise<
+    PulseResult<{
+      pagination: PulsePagination;
+      definitions: PulseMetricDefinition[];
+    }>
+  > => {
     return await guardAgainstPulseDisabled(async () => {
       const response = await this._apiClient.listAllPulseMetricDefinitions({
-        queries: { view },
+        queries: { view, page_token: pageToken, page_size: pageSize },
         ...this.authHeader,
       });
-      return response.definitions ?? [];
+      return {
+        pagination: {
+          next_page_token: response.next_page_token,
+          offset: response.offset,
+          total_available: response.total_available,
+        },
+        definitions: response.definitions ?? [],
+      };
     });
   };
 
@@ -151,7 +168,7 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
 }
 
 export type PulseDisabledError = 'tableau-server' | 'pulse-disabled';
-type PulseResult<T> = Result<T, PulseDisabledError>;
+export type PulseResult<T> = Result<T, PulseDisabledError>;
 async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise<PulseResult<T>> {
   try {
     return new Ok(await callback());

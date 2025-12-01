@@ -16,26 +16,7 @@ export function validateFields(fields: Fields): void {
   {
     // Field caption must be a non-empty string.
     if (fields.some(hasEmptyFieldCaption)) {
-      throw new Error(`The query must not include any fields with an empty fieldCaption.`);
-    }
-  }
-
-  {
-    // You can't query the same field twice.
-    const fieldCounts = fields.reduce<Record<string, number>>((acc, field) => {
-      if (!acc[field.fieldCaption]) {
-        acc[field.fieldCaption] = 0;
-      }
-
-      acc[field.fieldCaption]++;
-      return acc;
-    }, {});
-
-    const duplicateFields = Object.entries(fieldCounts).filter(([_, count]) => count > 1);
-    if (duplicateFields.length > 0) {
-      throw new Error(
-        `The query must not include duplicate fields. The following fields are duplicated: ${duplicateFields.map(([field]) => field).join(', ')}.`,
-      );
+      throw new Error('The query must not include any fields with an empty fieldCaption.');
     }
   }
 

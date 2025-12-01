@@ -258,6 +258,7 @@ describe('searchContentUtils', () => {
             content: {
               type: 'datasource',
               title: 'Test Datasource',
+              luid: 'test-luid',
               ownerId: 456,
             },
           },
@@ -271,6 +272,7 @@ describe('searchContentUtils', () => {
         type: 'datasource',
         title: 'Test Datasource',
         ownerId: 456,
+        luid: 'test-luid',
       });
     });
 
@@ -433,6 +435,7 @@ describe('searchContentUtils', () => {
               type: 'datasource',
               title: 'Datasource 1',
               ownerId: 456,
+              luid: 'test-luid',
             },
           },
         ],
@@ -450,6 +453,41 @@ describe('searchContentUtils', () => {
         type: 'datasource',
         title: 'Datasource 1',
         ownerId: 456,
+        luid: 'test-luid',
+      });
+    });
+
+    it('should combine unifieddatasource entries with correspdonding datasource entries', () => {
+      const response = {
+        total: 1,
+        items: [
+          {
+            uri: 'test-uri',
+            content: {
+              type: 'unifieddatasource',
+              title: 'Test Unified Datasource',
+              datasourceLuid: 'test-datasource-luid',
+              luid: 'test-unifieddatasource-luid',
+              ownerId: 123,
+            },
+          },
+          {
+            uri: 'test-uri-2',
+            content: {
+              type: 'datasource',
+              title: 'Test Datasource',
+              luid: 'test-datasource-luid',
+            },
+          },
+        ],
+      };
+      const result = reduceSearchContentResponse(response);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        type: 'datasource',
+        title: 'Test Unified Datasource',
+        luid: 'test-datasource-luid',
+        ownerId: 123,
       });
     });
   });
@@ -505,7 +543,7 @@ describe('searchContentUtils', () => {
       });
 
       invariant(result.type === 'success');
-      expect(result.result).toBe(items);
+      expect(result.result).toEqual([items[0], items[1]]);
     });
 
     it('should return success result when some items were filtered out by allowed projects in the bounded context', () => {

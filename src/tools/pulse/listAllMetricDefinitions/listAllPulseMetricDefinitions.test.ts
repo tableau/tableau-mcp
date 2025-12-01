@@ -15,6 +15,7 @@ vi.mock('../../../restApiInstance.js', () => ({
       pulseMethods: {
         listAllPulseMetricDefinitions: mocks.mockListAllPulseMetricDefinitions,
       },
+      siteId: 'test-site-id',
     }),
   ),
 }));
@@ -43,21 +44,39 @@ describe('listAllPulseMetricDefinitionsTool', () => {
     { view: 'DEFINITION_VIEW_FULL', label: 'full view' },
     { view: 'DEFINITION_VIEW_DEFAULT', label: 'default view' },
   ])('should list pulse metric definitions with $label', async ({ view }) => {
-    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(new Ok(mockPulseMetricDefinitions));
+    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(
+      new Ok({
+        pagination: { next_page_token: undefined },
+        definitions: mockPulseMetricDefinitions,
+      }),
+    );
     const result = await getToolResult({ view });
     expect(result.isError).toBe(false);
     const parsedValue = JSON.parse(result.content[0].text as string);
     expect(parsedValue).toEqual(mockPulseMetricDefinitions);
-    expect(mocks.mockListAllPulseMetricDefinitions).toHaveBeenCalledWith(view);
+    expect(mocks.mockListAllPulseMetricDefinitions).toHaveBeenCalledWith(
+      view,
+      undefined,
+      undefined,
+    );
   });
 
   it('should list pulse metric definitions with no view (default)', async () => {
-    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(new Ok(mockPulseMetricDefinitions));
+    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(
+      new Ok({
+        pagination: { next_page_token: undefined },
+        definitions: mockPulseMetricDefinitions,
+      }),
+    );
     const result = await getToolResult({});
     expect(result.isError).toBe(false);
     const parsedValue = JSON.parse(result.content[0].text as string);
     expect(parsedValue).toEqual(mockPulseMetricDefinitions);
-    expect(mocks.mockListAllPulseMetricDefinitions).toHaveBeenCalledWith(undefined);
+    expect(mocks.mockListAllPulseMetricDefinitions).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      undefined,
+    );
   });
 
   it('should handle API errors gracefully', async () => {

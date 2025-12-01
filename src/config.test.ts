@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { exportedForTesting } from './config.js';
 
 describe('Config', () => {
-  const { Config } = exportedForTesting;
+  const { Config, parseNumber } = exportedForTesting;
 
   const originalEnv = process.env;
 
@@ -24,6 +24,7 @@ describe('Config', () => {
       PORT: undefined,
       CUSTOM_PORT: undefined,
       CORS_ORIGIN_CONFIG: undefined,
+      TRUST_PROXY_CONFIG: undefined,
       SERVER: undefined,
       SITE_NAME: undefined,
       PAT_NAME: undefined,
@@ -41,11 +42,23 @@ describe('Config', () => {
       MAX_RESULT_LIMIT: undefined,
       DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: undefined,
       DISABLE_METADATA_API_REQUESTS: undefined,
+      DISABLE_SESSION_MANAGEMENT: undefined,
       ENABLE_SERVER_LOGGING: undefined,
       SERVER_LOG_DIRECTORY: undefined,
       INCLUDE_PROJECT_IDS: undefined,
       INCLUDE_DATASOURCE_IDS: undefined,
       INCLUDE_WORKBOOK_IDS: undefined,
+      TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: undefined,
+      DANGEROUSLY_DISABLE_OAUTH: undefined,
+      OAUTH_ISSUER: undefined,
+      OAUTH_REDIRECT_URI: undefined,
+      OAUTH_JWE_PRIVATE_KEY: undefined,
+      OAUTH_JWE_PRIVATE_KEY_PATH: undefined,
+      OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: undefined,
+      OAUTH_ACCESS_TOKEN_TIMEOUT_MS: undefined,
+      OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: undefined,
+      OAUTH_REFRESH_TOKEN_TIMEOUT_MS: undefined,
+      OAUTH_CLIENT_ID_SECRET_PAIRS: undefined,
     };
   });
 
@@ -57,6 +70,7 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: undefined,
+      SITE_NAME: 'test-site',
     };
 
     expect(() => new Config()).toThrow('The environment variable SERVER is not set');
@@ -66,6 +80,7 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'http://foo.com',
+      SITE_NAME: 'test-site',
     };
 
     expect(() => new Config()).toThrow(
@@ -77,6 +92,7 @@ describe('Config', () => {
     process.env = {
       ...process.env,
       SERVER: 'https://',
+      SITE_NAME: 'test-site',
     };
 
     expect(() => new Config()).toThrow(
@@ -260,6 +276,27 @@ describe('Config', () => {
     expect(config.disableMetadataApiRequests).toBe(true);
   });
 
+  it('should set disableSessionManagement to false by default', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+    };
+
+    const config = new Config();
+    expect(config.disableSessionManagement).toBe(false);
+  });
+
+  it('should set disableMetadataApiRequests to true when specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      DISABLE_SESSION_MANAGEMENT: 'true',
+    };
+
+    const config = new Config();
+    expect(config.disableSessionManagement).toBe(true);
+  });
+
   it('should default transport to stdio when not specified', () => {
     process.env = {
       ...process.env,
@@ -275,10 +312,33 @@ describe('Config', () => {
       ...process.env,
       ...defaultEnvVars,
       TRANSPORT: 'http',
+      DANGEROUSLY_DISABLE_OAUTH: 'true',
     };
 
     const config = new Config();
     expect(config.transport).toBe('http');
+  });
+
+  it('should set tableauServerVersionCheckIntervalInHours to default when not specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: undefined,
+    };
+
+    const config = new Config();
+    expect(config.tableauServerVersionCheckIntervalInHours).toBe(1);
+  });
+
+  it('should set tableauServerVersionCheckIntervalInHours to the specified value when specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: '2',
+    };
+
+    const config = new Config();
+    expect(config.tableauServerVersionCheckIntervalInHours).toBe(2);
   });
 
   describe('Tool filtering', () => {
@@ -381,7 +441,49 @@ describe('Config', () => {
     });
   });
 
-  describe('HTTP port parsing', () => {
+  describe('HTTP server config parsing', () => {
+    it('should set sslKey to default when SSL_KEY is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.sslKey).toBe('');
+    });
+
+    it('should set sslKey to the specified value when SSL_KEY is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        SSL_KEY: 'path/to/ssl-key.pem',
+      };
+
+      const config = new Config();
+      expect(config.sslKey).toBe('path/to/ssl-key.pem');
+    });
+
+    it('should set sslCert to default when SSL_CERT is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.sslCert).toBe('');
+    });
+
+    it('should set sslCert to the specified value when SSL_CERT is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        SSL_CERT: 'path/to/ssl-cert.pem',
+      };
+
+      const config = new Config();
+      expect(config.sslCert).toBe('path/to/ssl-cert.pem');
+    });
+
     it('should set httpPort to default when HTTP_PORT_ENV_VAR_NAME and PORT are not set', () => {
       process.env = {
         ...process.env,
@@ -538,6 +640,62 @@ describe('Config', () => {
       expect(() => new Config()).toThrow(
         'The environment variable CORS_ORIGIN_CONFIG is not a valid array of URLs: ["https://example.com", "invalid"]',
       );
+    });
+  });
+
+  describe('Trust proxy config parsing', () => {
+    it('should set trustProxyConfig to null when TRUST_PROXY_CONFIG is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe(null);
+    });
+
+    it('should set trustProxyConfig to true when TRUST_PROXY_CONFIG is "true"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        TRUST_PROXY_CONFIG: 'true',
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe(true);
+    });
+
+    it('should set trustProxyConfig to false when TRUST_PROXY_CONFIG is "false"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        TRUST_PROXY_CONFIG: 'false',
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe(false);
+    });
+
+    it('should set trustProxyConfig to the specified number when TRUST_PROXY_CONFIG is a valid number', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        TRUST_PROXY_CONFIG: '1',
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe(1);
+    });
+
+    it('should set trustProxyConfig to the specified string when TRUST_PROXY_CONFIG is a valid string', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        TRUST_PROXY_CONFIG: 'loopback, linklocal, uniquelocal',
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe('loopback, linklocal, uniquelocal');
     });
   });
 
@@ -719,6 +877,385 @@ describe('Config', () => {
       expect(() => new Config()).toThrow(
         'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
       );
+    });
+  });
+
+  describe('OAuth configuration', () => {
+    const defaultOAuthEnvVars = {
+      ...defaultEnvVars,
+      OAUTH_ISSUER: 'https://example.com',
+      OAUTH_JWE_PRIVATE_KEY_PATH: 'path/to/private.pem',
+    } as const;
+
+    const defaultOAuthTimeoutMs = {
+      authzCodeTimeoutMs: 10 * 60 * 1000,
+      accessTokenTimeoutMs: 1 * 60 * 60 * 1000,
+      refreshTokenTimeoutMs: 30 * 24 * 60 * 60 * 1000,
+    };
+
+    const defaultOAuthConfig = {
+      enabled: true,
+      clientIdSecretPairs: null,
+      issuer: defaultOAuthEnvVars.OAUTH_ISSUER,
+      redirectUri: `${defaultOAuthEnvVars.OAUTH_ISSUER}/Callback`,
+      jwePrivateKey: '',
+      jwePrivateKeyPath: defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH,
+      jwePrivateKeyPassphrase: undefined,
+      ...defaultOAuthTimeoutMs,
+    } as const;
+
+    it('should default to disabled', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        enabled: false,
+        issuer: '',
+        clientIdSecretPairs: null,
+        redirectUri: '',
+        jwePrivateKey: '',
+        jwePrivateKeyPath: '',
+        jwePrivateKeyPassphrase: undefined,
+        ...defaultOAuthTimeoutMs,
+      });
+    });
+
+    it('should enable OAuth when OAUTH_ISSUER is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual(defaultOAuthConfig);
+    });
+
+    it('should disable OAuth when DANGEROUSLY_DISABLE_OAUTH is "true"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        DANGEROUSLY_DISABLE_OAUTH: 'true',
+      };
+
+      const config = new Config();
+      expect(config.oauth.enabled).toEqual(false);
+    });
+
+    it('should set redirectUri to the specified value when OAUTH_REDIRECT_URI is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_REDIRECT_URI: 'https://example.com/CustomCallback',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        redirectUri: 'https://example.com/CustomCallback',
+      });
+    });
+
+    it('should set redirectUri to the default value when OAUTH_REDIRECT_URI is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_REDIRECT_URI: '',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        redirectUri: `${defaultOAuthEnvVars.OAUTH_ISSUER}/Callback`,
+      });
+    });
+
+    it('should set jwePrivateKey to the specified value when OAUTH_JWE_PRIVATE_KEY is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_JWE_PRIVATE_KEY: 'hamburgers',
+        OAUTH_JWE_PRIVATE_KEY_PATH: '',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        jwePrivateKey: 'hamburgers',
+        jwePrivateKeyPath: '',
+        jwePrivateKeyPassphrase: undefined,
+      });
+    });
+
+    it('should set authzCodeTimeoutMs to the specified value when OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: '5678',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        authzCodeTimeoutMs: 5678,
+      });
+    });
+
+    it('should set accessTokenTimeoutMs to the specified value when OAUTH_ACCESS_TOKEN_TIMEOUT_MS is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_ACCESS_TOKEN_TIMEOUT_MS: '1234',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        accessTokenTimeoutMs: 1234,
+      });
+    });
+
+    it('should set refreshTokenTimeoutMs to the specified value when OAUTH_REFRESH_TOKEN_TIMEOUT_MS is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_REFRESH_TOKEN_TIMEOUT_MS: '1234',
+      };
+
+      const config = new Config();
+      expect(config.oauth.refreshTokenTimeoutMs).toBe(1234);
+    });
+
+    it('should throw error when TRANSPORT is "http" and OAUTH_ISSUER is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        TRANSPORT: 'http',
+        OAUTH_ISSUER: undefined,
+      };
+
+      expect(() => new Config()).toThrow(
+        'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true"',
+      );
+    });
+
+    it('should throw error when OAUTH_JWE_PRIVATE_KEY and OAUTH_JWE_PRIVATE_KEY_PATH is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_JWE_PRIVATE_KEY_PATH: '',
+      };
+
+      expect(() => new Config()).toThrow(
+        'One of the environment variables: OAUTH_JWE_PRIVATE_KEY_PATH or OAUTH_JWE_PRIVATE_KEY must be set',
+      );
+    });
+
+    it('should throw error when OAUTH_JWE_PRIVATE_KEY and OAUTH_JWE_PRIVATE_KEY_PATH are both set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_JWE_PRIVATE_KEY: 'hamburgers',
+        OAUTH_JWE_PRIVATE_KEY_PATH: 'hotdogs',
+      };
+
+      expect(() => new Config()).toThrow(
+        'Only one of the environment variables: OAUTH_JWE_PRIVATE_KEY or OAUTH_JWE_PRIVATE_KEY_PATH must be set',
+      );
+    });
+
+    it('should throw error when AUTH is "oauth" and OAUTH_ISSUER is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        AUTH: 'oauth',
+        OAUTH_ISSUER: '',
+      };
+
+      expect(() => new Config()).toThrow('When AUTH is "oauth", OAUTH_ISSUER must be set');
+    });
+
+    it('should throw error when AUTH is "oauth" and DANGEROUSLY_DISABLE_OAUTH is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        AUTH: 'oauth',
+        DANGEROUSLY_DISABLE_OAUTH: 'true',
+      };
+
+      expect(() => new Config()).toThrow(
+        'When AUTH is "oauth", DANGEROUSLY_DISABLE_OAUTH cannot be "true"',
+      );
+    });
+
+    it('should default transport to "http" when OAUTH_ISSUER is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        TRANSPORT: undefined,
+      };
+
+      const config = new Config();
+      expect(config.transport).toBe('http');
+    });
+
+    it('should default auth to "oauth" when OAUTH_ISSUER is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.auth).toBe('oauth');
+    });
+
+    it('should throw error when transport is stdio and auth is "oauth"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        TRANSPORT: 'stdio',
+      };
+
+      expect(() => new Config()).toThrow('TRANSPORT must be "http" when OAUTH_ISSUER is set');
+    });
+
+    it('should allow PAT_NAME and PAT_VALUE to be empty when AUTH is "oauth"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        PAT_NAME: undefined,
+        PAT_VALUE: undefined,
+        AUTH: 'oauth',
+      };
+
+      const config = new Config();
+      expect(config.patName).toBe('');
+      expect(config.patValue).toBe('');
+    });
+
+    it('should allow SITE_NAME to be empty when AUTH is "oauth"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        AUTH: 'oauth',
+        SITE_NAME: '',
+      };
+
+      const config = new Config();
+      expect(config.siteName).toBe('');
+    });
+
+    it('should set clientIdSecretPairs to the specified value when OAUTH_CLIENT_ID_SECRET_PAIRS is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_CLIENT_ID_SECRET_PAIRS: 'client1:secret1,client2:secret2',
+      };
+
+      const config = new Config();
+      expect(config.oauth.clientIdSecretPairs).toEqual({
+        client1: 'secret1',
+        client2: 'secret2',
+      });
+    });
+  });
+
+  describe('parseNumber', () => {
+    it('should return defaultValue when value is undefined', () => {
+      const result = parseNumber(undefined, { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is empty string', () => {
+      const result = parseNumber('', { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is whitespace', () => {
+      const result = parseNumber('   ', { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is not a number', () => {
+      const result = parseNumber('abc', { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is NaN', () => {
+      const result = parseNumber('NaN', { defaultValue: 42 });
+      expect(result).toBe(42);
+    });
+
+    it('should parse valid integer string', () => {
+      const result = parseNumber('123', { defaultValue: 42 });
+      expect(result).toBe(123);
+    });
+
+    it('should parse valid integer string with leading zeros', () => {
+      const result = parseNumber('007', { defaultValue: 42 });
+      expect(result).toBe(7);
+    });
+
+    it('should parse valid integer string with whitespace', () => {
+      const result = parseNumber('  456  ', { defaultValue: 42 });
+      expect(result).toBe(456);
+    });
+
+    it('should parse valid decimal string', () => {
+      const result = parseNumber('123.45', { defaultValue: 42 });
+      expect(result).toBe(123.45);
+    });
+
+    it('should parse valid decimal string with whitespace', () => {
+      const result = parseNumber('  123.45  ', { defaultValue: 42 });
+      expect(result).toBe(123.45);
+    });
+
+    it('should return defaultValue when value is below minValue', () => {
+      const result = parseNumber('5', { defaultValue: 42, minValue: 10 });
+      expect(result).toBe(42);
+    });
+
+    it('should return defaultValue when value is above maxValue', () => {
+      const result = parseNumber('100', { defaultValue: 42, maxValue: 50 });
+      expect(result).toBe(42);
+    });
+
+    it('should parse valid number when within minValue and maxValue range', () => {
+      const result = parseNumber('25', { defaultValue: 42, minValue: 10, maxValue: 50 });
+      expect(result).toBe(25);
+    });
+
+    it('should parse valid number when value equals minValue', () => {
+      const result = parseNumber('10', { defaultValue: 42, minValue: 10, maxValue: 50 });
+      expect(result).toBe(10);
+    });
+
+    it('should parse valid number when value equals maxValue', () => {
+      const result = parseNumber('50', { defaultValue: 42, minValue: 10, maxValue: 50 });
+      expect(result).toBe(50);
+    });
+
+    it('should use default options when no options provided', () => {
+      const result = parseNumber('123');
+      expect(result).toBe(123);
+    });
+
+    it('should use default defaultValue of 0 when no options provided', () => {
+      const result = parseNumber('abc');
+      expect(result).toBe(0);
+    });
+
+    it('should handle negative numbers with appropriate minValue', () => {
+      const result = parseNumber('-5', { defaultValue: 42, minValue: -10 });
+      expect(result).toBe(-5);
+    });
+
+    it('should return defaultValue for negative numbers when minValue is 0', () => {
+      const result = parseNumber('-5', { defaultValue: 42, minValue: 0 });
+      expect(result).toBe(42);
     });
   });
 });

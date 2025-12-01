@@ -1,10 +1,30 @@
 ---
-sidebar_position: 2
+sidebar_position: 1
 ---
 
-# Optional Environment Variables
+# Environment Variables
 
-Values for the following environment variables are optional.
+Values for the following environment variables can be provided to configure the Tableau MCP server.
+
+## `SERVER`
+
+The URL of the Tableau server.
+
+- For Tableau Cloud, specify your site's specific pod e.g.
+  `https://prod-useast-c.online.tableau.com`
+- Required unless [`AUTH`](#auth) is `oauth`.
+
+<hr />
+
+## `SITE_NAME`
+
+The name of the Tableau site to use.
+
+- For Tableau Cloud, specify your site name.
+- For Tableau Server, you may leave this value blank to use the default site.
+- Required unless [`AUTH`](#auth) is `oauth`.
+
+<hr />
 
 ## `TRANSPORT`
 
@@ -19,10 +39,10 @@ The MCP transport type to use for the server.
 
 ## `AUTH`
 
-The Tableau authentication method to use by the server.
+The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 - Default: `pat`
-- Possible values: `pat` or `direct-trust`
+- Possible values: `pat`, `direct-trust`, or `oauth`
 - See [Authentication](authentication) for additional required variables depending on the desired
   method.
 
@@ -43,6 +63,8 @@ APIs.
 - Each line in the log file is a JSON object with the following properties:
 
   - `timestamp`: The timestamp of the log message in UTC time.
+  - `username`: For tool calls, the username of the user who made the call. This is only present
+    when OAuth is enabled and has the user context.
   - `level`: The logging level of the log message.
   - `logger`: The logger of the log message. This is typically `rest-api` for HTTP traces or
     `tableau-mcp` for tool calls.
@@ -181,6 +203,35 @@ Disables `graphql` requests to the Tableau Metadata API in the
 - Set this to `true` if you are using the
   [`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool and the Tableau
   Metadata API is not enabled on your Tableau Server.
+
+<hr />
+
+## `DISABLE_SESSION_MANAGEMENT`
+
+When `false` (the default) and using the Streamable HTTP transport, the MCP server will create and
+manage sessions as per the
+[Session Management](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#session-management)
+section of the MCP spec. The only state persisted in the session from one request to another is
+information about the client's identity, capabilities, and protocol version compatibility.
+
+- Default: `false`
+- Does not apply to the stdio transport.
+- When `true`, the MCP server will no longer assign a session ID at initialization time nor require
+  clients to provide that session ID in the `mcp-session-id` header for subsequent requests.
+- Set this to `true` if you are using the HTTP transport and your client does not support or need
+  session management.
+
+<hr />
+
+## `TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS`
+
+Some tools may have behavior or arguments that depend on the Tableau Server or Cloud version the MCP
+server is connected to. Rather than checking the Tableau version with every request, the MCP server
+will cache the version and only check it again after the interval specified by this environment
+variable.
+
+- Default: `1` hour
+- Must be a positive number between `1` and `168` (7 days).
 
 <hr />
 

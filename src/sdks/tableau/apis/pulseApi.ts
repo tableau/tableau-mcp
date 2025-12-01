@@ -26,9 +26,24 @@ const listAllPulseMetricDefinitionsRestEndpoint = makeEndpoint({
         - 'DEFINITION_VIEW_FULL' - Return the metric definition and the specified number of metrics.
         - 'DEFINITION_VIEW_DEFAULT' - Return the metric definition and the default metric.`,
     },
+    {
+      name: 'page_size',
+      type: 'Query',
+      schema: z.optional(z.coerce.number().int().positive()),
+      description: 'Specifies the number of results in a paged response.',
+    },
+    {
+      name: 'page_token',
+      type: 'Query',
+      schema: z.optional(z.string()),
+      description: 'Token for retrieving the next page of results. Omit for the first page.',
+    },
   ],
   response: z.object({
     definitions: z.array(pulseMetricDefinitionSchema),
+    next_page_token: z.string().optional(),
+    offset: z.coerce.number(),
+    total_available: z.coerce.number(),
   }),
 });
 

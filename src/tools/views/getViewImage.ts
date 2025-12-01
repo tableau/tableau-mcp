@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { convertPngDataToToolResult } from '../convertPngDataToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -24,18 +25,23 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
   const getViewImageTool = new Tool({
     server,
     name: 'get-view-image',
-    description: `Retrieves an image of the specified view in a Tableau workbook. The width and height in pixels can be provided. The default width and height are both 800 pixels.`,
+    description:
+      'Retrieves an image of the specified view in a Tableau workbook. The width and height in pixels can be provided. The default width and height are both 800 pixels.',
     paramsSchema,
     annotations: {
       title: 'Get View Image',
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ viewId, width, height }, { requestId }): Promise<CallToolResult> => {
+    callback: async (
+      { viewId, width, height },
+      { requestId, authInfo },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getViewImageTool.logAndExecute<string, GetViewImageError>({
         requestId,
+        authInfo,
         args: { viewId },
         callback: async () => {
           const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
@@ -56,6 +62,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
               requestId,
               server,
               jwtScopes: ['tableau:views:download'],
+              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 return await restApi.viewsMethods.queryViewImage({
                   viewId,

@@ -5,6 +5,7 @@ export interface ProcessEnvEx {
   SSL_CERT: string | undefined;
   HTTP_PORT_ENV_VAR_NAME: string | undefined;
   CORS_ORIGIN_CONFIG: string | undefined;
+  TRUST_PROXY_CONFIG: string | undefined;
   SERVER: string | undefined;
   SITE_NAME: string | undefined;
   PAT_NAME: string | undefined;
@@ -22,11 +23,23 @@ export interface ProcessEnvEx {
   MAX_RESULT_LIMIT: string | undefined;
   DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: string | undefined;
   DISABLE_METADATA_API_REQUESTS: string | undefined;
+  DISABLE_SESSION_MANAGEMENT: string | undefined;
   ENABLE_SERVER_LOGGING: string | undefined;
   SERVER_LOG_DIRECTORY: string | undefined;
   INCLUDE_PROJECT_IDS: string | undefined;
   INCLUDE_DATASOURCE_IDS: string | undefined;
   INCLUDE_WORKBOOK_IDS: string | undefined;
+  TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: string | undefined;
+  DANGEROUSLY_DISABLE_OAUTH: string | undefined;
+  OAUTH_ISSUER: string | undefined;
+  OAUTH_JWE_PRIVATE_KEY: string | undefined;
+  OAUTH_JWE_PRIVATE_KEY_PATH: string | undefined;
+  OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: string | undefined;
+  OAUTH_REDIRECT_URI: string | undefined;
+  OAUTH_CLIENT_ID_SECRET_PAIRS: string | undefined;
+  OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: string | undefined;
+  OAUTH_ACCESS_TOKEN_TIMEOUT_MS: string | undefined;
+  OAUTH_REFRESH_TOKEN_TIMEOUT_MS: string | undefined;
 }
 
 declare global {
