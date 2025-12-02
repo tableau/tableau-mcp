@@ -8,7 +8,7 @@ import { fromError } from 'zod-validation-error';
 
 import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
 import { axios, AxiosResponse, getStringResponseHeader } from '../../utils/axios.js';
-import { parseUrl } from '../../utils/isUrl.js';
+import { parseUrl } from '../../utils/parseUrl.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { clientMetadataCache } from './clientMetadataCache.js';
 import { getDnsResolver } from './dnsResolver.js';

@@ -54,12 +54,12 @@ describe('Config', () => {
       OAUTH_REDIRECT_URI: undefined,
       OAUTH_JWE_PRIVATE_KEY: undefined,
       OAUTH_JWE_PRIVATE_KEY_PATH: undefined,
+      OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: undefined,
       OAUTH_CIMD_DNS_SERVERS: undefined,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: undefined,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: undefined,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: undefined,
       OAUTH_CLIENT_ID_SECRET_PAIRS: undefined,
-      OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: undefined,
     };
   });
 
