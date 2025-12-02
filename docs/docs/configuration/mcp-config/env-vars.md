@@ -184,7 +184,7 @@ If a tool has a `limit` parameter and returns an array of items, the maximum len
 
 ## `DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`
 
-Disables requests that are made to the VizQl Data Service for validating queries in the [`query-datasource`](../../tools/data-qna/query-datasource.md) tool. Does not disable the ability to the datasource.
+Disables requests that are made to the VizQl Data Service for validating queries in the [`query-datasource`](../../tools/data-qna/query-datasource.md) tool. Does not disable the ability to query the datasource.
 
 - Default: `false`
 - When `true`, skips validation of queries against metadata results and validation of SET and MATCH filters.
