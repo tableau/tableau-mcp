@@ -94,7 +94,7 @@ describe('OAuth', () => {
       grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
       code_challenge_methods_supported: ['S256'],
       scopes_supported: [],
-      token_endpoint_auth_methods_supported: ['client_secret_basic'],
+      token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
       subject_types_supported: ['public'],
     });
   });
@@ -113,11 +113,36 @@ describe('OAuth', () => {
 
     const awaitableWritableStream = new AwaitableWritableStream();
 
+    const response = await request(app)
+      .post(`/${serverName}`)
+      .set('Authorization', `Bearer ${access_token}`)
+      .set('Content-Type', 'application/json')
+      .set('Accept', 'application/json, text/event-stream')
+      .send({
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {
+            elicitation: {},
+          },
+          clientInfo: {
+            name: 'tableau-mcp-tests',
+            version: '1.0.0',
+          },
+        },
+        jsonrpc: '2.0',
+        id: 0,
+      })
+      .expect(200);
+
+    const sessionId = response.headers['mcp-session-id'];
+
     request(app)
       .post(`/${serverName}`)
       .set('Authorization', `Bearer ${access_token}`)
       .set('Content-Type', 'application/json')
       .set('Accept', 'application/json, text/event-stream')
+      .set('mcp-session-id', sessionId)
       .send({
         jsonrpc: '2.0',
         id: '1',

@@ -116,7 +116,7 @@ export const useRestApi = async <T>({
 export const getRequestInterceptor =
   (server: Server, requestId: RequestId): RequestInterceptor =>
   (request) => {
-    request.headers['User-Agent'] = userAgent;
+    request.headers['User-Agent'] = getUserAgent(server);
     logRequest(server, request, requestId);
     return request;
   };
@@ -220,6 +220,17 @@ function logResponse(
   } as const;
 
   log.info(server, messageObj, { logger: 'rest-api', requestId });
+}
+
+function getUserAgent(server: Server): string {
+  const userAgentParts = [userAgent];
+  if (server.clientInfo) {
+    const { name, version } = server.clientInfo;
+    if (name) {
+      userAgentParts.push(version ? `(${name} ${version})` : `(${name})`);
+    }
+  }
+  return userAgentParts.join(' ');
 }
 
 function getJwtSubClaim(config: Config, authInfo: TableauAuthInfo | undefined): string {

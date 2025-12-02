@@ -5,6 +5,7 @@ export interface ProcessEnvEx {
   SSL_CERT: string | undefined;
   HTTP_PORT_ENV_VAR_NAME: string | undefined;
   CORS_ORIGIN_CONFIG: string | undefined;
+  TRUST_PROXY_CONFIG: string | undefined;
   SERVER: string | undefined;
   SITE_NAME: string | undefined;
   PAT_NAME: string | undefined;
@@ -22,6 +23,7 @@ export interface ProcessEnvEx {
   MAX_RESULT_LIMIT: string | undefined;
   DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: string | undefined;
   DISABLE_METADATA_API_REQUESTS: string | undefined;
+  DISABLE_SESSION_MANAGEMENT: string | undefined;
   ENABLE_SERVER_LOGGING: string | undefined;
   SERVER_LOG_DIRECTORY: string | undefined;
   INCLUDE_PROJECT_IDS: string | undefined;

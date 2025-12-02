@@ -1,5 +1,5 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import cors from 'cors';
 import express, { Request, RequestHandler, Response } from 'express';
 import fs, { existsSync } from 'fs';
@@ -9,10 +9,14 @@ import https from 'https';
 import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
+import { createSession, getSession, Session } from '../sessions.js';
 import { validateProtocolVersion } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
+import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
+
+const SESSION_ID_HEADER = 'mcp-session-id';
 
 export async function startExpressServer({
   basePath,
@@ -39,9 +43,14 @@ export async function startExpressServer({
         'Accept',
         'MCP-Protocol-Version',
       ],
-      exposedHeaders: ['mcp-session-id', 'x-session-id'],
+      exposedHeaders: [SESSION_ID_HEADER, 'x-session-id'],
     }),
   );
+
+  if (config.trustProxyConfig !== null) {
+    // https://expressjs.com/en/guide/behind-proxies.html
+    app.set('trust proxy', config.trustProxyConfig);
+  }
 
   const middleware: Array<RequestHandler> = [];
   if (config.oauth.enabled) {
@@ -53,8 +62,16 @@ export async function startExpressServer({
 
   const path = `/${basePath}`;
   app.post(path, ...middleware, createMcpServer);
-  app.get(path, ...middleware, methodNotAllowed);
-  app.delete(path, ...middleware, methodNotAllowed);
+  app.get(
+    path,
+    ...middleware,
+    config.disableSessionManagement ? methodNotAllowed : handleSessionRequest,
+  );
+  app.delete(
+    path,
+    ...middleware,
+    config.disableSessionManagement ? methodNotAllowed : handleSessionRequest,
+  );
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
@@ -90,21 +107,45 @@ export async function startExpressServer({
 
   async function createMcpServer(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const server = new Server();
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-      });
+      let transport: StreamableHTTPServerTransport;
 
-      res.on('close', () => {
-        transport.close();
-        server.close();
-      });
+      if (config.disableSessionManagement) {
+        const server = new Server();
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: undefined,
+        });
 
-      await server.registerTools(getTableauAuthInfo(req.auth));
-      server.registerRequestHandlers();
+        res.on('close', () => {
+          transport.close();
+          server.close();
+        });
 
-      await server.connect(transport);
-      setLogLevel(server, logLevel);
+        await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
+      } else {
+        const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
+
+        let session: Session | undefined;
+        if (sessionId && (session = getSession(sessionId))) {
+          transport = session.transport;
+        } else if (!sessionId && isInitializeRequest(req.body)) {
+          const clientInfo = req.body.params.clientInfo;
+          transport = createSession({ clientInfo });
+
+          const server = new Server({ clientInfo });
+          await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
+        } else {
+          // Invalid request
+          res.status(400).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32000,
+              message: 'Bad Request: No valid session ID provided',
+            },
+            id: null,
+          });
+          return;
+        }
+      }
 
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
@@ -123,6 +164,19 @@ export async function startExpressServer({
   }
 }
 
+async function connect(
+  server: Server,
+  transport: StreamableHTTPServerTransport,
+  logLevel: LoggingLevel,
+  authInfo: TableauAuthInfo | undefined,
+): Promise<void> {
+  await server.registerTools(authInfo);
+  server.registerRequestHandlers();
+
+  await server.connect(transport);
+  setLogLevel(server, logLevel);
+}
+
 async function methodNotAllowed(_req: Request, res: Response): Promise<void> {
   res.writeHead(405).end(
     JSON.stringify({
@@ -134,4 +188,16 @@ async function methodNotAllowed(_req: Request, res: Response): Promise<void> {
       id: null,
     }),
   );
+}
+
+async function handleSessionRequest(req: express.Request, res: express.Response): Promise<void> {
+  const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
+
+  let session: Session | undefined;
+  if (!sessionId || !(session = getSession(sessionId))) {
+    res.status(400).send('Invalid or missing session ID');
+    return;
+  }
+
+  await session.transport.handleRequest(req, res);
 }

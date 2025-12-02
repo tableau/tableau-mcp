@@ -35,6 +35,7 @@ export class Config {
   sslCert: string;
   httpPort: number;
   corsOriginConfig: CorsOptions['origin'];
+  trustProxyConfig: boolean | number | string | null;
   siteName: string;
   patName: string;
   patValue: string;
@@ -51,6 +52,7 @@ export class Config {
   maxResultLimit: number | null;
   disableQueryDatasourceValidationRequests: boolean;
   disableMetadataApiRequests: boolean;
+  disableSessionManagement: boolean;
   enableServerLogging: boolean;
   serverLogDirectory: string;
   boundedContext: BoundedContext;
@@ -79,6 +81,7 @@ export class Config {
       SSL_CERT: sslCert,
       HTTP_PORT_ENV_VAR_NAME: httpPortEnvVarName,
       CORS_ORIGIN_CONFIG: corsOriginConfig,
+      TRUST_PROXY_CONFIG: trustProxyConfig,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
       JWT_SUB_CLAIM: jwtSubClaim,
@@ -94,6 +97,7 @@ export class Config {
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: disableQueryDatasourceValidationRequests,
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
+      DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
       ENABLE_SERVER_LOGGING: enableServerLogging,
       SERVER_LOG_DIRECTORY: serverLogDirectory,
       INCLUDE_PROJECT_IDS: includeProjectIds,
@@ -122,12 +126,14 @@ export class Config {
       maxValue: 65535,
     });
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
+    this.trustProxyConfig = getTrustProxyConfig(trustProxyConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableQueryDatasourceValidationRequests =
       disableQueryDatasourceValidationRequests === 'true';
     this.disableMetadataApiRequests = disableMetadataApiRequests === 'true';
+    this.disableSessionManagement = disableSessionManagement === 'true';
     this.enableServerLogging = enableServerLogging === 'true';
     this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
     this.boundedContext = {
@@ -338,6 +344,22 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
       `The environment variable CORS_ORIGIN_CONFIG is not a valid URL: ${corsOriginConfig}`,
     );
   }
+}
+
+function getTrustProxyConfig(trustProxyConfig: string): boolean | number | string | null {
+  if (!trustProxyConfig) {
+    return null;
+  }
+
+  if (trustProxyConfig.match(/^true|false$/i)) {
+    return trustProxyConfig.toLowerCase() === 'true';
+  }
+
+  if (trustProxyConfig.match(/^\d+$/)) {
+    return parseInt(trustProxyConfig, 10);
+  }
+
+  return trustProxyConfig;
 }
 
 // Creates a set from a comma-separated string of values.

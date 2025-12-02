@@ -99,6 +99,20 @@ tsm pending-changes apply
 
 <hr />
 
+### `TRUST_PROXY_CONFIG`
+
+:::warning
+
+In our internal testing, setting `TRUST_PROXY_CONFIG` to `1` was required when OAuth is enabled and
+the MCP server is deployed to Heroku. Otherwise, some MCP clients may not be able to connect to the
+MCP server.
+
+See [TRUST_PROXY_CONFIG](http-server#trust_proxy_config) for details.
+
+:::
+
+<hr />
+
 ### `OAUTH_CLIENT_ID_SECRET_PAIRS`
 
 A comma-separated list of client ID and secret pairs to be used for OAuth clients that require the

@@ -208,6 +208,23 @@ Disables `graphql` requests to the Tableau Metadata API in the
 
 <hr />
 
+## `DISABLE_SESSION_MANAGEMENT`
+
+When `false` (the default) and using the Streamable HTTP transport, the MCP server will create and
+manage sessions as per the
+[Session Management](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#session-management)
+section of the MCP spec. The only state persisted in the session from one request to another is
+information about the client's identity, capabilities, and protocol version compatibility.
+
+- Default: `false`
+- Does not apply to the stdio transport.
+- When `true`, the MCP server will no longer assign a session ID at initialization time nor require
+  clients to provide that session ID in the `mcp-session-id` header for subsequent requests.
+- Set this to `true` if you are using the HTTP transport and your client does not support or need
+  session management.
+
+<hr />
+
 ## `TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS`
 
 Some tools may have behavior or arguments that depend on the Tableau Server or Cloud version the MCP
