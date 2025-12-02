@@ -151,22 +151,29 @@ async function getClientFromMetadataDoc(
 
   const originalHostname = clientMetadataUrl.hostname;
   if (!isIP(clientMetadataUrl.hostname)) {
-    // Resolve the IP from DNS
-    const dnsResolver = getDnsResolver();
-    const resolvedIps = await dnsResolver.resolve4(clientMetadataUrl.hostname);
-    let ipAddress = resolvedIps.find(Boolean);
-    if (!ipAddress) {
-      const resolvedIps = await dnsResolver.resolve6(clientMetadataUrl.hostname);
-      ipAddress = resolvedIps.find(Boolean);
+    try {
+      // Resolve the IP from DNS
+      const dnsResolver = getDnsResolver();
+      const resolvedIps = await dnsResolver.resolve4(clientMetadataUrl.hostname);
+      let ipAddress = resolvedIps.find(Boolean);
       if (!ipAddress) {
-        return Err({
-          error: 'invalid_request',
-          error_description: 'Client URL is not valid',
-        });
+        const resolvedIps = await dnsResolver.resolve6(clientMetadataUrl.hostname);
+        ipAddress = resolvedIps.find(Boolean);
+        if (!ipAddress) {
+          return Err({
+            error: 'invalid_request',
+            error_description: 'Client URL is not valid',
+          });
+        }
       }
+      // Replace the hostname with the resolved IP Address
+      clientMetadataUrl.hostname = ipAddress;
+    } catch {
+      return Err({
+        error: 'invalid_request',
+        error_description: 'Client URL is not valid',
+      });
     }
-    // Replace the hostname with the resolved IP Address
-    clientMetadataUrl.hostname = ipAddress;
   }
 
   const isSafe = isSSRFSafeURL(clientMetadataUrl.toString(), {
@@ -236,10 +243,17 @@ async function getClientFromMetadataDoc(
   }
 
   const cacheControl = getStringResponseHeader(response.headers, 'cache-control');
-  const cacheControlMaxAge = cacheControl
-    .split(',')
-    .find((s) => s.trim().startsWith('max-age='))
-    ?.split('=')[1];
+  let cacheControlMaxAge: string | undefined;
+  if (cacheControl) {
+    const maxAgeDirective = cacheControl
+      .split(',')
+      .map((s) => s.trim())
+      .find((s) => /^max-age\s*=\s*\d+$/i.test(s));
+
+    if (maxAgeDirective) {
+      cacheControlMaxAge = maxAgeDirective.split('=')[1].trim();
+    }
+  }
 
   let cacheExpiryMs = clientMetadataCache.defaultExpirationTimeMs;
   if (cacheControlMaxAge) {

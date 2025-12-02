@@ -23,6 +23,15 @@ export class ExpiringMap<K, V> extends Map<K, V> {
   }
 
   set = (key: K, value: V, expirationTimeMs = this.expirationTimeMs): this => {
+    if (expirationTimeMs <= 0) {
+      throw new Error('Expiration time must be greater than 0');
+    }
+
+    if (expirationTimeMs > 2 ** 31 - 1) {
+      // https://developer.mozilla.org/en-US/docs/Web/API/Window/setTimeout#maximum_delay_value
+      throw new Error(`Expiration time must be at most ${2 ** 31 - 1}`);
+    }
+
     // Clear any existing timeout for this key
     const currentTimeout = this.timeouts.get(key);
     if (currentTimeout) {
