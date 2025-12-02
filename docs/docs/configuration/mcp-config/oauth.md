@@ -221,6 +221,8 @@ References:
 - https://blog.modelcontextprotocol.io/posts/client_registration/
 - https://client.dev/
 
+<hr />
+
 ### `OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS`
 
 The timeout for the OAuth authorization codes.
