@@ -1,6 +1,3 @@
-import { ZodiosError } from '@zodios/core';
-import { fromError, isZodErrorLike } from 'zod-validation-error';
-
 import { getConfig } from './config.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { ProductVersion } from './sdks/tableau/types/serverInfo.js';
@@ -37,11 +34,7 @@ export const getTableauServerVersion = async (server?: string): Promise<ProductV
     tableauServerVersions.set(server, serverVersion);
     return serverVersion;
   } catch (error) {
-    const reason =
-      error instanceof ZodiosError && isZodErrorLike(error.cause)
-        ? fromError(error.cause).toString()
-        : getExceptionMessage(error);
-
+    const reason = getExceptionMessage(error);
     throw new Error(`Failed to get server version: ${reason}`);
   }
 };

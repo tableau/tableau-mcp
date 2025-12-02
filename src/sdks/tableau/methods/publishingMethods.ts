@@ -1,11 +1,17 @@
 import { Zodios } from '@zodios/core';
-import { Result } from 'ts-results-es';
+import { Err, Ok, Result } from 'ts-results-es';
 
+import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { publishingApis } from '../apis/publishingApi.js';
 import { useMultipartPluginAsync } from '../plugins/multipartPlugin.js';
 import { Credentials } from '../types/credentials.js';
 import { FileUpload } from '../types/fileUpload.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
+
+export type PublishingError = {
+  type: 'initiate-file-upload-error' | 'append-to-file-upload-error';
+  message: string;
+};
 
 /**
  * Publishing methods of the Tableau Server REST API
@@ -27,13 +33,26 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
    * @param {string} siteId - The Tableau site ID
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_publishing.htm#initiate_file_upload
    */
-  initiateFileUpload = async ({ siteId }: { siteId: string }): Promise<FileUpload> => {
-    return (
-      await this._apiClient.initiateFileUpload(undefined, {
-        params: { siteId },
-        ...this.authHeader,
-      })
-    ).fileUpload;
+  initiateFileUpload = async ({
+    siteId,
+  }: {
+    siteId: string;
+  }): Promise<Result<FileUpload, { type: 'initiate-file-upload-error'; message: string }>> => {
+    try {
+      return Ok(
+        (
+          await this._apiClient.initiateFileUpload(undefined, {
+            params: { siteId },
+            ...this.authHeader,
+          })
+        ).fileUpload,
+      );
+    } catch (error: unknown) {
+      return Err({
+        type: 'initiate-file-upload-error',
+        message: getExceptionMessage(error),
+      });
+    }
   };
 
   /**
@@ -63,30 +82,44 @@ export default class PublishingMethods extends AuthenticatedMethods<typeof publi
     contents: Buffer;
     contentDispositionName?: 'tableau_file';
     contentType?: 'application/xml';
-  }): Promise<Result<FileUpload, unknown>> => {
-    return await useMultipartPluginAsync({
-      apiClient: this._apiClient,
-      actionFnAsync: async () => {
-        const boundaryString = crypto.randomUUID();
-        return (
-          await this._apiClient.appendToFileUpload(
-            {
-              filename,
-              contents,
-              boundaryString,
-              contentDispositionName,
-              contentType,
-            },
-            {
-              params: { siteId, uploadSessionId },
-              headers: {
-                'Content-Type': `multipart/mixed; boundary=${boundaryString}`,
-                ...this.authHeader.headers,
+  }): Promise<Result<FileUpload, { type: 'append-to-file-upload-error'; message: string }>> => {
+    try {
+      const fileUpload = await useMultipartPluginAsync({
+        apiClient: this._apiClient,
+        actionFnAsync: async () => {
+          const boundaryString = crypto.randomUUID();
+          return (
+            await this._apiClient.appendToFileUpload(
+              {
+                filename,
+                contents,
+                boundaryString,
+                contentDispositionName,
+                contentType,
               },
-            },
-          )
-        ).fileUpload;
-      },
-    });
+              {
+                params: { siteId, uploadSessionId },
+                headers: {
+                  'Content-Type': `multipart/mixed; boundary=${boundaryString}`,
+                  ...this.authHeader.headers,
+                },
+              },
+            )
+          ).fileUpload;
+        },
+      });
+
+      return fileUpload.isOk()
+        ? fileUpload
+        : Err({
+            type: 'append-to-file-upload-error',
+            message: getExceptionMessage(fileUpload.error),
+          });
+    } catch (error: unknown) {
+      return Err({
+        type: 'append-to-file-upload-error',
+        message: getExceptionMessage(error),
+      });
+    }
   };
 }

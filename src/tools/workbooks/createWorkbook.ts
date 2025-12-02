@@ -17,6 +17,11 @@ const paramsSchema = {
   workbookXml: z.string().trim().nonempty(),
 };
 
+export type CreateWorkbookError = {
+  type: 'initiate-file-upload-error' | 'append-to-file-upload-error';
+  message: string;
+};
+
 export const getCreateWorkbookTool = (
   server: Server,
   authInfo?: TableauAuthInfo,
@@ -50,49 +55,55 @@ This does not publish the workbook but a URL will be provided that can be used t
     callback: async ({ workbookXml }, { requestId, authInfo }): Promise<CallToolResult> => {
       const config = getConfig();
 
-      return await createWorkbookTool.logAndExecute({
+      return await createWorkbookTool.logAndExecute<string, CreateWorkbookError>({
         requestId,
         authInfo,
         args: { workbookXml },
         callback: async () => {
           const tableauAuthInfo = getTableauAuthInfo(authInfo);
-          return new Ok(
-            await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: ['tableau:file_uploads:create'],
-              authInfo: tableauAuthInfo,
-              callback: async (restApi) => {
-                const { uploadSessionId } = await restApi.publishingMethods.initiateFileUpload({
-                  siteId: restApi.siteId,
-                });
+          return await useRestApi({
+            config,
+            requestId,
+            server,
+            jwtScopes: ['tableau:file_uploads:create'],
+            authInfo: tableauAuthInfo,
+            callback: async (restApi) => {
+              const initiateFileUploadResult = await restApi.publishingMethods.initiateFileUpload({
+                siteId: restApi.siteId,
+              });
 
-                const result = await restApi.publishingMethods.appendToFileUpload({
-                  siteId: restApi.siteId,
-                  uploadSessionId,
-                  filename: `${randomUUID()}.twb`,
-                  contents: Buffer.from(workbookXml),
-                });
+              if (initiateFileUploadResult.isErr()) {
+                return initiateFileUploadResult;
+              }
 
-                if (result.isErr()) {
-                  return result;
-                }
+              const { uploadSessionId } = initiateFileUploadResult.value;
+              const result = await restApi.publishingMethods.appendToFileUpload({
+                siteId: restApi.siteId,
+                uploadSessionId,
+                filename: `${randomUUID()}.twb`,
+                contents: Buffer.from(workbookXml),
+              });
 
-                const server = config.server || tableauAuthInfo?.server;
-                invariant(server, 'Tableau server could not be determined');
-                return new Ok(
-                  `${server}/vizql/show${config.siteName ? `/t/${config.siteName}` : ''}/authoring/newWorkbook/${randomUUID()}/fromFileUpload/${uploadSessionId}`,
-                );
-              },
-            }),
-          );
+              if (result.isErr()) {
+                return result;
+              }
+
+              const server = config.server || tableauAuthInfo?.server;
+              invariant(server, 'Tableau server could not be determined');
+              return new Ok(
+                `${server}/vizql/show${config.siteName ? `/t/${config.siteName}` : ''}/authoring/newWorkbook/${randomUUID()}/fromFileUpload/${uploadSessionId}`,
+              );
+            },
+          });
         },
-        constrainSuccessResult: (uploadSessionId) => {
+        constrainSuccessResult: (newWorkbookUrl) => {
           return {
             type: 'success',
-            result: uploadSessionId,
+            result: newWorkbookUrl,
           };
+        },
+        getErrorText: (error) => {
+          return error.message;
         },
       });
     },
