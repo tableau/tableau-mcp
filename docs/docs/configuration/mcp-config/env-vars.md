@@ -184,7 +184,16 @@ If a tool has a `limit` parameter and returns an array of items, the maximum len
 
 ## `DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`
 
-TODO: Update this
+Disables requests that are made to the VizQl Data Service for validating queries in the [`query-datasource`](../../tools/data-qna/query-datasource.md) tool. Does not disable the ability to the datasource.
+
+- Default: `false`
+- When `true`, skips validation of queries against metadata results and validation of SET and MATCH filters.
+
+<hr />
+
+## `DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION`
+
+Note: This environment variable was deprecated in Tableau MCP `v1.13.0` and replaced by `DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`.
 
 Disable validation of SET and MATCH filter values in the
 [`query-datasource`](../../tools/data-qna/query-datasource.md) tool.

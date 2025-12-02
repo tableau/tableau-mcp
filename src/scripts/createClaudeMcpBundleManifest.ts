@@ -204,7 +204,7 @@ const envVars = {
     type: 'boolean',
     title: 'Disable Query Datasource Validation Requests',
     description:
-      'Disable extra requests made to the VizQL Data Service used for validating queries provided to the query-datasource tool. Does not disable the ability to query the datasource.',
+      'Disable requests made to the VizQL Data Service used for validating queries provided to the query-datasource tool. Does not disable the ability to query the datasource.',
     required: false,
     sensitive: false,
   },
@@ -213,7 +213,7 @@ const envVars = {
     type: 'boolean',
     title: 'Disable Metadata API Requests',
     description:
-      'Disable requests to the Tableau Metadata API in the get-datasource-metadata tool.',
+      'Disable requests to the Tableau Metadata API in the get-datasource-metadata tool. Deprecated in Tableau MCP v1.13.0 and replaced by DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS.',
     required: false,
     sensitive: false,
   },
