@@ -6,7 +6,7 @@ on:
       - anyoung/sea
 
 jobs:
-  build:
+  build-linux:
     runs-on: ubuntu-latest
 
     steps:
@@ -44,5 +44,43 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: artifacts/
-          name: sea-archive
+          name: sea-archive-linux
+          retention-days: 1
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '>=22.7.5'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Generate SEA
+        run: |
+          node --experimental-sea-config sea-config.json
+          node -e "require('fs').copyFileSync(process.execPath, 'tableau-mcp.exe')"
+          npx -y postject tableau-mcp.exe NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+          echo "SERVER=${{ secrets.E2E_TEST_SERVER }}" > .env
+          echo "AUTH=${{ secrets.E2E_TEST_AUTH }}" >> .env
+          echo "SITE_NAME=${{ secrets.E2E_TEST_SITE_NAME }}" >> .env
+          echo "JWT_SUB_CLAIM=${{ secrets.E2E_TEST_JWT_SUB_CLAIM }}" >> .env
+          echo "CONNECTED_APP_CLIENT_ID=${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}" >> .env
+          echo "CONNECTED_APP_SECRET_ID=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}" >> .env
+          echo "CONNECTED_APP_SECRET_VALUE=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}" >> .env
+          mkdir artifacts
+          copy ./tableau-mcp.exe ./artifacts/tableau-mcp.exe
+          ./artifacts/tableau-mcp.exe &
+
+      - name: Upload Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: artifacts/
+          name: sea-archive-windows
           retention-days: 1
