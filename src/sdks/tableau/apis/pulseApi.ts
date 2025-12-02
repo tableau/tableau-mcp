@@ -4,6 +4,8 @@ import { z } from 'zod';
 import {
   pulseBundleRequestSchema,
   pulseBundleResponseSchema,
+  pulseInsightBriefRequestSchema,
+  pulseInsightBriefResponseSchema,
   pulseInsightBundleTypeEnum,
   pulseMetricDefinitionSchema,
   pulseMetricDefinitionViewEnum,
@@ -147,8 +149,25 @@ const generatePulseMetricValueInsightBundleRestEndpoint = makeEndpoint({
   response: pulseBundleResponseSchema,
 });
 
+const generatePulseInsightBriefRestEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/pulse/insights/brief',
+  alias: 'generatePulseInsightBrief',
+  description:
+    'Generates an AI-powered insight brief for Pulse metrics based on natural language questions.',
+  parameters: [
+    {
+      name: 'brief_request',
+      type: 'Body',
+      schema: pulseInsightBriefRequestSchema,
+    },
+  ],
+  response: pulseInsightBriefResponseSchema,
+});
+
 const pulseApi = makeApi([
   generatePulseMetricValueInsightBundleRestEndpoint,
+  generatePulseInsightBriefRestEndpoint,
   listAllPulseMetricDefinitionsRestEndpoint,
   listPulseMetricDefinitionsFromMetricDefinitionIdsRestEndpoint,
   listPulseMetricsFromMetricDefinitionIdRestEndpoint,
