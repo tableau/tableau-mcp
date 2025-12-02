@@ -1,4 +1,3 @@
-import { Decimal } from 'decimal.js-light';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import {
@@ -82,7 +81,7 @@ function validateFieldsAgainstDatasourceMetadata(
       if (preexistingBinField) {
         validationErrors.push({
           field: field.fieldCaption,
-          message: `The bin field '${field.fieldCaption}' already exists in the datasource, and can not be modified. To create a new bin field, provide a new field caption. To query this field, omit the binSize property.`,
+          message: `The bin field '${field.fieldCaption}' has a fixed bin size defined in the datasource and can not be modified. To create a new bin on a field, use the field caption of the measure field you want to group. To use this bin, omit the binSize property.`,
         });
         continue;
       }
@@ -95,7 +94,7 @@ function validateFieldsAgainstDatasourceMetadata(
       if (!measureField) {
         validationErrors.push({
           field: field.fieldCaption,
-          message: `The bin field '${field.fieldCaption}' was provided in the query, but no corresponding measure field was found. To create a new bin field, provide the corresponding measure field in the query.`,
+          message: `The bin field '${field.fieldCaption}' was provided in the query, but no corresponding measure field was found. To create a new bin on a field, use the field caption of the measure field you want to group.`,
         });
       }
 
@@ -111,7 +110,7 @@ function validateFieldsAgainstDatasourceMetadata(
       if (!('calculation' in field)) {
         validationErrors.push({
           field: field.fieldCaption,
-          message: `Field '${field.fieldCaption}' was not found in the datasource. Fields must either belong to the datasource or be a new field with a calculation.`,
+          message: `Field '${field.fieldCaption}' was not found in the datasource. Fields must either belong to the datasource or provide a custom calculation.`,
         });
       }
 
@@ -120,7 +119,7 @@ function validateFieldsAgainstDatasourceMetadata(
       if ('formula' in matchingField) {
         validationErrors.push({
           field: field.fieldCaption,
-          message: `A custom calculation was provided for field '${field.fieldCaption}', but this field already has a calculation assigned to it. To query a preexisting field with a calculation, omit the calculation property. To create a new calculation, provide a new field caption.`,
+          message: `A custom calculation was provided for field '${field.fieldCaption}', but this field already has a calculation and can not be overwritten. To query this field, omit the calculation property. To create a new calculation, provide a new field caption.`,
         });
       } else {
         validationErrors.push({
@@ -152,7 +151,7 @@ function validateFieldsAgainstDatasourceMetadata(
           ) {
             validationErrors.push({
               field: field.fieldCaption,
-              message: `The '${field.fieldCaption}' field is of type '${matchingField.dataType}', and the function '${field.function}' can not be applied to fields of this data type.`,
+              message: `The '${field.fieldCaption}' field is of type '${matchingField.dataType}'. The '${field.function}' function can not be applied to fields of this data type.`,
             });
           }
           continue;
@@ -161,16 +160,34 @@ function validateFieldsAgainstDatasourceMetadata(
           if (!['MIN', 'MAX', 'COUNT', 'COUNTD', 'ATTR'].includes(field.function)) {
             validationErrors.push({
               field: field.fieldCaption,
-              message: `The '${field.fieldCaption}' field is of type '${matchingField.dataType}', and the function '${field.function}' can not be applied to fields of this data type.`,
+              message: `The '${field.fieldCaption}' field is of type '${matchingField.dataType}'. The '${field.function}' function can not be applied to fields of this data type.`,
             });
           }
           continue;
         case 'DATE':
         case 'DATETIME':
-          if (!['MIN', 'MAX', 'COUNT', 'COUNTD', 'ATTR'].includes(field.function)) {
+          if (
+            ![
+              'MIN',
+              'MAX',
+              'COUNT',
+              'COUNTD',
+              'ATTR',
+              'YEAR',
+              'QUARTER',
+              'MONTH',
+              'WEEK',
+              'DAY',
+              'TRUNC_YEAR',
+              'TRUNC_QUARTER',
+              'TRUNC_MONTH',
+              'TRUNC_WEEK',
+              'TRUNC_DAY',
+            ].includes(field.function)
+          ) {
             validationErrors.push({
               field: field.fieldCaption,
-              message: `The '${field.fieldCaption}' field is of type '${matchingField.dataType}', and the function '${field.function}' can not be applied to fields of this data type.`,
+              message: `The '${field.fieldCaption}' field is of type '${matchingField.dataType}'. The '${field.function}' function can not be applied to fields of this data type.`,
             });
           }
           continue;
@@ -201,15 +218,16 @@ function validateParametersAgainstDatasourceMetadata(
       continue;
     }
 
+    // Do validation based on the parameter type.
     switch (matchingParameter.parameterType) {
       case 'ANY_VALUE':
         if (!parameterValueMatchesDataType(parameter.value, matchingParameter.dataType)) {
           validationErrors.push({
             parameter: parameter.parameterCaption,
-            message: `Parameter '${parameter.parameterCaption}' has a data type of '${matchingParameter.dataType}' but was provided a value that does not match the data type: ${parameter.value}.`,
+            message: `Parameter '${parameter.parameterCaption}' has '${matchingParameter.dataType}' data type but was provided a value that does not match the data type: ${parameter.value}.`,
           });
         }
-        break;
+        continue;
       case 'LIST':
         if (!matchingParameter.members.includes(parameter.value)) {
           validationErrors.push({
@@ -217,7 +235,7 @@ function validateParametersAgainstDatasourceMetadata(
             message: `Parameter '${parameter.parameterCaption}' has a value that is not in the list of allowed values for the parameter. The list of allowed values is: ${matchingParameter.members.join(', ')}.`,
           });
         }
-        break;
+        continue;
       case 'QUANTITATIVE_DATE':
         if (typeof parameter.value !== 'string' || isNaN(Date.parse(parameter.value))) {
           validationErrors.push({
@@ -232,7 +250,7 @@ function validateParametersAgainstDatasourceMetadata(
         ) {
           validationErrors.push({
             parameter: parameter.parameterCaption,
-            message: `Parameter '${parameter.parameterCaption}' was provided a value that is less than the minimum date for the parameter.`,
+            message: `Parameter '${parameter.parameterCaption}' was provided a value that is less than the minimum allowed date of ${matchingParameter.minDate}.`,
           });
           continue;
         }
@@ -242,44 +260,34 @@ function validateParametersAgainstDatasourceMetadata(
         ) {
           validationErrors.push({
             parameter: parameter.parameterCaption,
-            message: `Parameter '${parameter.parameterCaption}' was provided a value that is greater than the maximum date for the parameter.`,
+            message: `Parameter '${parameter.parameterCaption}' was provided a value that is greater than the maximum allowed date of ${matchingParameter.maxDate}.`,
           });
           continue;
         }
-        break;
+        continue;
       case 'QUANTITATIVE_RANGE':
         if (typeof parameter.value !== 'number') {
           validationErrors.push({
             parameter: parameter.parameterCaption,
-            message: `Parameter '${parameter.parameterCaption}'. This parameter is a quantitative range parameter, and can only be assigned numerical values.`,
+            message: `Parameter '${parameter.parameterCaption}' is a quantitative range parameter, and can only be assigned numerical values.`,
           });
           continue;
         }
         if (matchingParameter.min != undefined && parameter.value < matchingParameter.min) {
           validationErrors.push({
             parameter: parameter.parameterCaption,
-            message: `Parameter '${parameter.parameterCaption}' was provided a value that is less than the minimum value for the parameter.`,
+            message: `Parameter '${parameter.parameterCaption}' was provided a value that is less than the minimum allowed value of ${matchingParameter.min}.`,
           });
           continue;
         }
         if (matchingParameter.max != undefined && parameter.value > matchingParameter.max) {
           validationErrors.push({
             parameter: parameter.parameterCaption,
-            message: `Parameter '${parameter.parameterCaption}' was provided a value that is greater than the maximum value for the parameter.`,
+            message: `Parameter '${parameter.parameterCaption}' was provided a value that is greater than the maximum allowed value of ${matchingParameter.max}.`,
           });
           continue;
         }
-        if (
-          matchingParameter.step != undefined &&
-          new Decimal(parameter.value).modulo(matchingParameter.step).toNumber() !== 0
-        ) {
-          validationErrors.push({
-            parameter: parameter.parameterCaption,
-            message: `Parameter '${parameter.parameterCaption}' was provided a value that is not a multiple of the step value for the parameter.`,
-          });
-          continue;
-        }
-        break;
+        continue;
       default:
         // if more parameter types are added, this method will continue without throwing an error.
         continue;
