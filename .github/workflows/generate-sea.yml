@@ -1,0 +1,32 @@
+name: Generate NodeJS Single Executable Application
+
+on:
+  push:
+    branches:
+      - anyoung/sea
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '>=22.7.5'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Generate SEA
+        run: |
+          node --experimental-sea-config sea-config.json
+          cp $(command -v node) tableau-mcp
+          npx -y postject tableau-mcp NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+          ./tableau-mcp
