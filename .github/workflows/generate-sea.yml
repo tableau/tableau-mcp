@@ -44,4 +44,5 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: artifacts/
+          name: sea-archive
           retention-days: 1
