@@ -60,7 +60,10 @@ Generates a Tableau TWB (workbook) XML string that connects to a specified publi
           if (!isDatasourceAllowedResult.allowed) {
             return new Err({
               type: 'datasource-not-allowed',
-              message: isDatasourceAllowedResult.message,
+              message: [
+                'The set of allowed data sources that can be used to generate a workbook is limited by the server configuration.',
+                `Generating a workbook using the datasource with LUID ${publishedDatasourceId} is not allowed.`,
+              ].join(' '),
             });
           }
 
@@ -68,7 +71,7 @@ Generates a Tableau TWB (workbook) XML string that connects to a specified publi
           const channel = url.protocol === 'https:' ? 'https' : 'http';
           const defaultPort = channel === 'https' ? '443' : '80';
           const port = url.port && url.port !== '0' ? url.port : defaultPort;
-          const siteName = config.siteName ?? '';
+          const siteName = config.siteName;
 
           const finalCaption = datasourceCaption?.trim() || datasourceName;
           const finalRevision = (revision ?? '1.0').trim();
