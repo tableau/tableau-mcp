@@ -902,7 +902,7 @@ describe('Config', () => {
       jwePrivateKey: '',
       jwePrivateKeyPath: defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH,
       jwePrivateKeyPassphrase: undefined,
-      dnsServers: ['1.1.1.1'],
+      dnsServers: ['1.1.1.1', '1.0.0.1'],
       ...defaultOAuthTimeoutMs,
     } as const;
 
@@ -921,7 +921,7 @@ describe('Config', () => {
         jwePrivateKey: '',
         jwePrivateKeyPath: '',
         jwePrivateKeyPassphrase: undefined,
-        dnsServers: ['1.1.1.1'],
+        dnsServers: ['1.1.1.1', '1.0.0.1'],
         ...defaultOAuthTimeoutMs,
       });
     });

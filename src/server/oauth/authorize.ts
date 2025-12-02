@@ -244,12 +244,15 @@ async function getClientFromMetadataDoc(
   let cacheExpiryMilliseconds = clientMetadataCache.defaultExpirationTimeMs;
   if (cacheControlMaxAge) {
     const cacheControlMaxAgeSeconds = parseInt(cacheControlMaxAge);
-    if (!isNaN(cacheControlMaxAgeSeconds)) {
+    if (!isNaN(cacheControlMaxAgeSeconds) && cacheControlMaxAgeSeconds >= 0) {
       cacheExpiryMilliseconds = Math.min(ONE_DAY_IN_MS, cacheControlMaxAgeSeconds * 1000);
     }
   }
 
-  clientMetadataCache.set(originalUrl, clientMetadataResult.data, cacheExpiryMilliseconds);
+  if (cacheExpiryMilliseconds > 0) {
+    clientMetadataCache.set(originalUrl, clientMetadataResult.data, cacheExpiryMilliseconds);
+  }
+
   return Ok(clientMetadataResult.data);
 }
 

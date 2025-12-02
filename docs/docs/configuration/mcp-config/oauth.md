@@ -209,10 +209,10 @@ URL. Part of this process requires resolving the IP address of the host of the d
 against DNS rebinding and Server-Side Request Forgery (SSRF) attacks.
 
 By default, the MCP server will use
-[Cloudflare's Public DNS](https://developers.cloudflare.com/1.1.1.1/ip-addresses/) (1.1.1.1) but you
-can override this using the `OAUTH_CIMD_DNS_SERVERS` environment variable.
+[Cloudflare's Public DNS](https://developers.cloudflare.com/1.1.1.1/ip-addresses/) (1.1.1.1 and
+1.0.0.1) but you can override this using the `OAUTH_CIMD_DNS_SERVERS` environment variable.
 
-- Default: `1.1.1.1`
+- Default: `1.1.1.1,1.0.0.1`
 - Format is a comma-separated list of IP addresses.
 - Example: `8.8.8.8,8.8.4.4` (Google's Public DNS)
 

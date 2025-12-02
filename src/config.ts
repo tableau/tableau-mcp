@@ -181,7 +181,7 @@ export class Config {
       jwePrivateKeyPassphrase: oauthJwePrivateKeyPassphrase || undefined,
       dnsServers: dnsServers
         ? dnsServers.split(',').map((ip) => ip.trim())
-        : ['1.1.1.1' /* Cloudflare public DNS */],
+        : ['1.1.1.1', '1.0.0.1' /* Cloudflare public DNS */],
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
         defaultValue: TEN_MINUTES_IN_MS,
         minValue: 0,
