@@ -275,7 +275,7 @@ describe('clientIdMetadataDocuments', () => {
     expect(response.status).toBe(400);
     expect(response.body).toEqual({
       error: 'invalid_request',
-      error_description: 'Client URL is not valid',
+      error_description: 'IP address of Client Metadata URL could not be resolved',
     });
   });
 

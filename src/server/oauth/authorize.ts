@@ -54,24 +54,22 @@ export function authorize(
         return;
       }
 
-      if (clientResult.value) {
-        const { redirect_uris, response_types } = clientResult.value;
+      const { redirect_uris, response_types } = clientResult.value;
 
-        if (response_types && !response_types.find((type) => type === response_type)) {
-          res.status(400).json({
-            error: 'unsupported_response_type',
-            error_description: `Unsupported response type: ${response_type}`,
-          });
-          return;
-        }
+      if (response_types && !response_types.find((type) => type === response_type)) {
+        res.status(400).json({
+          error: 'unsupported_response_type',
+          error_description: `Unsupported response type: ${response_type}`,
+        });
+        return;
+      }
 
-        if (redirect_uris && !redirect_uris.includes(redirect_uri)) {
-          res.status(400).json({
-            error: 'invalid_request',
-            error_description: `Invalid redirect URI: ${redirect_uri}`,
-          });
-          return;
-        }
+      if (redirect_uris && !redirect_uris.includes(redirect_uri)) {
+        res.status(400).json({
+          error: 'invalid_request',
+          error_description: `Invalid redirect URI: ${redirect_uri}`,
+        });
+        return;
       }
     }
 
@@ -162,7 +160,7 @@ async function getClientFromMetadataDoc(
         if (!ipAddress) {
           return Err({
             error: 'invalid_request',
-            error_description: 'Client URL is not valid',
+            error_description: 'IP address of Client Metadata URL could not be resolved',
           });
         }
       }
@@ -171,7 +169,7 @@ async function getClientFromMetadataDoc(
     } catch {
       return Err({
         error: 'invalid_request',
-        error_description: 'Client URL is not valid',
+        error_description: 'IP address of Client Metadata URL could not be resolved',
       });
     }
   }
