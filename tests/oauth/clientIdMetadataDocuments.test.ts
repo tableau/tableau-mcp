@@ -282,9 +282,7 @@ describe('clientIdMetadataDocuments', () => {
   it('should reject authorize requests with non-https CIMD URL', async () => {
     const { app } = await startServer();
 
-    const metadataUrl = new URL(
-      'http://www.fakemcpclient.com/.well-known/oauth/client-metadata.json',
-    );
+    const metadataUrl = new URL(constants.FAKE_CLIENT_METADATA_URL);
     metadataUrl.protocol = 'http:';
 
     mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
