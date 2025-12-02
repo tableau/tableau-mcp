@@ -36,4 +36,12 @@ jobs:
           echo "CONNECTED_APP_CLIENT_ID=${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}" >> .env
           echo "CONNECTED_APP_SECRET_ID=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}" >> .env
           echo "CONNECTED_APP_SECRET_VALUE=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}" >> .env
-          ./tableau-mcp &
+          mkdir artifacts
+          cp ./tableau-mcp ./artifacts/tableau-mcp
+          ./artifacts/tableau-mcp &
+
+      - name: Upload Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: artifacts/
+          retention-days: 1
