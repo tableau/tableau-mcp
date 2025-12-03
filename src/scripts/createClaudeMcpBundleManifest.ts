@@ -213,7 +213,7 @@ const envVars = {
     type: 'boolean',
     title: 'Disable Metadata API Requests',
     description:
-      'Disable requests to the Tableau Metadata API in the get-datasource-metadata tool. Deprecated in Tableau MCP v1.13.0 and replaced by DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS.',
+      'Disable requests to the Tableau Metadata API in the get-datasource-metadata tool.',
     required: false,
     sensitive: false,
   },
