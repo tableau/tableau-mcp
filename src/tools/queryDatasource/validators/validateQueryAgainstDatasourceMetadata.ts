@@ -9,17 +9,17 @@ import {
 } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
 
-type FieldValidationError = {
+export type FieldValidationError = {
   field: string;
   message: string;
 };
 
-type ParameterValidationError = {
+export type ParameterValidationError = {
   parameter: string;
   message: string;
 };
 
-type QueryValidationError = FieldValidationError | ParameterValidationError;
+export type QueryValidationError = FieldValidationError | ParameterValidationError;
 
 export async function validateQueryAgainstDatasourceMetadata(
   query: Query,
@@ -65,7 +65,7 @@ export async function validateQueryAgainstDatasourceMetadata(
   return Ok.EMPTY;
 }
 
-function validateFieldsAgainstDatasourceMetadata(
+export function validateFieldsAgainstDatasourceMetadata(
   fields: Query['fields'],
   datasourceMetadata: MetadataResponse,
   validationErrors: QueryValidationError[],
@@ -136,18 +136,9 @@ function validateFieldsAgainstDatasourceMetadata(
         case 'INTEGER':
         case 'REAL':
           if (
-            ![
-              'SUM',
-              'AVG',
-              'MEDIAN',
-              'COUNT',
-              'COUNTD',
-              'MIN',
-              'MAX',
-              'STDEV',
-              'VAR',
-              'ATTR',
-            ].includes(field.function)
+            !['SUM', 'AVG', 'MEDIAN', 'COUNT', 'COUNTD', 'MIN', 'MAX', 'STDEV', 'VAR'].includes(
+              field.function,
+            )
           ) {
             validationErrors.push({
               field: field.fieldCaption,
@@ -157,7 +148,7 @@ function validateFieldsAgainstDatasourceMetadata(
           continue;
         case 'STRING':
         case 'BOOLEAN':
-          if (!['MIN', 'MAX', 'COUNT', 'COUNTD', 'ATTR'].includes(field.function)) {
+          if (!['MIN', 'MAX', 'COUNT', 'COUNTD'].includes(field.function)) {
             validationErrors.push({
               field: field.fieldCaption,
               message: `The '${field.fieldCaption}' field is of type '${matchingField.dataType}'. The '${field.function}' function can not be applied to fields of this data type.`,
@@ -172,7 +163,6 @@ function validateFieldsAgainstDatasourceMetadata(
               'MAX',
               'COUNT',
               'COUNTD',
-              'ATTR',
               'YEAR',
               'QUARTER',
               'MONTH',
@@ -199,7 +189,7 @@ function validateFieldsAgainstDatasourceMetadata(
   }
 }
 
-function validateParametersAgainstDatasourceMetadata(
+export function validateParametersAgainstDatasourceMetadata(
   parameters: QueryParameter[],
   datasourceMetadata: MetadataResponse,
   validationErrors: QueryValidationError[],
@@ -232,7 +222,7 @@ function validateParametersAgainstDatasourceMetadata(
         if (!matchingParameter.members.includes(parameter.value)) {
           validationErrors.push({
             parameter: parameter.parameterCaption,
-            message: `Parameter '${parameter.parameterCaption}' has a value that is not in the list of allowed values for the parameter. The list of allowed values is: ${matchingParameter.members.join(', ')}.`,
+            message: `Parameter '${parameter.parameterCaption}' has a value that is not in the list of allowed values for the parameter. The list of allowed values is [${matchingParameter.members.join(', ')}].`,
           });
         }
         continue;
