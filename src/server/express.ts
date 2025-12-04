@@ -11,7 +11,10 @@ import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
 import { validateProtocolVersion } from './middleware.js';
+import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
+import { TableauAuthInfo } from './oauth/schemas.js';
+import { AuthenticatedRequest } from './oauth/types.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
 
@@ -102,7 +105,7 @@ export async function startExpressServer({
       );
   });
 
-  async function createMcpServer(req: Request, res: Response): Promise<void> {
+  async function createMcpServer(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       let transport: StreamableHTTPServerTransport;
 
@@ -117,7 +120,7 @@ export async function startExpressServer({
           server.close();
         });
 
-        await connect(server, transport, logLevel);
+        await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
       } else {
         const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
 
@@ -129,7 +132,7 @@ export async function startExpressServer({
           transport = createSession({ clientInfo });
 
           const server = new Server({ clientInfo });
-          await connect(server, transport, logLevel);
+          await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
         } else {
           // Invalid request
           res.status(400).json({
@@ -165,8 +168,9 @@ async function connect(
   server: Server,
   transport: StreamableHTTPServerTransport,
   logLevel: LoggingLevel,
+  authInfo: TableauAuthInfo | undefined,
 ): Promise<void> {
-  server.registerTools();
+  await server.registerTools(authInfo);
   server.registerRequestHandlers();
 
   await server.connect(transport);
