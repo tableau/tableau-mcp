@@ -9,10 +9,11 @@ import invariant from './utils/invariant.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
-const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
-const ONE_HOUR_IN_MS = 60 * 60 * 1000;
-const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
-const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
+export const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+export const ONE_HOUR_IN_MS = 60 * 60 * 1000;
+export const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
+export const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
+export const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
 const authTypes = ['pat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
@@ -68,6 +69,7 @@ export class Config {
     accessTokenTimeoutMs: number;
     refreshTokenTimeoutMs: number;
     clientIdSecretPairs: Record<string, string> | null;
+    dnsServers: string[];
   };
 
   constructor() {
@@ -111,6 +113,7 @@ export class Config {
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
+      OAUTH_CIMD_DNS_SERVERS: dnsServers,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
@@ -177,6 +180,9 @@ export class Config {
       jwePrivateKey: oauthJwePrivateKey ?? '',
       jwePrivateKeyPath: oauthJwePrivateKeyPath ?? '',
       jwePrivateKeyPassphrase: oauthJwePrivateKeyPassphrase || undefined,
+      dnsServers: dnsServers
+        ? dnsServers.split(',').map((ip) => ip.trim())
+        : ['1.1.1.1', '1.0.0.1' /* Cloudflare public DNS */],
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
         defaultValue: TEN_MINUTES_IN_MS,
         minValue: 0,

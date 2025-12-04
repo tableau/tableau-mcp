@@ -96,6 +96,7 @@ describe('OAuth', () => {
       scopes_supported: [],
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
       subject_types_supported: ['public'],
+      client_id_metadata_document_supported: true,
     });
   });
 
