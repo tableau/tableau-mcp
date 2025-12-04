@@ -54,6 +54,12 @@ vi.mock('axios', () => {
   };
 });
 
+vi.mock('axios-retry', () => {
+  return {
+    default: vi.fn(),
+  };
+});
+
 const mockAxios = {
   get: axios.get as MockedFunction<typeof axios.get>,
 };
