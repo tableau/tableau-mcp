@@ -189,6 +189,8 @@ async function getClientFromMetadataDoc(
   let response: AxiosResponse;
   try {
     const client = axios.create();
+    axiosRetry(client, { retries: 3, retryDelay: axiosRetry.exponentialDelay });
+
     response = await client.get(clientMetadataUrl.toString(), {
       timeout: 5000,
       maxContentLength: 5 * 1024, // 5 KB
@@ -196,10 +198,6 @@ async function getClientFromMetadataDoc(
       headers: {
         Accept: 'application/json',
         Host: originalHostname,
-      },
-      'axios-retry': {
-        retries: 3,
-        retryDelay: axiosRetry.exponentialDelay,
       },
     });
   } catch {
