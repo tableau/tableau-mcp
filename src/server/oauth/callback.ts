@@ -94,7 +94,7 @@ export function callback(
       const server = originHostUrl.toString();
       const restApi = new RestApi(server);
       restApi.setCredentials(accessToken, 'unknown user id');
-      const sessionResult = await restApi.serverMethods.getCurrentServerSession();
+      const sessionResult = await restApi.authenticatedServerMethods.getCurrentServerSession();
       if (sessionResult.isErr()) {
         if (sessionResult.error.type === 'unauthorized') {
           res.status(401).json({

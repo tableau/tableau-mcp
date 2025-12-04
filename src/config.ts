@@ -50,7 +50,7 @@ export class Config {
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
   maxResultLimit: number | null;
-  disableQueryDatasourceFilterValidation: boolean;
+  disableQueryDatasourceValidationRequests: boolean;
   disableMetadataApiRequests: boolean;
   disableSessionManagement: boolean;
   enableServerLogging: boolean;
@@ -95,7 +95,7 @@ export class Config {
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
       MAX_RESULT_LIMIT: maxResultLimit,
-      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
+      DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: disableQueryDatasourceValidationRequests,
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
       ENABLE_SERVER_LOGGING: enableServerLogging,
@@ -130,7 +130,8 @@ export class Config {
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
-    this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
+    this.disableQueryDatasourceValidationRequests =
+      disableQueryDatasourceValidationRequests === 'true';
     this.disableMetadataApiRequests = disableMetadataApiRequests === 'true';
     this.disableSessionManagement = disableSessionManagement === 'true';
     this.enableServerLogging = enableServerLogging === 'true';

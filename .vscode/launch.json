@@ -29,7 +29,7 @@
         "EXCLUDE_TOOLS": "${config:tableau.mcp.EXCLUDE_TOOLS}",
         "MAX_RESULT_LIMIT": "${config:tableau.mcp.MAX_RESULT_LIMIT}",
         "DISABLE_LOG_MASKING": "${config:tableau.mcp.DISABLE_LOG_MASKING}",
-        "DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION": "${config:tableau.mcp.DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION}",
+        "DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS": "${config:tableau.mcp.DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS}",
         "DISABLE_METADATA_API_REQUESTS": "${config:tableau.mcp.DISABLE_METADATA_API_REQUESTS}"
       },
       "args": ["build/index.js"],

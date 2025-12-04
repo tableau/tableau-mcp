@@ -1,6 +1,5 @@
 import { isErrorFromAlias, Zodios, ZodiosError } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
-import { z } from 'zod';
 
 import {
   MetadataResponse,
@@ -33,11 +32,11 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    *
    * Required scopes: `tableau:viz_data_service:read`
    *
-   * @param {z.infer<typeof QueryRequest>} queryRequest
+   * @param {QueryRequest} queryRequest
    * @link https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/QueryDatasource
    */
   queryDatasource = async (
-    queryRequest: z.infer<typeof QueryRequest>,
+    queryRequest: QueryRequest,
   ): Promise<Result<QueryOutput, 'feature-disabled' | TableauError | ZodiosError>> => {
     try {
       return Ok(await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader }));
@@ -63,11 +62,11 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    *
    * Required scopes: `tableau:viz_data_service:read`
    *
-   * @param {z.infer<typeof ReadMetadataRequest>} readMetadataRequest
+   * @param {ReadMetadataRequest} readMetadataRequest
    * @link https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/ReadMetadata
    */
   readMetadata = async (
-    readMetadataRequest: z.infer<typeof ReadMetadataRequest>,
+    readMetadataRequest: ReadMetadataRequest,
   ): Promise<Result<MetadataResponse, 'feature-disabled'>> => {
     try {
       return Ok(await this._apiClient.readMetadata(readMetadataRequest, { ...this.authHeader }));
