@@ -94,11 +94,11 @@ export class Config {
       CONNECTED_APP_CLIENT_ID: clientId,
       CONNECTED_APP_SECRET_ID: secretId,
       CONNECTED_APP_SECRET_VALUE: secretValue,
-      UAT_JWT_TENANT_ID: uatJwtTenantId,
-      UAT_JWT_ISSUER: uatJwtIssuer,
-      UAT_JWT_PRIVATE_KEY: uatJwtPrivateKey,
-      UAT_JWT_PRIVATE_KEY_PATH: uatJwtPrivateKeyPath,
-      UAT_JWT_KEY_ID: uatJwtKeyId,
+      UAT_TENANT_ID: uatJwtTenantId,
+      UAT_ISSUER: uatJwtIssuer,
+      UAT_PRIVATE_KEY: uatJwtPrivateKey,
+      UAT_PRIVATE_KEY_PATH: uatJwtPrivateKeyPath,
+      UAT_KEY_ID: uatJwtKeyId,
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
@@ -301,18 +301,18 @@ export class Config {
       invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
       invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
     } else if (this.auth === 'uat') {
-      invariant(uatJwtTenantId, 'The environment variable UAT_JWT_TENANT_ID is not set');
-      invariant(uatJwtIssuer, 'The environment variable UAT_JWT_ISSUER is not set');
+      invariant(uatJwtTenantId, 'The environment variable UAT_TENANT_ID is not set');
+      invariant(uatJwtIssuer, 'The environment variable UAT_ISSUER is not set');
 
       if (!uatJwtPrivateKey && !uatJwtPrivateKeyPath) {
         throw new Error(
-          'One of the environment variables: UAT_JWT_PRIVATE_KEY_PATH or UAT_JWT_PRIVATE_KEY must be set',
+          'One of the environment variables: UAT_PRIVATE_KEY_PATH or UAT_PRIVATE_KEY must be set',
         );
       }
 
       if (uatJwtPrivateKey && uatJwtPrivateKeyPath) {
         throw new Error(
-          'Only one of the environment variables: UAT_JWT_PRIVATE_KEY or UAT_JWT_PRIVATE_KEY_PATH must be set',
+          'Only one of the environment variables: UAT_PRIVATE_KEY or UAT_PRIVATE_KEY_PATH must be set',
         );
       }
 

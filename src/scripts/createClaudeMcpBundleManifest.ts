@@ -98,7 +98,7 @@ const envVars = {
     required: false,
     sensitive: true,
   },
-  UAT_JWT_TENANT_ID: {
+  UAT_TENANT_ID: {
     includeInUserConfig: false,
     type: 'string',
     title: 'UAT JWT Tenant ID',
@@ -106,7 +106,7 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  UAT_JWT_ISSUER: {
+  UAT_ISSUER: {
     includeInUserConfig: false,
     type: 'string',
     title: 'UAT JWT Issuer',
@@ -114,7 +114,7 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  UAT_JWT_PRIVATE_KEY: {
+  UAT_PRIVATE_KEY: {
     includeInUserConfig: false,
     type: 'string',
     title: 'UAT JWT Private Key',
@@ -122,7 +122,7 @@ const envVars = {
     required: false,
     sensitive: true,
   },
-  UAT_JWT_PRIVATE_KEY_PATH: {
+  UAT_PRIVATE_KEY_PATH: {
     includeInUserConfig: false,
     type: 'string',
     title: 'UAT JWT Private Key Path',
@@ -130,7 +130,7 @@ const envVars = {
     required: false,
     sensitive: true,
   },
-  UAT_JWT_KEY_ID: {
+  UAT_KEY_ID: {
     includeInUserConfig: false,
     type: 'string',
     title: 'UAT JWT Key ID',
