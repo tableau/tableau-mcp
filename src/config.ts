@@ -44,10 +44,10 @@ export class Config {
   connectedAppClientId: string;
   connectedAppSecretId: string;
   connectedAppSecretValue: string;
-  uatJwtTenantId: string;
-  uatJwtIssuer: string;
-  uatJwtPrivateKey: string;
-  uatJwtKeyId: string;
+  uatTenantId: string;
+  uatIssuer: string;
+  uatPrivateKey: string;
+  uatKeyId: string;
   jwtAdditionalPayload: string;
   datasourceCredentials: string;
   defaultLogLevel: string;
@@ -94,11 +94,11 @@ export class Config {
       CONNECTED_APP_CLIENT_ID: clientId,
       CONNECTED_APP_SECRET_ID: secretId,
       CONNECTED_APP_SECRET_VALUE: secretValue,
-      UAT_TENANT_ID: uatJwtTenantId,
-      UAT_ISSUER: uatJwtIssuer,
-      UAT_PRIVATE_KEY: uatJwtPrivateKey,
-      UAT_PRIVATE_KEY_PATH: uatJwtPrivateKeyPath,
-      UAT_KEY_ID: uatJwtKeyId,
+      UAT_TENANT_ID: uatTenantId,
+      UAT_ISSUER: uatIssuer,
+      UAT_PRIVATE_KEY: uatPrivateKey,
+      UAT_PRIVATE_KEY_PATH: uatPrivateKeyPath,
+      UAT_KEY_ID: uatKeyId,
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
@@ -301,27 +301,27 @@ export class Config {
       invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
       invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
     } else if (this.auth === 'uat') {
-      invariant(uatJwtTenantId, 'The environment variable UAT_TENANT_ID is not set');
-      invariant(uatJwtIssuer, 'The environment variable UAT_ISSUER is not set');
+      invariant(uatTenantId, 'The environment variable UAT_TENANT_ID is not set');
+      invariant(uatIssuer, 'The environment variable UAT_ISSUER is not set');
 
-      if (!uatJwtPrivateKey && !uatJwtPrivateKeyPath) {
+      if (!uatPrivateKey && !uatPrivateKeyPath) {
         throw new Error(
           'One of the environment variables: UAT_PRIVATE_KEY_PATH or UAT_PRIVATE_KEY must be set',
         );
       }
 
-      if (uatJwtPrivateKey && uatJwtPrivateKeyPath) {
+      if (uatPrivateKey && uatPrivateKeyPath) {
         throw new Error(
           'Only one of the environment variables: UAT_PRIVATE_KEY or UAT_PRIVATE_KEY_PATH must be set',
         );
       }
 
       if (
-        uatJwtPrivateKeyPath &&
+        uatPrivateKeyPath &&
         process.env.TABLEAU_MCP_TEST !== 'true' &&
-        !existsSync(uatJwtPrivateKeyPath)
+        !existsSync(uatPrivateKeyPath)
       ) {
-        throw new Error(`UAT JWT private key path does not exist: ${uatJwtPrivateKeyPath}`);
+        throw new Error(`UAT private key path does not exist: ${uatPrivateKeyPath}`);
       }
     }
 
@@ -332,11 +332,11 @@ export class Config {
     this.connectedAppClientId = clientId ?? '';
     this.connectedAppSecretId = secretId ?? '';
     this.connectedAppSecretValue = secretValue ?? '';
-    this.uatJwtTenantId = uatJwtTenantId ?? '';
-    this.uatJwtIssuer = uatJwtIssuer ?? '';
-    this.uatJwtPrivateKey =
-      uatJwtPrivateKey ?? (uatJwtPrivateKeyPath ? readFileSync(uatJwtPrivateKeyPath, 'utf8') : '');
-    this.uatJwtKeyId = uatJwtKeyId ?? '';
+    this.uatTenantId = uatTenantId ?? '';
+    this.uatIssuer = uatIssuer ?? '';
+    this.uatPrivateKey =
+      uatPrivateKey ?? (uatPrivateKeyPath ? readFileSync(uatPrivateKeyPath, 'utf8') : '');
+    this.uatKeyId = uatKeyId ?? '';
     this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
   }
 }
