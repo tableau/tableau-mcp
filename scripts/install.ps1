@@ -394,15 +394,36 @@ Stop-CurrentServer
 Write-Host "Tableau MCP Server Installer v$installerVersion" -ForegroundColor Cyan
 Write-Host
 
-Write-Host "Tableau MCP requires Node.js >= $minNodejsVersion or Docker to be installed" -ForegroundColor Yellow
-Write-Host "How do you plan to run the Tableau MCP Server?" -ForegroundColor Yellow
-Show-Menu @(
-  @{
-    label  = "Node.js"
-    action = { Use-NodeJS }
+Write-Host "Which version of the Tableau MCP Server do you want to install?" -ForegroundColor Yellow
+
+$response = Invoke-WebRequest -Uri "https://api.github.com/repos/tableau/tableau-mcp/releases"
+$versions = ($response.Content | ConvertFrom-Json) `
+| Select-Object -ExpandProperty tag_name `
+| ForEach-Object { $_ -replace 'v', '' } `
+| Sort-Object { [Version]$_ } -Descending `
+| Select-Object -First 4
+
+$menuItems = @(
+  for ($i = 0; $i -lt $versions.Length; $i++) {
+    # if $i is 0, add "Latest" to the label
+    $label = ""
+    if ($i -eq 0) {
+      $label = " (Latest)"
+    }
+
+    $version = $versions[$i]
+    @{
+      label  = "$version$label"
+      action = { Get-TableauMCP -version $version }
+    }
   }
   @{
-    label  = "Docker"
-    action = { Use-Docker }
+    label  = "Other"
+    action = {
+      $version = Read-Host "Enter the version of the Tableau MCP Server"
+      $version = $version -replace 'v', ''
+      Get-TableauMCP -version $version
+    }
   }
 )
+Show-Menu $menuItems
