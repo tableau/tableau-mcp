@@ -298,8 +298,10 @@ export class Config {
 }
 
 function validateServer(server: string): void {
-  if (!server.startsWith('https://')) {
-    throw new Error(`The environment variable SERVER must start with "https://": ${server}`);
+  if (!['https://', 'http://'].find((prefix) => server.startsWith(prefix))) {
+    throw new Error(
+      `The environment variable SERVER must start with "http://" or "https://": ${server}`,
+    );
   }
 
   try {
