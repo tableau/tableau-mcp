@@ -335,7 +335,7 @@ export class Config {
     this.uatTenantId = uatTenantId ?? '';
     this.uatIssuer = uatIssuer ?? '';
     this.uatPrivateKey =
-      uatPrivateKey ?? (uatPrivateKeyPath ? readFileSync(uatPrivateKeyPath, 'utf8') : '');
+      uatPrivateKey || (uatPrivateKeyPath ? readFileSync(uatPrivateKeyPath, 'utf8') : '');
     this.uatKeyId = uatKeyId ?? '';
     this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
   }
