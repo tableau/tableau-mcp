@@ -14,6 +14,11 @@ export interface ProcessEnvEx {
   CONNECTED_APP_CLIENT_ID: string | undefined;
   CONNECTED_APP_SECRET_ID: string | undefined;
   CONNECTED_APP_SECRET_VALUE: string | undefined;
+  UAT_JWT_TENANT_ID: string | undefined;
+  UAT_JWT_ISSUER: string | undefined;
+  UAT_JWT_PRIVATE_KEY: string | undefined;
+  UAT_JWT_PRIVATE_KEY_PATH: string | undefined;
+  UAT_JWT_KEY_ID: string | undefined;
   JWT_ADDITIONAL_PAYLOAD: string | undefined;
   DATASOURCE_CREDENTIALS: string | undefined;
   DEFAULT_LOG_LEVEL: string | undefined;

@@ -23,7 +23,7 @@ describe('getJwt', () => {
   it('should include correct header in the token', async () => {
     const token = await getJwt({
       username: mockUsername,
-      connectedApp: mockConnectedApp,
+      config: { type: 'connected-app', connectedApp: mockConnectedApp },
       scopes: mockScopes,
     });
 
@@ -38,7 +38,7 @@ describe('getJwt', () => {
   it('should include correct payload in the token', async () => {
     const token = await getJwt({
       username: mockUsername,
-      connectedApp: mockConnectedApp,
+      config: { type: 'connected-app', connectedApp: mockConnectedApp },
       scopes: mockScopes,
     });
 
@@ -60,7 +60,7 @@ describe('getJwt', () => {
   it('should generate a token that can be verified with the secret', async () => {
     const token = await getJwt({
       username: mockUsername,
-      connectedApp: mockConnectedApp,
+      config: { type: 'connected-app', connectedApp: mockConnectedApp },
       scopes: mockScopes,
     });
 
@@ -72,7 +72,7 @@ describe('getJwt', () => {
   it('should throw when verifying with incorrect secret', async () => {
     const token = await getJwt({
       username: mockUsername,
-      connectedApp: mockConnectedApp,
+      config: { type: 'connected-app', connectedApp: mockConnectedApp },
       scopes: mockScopes,
     });
 

@@ -68,6 +68,18 @@ const getNewRestApiInstanceAsync = async (
       scopes: jwtScopes,
       additionalPayload: getJwtAdditionalPayload(config, authInfo),
     });
+  } else if (config.auth === 'uat') {
+    await restApi.signIn({
+      type: 'uat',
+      siteName: config.siteName,
+      username: getJwtSubClaim(config, authInfo),
+      tenantId: config.uatJwtTenantId,
+      issuer: config.uatJwtIssuer,
+      privateKey: config.uatJwtPrivateKey,
+      keyId: config.uatJwtKeyId,
+      scopes: jwtScopes,
+      additionalPayload: getJwtAdditionalPayload(config, authInfo),
+    });
   } else {
     if (!authInfo?.accessToken || !authInfo?.userId) {
       throw new Error('Auth info is required when not signing in first.');

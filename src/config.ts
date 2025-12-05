@@ -1,5 +1,5 @@
 import { CorsOptions } from 'cors';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -15,7 +15,7 @@ export const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
 export const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
 export const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
-const authTypes = ['pat', 'direct-trust', 'oauth'] as const;
+const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
 
 function isAuthType(auth: unknown): auth is AuthType {
@@ -44,6 +44,10 @@ export class Config {
   connectedAppClientId: string;
   connectedAppSecretId: string;
   connectedAppSecretValue: string;
+  uatJwtTenantId: string;
+  uatJwtIssuer: string;
+  uatJwtPrivateKey: string;
+  uatJwtKeyId: string;
   jwtAdditionalPayload: string;
   datasourceCredentials: string;
   defaultLogLevel: string;
@@ -90,6 +94,11 @@ export class Config {
       CONNECTED_APP_CLIENT_ID: clientId,
       CONNECTED_APP_SECRET_ID: secretId,
       CONNECTED_APP_SECRET_VALUE: secretValue,
+      UAT_JWT_TENANT_ID: uatJwtTenantId,
+      UAT_JWT_ISSUER: uatJwtIssuer,
+      UAT_JWT_PRIVATE_KEY: uatJwtPrivateKey,
+      UAT_JWT_PRIVATE_KEY_PATH: uatJwtPrivateKeyPath,
+      UAT_JWT_KEY_ID: uatJwtKeyId,
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
@@ -291,6 +300,29 @@ export class Config {
       invariant(clientId, 'The environment variable CONNECTED_APP_CLIENT_ID is not set');
       invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
       invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
+    } else if (this.auth === 'uat') {
+      invariant(uatJwtTenantId, 'The environment variable UAT_JWT_TENANT_ID is not set');
+      invariant(uatJwtIssuer, 'The environment variable UAT_JWT_ISSUER is not set');
+
+      if (!uatJwtPrivateKey && !uatJwtPrivateKeyPath) {
+        throw new Error(
+          'One of the environment variables: UAT_JWT_PRIVATE_KEY_PATH or UAT_JWT_PRIVATE_KEY must be set',
+        );
+      }
+
+      if (uatJwtPrivateKey && uatJwtPrivateKeyPath) {
+        throw new Error(
+          'Only one of the environment variables: UAT_JWT_PRIVATE_KEY or UAT_JWT_PRIVATE_KEY_PATH must be set',
+        );
+      }
+
+      if (
+        uatJwtPrivateKeyPath &&
+        process.env.TABLEAU_MCP_TEST !== 'true' &&
+        !existsSync(uatJwtPrivateKeyPath)
+      ) {
+        throw new Error(`UAT JWT private key path does not exist: ${uatJwtPrivateKeyPath}`);
+      }
     }
 
     this.server = server ?? '';
@@ -300,6 +332,11 @@ export class Config {
     this.connectedAppClientId = clientId ?? '';
     this.connectedAppSecretId = secretId ?? '';
     this.connectedAppSecretValue = secretValue ?? '';
+    this.uatJwtTenantId = uatJwtTenantId ?? '';
+    this.uatJwtIssuer = uatJwtIssuer ?? '';
+    this.uatJwtPrivateKey =
+      uatJwtPrivateKey ?? (uatJwtPrivateKeyPath ? readFileSync(uatJwtPrivateKeyPath, 'utf8') : '');
+    this.uatJwtKeyId = uatJwtKeyId ?? '';
     this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
   }
 }
