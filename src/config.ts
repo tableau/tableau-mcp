@@ -9,10 +9,11 @@ import invariant from './utils/invariant.js';
 
 const __dirname = getDirname();
 
-const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
-const ONE_HOUR_IN_MS = 60 * 60 * 1000;
-const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
-const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
+export const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+export const ONE_HOUR_IN_MS = 60 * 60 * 1000;
+export const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
+export const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
+export const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
 const authTypes = ['pat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
@@ -50,7 +51,7 @@ export class Config {
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
   maxResultLimit: number | null;
-  disableQueryDatasourceFilterValidation: boolean;
+  disableQueryDatasourceValidationRequests: boolean;
   disableMetadataApiRequests: boolean;
   disableSessionManagement: boolean;
   enableServerLogging: boolean;
@@ -68,6 +69,7 @@ export class Config {
     accessTokenTimeoutMs: number;
     refreshTokenTimeoutMs: number;
     clientIdSecretPairs: Record<string, string> | null;
+    dnsServers: string[];
   };
 
   constructor() {
@@ -95,7 +97,7 @@ export class Config {
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
       MAX_RESULT_LIMIT: maxResultLimit,
-      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
+      DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: disableQueryDatasourceValidationRequests,
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
       ENABLE_SERVER_LOGGING: enableServerLogging,
@@ -111,6 +113,7 @@ export class Config {
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
+      OAUTH_CIMD_DNS_SERVERS: dnsServers,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
@@ -130,7 +133,8 @@ export class Config {
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
-    this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
+    this.disableQueryDatasourceValidationRequests =
+      disableQueryDatasourceValidationRequests === 'true';
     this.disableMetadataApiRequests = disableMetadataApiRequests === 'true';
     this.disableSessionManagement = disableSessionManagement === 'true';
     this.enableServerLogging = enableServerLogging === 'true';
@@ -176,6 +180,9 @@ export class Config {
       jwePrivateKey: oauthJwePrivateKey ?? '',
       jwePrivateKeyPath: oauthJwePrivateKeyPath ?? '',
       jwePrivateKeyPassphrase: oauthJwePrivateKeyPassphrase || undefined,
+      dnsServers: dnsServers
+        ? dnsServers.split(',').map((ip) => ip.trim())
+        : ['1.1.1.1', '1.0.0.1' /* Cloudflare public DNS */],
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
         defaultValue: TEN_MINUTES_IN_MS,
         minValue: 0,

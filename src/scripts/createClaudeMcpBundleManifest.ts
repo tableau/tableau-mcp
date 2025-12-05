@@ -199,11 +199,12 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: {
+  DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: {
     includeInUserConfig: false,
     type: 'boolean',
-    title: 'Disable Query Datasource Filter Validation',
-    description: 'Disable validation of SET and MATCH filter values in query-datasource tool.',
+    title: 'Disable Query Datasource Validation Requests',
+    description:
+      'Disable requests made to the VizQL Data Service used for validating queries provided to the query-datasource tool. Does not disable the ability to query the datasource.',
     required: false,
     sensitive: false,
   },
@@ -336,6 +337,15 @@ const envVars = {
       'A comma-separated list of client ID and secret pairs for the OAuth client. The format is `clientId:secret`.',
     required: false,
     sensitive: true,
+  },
+  OAUTH_CIMD_DNS_SERVERS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth CIMD DNS Servers',
+    description:
+      'A comma-separated list of DNS server IP addresses to resolve the IP addresses of the client metadata document URLs.',
+    required: false,
+    sensitive: false,
   },
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: {
     includeInUserConfig: false,

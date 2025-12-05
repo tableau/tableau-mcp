@@ -16,9 +16,9 @@ import {
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
-import { isAxiosError } from './utils/isAxiosError.js';
 
 type JwtScopes =
   | 'tableau:viz_data_service:read'
