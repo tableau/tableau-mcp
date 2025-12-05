@@ -1,9 +1,6 @@
-import { FilterField, Query } from '../queryDatasourceValidator.js';
+import { Field, FilterField } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 
-type Fields = Query['fields'];
-type Field = Fields[number];
-
-export function validateFields(fields: Fields): void {
+export function validateFields(fields: Field[]): void {
   {
     // You must query at least one field.
     if (fields.length === 0) {

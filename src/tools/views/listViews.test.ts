@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
 import invariant from '../../utils/invariant.js';
+import { Provider } from '../../utils/provider.js';
 import { constrainViews, getListViewsTool } from './listViews.js';
 import { mockView } from './mockView.js';
 
@@ -129,7 +130,8 @@ describe('listViewsTool', () => {
 
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
   const listViewsTool = getListViewsTool(new Server());
-  return await listViewsTool.callback(params, {
+  const callback = await Provider.from(listViewsTool.callback);
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

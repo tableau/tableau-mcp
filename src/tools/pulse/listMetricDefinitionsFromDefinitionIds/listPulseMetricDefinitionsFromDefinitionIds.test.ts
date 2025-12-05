@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../../server.js';
+import { Provider } from '../../../utils/provider.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import { getListPulseMetricDefinitionsFromDefinitionIdsTool } from './listPulseMetricDefinitionsFromDefinitionIds.js';
 
@@ -217,7 +218,8 @@ async function getToolResult(params: {
 }): Promise<CallToolResult> {
   const listPulseMetricDefinitionsFromDefinitionIdsTool =
     getListPulseMetricDefinitionsFromDefinitionIdsTool(new Server());
-  return await listPulseMetricDefinitionsFromDefinitionIdsTool.callback(params, {
+  const callback = await Provider.from(listPulseMetricDefinitionsFromDefinitionIdsTool.callback);
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),
