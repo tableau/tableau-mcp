@@ -177,7 +177,9 @@ export const getResponseErrorInterceptor =
 function logRequest(server: Server, request: RequestInterceptorConfig, requestId: RequestId): void {
   const config = getConfig();
   const maskedRequest = config.disableLogMasking ? request : maskRequest(request);
-  const url = new URL(maskedRequest.url ?? '', maskedRequest.baseUrl);
+  const url = new URL(
+    `${maskedRequest.baseUrl.replace(/\/$/, '')}/${maskedRequest.url?.replace(/^\//, '') ?? ''}`,
+  );
   if (request.params && Object.keys(request.params).length > 0) {
     url.search = new URLSearchParams(request.params).toString();
   }
@@ -204,7 +206,9 @@ function logResponse(
 ): void {
   const config = getConfig();
   const maskedResponse = config.disableLogMasking ? response : maskResponse(response);
-  const url = new URL(maskedResponse.url ?? '', maskedResponse.baseUrl);
+  const url = new URL(
+    `${maskedResponse.baseUrl.replace(/\/$/, '')}/${maskedResponse.url?.replace(/^\//, '') ?? ''}`,
+  );
   if (response.request?.params && Object.keys(response.request.params).length > 0) {
     url.search = new URLSearchParams(response.request.params).toString();
   }
