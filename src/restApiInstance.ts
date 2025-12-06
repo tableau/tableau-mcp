@@ -206,10 +206,9 @@ function logResponse(
 ): void {
   const config = getConfig();
   const maskedResponse = config.disableLogMasking ? response : maskResponse(response);
-  const baseUrlObj = new URL(response.baseUrl);
-  const url = maskedResponse.url?.startsWith('/')
-    ? new URL(baseUrlObj.origin + baseUrlObj.pathname + (maskedResponse.url ?? ''))
-    : new URL(maskedResponse.url ?? '', response.baseUrl);
+  const url = new URL(
+    `${maskedResponse.baseUrl.replace(/\/$/, '')}/${maskedResponse.url?.replace(/^\//, '') ?? ''}`,
+  );
   if (response.request?.params && Object.keys(response.request.params).length > 0) {
     url.search = new URLSearchParams(response.request.params).toString();
   }
