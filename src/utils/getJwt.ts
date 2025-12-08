@@ -12,11 +12,9 @@ export async function getJwt({
   config:
     | {
         type: 'connected-app';
-        connectedApp: {
-          clientId: string;
-          secretId: string;
-          secretValue: string;
-        };
+        clientId: string;
+        secretId: string;
+        secretValue: string;
       }
     | {
         type: 'uat';
@@ -35,7 +33,7 @@ export async function getJwt({
   };
 
   if (config.type === 'connected-app') {
-    header.kid = config.connectedApp.secretId;
+    header.kid = config.secretId;
   } else if (config.keyId) {
     header.kid = config.keyId;
   }
@@ -46,24 +44,23 @@ export async function getJwt({
     iat: iat - 5,
     exp: iat + 5 * 60,
     nbf: iat - 5,
+    scp: [...scopes],
     ...additionalPayload,
   };
 
   if (config.type === 'connected-app') {
     payload.jti = randomUUID();
-    payload.iss = config.connectedApp.clientId;
+    payload.iss = config.clientId;
     payload.aud = 'tableau';
-    payload.scp = [...scopes];
 
     return await new SignJWT(payload)
       .setProtectedHeader(header)
-      .sign(new TextEncoder().encode(config.connectedApp.secretValue));
+      .sign(new TextEncoder().encode(config.secretValue));
   } else {
     payload.email = username;
     payload.username = username;
-    payload.jti = `${config.issuer}-${iat}`;
+    payload.jti = `${config.issuer}-${payload.iat}`;
     payload.iss = config.issuer;
-    payload.scope = [...scopes].join(' ');
     payload['https://tableau.com/tenantId'] = config.tenantId;
 
     const privateKey = await importPKCS8(config.privateKey, 'RS256');

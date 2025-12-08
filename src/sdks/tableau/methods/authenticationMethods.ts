@@ -45,11 +45,9 @@ export class AuthenticationMethods extends Methods<typeof authenticationApis> {
                     username: authConfig.username,
                     config: {
                       type: 'connected-app',
-                      connectedApp: {
-                        clientId: authConfig.clientId,
-                        secretId: authConfig.secretId,
-                        secretValue: authConfig.secretValue,
-                      },
+                      clientId: authConfig.clientId,
+                      secretId: authConfig.secretId,
+                      secretValue: authConfig.secretValue,
                     },
                     scopes: authConfig.scopes,
                     additionalPayload: authConfig.additionalPayload,
