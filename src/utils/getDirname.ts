@@ -9,5 +9,5 @@ export function getDirname(): string {
     return fileURLToPath(new URL('.', import.meta.url));
   }
 
-  throw new Error('__dirname is not set');
+  throw new Error('Unable to determine directory path: neither __dirname nor import.meta is available');
 }
