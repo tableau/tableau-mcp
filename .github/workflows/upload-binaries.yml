@@ -31,6 +31,14 @@ jobs:
           echo "CONNECTED_APP_SECRET_ID=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}" >> .env
           echo "CONNECTED_APP_SECRET_VALUE=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}" >> .env
           ./tableau-mcp &
+          if [ $? -eq 0 ]; then
+            echo "tableau-mcp started successfully"
+            rm .env
+            pkill -f tableau-mcp
+          else
+            echo "tableau-mcp failed to start"
+            exit 1
+          fi
           tar -czf tableau-mcp.tar.gz tableau-mcp
       - name: Upload archive to release
         run: |
@@ -63,7 +71,16 @@ jobs:
           echo "CONNECTED_APP_CLIENT_ID=${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}" >> .env
           echo "CONNECTED_APP_SECRET_ID=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}" >> .env
           echo "CONNECTED_APP_SECRET_VALUE=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}" >> .env
-          .\tableau-mcp.exe &
+          start /b tableau-mcp.exe
+          tasklist /FI "IMAGENAME eq tableau-mcp.exe" | find /I /N "tableau-mcp.exe">NUL
+          if "%ERRORLEVEL%"=="0" (
+            echo tableau-mcp.exe is running
+            del .env
+            taskkill /IM tableau-mcp.exe /F
+          ) else (
+            echo tableau-mcp.exe failed to start
+            exit /b 1
+          )
           powershell Compress-Archive -Path tableau-mcp.exe -DestinationPath tableau-mcp.zip
       - name: Upload zip to release
         run: |
