@@ -31,13 +31,8 @@ export async function getJwt({
   const header: JWTHeaderParameters = {
     alg: config.type === 'connected-app' ? 'HS256' : 'RS256',
     typ: 'JWT',
+    kid: config.type === 'connected-app' ? config.secretId : config.keyId,
   };
-
-  if (config.type === 'connected-app') {
-    header.kid = config.secretId;
-  } else if (config.keyId) {
-    header.kid = config.keyId;
-  }
 
   const iat = Math.floor(Date.now() / 1000);
   const payload: JWTPayload = {
