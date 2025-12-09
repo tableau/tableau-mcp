@@ -4,9 +4,8 @@ sidebar_position: 3
 
 # Unified Access Tokens
 
-When `AUTH` is `uat`, the MCP server will use the provided [Tableau Unified Access Tokens
-(UAT)][uat] info to generate a scoped JSON Web Token (JWT) and use it to authenticate to the Tableau
-REST APIs.
+When `AUTH` is `uat`, the MCP server will use the provided [Tableau Unified Access Token (UAT)][uat]
+info to generate a scoped JSON Web Token (JWT) and use it to authenticate to the Tableau REST APIs.
 
 The generated JWT will have the minimum set of scopes necessary to invoke the methods called by the
 tool being executed.
@@ -31,7 +30,7 @@ it internally calls into VizQL Data Service, the JWT will only have the
 
 ### `UAT_ISSUER`
 
-- The issuer of the UAT configuration.
+- The unique issuer URI of the UAT configuration.
 - Used as the `iss` claim of the JWT.
 
 <hr />
@@ -84,5 +83,4 @@ Example:
 }
 ```
 
-[uat]:
-  https://help.dev.tabint.net/__PERSONAL/__REVIEW/benjamin.wu/content-experience/tcm-api-docs/development/fsatta-tcm-jwt-auth/docs/unified_access_tokens.html
+[uat]: https://help.tableau.com/current/api/cloud-manager/en-us/docs/unified_access_tokens.html
