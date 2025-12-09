@@ -55,6 +55,7 @@ export class AuthenticationMethods extends Methods<typeof authenticationApis> {
                 };
               case 'uat':
                 return {
+                  isUat: true,
                   jwt: await getJwt({
                     username: authConfig.username,
                     config: {
