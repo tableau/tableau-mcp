@@ -812,6 +812,78 @@ describe('Config', () => {
     });
   });
 
+  describe('UAT configuration config parsing', () => {
+    const defaultUatEnvVars = {
+      ...defaultEnvVars,
+      AUTH: 'uat',
+      UAT_TENANT_ID: 'test-tenant-id',
+      UAT_ISSUER: 'test-issuer',
+      UAT_PRIVATE_KEY: 'test-private-key',
+      UAT_KEY_ID: 'test-key-id',
+    } as const;
+
+    it('should configure uat authentication when all required variables are provided', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.auth).toBe('uat');
+      expect(config.uatTenantId).toBe('test-tenant-id');
+      expect(config.uatIssuer).toBe('test-issuer');
+      expect(config.uatUsernameClaim).toBe('email');
+      expect(config.uatPrivateKey).toBe('test-private-key');
+      expect(config.uatKeyId).toBe('test-key-id');
+    });
+
+    it('should throw error when UAT_TENANT_ID is missing', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_TENANT_ID: undefined,
+      };
+
+      expect(() => new Config()).toThrow('The environment variable UAT_TENANT_ID is not set');
+    });
+
+    it('should throw error when UAT_ISSUER is missing', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_ISSUER: undefined,
+      };
+
+      expect(() => new Config()).toThrow('The environment variable UAT_ISSUER is not set');
+    });
+
+    it('should throw error when UAT_PRIVATE_KEY and UAT_PRIVATE_KEY_PATH is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_PRIVATE_KEY: undefined,
+        UAT_PRIVATE_KEY_PATH: undefined,
+      };
+
+      expect(() => new Config()).toThrow(
+        'One of the environment variables: UAT_PRIVATE_KEY_PATH or UAT_PRIVATE_KEY must be set',
+      );
+    });
+
+    it('should throw error when UAT_PRIVATE_KEY and UAT_PRIVATE_KEY_PATH are both set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_PRIVATE_KEY: 'hamburgers',
+        UAT_PRIVATE_KEY_PATH: 'hotdogs',
+      };
+
+      expect(() => new Config()).toThrow(
+        'Only one of the environment variables: UAT_PRIVATE_KEY or UAT_PRIVATE_KEY_PATH must be set',
+      );
+    });
+  });
+
   describe('Bounded context parsing', () => {
     it('should set boundedContext to null sets when no project, datasource, or workbook IDs are provided', () => {
       process.env = {

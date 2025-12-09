@@ -20,6 +20,7 @@ export async function getJwt({
         type: 'uat';
         tenantId: string;
         issuer: string;
+        usernameClaim: string;
         privateKey: string;
         keyId: string;
       };
@@ -40,7 +41,6 @@ export async function getJwt({
 
   const iat = Math.floor(Date.now() / 1000);
   const payload: JWTPayload = {
-    sub: username,
     iat: iat - 5,
     exp: iat + 5 * 60,
     nbf: iat - 5,
@@ -49,6 +49,7 @@ export async function getJwt({
   };
 
   if (config.type === 'connected-app') {
+    payload.sub = username;
     payload.jti = randomUUID();
     payload.iss = config.clientId;
     payload.aud = 'tableau';
@@ -57,8 +58,7 @@ export async function getJwt({
       .setProtectedHeader(header)
       .sign(new TextEncoder().encode(config.secretValue));
   } else {
-    payload.email = username;
-    payload.username = username;
+    payload[config.usernameClaim] = username;
     payload.jti = `${config.issuer}-${payload.iat}`;
     payload.iss = config.issuer;
     payload['https://tableau.com/tenantId'] = config.tenantId;

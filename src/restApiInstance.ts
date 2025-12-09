@@ -75,6 +75,7 @@ const getNewRestApiInstanceAsync = async (
       username: getJwtSubClaim(config, authInfo),
       tenantId: config.uatTenantId,
       issuer: config.uatIssuer,
+      usernameClaim: config.uatUsernameClaim,
       privateKey: config.uatPrivateKey,
       keyId: config.uatKeyId,
       scopes: jwtScopes,

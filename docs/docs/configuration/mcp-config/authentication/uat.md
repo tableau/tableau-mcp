@@ -35,6 +35,13 @@ it internally calls into VizQL Data Service, the JWT will only have the
 
 <hr />
 
+### `UAT_USERNAME_CLAIM`
+
+- The username claim of the Tableau UAT JWT that maps to the Tableau username.
+- Defaults to `email`.
+
+<hr />
+
 ### `UAT_PRIVATE_KEY`
 
 The RSA private key used to sign the UAT JWTs.

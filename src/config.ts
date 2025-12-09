@@ -46,6 +46,7 @@ export class Config {
   connectedAppSecretValue: string;
   uatTenantId: string;
   uatIssuer: string;
+  uatUsernameClaim: string;
   uatPrivateKey: string;
   uatKeyId: string;
   jwtAdditionalPayload: string;
@@ -96,6 +97,7 @@ export class Config {
       CONNECTED_APP_SECRET_VALUE: secretValue,
       UAT_TENANT_ID: uatTenantId,
       UAT_ISSUER: uatIssuer,
+      UAT_USERNAME_CLAIM: uatUsernameClaim,
       UAT_PRIVATE_KEY: uatPrivateKey,
       UAT_PRIVATE_KEY_PATH: uatPrivateKeyPath,
       UAT_KEY_ID: uatKeyId,
@@ -334,6 +336,7 @@ export class Config {
     this.connectedAppSecretValue = secretValue ?? '';
     this.uatTenantId = uatTenantId ?? '';
     this.uatIssuer = uatIssuer ?? '';
+    this.uatUsernameClaim = uatUsernameClaim || 'email';
     this.uatPrivateKey =
       uatPrivateKey || (uatPrivateKeyPath ? readFileSync(uatPrivateKeyPath, 'utf8') : '');
     this.uatKeyId = uatKeyId ?? '';

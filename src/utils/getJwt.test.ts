@@ -1,11 +1,4 @@
-import {
-  decodeJwt,
-  decodeProtectedHeader,
-  exportPKCS8,
-  generateKeyPair,
-  importPKCS8,
-  jwtVerify,
-} from 'jose';
+import { decodeJwt, decodeProtectedHeader, exportPKCS8, generateKeyPair, jwtVerify } from 'jose';
 
 import { getJwt } from './getJwt.js';
 
@@ -95,6 +88,7 @@ describe('getJwt', () => {
     const mockUatConfig = {
       tenantId: 'test-tenant-id',
       issuer: 'test-issuer',
+      usernameClaim: 'email',
       keyId: 'test-key-id',
       privateKey: privateKeyPem,
     };
@@ -128,7 +122,7 @@ describe('getJwt', () => {
       expect(decodedPayload).toMatchObject({
         jti: `${mockUatConfig.issuer}-${decodedPayload.iat}`,
         iss: mockUatConfig.issuer,
-        sub: mockUsername,
+        email: mockUsername,
         scp: [...mockScopes],
       });
 
@@ -146,6 +140,17 @@ describe('getJwt', () => {
       });
 
       await expect(jwtVerify(token, publicKey)).resolves.not.toThrow();
+    });
+
+    it('should include the username claim in the payload', async () => {
+      const token = await getJwt({
+        username: mockUsername,
+        config: { type: 'uat', ...mockUatConfig, usernameClaim: 'username' },
+        scopes: mockScopes,
+      });
+      const decodedPayload = decodeJwt(token);
+      expect(decodedPayload.username).toBe(mockUsername);
+      expect(decodedPayload.email).toBeUndefined();
     });
 
     it('should throw when verifying with incorrect secret', async () => {
