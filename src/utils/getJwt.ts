@@ -28,11 +28,18 @@ export async function getJwt({
   scopes: Set<string>;
   additionalPayload?: Record<string, unknown>;
 }): Promise<string> {
-  const header: JWTHeaderParameters = {
-    alg: config.type === 'connected-app' ? 'HS256' : 'RS256',
-    typ: 'JWT',
-    kid: config.type === 'connected-app' ? config.secretId : config.keyId,
-  };
+  const header: JWTHeaderParameters =
+    config.type === 'connected-app'
+      ? {
+          alg: 'HS256',
+          typ: 'JWT',
+          kid: config.secretId,
+        }
+      : {
+          alg: 'RS256',
+          typ: 'JWT',
+          kid: config.keyId,
+        };
 
   const iat = Math.floor(Date.now() / 1000);
   const payload: JWTPayload = {
