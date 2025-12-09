@@ -1,31 +1,25 @@
 name: Generate NodeJS Single Executable Application
 
 on:
-  push:
-    branches:
-      - anyoung/sea
+  release:
+    types: [published]
 
 jobs:
   build-linux:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '>=22.7.5'
           cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
       - name: Generate SEA
         run: |
+          git fetch --tags
+          git checkout -b sea-linux ${{ github.event.release.tag_name }}
+          npm ci
+          npm run build
           node --experimental-sea-config sea-config.json
           cp $(command -v node) tableau-mcp
           npx -y postject tableau-mcp NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
@@ -36,16 +30,13 @@ jobs:
           echo "CONNECTED_APP_CLIENT_ID=${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}" >> .env
           echo "CONNECTED_APP_SECRET_ID=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}" >> .env
           echo "CONNECTED_APP_SECRET_VALUE=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}" >> .env
-          mkdir artifacts
-          cp ./tableau-mcp ./artifacts/tableau-mcp
-          ./artifacts/tableau-mcp &
-
-      - name: Upload Artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: artifacts/
-          name: sea-archive-linux
-          retention-days: 1
+          ./tableau-mcp &
+          tar -czf tableau-mcp.tar.gz tableau-mcp
+      - name: Upload archive to release
+        run: |
+          gh release upload ${{github.event.release.tag_name}} tableau-mcp.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
   build-windows:
     runs-on: windows-latest
@@ -56,14 +47,12 @@ jobs:
         with:
           node-version: '>=22.7.5'
           cache: 'npm'
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
       - name: Generate SEA
         run: |
+          git fetch --tags
+          git checkout -b sea-linux ${{ github.event.release.tag_name }}
+          npm ci
+          npm run build
           node --experimental-sea-config sea-config.json
           node -e "require('fs').copyFileSync(process.execPath, 'tableau-mcp.exe')"
           npx -y postject tableau-mcp.exe NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
@@ -74,13 +63,10 @@ jobs:
           echo "CONNECTED_APP_CLIENT_ID=${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}" >> .env
           echo "CONNECTED_APP_SECRET_ID=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}" >> .env
           echo "CONNECTED_APP_SECRET_VALUE=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}" >> .env
-          mkdir artifacts
-          copy ./tableau-mcp.exe ./artifacts/tableau-mcp.exe
-          ./artifacts/tableau-mcp.exe &
-
-      - name: Upload Artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: artifacts/
-          name: sea-archive-windows
-          retention-days: 1
+          .\tableau-mcp.exe &
+          powershell Compress-Archive -Path tableau-mcp.exe -DestinationPath tableau-mcp.zip
+      - name: Upload zip to release
+        run: |
+          gh release upload ${{github.event.release.tag_name}} tableau-mcp.zip
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
