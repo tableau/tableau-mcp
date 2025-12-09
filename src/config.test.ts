@@ -718,7 +718,7 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.auth).toBe('direct-trust');
-      expect(config.jwtSubClaim).toBe('test-jwt-sub-claim');
+      expect(config.jwtUsername).toBe('test-jwt-sub-claim');
       expect(config.connectedAppClientId).toBe('test-client-id');
       expect(config.connectedAppSecretId).toBe('test-secret-id');
       expect(config.connectedAppSecretValue).toBe('test-secret-value');
@@ -804,7 +804,7 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.auth).toBe('pat');
-      expect(config.jwtSubClaim).toBe('');
+      expect(config.jwtUsername).toBe('');
       expect(config.connectedAppClientId).toBe('');
       expect(config.connectedAppSecretId).toBe('');
       expect(config.connectedAppSecretValue).toBe('');
@@ -818,6 +818,7 @@ describe('Config', () => {
       AUTH: 'uat',
       UAT_TENANT_ID: 'test-tenant-id',
       UAT_ISSUER: 'test-issuer',
+      UAT_USERNAME_CLAIM: 'test-username',
       UAT_PRIVATE_KEY: 'test-private-key',
       UAT_KEY_ID: 'test-key-id',
     } as const;
@@ -832,9 +833,33 @@ describe('Config', () => {
       expect(config.auth).toBe('uat');
       expect(config.uatTenantId).toBe('test-tenant-id');
       expect(config.uatIssuer).toBe('test-issuer');
-      expect(config.uatUsernameClaim).toBe('email');
+      expect(config.uatUsernameClaimName).toBe('email');
+      expect(config.jwtUsername).toBe('test-username');
       expect(config.uatPrivateKey).toBe('test-private-key');
       expect(config.uatKeyId).toBe('test-key-id');
+    });
+
+    it('should fall back to JWT_SUB_CLAIM when UAT_USERNAME_CLAIM is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_USERNAME_CLAIM: undefined,
+        JWT_SUB_CLAIM: 'test-jwt-sub-claim',
+      };
+
+      const config = new Config();
+      expect(config.jwtUsername).toBe('test-jwt-sub-claim');
+    });
+
+    it('should set uatUsernameClaimName to the specified value when UAT_USERNAME_CLAIM_NAME is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_USERNAME_CLAIM_NAME: 'test-username-claim-name',
+      };
+
+      const config = new Config();
+      expect(config.uatUsernameClaimName).toBe('test-username-claim-name');
     });
 
     it('should throw error when UAT_TENANT_ID is missing', () => {
@@ -855,6 +880,19 @@ describe('Config', () => {
       };
 
       expect(() => new Config()).toThrow('The environment variable UAT_ISSUER is not set');
+    });
+
+    it('should throw error when UAT_USERNAME_CLAIM is missing and JWT_SUB_CLAIM is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_USERNAME_CLAIM: undefined,
+        JWT_SUB_CLAIM: undefined,
+      };
+
+      expect(() => new Config()).toThrow(
+        'One of the environment variables: UAT_USERNAME_CLAIM or JWT_SUB_CLAIM must be set',
+      );
     });
 
     it('should throw error when UAT_PRIVATE_KEY and UAT_PRIVATE_KEY_PATH is not set', () => {

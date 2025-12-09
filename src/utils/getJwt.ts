@@ -20,7 +20,7 @@ export async function getJwt({
         type: 'uat';
         tenantId: string;
         issuer: string;
-        usernameClaim: string;
+        usernameClaimName: string;
         privateKey: string;
         keyId: string;
       };
@@ -60,7 +60,7 @@ export async function getJwt({
       .setProtectedHeader(header)
       .sign(new TextEncoder().encode(config.secretValue));
   } else {
-    payload[config.usernameClaim] = username;
+    payload[config.usernameClaimName] = username;
     payload.jti = `${config.issuer}-${payload.iat}`;
     payload.iss = config.issuer;
     payload['https://tableau.com/tenantId'] = config.tenantId;

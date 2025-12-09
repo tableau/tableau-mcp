@@ -88,7 +88,8 @@ describe('getJwt', () => {
     const mockUatConfig = {
       tenantId: 'test-tenant-id',
       issuer: 'test-issuer',
-      usernameClaim: 'email',
+      usernameClaimName: 'email',
+      username: mockUsername,
       keyId: 'test-key-id',
       privateKey: privateKeyPem,
     };
@@ -145,7 +146,7 @@ describe('getJwt', () => {
     it('should include the username claim in the payload', async () => {
       const token = await getJwt({
         username: mockUsername,
-        config: { type: 'uat', ...mockUatConfig, usernameClaim: 'username' },
+        config: { type: 'uat', ...mockUatConfig, usernameClaimName: 'username' },
         scopes: mockScopes,
       });
       const decodedPayload = decodeJwt(token);

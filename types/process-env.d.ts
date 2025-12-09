@@ -17,6 +17,7 @@ export interface ProcessEnvEx {
   UAT_TENANT_ID: string | undefined;
   UAT_ISSUER: string | undefined;
   UAT_USERNAME_CLAIM: string | undefined;
+  UAT_USERNAME_CLAIM_NAME: string | undefined;
   UAT_PRIVATE_KEY: string | undefined;
   UAT_PRIVATE_KEY_PATH: string | undefined;
   UAT_KEY_ID: string | undefined;

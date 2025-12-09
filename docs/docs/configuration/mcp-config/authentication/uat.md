@@ -35,10 +35,22 @@ it internally calls into VizQL Data Service, the JWT will only have the
 
 <hr />
 
+### `UAT_USERNAME_CLAIM_NAME`
+
+- The name of the claim of the Tableau UAT JWT that maps to the Tableau username.
+- Defaults to `email`.
+
+<hr />
+
 ### `UAT_USERNAME_CLAIM`
 
-- The username claim of the Tableau UAT JWT that maps to the Tableau username.
-- Defaults to `email`.
+The username for the claim of the JWT specified by the
+[`UAT_USERNAME_CLAIM_NAME`](#uat_username_claim_name) environment variable.
+
+- Can either be a hard-coded username, or the OAuth username by setting it to `{OAUTH_USERNAME}`.
+- Defaults to the value of the [`JWT_SUB_CLAIM`](./direct-trust.md#jwt_sub_claim) environment
+  variable which is used in the [Direct Trust](./direct-trust.md) authentication method. This is
+  only provided as a convenience and does not imply the JWT will have a `sub` claim.
 
 <hr />
 

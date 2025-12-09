@@ -20,7 +20,7 @@ export type AuthConfig = {
       username: string;
       tenantId: string;
       issuer: string;
-      usernameClaim: string;
+      usernameClaimName: string;
       privateKey: string;
       keyId: string;
       scopes: Set<string>;

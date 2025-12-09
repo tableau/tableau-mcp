@@ -40,13 +40,13 @@ export class Config {
   siteName: string;
   patName: string;
   patValue: string;
-  jwtSubClaim: string;
+  jwtUsername: string;
   connectedAppClientId: string;
   connectedAppSecretId: string;
   connectedAppSecretValue: string;
   uatTenantId: string;
   uatIssuer: string;
-  uatUsernameClaim: string;
+  uatUsernameClaimName: string;
   uatPrivateKey: string;
   uatKeyId: string;
   jwtAdditionalPayload: string;
@@ -97,6 +97,7 @@ export class Config {
       CONNECTED_APP_SECRET_VALUE: secretValue,
       UAT_TENANT_ID: uatTenantId,
       UAT_ISSUER: uatIssuer,
+      UAT_USERNAME_CLAIM_NAME: uatUsernameClaimName,
       UAT_USERNAME_CLAIM: uatUsernameClaim,
       UAT_PRIVATE_KEY: uatPrivateKey,
       UAT_PRIVATE_KEY_PATH: uatPrivateKeyPath,
@@ -129,6 +130,8 @@ export class Config {
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
     } = cleansedVars;
+
+    let jwtUsername = '';
 
     this.siteName = siteName ?? '';
 
@@ -302,9 +305,19 @@ export class Config {
       invariant(clientId, 'The environment variable CONNECTED_APP_CLIENT_ID is not set');
       invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
       invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
+
+      jwtUsername = jwtSubClaim ?? '';
     } else if (this.auth === 'uat') {
       invariant(uatTenantId, 'The environment variable UAT_TENANT_ID is not set');
       invariant(uatIssuer, 'The environment variable UAT_ISSUER is not set');
+
+      if (!uatUsernameClaim && !jwtSubClaim) {
+        throw new Error(
+          'One of the environment variables: UAT_USERNAME_CLAIM or JWT_SUB_CLAIM must be set',
+        );
+      }
+
+      jwtUsername = uatUsernameClaim ?? jwtSubClaim ?? '';
 
       if (!uatPrivateKey && !uatPrivateKeyPath) {
         throw new Error(
@@ -330,13 +343,13 @@ export class Config {
     this.server = server ?? '';
     this.patName = patName ?? '';
     this.patValue = patValue ?? '';
-    this.jwtSubClaim = jwtSubClaim ?? '';
+    this.jwtUsername = jwtUsername ?? '';
     this.connectedAppClientId = clientId ?? '';
     this.connectedAppSecretId = secretId ?? '';
     this.connectedAppSecretValue = secretValue ?? '';
     this.uatTenantId = uatTenantId ?? '';
     this.uatIssuer = uatIssuer ?? '';
-    this.uatUsernameClaim = uatUsernameClaim || 'email';
+    this.uatUsernameClaimName = uatUsernameClaimName || 'email';
     this.uatPrivateKey =
       uatPrivateKey || (uatPrivateKeyPath ? readFileSync(uatPrivateKeyPath, 'utf8') : '');
     this.uatKeyId = uatKeyId ?? '';

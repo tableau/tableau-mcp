@@ -62,7 +62,7 @@ export class AuthenticationMethods extends Methods<typeof authenticationApis> {
                       type: 'uat',
                       tenantId: authConfig.tenantId,
                       issuer: authConfig.issuer,
-                      usernameClaim: authConfig.usernameClaim,
+                      usernameClaimName: authConfig.usernameClaimName,
                       privateKey: authConfig.privateKey,
                       keyId: authConfig.keyId,
                     },

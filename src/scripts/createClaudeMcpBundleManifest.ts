@@ -114,11 +114,21 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  UAT_USERNAME_CLAIM_NAME: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Username Claim Name',
+    description:
+      'The name of the claim of the Tableau UAT JWT that maps to the Tableau username. Defaults to `email`.',
+    required: false,
+    sensitive: false,
+  },
   UAT_USERNAME_CLAIM: {
     includeInUserConfig: false,
     type: 'string',
     title: 'UAT JWT Username Claim',
-    description: 'The username claim of the Tableau UAT JWT. Defaults to `email`.',
+    description:
+      'The username for the claim of the JWT specified by the `UAT_USERNAME_CLAIM_NAME` environment variable.',
     required: false,
     sensitive: false,
   },
