@@ -53,9 +53,7 @@ async function startServer(): Promise<void> {
   }
 }
 
-try {
-  await startServer();
-} catch (error) {
+startServer().catch((error) => {
   writeToStderr(`Fatal error when starting the server: ${getExceptionMessage(error)}`);
   process.exit(1);
-}
+});

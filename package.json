@@ -9,7 +9,7 @@
   "homepage": "https://github.com/tableau/tableau-mcp",
   "bugs": "https://github.com/tableau/tableau-mcp/issues",
   "author": "Tableau",
-  "type": "module",
+  "type": "commonjs",
   "license": "Apache-2.0",
   "keywords": [
     "tableau",
@@ -19,10 +19,11 @@
     "tableau-mcp-server": "./build/index.js"
   },
   "scripts": {
-    ":build": "npx rimraf ./build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --minify --outdir=build --sourcemap",
-    ":build:dev": "npx rimraf ./build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap",
-    "build": "run-s :build exec-perms",
-    "build:dev": "run-s :build:dev exec-perms",
+    "clean": "npx rimraf ./build",
+    ":build": "esbuild src/index.ts --bundle --platform=node --format=cjs --minify --outfile=build/index.js --sourcemap --log-override:empty-import-meta=silent",
+    ":build:dev": "esbuild src/index.ts --bundle --packages=external --platform=node --format=cjs --outfile=build/index.js --sourcemap",
+    "build": "run-s clean :build exec-perms",
+    "build:dev": "run-s clean :build:dev exec-perms",
     "build:watch": "npm run :build:dev -- --watch",
     "build:docker": "docker build -t tableau-mcp .",
     ":build:mcpb": "npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb",
