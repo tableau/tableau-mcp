@@ -67,13 +67,13 @@ jobs:
           node -e "require('fs').copyFileSync(process.execPath, 'tableau-mcp.exe')"
           npx -y postject tableau-mcp.exe NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
 
-          "SERVER=${{ secrets.E2E_TEST_SERVER }}" | Out-File -FilePath ".env"
-          "AUTH=${{ secrets.E2E_TEST_AUTH }}" | Out-File -FilePath ".env" -Append
-          "SITE_NAME=${{ secrets.E2E_TEST_SITE_NAME }}" | Out-File -FilePath ".env" -Append
-          "JWT_SUB_CLAIM=${{ secrets.E2E_TEST_JWT_SUB_CLAIM }}" | Out-File -FilePath ".env" -Append
-          "CONNECTED_APP_CLIENT_ID=${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}" | Out-File -FilePath ".env" -Append
-          "CONNECTED_APP_SECRET_ID=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}" | Out-File -FilePath ".env" -Append
-          "CONNECTED_APP_SECRET_VALUE=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}" | Out-File -FilePath ".env" -Append
+          "SERVER=${{ secrets.E2E_TEST_SERVER }}" | Out-File -FilePath ".env" -Encoding UTF8
+          "AUTH=${{ secrets.E2E_TEST_AUTH }}" | Out-File -FilePath ".env" -Append -Encoding UTF8
+          "SITE_NAME=${{ secrets.E2E_TEST_SITE_NAME }}" | Out-File -FilePath ".env" -Append -Encoding UTF8
+          "JWT_SUB_CLAIM=${{ secrets.E2E_TEST_JWT_SUB_CLAIM }}" | Out-File -FilePath ".env" -Append -Encoding UTF8
+          "CONNECTED_APP_CLIENT_ID=${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}" | Out-File -FilePath ".env" -Append -Encoding UTF8
+          "CONNECTED_APP_SECRET_ID=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}" | Out-File -FilePath ".env" -Append -Encoding UTF8
+          "CONNECTED_APP_SECRET_VALUE=${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}" | Out-File -FilePath ".env" -Append -Encoding UTF8
 
           Start-Process -FilePath .\tableau-mcp.exe -NoNewWindow -ErrorAction SilentlyContinue
           $processId = Get-Process -Name tableau-mcp -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id
