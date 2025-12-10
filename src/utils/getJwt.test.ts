@@ -56,6 +56,7 @@ describe('getJwt', () => {
       const now = Math.floor(Date.now() / 1000);
       expect(decodedPayload.iat).toBeLessThanOrEqual(now);
       expect(decodedPayload.exp).toBeGreaterThan(now);
+      expect(decodedPayload.nbf).toBeLessThanOrEqual(now);
     });
 
     it('should generate a token that can be verified with the secret', async () => {
@@ -125,12 +126,14 @@ describe('getJwt', () => {
         iss: mockUatConfig.issuer,
         email: mockUsername,
         scp: [...mockScopes],
+        'https://tableau.com/tenantId': mockUatConfig.tenantId,
       });
 
       // Verify timestamp fields are within expected ranges
       const now = Math.floor(Date.now() / 1000);
       expect(decodedPayload.iat).toBeLessThanOrEqual(now);
       expect(decodedPayload.exp).toBeGreaterThan(now);
+      expect(decodedPayload.nbf).toBeLessThanOrEqual(now);
     });
 
     it('should generate a token that can be verified with the secret', async () => {
