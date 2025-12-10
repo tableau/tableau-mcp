@@ -77,15 +77,28 @@ describe('Config', () => {
     expect(() => new Config()).toThrow('The environment variable SERVER is not set');
   });
 
-  it('should throw error when SERVER is not HTTPS', () => {
+  it('should accept HTTP URLs for SERVER', () => {
     process.env = {
       ...process.env,
       SERVER: 'http://foo.com',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: 'test-pat-value',
+      SITE_NAME: 'test-site',
+    };
+
+    const config = new Config();
+    expect(config.server).toBe('http://foo.com');
+  });
+
+  it('should throw error when SERVER is not HTTP/HTTPS', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'gopher://foo.com',
       SITE_NAME: 'test-site',
     };
 
     expect(() => new Config()).toThrow(
-      'The environment variable SERVER must start with "https://": http://foo.com',
+      'The environment variable SERVER must start with "http://" or "https://": gopher://foo.com',
     );
   });
 

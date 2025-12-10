@@ -7,10 +7,11 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { z } from 'zod';
 
-import packageJson from '../../package.json' with { type: 'json' };
+import packageJson from '../../package.json';
 import { ProcessEnvEx } from '../../types/process-env.js';
 import { toolNames } from '../tools/toolName.js';
 
+// @ts-expect-error - import.meta is not allowed in CommonJS output, but this file is built using esbuild as ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
