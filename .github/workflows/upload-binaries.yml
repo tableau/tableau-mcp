@@ -57,6 +57,8 @@ jobs:
           cache: 'npm'
       - name: Generate SEA
         run: |
+          git fetch --tags
+          git checkout -b sea-windows ${{ github.event.release.tag_name }}
           npm ci
           npm run build
 
