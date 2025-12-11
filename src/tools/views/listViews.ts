@@ -49,7 +49,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
   | workbookName        | eq, in               |
 
   ${genericFilterDescription}
-  
+
   **Example Usage:**
   - List all views on a site
   - List views with the name "Overview":
@@ -68,7 +68,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
     },
     callback: async (
       { filter, pageSize, limit },
-      { requestId, authInfo },
+      { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const validatedFilter = filter ? parseAndValidateViewsFilterString(filter) : undefined;
@@ -84,6 +84,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
               requestId,
               server,
               jwtScopes: ['tableau:content:read'],
+              signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 const views = await paginate({

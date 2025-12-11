@@ -47,12 +47,14 @@ export class RestApi {
   private static _version = '3.24';
 
   private _maxRequestTimeoutMs: number;
+  private _signal?: AbortSignal;
   private _requestInterceptor?: [RequestInterceptor, ErrorInterceptor?];
   private _responseInterceptor?: [ResponseInterceptor, ErrorInterceptor?];
 
   constructor(
     host: string,
     options: { maxRequestTimeoutMs: number } & Partial<{
+      signal: AbortSignal;
       requestInterceptor: [RequestInterceptor, ErrorInterceptor?];
       responseInterceptor: [ResponseInterceptor, ErrorInterceptor?];
     }>,
@@ -61,6 +63,7 @@ export class RestApi {
     this._baseUrl = `${this._host}/api/${RestApi._version}`;
     this._baseUrlWithoutVersion = `${this._host}/api/-`;
     this._maxRequestTimeoutMs = options?.maxRequestTimeoutMs;
+    this._signal = options?.signal;
     this._requestInterceptor = options?.requestInterceptor;
     this._responseInterceptor = options?.responseInterceptor;
   }
@@ -81,6 +84,7 @@ export class RestApi {
     if (!this._authenticationMethods) {
       this._authenticationMethods = new AuthenticationMethods(this._baseUrl, {
         timeout: this._maxRequestTimeoutMs,
+        signal: this._signal,
       });
       this._addInterceptors(this._baseUrl, this._authenticationMethods.interceptors);
     }
@@ -94,6 +98,7 @@ export class RestApi {
         this.creds,
         {
           timeout: this._maxRequestTimeoutMs,
+          signal: this._signal,
         },
       );
       this._addInterceptors(this._baseUrl, this._authenticatedAuthenticationMethods.interceptors);
@@ -105,6 +110,7 @@ export class RestApi {
     if (!this._authenticatedServerMethods) {
       this._authenticatedServerMethods = new AuthenticatedServerMethods(this._baseUrl, this.creds, {
         timeout: this._maxRequestTimeoutMs,
+        signal: this._signal,
       });
       this._addInterceptors(this._baseUrl, this._authenticatedServerMethods.interceptors);
     }
@@ -118,6 +124,7 @@ export class RestApi {
         this.creds,
         {
           timeout: this._maxRequestTimeoutMs,
+          signal: this._signal,
         },
       );
       this._addInterceptors(
@@ -133,6 +140,7 @@ export class RestApi {
     if (!this._datasourcesMethods) {
       this._datasourcesMethods = new DatasourcesMethods(this._baseUrl, this.creds, {
         timeout: this._maxRequestTimeoutMs,
+        signal: this._signal,
       });
       this._addInterceptors(this._baseUrl, this._datasourcesMethods.interceptors);
     }
@@ -145,6 +153,7 @@ export class RestApi {
       const baseUrl = `${this._host}/api/metadata`;
       this._metadataMethods = new MetadataMethods(baseUrl, this.creds, {
         timeout: this._maxRequestTimeoutMs,
+        signal: this._signal,
       });
       this._addInterceptors(baseUrl, this._metadataMethods.interceptors);
     }
@@ -156,6 +165,7 @@ export class RestApi {
     if (!this._pulseMethods) {
       this._pulseMethods = new PulseMethods(this._baseUrlWithoutVersion, this.creds, {
         timeout: this._maxRequestTimeoutMs,
+        signal: this._signal,
       });
       this._addInterceptors(this._baseUrlWithoutVersion, this._pulseMethods.interceptors);
     }
@@ -167,6 +177,7 @@ export class RestApi {
     if (!this._serverMethods) {
       this._serverMethods = new ServerMethods(this._baseUrl, {
         timeout: this._maxRequestTimeoutMs,
+        signal: this._signal,
       });
       this._addInterceptors(this._baseUrl, this._serverMethods.interceptors);
     }
@@ -179,6 +190,7 @@ export class RestApi {
       const baseUrl = `${this._host}/api/v1/vizql-data-service`;
       this._vizqlDataServiceMethods = new VizqlDataServiceMethods(baseUrl, this.creds, {
         timeout: this._maxRequestTimeoutMs,
+        signal: this._signal,
       });
       this._addInterceptors(baseUrl, this._vizqlDataServiceMethods.interceptors);
     }
@@ -190,6 +202,7 @@ export class RestApi {
     if (!this._viewsMethods) {
       this._viewsMethods = new ViewsMethods(this._baseUrl, this.creds, {
         timeout: this._maxRequestTimeoutMs,
+        signal: this._signal,
       });
       this._addInterceptors(this._baseUrl, this._viewsMethods.interceptors);
     }
@@ -201,6 +214,7 @@ export class RestApi {
     if (!this._workbooksMethods) {
       this._workbooksMethods = new WorkbooksMethods(this._baseUrl, this.creds, {
         timeout: this._maxRequestTimeoutMs,
+        signal: this._signal,
       });
       this._addInterceptors(this._baseUrl, this._workbooksMethods.interceptors);
     }

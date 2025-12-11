@@ -34,6 +34,7 @@ const getNewRestApiInstanceAsync = async (
   requestId: RequestId,
   server: Server,
   jwtScopes: Set<JwtScopes>,
+  signal: AbortSignal,
   authInfo?: TableauAuthInfo,
 ): Promise<RestApi> => {
   const tableauServer = config.server || authInfo?.server;
@@ -41,6 +42,7 @@ const getNewRestApiInstanceAsync = async (
 
   const restApi = new RestApi(tableauServer, {
     maxRequestTimeoutMs: config.maxRequestTimeoutMs,
+    signal,
     requestInterceptor: [
       getRequestInterceptor(server, requestId),
       getRequestErrorInterceptor(server, requestId),
@@ -86,12 +88,14 @@ export const useRestApi = async <T>({
   server,
   callback,
   jwtScopes,
+  signal,
   authInfo,
 }: {
   config: Config;
   requestId: RequestId;
   server: Server;
   jwtScopes: Array<JwtScopes>;
+  signal: AbortSignal;
   callback: (restApi: RestApi) => Promise<T>;
   authInfo?: TableauAuthInfo;
 }): Promise<T> => {
@@ -100,6 +104,7 @@ export const useRestApi = async <T>({
     requestId,
     server,
     new Set(jwtScopes),
+    signal,
     authInfo,
   );
   try {
