@@ -48,6 +48,7 @@ describe('listViewsTool', () => {
     mocks.mockQueryViewsForSiteData.mockResolvedValue(mockViews);
     const result = await getToolResult({ filter: 'name:eq:Overview' });
     expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
     expect(JSON.parse(`${result.content[0].text}`)).toMatchObject(mockViews.views);
     expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -63,6 +64,7 @@ describe('listViewsTool', () => {
     mocks.mockQueryViewsForSiteData.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ filter: 'name:eq:Overview' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -131,10 +133,13 @@ describe('listViewsTool', () => {
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
   const listViewsTool = getListViewsTool(new Server());
   const callback = await Provider.from(listViewsTool.callback);
-  return await callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  return await callback(
+    { filter: params.filter, pageSize: undefined, limit: undefined },
+    {
+      signal: new AbortController().signal,
+      requestId: 'test-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    },
+  );
 }

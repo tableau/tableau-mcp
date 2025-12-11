@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../../server.js';
+import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import { getListAllPulseMetricDefinitionsTool } from './listAllPulseMetricDefinitions.js';
@@ -53,7 +54,8 @@ describe('listAllPulseMetricDefinitionsTool', () => {
     );
     const result = await getToolResult({ view });
     expect(result.isError).toBe(false);
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockPulseMetricDefinitions);
     expect(mocks.mockListAllPulseMetricDefinitions).toHaveBeenCalledWith(
       view,
@@ -71,7 +73,8 @@ describe('listAllPulseMetricDefinitionsTool', () => {
     );
     const result = await getToolResult({});
     expect(result.isError).toBe(false);
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockPulseMetricDefinitions);
     expect(mocks.mockListAllPulseMetricDefinitions).toHaveBeenCalledWith(
       undefined,
@@ -85,6 +88,7 @@ describe('listAllPulseMetricDefinitionsTool', () => {
     mocks.mockListAllPulseMetricDefinitions.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ view: 'DEFINITION_VIEW_BASIC' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -97,6 +101,7 @@ describe('listAllPulseMetricDefinitionsTool', () => {
     // @ts-expect-error: intentionally passing invalid value for testing
     const result = await getToolResult({ view: 'INVALID_VIEW' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('view');
     expect(result.content[0].text).toContain('Enumeration value must be one of');
     expect(result.content[0].text).toContain(
@@ -108,6 +113,7 @@ describe('listAllPulseMetricDefinitionsTool', () => {
     mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(new Err('tableau-server'));
     const result = await getToolResult({});
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
   });
 
@@ -115,6 +121,7 @@ describe('listAllPulseMetricDefinitionsTool', () => {
     mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(new Err('pulse-disabled'));
     const result = await getToolResult({});
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
   });
 });
@@ -124,10 +131,13 @@ async function getToolResult(params: {
 }): Promise<CallToolResult> {
   const listAllPulseMetricDefinitionsTool = getListAllPulseMetricDefinitionsTool(new Server());
   const callback = await Provider.from(listAllPulseMetricDefinitionsTool.callback);
-  return await callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  return await callback(
+    { view: params.view, limit: undefined, pageSize: undefined },
+    {
+      signal: new AbortController().signal,
+      requestId: 'test-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    },
+  );
 }

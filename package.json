@@ -52,7 +52,7 @@
     "version:patch": "npm version patch --no-git-tag-version"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.24.3",
     "@zodios/core": "^10.9.6",
     "axios-retry": "^4.5.0",
     "cors": "^2.8.5",
