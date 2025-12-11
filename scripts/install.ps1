@@ -1,4 +1,4 @@
-$installerVersion = "1.0.0"
+$managerVersion = "1.0.0"
 
 function Show-Menu {
   param(
@@ -143,37 +143,59 @@ OAUTH_CLIENT_ID_SECRET_PAIRS=$oauthClientIdSecretPairs
 }
 
 function Start-Server {
-  Write-Host "`nStage: Start Node.js server" -ForegroundColor Magenta
-  Write-Host "Starting Node.js server" -ForegroundColor Magenta
+  Write-Host "`nStage: Start MCP server" -ForegroundColor Magenta
+  Write-Host "Starting MCP server" -ForegroundColor Magenta
   $path = Join-Path -Path $PWD -ChildPath "tableau-mcp.exe"
   $process = Start-Process -FilePath $path -NoNewWindow -PassThru
-  Write-Host "Node.js server started successfully! Enjoy!!" -ForegroundColor Green
+  if ($process.HasExited -and $process.ExitCode -ne 0) {
+    Write-Host "MCP server failed to start" -ForegroundColor Red
+    exit 1
+  }
 
+  Write-Host "MCP server started successfully! Enjoy!!" -ForegroundColor Green
   $pidFile = Join-Path -Path $PWD -ChildPath "pid.txt"
   Set-Content -Path $pidFile -Value $process.Id
 }
 
 function Stop-Server {
-  $process = Get-Process -Name "tableau-mcp.exe" -ErrorAction SilentlyContinue
+  param(
+    [switch]$Silent
+  )
+  $pidFile = Join-Path -Path $PWD -ChildPath "pid.txt"
+  $process = Get-Process -Name "tableau-mcp" -ErrorAction SilentlyContinue
   if ($null -eq $process) {
-    $pidFile = Join-Path -Path $PWD -ChildPath "pid.txt"
     if (Test-Path $pidFile) {
       $nodePid = Get-Content -Path $pidFile
       $process = Get-Process -Id $nodePid -ErrorAction SilentlyContinue
     }
   }
+  else {
+    $nodePid = $process.Id
+    Set-Content -Path $pidFile -Value $nodePid
+  }
 
   if ($process) {
-    Write-Host "Looks like the MCP server is already running with PID $nodePid. You should stop it before starting a new one." -ForegroundColor Green
+    Write-Host "The MCP server is already running with PID $nodePid." -ForegroundColor Green
+    Write-Host ""
+
     $choice = Read-Host "Do you want to stop the server? (Y/n)"
     if ($choice -ine 'n') {
-      Write-Host "Stopping Node.js server with PID $nodePid" -ForegroundColor Magenta
+      Write-Host "Stopping MCP server with PID $nodePid" -ForegroundColor Magenta
       Stop-Process -Id $nodePid
-      Write-Host "Node.js server stopped successfully" -ForegroundColor Green
-      Remove-Item -Path $pidFile -ErrorAction SilentlyContinue
+      Write-Host "MCP server stopped successfully" -ForegroundColor Green
+      Remove-Item -Path $pidFile
     }
     else {
       exit 1
+    }
+  }
+  else {
+    if (-not $Silent) {
+      Write-Host "The MCP server is not running" -ForegroundColor Yellow
+    }
+
+    if (Test-Path $pidFile) {
+      Remove-Item -Path $pidFile
     }
   }
 }
@@ -241,30 +263,57 @@ function Get-GitHubReleases {
   return @($releases)
 }
 
+function Install-TableauMCP {
+  Stop-Server
+
+  Write-Host "Which version of the Tableau MCP Server do you want to install?" -ForegroundColor Yellow
+  [Array]$releases = Get-GitHubReleases
+
+  Show-Menu @(
+    for ($i = 0; $i -lt $releases.Length; $i++) {
+      $label = ""
+      if ($i -eq 0) {
+        $label = " (Latest)"
+      }
+
+      $version = $releases[$i].version
+      $assetUrl = $releases[$i].assetUrl
+      @{
+        label  = "$version$label"
+        action = { Use-NodeJS -assetUrl $assetUrl }
+      }
+    }
+  )
+}
+
+function Get-ServerStatus {
+}
+
+# =========================================================================================
 Clear-Host
 
-Write-Host "Tableau MCP Server Installer v$installerVersion" -ForegroundColor Cyan
+Write-Host "Tableau MCP Server Manager v$managerVersion" -ForegroundColor Cyan
 Write-Host
 
-Stop-Server
-
-
-
-Write-Host "Which version of the Tableau MCP Server do you want to install?" -ForegroundColor Yellow
-[Array]$releases = Get-GitHubReleases
-
 Show-Menu @(
-  for ($i = 0; $i -lt $releases.Length; $i++) {
-    $label = ""
-    if ($i -eq 0) {
-      $label = " (Latest)"
+  @{
+    label  = "Install/Upgrade Tableau MCP Server"
+    action = { Install-TableauMCP }
+  }
+  @{
+    label  = "Check Server Status"
+    action = { Get-ServerStatus }
+  }
+  @{
+    label  = "Start/Restart Server"
+    action = {
+      Stop-Server -Silent
+      Start-Server
+      Get-ServerStatus
     }
-
-    $version = $releases[$i].version
-    $assetUrl = $releases[$i].assetUrl
-    @{
-      label  = "$version$label"
-      action = { Use-NodeJS -assetUrl $assetUrl }
-    }
+  }
+  @{
+    label  = "Stop Server"
+    action = { Stop-Server }
   }
 )
