@@ -1,5 +1,4 @@
 $installerVersion = "1.0.0"
-$minNodejsVersion = "22.7.5"
 
 function Show-Menu {
   param(
@@ -12,7 +11,13 @@ function Show-Menu {
   Write-Host "  [Q] Quit" -ForegroundColor Red
   Write-Host ""
 
-  $choice = Read-Host "Enter your choice [1-$($menuItems.Length)] or [Q] to quit"
+  if ($menuItems.Length -eq 1) {
+    $choice = Read-Host "Enter your choice [1] or [Q] to quit"
+  }
+  else {
+    $choice = Read-Host "Enter your choice [1-$($menuItems.Length)] or [Q] to quit"
+  }
+
   if ($choice -ieq 'Q' -or $choice -eq '') {
     Write-Host "Goodbye!`n" -ForegroundColor Yellow
     exit
@@ -22,108 +27,15 @@ function Show-Menu {
 }
 
 function Use-NodeJS {
-  Write-Host "`nStage: Node.js installation check" -ForegroundColor Magenta
+  param(
+    [string]$assetUrl
+  )
 
-  $installNodejs = $true
-  $nodejsVersion = ""
-  try {
-    $nodejsVersion = (node --version) -replace 'v', ''
-  }
-  catch {}
-
-  if ($nodejsVersion -eq "") {
-    Write-Host "Node.js is not installed" -ForegroundColor Red
-  }
-  else {
-    Write-Host "Node.js $nodejsVersion is installed" -ForegroundColor Green
-    $version = $nodejsVersion.Split("v")[1]
-    if ([Version]$nodejsVersion -lt [Version]$minNodejsVersion) {
-      Write-Host "Node.js $nodejsVersion is too old. Please uninstall it and run this script again." -ForegroundColor Red
-      exit 1
-    }
-    else {
-      $installNodejs = $false
-    }
-  }
-
-  if ($installNodejs) {
-    Write-Host "How do you want to install Node.js?" -ForegroundColor Yellow
-    Show-Menu @(
-      @{
-        label  = "Download from nodejs.org"
-        action = {
-          $nodejsVersion = "latest-v22.x"
-          $nodejsFilename = "node-v22.21.1-x64.msi"
-          $nodejsMsi = Join-Path -Path $env:TEMP -ChildPath $nodejsFilename
-
-          if (Test-Path $nodejsMsi) {
-            $choice = Read-Host "$($nodejsMsi) already exists, skip re-download? (Y/n)"
-            if ($choice -ieq 'n') {
-              Get-NodeJS -nodejsVersion $nodejsVersion -nodejsFilename $nodejsFilename -nodejsMsi $nodejsMsi
-            }
-          }
-          else {
-            Get-NodeJS -nodejsVersion $nodejsVersion -nodejsFilename $nodejsFilename -nodejsMsi $nodejsMsi
-          }
-
-          $logPath = Join-Path -Path $env:TEMP -ChildPath "$nodejsFilename.log"
-          Write-Host "Installing Node.js from $nodejsMsi" -ForegroundColor Magenta
-          Write-Host "Logging to $logPath" -ForegroundColor Magenta
-          $arguments = @(
-            "/i"
-            "`"$nodejsMsi`""
-            "/quiet"
-            "/norestart"
-            "/l*v"
-            "`"$logPath`""
-          )
-
-          $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $arguments -NoNewWindow -Wait -PassThru
-
-          if ($process.ExitCode -eq 0) {
-            Write-Host "Installation completed successfully!" -ForegroundColor Green
-            $choice = Read-Host "Do you want to delete the MSI and the installation log file? (Y/n)"
-            if ($choice -ine 'n') {
-              Remove-Item -Path $nodejsMsi
-              Remove-Item -Path $logPath
-            }
-          }
-          else {
-            Write-Host "Installation failed with exit code: $($process.ExitCode)" -ForegroundColor Red
-            exit 1
-          }
-        }
-      }
-      @{
-        label  = "Use NVM for Windows"
-        action = {
-          $nodejsVersion = "22.21.1"
-          Write-Host "nvm install $nodejsVersion" -ForegroundColor Magenta
-          Start-Process -FilePath "nvm" -ArgumentList "install $nodejsVersion" -NoNewWindow -Wait -PassThru
-
-          Write-Host "nvm use $nodejsVersion" -ForegroundColor Magenta
-          $process = Start-Process -FilePath "nvm" -ArgumentList "use $nodejsVersion" -NoNewWindow -Wait -PassThru
-          if ($process.ExitCode -ne 0) {
-            Write-Host "Failed to use Node.js version $nodejsVersion" -ForegroundColor Red
-            exit 1
-          }
-        }
-      }
-    )
-
-    Write-Host "Node.js installation completed successfully!" -ForegroundColor Green
-    Write-Host "You need to restart your terminal or PowerShell session to use the new Node.js version." -ForegroundColor Yellow
-    Write-Host "Please restart your terminal or PowerShell session and run this script again after the restart." -ForegroundColor Yellow
-    exit 1
-  }
-
-  Get-TableauMCP
+  Get-TableauMCP $assetUrl
   Expand-TableauMCP
   New-EnvFile
-  Start-Node
+  Start-Server
 }
-
-
 
 function New-EnvFile {
   Write-Host "`nStage: Create .env file" -ForegroundColor Magenta
@@ -224,111 +136,54 @@ OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS=$oauthAuthzCodeTimeoutMs
 OAUTH_ACCESS_TOKEN_TIMEOUT_MS=$oauthAccessTokenTimeoutMs
 OAUTH_REFRESH_TOKEN_TIMEOUT_MS=$oauthRefreshTokenTimeoutMs
 OAUTH_CLIENT_ID_SECRET_PAIRS=$oauthClientIdSecretPairs
-DANGEROUSLY_DISABLE_OAUTH=true
-"@
-      }
-    }
-    @{
-      label  = "Auth Cookie"
-      action = {
-        return @"
-SERVER=$server
-TRANSPORT=http
-PORT=$port
-AUTH=cookie
-DANGEROUSLY_DISABLE_OAUTH=true
 "@
       }
     }
   )
 }
 
-function Start-Node {
+function Start-Server {
   Write-Host "`nStage: Start Node.js server" -ForegroundColor Magenta
   Write-Host "Starting Node.js server" -ForegroundColor Magenta
-  $path = Join-Path -Path $PWD -ChildPath "build/index.js"
-  $process = Start-Process -FilePath "node" -ArgumentList $path -NoNewWindow -PassThru
+  $path = Join-Path -Path $PWD -ChildPath "tableau-mcp.exe"
+  $process = Start-Process -FilePath $path -NoNewWindow -PassThru
   Write-Host "Node.js server started successfully! Enjoy!!" -ForegroundColor Green
 
   $pidFile = Join-Path -Path $PWD -ChildPath "pid.txt"
   Set-Content -Path $pidFile -Value $process.Id
 }
 
-function Get-NodeJS {
-  param(
-    [string]$nodejsVersion,
-    [string]$nodejsFilename,
-    [string]$nodejsMsi
-  )
-  $nodejsUrl = "https://nodejs.org/dist/$nodejsVersion/$nodejsFilename"
-  Write-Host "Downloading Node.js from $nodejsUrl" -ForegroundColor Magenta
-  Write-Host "Downloading to $nodejsMsi" -ForegroundColor Magenta
-  Invoke-WebRequest -Uri $nodejsUrl -OutFile $nodejsMsi
-}
-
-function Use-Docker {
-  Write-Host "`nStage: Check if Docker is installed" -ForegroundColor Magenta
-  if (Get-Command docker) {
-    Write-Host "Docker is already installed" -ForegroundColor Green
-    Get-TableauMCP
-    Expand-TableauMCP
-    New-EnvFile
-    New-Dockerfile
-  }
-  else {
-    Write-Host "Docker is not installed. Please install Docker Desktop from https://docs.docker.com/desktop/setup/install/windows-install/" -ForegroundColor Red
-    exit 1
-  }
-}
-
-function New-Dockerfile {
-  Write-Host "`nStage: Create Dockerfile" -ForegroundColor Magenta
-  $dockerfile = Join-Path -Path $PWD -ChildPath "Dockerfile"
-  if (Test-Path $dockerfile) {
-    $choice = Read-Host "$($dockerfile) already exists, skip re-creation? (Y/n)"
-    if ($choice -ine 'n') {
-      Start-Docker
-      return
+function Stop-Server {
+  $process = Get-Process -Name "tableau-mcp.exe" -ErrorAction SilentlyContinue
+  if ($null -eq $process) {
+    $pidFile = Join-Path -Path $PWD -ChildPath "pid.txt"
+    if (Test-Path $pidFile) {
+      $nodePid = Get-Content -Path $pidFile
+      $process = Get-Process -Id $nodePid -ErrorAction SilentlyContinue
     }
   }
 
-  $dockerfileContent = @"
-FROM node:22-alpine
-COPY ./build /build
-COPY ./node_modules /node_modules
-RUN chmod +x build/index.js
-ENTRYPOINT ["node", "build/index.js"]
-"@
-
-  Write-Host "Contents of the Dockerfile:" -ForegroundColor Magenta
-  Write-Host "--------------------------------" -ForegroundColor Magenta
-  Write-Host $dockerfileContent -ForegroundColor Magenta
-  Write-Host "--------------------------------" -ForegroundColor Magenta
-  Write-Host ""
-  $choice = Read-Host "Do you want to create the Dockerfile? (Y/n)"
-  if ($choice -ine 'n') {
-    Set-Content -Path $dockerfile -Value $dockerfileContent
+  if ($process) {
+    Write-Host "Looks like the MCP server is already running with PID $nodePid. You should stop it before starting a new one." -ForegroundColor Green
+    $choice = Read-Host "Do you want to stop the server? (Y/n)"
+    if ($choice -ine 'n') {
+      Write-Host "Stopping Node.js server with PID $nodePid" -ForegroundColor Magenta
+      Stop-Process -Id $nodePid
+      Write-Host "Node.js server stopped successfully" -ForegroundColor Green
+      Remove-Item -Path $pidFile -ErrorAction SilentlyContinue
+    }
+    else {
+      exit 1
+    }
   }
-  else {
-    Write-Host "No Dockerfile created" -ForegroundColor Red
-    exit 1
-  }
-
-  Start-Docker
 }
 
-function Start-Docker {
-  Write-Host "`nStage: Build Docker image" -ForegroundColor Magenta
-  Start-Process -FilePath "docker" -ArgumentList "build -t tableau-mcp ." -NoNewWindow -Wait -PassThru | Out-Null
-
-  Write-Host "`nStage: Run Docker container" -ForegroundColor Magenta
-  Start-Process -FilePath "docker" -ArgumentList "run -p 3927:3927 -i --rm --env-file .env tableau-mcp" -NoNewWindow -Wait -PassThru | Out-Null
-}
 
 function Get-TableauMCP {
+  param(
+    [string]$assetUrl
+  )
   Write-Host "`nStage: Download Tableau MCP from GitHub" -ForegroundColor Magenta
-
-  $tableauMCPUrl = "https://github.com/tableau/tableau-mcp/releases/latest/download/tableau-mcp.zip"
   $tableauMCPZip = Join-Path -Path $PWD -ChildPath "tableau-mcp.zip"
 
   if (Test-Path $tableauMCPZip) {
@@ -338,9 +193,9 @@ function Get-TableauMCP {
     }
   }
 
-  Write-Host "Downloading Tableau MCP from $tableauMCPUrl..." -ForegroundColor Magenta
+  Write-Host "Downloading Tableau MCP from $assetUrl..." -ForegroundColor Magenta
   Write-Host "Downloading to $tableauMCPZip" -ForegroundColor Magenta
-  Invoke-WebRequest -Uri $tableauMCPUrl -OutFile $tableauMCPZip
+  Invoke-WebRequest -Uri $assetUrl -OutFile $tableauMCPZip
 }
 
 function Expand-TableauMCP {
@@ -348,82 +203,68 @@ function Expand-TableauMCP {
 
   $tableauMCPZip = Join-Path -Path $PWD -ChildPath "tableau-mcp.zip"
 
-  $buildPath = Join-Path -Path $PWD -ChildPath "build"
-  $nodeModulesPath = Join-Path -Path $PWD -ChildPath "node_modules"
-
-  if ((Test-Path $buildPath) -and (Test-Path $nodeModulesPath)) {
-    $choice = Read-Host "It looks like the Tableau MCP has already been extracted. Do you want to delete the existing files and extract it again? (y/N)"
-    if ($choice -ine 'y') {
-      return
-    }
-  }
-
-  Remove-Item -Path $buildPath -Recurse -Force
-  Remove-Item -Path $nodeModulesPath -Recurse -Force
-
   Write-Host "Expanding archive to $PWD..." -ForegroundColor Magenta
   Expand-Archive -Path $tableauMCPZip -DestinationPath $PWD
 
   Write-Host "Tableau MCP extracted successfully!" -ForegroundColor Green
 }
 
-function Stop-CurrentServer {
-  $pidFile = Join-Path -Path $PWD -ChildPath "pid.txt"
-  if (Test-Path $pidFile) {
-    $nodePid = Get-Content -Path $pidFile
-    $process = Get-Process -Id $nodePid -ErrorAction SilentlyContinue
-    if ($process) {
-      Write-Host "Looks like the MCP server is already running with PID $nodePid. You should stop it before starting a new one." -ForegroundColor Green
-      $choice = Read-Host "Do you want to stop the server? (Y/n)"
-      if ($choice -ine 'n') {
-        Write-Host "Stopping Node.js server with PID $nodePid" -ForegroundColor Magenta
-        Stop-Process -Id $nodePid
-        Write-Host "Node.js server stopped successfully" -ForegroundColor Green
-        Remove-Item -Path $pidFile
-      }
-      else {
-        exit 1
-      }
-    }
+function Get-GitHubReleases {
+  $headers = @{
+    Accept                 = "application/vnd.github+json"
+    "X-GitHub-Api-Version" = "2022-11-28"
   }
+
+  if ($env:GITHUB_TOKEN) {
+    $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN"
+  }
+
+  Write-Progress -Activity "Fetching Tableau MCP releases" -Status "Fetching releases" -PercentComplete 0
+  $response = Invoke-RestMethod `
+    -Uri "https://api.github.com/repos/tableau/tableau-mcp/releases" `
+    -Headers $headers `
+    -Method Get
+  Write-Progress -Activity "Fetching Tableau MCP releases" -Status "Fetching releases" -Completed
+
+  $releases = $response `
+  | Select-Object tag_name, assets `
+  | Where-Object { $_.assets.name -eq "tableau-mcp.zip" } `
+  | ForEach-Object {
+    @{
+      version  = $_.tag_name -replace 'v', '';
+      assetUrl = $_.assets | Where-Object { $_.name -eq "tableau-mcp.zip" } | Select-Object -ExpandProperty browser_download_url
+    }
+  } `
+  | Sort-Object { [Version]$_.version } -Descending `
+  | Select-Object -First 10
+
+  return @($releases)
 }
 
 Clear-Host
-Stop-CurrentServer
 
 Write-Host "Tableau MCP Server Installer v$installerVersion" -ForegroundColor Cyan
 Write-Host
 
+Stop-Server
+
+
+
 Write-Host "Which version of the Tableau MCP Server do you want to install?" -ForegroundColor Yellow
+[Array]$releases = Get-GitHubReleases
 
-$response = Invoke-WebRequest -Uri "https://api.github.com/repos/tableau/tableau-mcp/releases"
-$versions = ($response.Content | ConvertFrom-Json) `
-| Select-Object -ExpandProperty tag_name `
-| ForEach-Object { $_ -replace 'v', '' } `
-| Sort-Object { [Version]$_ } -Descending `
-| Select-Object -First 4
-
-$menuItems = @(
-  for ($i = 0; $i -lt $versions.Length; $i++) {
-    # if $i is 0, add "Latest" to the label
+Show-Menu @(
+  for ($i = 0; $i -lt $releases.Length; $i++) {
     $label = ""
     if ($i -eq 0) {
       $label = " (Latest)"
     }
 
-    $version = $versions[$i]
+    $version = $releases[$i].version
+    $assetUrl = $releases[$i].assetUrl
     @{
       label  = "$version$label"
-      action = { Get-TableauMCP -version $version }
-    }
-  }
-  @{
-    label  = "Other"
-    action = {
-      $version = Read-Host "Enter the version of the Tableau MCP Server"
-      $version = $version -replace 'v', ''
-      Get-TableauMCP -version $version
+      action = { Use-NodeJS -assetUrl $assetUrl }
     }
   }
 )
-Show-Menu $menuItems
