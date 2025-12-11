@@ -39,8 +39,8 @@ describe('Config', () => {
       DISABLE_LOG_MASKING: undefined,
       INCLUDE_TOOLS: undefined,
       EXCLUDE_TOOLS: undefined,
-      MAX_RESULT_LIMIT: undefined,
       MAX_REQUEST_TIMEOUT_MS: undefined,
+      MAX_RESULT_LIMIT: undefined,
       DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: undefined,
       DISABLE_METADATA_API_REQUESTS: undefined,
       DISABLE_SESSION_MANAGEMENT: undefined,
@@ -206,49 +206,6 @@ describe('Config', () => {
     expect(config.disableLogMasking).toBe(true);
   });
 
-  it('should set maxResultLimit to null when not specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-    };
-
-    const config = new Config();
-    expect(config.maxResultLimit).toBe(null);
-  });
-
-  it('should set maxResultLimit to null when specified as a non-number', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      MAX_RESULT_LIMIT: 'abc',
-    };
-
-    const config = new Config();
-    expect(config.maxResultLimit).toBe(null);
-  });
-
-  it('should set maxResultLimit to null when specified as a negative number', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      MAX_RESULT_LIMIT: '-100',
-    };
-
-    const config = new Config();
-    expect(config.maxResultLimit).toBe(null);
-  });
-
-  it('should set maxResultLimit to the specified value when specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      MAX_RESULT_LIMIT: '100',
-    };
-
-    const config = new Config();
-    expect(config.maxResultLimit).toBe(100);
-  });
-
   it('should set maxRequestTimeoutMs to the default value when not specified', () => {
     process.env = {
       ...process.env,
@@ -301,6 +258,49 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
+  });
+
+  it('should set maxResultLimit to null when not specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+    };
+
+    const config = new Config();
+    expect(config.maxResultLimit).toBe(null);
+  });
+
+  it('should set maxResultLimit to null when specified as a non-number', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      MAX_RESULT_LIMIT: 'abc',
+    };
+
+    const config = new Config();
+    expect(config.maxResultLimit).toBe(null);
+  });
+
+  it('should set maxResultLimit to null when specified as a negative number', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      MAX_RESULT_LIMIT: '-100',
+    };
+
+    const config = new Config();
+    expect(config.maxResultLimit).toBe(null);
+  });
+
+  it('should set maxResultLimit to the specified value when specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      MAX_RESULT_LIMIT: '100',
+    };
+
+    const config = new Config();
+    expect(config.maxResultLimit).toBe(100);
   });
 
   it('should set disableQueryDatasourceValidationRequests to false by default', () => {

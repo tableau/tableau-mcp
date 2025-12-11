@@ -263,12 +263,15 @@ export class Config {
       }
     }
 
-    this.maxResultLimit = parseOptionalPositiveInteger(maxResultLimit);
     this.maxRequestTimeoutMs = parseNumber(maxRequestTimeoutMs, {
       defaultValue: TEN_MINUTES_IN_MS,
       minValue: 5000,
       maxValue: ONE_HOUR_IN_MS,
     });
+
+    const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
+    this.maxResultLimit =
+      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
 
     this.includeTools = includeTools
       ? includeTools.split(',').flatMap((s) => {
@@ -428,11 +431,6 @@ function parseNumber(
     (maxValue !== undefined && number > maxValue)
     ? defaultValue
     : number;
-}
-
-function parseOptionalPositiveInteger(value: string | undefined): number | null {
-  const number = value ? parseInt(value) : NaN;
-  return isNaN(number) || number <= 0 ? null : number;
 }
 
 export const getConfig = (): Config => new Config();
