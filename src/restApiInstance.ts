@@ -38,7 +38,15 @@ const getNewRestApiInstanceAsync = async (
   authInfo?: TableauAuthInfo,
 ): Promise<RestApi> => {
   signal.onabort = () => {
-    log.info(server, 'Request was cancelled!', { logger: server.name, requestId });
+    log.info(
+      server,
+      {
+        type: 'request-cancelled',
+        requestId,
+        reason: signal.reason,
+      },
+      { logger: server.name, requestId },
+    );
   };
 
   const tableauServer = config.server || authInfo?.server;
