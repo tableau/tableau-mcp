@@ -40,6 +40,7 @@ const getNewRestApiInstanceAsync = async (
   invariant(tableauServer, 'Tableau server could not be determined');
 
   const restApi = new RestApi(tableauServer, {
+    maxRequestTimeoutMs: config.maxRequestTimeoutMs,
     requestInterceptor: [
       getRequestInterceptor(server, requestId),
       getRequestErrorInterceptor(server, requestId),

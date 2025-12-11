@@ -46,12 +46,13 @@ export class RestApi {
   private _workbooksMethods?: WorkbooksMethods;
   private static _version = '3.24';
 
+  private _maxRequestTimeoutMs: number;
   private _requestInterceptor?: [RequestInterceptor, ErrorInterceptor?];
   private _responseInterceptor?: [ResponseInterceptor, ErrorInterceptor?];
 
   constructor(
     host: string,
-    options?: Partial<{
+    options: { maxRequestTimeoutMs: number } & Partial<{
       requestInterceptor: [RequestInterceptor, ErrorInterceptor?];
       responseInterceptor: [ResponseInterceptor, ErrorInterceptor?];
     }>,
@@ -59,6 +60,7 @@ export class RestApi {
     this._host = host;
     this._baseUrl = `${this._host}/api/${RestApi._version}`;
     this._baseUrlWithoutVersion = `${this._host}/api/-`;
+    this._maxRequestTimeoutMs = options?.maxRequestTimeoutMs;
     this._requestInterceptor = options?.requestInterceptor;
     this._responseInterceptor = options?.responseInterceptor;
   }
@@ -77,7 +79,9 @@ export class RestApi {
 
   private get authenticationMethods(): AuthenticationMethods {
     if (!this._authenticationMethods) {
-      this._authenticationMethods = new AuthenticationMethods(this._baseUrl);
+      this._authenticationMethods = new AuthenticationMethods(this._baseUrl, {
+        timeout: this._maxRequestTimeoutMs,
+      });
       this._addInterceptors(this._baseUrl, this._authenticationMethods.interceptors);
     }
     return this._authenticationMethods;
@@ -88,6 +92,9 @@ export class RestApi {
       this._authenticatedAuthenticationMethods = new AuthenticatedAuthenticationMethods(
         this._baseUrl,
         this.creds,
+        {
+          timeout: this._maxRequestTimeoutMs,
+        },
       );
       this._addInterceptors(this._baseUrl, this._authenticatedAuthenticationMethods.interceptors);
     }
@@ -96,7 +103,9 @@ export class RestApi {
 
   get authenticatedServerMethods(): AuthenticatedServerMethods {
     if (!this._authenticatedServerMethods) {
-      this._authenticatedServerMethods = new AuthenticatedServerMethods(this._baseUrl, this.creds);
+      this._authenticatedServerMethods = new AuthenticatedServerMethods(this._baseUrl, this.creds, {
+        timeout: this._maxRequestTimeoutMs,
+      });
       this._addInterceptors(this._baseUrl, this._authenticatedServerMethods.interceptors);
     }
     return this._authenticatedServerMethods;
@@ -107,6 +116,9 @@ export class RestApi {
       this._contentExplorationMethods = new ContentExplorationMethods(
         this._baseUrlWithoutVersion,
         this.creds,
+        {
+          timeout: this._maxRequestTimeoutMs,
+        },
       );
       this._addInterceptors(
         this._baseUrlWithoutVersion,
@@ -119,7 +131,9 @@ export class RestApi {
 
   get datasourcesMethods(): DatasourcesMethods {
     if (!this._datasourcesMethods) {
-      this._datasourcesMethods = new DatasourcesMethods(this._baseUrl, this.creds);
+      this._datasourcesMethods = new DatasourcesMethods(this._baseUrl, this.creds, {
+        timeout: this._maxRequestTimeoutMs,
+      });
       this._addInterceptors(this._baseUrl, this._datasourcesMethods.interceptors);
     }
 
@@ -129,7 +143,9 @@ export class RestApi {
   get metadataMethods(): MetadataMethods {
     if (!this._metadataMethods) {
       const baseUrl = `${this._host}/api/metadata`;
-      this._metadataMethods = new MetadataMethods(baseUrl, this.creds);
+      this._metadataMethods = new MetadataMethods(baseUrl, this.creds, {
+        timeout: this._maxRequestTimeoutMs,
+      });
       this._addInterceptors(baseUrl, this._metadataMethods.interceptors);
     }
 
@@ -138,7 +154,9 @@ export class RestApi {
 
   get pulseMethods(): PulseMethods {
     if (!this._pulseMethods) {
-      this._pulseMethods = new PulseMethods(this._baseUrlWithoutVersion, this.creds);
+      this._pulseMethods = new PulseMethods(this._baseUrlWithoutVersion, this.creds, {
+        timeout: this._maxRequestTimeoutMs,
+      });
       this._addInterceptors(this._baseUrlWithoutVersion, this._pulseMethods.interceptors);
     }
 
@@ -147,7 +165,9 @@ export class RestApi {
 
   get serverMethods(): ServerMethods {
     if (!this._serverMethods) {
-      this._serverMethods = new ServerMethods(this._baseUrl);
+      this._serverMethods = new ServerMethods(this._baseUrl, {
+        timeout: this._maxRequestTimeoutMs,
+      });
       this._addInterceptors(this._baseUrl, this._serverMethods.interceptors);
     }
 
@@ -157,7 +177,9 @@ export class RestApi {
   get vizqlDataServiceMethods(): VizqlDataServiceMethods {
     if (!this._vizqlDataServiceMethods) {
       const baseUrl = `${this._host}/api/v1/vizql-data-service`;
-      this._vizqlDataServiceMethods = new VizqlDataServiceMethods(baseUrl, this.creds);
+      this._vizqlDataServiceMethods = new VizqlDataServiceMethods(baseUrl, this.creds, {
+        timeout: this._maxRequestTimeoutMs,
+      });
       this._addInterceptors(baseUrl, this._vizqlDataServiceMethods.interceptors);
     }
 
@@ -166,7 +188,9 @@ export class RestApi {
 
   get viewsMethods(): ViewsMethods {
     if (!this._viewsMethods) {
-      this._viewsMethods = new ViewsMethods(this._baseUrl, this.creds);
+      this._viewsMethods = new ViewsMethods(this._baseUrl, this.creds, {
+        timeout: this._maxRequestTimeoutMs,
+      });
       this._addInterceptors(this._baseUrl, this._viewsMethods.interceptors);
     }
 
@@ -175,7 +199,9 @@ export class RestApi {
 
   get workbooksMethods(): WorkbooksMethods {
     if (!this._workbooksMethods) {
-      this._workbooksMethods = new WorkbooksMethods(this._baseUrl, this.creds);
+      this._workbooksMethods = new WorkbooksMethods(this._baseUrl, this.creds, {
+        timeout: this._maxRequestTimeoutMs,
+      });
       this._addInterceptors(this._baseUrl, this._workbooksMethods.interceptors);
     }
 

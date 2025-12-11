@@ -50,6 +50,7 @@ export class Config {
   disableLogMasking: boolean;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
+  maxRequestTimeoutMs: number;
   maxResultLimit: number | null;
   disableQueryDatasourceValidationRequests: boolean;
   disableMetadataApiRequests: boolean;
@@ -96,6 +97,7 @@ export class Config {
       DISABLE_LOG_MASKING: disableLogMasking,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
+      MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: disableQueryDatasourceValidationRequests,
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
@@ -261,9 +263,12 @@ export class Config {
       }
     }
 
-    const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
-    this.maxResultLimit =
-      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
+    this.maxResultLimit = parseOptionalPositiveInteger(maxResultLimit);
+    this.maxRequestTimeoutMs = parseNumber(maxRequestTimeoutMs, {
+      defaultValue: TEN_MINUTES_IN_MS,
+      minValue: 5000,
+      maxValue: ONE_HOUR_IN_MS,
+    });
 
     this.includeTools = includeTools
       ? includeTools.split(',').flatMap((s) => {
@@ -423,6 +428,11 @@ function parseNumber(
     (maxValue !== undefined && number > maxValue)
     ? defaultValue
     : number;
+}
+
+function parseOptionalPositiveInteger(value: string | undefined): number | null {
+  const number = value ? parseInt(value) : NaN;
+  return isNaN(number) || number <= 0 ? null : number;
 }
 
 export const getConfig = (): Config => new Config();

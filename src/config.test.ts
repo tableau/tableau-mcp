@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { exportedForTesting } from './config.js';
+import { exportedForTesting, ONE_HOUR_IN_MS, TEN_MINUTES_IN_MS } from './config.js';
 
 describe('Config', () => {
   const { Config, parseNumber } = exportedForTesting;
@@ -40,6 +40,7 @@ describe('Config', () => {
       INCLUDE_TOOLS: undefined,
       EXCLUDE_TOOLS: undefined,
       MAX_RESULT_LIMIT: undefined,
+      MAX_REQUEST_TIMEOUT_MS: undefined,
       DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: undefined,
       DISABLE_METADATA_API_REQUESTS: undefined,
       DISABLE_SESSION_MANAGEMENT: undefined,
@@ -246,6 +247,60 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.maxResultLimit).toBe(100);
+  });
+
+  it('should set maxRequestTimeoutMs to the default value when not specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+    };
+
+    const config = new Config();
+    expect(config.maxRequestTimeoutMs).toBe(10 * 60 * 1000);
+  });
+
+  it('should set maxRequestTimeoutMs to the specified value when specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      MAX_REQUEST_TIMEOUT_MS: '123456',
+    };
+
+    const config = new Config();
+    expect(config.maxRequestTimeoutMs).toBe(123456);
+  });
+
+  it('should set maxRequestTimeoutMs to the default value when specified as a non-number', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      MAX_REQUEST_TIMEOUT_MS: 'abc',
+    };
+
+    const config = new Config();
+    expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
+  });
+
+  it('should set maxRequestTimeoutMs to the default value when specified as a negative number', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      MAX_REQUEST_TIMEOUT_MS: '-100',
+    };
+
+    const config = new Config();
+    expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
+  });
+
+  it('should set maxRequestTimeoutMs to the default value when specified as a number greater than one hour', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      MAX_REQUEST_TIMEOUT_MS: `${ONE_HOUR_IN_MS + 1}`,
+    };
+
+    const config = new Config();
+    expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
   });
 
   it('should set disableQueryDatasourceValidationRequests to false by default', () => {
