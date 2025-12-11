@@ -1,7 +1,7 @@
 import { ZodiosClass, ZodiosEndpointDefinitions, ZodiosInstance } from '@zodios/core';
 
 export default class Methods<T extends ZodiosEndpointDefinitions> {
-  protected readonly _apiClient: ZodiosInstance<T>;
+  protected _apiClient: ZodiosInstance<T>;
 
   constructor(apiClient: ZodiosInstance<T>) {
     this._apiClient = apiClient;

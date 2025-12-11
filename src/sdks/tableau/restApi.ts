@@ -62,10 +62,10 @@ export class RestApi {
     this._host = host;
     this._baseUrl = `${this._host}/api/${RestApi._version}`;
     this._baseUrlWithoutVersion = `${this._host}/api/-`;
-    this._maxRequestTimeoutMs = options?.maxRequestTimeoutMs;
-    this._signal = options?.signal;
-    this._requestInterceptor = options?.requestInterceptor;
-    this._responseInterceptor = options?.responseInterceptor;
+    this._maxRequestTimeoutMs = options.maxRequestTimeoutMs;
+    this._signal = options.signal;
+    this._requestInterceptor = options.requestInterceptor;
+    this._responseInterceptor = options.responseInterceptor;
   }
 
   private get creds(): Credentials {
