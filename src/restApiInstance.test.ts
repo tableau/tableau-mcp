@@ -43,6 +43,7 @@ describe('restApiInstance', () => {
         requestId: mockRequestId,
         server: new Server(),
         jwtScopes: [],
+        signal: new AbortController().signal,
         callback: (restApi) => Promise.resolve(restApi),
       });
 

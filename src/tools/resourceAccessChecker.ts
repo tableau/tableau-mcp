@@ -14,6 +14,7 @@ export type RestApiArgs = {
   config: Config;
   requestId: RequestId;
   server: Server;
+  signal: AbortSignal;
 };
 
 class ResourceAccessChecker {
@@ -131,7 +132,7 @@ class ResourceAccessChecker {
 
   private async _isDatasourceAllowed({
     datasourceLuid,
-    restApiArgs: { config, requestId, server },
+    restApiArgs: { config, requestId, server, signal },
   }: {
     datasourceLuid: string;
     restApiArgs: RestApiArgs;
@@ -158,6 +159,7 @@ class ResourceAccessChecker {
           requestId,
           server,
           jwtScopes: ['tableau:content:read'],
+          signal,
           callback: async (restApi) => {
             const datasource = await restApi.datasourcesMethods.queryDatasource({
               siteId: restApi.siteId,
@@ -194,7 +196,7 @@ class ResourceAccessChecker {
 
   private async _isWorkbookAllowed({
     workbookId,
-    restApiArgs: { config, requestId, server },
+    restApiArgs: { config, requestId, server, signal },
   }: {
     workbookId: string;
     restApiArgs: RestApiArgs;
@@ -222,6 +224,7 @@ class ResourceAccessChecker {
           requestId,
           server,
           jwtScopes: ['tableau:content:read'],
+          signal,
           callback: async (restApi) => {
             const workbook = await restApi.workbooksMethods.getWorkbook({
               siteId: restApi.siteId,
@@ -258,7 +261,7 @@ class ResourceAccessChecker {
 
   private async _isViewAllowed({
     viewId,
-    restApiArgs: { config, requestId, server },
+    restApiArgs: { config, requestId, server, signal },
   }: {
     viewId: string;
     restApiArgs: RestApiArgs;
@@ -278,6 +281,7 @@ class ResourceAccessChecker {
           requestId,
           server,
           jwtScopes: ['tableau:content:read'],
+          signal,
           callback: async (restApi) => {
             return await restApi.viewsMethods.getView({
               siteId: restApi.siteId,
@@ -319,6 +323,7 @@ class ResourceAccessChecker {
             requestId,
             server,
             jwtScopes: ['tableau:content:read'],
+            signal,
             callback: async (restApi) => {
               const view = await restApi.viewsMethods.getView({
                 siteId: restApi.siteId,

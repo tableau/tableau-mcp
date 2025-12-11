@@ -1,5 +1,6 @@
 import { Zodios } from '@zodios/core';
 
+import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { viewsApis } from '../apis/viewsApi.js';
 import { Credentials } from '../types/credentials.js';
 import { Pagination } from '../types/pagination.js';
@@ -14,8 +15,8 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm
  */
 export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis> {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, viewsApis), creds);
+  constructor(baseUrl: string, creds: Credentials, axiosConfig: AxiosRequestConfig) {
+    super(new Zodios(baseUrl, viewsApis, { axiosConfig }), creds);
   }
 
   /**

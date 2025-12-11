@@ -1,6 +1,7 @@
 import { isErrorFromAlias, Zodios, ZodiosError } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
+import { AxiosRequestConfig } from '../../../utils/axios.js';
 import {
   MetadataResponse,
   QueryOutput,
@@ -23,8 +24,8 @@ import AuthenticatedMethods from './authenticatedMethods.js';
 export default class VizqlDataServiceMethods extends AuthenticatedMethods<
   typeof vizqlDataServiceApis
 > {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, vizqlDataServiceApis), creds);
+  constructor(baseUrl: string, creds: Credentials, axiosConfig: AxiosRequestConfig) {
+    super(new Zodios(baseUrl, vizqlDataServiceApis, { axiosConfig }), creds);
   }
 
   /**

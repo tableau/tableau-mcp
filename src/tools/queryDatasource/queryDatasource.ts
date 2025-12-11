@@ -77,7 +77,7 @@ export const getQueryDatasourceTool = (
     argsValidator: validateQuery,
     callback: async (
       { datasourceLuid, query },
-      { requestId, authInfo },
+      { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
       return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
@@ -86,7 +86,7 @@ export const getQueryDatasourceTool = (
         callback: async () => {
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
-            restApiArgs: { config, requestId, server },
+            restApiArgs: { config, requestId, server, signal },
           });
 
           if (!isDatasourceAllowedResult.allowed) {
@@ -119,6 +119,7 @@ export const getQueryDatasourceTool = (
             requestId,
             server,
             jwtScopes: ['tableau:viz_data_service:read'],
+            signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               if (!config.disableQueryDatasourceValidationRequests) {

@@ -30,7 +30,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ viewId }, { requestId, authInfo }): Promise<CallToolResult> => {
+    callback: async ({ viewId }, { requestId, authInfo, signal }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getViewDataTool.logAndExecute<string, GetViewDataError>({
@@ -40,7 +40,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
         callback: async () => {
           const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
             viewId,
-            restApiArgs: { config, requestId, server },
+            restApiArgs: { config, requestId, server, signal },
           });
 
           if (!isViewAllowedResult.allowed) {
@@ -56,6 +56,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
               requestId,
               server,
               jwtScopes: ['tableau:views:download'],
+              signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 return await restApi.viewsMethods.queryViewData({

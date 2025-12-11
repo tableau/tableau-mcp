@@ -92,7 +92,10 @@ export function callback(
       }
 
       const server = originHostUrl.toString();
-      const restApi = new RestApi(server);
+      const restApi = new RestApi(server, {
+        maxRequestTimeoutMs: config.maxRequestTimeoutMs,
+      });
+
       restApi.setCredentials(accessToken, 'unknown user id');
       const sessionResult = await restApi.authenticatedServerMethods.getCurrentServerSession();
       if (sessionResult.isErr()) {
@@ -172,13 +175,19 @@ async function exchangeAuthorizationCode({
   codeVerifier: string;
 }): Promise<Result<TableauAccessToken, string>> {
   try {
-    const result = await getTokenResult(server, {
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: redirectUri,
-      client_id: clientId,
-      code_verifier: codeVerifier,
-    });
+    const result = await getTokenResult(
+      server,
+      {
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: redirectUri,
+        client_id: clientId,
+        code_verifier: codeVerifier,
+      },
+      {
+        timeout: getConfig().maxRequestTimeoutMs,
+      },
+    );
 
     return Ok(result);
   } catch {

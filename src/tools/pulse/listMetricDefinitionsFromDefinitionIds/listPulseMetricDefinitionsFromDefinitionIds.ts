@@ -59,7 +59,7 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
     },
     callback: async (
       { view, metricDefinitionIds },
-      { requestId, authInfo },
+      { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       return await listPulseMetricDefinitionsFromDefinitionIdsTool.logAndExecute({
@@ -72,6 +72,7 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
             requestId,
             server,
             jwtScopes: ['tableau:insight_definitions_metrics:read'],
+            signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricDefinitionsFromMetricDefinitionIds(
