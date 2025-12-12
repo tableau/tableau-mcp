@@ -399,10 +399,11 @@ function Install-TableauMCP {
 
       $version = $releases[$i].version
       $assetUrl = $releases[$i].assetUrl
-      $assetUrlCopy = $assetUrl
+
+      $action = [scriptblock]::Create("Use-NodeJS -assetUrl '$assetUrl'")
       @{
         label  = "$version$label"
-        action = { Use-NodeJS -assetUrl $assetUrlCopy }
+        action = $action
       }
     }
   )
