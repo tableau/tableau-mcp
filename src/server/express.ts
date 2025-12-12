@@ -65,7 +65,7 @@ export async function startExpressServer({
   }
 
   const path = `/${basePath}`;
-  app.post(path, ...middleware, handleRequest);
+  app.post(path, ...middleware, createMcpServer);
   app.get(
     path,
     ...middleware,
@@ -109,17 +109,9 @@ export async function startExpressServer({
       );
   });
 
-  async function handleRequest(req: AuthenticatedRequest, res: Response): Promise<void> {
+  async function createMcpServer(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       let transport: StreamableHTTPServerTransport;
-
-      if (PingRequestSchema.safeParse(req.body).success) {
-        res.status(200).json({
-          jsonrpc: '2.0',
-          result: {},
-        });
-        return;
-      }
 
       if (config.disableSessionManagement) {
         const server = new Server();

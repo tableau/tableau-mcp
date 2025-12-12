@@ -21,7 +21,7 @@ jobs:
           npm ci
           npm run build
           npm publish
-  upload-artifacts:
+  upload-mcpb:
     runs-on: ubuntu-latest
     permissions:
       contents: write # Needed to upload release assets
@@ -33,17 +33,15 @@ jobs:
           cache: 'npm'
       - run: |
           git fetch --tags
-          git checkout -b artifacts ${{ github.event.release.tag_name }}
+          git checkout -b mcpb ${{ github.event.release.tag_name }}
           npm ci
           npm run build
           npm run build:manifest:script
           npm run build:manifest
           npm ci --omit=dev
-          npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb
-          zip -r tableau-mcp.zip build/ node_modules/ >/dev/null 2>&1
-      - name: Upload artifacts to release
+          npx -y @anthropic-ai/mcpb pack . tableau-mcp-${{ github.event.release.tag_name }}.mcpb
+      - name: Upload mcpb to release
         run: |
-          gh release upload ${{github.event.release.tag_name}} tableau-mcp.zip
-          gh release upload ${{github.event.release.tag_name}} tableau-mcp.mcpb
+          gh release upload ${{github.event.release.tag_name}} tableau-mcp-${{ github.event.release.tag_name }}.mcpb
         env:
           GITHUB_TOKEN: ${{ github.token }}

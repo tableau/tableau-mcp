@@ -31,6 +31,7 @@ export function validateProtocolVersion(req: Request, res: Response, next: NextF
   next();
 }
 
+// https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/ping
 export function validatePingRequest(req: Request, res: Response, next: NextFunction): void {
   const pingRequest = PingRequestSchema.safeParse(req.body);
   if (pingRequest.success) {

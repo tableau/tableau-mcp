@@ -1,7 +1,48 @@
-$managerVersion = "1.0.0"
+<#
+  .SYNOPSIS
+  Manages the Tableau MCP Server
+
+  .DESCRIPTION
+  The Manage-Server.ps1 script helps to manage your deployment of the Tableau MCP Server.
+
+  It can help you:
+
+  1. Download the single executable application for any of the latest releases.
+  2. Create a `.env` file with your Tableau MCP settings.
+  3. Start the MCP server.
+  4. Check the status of the MCP server.
+  5. Upgrade the MCP server.
+  6. Stop the MCP server.
+
+  .INPUTS
+  None. You can't pipe objects to Manage-Server.ps1.
+
+  .OUTPUTS
+  None. Manage-Server.ps1 doesn't generate any output.
+
+  .EXAMPLE
+  PS> .\Manage-Server.ps1
+
+  .LINK
+  https://tableau.github.io/tableau-mcp/docs/getting-started#nodejs-single-executable-applications
+#>
 
 function Show-Menu {
+  <#
+    .SYNOPSIS
+        Displays a menu of options to the user
+
+    .PARAMETER menuItems
+        The menu items to display
+
+    .EXAMPLE
+        Show-Menu -menuItems @(
+            @{ label = "Option 1"; action = { Write-Host "Option 1 selected" } }
+            @{ label = "Option 2"; action = { Write-Host "Option 2 selected" } }
+        )
+    #>
   param(
+    [Parameter(Mandatory = $true, HelpMessage = "The menu items to display")]
     [array]$menuItems
   )
   for ($i = 0; $i -lt $menuItems.Length; $i++) {
@@ -27,7 +68,18 @@ function Show-Menu {
 }
 
 function Use-NodeJS {
+  <#
+    .SYNOPSIS
+        Downloads the Tableau MCP SEA zip file, expands it, creates a .env file, starts the MCP server, and checks the server status
+
+    .PARAMETER assetUrl
+        The GitHub release asset URL to download the Tableau MCP SEA zip file
+
+    .EXAMPLE
+        Use-NodeJS -assetUrl "https://github.com/tableau/tableau-mcp/releases/download/v1.13.4/tableau-mcp.zip"
+    #>
   param(
+    [Parameter(Mandatory = $true, HelpMessage = "The GitHub release asset URL to download the Tableau MCP SEA zip file")]
     [string]$assetUrl
   )
 
@@ -39,6 +91,13 @@ function Use-NodeJS {
 }
 
 function New-EnvFile {
+  <#
+    .SYNOPSIS
+        Creates a .env file with the user's Tableau MCP settings
+
+    .EXAMPLE
+        New-EnvFile
+    #>
   Write-Host "`nStage: Create .env file" -ForegroundColor Magenta
 
   $envFile = Join-Path -Path $PWD -ChildPath ".env"
@@ -67,6 +126,13 @@ function New-EnvFile {
 }
 
 function Get-EnvContent {
+  <#
+    .SYNOPSIS
+        Gets the content of the .env file with the user's Tableau MCP settings
+
+    .EXAMPLE
+        Get-EnvContent
+    #>
   $server = Read-Host "Enter the URL of your Tableau Server"
   $port = Read-Host "What port do you want to use for the Tableau MCP Server? (default: 3927)"
   if ($port -eq "") {
@@ -144,6 +210,13 @@ OAUTH_CLIENT_ID_SECRET_PAIRS=$oauthClientIdSecretPairs
 }
 
 function Start-Server {
+  <#
+    .SYNOPSIS
+        Starts the MCP server
+
+    .EXAMPLE
+        Start-Server
+    #>
   Write-Host "`nStage: Start MCP server" -ForegroundColor Magenta
   Write-Host "Starting MCP server" -ForegroundColor Magenta
   $path = Join-Path -Path $PWD -ChildPath "tableau-mcp.exe"
@@ -160,6 +233,16 @@ function Start-Server {
 }
 
 function Stop-Server {
+  <#
+    .SYNOPSIS
+        Stops the MCP server
+
+    .PARAMETER Silent
+        Whether to suppress the messaging when the server is not running
+
+    .EXAMPLE
+        Stop-Server -Silent
+    #>
   param(
     [switch]$Silent
   )
@@ -204,6 +287,16 @@ function Stop-Server {
 
 
 function Get-TableauMCP {
+  <#
+    .SYNOPSIS
+        Downloads the Tableau MCP SEA zip file
+
+    .PARAMETER assetUrl
+        The GitHub release asset URL to download the Tableau MCP SEA zip file
+
+    .EXAMPLE
+        Get-TableauMCP -assetUrl "https://github.com/tableau/tableau-mcp/releases/download/v1.13.4/tableau-mcp.zip"
+    #>
   param(
     [string]$assetUrl
   )
@@ -223,6 +316,13 @@ function Get-TableauMCP {
 }
 
 function Expand-TableauMCP {
+  <#
+    .SYNOPSIS
+        Expands the Tableau MCP SEA zip file
+
+    .EXAMPLE
+        Expand-TableauMCP
+    #>
   Write-Host "`nStage: Expand Tableau MCP ZIP file" -ForegroundColor Magenta
 
   $tableauMCPZip = Join-Path -Path $PWD -ChildPath "tableau-mcp.zip"
@@ -234,12 +334,20 @@ function Expand-TableauMCP {
 }
 
 function Get-GitHubReleases {
+  <#
+    .SYNOPSIS
+        Gets the latest Tableau MCP releases from GitHub
+
+    .EXAMPLE
+        Get-GitHubReleases
+    #>
   $headers = @{
     Accept                 = "application/vnd.github+json"
     "X-GitHub-Api-Version" = "2022-11-28"
   }
 
   if ($env:GITHUB_TOKEN) {
+    # Unauthenticated requests are more likely to be rate limited
     $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN"
   }
 
@@ -266,6 +374,13 @@ function Get-GitHubReleases {
 }
 
 function Install-TableauMCP {
+  <#
+    .SYNOPSIS
+        Installs the Tableau MCP Server
+
+    .EXAMPLE
+        Install-TableauMCP
+    #>
   Stop-Server -Silent
 
   Write-Host "Which version of the Tableau MCP Server do you want to install?" -ForegroundColor Yellow
@@ -289,6 +404,13 @@ function Install-TableauMCP {
 }
 
 function Get-ServerStatus {
+  <#
+    .SYNOPSIS
+        Checks the status of the Tableau MCP Server
+
+    .EXAMPLE
+        Get-ServerStatus
+    #>
   $port = $env:PORT
   if ($port -eq "" -or $null -eq $port) {
     $envFile = Join-Path -Path $PWD -ChildPath ".env"
@@ -339,7 +461,7 @@ function Get-ServerStatus {
 # =========================================================================================
 Clear-Host
 
-Write-Host "Tableau MCP Server Manager v$managerVersion" -ForegroundColor Cyan
+Write-Host "Tableau MCP Server Manager" -ForegroundColor Cyan
 Write-Host
 
 Show-Menu @(
