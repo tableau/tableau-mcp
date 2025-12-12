@@ -147,12 +147,13 @@ function Start-Server {
   Write-Host "Starting MCP server" -ForegroundColor Magenta
   $path = Join-Path -Path $PWD -ChildPath "tableau-mcp.exe"
   $process = Start-Process -FilePath $path -NoNewWindow -PassThru
+  Start-Sleep -Seconds 2
   if ($process.HasExited -and $process.ExitCode -ne 0) {
     Write-Host "MCP server failed to start" -ForegroundColor Red
     exit 1
   }
 
-  Write-Host "MCP server started successfully! Enjoy!!" -ForegroundColor Green
+  Write-Host "MCP server process started successfully" -ForegroundColor Green
   $pidFile = Join-Path -Path $PWD -ChildPath "pid.txt"
   Set-Content -Path $pidFile -Value $process.Id
 }
@@ -175,12 +176,12 @@ function Stop-Server {
   }
 
   if ($process) {
-    Write-Host "The MCP server is already running with PID $nodePid." -ForegroundColor Green
+    Write-Host "The MCP server is already running" -ForegroundColor Green
     Write-Host ""
 
     $choice = Read-Host "Do you want to stop the server? (Y/n)"
     if ($choice -ine 'n') {
-      Write-Host "Stopping MCP server with PID $nodePid" -ForegroundColor Magenta
+      Write-Host "Stopping MCP server..." -ForegroundColor Magenta
       Stop-Process -Id $nodePid
       Write-Host "MCP server stopped successfully" -ForegroundColor Green
       Remove-Item -Path $pidFile
@@ -287,6 +288,51 @@ function Install-TableauMCP {
 }
 
 function Get-ServerStatus {
+  $port = $env:PORT
+  if ($port -eq "" -or $null -eq $port) {
+    $envFile = Join-Path -Path $PWD -ChildPath ".env"
+    $envContent = Get-Content -Path $envFile
+    $port = $envContent | Select-String -Pattern "PORT=([0-9]+)" | ForEach-Object { $_.Matches.Groups[1].Value }
+  }
+
+  if ($port -eq "" -or $null -eq $port) {
+    $port = 3927
+  }
+
+  try {
+    Write-Host ""
+    Write-Host "Checking MCP server status on port $port..." -ForegroundColor Magenta
+    $uri = "http://localhost:$port/tableau-mcp"
+    $body = @{jsonrpc = "2.0"; id = "1"; method = "ping" }
+
+    Write-Host "Uri: $uri" -ForegroundColor Magenta
+    Write-Host "Body: $($body | ConvertTo-Json -Compress)" -ForegroundColor Magenta
+    Write-Host ""
+
+    $response = Invoke-WebRequest -Uri "http://localhost:$port/tableau-mcp" `
+      -Method Post `
+      -Body (@{jsonrpc = "2.0"; id = "1"; method = "ping" }) `
+      -TimeoutSec 5 `
+
+  }
+  catch {
+    Write-Host "MCP server is not running" -ForegroundColor Red
+    Write-Host "$($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+  }
+
+
+  if ($response.StatusCode -eq 200 -and $response.Content -eq '{"jsonrpc":"2.0","id":"1","result":{}}') {
+    Write-Host "StatusCode: $($response.StatusCode)" -ForegroundColor Magenta
+    Write-Host "Response: $($response.Content)" -ForegroundColor Magenta
+    Write-Host "MCP server is healthy" -ForegroundColor Green
+  }
+  else {
+    Write-Host "MCP server is not running" -ForegroundColor Red
+    Write-Host "StatusCode: $($response.StatusCode)" -ForegroundColor Red
+    Write-Host "Response: $($response.Content)" -ForegroundColor Red
+  }
+
 }
 
 # =========================================================================================

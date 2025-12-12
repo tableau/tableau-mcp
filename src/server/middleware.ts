@@ -1,3 +1,4 @@
+import { PingRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { NextFunction, Request, Response } from 'express';
 
 /**
@@ -27,5 +28,18 @@ export function validateProtocolVersion(req: Request, res: Response, next: NextF
     return;
   }
 
+  next();
+}
+
+export function validatePingRequest(req: Request, res: Response, next: NextFunction): void {
+  const pingRequest = PingRequestSchema.safeParse(req.body);
+  if (pingRequest.success) {
+    res.status(200).json({
+      jsonrpc: '2.0',
+      id: req.body.id,
+      result: {},
+    });
+    return;
+  }
   next();
 }
