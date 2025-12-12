@@ -1,9 +1,5 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {
-  isInitializeRequest,
-  LoggingLevel,
-  PingRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import cors from 'cors';
 import express, { Request, RequestHandler, Response } from 'express';
 import fs, { existsSync } from 'fs';
