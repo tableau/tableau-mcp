@@ -160,7 +160,7 @@ describe('OAuth', () => {
     const lines = message.split('\n').filter(Boolean);
     expect(lines.length).toBeGreaterThan(1);
     expect(lines[0]).toBe('event: message');
-    const data = JSON.parse(lines[1].substring(lines[1].indexOf('data: ') + 5));
+    const data = JSON.parse(lines[1].substring(lines[1].indexOf('data: ') + 6));
     expect(data).toMatchObject({ result: { tools: expect.any(Array) } });
   });
 

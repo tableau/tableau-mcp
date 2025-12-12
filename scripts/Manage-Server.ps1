@@ -328,7 +328,7 @@ function Expand-TableauMCP {
   $tableauMCPZip = Join-Path -Path $PWD -ChildPath "tableau-mcp.zip"
 
   Write-Host "Expanding archive to $PWD..." -ForegroundColor Magenta
-  Expand-Archive -Path $tableauMCPZip -DestinationPath $PWD
+  Expand-Archive -Path $tableauMCPZip -DestinationPath $PWD -Force
 
   Write-Host "Tableau MCP extracted successfully!" -ForegroundColor Green
 }
@@ -395,9 +395,10 @@ function Install-TableauMCP {
 
       $version = $releases[$i].version
       $assetUrl = $releases[$i].assetUrl
+      $assetUrlCopy = $assetUrl
       @{
         label  = "$version$label"
-        action = { Use-NodeJS -assetUrl $assetUrl }
+        action = { Use-NodeJS -assetUrl $assetUrlCopy }
       }
     }
   )
