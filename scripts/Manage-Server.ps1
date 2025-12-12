@@ -436,6 +436,7 @@ function Get-ServerStatus {
       -Method Post `
       -Body (@{jsonrpc = "2.0"; id = "1"; method = "ping" }) `
       -TimeoutSec 5 `
+      -UseBasicParsing
 
   }
   catch {
