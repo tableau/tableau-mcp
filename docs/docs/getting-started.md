@@ -44,18 +44,34 @@ Linux.
 ### Windows
 
 Run [Manage-Server.ps1](https://github.com/tableau/tableau-mcp/blob/main/scripts/Manage-Server.ps1)
-to install and manage the MCP server.
+which allows you to:
+
+1. Dowload the single executable application for the latest releases.
+2. Create a .env file with your Tableau MCP settings.
+3. Start the MCP server.
+4. Check the status of the MCP server.
+5. Upgrade the MCP server.
+6. Stop the MCP server.
+
+:::warning
+
+- Never run scripts from untrusted sources.
+- Verify the URL of the script correctly points to the main branch of the
+  [official Tableau MCP repository](https://github.com/tableau/tableau-mcp) and not a fork.
+- Download the script first and inspect it before running it.
+
+:::
+
+Run the script directly from the command line:
 
 ```powershell
 iex (iwr -Uri "https://raw.githubusercontent.com/tableau/tableau-mcp/refs/heads/main/scripts/Manage-Server.ps1" -UseBasicParsing).Content
 ```
 
-Or, if you prefer to download the script first, and then run it:
+Or, if you prefer to download the script first:
 
 ```powershell
 iwr -Uri "https://raw.githubusercontent.com/tableau/tableau-mcp/refs/heads/main/scripts/Manage-Server.ps1" -OutFile "Manage-Server.ps1"
-
-.\Manage-Server.ps1
 ```
 
 ### Manual Installation
@@ -88,7 +104,3 @@ The Desktop Extension has been available starting with Tableau MCP v1.5.2.
 [releases]: https://github.com/tableau/tableau-mcp/releases
 [claude]:
   https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop
-
-```
-
-```
