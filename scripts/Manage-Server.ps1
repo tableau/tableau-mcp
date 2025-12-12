@@ -35,6 +35,7 @@ function Use-NodeJS {
   Expand-TableauMCP
   New-EnvFile
   Start-Server
+  Get-ServerStatus
 }
 
 function New-EnvFile {
@@ -265,7 +266,7 @@ function Get-GitHubReleases {
 }
 
 function Install-TableauMCP {
-  Stop-Server
+  Stop-Server -Silent
 
   Write-Host "Which version of the Tableau MCP Server do you want to install?" -ForegroundColor Yellow
   [Array]$releases = Get-GitHubReleases
