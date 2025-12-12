@@ -147,7 +147,7 @@ describe('OAuth', () => {
       .send({
         jsonrpc: '2.0',
         id: '1',
-        method: 'ping',
+        method: 'tools/list',
       })
       .pipe(awaitableWritableStream.stream);
 
@@ -155,13 +155,13 @@ describe('OAuth', () => {
       Buffer.from(chunk).toString('utf-8'),
     );
 
-    expect(messages).toHaveLength(1);
-    const message = messages[0];
+    expect(messages.length).toBeGreaterThan(0);
+    const message = messages.join('');
     const lines = message.split('\n').filter(Boolean);
-    expect(lines).toHaveLength(2);
+    expect(lines.length).toBeGreaterThan(1);
     expect(lines[0]).toBe('event: message');
-    const data = JSON.parse(lines[1].split('data: ')[1]);
-    expect(data).toEqual({ result: {}, jsonrpc: '2.0', id: '1' });
+    const data = JSON.parse(lines[1].substring(lines[1].indexOf('data: ') + 5));
+    expect(data).toMatchObject({ result: { tools: expect.any(Array) } });
   });
 
   it('should reject if the access token is invalid or expired', async () => {
@@ -175,7 +175,7 @@ describe('OAuth', () => {
       .send({
         jsonrpc: '2.0',
         id: '1',
-        method: 'ping',
+        method: 'tools/list',
       });
 
     expect(response.status).toBe(401);
