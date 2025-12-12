@@ -439,12 +439,14 @@ function Get-ServerStatus {
     Write-Host "Body: $($body | ConvertTo-Json -Compress)" -ForegroundColor Magenta
     Write-Host ""
 
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
     $response = Invoke-WebRequest -Uri $uri `
       -Method Post `
       -Body ($body | ConvertTo-Json -Compress) `
       -ContentType "application/json" `
       -TimeoutSec 5 `
       -UseBasicParsing
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $null
 
   }
   catch {
