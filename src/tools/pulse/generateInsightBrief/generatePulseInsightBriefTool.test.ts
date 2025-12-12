@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../../server.js';
+import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
 import { getGeneratePulseInsightBriefTool } from './generatePulseInsightBriefTool.js';
 
@@ -297,16 +298,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
     });
     mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Ok(mockBriefResponse));
 
-    const tool = getGeneratePulseInsightBriefTool(new Server());
-    const result = await tool.callback(
-      { briefRequest: twoMetricRequest },
-      {
-        signal: new AbortController().signal,
-        requestId: 'test-request-id',
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      },
-    );
+    const result = await getToolResult(twoMetricRequest);
 
     // Should succeed
     expect(result.isError).toBe(false);
@@ -339,10 +331,13 @@ describe('getGeneratePulseInsightBriefTool', () => {
     );
   });
 
-  async function getToolResult(): Promise<CallToolResult> {
+  async function getToolResult(
+    overrideBriefRequest?: typeof briefRequest,
+  ): Promise<CallToolResult> {
     const tool = getGeneratePulseInsightBriefTool(new Server());
-    return await tool.callback(
-      { briefRequest },
+    const callback = await Provider.from(tool.callback);
+    return await callback(
+      { briefRequest: overrideBriefRequest ?? briefRequest },
       {
         signal: new AbortController().signal,
         requestId: 'test-request-id',
