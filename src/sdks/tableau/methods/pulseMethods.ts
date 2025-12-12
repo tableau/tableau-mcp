@@ -2,7 +2,7 @@ import { Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 import z from 'zod';
 
-import { isAxiosError } from '../../../utils/isAxiosError.js';
+import { isAxiosError } from '../../../utils/axios.js';
 import { pulseApis } from '../apis/pulseApi.js';
 import { Credentials } from '../types/credentials.js';
 import { PulsePagination } from '../types/pagination.js';

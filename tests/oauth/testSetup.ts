@@ -8,10 +8,7 @@ vi.mock('../../src/sdks/tableau/restApi.js', async (importOriginal) => ({
     signIn: vi.fn().mockResolvedValue(undefined),
     signOut: vi.fn().mockResolvedValue(undefined),
     setCredentials: vi.fn().mockResolvedValue(undefined),
-    serverMethods: {
-      getServerInfo: vi.fn().mockResolvedValue({
-        productVersion: testProductVersion,
-      }),
+    authenticatedServerMethods: {
       getCurrentServerSession: vi.fn().mockResolvedValue(
         Ok({
           site: {
@@ -24,6 +21,11 @@ vi.mock('../../src/sdks/tableau/restApi.js', async (importOriginal) => ({
           },
         }),
       ),
+    },
+    serverMethods: {
+      getServerInfo: vi.fn().mockResolvedValue({
+        productVersion: testProductVersion,
+      }),
     },
   })),
 }));

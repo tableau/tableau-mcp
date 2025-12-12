@@ -32,9 +32,9 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 - Can still be set to other authentication methods. See [Authentication](env-vars#auth) for options.
 - When set to a value _other_ than `oauth`, the MCP server will still be protected from unauthorized
   access by OAuth but will _not_ use the Tableau session initiated by the Tableau OAuth flow to
-  authenticate to the Tableau REST APIs. For example, if `AUTH` is set to `pat`, the MCP server will
-  use the values of [`PAT_NAME`](authentication/pat#pat_name) and
-  [`PAT_VALUE`](authentication/pat#pat_value) to authenticate to the Tableau REST APIs.
+  authenticate to the Tableau REST APIs. For example, if `AUTH` is set to `uat`, the MCP server will
+  use the [Unified Access Token (UAT)](authentication/uat.md) configuration to authenticate to the
+  Tableau REST APIs.
 
 <hr />
 
@@ -199,6 +199,27 @@ The absolute path to the RSA private key (.pem) file used to decrypt the OAuth a
 ### `OAUTH_JWE_PRIVATE_KEY_PASSPHRASE`
 
 The passphrase for the private key if it is encrypted.
+
+<hr />
+
+### `OAUTH_CIMD_DNS_SERVERS`
+
+The Tableau MCP server supports MCP clients that register using a Client ID Metadata Document (CIMD)
+URL. Part of this process requires resolving the IP address of the host of the document to protect
+against DNS rebinding and Server-Side Request Forgery (SSRF) attacks.
+
+By default, the MCP server will use
+[Cloudflare's Public DNS](https://developers.cloudflare.com/1.1.1.1/ip-addresses/) (1.1.1.1 and
+1.0.0.1) but you can override this using the `OAUTH_CIMD_DNS_SERVERS` environment variable.
+
+- Default: `1.1.1.1,1.0.0.1`
+- Format is a comma-separated list of IP addresses.
+- Example: `8.8.8.8,8.8.4.4` (Google's Public DNS)
+
+References:
+
+- https://blog.modelcontextprotocol.io/posts/client_registration/
+- https://client.dev/
 
 <hr />
 

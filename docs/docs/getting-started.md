@@ -30,6 +30,23 @@ This standard config works in most MCP clients:
 }
 ```
 
+<hr />
+
+## Node.js Single Executable Applications
+
+Node.js [Single Executable Applications](https://nodejs.org/api/single-executable-applications.html) (SEA) are a way to package a Node.js application into a single executable file.
+
+This provides a simple method for administrators to deploy Tableau MCP to their users without having to install Node.js or any other dependencies. Tableau MCP is available as a SEA for both Windows and Linux.
+
+1. Go to the latest [Tableau MCP release][releases] on GitHub
+2. Under Assets, download the `tableau-mcp.zip` (Windows) or `tableau-mcp.tar.gz` (Linux) archive for your operating system.
+   - If no archives exist, the release is too old and you'll need to choose a newer release.
+3. Extract the archive
+4. Create a [.env](https://www.dotenv.org/docs/security/env.html) file with your Tableau MCP settings. See [Environment Variables](./configuration/mcp-config/env-vars.md) section for more details.
+5. Run the application
+
+<hr />
+
 ## Claude Desktop Extension
 
 Claude Desktop users can also install Tableau MCP as a [Desktop Extension][mcpb]. This is a single

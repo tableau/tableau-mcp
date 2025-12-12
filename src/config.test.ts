@@ -33,6 +33,13 @@ describe('Config', () => {
       CONNECTED_APP_CLIENT_ID: undefined,
       CONNECTED_APP_SECRET_ID: undefined,
       CONNECTED_APP_SECRET_VALUE: undefined,
+      UAT_TENANT_ID: undefined,
+      UAT_ISSUER: undefined,
+      UAT_USERNAME_CLAIM: undefined,
+      UAT_USERNAME_CLAIM_NAME: undefined,
+      UAT_PRIVATE_KEY: undefined,
+      UAT_PRIVATE_KEY_PATH: undefined,
+      UAT_KEY_ID: undefined,
       JWT_ADDITIONAL_PAYLOAD: undefined,
       DATASOURCE_CREDENTIALS: undefined,
       DEFAULT_LOG_LEVEL: undefined,
@@ -40,7 +47,7 @@ describe('Config', () => {
       INCLUDE_TOOLS: undefined,
       EXCLUDE_TOOLS: undefined,
       MAX_RESULT_LIMIT: undefined,
-      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: undefined,
+      DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: undefined,
       DISABLE_METADATA_API_REQUESTS: undefined,
       DISABLE_SESSION_MANAGEMENT: undefined,
       ENABLE_SERVER_LOGGING: undefined,
@@ -55,6 +62,7 @@ describe('Config', () => {
       OAUTH_JWE_PRIVATE_KEY: undefined,
       OAUTH_JWE_PRIVATE_KEY_PATH: undefined,
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: undefined,
+      OAUTH_CIMD_DNS_SERVERS: undefined,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: undefined,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: undefined,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: undefined,
@@ -76,15 +84,28 @@ describe('Config', () => {
     expect(() => new Config()).toThrow('The environment variable SERVER is not set');
   });
 
-  it('should throw error when SERVER is not HTTPS', () => {
+  it('should accept HTTP URLs for SERVER', () => {
     process.env = {
       ...process.env,
       SERVER: 'http://foo.com',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: 'test-pat-value',
+      SITE_NAME: 'test-site',
+    };
+
+    const config = new Config();
+    expect(config.server).toBe('http://foo.com');
+  });
+
+  it('should throw error when SERVER is not HTTP/HTTPS', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'gopher://foo.com',
       SITE_NAME: 'test-site',
     };
 
     expect(() => new Config()).toThrow(
-      'The environment variable SERVER must start with "https://": http://foo.com',
+      'The environment variable SERVER must start with "http://" or "https://": gopher://foo.com',
     );
   });
 
@@ -234,25 +255,25 @@ describe('Config', () => {
     expect(config.maxResultLimit).toBe(100);
   });
 
-  it('should set disableQueryDatasourceFilterValidation to false by default', () => {
+  it('should set disableQueryDatasourceValidationRequests to false by default', () => {
     process.env = {
       ...process.env,
       ...defaultEnvVars,
     };
 
     const config = new Config();
-    expect(config.disableQueryDatasourceFilterValidation).toBe(false);
+    expect(config.disableQueryDatasourceValidationRequests).toBe(false);
   });
 
-  it('should set disableQueryDatasourceFilterValidation to true when specified', () => {
+  it('should set disableQueryDatasourceValidationRequests to true when specified', () => {
     process.env = {
       ...process.env,
       ...defaultEnvVars,
-      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: 'true',
+      DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: 'true',
     };
 
     const config = new Config();
-    expect(config.disableQueryDatasourceFilterValidation).toBe(true);
+    expect(config.disableQueryDatasourceValidationRequests).toBe(true);
   });
 
   it('should set disableMetadataApiRequests to false by default', () => {
@@ -717,7 +738,7 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.auth).toBe('direct-trust');
-      expect(config.jwtSubClaim).toBe('test-jwt-sub-claim');
+      expect(config.jwtUsername).toBe('test-jwt-sub-claim');
       expect(config.connectedAppClientId).toBe('test-client-id');
       expect(config.connectedAppSecretId).toBe('test-secret-id');
       expect(config.connectedAppSecretValue).toBe('test-secret-value');
@@ -803,11 +824,121 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.auth).toBe('pat');
-      expect(config.jwtSubClaim).toBe('');
+      expect(config.jwtUsername).toBe('');
       expect(config.connectedAppClientId).toBe('');
       expect(config.connectedAppSecretId).toBe('');
       expect(config.connectedAppSecretValue).toBe('');
       expect(config.jwtAdditionalPayload).toBe('{}');
+    });
+  });
+
+  describe('UAT configuration config parsing', () => {
+    const defaultUatEnvVars = {
+      ...defaultEnvVars,
+      AUTH: 'uat',
+      UAT_TENANT_ID: 'test-tenant-id',
+      UAT_ISSUER: 'test-issuer',
+      UAT_USERNAME_CLAIM: 'test-username',
+      UAT_PRIVATE_KEY: 'test-private-key',
+      UAT_KEY_ID: 'test-key-id',
+    } as const;
+
+    it('should configure uat authentication when all required variables are provided', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.auth).toBe('uat');
+      expect(config.uatTenantId).toBe('test-tenant-id');
+      expect(config.uatIssuer).toBe('test-issuer');
+      expect(config.uatUsernameClaimName).toBe('email');
+      expect(config.jwtUsername).toBe('test-username');
+      expect(config.uatPrivateKey).toBe('test-private-key');
+      expect(config.uatKeyId).toBe('test-key-id');
+    });
+
+    it('should fall back to JWT_SUB_CLAIM when UAT_USERNAME_CLAIM is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_USERNAME_CLAIM: undefined,
+        JWT_SUB_CLAIM: 'test-jwt-sub-claim',
+      };
+
+      const config = new Config();
+      expect(config.jwtUsername).toBe('test-jwt-sub-claim');
+    });
+
+    it('should set uatUsernameClaimName to the specified value when UAT_USERNAME_CLAIM_NAME is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_USERNAME_CLAIM_NAME: 'test-username-claim-name',
+      };
+
+      const config = new Config();
+      expect(config.uatUsernameClaimName).toBe('test-username-claim-name');
+    });
+
+    it('should throw error when UAT_TENANT_ID is missing', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_TENANT_ID: undefined,
+      };
+
+      expect(() => new Config()).toThrow('The environment variable UAT_TENANT_ID is not set');
+    });
+
+    it('should throw error when UAT_ISSUER is missing', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_ISSUER: undefined,
+      };
+
+      expect(() => new Config()).toThrow('The environment variable UAT_ISSUER is not set');
+    });
+
+    it('should throw error when UAT_USERNAME_CLAIM is missing and JWT_SUB_CLAIM is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_USERNAME_CLAIM: undefined,
+        JWT_SUB_CLAIM: undefined,
+      };
+
+      expect(() => new Config()).toThrow(
+        'One of the environment variables: UAT_USERNAME_CLAIM or JWT_SUB_CLAIM must be set',
+      );
+    });
+
+    it('should throw error when UAT_PRIVATE_KEY and UAT_PRIVATE_KEY_PATH is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_PRIVATE_KEY: undefined,
+        UAT_PRIVATE_KEY_PATH: undefined,
+      };
+
+      expect(() => new Config()).toThrow(
+        'One of the environment variables: UAT_PRIVATE_KEY_PATH or UAT_PRIVATE_KEY must be set',
+      );
+    });
+
+    it('should throw error when UAT_PRIVATE_KEY and UAT_PRIVATE_KEY_PATH are both set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_PRIVATE_KEY: 'hamburgers',
+        UAT_PRIVATE_KEY_PATH: 'hotdogs',
+      };
+
+      expect(() => new Config()).toThrow(
+        'Only one of the environment variables: UAT_PRIVATE_KEY or UAT_PRIVATE_KEY_PATH must be set',
+      );
     });
   });
 
@@ -901,6 +1032,7 @@ describe('Config', () => {
       jwePrivateKey: '',
       jwePrivateKeyPath: defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH,
       jwePrivateKeyPassphrase: undefined,
+      dnsServers: ['1.1.1.1', '1.0.0.1'],
       ...defaultOAuthTimeoutMs,
     } as const;
 
@@ -919,6 +1051,7 @@ describe('Config', () => {
         jwePrivateKey: '',
         jwePrivateKeyPath: '',
         jwePrivateKeyPassphrase: undefined,
+        dnsServers: ['1.1.1.1', '1.0.0.1'],
         ...defaultOAuthTimeoutMs,
       });
     });
@@ -1159,6 +1292,17 @@ describe('Config', () => {
         client1: 'secret1',
         client2: 'secret2',
       });
+    });
+
+    it('should set dnsServers to the specified value when OAUTH_CIMD_DNS_SERVERS is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_CIMD_DNS_SERVERS: '8.8.8.8,8.8.4.4',
+      };
+
+      const config = new Config();
+      expect(config.oauth.dnsServers).toEqual(['8.8.8.8', '8.8.4.4']);
     });
   });
 

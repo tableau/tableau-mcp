@@ -3,6 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { PulseInsightBundleType } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './generatePulseMetricValueInsightBundleTool.js';
 
@@ -233,7 +234,8 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
 
   async function getToolResult(bundleType?: PulseInsightBundleType): Promise<CallToolResult> {
     const tool = getGeneratePulseMetricValueInsightBundleTool(new Server());
-    return await tool.callback(bundleType ? { bundleRequest, bundleType } : { bundleRequest }, {
+    const callback = await Provider.from(tool.callback);
+    return await callback(bundleType ? { bundleRequest, bundleType } : { bundleRequest }, {
       signal: new AbortController().signal,
       requestId: 'test-request-id',
       sendNotification: vi.fn(),

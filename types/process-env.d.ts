@@ -14,6 +14,13 @@ export interface ProcessEnvEx {
   CONNECTED_APP_CLIENT_ID: string | undefined;
   CONNECTED_APP_SECRET_ID: string | undefined;
   CONNECTED_APP_SECRET_VALUE: string | undefined;
+  UAT_TENANT_ID: string | undefined;
+  UAT_ISSUER: string | undefined;
+  UAT_USERNAME_CLAIM: string | undefined;
+  UAT_USERNAME_CLAIM_NAME: string | undefined;
+  UAT_PRIVATE_KEY: string | undefined;
+  UAT_PRIVATE_KEY_PATH: string | undefined;
+  UAT_KEY_ID: string | undefined;
   JWT_ADDITIONAL_PAYLOAD: string | undefined;
   DATASOURCE_CREDENTIALS: string | undefined;
   DEFAULT_LOG_LEVEL: string | undefined;
@@ -21,7 +28,7 @@ export interface ProcessEnvEx {
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
-  DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: string | undefined;
+  DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: string | undefined;
   DISABLE_METADATA_API_REQUESTS: string | undefined;
   DISABLE_SESSION_MANAGEMENT: string | undefined;
   ENABLE_SERVER_LOGGING: string | undefined;
@@ -35,6 +42,7 @@ export interface ProcessEnvEx {
   OAUTH_JWE_PRIVATE_KEY: string | undefined;
   OAUTH_JWE_PRIVATE_KEY_PATH: string | undefined;
   OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: string | undefined;
+  OAUTH_CIMD_DNS_SERVERS: string | undefined;
   OAUTH_REDIRECT_URI: string | undefined;
   OAUTH_CLIENT_ID_SECRET_PAIRS: string | undefined;
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: string | undefined;

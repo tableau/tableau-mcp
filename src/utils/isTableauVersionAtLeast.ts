@@ -1,6 +1,27 @@
+import { getTableauServerVersion } from '../getTableauServerVersion.js';
 import { ProductVersion } from '../sdks/tableau/types/serverInfo.js';
 
-export function isTableauVersionAtLeast({
+// Example 2025.3.0
+type TableauVersion = `${number}.${number}.${number}`;
+
+export async function getResultForTableauVersion<T>({
+  server,
+  mappings,
+}: {
+  server: string | undefined;
+  mappings: { [minVersion: TableauVersion]: T } & { default: T };
+}): Promise<T> {
+  const productVersion = await getTableauServerVersion(server);
+  for (const [minVersion, value] of Object.entries(mappings) as Array<[TableauVersion, T]>) {
+    if (isTableauVersionAtLeast({ productVersion, minVersion })) {
+      return value;
+    }
+  }
+
+  return mappings.default;
+}
+
+function isTableauVersionAtLeast({
   productVersion,
   minVersion,
 }: {
@@ -36,3 +57,7 @@ export function isTableauVersionAtLeast({
   // Tableau version is older than the minimum required version
   return false;
 }
+
+export const exportedForTesting = {
+  isTableauVersionAtLeast,
+};

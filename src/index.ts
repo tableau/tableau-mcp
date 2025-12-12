@@ -21,7 +21,7 @@ async function startServer(): Promise<void> {
   switch (config.transport) {
     case 'stdio': {
       const server = new Server();
-      server.registerTools();
+      await server.registerTools();
       server.registerRequestHandlers();
 
       const transport = new StdioServerTransport();
@@ -53,9 +53,7 @@ async function startServer(): Promise<void> {
   }
 }
 
-try {
-  await startServer();
-} catch (error) {
+startServer().catch((error) => {
   writeToStderr(`Fatal error when starting the server: ${getExceptionMessage(error)}`);
   process.exit(1);
-}
+});
