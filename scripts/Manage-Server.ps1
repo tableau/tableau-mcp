@@ -435,7 +435,8 @@ function Get-ServerStatus {
 
     $response = Invoke-WebRequest -Uri "http://localhost:$port/tableau-mcp" `
       -Method Post `
-      -Body (@{jsonrpc = "2.0"; id = "1"; method = "ping" }) `
+      -Body ($body | ConvertTo-Json -Compress) `
+      -ContentType "application/json" `
       -TimeoutSec 5 `
       -UseBasicParsing
 
