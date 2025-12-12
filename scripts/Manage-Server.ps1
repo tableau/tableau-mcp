@@ -417,10 +417,12 @@ function Get-ServerStatus {
         Get-ServerStatus
     #>
   $port = $env:PORT
+  $sslKey = $env:SSL_KEY
   if ($port -eq "" -or $null -eq $port) {
     $envFile = Join-Path -Path $PWD -ChildPath ".env"
     $envContent = Get-Content -Path $envFile
     $port = $envContent | Select-String -Pattern "PORT=([0-9]+)" | ForEach-Object { $_.Matches.Groups[1].Value }
+    $sslKey = $envContent | Select-String -Pattern "SSL_KEY=([^\s]+)" | ForEach-Object { $_.Matches.Groups[1].Value }
   }
 
   if ($port -eq "" -or $null -eq $port) {
@@ -430,14 +432,14 @@ function Get-ServerStatus {
   try {
     Write-Host ""
     Write-Host "Checking MCP server status on port $port..." -ForegroundColor Magenta
-    $uri = "http://localhost:$port/tableau-mcp"
+    $uri = if ($sslKey) { "https://localhost:$port/tableau-mcp" } else { "http://localhost:$port/tableau-mcp" }
     $body = @{jsonrpc = "2.0"; id = "1"; method = "ping" }
 
     Write-Host "Uri: $uri" -ForegroundColor Magenta
     Write-Host "Body: $($body | ConvertTo-Json -Compress)" -ForegroundColor Magenta
     Write-Host ""
 
-    $response = Invoke-WebRequest -Uri "http://localhost:$port/tableau-mcp" `
+    $response = Invoke-WebRequest -Uri $uri `
       -Method Post `
       -Body ($body | ConvertTo-Json -Compress) `
       -ContentType "application/json" `
