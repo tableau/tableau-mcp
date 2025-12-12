@@ -125,7 +125,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetResourceAccessCheckerSingleton()
+    resetResourceAccessCheckerSingleton();
     mocks.mockGetConfig.mockReturnValue({
       boundedContext: {
         projectIds: null,
