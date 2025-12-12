@@ -2,23 +2,14 @@ import { z } from 'zod';
 
 import { requiredString } from '../../utils/requiredString.js';
 
-export const mcpAuthorizeSchema = z
-  .object({
-    client_id: requiredString('client_id'),
-    redirect_uri: requiredString('redirect_uri'),
-    response_type: requiredString('response_type'),
-    code_challenge: requiredString('code_challenge'),
-    code_challenge_method: requiredString('code_challenge_method'),
-    state: z.string().optional(),
-  })
-  .transform((data) => ({
-    clientId: data.client_id,
-    redirectUri: data.redirect_uri,
-    responseType: data.response_type,
-    codeChallenge: data.code_challenge,
-    codeChallengeMethod: data.code_challenge_method,
-    state: data.state,
-  }));
+export const mcpAuthorizeSchema = z.object({
+  client_id: requiredString('client_id'),
+  redirect_uri: requiredString('redirect_uri'),
+  response_type: requiredString('response_type'),
+  code_challenge: requiredString('code_challenge'),
+  code_challenge_method: requiredString('code_challenge_method'),
+  state: z.string().optional(),
+});
 
 export const mcpTokenSchema = z
   .discriminatedUnion(
@@ -123,4 +114,23 @@ export const tableauAuthInfoSchema = z
   })
   .partial();
 
+export const cimdMetadataSchema = z.object({
+  client_id: z.string(),
+  redirect_uris: z.array(z.string().url()).min(1),
+  client_name: z.string().optional(),
+  logo_uri: z.string().url().optional(),
+  client_uri: z.string().url().optional(),
+  tos_uri: z.string().url().optional(),
+  policy_uri: z.string().url().optional(),
+  grant_types: z.array(z.string()).optional(),
+  response_types: z.array(z.enum(['code', 'token'])).optional(),
+  post_logout_redirect_uris: z.array(z.string().url()).optional(),
+  scope: z.string().default('read').optional(),
+  token_endpoint_auth_method: z
+    .enum(['none', 'client_secret_basic', 'client_secret_post'])
+    .optional(),
+});
+
 export type TableauAuthInfo = z.infer<typeof tableauAuthInfoSchema>;
+export type McpAuthorizeRequest = z.infer<typeof mcpAuthorizeSchema>;
+export type ClientMetadata = z.infer<typeof cimdMetadataSchema>;

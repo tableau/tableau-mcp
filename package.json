@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "An MCP server for Tableau, providing a suite of tools that will make it easier for developers to build AI applications that integrate with Tableau.",
-  "version": "1.13.0",
+  "version": "1.13.5",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -9,7 +9,7 @@
   "homepage": "https://github.com/tableau/tableau-mcp",
   "bugs": "https://github.com/tableau/tableau-mcp/issues",
   "author": "Tableau",
-  "type": "module",
+  "type": "commonjs",
   "license": "Apache-2.0",
   "keywords": [
     "tableau",
@@ -19,10 +19,11 @@
     "tableau-mcp-server": "./build/index.js"
   },
   "scripts": {
-    ":build": "npx rimraf ./build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --minify --outdir=build --sourcemap",
-    ":build:dev": "npx rimraf ./build && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outdir=build --sourcemap",
-    "build": "run-s :build exec-perms",
-    "build:dev": "run-s :build:dev exec-perms",
+    "clean": "npx rimraf ./build",
+    ":build": "esbuild src/index.ts --bundle --platform=node --format=cjs --minify --outfile=build/index.js --sourcemap --log-override:empty-import-meta=silent",
+    ":build:dev": "esbuild src/index.ts --bundle --packages=external --platform=node --format=cjs --outfile=build/index.js --sourcemap",
+    "build": "run-s clean :build exec-perms",
+    "build:dev": "run-s clean :build:dev exec-perms",
     "build:watch": "npm run :build:dev -- --watch",
     "build:docker": "docker build -t tableau-mcp .",
     ":build:mcpb": "npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb",
@@ -53,11 +54,13 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@zodios/core": "^10.9.6",
+    "axios-retry": "^4.5.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "fast-levenshtein": "^3.0.0",
     "jose": "^6.0.12",
+    "ssrfcheck": "^1.2.0",
     "ts-results-es": "^5.0.1",
     "zod": "^3.24.3",
     "zod-validation-error": "^4.0.1"

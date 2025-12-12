@@ -16,9 +16,9 @@ import {
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
-import { isAxiosError } from './utils/isAxiosError.js';
 
 type JwtScopes =
   | 'tableau:viz_data_service:read'
@@ -61,10 +61,23 @@ const getNewRestApiInstanceAsync = async (
     await restApi.signIn({
       type: 'direct-trust',
       siteName: config.siteName,
-      username: getJwtSubClaim(config, authInfo),
+      username: getJwtUsername(config, authInfo),
       clientId: config.connectedAppClientId,
       secretId: config.connectedAppSecretId,
       secretValue: config.connectedAppSecretValue,
+      scopes: jwtScopes,
+      additionalPayload: getJwtAdditionalPayload(config, authInfo),
+    });
+  } else if (config.auth === 'uat') {
+    await restApi.signIn({
+      type: 'uat',
+      siteName: config.siteName,
+      username: getJwtUsername(config, authInfo),
+      tenantId: config.uatTenantId,
+      issuer: config.uatIssuer,
+      usernameClaimName: config.uatUsernameClaimName,
+      privateKey: config.uatPrivateKey,
+      keyId: config.uatKeyId,
       scopes: jwtScopes,
       additionalPayload: getJwtAdditionalPayload(config, authInfo),
     });
@@ -177,7 +190,9 @@ export const getResponseErrorInterceptor =
 function logRequest(server: Server, request: RequestInterceptorConfig, requestId: RequestId): void {
   const config = getConfig();
   const maskedRequest = config.disableLogMasking ? request : maskRequest(request);
-  const url = new URL(maskedRequest.url ?? '', maskedRequest.baseUrl);
+  const url = new URL(
+    `${maskedRequest.baseUrl.replace(/\/$/, '')}/${maskedRequest.url?.replace(/^\//, '') ?? ''}`,
+  );
   if (request.params && Object.keys(request.params).length > 0) {
     url.search = new URLSearchParams(request.params).toString();
   }
@@ -204,7 +219,9 @@ function logResponse(
 ): void {
   const config = getConfig();
   const maskedResponse = config.disableLogMasking ? response : maskResponse(response);
-  const url = new URL(maskedResponse.url ?? '', maskedResponse.baseUrl);
+  const url = new URL(
+    `${maskedResponse.baseUrl.replace(/\/$/, '')}/${maskedResponse.url?.replace(/^\//, '') ?? ''}`,
+  );
   if (response.request?.params && Object.keys(response.request.params).length > 0) {
     url.search = new URLSearchParams(response.request.params).toString();
   }
@@ -233,8 +250,8 @@ function getUserAgent(server: Server): string {
   return userAgentParts.join(' ');
 }
 
-function getJwtSubClaim(config: Config, authInfo: TableauAuthInfo | undefined): string {
-  return config.jwtSubClaim.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
+function getJwtUsername(config: Config, authInfo: TableauAuthInfo | undefined): string {
+  return config.jwtUsername.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
 }
 
 function getJwtAdditionalPayload(

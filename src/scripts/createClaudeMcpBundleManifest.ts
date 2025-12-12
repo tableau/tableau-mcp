@@ -7,10 +7,11 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { z } from 'zod';
 
-import packageJson from '../../package.json' with { type: 'json' };
+import packageJson from '../../package.json';
 import { ProcessEnvEx } from '../../types/process-env.js';
 import { toolNames } from '../tools/toolName.js';
 
+// @ts-expect-error - import.meta is not allowed in CommonJS output, but this file is built using esbuild as ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -97,6 +98,64 @@ const envVars = {
     description: 'The secret value of the Tableau Connected App.',
     required: false,
     sensitive: true,
+  },
+  UAT_TENANT_ID: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Tenant ID',
+    description: 'The tenant ID of the Tableau UAT JWT.',
+    required: false,
+    sensitive: false,
+  },
+  UAT_ISSUER: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Issuer',
+    description: 'The issuer of the Tableau UAT JWT.',
+    required: false,
+    sensitive: false,
+  },
+  UAT_USERNAME_CLAIM_NAME: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Username Claim Name',
+    description:
+      'The name of the claim of the Tableau UAT JWT that maps to the Tableau username. Defaults to `email`.',
+    required: false,
+    sensitive: false,
+  },
+  UAT_USERNAME_CLAIM: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Username Claim',
+    description:
+      'The username for the claim of the JWT specified by the `UAT_USERNAME_CLAIM_NAME` environment variable.',
+    required: false,
+    sensitive: false,
+  },
+  UAT_PRIVATE_KEY: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Private Key',
+    description: 'The private key of the Tableau UAT JWT.',
+    required: false,
+    sensitive: true,
+  },
+  UAT_PRIVATE_KEY_PATH: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Private Key Path',
+    description: 'The path to the UAT JWT private key.',
+    required: false,
+    sensitive: true,
+  },
+  UAT_KEY_ID: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Key ID',
+    description: 'The key ID of the Tableau UAT JWT.',
+    required: false,
+    sensitive: false,
   },
   JWT_ADDITIONAL_PAYLOAD: {
     includeInUserConfig: false,
@@ -337,6 +396,15 @@ const envVars = {
       'A comma-separated list of client ID and secret pairs for the OAuth client. The format is `clientId:secret`.',
     required: false,
     sensitive: true,
+  },
+  OAUTH_CIMD_DNS_SERVERS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth CIMD DNS Servers',
+    description:
+      'A comma-separated list of DNS server IP addresses to resolve the IP addresses of the client metadata document URLs.',
+    required: false,
+    sensitive: false,
   },
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: {
     includeInUserConfig: false,

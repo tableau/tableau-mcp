@@ -1,20 +1,21 @@
 import { CorsOptions } from 'cors';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { fileURLToPath } from 'url';
 
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
+import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const __dirname = getDirname();
 
-const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
-const ONE_HOUR_IN_MS = 60 * 60 * 1000;
-const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
-const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
+export const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+export const ONE_HOUR_IN_MS = 60 * 60 * 1000;
+export const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
+export const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
+export const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
-const authTypes = ['pat', 'direct-trust', 'oauth'] as const;
+const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
 
 function isAuthType(auth: unknown): auth is AuthType {
@@ -39,10 +40,15 @@ export class Config {
   siteName: string;
   patName: string;
   patValue: string;
-  jwtSubClaim: string;
+  jwtUsername: string;
   connectedAppClientId: string;
   connectedAppSecretId: string;
   connectedAppSecretValue: string;
+  uatTenantId: string;
+  uatIssuer: string;
+  uatUsernameClaimName: string;
+  uatPrivateKey: string;
+  uatKeyId: string;
   jwtAdditionalPayload: string;
   datasourceCredentials: string;
   defaultLogLevel: string;
@@ -68,6 +74,7 @@ export class Config {
     accessTokenTimeoutMs: number;
     refreshTokenTimeoutMs: number;
     clientIdSecretPairs: Record<string, string> | null;
+    dnsServers: string[];
   };
 
   constructor() {
@@ -88,6 +95,13 @@ export class Config {
       CONNECTED_APP_CLIENT_ID: clientId,
       CONNECTED_APP_SECRET_ID: secretId,
       CONNECTED_APP_SECRET_VALUE: secretValue,
+      UAT_TENANT_ID: uatTenantId,
+      UAT_ISSUER: uatIssuer,
+      UAT_USERNAME_CLAIM_NAME: uatUsernameClaimName,
+      UAT_USERNAME_CLAIM: uatUsernameClaim,
+      UAT_PRIVATE_KEY: uatPrivateKey,
+      UAT_PRIVATE_KEY_PATH: uatPrivateKeyPath,
+      UAT_KEY_ID: uatKeyId,
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
@@ -111,10 +125,13 @@ export class Config {
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
+      OAUTH_CIMD_DNS_SERVERS: dnsServers,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
     } = cleansedVars;
+
+    let jwtUsername = '';
 
     this.siteName = siteName ?? '';
 
@@ -177,6 +194,9 @@ export class Config {
       jwePrivateKey: oauthJwePrivateKey ?? '',
       jwePrivateKeyPath: oauthJwePrivateKeyPath ?? '',
       jwePrivateKeyPassphrase: oauthJwePrivateKeyPassphrase || undefined,
+      dnsServers: dnsServers
+        ? dnsServers.split(',').map((ip) => ip.trim())
+        : ['1.1.1.1', '1.0.0.1' /* Cloudflare public DNS */],
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
         defaultValue: TEN_MINUTES_IN_MS,
         minValue: 0,
@@ -285,15 +305,54 @@ export class Config {
       invariant(clientId, 'The environment variable CONNECTED_APP_CLIENT_ID is not set');
       invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
       invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
+
+      jwtUsername = jwtSubClaim ?? '';
+    } else if (this.auth === 'uat') {
+      invariant(uatTenantId, 'The environment variable UAT_TENANT_ID is not set');
+      invariant(uatIssuer, 'The environment variable UAT_ISSUER is not set');
+
+      if (!uatUsernameClaim && !jwtSubClaim) {
+        throw new Error(
+          'One of the environment variables: UAT_USERNAME_CLAIM or JWT_SUB_CLAIM must be set',
+        );
+      }
+
+      jwtUsername = uatUsernameClaim ?? jwtSubClaim ?? '';
+
+      if (!uatPrivateKey && !uatPrivateKeyPath) {
+        throw new Error(
+          'One of the environment variables: UAT_PRIVATE_KEY_PATH or UAT_PRIVATE_KEY must be set',
+        );
+      }
+
+      if (uatPrivateKey && uatPrivateKeyPath) {
+        throw new Error(
+          'Only one of the environment variables: UAT_PRIVATE_KEY or UAT_PRIVATE_KEY_PATH must be set',
+        );
+      }
+
+      if (
+        uatPrivateKeyPath &&
+        process.env.TABLEAU_MCP_TEST !== 'true' &&
+        !existsSync(uatPrivateKeyPath)
+      ) {
+        throw new Error(`UAT private key path does not exist: ${uatPrivateKeyPath}`);
+      }
     }
 
     this.server = server ?? '';
     this.patName = patName ?? '';
     this.patValue = patValue ?? '';
-    this.jwtSubClaim = jwtSubClaim ?? '';
+    this.jwtUsername = jwtUsername ?? '';
     this.connectedAppClientId = clientId ?? '';
     this.connectedAppSecretId = secretId ?? '';
     this.connectedAppSecretValue = secretValue ?? '';
+    this.uatTenantId = uatTenantId ?? '';
+    this.uatIssuer = uatIssuer ?? '';
+    this.uatUsernameClaimName = uatUsernameClaimName || 'email';
+    this.uatPrivateKey =
+      uatPrivateKey || (uatPrivateKeyPath ? readFileSync(uatPrivateKeyPath, 'utf8') : '');
+    this.uatKeyId = uatKeyId ?? '';
     this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
   }
 }
