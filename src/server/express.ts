@@ -10,7 +10,7 @@ import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
-import { validateProtocolVersion } from './middleware.js';
+import { handlePingRequest, validateProtocolVersion } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
@@ -52,7 +52,7 @@ export async function startExpressServer({
     app.set('trust proxy', config.trustProxyConfig);
   }
 
-  const middleware: Array<RequestHandler> = [];
+  const middleware: Array<RequestHandler> = [handlePingRequest];
   if (config.oauth.enabled) {
     const oauthProvider = new OAuthProvider();
     oauthProvider.setupRoutes(app);
