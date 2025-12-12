@@ -182,8 +182,12 @@ DANGEROUSLY_DISABLE_OAUTH=true
       action = {
         $oauthIssuer = Read-Host "OAuth Issuer"
         $oauthRedirectUri = Read-Host "OAuth Redirect URI ([ENTER] to use default)"
-        $oauthJwePrivateKey = Read-Host "OAuth JWE Private Key ([ENTER] to provide path instead)"
-        $oauthJwePrivateKeyPath = Read-Host "OAuth JWE Private Key Path"
+        $oauthJwePrivateKey = Read-Host "OAuth JWE Private Key ([ENTER] to provide path to key file instead)"
+
+        if ($oauthJwePrivateKey -eq "") {
+          $oauthJwePrivateKeyPath = Read-Host "OAuth JWE Private Key Path"
+        }
+
         $oauthJwePrivateKeyPassphrase = Read-Host "OAuth JWE Private Key Passphrase ([ENTER] to leave blank)"
         $oauthAuthzCodeTimeoutMs = Read-Host "OAuth Authz Code Timeout MS ([ENTER] to use default)"
         $oauthAccessTokenTimeoutMs = Read-Host "OAuth Access Token Timeout MS ([ENTER] to use default)"
