@@ -27,7 +27,8 @@ type JwtScopes =
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
   | 'tableau:insights:read'
-  | 'tableau:views:download';
+  | 'tableau:views:download'
+  | 'tableau:insight_brief:create';
 
 const getNewRestApiInstanceAsync = async (
   config: Config,
@@ -76,10 +77,23 @@ const getNewRestApiInstanceAsync = async (
     await restApi.signIn({
       type: 'direct-trust',
       siteName: config.siteName,
-      username: getJwtSubClaim(config, authInfo),
+      username: getJwtUsername(config, authInfo),
       clientId: config.connectedAppClientId,
       secretId: config.connectedAppSecretId,
       secretValue: config.connectedAppSecretValue,
+      scopes: jwtScopes,
+      additionalPayload: getJwtAdditionalPayload(config, authInfo),
+    });
+  } else if (config.auth === 'uat') {
+    await restApi.signIn({
+      type: 'uat',
+      siteName: config.siteName,
+      username: getJwtUsername(config, authInfo),
+      tenantId: config.uatTenantId,
+      issuer: config.uatIssuer,
+      usernameClaimName: config.uatUsernameClaimName,
+      privateKey: config.uatPrivateKey,
+      keyId: config.uatKeyId,
       scopes: jwtScopes,
       additionalPayload: getJwtAdditionalPayload(config, authInfo),
     });
@@ -255,8 +269,8 @@ function getUserAgent(server: Server): string {
   return userAgentParts.join(' ');
 }
 
-function getJwtSubClaim(config: Config, authInfo: TableauAuthInfo | undefined): string {
-  return config.jwtSubClaim.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
+function getJwtUsername(config: Config, authInfo: TableauAuthInfo | undefined): string {
+  return config.jwtUsername.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
 }
 
 function getJwtAdditionalPayload(

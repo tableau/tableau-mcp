@@ -9,6 +9,8 @@ import { PulsePagination } from '../types/pagination.js';
 import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
+  pulseInsightBriefRequestSchema,
+  PulseInsightBriefResponse,
   PulseInsightBundleType,
   PulseMetric,
   PulseMetricDefinition,
@@ -142,6 +144,26 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
         ...this.authHeader,
       });
       return response.subscriptions ?? [];
+    });
+  };
+
+  /**
+   * Generates an AI-powered insight brief for Pulse metrics based on natural language questions.
+   *
+   * Required scopes: `tableau:insight_brief:create`
+   *
+   * @param briefRequest - The request to generate an insight brief for.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#EmbeddingsService_GenerateInsightBrief
+   */
+  generatePulseInsightBrief = async (
+    briefRequest: z.infer<typeof pulseInsightBriefRequestSchema>,
+  ): Promise<PulseResult<PulseInsightBriefResponse>> => {
+    return await guardAgainstPulseDisabled(async () => {
+      const response = await this._apiClient.generatePulseInsightBrief(
+        briefRequest,
+        this.authHeader,
+      );
+      return response;
     });
   };
 

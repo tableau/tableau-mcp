@@ -44,10 +44,28 @@ export class AuthenticationMethods extends Methods<typeof authenticationApis> {
                 return {
                   jwt: await getJwt({
                     username: authConfig.username,
-                    connectedApp: {
+                    config: {
+                      type: 'connected-app',
                       clientId: authConfig.clientId,
                       secretId: authConfig.secretId,
                       secretValue: authConfig.secretValue,
+                    },
+                    scopes: authConfig.scopes,
+                    additionalPayload: authConfig.additionalPayload,
+                  }),
+                };
+              case 'uat':
+                return {
+                  isUat: true,
+                  jwt: await getJwt({
+                    username: authConfig.username,
+                    config: {
+                      type: 'uat',
+                      tenantId: authConfig.tenantId,
+                      issuer: authConfig.issuer,
+                      usernameClaimName: authConfig.usernameClaimName,
+                      privateKey: authConfig.privateKey,
+                      keyId: authConfig.keyId,
                     },
                     scopes: authConfig.scopes,
                     additionalPayload: authConfig.additionalPayload,

@@ -32,9 +32,9 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 - Can still be set to other authentication methods. See [Authentication](env-vars#auth) for options.
 - When set to a value _other_ than `oauth`, the MCP server will still be protected from unauthorized
   access by OAuth but will _not_ use the Tableau session initiated by the Tableau OAuth flow to
-  authenticate to the Tableau REST APIs. For example, if `AUTH` is set to `pat`, the MCP server will
-  use the values of [`PAT_NAME`](authentication/pat#pat_name) and
-  [`PAT_VALUE`](authentication/pat#pat_value) to authenticate to the Tableau REST APIs.
+  authenticate to the Tableau REST APIs. For example, if `AUTH` is set to `uat`, the MCP server will
+  use the [Unified Access Token (UAT)](authentication/uat.md) configuration to authenticate to the
+  Tableau REST APIs.
 
 <hr />
 
