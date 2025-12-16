@@ -15,9 +15,7 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          PR_TITLE_PATTERN='^@W-\d+'
-
-          if [[ ! "$PR_TITLE" =~ $PR_TITLE_PATTERN ]]; then
+          if [[ ! "$PR_TITLE" =~ ^@W-[0-9]+ ]]; then
             echo "❌ PR title must match the pattern '@W-<digits>' (e.g., @W-123456)"
             exit 1
           fi
