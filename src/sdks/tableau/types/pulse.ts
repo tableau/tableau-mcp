@@ -128,6 +128,14 @@ export const pulseMetricSubscriptionSchema = z.object({
   metric_id: z.string(),
 });
 
+export const pulseCorrelationCandidateDefinitionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  specification: pulseSpecificationSchema,
+  extension_options: pulseExtensionOptionsSchema,
+  representation_options: pulseRepresentationOptionsSchema,
+})
+
 export const languageEnumSchema = z.enum([
   'LANGUAGE_UNSPECIFIED',
   'LANGUAGE_DE_DE',
@@ -308,7 +316,7 @@ export const metricGroupContextSchema = z.array(
           metric_goals: pulseGoalsSchema.optional(),
         })
         .optional(),
-      candidates: z.array(z.any()).optional(),
+      candidates: z.array(pulseCorrelationCandidateDefinitionSchema),
     }),
   }),
 );
