@@ -134,7 +134,7 @@ export const pulseCorrelationCandidateDefinitionSchema = z.object({
   specification: pulseSpecificationSchema,
   extension_options: pulseExtensionOptionsSchema,
   representation_options: pulseRepresentationOptionsSchema,
-})
+});
 
 export const languageEnumSchema = z.enum([
   'LANGUAGE_UNSPECIFIED',
