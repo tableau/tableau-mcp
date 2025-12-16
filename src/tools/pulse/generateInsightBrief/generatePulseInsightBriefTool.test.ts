@@ -97,6 +97,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
               insights_options: {
                 settings: [],
               },
+              candidates: [],
             },
           },
         ],
@@ -238,6 +239,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
                   currency_code: 'CURRENCY_CODE_USD' as const,
                 },
                 insights_options: { settings: [] },
+                candidates: [],
               },
             },
             {
@@ -282,6 +284,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
                   currency_code: 'CURRENCY_CODE_USD' as const,
                 },
                 insights_options: { settings: [] },
+                candidates: [],
               },
             },
           ],
