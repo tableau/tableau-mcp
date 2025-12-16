@@ -38,17 +38,21 @@ const getNewRestApiInstanceAsync = async (
   signal: AbortSignal,
   authInfo?: TableauAuthInfo,
 ): Promise<RestApi> => {
-  signal.onabort = () => {
-    log.info(
-      server,
-      {
-        type: 'request-cancelled',
-        requestId,
-        reason: signal.reason,
-      },
-      { logger: server.name, requestId },
-    );
-  };
+  signal.addEventListener(
+    'abort',
+    () => {
+      log.info(
+        server,
+        {
+          type: 'request-cancelled',
+          requestId,
+          reason: signal.reason,
+        },
+        { logger: server.name, requestId },
+      );
+    },
+    { once: true },
+  );
 
   const tableauServer = config.server || authInfo?.server;
   invariant(tableauServer, 'Tableau server could not be determined');
