@@ -259,7 +259,7 @@ async function getClientFromMetadataDoc(
     }
   }
 
-  if (cacheExpiryMs > 0) {
+  if (cacheExpiryMs !== undefined && cacheExpiryMs > 0) {
     clientMetadataCache.set(originalUrl, clientMetadataResult.data, cacheExpiryMs);
   }
 

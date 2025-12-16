@@ -1,40 +1,34 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { randomUUID } from 'crypto';
 
-import { ClientInfo } from './server.js';
+import { ClientInfo } from '../../server';
+import { Store } from './store';
 
 export type Session = {
-  transport: StreamableHTTPServerTransport;
+  sessionId: string;
   clientInfo: ClientInfo;
+  transport: StreamableHTTPServerTransport | undefined;
 };
-
-const sessions: { [sessionId: string]: Session } = {};
 
 export const createSession = ({
   clientInfo,
+  store,
 }: {
   clientInfo: ClientInfo;
+  store: Store<Session>;
 }): StreamableHTTPServerTransport => {
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
     onsessioninitialized: (sessionId) => {
-      sessions[sessionId] = { transport, clientInfo };
+      store.set(sessionId, { sessionId, clientInfo, transport });
     },
   });
 
   transport.onclose = () => {
     if (transport.sessionId) {
-      deleteSession(transport.sessionId);
+      store.delete(transport.sessionId);
     }
   };
 
   return transport;
-};
-
-export const getSession = (sessionId: string): Session | undefined => {
-  return sessions[sessionId];
-};
-
-const deleteSession = (sessionId: string): void => {
-  delete sessions[sessionId];
 };

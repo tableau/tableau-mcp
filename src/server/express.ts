@@ -9,12 +9,13 @@ import https from 'https';
 import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
-import { createSession, getSession, Session } from '../sessions.js';
 import { handlePingRequest, validateProtocolVersion } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
+import { createSession, Session } from './storage/session.js';
+import { getSessionStore } from './storage/sessionStore.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
 
@@ -123,13 +124,16 @@ export async function startExpressServer({
         await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
       } else {
         const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
+        const store = await getSessionStore();
 
         let session: Session | undefined;
-        if (sessionId && (session = getSession(sessionId))) {
-          transport = session.transport;
+        if (sessionId && (session = await store.get(sessionId))) {
+          transport = session.transport ??= new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => sessionId,
+          });
         } else if (!sessionId && isInitializeRequest(req.body)) {
           const clientInfo = req.body.params.clientInfo;
-          transport = createSession({ clientInfo });
+          transport = createSession({ clientInfo, store });
 
           const server = new Server({ clientInfo });
           await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
@@ -192,12 +196,17 @@ async function methodNotAllowed(_req: Request, res: Response): Promise<void> {
 
 async function handleSessionRequest(req: express.Request, res: express.Response): Promise<void> {
   const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
+  const store = await getSessionStore();
 
   let session: Session | undefined;
-  if (!sessionId || !(session = getSession(sessionId))) {
+  if (!sessionId || !(session = await store.get(sessionId))) {
     res.status(400).send('Invalid or missing session ID');
     return;
   }
+
+  session.transport ??= new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => sessionId,
+  });
 
   await session.transport.handleRequest(req, res);
 }
