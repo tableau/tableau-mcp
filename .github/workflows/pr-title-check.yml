@@ -4,32 +4,21 @@ on:
   pull_request:
     branches:
       - main
+    types: [opened, edited, synchronize, reopened]
 
 jobs:
   check-title:
     runs-on: ubuntu-latest
     steps:
-      - name: Is PR from a fork?
-        id: fork-check
-        run: |
-          if [[ "${{ github.event.pull_request.head.repo.fork }}" == "true" ]]; then
-            echo "is_fork=true" >> $GITHUB_OUTPUT
-            echo "PR is from a fork, skipping title validation"
-          else
-            echo "is_fork=false" >> $GITHUB_OUTPUT
-            echo "PR is not from a fork"
-          fi
       - name: Check PR title format
-        if: steps.fork-check.outputs.is_fork == 'false'
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          # Define your required prefix/pattern
-          REQUIRED_PREFIX="@W-"
+          PR_TITLE_PATTERN='^@W-\d+'
 
-          if [[ ! "$PR_TITLE" =~ ^$REQUIRED_PREFIX ]]; then
-            echo "❌ PR title must start with '$REQUIRED_PREFIX'"
-            echo "Current title: $PR_TITLE"
+          if [[ ! "$PR_TITLE" =~ $PR_TITLE_PATTERN ]]; then
+            echo "❌ PR title must match the pattern '@W-<digits>' (e.g., @W-123456)"
             exit 1
           fi
 
