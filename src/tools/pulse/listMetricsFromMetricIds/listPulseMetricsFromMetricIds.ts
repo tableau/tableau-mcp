@@ -38,7 +38,7 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ metricIds }, { requestId, authInfo }): Promise<CallToolResult> => {
+    callback: async ({ metricIds }, { requestId, authInfo, signal }): Promise<CallToolResult> => {
       const config = getConfig();
       return await listPulseMetricsFromMetricIdsTool.logAndExecute({
         requestId,
@@ -50,6 +50,7 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
             requestId,
             server,
             jwtScopes: ['tableau:insight_metrics:read'],
+            signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricsFromMetricIds(metricIds);

@@ -89,7 +89,12 @@ describe('listPulseMetricSubscriptionsTool', () => {
   });
 
   describe('constrainPulseMetricSubscriptions', () => {
-    const restApiArgs = { config: getConfig(), requestId: 'request-id', server: getServer() };
+    const restApiArgs = {
+      config: getConfig(),
+      requestId: 'request-id',
+      server: getServer(),
+      signal: new AbortController().signal,
+    };
 
     it('should return empty result when no subscriptions are found', async () => {
       const result = await constrainPulseMetricSubscriptions({

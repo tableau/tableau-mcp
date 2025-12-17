@@ -76,7 +76,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               basic_specification: {
                 measure: {
                   field: 'Sales',
-                  aggregation: 'AGGREGATION_SUM', 
+                  aggregation: 'AGGREGATION_SUM',
                 },
                 time_dimension: {
                   field: 'Order Date',
@@ -152,7 +152,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
     },
     callback: async (
       { bundleRequest, bundleType },
-      { requestId, authInfo },
+      { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       return await generatePulseMetricValueInsightBundleTool.logAndExecute<
@@ -185,6 +185,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
             requestId,
             server,
             jwtScopes: ['tableau:insights:read'],
+            signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseMetricValueInsightBundle(

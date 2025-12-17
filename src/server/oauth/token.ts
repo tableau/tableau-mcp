@@ -280,12 +280,18 @@ async function exchangeRefreshToken(
   clientId: string,
 ): Promise<Result<TableauAccessToken, string>> {
   try {
-    const result = await getTokenResult(server, {
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: clientId,
-      site_namespace: '',
-    });
+    const result = await getTokenResult(
+      server,
+      {
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: clientId,
+        site_namespace: '',
+      },
+      {
+        timeout: getConfig().maxRequestTimeoutMs,
+      },
+    );
 
     return Ok(result);
   } catch {

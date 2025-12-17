@@ -4,7 +4,7 @@ import { Server } from '../server.js';
 import { ToolName } from '../tools/toolName.js';
 import { ServerLogger } from './serverLogger.js';
 type Logger = 'rest-api' | (string & {});
-type LogType = LoggingLevel | 'request' | 'response' | 'tool';
+type LogType = LoggingLevel | 'request' | 'response' | 'tool' | 'request-cancelled';
 type LogMessage = {
   type: LogType;
   [key: string]: any;

@@ -31,7 +31,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ workbookId }, { requestId, authInfo }): Promise<CallToolResult> => {
+    callback: async ({ workbookId }, { requestId, authInfo, signal }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getWorkbookTool.logAndExecute<Workbook, GetWorkbookError>({
@@ -41,7 +41,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
         callback: async () => {
           const isWorkbookAllowedResult = await resourceAccessChecker.isWorkbookAllowed({
             workbookId,
-            restApiArgs: { config, requestId, server },
+            restApiArgs: { config, requestId, server, signal },
           });
 
           if (!isWorkbookAllowedResult.allowed) {
@@ -57,6 +57,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
               requestId,
               server,
               jwtScopes: ['tableau:content:read'],
+              signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 // Notice that we already have the workbook if it had been allowed by a project scope.

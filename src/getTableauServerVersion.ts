@@ -32,7 +32,10 @@ export const getTableauServerVersion = async (server?: string): Promise<ProductV
     return serverVersion;
   }
 
-  const restApi = new RestApi(server);
+  const restApi = new RestApi(server, {
+    maxRequestTimeoutMs: getConfig().maxRequestTimeoutMs,
+  });
+
   try {
     const serverVersion = (await restApi.serverMethods.getServerInfo()).productVersion;
     tableauServerVersions.set(server, serverVersion);

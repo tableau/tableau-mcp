@@ -1,5 +1,6 @@
 import { Zodios } from '@zodios/core';
 
+import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { GraphQLResponse, metadataApis } from '../apis/metadataApi.js';
 import { Credentials } from '../types/credentials.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
@@ -12,8 +13,8 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_metadata.htm
  */
 export default class MetadataMethods extends AuthenticatedMethods<typeof metadataApis> {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, metadataApis), creds);
+  constructor(baseUrl: string, creds: Credentials, axiosConfig: AxiosRequestConfig) {
+    super(new Zodios(baseUrl, metadataApis, { axiosConfig }), creds);
   }
 
   /**
