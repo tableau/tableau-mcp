@@ -10,7 +10,6 @@ import { authorize } from './authorize.js';
 import { callback } from './callback.js';
 import { register } from './register.js';
 import { token } from './token.js';
-import { AuthorizationCode, PendingAuthorization, RefreshTokenData } from './types.js';
 
 export const TABLEAU_CLOUD_SERVER_URL = 'https://online.tableau.com';
 export const AUDIENCE = 'tableau-mcp-server';
@@ -24,10 +23,6 @@ export const AUDIENCE = 'tableau-mcp-server';
  */
 export class OAuthProvider {
   private readonly config = getConfig();
-
-  private readonly pendingAuthorizations = new Map<string, PendingAuthorization>();
-  private readonly authorizationCodes = new Map<string, AuthorizationCode>();
-  private readonly refreshTokens = new Map<string, RefreshTokenData>();
 
   private readonly privateKey: KeyObject;
   private readonly publicKey: KeyObject;
@@ -52,13 +47,13 @@ export class OAuthProvider {
     register(app);
 
     // oauth/authorize
-    authorize(app, this.pendingAuthorizations);
+    authorize(app);
 
     // /Callback
-    callback(app, this.pendingAuthorizations, this.authorizationCodes);
+    callback(app);
 
     // oauth/token
-    token(app, this.authorizationCodes, this.refreshTokens, this.publicKey);
+    token(app, this.publicKey);
   }
 
   private getPrivateKey(): KeyObject {

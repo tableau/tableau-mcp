@@ -9,12 +9,12 @@ let sessionStore: SessionStore | undefined;
 
 export const getSessionStore = async (): Promise<SessionStore> => {
   if (!sessionStore) {
-    const { persistentStorage } = getConfig();
+    const { sessionPersistentStorage } = getConfig();
     sessionStore = new DualLayerStore(
-      persistentStorage
+      sessionPersistentStorage
         ? {
             persistentStore: await PersistentStoreFactory.create({
-              config: persistentStorage,
+              config: sessionPersistentStorage,
               RedisStoreCtor: RedisSessionStore,
             }),
           }

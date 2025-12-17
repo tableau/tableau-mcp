@@ -64,7 +64,7 @@ export class Config {
   serverLogDirectory: string;
   boundedContext: BoundedContext;
   tableauServerVersionCheckIntervalInHours: number;
-  persistentStorage: PersistentStorageConfig | undefined;
+  sessionPersistentStorage: PersistentStorageConfig | undefined;
   oauth: {
     enabled: boolean;
     issuer: string;
@@ -72,6 +72,9 @@ export class Config {
     jwePrivateKey: string;
     jwePrivateKeyPath: string;
     jwePrivateKeyPassphrase: string | undefined;
+    authzCodePersistentStorage: PersistentStorageConfig | undefined;
+    refreshTokenPersistentStorage: PersistentStorageConfig | undefined;
+    pendingAuthorizationPersistentStorage: PersistentStorageConfig | undefined;
     authzCodeTimeoutMs: number;
     accessTokenTimeoutMs: number;
     refreshTokenTimeoutMs: number;
@@ -188,7 +191,7 @@ export class Config {
       },
     );
 
-    this.persistentStorage = {
+    this.sessionPersistentStorage = {
       type: 'redis',
       url: 'redis://localhost:6379/0',
       keyPrefix: 'tableau:mcp:session:',
@@ -205,6 +208,21 @@ export class Config {
       dnsServers: dnsServers
         ? dnsServers.split(',').map((ip) => ip.trim())
         : ['1.1.1.1', '1.0.0.1' /* Cloudflare public DNS */],
+      authzCodePersistentStorage: {
+        type: 'redis',
+        url: 'redis://localhost:6379/0',
+        keyPrefix: 'tableau:mcp:oauth:authz-code:',
+      },
+      refreshTokenPersistentStorage: {
+        type: 'redis',
+        url: 'redis://localhost:6379/0',
+        keyPrefix: 'tableau:mcp:oauth:refresh-token:',
+      },
+      pendingAuthorizationPersistentStorage: {
+        type: 'redis',
+        url: 'redis://localhost:6379/0',
+        keyPrefix: 'tableau:mcp:oauth:pending-authorization:',
+      },
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
         defaultValue: TEN_MINUTES_IN_MS,
         minValue: 0,

@@ -7,9 +7,10 @@ import { getConfig } from '../../config.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
+import { getAuthorizationCodeStore } from './authorizationCodeStore.js';
+import { getPendingAuthorizationStore } from './pendingAuthorizationStore.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { callbackSchema } from './schemas.js';
-import { AuthorizationCode, PendingAuthorization } from './types.js';
 
 /**
  * OAuth Callback Handler
@@ -18,11 +19,7 @@ import { AuthorizationCode, PendingAuthorization } from './types.js';
  * Exchanges code for tokens, generates MCP authorization
  * code, and redirects back to client with code.
  */
-export function callback(
-  app: express.Application,
-  pendingAuthorizations: Map<string, PendingAuthorization>,
-  authorizationCodes: Map<string, AuthorizationCode>,
-): void {
+export function callback(app: express.Application): void {
   const config = getConfig();
 
   app.get('/Callback', async (req, res) => {
@@ -49,7 +46,8 @@ export function callback(
     try {
       // Parse state to get auth key and Tableau state
       const [authKey, tableauState] = state?.split(':') ?? [];
-      const pendingAuth = pendingAuthorizations.get(authKey);
+      const pendingAuthorizationStore = await getPendingAuthorizationStore();
+      const pendingAuth = await pendingAuthorizationStore.get(authKey);
 
       if (!pendingAuth || pendingAuth.tableauState !== tableauState) {
         res.status(400).json({
@@ -113,7 +111,8 @@ export function callback(
 
       // Generate authorization code
       const authorizationCode = randomBytes(32).toString('hex');
-      authorizationCodes.set(authorizationCode, {
+      const authorizationCodeStore = await getAuthorizationCodeStore();
+      await authorizationCodeStore.set(authorizationCode, {
         clientId: pendingAuth.clientId,
         redirectUri: pendingAuth.redirectUri,
         codeChallenge: pendingAuth.codeChallenge,
@@ -129,7 +128,7 @@ export function callback(
       });
 
       // Clean up
-      pendingAuthorizations.delete(authKey);
+      await pendingAuthorizationStore.delete(authKey);
 
       // Redirect back to client with authorization code
       const redirectUrl = new URL(pendingAuth.redirectUri);

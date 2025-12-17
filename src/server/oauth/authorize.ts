@@ -14,9 +14,9 @@ import { clientMetadataCache } from './clientMetadataCache.js';
 import { getDnsResolver } from './dnsResolver.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
+import { getPendingAuthorizationStore } from './pendingAuthorizationStore.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
-import { PendingAuthorization } from './types.js';
 
 /**
  * OAuth 2.1 Authorization Endpoint
@@ -25,10 +25,7 @@ import { PendingAuthorization } from './types.js';
  * Validates request, stores pending authorization, and
  * redirects to Tableau OAuth.
  */
-export function authorize(
-  app: express.Application,
-  pendingAuthorizations: Map<string, PendingAuthorization>,
-): void {
+export function authorize(app: express.Application): void {
   const config = getConfig();
 
   app.get('/oauth/authorize', async (req, res) => {
@@ -106,7 +103,8 @@ export function authorize(
     const numCodeVerifierBytes = Math.floor(Math.random() * (64 - 22 + 1)) + 22;
     const tableauCodeVerifier = randomBytes(numCodeVerifierBytes).toString('hex');
     const tableauCodeChallenge = generateCodeChallenge(tableauCodeVerifier);
-    pendingAuthorizations.set(authKey, {
+    const pendingAuthorizationStore = await getPendingAuthorizationStore();
+    await pendingAuthorizationStore.set(authKey, {
       clientId: client_id,
       redirectUri: redirect_uri,
       codeChallenge: code_challenge,
@@ -117,7 +115,10 @@ export function authorize(
     });
 
     // Clean up expired authorizations
-    setLongTimeout(() => pendingAuthorizations.delete(authKey), config.oauth.authzCodeTimeoutMs);
+    setLongTimeout(
+      async () => await pendingAuthorizationStore.delete(authKey),
+      config.oauth.authzCodeTimeoutMs,
+    );
 
     // Redirect to Tableau OAuth
     const server = config.server || TABLEAU_CLOUD_SERVER_URL;

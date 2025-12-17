@@ -8,10 +8,12 @@ import { getConfig } from '../../config.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
+import { getAuthorizationCodeStore } from './authorizationCodeStore.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { AUDIENCE } from './provider.js';
+import { getRefreshTokenStore } from './refreshTokenStore.js';
 import { mcpTokenSchema } from './schemas.js';
-import { AuthorizationCode, ClientCredentials, RefreshTokenData, UserAndTokens } from './types.js';
+import { ClientCredentials, UserAndTokens } from './types.js';
 
 /**
  * OAuth 2.1 Token Endpoint
@@ -20,12 +22,7 @@ import { AuthorizationCode, ClientCredentials, RefreshTokenData, UserAndTokens }
  * Verifies PKCE code_verifier matches the original challenge.
  * Returns JWE containing tokens for API access.
  */
-export function token(
-  app: express.Application,
-  authorizationCodes: Map<string, AuthorizationCode>,
-  refreshTokens: Map<string, RefreshTokenData>,
-  publicKey: KeyObject,
-): void {
+export function token(app: express.Application, publicKey: KeyObject): void {
   const config = getConfig();
 
   app.post('/oauth/token', async (req, res) => {
@@ -60,9 +57,10 @@ export function token(
         case 'authorization_code': {
           // Handle authorization code exchange
           const { code, codeVerifier } = result.data;
-          const authCode = authorizationCodes.get(code);
+          const authorizationCodeStore = await getAuthorizationCodeStore();
+          const authCode = await authorizationCodeStore.get(code);
           if (!authCode || authCode.expiresAt < Math.floor(Date.now() / 1000)) {
-            authorizationCodes.delete(code);
+            await authorizationCodeStore.delete(code);
             res.status(400).json({
               error: 'invalid_grant',
               error_description: 'Invalid or expired authorization code',
@@ -83,7 +81,8 @@ export function token(
           // Generate tokens
           const refreshTokenId = randomBytes(32).toString('hex');
           const accessToken = await createAccessToken(authCode, publicKey);
-          refreshTokens.set(refreshTokenId, {
+          const refreshTokenStore = await getRefreshTokenStore();
+          await refreshTokenStore.set(refreshTokenId, {
             user: authCode.user,
             server: authCode.server,
             clientId: authCode.clientId,
@@ -93,11 +92,11 @@ export function token(
           });
 
           setLongTimeout(
-            () => refreshTokens.delete(refreshTokenId),
+            async () => await refreshTokenStore.delete(refreshTokenId),
             config.oauth.refreshTokenTimeoutMs,
           );
 
-          authorizationCodes.delete(code);
+          await authorizationCodeStore.delete(code);
 
           res.json({
             access_token: accessToken,
@@ -129,10 +128,11 @@ export function token(
         case 'refresh_token': {
           // Handle refresh token
           const { refreshToken } = result.data;
-          const tokenData = refreshTokens.get(refreshToken);
+          const refreshTokenStore = await getRefreshTokenStore();
+          const tokenData = await refreshTokenStore.get(refreshToken);
           if (!tokenData || tokenData.expiresAt < Math.floor(Date.now() / 1000)) {
             // Refresh token is expired
-            refreshTokens.delete(refreshToken);
+            await refreshTokenStore.delete(refreshToken);
             res.status(400).json({
               error: 'invalid_grant',
               error_description: 'Invalid or expired refresh token',
@@ -184,10 +184,10 @@ export function token(
           }
 
           // Rotate the refresh token and extend its expiration time
-          refreshTokens.delete(refreshToken);
+          await refreshTokenStore.delete(refreshToken);
           const refreshTokenId = randomBytes(32).toString('hex');
 
-          refreshTokens.set(refreshTokenId, {
+          await refreshTokenStore.set(refreshTokenId, {
             user: tokenData.user,
             server: tokenData.server,
             clientId: tokenData.clientId,
