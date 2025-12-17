@@ -7,10 +7,9 @@ import { fromError } from 'zod-validation-error';
 import { getConfig } from '../../config.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
-import { getAuthorizationCodeStore } from './authorizationCodeStore.js';
+import { getAuthorizationCodeStore, getRefreshTokenStore } from '../storage/stores.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { AUDIENCE } from './provider.js';
-import { getRefreshTokenStore } from './refreshTokenStore.js';
 import { mcpTokenSchema } from './schemas.js';
 import { ClientCredentials, UserAndTokens } from './types.js';
 

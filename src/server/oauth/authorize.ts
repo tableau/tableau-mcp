@@ -9,11 +9,11 @@ import { fromError } from 'zod-validation-error';
 import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
 import { axios, AxiosResponse, getStringResponseHeader } from '../../utils/axios.js';
 import { parseUrl } from '../../utils/parseUrl.js';
+import { getPendingAuthorizationStore } from '../storage/stores.js';
 import { clientMetadataCache } from './clientMetadataCache.js';
 import { getDnsResolver } from './dnsResolver.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
-import { getPendingAuthorizationStore } from './pendingAuthorizationStore.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
 

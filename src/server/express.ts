@@ -15,7 +15,7 @@ import { OAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 import { createSession, Session } from './storage/session.js';
-import { getSessionStore } from './storage/sessionStore.js';
+import { getSessionStore } from './storage/stores.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
 

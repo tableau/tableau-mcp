@@ -7,8 +7,7 @@ import { getConfig } from '../../config.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
-import { getAuthorizationCodeStore } from './authorizationCodeStore.js';
-import { getPendingAuthorizationStore } from './pendingAuthorizationStore.js';
+import { getAuthorizationCodeStore, getPendingAuthorizationStore } from '../storage/stores.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { callbackSchema } from './schemas.js';
 
