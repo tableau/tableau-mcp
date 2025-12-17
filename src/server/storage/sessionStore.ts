@@ -1,5 +1,4 @@
 import { getConfig } from '../../config';
-import { RedisSessionStore } from './redisSessionStore';
 import { Session } from './session';
 import { Store } from './store';
 import { StoreFactory } from './storeFactory';
@@ -12,7 +11,6 @@ export const getSessionStore = async (): Promise<SessionStore> => {
     const { sessionStorage: sessionPersistentStorage } = getConfig();
     sessionStore = await StoreFactory.create({
       config: sessionPersistentStorage,
-      RedisStoreCtor: RedisSessionStore,
     });
   }
   return sessionStore;

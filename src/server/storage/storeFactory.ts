@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { InMemoryStore } from './inMemoryStore';
-import { RedisStore, RedisStoreConfig } from './redisStore';
+import { RedisStore } from './redisStore';
 import { Store } from './store';
 
 const storageConfigSchema = z.discriminatedUnion('type', [
@@ -78,24 +78,27 @@ export function getStorageConfig(
 }
 
 export class StoreFactory {
-  static async create<T>({
-    config,
-    RedisStoreCtor,
-  }: {
-    config: StorageConfig;
-    RedisStoreCtor: new (config: RedisStoreConfig) => RedisStore<T>;
-  }): Promise<Store<T>> {
+  static async create<T>({ config }: { config: StorageConfig }): Promise<Store<T>> {
     switch (config.type) {
       case 'memory': {
         return new InMemoryStore<T>();
       }
       case 'redis': {
-        const store = new RedisStoreCtor(config);
-        // if (!(await store.healthCheck())) {
-        //   throw new Error(`Redis health check failed. Could not connect to Redis at ${config.url}`);
-        // }
+        const store = new RedisStore<T>(config);
+        try {
+          await store.connect();
+        } catch (e) {
+          console.error(`Could not connect to Redis at ${config.url}`);
+          throw e;
+        }
 
-        await store.connect();
+        try {
+          await store.healthCheck();
+        } catch (e) {
+          console.error('Redis health check failed.');
+          throw e;
+        }
+
         return store;
       }
       case 'custom': {
@@ -108,10 +111,20 @@ export class StoreFactory {
 
         const store = new StoreClass(config.config);
 
-        this.validateStore(store);
+        this.validateStore<T>(store);
 
-        if (typeof store.connect === 'function') {
+        try {
           await store.connect();
+        } catch (e) {
+          console.error('Could not connect to store');
+          throw e;
+        }
+
+        try {
+          await store.healthCheck();
+        } catch (e) {
+          console.error('Store health check failed.');
+          throw e;
         }
 
         return store;
@@ -119,13 +132,35 @@ export class StoreFactory {
     }
   }
 
-  private static validateStore(store: any): void {
-    const requiredMethods = ['get', 'set', 'delete', 'exists', 'healthCheck', 'close'];
+  private static validateStore<T>(store: any): asserts store is Store<T> {
+    const requiredMethods = getInstanceMethods(Store);
+    const missingMethods = requiredMethods.filter((method) => typeof store[method] !== 'function');
 
-    for (const method of requiredMethods) {
-      if (typeof store[method] !== 'function') {
-        throw new Error(`Storage implementation missing required method: ${method}`);
-      }
+    if (missingMethods.length > 0) {
+      throw new Error(
+        `Storage implementation missing required methods: ${missingMethods.join(', ')}`,
+      );
     }
   }
 }
+
+function getInstanceMethods(instance: any): Array<string> {
+  const methods = new Set<string>();
+  let prototype = instance.prototype;
+  while (prototype && prototype !== Object.prototype) {
+    Object.getOwnPropertyNames(prototype).forEach((name) => {
+      if (
+        name !== 'constructor' &&
+        typeof prototype[name as keyof typeof prototype] === 'function'
+      ) {
+        methods.add(name);
+      }
+    });
+    prototype = Object.getPrototypeOf(prototype);
+  }
+  return [...methods];
+}
+
+export const exportedForTesting = {
+  getInstanceMethods,
+};

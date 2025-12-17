@@ -50,12 +50,8 @@ export class RedisStore<T> extends Store<T> {
   }
 
   async healthCheck(): Promise<boolean> {
-    try {
-      const result = await this.client.ping();
-      return result === 'PONG';
-    } catch {
-      return false;
-    }
+    const result = await this.client.ping();
+    return result === 'PONG';
   }
 
   async close(): Promise<void> {

@@ -1,5 +1,4 @@
 import { getConfig } from '../../config';
-import { RedisStore } from '../storage/redisStore';
 import { Store } from '../storage/store';
 import { StoreFactory } from '../storage/storeFactory';
 import { AuthorizationCode } from './types';
@@ -15,7 +14,6 @@ export const getAuthorizationCodeStore = async (): Promise<AuthorizationCodeStor
 
     authorizationCodeStore = await StoreFactory.create({
       config: authzCodeStorage,
-      RedisStoreCtor: RedisStore<AuthorizationCode>,
     });
   }
   return authorizationCodeStore;

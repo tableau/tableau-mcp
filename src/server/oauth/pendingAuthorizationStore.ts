@@ -1,5 +1,4 @@
 import { getConfig } from '../../config';
-import { RedisStore } from '../storage/redisStore';
 import { Store } from '../storage/store';
 import { StoreFactory } from '../storage/storeFactory';
 import { PendingAuthorization } from './types';
@@ -15,7 +14,6 @@ export const getPendingAuthorizationStore = async (): Promise<PendingAuthorizati
 
     pendingAuthorizationStore = await StoreFactory.create({
       config: pendingAuthorizationStorage,
-      RedisStoreCtor: RedisStore<PendingAuthorization>,
     });
   }
   return pendingAuthorizationStore;

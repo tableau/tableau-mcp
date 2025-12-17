@@ -21,6 +21,10 @@ export class InMemoryStore<T> extends Store<T> {
     return this.store.has(sessionId);
   }
 
+  async connect(): Promise<void> {
+    return;
+  }
+
   async healthCheck(): Promise<boolean> {
     return true;
   }
