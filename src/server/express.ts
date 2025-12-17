@@ -132,6 +132,7 @@ export async function startExpressServer({
             session.transport = createSession({
               clientInfo: session.clientInfo,
               store,
+              expirationTimeMs: config.sessionStorage.expirationTimeMs,
               sessionIdGenerator: () => sessionId,
             });
 
@@ -148,7 +149,11 @@ export async function startExpressServer({
           transport = session.transport;
         } else if (!sessionId && isInitializeRequest(req.body)) {
           const clientInfo = req.body.params.clientInfo;
-          transport = createSession({ clientInfo, store });
+          transport = createSession({
+            clientInfo,
+            store,
+            expirationTimeMs: config.sessionStorage.expirationTimeMs,
+          });
 
           const server = new Server({ clientInfo });
           await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
@@ -219,9 +224,18 @@ async function handleSessionRequest(req: express.Request, res: express.Response)
     return;
   }
 
-  session.transport ??= new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => sessionId,
-  });
+  if (!session.transport) {
+    session.transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => sessionId,
+    });
+
+    // Since the initialize request already happened, the SDK won't set the sessionId itself, so we need to do it manually.
+    session.transport.sessionId = sessionId;
+
+    // _initialized is a private property of the StreamableHTTPServerTransport class.
+    // @ts-expect-error - this is a hack to convince the transport that it has already been initialized
+    session.transport._initialized = true;
+  }
 
   await session.transport.handleRequest(req, res);
 }

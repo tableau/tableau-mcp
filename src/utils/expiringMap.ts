@@ -49,6 +49,7 @@ export class ExpiringMap<K, V> extends Map<K, V> {
     super.set(key, value);
 
     // Set a timeout to delete the key
+    // TODO: Use setLongTimeout instead
     const timeout = setTimeout(() => {
       this.delete(key);
     }, expirationTimeMs);

@@ -13,16 +13,18 @@ export type Session = {
 export const createSession = ({
   clientInfo,
   store,
+  expirationTimeMs,
   sessionIdGenerator = () => randomUUID(),
 }: {
   clientInfo: ClientInfo;
   store: Store<Session>;
+  expirationTimeMs: number;
   sessionIdGenerator?: () => string;
 }): StreamableHTTPServerTransport => {
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator,
     onsessioninitialized: (sessionId) => {
-      store.set(sessionId, { sessionId, clientInfo, transport });
+      store.set(sessionId, { sessionId, clientInfo, transport }, expirationTimeMs);
     },
   });
 

@@ -7,7 +7,6 @@ import { fromError } from 'zod-validation-error';
 import { getConfig } from '../../config.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
-import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { getAuthorizationCodeStore } from './authorizationCodeStore.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { AUDIENCE } from './provider.js';
@@ -82,18 +81,19 @@ export function token(app: express.Application, publicKey: KeyObject): void {
           const refreshTokenId = randomBytes(32).toString('hex');
           const accessToken = await createAccessToken(authCode, publicKey);
           const refreshTokenStore = await getRefreshTokenStore();
-          await refreshTokenStore.set(refreshTokenId, {
-            user: authCode.user,
-            server: authCode.server,
-            clientId: authCode.clientId,
-            tokens: authCode.tokens,
-            expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
-            tableauClientId: authCode.tableauClientId,
-          });
-
-          setLongTimeout(
-            async () => await refreshTokenStore.delete(refreshTokenId),
-            config.oauth.refreshTokenTimeoutMs,
+          await refreshTokenStore.set(
+            refreshTokenId,
+            {
+              user: authCode.user,
+              server: authCode.server,
+              clientId: authCode.clientId,
+              tokens: authCode.tokens,
+              expiresAt: Math.floor(
+                (Date.now() + (config.oauth.refreshTokenStorage.expirationTimeMs ?? 0)) / 1000,
+              ),
+              tableauClientId: authCode.tableauClientId,
+            },
+            config.oauth.refreshTokenStorage.expirationTimeMs,
           );
 
           await authorizationCodeStore.delete(code);
@@ -187,14 +187,20 @@ export function token(app: express.Application, publicKey: KeyObject): void {
           await refreshTokenStore.delete(refreshToken);
           const refreshTokenId = randomBytes(32).toString('hex');
 
-          await refreshTokenStore.set(refreshTokenId, {
-            user: tokenData.user,
-            server: tokenData.server,
-            clientId: tokenData.clientId,
-            tokens: tokenData.tokens,
-            expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
-            tableauClientId: tokenData.tableauClientId,
-          });
+          await refreshTokenStore.set(
+            refreshTokenId,
+            {
+              user: tokenData.user,
+              server: tokenData.server,
+              clientId: tokenData.clientId,
+              tokens: tokenData.tokens,
+              expiresAt: Math.floor(
+                (Date.now() + (config.oauth.refreshTokenStorage.expirationTimeMs ?? 0)) / 1000,
+              ),
+              tableauClientId: tokenData.tableauClientId,
+            },
+            config.oauth.refreshTokenStorage.expirationTimeMs,
+          );
 
           res.json({
             access_token: accessToken,

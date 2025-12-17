@@ -112,20 +112,26 @@ export function callback(app: express.Application): void {
       // Generate authorization code
       const authorizationCode = randomBytes(32).toString('hex');
       const authorizationCodeStore = await getAuthorizationCodeStore();
-      await authorizationCodeStore.set(authorizationCode, {
-        clientId: pendingAuth.clientId,
-        redirectUri: pendingAuth.redirectUri,
-        codeChallenge: pendingAuth.codeChallenge,
-        user: sessionResult.value.user,
-        server,
-        tableauClientId: pendingAuth.tableauClientId,
-        tokens: {
-          accessToken,
-          refreshToken,
-          expiresInSeconds,
+      await authorizationCodeStore.set(
+        authorizationCode,
+        {
+          clientId: pendingAuth.clientId,
+          redirectUri: pendingAuth.redirectUri,
+          codeChallenge: pendingAuth.codeChallenge,
+          user: sessionResult.value.user,
+          server,
+          tableauClientId: pendingAuth.tableauClientId,
+          tokens: {
+            accessToken,
+            refreshToken,
+            expiresInSeconds,
+          },
+          expiresAt: Math.floor(
+            (Date.now() + (config.oauth.authzCodeStorage.expirationTimeMs ?? 0)) / 1000,
+          ),
         },
-        expiresAt: Math.floor((Date.now() + config.oauth.authzCodeTimeoutMs) / 1000),
-      });
+        config.oauth.authzCodeStorage.expirationTimeMs,
+      );
 
       // Clean up
       await pendingAuthorizationStore.delete(authKey);

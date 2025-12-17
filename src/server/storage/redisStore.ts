@@ -28,12 +28,12 @@ export class RedisStore<T> extends Store<T> {
     return data ? JSON.parse(data) : undefined;
   }
 
-  async set(key: string, data: T, expirationTimeMs?: number): Promise<this> {
+  async set(key: string, data: T, expirationTimeMs: number): Promise<this> {
     const fullKey = this.getFullKey(key);
     const value = JSON.stringify(data);
 
     if (expirationTimeMs) {
-      await this.client.setEx(fullKey, expirationTimeMs / 1000, value);
+      await this.client.setEx(fullKey, Math.floor(expirationTimeMs / 1000), value);
     } else {
       await this.client.set(fullKey, value);
     }
@@ -51,8 +51,8 @@ export class RedisStore<T> extends Store<T> {
 
   async healthCheck(): Promise<boolean> {
     try {
-      await this.client.ping();
-      return true;
+      const result = await this.client.ping();
+      return result === 'PONG';
     } catch {
       return false;
     }

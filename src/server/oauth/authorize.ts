@@ -9,7 +9,6 @@ import { fromError } from 'zod-validation-error';
 import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
 import { axios, AxiosResponse, getStringResponseHeader } from '../../utils/axios.js';
 import { parseUrl } from '../../utils/parseUrl.js';
-import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { clientMetadataCache } from './clientMetadataCache.js';
 import { getDnsResolver } from './dnsResolver.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
@@ -104,20 +103,18 @@ export function authorize(app: express.Application): void {
     const tableauCodeVerifier = randomBytes(numCodeVerifierBytes).toString('hex');
     const tableauCodeChallenge = generateCodeChallenge(tableauCodeVerifier);
     const pendingAuthorizationStore = await getPendingAuthorizationStore();
-    await pendingAuthorizationStore.set(authKey, {
-      clientId: client_id,
-      redirectUri: redirect_uri,
-      codeChallenge: code_challenge,
-      state: state ?? '',
-      tableauState,
-      tableauClientId,
-      tableauCodeVerifier,
-    });
-
-    // Clean up expired authorizations
-    setLongTimeout(
-      async () => await pendingAuthorizationStore.delete(authKey),
-      config.oauth.authzCodeTimeoutMs,
+    await pendingAuthorizationStore.set(
+      authKey,
+      {
+        clientId: client_id,
+        redirectUri: redirect_uri,
+        codeChallenge: code_challenge,
+        state: state ?? '',
+        tableauState,
+        tableauClientId,
+        tableauCodeVerifier,
+      },
+      config.oauth.authzCodeStorage.expirationTimeMs,
     );
 
     // Redirect to Tableau OAuth

@@ -8,7 +8,7 @@ export class InMemoryStore<T> extends Store<T> {
     return this.store.get(sessionId);
   }
 
-  async set(sessionId: string, data: T, expirationTimeMs?: number): Promise<this> {
+  async set(sessionId: string, data: T, expirationTimeMs: number): Promise<this> {
     this.store.set(sessionId, data, expirationTimeMs);
     return this;
   }

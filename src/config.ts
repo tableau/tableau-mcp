@@ -2,7 +2,7 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
-import { StorageConfig } from './server/storage/storeFactory.js';
+import { getStorageConfig, StorageConfig } from './server/storage/storeFactory.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
@@ -75,9 +75,7 @@ export class Config {
     authzCodeStorage: StorageConfig;
     refreshTokenStorage: StorageConfig;
     pendingAuthorizationStorage: StorageConfig;
-    authzCodeTimeoutMs: number;
     accessTokenTimeoutMs: number;
-    refreshTokenTimeoutMs: number;
     clientIdSecretPairs: Record<string, string> | null;
     dnsServers: string[];
   };
@@ -123,6 +121,7 @@ export class Config {
       INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
       INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
+      SESSION_STORAGE_CONFIG: sessionStorage,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
       OAUTH_JWE_PRIVATE_KEY: oauthJwePrivateKey,
@@ -131,9 +130,10 @@ export class Config {
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
       OAUTH_CIMD_DNS_SERVERS: dnsServers,
-      OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
+      OAUTH_AUTHORIZATION_CODE_STORAGE_CONFIG: oauthAuthorizationCodeStorage,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
-      OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
+      OAUTH_REFRESH_TOKEN_STORAGE_CONFIG: oauthRefreshTokenStorage,
+      OAUTH_PENDING_AUTHORIZATION_STORAGE_CONFIG: oauthPendingAuthorizationStorage,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -191,11 +191,13 @@ export class Config {
       },
     );
 
-    this.sessionStorage = {
-      type: 'redis',
-      url: 'redis://localhost:6379/0',
-      keyPrefix: 'tableau:mcp:session:',
-    };
+    this.sessionStorage = getStorageConfig(sessionStorage, {
+      expirationTimeMs: {
+        defaultValue: THIRTY_DAYS_IN_MS,
+        minValue: ONE_HOUR_IN_MS,
+        maxValue: THIRTY_DAYS_IN_MS,
+      },
+    });
 
     const disableOauthOverride = disableOauth === 'true';
     this.oauth = {
@@ -208,35 +210,31 @@ export class Config {
       dnsServers: dnsServers
         ? dnsServers.split(',').map((ip) => ip.trim())
         : ['1.1.1.1', '1.0.0.1' /* Cloudflare public DNS */],
-      authzCodeStorage: {
-        type: 'redis',
-        url: 'redis://localhost:6379/0',
-        keyPrefix: 'tableau:mcp:oauth:authz-code:',
-      },
-      refreshTokenStorage: {
-        type: 'redis',
-        url: 'redis://localhost:6379/0',
-        keyPrefix: 'tableau:mcp:oauth:refresh-token:',
-      },
-      pendingAuthorizationStorage: {
-        type: 'redis',
-        url: 'redis://localhost:6379/0',
-        keyPrefix: 'tableau:mcp:oauth:pending-authorization:',
-      },
-      authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
-        defaultValue: TEN_MINUTES_IN_MS,
-        minValue: 0,
-        maxValue: ONE_HOUR_IN_MS,
-      }),
       accessTokenTimeoutMs: parseNumber(accessTokenTimeoutMs, {
         defaultValue: ONE_HOUR_IN_MS,
         minValue: 0,
         maxValue: THIRTY_DAYS_IN_MS,
       }),
-      refreshTokenTimeoutMs: parseNumber(refreshTokenTimeoutMs, {
-        defaultValue: THIRTY_DAYS_IN_MS,
-        minValue: 0,
-        maxValue: ONE_YEAR_IN_MS,
+      authzCodeStorage: getStorageConfig(oauthAuthorizationCodeStorage, {
+        expirationTimeMs: {
+          defaultValue: TEN_MINUTES_IN_MS,
+          minValue: 0,
+          maxValue: ONE_HOUR_IN_MS,
+        },
+      }),
+      refreshTokenStorage: getStorageConfig(oauthRefreshTokenStorage, {
+        expirationTimeMs: {
+          defaultValue: THIRTY_DAYS_IN_MS,
+          minValue: 0,
+          maxValue: ONE_YEAR_IN_MS,
+        },
+      }),
+      pendingAuthorizationStorage: getStorageConfig(oauthPendingAuthorizationStorage, {
+        expirationTimeMs: {
+          defaultValue: TEN_MINUTES_IN_MS,
+          minValue: 0,
+          maxValue: ONE_HOUR_IN_MS,
+        },
       }),
       clientIdSecretPairs: oauthClientIdSecretPairs
         ? oauthClientIdSecretPairs.split(',').reduce<Record<string, string>>((acc, curr) => {
