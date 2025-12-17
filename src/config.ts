@@ -2,7 +2,7 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
-import { PersistentStorageConfig } from './server/storage/persistentStoreFactory.js';
+import { StorageConfig } from './server/storage/storeFactory.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
@@ -64,7 +64,7 @@ export class Config {
   serverLogDirectory: string;
   boundedContext: BoundedContext;
   tableauServerVersionCheckIntervalInHours: number;
-  sessionPersistentStorage: PersistentStorageConfig | undefined;
+  sessionStorage: StorageConfig;
   oauth: {
     enabled: boolean;
     issuer: string;
@@ -72,9 +72,9 @@ export class Config {
     jwePrivateKey: string;
     jwePrivateKeyPath: string;
     jwePrivateKeyPassphrase: string | undefined;
-    authzCodePersistentStorage: PersistentStorageConfig | undefined;
-    refreshTokenPersistentStorage: PersistentStorageConfig | undefined;
-    pendingAuthorizationPersistentStorage: PersistentStorageConfig | undefined;
+    authzCodeStorage: StorageConfig;
+    refreshTokenStorage: StorageConfig;
+    pendingAuthorizationStorage: StorageConfig;
     authzCodeTimeoutMs: number;
     accessTokenTimeoutMs: number;
     refreshTokenTimeoutMs: number;
@@ -191,7 +191,7 @@ export class Config {
       },
     );
 
-    this.sessionPersistentStorage = {
+    this.sessionStorage = {
       type: 'redis',
       url: 'redis://localhost:6379/0',
       keyPrefix: 'tableau:mcp:session:',
@@ -208,17 +208,17 @@ export class Config {
       dnsServers: dnsServers
         ? dnsServers.split(',').map((ip) => ip.trim())
         : ['1.1.1.1', '1.0.0.1' /* Cloudflare public DNS */],
-      authzCodePersistentStorage: {
+      authzCodeStorage: {
         type: 'redis',
         url: 'redis://localhost:6379/0',
         keyPrefix: 'tableau:mcp:oauth:authz-code:',
       },
-      refreshTokenPersistentStorage: {
+      refreshTokenStorage: {
         type: 'redis',
         url: 'redis://localhost:6379/0',
         keyPrefix: 'tableau:mcp:oauth:refresh-token:',
       },
-      pendingAuthorizationPersistentStorage: {
+      pendingAuthorizationStorage: {
         type: 'redis',
         url: 'redis://localhost:6379/0',
         keyPrefix: 'tableau:mcp:oauth:pending-authorization:',

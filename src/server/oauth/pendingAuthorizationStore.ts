@@ -1,28 +1,22 @@
 import { getConfig } from '../../config';
-import { DualLayerStore } from '../storage/dualLayerStore';
-import { PersistentStoreFactory } from '../storage/persistentStoreFactory';
 import { RedisStore } from '../storage/redisStore';
+import { Store } from '../storage/store';
+import { StoreFactory } from '../storage/storeFactory';
 import { PendingAuthorization } from './types';
 
-export type PendingAuthorizationStore = DualLayerStore<PendingAuthorization>;
+export type PendingAuthorizationStore = Store<PendingAuthorization>;
 let pendingAuthorizationStore: PendingAuthorizationStore | undefined;
 
 export const getPendingAuthorizationStore = async (): Promise<PendingAuthorizationStore> => {
   if (!pendingAuthorizationStore) {
     const {
-      oauth: { pendingAuthorizationPersistentStorage },
+      oauth: { pendingAuthorizationStorage },
     } = getConfig();
 
-    pendingAuthorizationStore = new DualLayerStore(
-      pendingAuthorizationPersistentStorage
-        ? {
-            persistentStore: await PersistentStoreFactory.create({
-              config: pendingAuthorizationPersistentStorage,
-              RedisStoreCtor: RedisStore<PendingAuthorization>,
-            }),
-          }
-        : undefined,
-    );
+    pendingAuthorizationStore = await StoreFactory.create({
+      config: pendingAuthorizationStorage,
+      RedisStoreCtor: RedisStore<PendingAuthorization>,
+    });
   }
   return pendingAuthorizationStore;
 };

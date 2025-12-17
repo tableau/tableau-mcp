@@ -1,28 +1,22 @@
 import { getConfig } from '../../config';
-import { DualLayerStore } from '../storage/dualLayerStore';
-import { PersistentStoreFactory } from '../storage/persistentStoreFactory';
 import { RedisStore } from '../storage/redisStore';
+import { Store } from '../storage/store';
+import { StoreFactory } from '../storage/storeFactory';
 import { AuthorizationCode } from './types';
 
-export type AuthorizationCodeStore = DualLayerStore<AuthorizationCode>;
+export type AuthorizationCodeStore = Store<AuthorizationCode>;
 let authorizationCodeStore: AuthorizationCodeStore | undefined;
 
 export const getAuthorizationCodeStore = async (): Promise<AuthorizationCodeStore> => {
   if (!authorizationCodeStore) {
     const {
-      oauth: { authzCodePersistentStorage },
+      oauth: { authzCodeStorage },
     } = getConfig();
 
-    authorizationCodeStore = new DualLayerStore(
-      authzCodePersistentStorage
-        ? {
-            persistentStore: await PersistentStoreFactory.create({
-              config: authzCodePersistentStorage,
-              RedisStoreCtor: RedisStore<AuthorizationCode>,
-            }),
-          }
-        : undefined,
-    );
+    authorizationCodeStore = await StoreFactory.create({
+      config: authzCodeStorage,
+      RedisStoreCtor: RedisStore<AuthorizationCode>,
+    });
   }
   return authorizationCodeStore;
 };

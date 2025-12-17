@@ -1,7 +1,11 @@
+import { InMemoryStore } from './inMemoryStore';
 import { RedisStore, RedisStoreConfig } from './redisStore';
 import { Store } from './store';
 
-export type PersistentStorageConfig =
+export type StorageConfig =
+  | {
+      type: 'memory';
+    }
   | ({
       type: 'redis';
     } & RedisStoreConfig)
@@ -11,15 +15,18 @@ export type PersistentStorageConfig =
       config?: Record<string, any>;
     };
 
-export class PersistentStoreFactory {
+export class StoreFactory {
   static async create<T>({
     config,
     RedisStoreCtor,
   }: {
-    config: PersistentStorageConfig;
+    config: StorageConfig;
     RedisStoreCtor: new (config: RedisStoreConfig) => RedisStore<T>;
   }): Promise<Store<T>> {
     switch (config.type) {
+      case 'memory': {
+        return new InMemoryStore<T>();
+      }
       case 'redis': {
         const store = new RedisStoreCtor(config);
         await store.connect();

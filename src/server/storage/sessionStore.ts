@@ -1,25 +1,19 @@
 import { getConfig } from '../../config';
-import { DualLayerStore } from './dualLayerStore';
-import { PersistentStoreFactory } from './persistentStoreFactory';
 import { RedisSessionStore } from './redisSessionStore';
 import { Session } from './session';
+import { Store } from './store';
+import { StoreFactory } from './storeFactory';
 
-type SessionStore = DualLayerStore<Session>;
+type SessionStore = Store<Session>;
 let sessionStore: SessionStore | undefined;
 
 export const getSessionStore = async (): Promise<SessionStore> => {
   if (!sessionStore) {
-    const { sessionPersistentStorage } = getConfig();
-    sessionStore = new DualLayerStore(
-      sessionPersistentStorage
-        ? {
-            persistentStore: await PersistentStoreFactory.create({
-              config: sessionPersistentStorage,
-              RedisStoreCtor: RedisSessionStore,
-            }),
-          }
-        : undefined,
-    );
+    const { sessionStorage: sessionPersistentStorage } = getConfig();
+    sessionStore = await StoreFactory.create({
+      config: sessionPersistentStorage,
+      RedisStoreCtor: RedisSessionStore,
+    });
   }
   return sessionStore;
 };
