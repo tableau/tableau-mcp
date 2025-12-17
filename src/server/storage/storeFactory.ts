@@ -49,7 +49,8 @@ export function getStorageConfig(
     },
   },
 ): StorageConfig {
-  let expirationTimeMs = options.expirationTimeMs.defaultValue;
+  const { defaultValue } = options.expirationTimeMs;
+  let expirationTimeMs = defaultValue;
 
   if (!config) {
     return { type: 'memory', expirationTimeMs };
@@ -62,12 +63,13 @@ export function getStorageConfig(
     const minValue = options.expirationTimeMs.minValue ?? Number.NEGATIVE_INFINITY;
     const maxValue = options.expirationTimeMs.maxValue ?? Number.POSITIVE_INFINITY;
 
-    expirationTimeMs = result.data.expirationTimeMs ?? options.expirationTimeMs.defaultValue;
+    expirationTimeMs = result.data.expirationTimeMs ?? defaultValue;
     if (expirationTimeMs < minValue) {
       expirationTimeMs = minValue;
     } else if (expirationTimeMs > maxValue) {
       expirationTimeMs = maxValue;
     }
+
     return {
       ...result.data,
       expirationTimeMs,

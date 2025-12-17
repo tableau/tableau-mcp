@@ -195,7 +195,7 @@ export class Config {
       expirationTimeMs: {
         defaultValue: THIRTY_DAYS_IN_MS,
         minValue: ONE_HOUR_IN_MS,
-        maxValue: THIRTY_DAYS_IN_MS,
+        maxValue: ONE_YEAR_IN_MS,
       },
     });
 

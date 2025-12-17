@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { exportedForTesting } from './config.js';
+import { exportedForTesting, TEN_MINUTES_IN_MS, THIRTY_DAYS_IN_MS } from './config.js';
 
 describe('Config', () => {
   const { Config, parseNumber } = exportedForTesting;
@@ -56,6 +56,7 @@ describe('Config', () => {
       INCLUDE_DATASOURCE_IDS: undefined,
       INCLUDE_WORKBOOK_IDS: undefined,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: undefined,
+      SESSION_STORAGE_CONFIG: undefined,
       DANGEROUSLY_DISABLE_OAUTH: undefined,
       OAUTH_ISSUER: undefined,
       OAUTH_REDIRECT_URI: undefined,
@@ -64,8 +65,9 @@ describe('Config', () => {
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: undefined,
       OAUTH_CIMD_DNS_SERVERS: undefined,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: undefined,
-      OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: undefined,
-      OAUTH_REFRESH_TOKEN_TIMEOUT_MS: undefined,
+      OAUTH_AUTHORIZATION_CODE_STORAGE_CONFIG: undefined,
+      OAUTH_PENDING_AUTHORIZATION_STORAGE_CONFIG: undefined,
+      OAUTH_REFRESH_TOKEN_STORAGE_CONFIG: undefined,
       OAUTH_CLIENT_ID_SECRET_PAIRS: undefined,
     };
   });
@@ -360,6 +362,27 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.tableauServerVersionCheckIntervalInHours).toBe(2);
+  });
+
+  it('should set sessionStorage to the specified value when SESSION_STORAGE_CONFIG is set', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      SESSION_STORAGE_CONFIG: JSON.stringify({
+        type: 'redis',
+        url: 'redis://localhost:6379/0',
+        keyPrefix: 'tableau:mcp:session:',
+        expirationTimeMs: 3600001,
+      }),
+    };
+
+    const config = new Config();
+    expect(config.sessionStorage).toEqual({
+      type: 'redis',
+      url: 'redis://localhost:6379/0',
+      keyPrefix: 'tableau:mcp:session:',
+      expirationTimeMs: 3600001,
+    });
   });
 
   describe('Tool filtering', () => {
@@ -1019,9 +1042,22 @@ describe('Config', () => {
     } as const;
 
     const defaultOAuthTimeoutMs = {
-      authzCodeTimeoutMs: 10 * 60 * 1000,
       accessTokenTimeoutMs: 1 * 60 * 60 * 1000,
-      refreshTokenTimeoutMs: 30 * 24 * 60 * 60 * 1000,
+    };
+
+    const defaultStorageConfigs = {
+      authzCodeStorage: {
+        type: 'memory',
+        expirationTimeMs: TEN_MINUTES_IN_MS,
+      },
+      refreshTokenStorage: {
+        type: 'memory',
+        expirationTimeMs: THIRTY_DAYS_IN_MS,
+      },
+      pendingAuthorizationStorage: {
+        type: 'memory',
+        expirationTimeMs: TEN_MINUTES_IN_MS,
+      },
     };
 
     const defaultOAuthConfig = {
@@ -1034,6 +1070,7 @@ describe('Config', () => {
       jwePrivateKeyPassphrase: undefined,
       dnsServers: ['1.1.1.1', '1.0.0.1'],
       ...defaultOAuthTimeoutMs,
+      ...defaultStorageConfigs,
     } as const;
 
     it('should default to disabled', () => {
@@ -1053,6 +1090,7 @@ describe('Config', () => {
         jwePrivateKeyPassphrase: undefined,
         dnsServers: ['1.1.1.1', '1.0.0.1'],
         ...defaultOAuthTimeoutMs,
+        ...defaultStorageConfigs,
       });
     });
 
@@ -1122,17 +1160,45 @@ describe('Config', () => {
       });
     });
 
-    it('should set authzCodeTimeoutMs to the specified value when OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS is set', () => {
+    it('should set authzCodeStorage to the specified value when OAUTH_AUTHORIZATION_CODE_STORAGE_CONFIG is set', () => {
       process.env = {
         ...process.env,
         ...defaultOAuthEnvVars,
-        OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: '5678',
+        OAUTH_AUTHORIZATION_CODE_STORAGE_CONFIG: JSON.stringify({
+          type: 'redis',
+          url: 'redis://localhost:6379/0',
+          keyPrefix: 'tableau:mcp:oauth:authorization_codes:',
+          expirationTimeMs: 5678,
+        }),
       };
 
       const config = new Config();
-      expect(config.oauth).toEqual({
-        ...defaultOAuthConfig,
-        authzCodeTimeoutMs: 5678,
+      expect(config.oauth.authzCodeStorage).toEqual({
+        type: 'redis',
+        url: 'redis://localhost:6379/0',
+        keyPrefix: 'tableau:mcp:oauth:authorization_codes:',
+        expirationTimeMs: 5678,
+      });
+    });
+
+    it('should set pendingAuthorizationStorage to the specified value when OAUTH_PENDING_AUTHORIZATION_STORAGE_CONFIG is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_PENDING_AUTHORIZATION_STORAGE_CONFIG: JSON.stringify({
+          type: 'redis',
+          url: 'redis://localhost:6379/0',
+          keyPrefix: 'tableau:mcp:oauth:pending_authorizations:',
+          expirationTimeMs: 9101,
+        }),
+      };
+
+      const config = new Config();
+      expect(config.oauth.pendingAuthorizationStorage).toEqual({
+        type: 'redis',
+        url: 'redis://localhost:6379/0',
+        keyPrefix: 'tableau:mcp:oauth:pending_authorizations:',
+        expirationTimeMs: 9101,
       });
     });
 
@@ -1150,15 +1216,25 @@ describe('Config', () => {
       });
     });
 
-    it('should set refreshTokenTimeoutMs to the specified value when OAUTH_REFRESH_TOKEN_TIMEOUT_MS is set', () => {
+    it('should set refreshTokenStorage to the specified value when OAUTH_REFRESH_TOKEN_STORAGE_CONFIG is set', () => {
       process.env = {
         ...process.env,
         ...defaultOAuthEnvVars,
-        OAUTH_REFRESH_TOKEN_TIMEOUT_MS: '1234',
+        OAUTH_REFRESH_TOKEN_STORAGE_CONFIG: JSON.stringify({
+          type: 'redis',
+          url: 'redis://localhost:6379/0',
+          keyPrefix: 'tableau:mcp:oauth:refresh_tokens:',
+          expirationTimeMs: 1234,
+        }),
       };
 
       const config = new Config();
-      expect(config.oauth.refreshTokenTimeoutMs).toBe(1234);
+      expect(config.oauth.refreshTokenStorage).toEqual({
+        type: 'redis',
+        url: 'redis://localhost:6379/0',
+        keyPrefix: 'tableau:mcp:oauth:refresh_tokens:',
+        expirationTimeMs: 1234,
+      });
     });
 
     it('should throw error when TRANSPORT is "http" and OAUTH_ISSUER is not set', () => {
