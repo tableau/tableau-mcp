@@ -32,6 +32,7 @@
     "build:manifest:script": "esbuild src/scripts/createClaudeMcpBundleManifest.ts --bundle --platform=node --format=esm --outdir=build/scripts --sourcemap=inline --out-extension:.js=.mjs",
     "start:http": "node build/index.js",
     "start:http:docker": "docker run -p 3927:3927 -i --rm --env-file env.list tableau-mcp",
+    "start:redis": "docker run -d --name redis-mcp -p 6379:6379 -v redis-data:/data redis:7-alpine redis-server --appendonly yes",
     "lint": "npm exec eslint",
     "inspect": "npx @modelcontextprotocol/inspector --config config.json --server tableau",
     ":inspect:http": "npx @modelcontextprotocol/inspector --config config.http.json --server tableau",
