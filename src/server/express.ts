@@ -128,9 +128,24 @@ export async function startExpressServer({
 
         let session: Session | undefined;
         if (sessionId && (session = await store.get(sessionId))) {
-          transport = session.transport ??= new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => sessionId,
-          });
+          if (!session.transport) {
+            session.transport = createSession({
+              clientInfo: session.clientInfo,
+              store,
+              sessionIdGenerator: () => sessionId,
+            });
+
+            // Since the initialize request already happened, the SDK won't set the sessionId itself, so we need to do it manually.
+            session.transport.sessionId = sessionId;
+
+            // _initialized is a private property of the StreamableHTTPServerTransport class.
+            // @ts-expect-error - this is a hack to convince the transport that it has already been initialized
+            session.transport._initialized = true;
+
+            const server = new Server({ clientInfo: session.clientInfo });
+            await connect(server, session.transport, logLevel, getTableauAuthInfo(req.auth));
+          }
+          transport = session.transport;
         } else if (!sessionId && isInitializeRequest(req.body)) {
           const clientInfo = req.body.params.clientInfo;
           transport = createSession({ clientInfo, store });

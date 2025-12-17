@@ -2,7 +2,7 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
-import { StorageConfig } from './server/storage/sessionStoreFactory.js';
+import { PersistentStorageConfig } from './server/storage/persistentSessionStoreFactory.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
@@ -64,7 +64,7 @@ export class Config {
   serverLogDirectory: string;
   boundedContext: BoundedContext;
   tableauServerVersionCheckIntervalInHours: number;
-  storage: StorageConfig;
+  storage: PersistentStorageConfig | undefined;
   oauth: {
     enabled: boolean;
     issuer: string;
@@ -188,7 +188,12 @@ export class Config {
       },
     );
 
-    this.storage = { type: 'memory' };
+    this.storage = {
+      type: 'redis',
+      url: 'redis://localhost:6379/0',
+      keyPrefix: 'tableau:mcp:session:',
+    };
+
     const disableOauthOverride = disableOauth === 'true';
     this.oauth = {
       enabled: disableOauthOverride ? false : !!oauthIssuer,

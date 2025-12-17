@@ -13,12 +13,14 @@ export type Session = {
 export const createSession = ({
   clientInfo,
   store,
+  sessionIdGenerator = () => randomUUID(),
 }: {
   clientInfo: ClientInfo;
   store: Store<Session>;
+  sessionIdGenerator?: () => string;
 }): StreamableHTTPServerTransport => {
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
+    sessionIdGenerator,
     onsessioninitialized: (sessionId) => {
       store.set(sessionId, { sessionId, clientInfo, transport });
     },
