@@ -1,6 +1,4 @@
-import { RedisSessionStore } from './redisSessionStore';
-import { RedisStoreConfig } from './redisStore';
-import { Session } from './session';
+import { RedisStore, RedisStoreConfig } from './redisStore';
 import { Store } from './store';
 
 export type PersistentStorageConfig =
@@ -13,11 +11,17 @@ export type PersistentStorageConfig =
       config?: Record<string, any>;
     };
 
-export class PersistentSessionStoreFactory {
-  static async create(config: PersistentStorageConfig): Promise<Store<Session>> {
+export class PersistentStoreFactory {
+  static async create<T>({
+    config,
+    RedisStoreCtor,
+  }: {
+    config: PersistentStorageConfig;
+    RedisStoreCtor: new (config: RedisStoreConfig) => RedisStore<T>;
+  }): Promise<Store<T>> {
     switch (config.type) {
       case 'redis': {
-        const store = new RedisSessionStore(config);
+        const store = new RedisStoreCtor(config);
         await store.connect();
         return store;
       }
