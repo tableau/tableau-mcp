@@ -128,7 +128,7 @@ export async function startExpressServer({
 
         let session: Session | undefined;
         if (sessionId && (session = await store.get(sessionId))) {
-          if (!session.transport) {
+          if (typeof session.transport?.handleRequest !== 'function') {
             session.transport = createSession({
               clientInfo: session.clientInfo,
               store,
@@ -224,7 +224,7 @@ async function handleSessionRequest(req: express.Request, res: express.Response)
     return;
   }
 
-  if (!session.transport) {
+  if (typeof session.transport?.handleRequest !== 'function') {
     session.transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => sessionId,
     });

@@ -1,6 +1,9 @@
 import { KeyObject } from 'crypto';
+import { join } from 'path';
+import { pathToFileURL } from 'url';
 import { z } from 'zod';
 
+import { getDirname } from '../../utils/getDirname';
 import { InMemoryStore } from './inMemoryStore';
 import { RedisStore } from './redisStore';
 import { Store } from './store';
@@ -125,10 +128,10 @@ export class StoreFactory {
           throw new Error('Custom storage requires module path');
         }
 
-        const CustomStore = await import(config.module);
-        const StoreClass = CustomStore.default || CustomStore;
+        const modulePath = join(getDirname(), config.module);
+        const { default: StoreClass } = await import(pathToFileURL(modulePath).href);
 
-        const store = new StoreClass(config.config);
+        const store = new StoreClass.default(config.config);
 
         this.validateStore<T>(store);
 
