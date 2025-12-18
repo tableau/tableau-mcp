@@ -47,13 +47,13 @@ export class OAuthProvider {
     register(app);
 
     // oauth/authorize
-    authorize(app);
+    authorize(app, this.privateKey);
 
     // /Callback
-    callback(app);
+    callback(app, this.privateKey);
 
     // oauth/token
-    token(app, this.publicKey);
+    token(app, this.privateKey, this.publicKey);
   }
 
   private getPrivateKey(): KeyObject {

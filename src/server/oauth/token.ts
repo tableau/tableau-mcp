@@ -20,7 +20,7 @@ import { ClientCredentials, UserAndTokens } from './types.js';
  * Verifies PKCE code_verifier matches the original challenge.
  * Returns JWE containing tokens for API access.
  */
-export function token(app: express.Application, publicKey: KeyObject): void {
+export function token(app: express.Application, privateKey: KeyObject, publicKey: KeyObject): void {
   const config = getConfig();
 
   app.post('/oauth/token', async (req, res) => {
@@ -55,7 +55,7 @@ export function token(app: express.Application, publicKey: KeyObject): void {
         case 'authorization_code': {
           // Handle authorization code exchange
           const { code, codeVerifier } = result.data;
-          const authorizationCodeStore = await getAuthorizationCodeStore();
+          const authorizationCodeStore = await getAuthorizationCodeStore(privateKey);
           const authCode = await authorizationCodeStore.get(code);
           if (!authCode || authCode.expiresAt < Math.floor(Date.now() / 1000)) {
             await authorizationCodeStore.delete(code);
@@ -79,7 +79,7 @@ export function token(app: express.Application, publicKey: KeyObject): void {
           // Generate tokens
           const refreshTokenId = randomBytes(32).toString('hex');
           const accessToken = await createAccessToken(authCode, publicKey);
-          const refreshTokenStore = await getRefreshTokenStore();
+          const refreshTokenStore = await getRefreshTokenStore(privateKey);
           await refreshTokenStore.set(
             refreshTokenId,
             {
@@ -127,7 +127,7 @@ export function token(app: express.Application, publicKey: KeyObject): void {
         case 'refresh_token': {
           // Handle refresh token
           const { refreshToken } = result.data;
-          const refreshTokenStore = await getRefreshTokenStore();
+          const refreshTokenStore = await getRefreshTokenStore(privateKey);
           const tokenData = await refreshTokenStore.get(refreshToken);
           if (!tokenData || tokenData.expiresAt < Math.floor(Date.now() / 1000)) {
             // Refresh token is expired

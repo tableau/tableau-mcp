@@ -1,5 +1,5 @@
 import axiosRetry from 'axios-retry';
-import { randomBytes, randomUUID } from 'crypto';
+import { KeyObject, randomBytes, randomUUID } from 'crypto';
 import express from 'express';
 import { isIP } from 'net';
 import { isSSRFSafeURL } from 'ssrfcheck';
@@ -24,7 +24,7 @@ import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schema
  * Validates request, stores pending authorization, and
  * redirects to Tableau OAuth.
  */
-export function authorize(app: express.Application): void {
+export function authorize(app: express.Application, privateKey: KeyObject): void {
   const config = getConfig();
 
   app.get('/oauth/authorize', async (req, res) => {
@@ -102,7 +102,7 @@ export function authorize(app: express.Application): void {
     const numCodeVerifierBytes = Math.floor(Math.random() * (64 - 22 + 1)) + 22;
     const tableauCodeVerifier = randomBytes(numCodeVerifierBytes).toString('hex');
     const tableauCodeChallenge = generateCodeChallenge(tableauCodeVerifier);
-    const pendingAuthorizationStore = await getPendingAuthorizationStore();
+    const pendingAuthorizationStore = await getPendingAuthorizationStore(privateKey);
     await pendingAuthorizationStore.set(
       authKey,
       {

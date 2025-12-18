@@ -1,21 +1,27 @@
+import { createPublicKey, KeyObject } from 'crypto';
+import { compactDecrypt, CompactEncrypt } from 'jose';
 import { createClient, RedisClientType } from 'redis';
 
 import { Store } from './store';
-
-export interface RedisStoreConfig {
-  url: string;
-  keyPrefix: string;
-  password?: string;
-}
+import { RedisStorageConfig } from './storeFactory';
 
 export class RedisStore<T> extends Store<T> {
   private client: RedisClientType;
   private keyPrefix: string;
 
-  constructor(config: RedisStoreConfig) {
+  private readonly privateKey: KeyObject | undefined;
+  private readonly publicKey: KeyObject | undefined;
+
+  constructor(config: RedisStorageConfig, { privateKey }: { privateKey?: KeyObject }) {
     super();
     this.keyPrefix = config.keyPrefix;
-    this.client = createClient({ url: config.url, password: config.password });
+
+    this.privateKey = privateKey;
+    this.publicKey = privateKey ? createPublicKey(privateKey) : undefined;
+
+    this.client = createClient({
+      ...config.clientConfig,
+    });
   }
 
   async connect(): Promise<void> {
@@ -24,13 +30,29 @@ export class RedisStore<T> extends Store<T> {
 
   async get(key: string): Promise<T | undefined> {
     const fullKey = this.getFullKey(key);
-    const data = await this.client.get(fullKey);
+    let data = await this.client.get(fullKey);
+
+    if (data === null) {
+      return undefined;
+    }
+
+    if (this.privateKey) {
+      const { plaintext } = await compactDecrypt(data, this.privateKey);
+      data = new TextDecoder().decode(plaintext);
+    }
+
     return data ? JSON.parse(data) : undefined;
   }
 
   async set(key: string, data: T, expirationTimeMs: number): Promise<this> {
     const fullKey = this.getFullKey(key);
-    const value = JSON.stringify(data);
+    let value = JSON.stringify(data);
+
+    if (this.publicKey) {
+      value = await new CompactEncrypt(new TextEncoder().encode(value))
+        .setProtectedHeader({ alg: 'RSA-OAEP-256', enc: 'A256GCM' })
+        .encrypt(this.publicKey);
+    }
 
     if (expirationTimeMs) {
       await this.client.setEx(fullKey, Math.floor(expirationTimeMs / 1000), value);

@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto';
+import { KeyObject, randomBytes } from 'crypto';
 import express from 'express';
 import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error';
@@ -18,7 +18,7 @@ import { callbackSchema } from './schemas.js';
  * Exchanges code for tokens, generates MCP authorization
  * code, and redirects back to client with code.
  */
-export function callback(app: express.Application): void {
+export function callback(app: express.Application, privateKey: KeyObject): void {
   const config = getConfig();
 
   app.get('/Callback', async (req, res) => {
@@ -45,7 +45,7 @@ export function callback(app: express.Application): void {
     try {
       // Parse state to get auth key and Tableau state
       const [authKey, tableauState] = state?.split(':') ?? [];
-      const pendingAuthorizationStore = await getPendingAuthorizationStore();
+      const pendingAuthorizationStore = await getPendingAuthorizationStore(privateKey);
       const pendingAuth = await pendingAuthorizationStore.get(authKey);
 
       if (!pendingAuth || pendingAuth.tableauState !== tableauState) {
@@ -110,7 +110,7 @@ export function callback(app: express.Application): void {
 
       // Generate authorization code
       const authorizationCode = randomBytes(32).toString('hex');
-      const authorizationCodeStore = await getAuthorizationCodeStore();
+      const authorizationCodeStore = await getAuthorizationCodeStore(privateKey);
       await authorizationCodeStore.set(
         authorizationCode,
         {

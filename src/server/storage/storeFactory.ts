@@ -1,8 +1,15 @@
+import { KeyObject } from 'crypto';
 import { z } from 'zod';
 
 import { InMemoryStore } from './inMemoryStore';
 import { RedisStore } from './redisStore';
 import { Store } from './store';
+
+const redisSchema = z.object({
+  clientConfig: z.record(z.string(), z.any()),
+  keyPrefix: z.string(),
+  expirationTimeMs: z.number().optional(),
+});
 
 const storageConfigSchema = z.discriminatedUnion('type', [
   z.object({
@@ -11,15 +18,12 @@ const storageConfigSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('redis'),
-    url: z.string(),
-    keyPrefix: z.string(),
-    password: z.string().optional(),
-    expirationTimeMs: z.number().optional(),
+    ...redisSchema.shape,
   }),
   z.object({
     type: z.literal('custom'),
     module: z.string(),
-    config: z.record(z.any()).optional(),
+    config: z.record(z.string(), z.any()).optional(),
     expirationTimeMs: z.number().optional(),
   }),
 ]);
@@ -32,6 +36,8 @@ export type StorageConfig = RequireProperty<
   z.infer<typeof storageConfigSchema>,
   'expirationTimeMs'
 >;
+
+export type RedisStorageConfig = z.infer<typeof redisSchema>;
 
 export function getStorageConfig(
   config: string | undefined,
@@ -80,17 +86,28 @@ export function getStorageConfig(
 }
 
 export class StoreFactory {
-  static async create<T>({ config }: { config: StorageConfig }): Promise<Store<T>> {
+  static async create<T>({
+    config,
+    RedisStoreCtor,
+    privateKey,
+  }: {
+    config: StorageConfig;
+    RedisStoreCtor?: new (
+      config: RedisStorageConfig,
+      { privateKey }: { privateKey?: KeyObject },
+    ) => RedisStore<T>;
+    privateKey?: KeyObject;
+  }): Promise<Store<T>> {
     switch (config.type) {
       case 'memory': {
         return new InMemoryStore<T>();
       }
       case 'redis': {
-        const store = new RedisStore<T>(config);
+        const store = new (RedisStoreCtor ?? RedisStore)(config, { privateKey });
         try {
           await store.connect();
         } catch (e) {
-          console.error(`Could not connect to Redis at ${config.url}`);
+          console.error(`Could not connect to Redis at ${config.clientConfig.url}`);
           throw e;
         }
 

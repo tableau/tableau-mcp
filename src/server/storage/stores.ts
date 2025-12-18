@@ -1,5 +1,8 @@
+import { KeyObject } from 'crypto';
+
 import { getConfig } from '../../config';
 import { AuthorizationCode, PendingAuthorization, RefreshTokenData } from '../oauth/types';
+import { RedisSessionStore } from './redisSessionStore';
 import { Session } from './session';
 import { Store } from './store';
 import { StoreFactory } from './storeFactory';
@@ -17,12 +20,15 @@ export async function getSessionStore(): Promise<Store<Session>> {
   const { sessionStorage: sessionPersistentStorage } = getConfig();
   sessionStore = await StoreFactory.create({
     config: sessionPersistentStorage,
+    RedisStoreCtor: RedisSessionStore,
   });
 
   return sessionStore;
 }
 
-export async function getAuthorizationCodeStore(): Promise<Store<AuthorizationCode>> {
+export async function getAuthorizationCodeStore(
+  privateKey: KeyObject,
+): Promise<Store<AuthorizationCode>> {
   if (authorizationCodeStore) {
     return authorizationCodeStore;
   }
@@ -33,12 +39,15 @@ export async function getAuthorizationCodeStore(): Promise<Store<AuthorizationCo
 
   authorizationCodeStore = await StoreFactory.create({
     config: authzCodeStorage,
+    privateKey,
   });
 
   return authorizationCodeStore;
 }
 
-export async function getRefreshTokenStore(): Promise<Store<RefreshTokenData>> {
+export async function getRefreshTokenStore(
+  privateKey: KeyObject,
+): Promise<Store<RefreshTokenData>> {
   if (refreshTokenStore) {
     return refreshTokenStore;
   }
@@ -49,12 +58,15 @@ export async function getRefreshTokenStore(): Promise<Store<RefreshTokenData>> {
 
   refreshTokenStore = await StoreFactory.create({
     config: refreshTokenStorage,
+    privateKey,
   });
 
   return refreshTokenStore;
 }
 
-export async function getPendingAuthorizationStore(): Promise<Store<PendingAuthorization>> {
+export async function getPendingAuthorizationStore(
+  privateKey: KeyObject,
+): Promise<Store<PendingAuthorization>> {
   if (pendingAuthorizationStore) {
     return pendingAuthorizationStore;
   }
@@ -65,6 +77,7 @@ export async function getPendingAuthorizationStore(): Promise<Store<PendingAutho
 
   pendingAuthorizationStore = await StoreFactory.create({
     config: pendingAuthorizationStorage,
+    privateKey,
   });
 
   return pendingAuthorizationStore;
