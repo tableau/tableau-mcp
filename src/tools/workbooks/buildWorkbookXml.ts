@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 
 function sanitizeForId(input: string): string {
-  return input.replace(/[^A-Za-z0-9_-]/g, '');
+  return input.replace(/[^A-Za-z0-9_\- ]/g, '');
 }
 
 function escapeXmlAttribute(value: string): string {
