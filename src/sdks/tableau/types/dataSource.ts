@@ -5,6 +5,7 @@ import { projectSchema } from './project.js';
 export const dataSourceSchema = z.object({
   id: z.string(),
   name: z.string(),
+  contentUrl: z.string(),
   description: z.string().optional(),
   project: projectSchema,
 });
