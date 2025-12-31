@@ -9,9 +9,9 @@ import { Tool } from '../tool.js';
 import { buildWorkbookXml } from './buildWorkbookXml.js';
 
 const paramsSchema = {
-  datasourceName: z.string().trim().nonempty(),
+  datasourceRepositoryURL: z.string().trim().nonempty(),
   publishedDatasourceId: z.string().trim().nonempty(),
-  // Optional overrides; sensible defaults are derived from config and datasourceName
+  // Optional overrides; sensible defaults are derived from config and datasourceRepositoryURL
   datasourceCaption: z.string().trim().nonempty().optional(),
   revision: z.string().trim().nonempty().default('1.0').optional(),
   worksheetName: z.string().trim().nonempty().default('Sheet 1').optional(),
@@ -30,9 +30,9 @@ export const getGenerateWorkbookXmlTool = (server: Server): Tool<typeof paramsSc
 Generates a Tableau TWB (workbook) XML string that connects to a specified published datasource (Data Server). Use the output to save a .twb file.
 
 **Parameters:**
-- \`datasourceName\` (required): The name of the data source the workbook will connect to.
+- \`datasourceRepositoryURL\` (required): The location of the data source the workbook will connect to. used to construct the full datasource url e.g. \`t/tc25/datasources/test-datasource\` for a site named tc25.
 - \`publishedDatasourceId\` (required): The published datasource's ID.
-- \`datasourceCaption\` (optional): The caption of the data source in the workbook.  Defaults to \`datasourceName\`.
+- \`datasourceCaption\` (optional): The caption of the data source in the workbook.  Defaults to \`datasourceRepositoryURL\`.
 - \`revision\` (optional): The revision of the data source.  Defaults to \`1.0\`.
 - \`worksheetName\` (optional): The name of the worksheet in the workbook.  Defaults to \`Sheet 1\`.
 `,
@@ -43,14 +43,14 @@ Generates a Tableau TWB (workbook) XML string that connects to a specified publi
       openWorldHint: false,
     },
     callback: async (
-      { datasourceName, publishedDatasourceId, datasourceCaption, revision, worksheetName },
+      { datasourceRepositoryURL, publishedDatasourceId, datasourceCaption, revision, worksheetName },
       { requestId, authInfo },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       return await generateWorkbookXmlTool.logAndExecute<string, GenerateWorkbookXmlError>({
         requestId,
         authInfo,
-        args: { datasourceName, publishedDatasourceId, datasourceCaption, revision, worksheetName },
+        args: { datasourceRepositoryURL, publishedDatasourceId, datasourceCaption, revision, worksheetName },
         callback: async () => {
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid: publishedDatasourceId,
@@ -73,7 +73,7 @@ Generates a Tableau TWB (workbook) XML string that connects to a specified publi
           const port = url.port && url.port !== '0' ? url.port : defaultPort;
           const siteName = config.siteName;
 
-          const finalCaption = datasourceCaption?.trim() || datasourceName;
+          const finalCaption = datasourceCaption?.trim() || datasourceRepositoryURL;
           const finalRevision = (revision ?? '1.0').trim();
           const finalWorksheetName = (worksheetName ?? 'Sheet 1').trim();
 
@@ -82,7 +82,7 @@ Generates a Tableau TWB (workbook) XML string that connects to a specified publi
             hostname: url.hostname,
             port,
             channel,
-            datasourceName,
+            datasourceRepositoryURL: datasourceRepositoryURL,
             datasourceCaption: finalCaption,
             publishedDatasourceId,
             revision: finalRevision,

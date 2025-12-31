@@ -42,7 +42,7 @@ describe('generateWorkbookXmlTool', () => {
 
   it('should successfully create a workbook', async () => {
     const result = await getToolResult({
-      datasourceName: 'test-datasource',
+      datasourceRepositoryURL: 'test-datasource',
       publishedDatasourceId: 'test-published-datasource-id',
       datasourceCaption: 'test-datasource-caption',
       revision: '1.0',
@@ -67,7 +67,7 @@ describe('generateWorkbookXmlTool', () => {
     });
 
     const result = await getToolResult({
-      datasourceName: 'test-datasource',
+      datasourceRepositoryURL: 'test-datasource',
       publishedDatasourceId: 'test-published-datasource-id',
       datasourceCaption: 'test-datasource-caption',
       revision: '1.0',
@@ -84,7 +84,7 @@ describe('generateWorkbookXmlTool', () => {
 });
 
 async function getToolResult(params: {
-  datasourceName: string;
+  datasourceRepositoryURL: string;
   publishedDatasourceId: string;
   datasourceCaption: string;
   revision: string;

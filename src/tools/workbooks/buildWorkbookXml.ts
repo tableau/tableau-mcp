@@ -1,9 +1,5 @@
 import { randomUUID } from 'crypto';
 
-function sanitizeForId(input: string): string {
-  return input.replace(/[^A-Za-z0-9_\- ]/g, '');
-}
-
 function escapeXmlAttribute(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -24,7 +20,7 @@ export function buildWorkbookXml({
   hostname,
   port,
   channel,
-  datasourceName,
+  datasourceRepositoryURL,
   datasourceCaption,
   publishedDatasourceId,
   revision,
@@ -34,14 +30,12 @@ export function buildWorkbookXml({
   hostname: string;
   port: string;
   channel: 'http' | 'https';
-  datasourceName: string;
+  datasourceRepositoryURL: string;
   datasourceCaption: string;
   publishedDatasourceId: string;
   revision: string;
   worksheetName: string;
 }): string {
-  datasourceName = sanitizeForId(datasourceName);
-
   const connectionName = generateSqlProxyConnectionName();
 
   const pathDatasources = siteName
@@ -67,7 +61,7 @@ export function buildWorkbookXml({
   <datasources>
     <datasource caption='${escapeXmlAttribute(datasourceCaption)}' inline='true' name='${escapeXmlAttribute(connectionName)}' version='18.1'>
       <repository-location id='${escapeXmlAttribute(publishedDatasourceId)}' path='${pathDatasources}' revision='${escapeXmlAttribute(revision)}'${siteAttr} />
-      <connection channel='${channel}' class='sqlproxy' dbname='${escapeXmlAttribute(datasourceName)}' local-dataserver='' port='${escapeXmlAttribute(port)}' server='${escapeXmlAttribute(hostname)}' username=''>
+      <connection channel='${channel}' class='sqlproxy' dbname='${escapeXmlAttribute(datasourceRepositoryURL)}' local-dataserver='' port='${escapeXmlAttribute(port)}' server='${escapeXmlAttribute(hostname)}' username=''>
         <relation name='sqlproxy' table='[sqlproxy]' type='table' />
       </connection>
       <aliases enabled='yes' />

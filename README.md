@@ -20,9 +20,9 @@ The `generate-workbook-xml` tool creates a Tableau TWB (XML) string that connect
 
 Parameters:
 
-- `datasourceName` (required): The published data source display name (friendly name).
+- `datasourceRepositoryURL` (required): The location of the data source the workbook will connect to; used to construct the full datasource URL (e.g., `t/tc25/datasources/test-datasource` for a site named `tc25`).
 - `publishedDatasourceId` (required): The published datasource's repository ID.
-- `datasourceCaption` (optional): Caption in the workbook; defaults to `datasourceName`.
+- `datasourceCaption` (optional): Caption in the workbook; defaults to `datasourceRepositoryURL`.
 - `revision` (optional): Revision string; defaults to `1.0`.
 - `worksheetName` (optional): The initial sheet name; defaults to `Sheet 1`.
 

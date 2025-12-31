@@ -26,7 +26,7 @@ describe('injectVizIntoWorkbookXml', () => {
       hostname: 'test-hostname',
       port: 'test-port',
       channel: 'http',
-      datasourceName: 'test-datasource',
+      datasourceRepositoryURL: 'test-datasource',
       datasourceCaption: 'test-datasource-caption',
       publishedDatasourceId: 'test-published-datasource-id',
       revision: '1.0',
