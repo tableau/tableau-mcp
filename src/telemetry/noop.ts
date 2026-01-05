@@ -9,7 +9,7 @@
 import { TelemetryAttributes, TelemetryProvider } from './types.js';
 
 export class NoOpTelemetryProvider implements TelemetryProvider {
-  async initialize(): Promise<void> {
+  initialize(): void {
     // No-op
   }
 

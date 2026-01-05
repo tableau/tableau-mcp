@@ -19,9 +19,9 @@ import { TelemetryProvider } from './types.js';
  *
  * @example
  * ```typescript
- * async function main() {
+ * function main() {
  *   // Initialize telemetry first
- *   const telemetry = await initializeTelemetry();
+ *   const telemetry = initializeTelemetry();
  *
  *   // Add global attributes
  *   telemetry.addAttributes({
@@ -33,13 +33,13 @@ import { TelemetryProvider } from './types.js';
  * }
  * ```
  */
-export async function initializeTelemetry(): Promise<TelemetryProvider> {
+export function initializeTelemetry(): TelemetryProvider {
   const config = getConfig();
 
   // If telemetry is disabled, use NoOp provider
   if (!config.telemetry.enabled) {
     const provider = new NoOpTelemetryProvider();
-    await provider.initialize();
+    provider.initialize();
     return provider;
   }
 
@@ -54,7 +54,7 @@ export async function initializeTelemetry(): Promise<TelemetryProvider> {
 
       case 'custom':
         // Load custom provider from user's filesystem
-        provider = await loadCustomProvider(config.telemetry.providerConfig);
+        provider = loadCustomProvider(config.telemetry.providerConfig);
         break;
 
       case 'noop':
@@ -68,7 +68,7 @@ export async function initializeTelemetry(): Promise<TelemetryProvider> {
     }
 
     // Initialize the provider
-    await provider.initialize();
+    provider.initialize();
     return provider;
   } catch (error) {
     console.error('Failed to initialize telemetry provider:', error);
@@ -76,7 +76,7 @@ export async function initializeTelemetry(): Promise<TelemetryProvider> {
 
     // Fallback to NoOp on error - telemetry failures shouldn't break the application
     const fallbackProvider = new NoOpTelemetryProvider();
-    await fallbackProvider.initialize();
+    fallbackProvider.initialize();
     return fallbackProvider;
   }
 }
@@ -101,7 +101,7 @@ export async function initializeTelemetry(): Promise<TelemetryProvider> {
  * TELEMETRY_PROVIDER_CONFIG='{"module":"my-company-telemetry"}'
  * ```
  */
-async function loadCustomProvider(config?: Record<string, unknown>): Promise<TelemetryProvider> {
+function loadCustomProvider(config?: Record<string, unknown>): TelemetryProvider {
   if (!config?.module) {
     throw new Error(
       'Custom telemetry provider requires "module" in providerConfig. ' +
@@ -118,13 +118,13 @@ async function loadCustomProvider(config?: Record<string, unknown>): Promise<Tel
     // File path - resolve relative to process working directory (user's project root)
     resolvedPath = resolve(process.cwd(), modulePath);
   } else {
-    // npm package name - import as-is
+    // npm package name - require as-is
     resolvedPath = modulePath;
   }
 
   try {
-    // Dynamically import the custom provider module
-    const module = await import(resolvedPath);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Sync load for preload script
+    const module = require(resolvedPath);
 
     // Look for default export or named export "TelemetryProvider"
     const ProviderClass = module.default || module.TelemetryProvider;
@@ -142,7 +142,7 @@ async function loadCustomProvider(config?: Record<string, unknown>): Promise<Tel
     // Provide helpful error message with common issues
     let errorMessage = `Failed to load custom telemetry provider from "${modulePath}". `;
 
-    if ((error as any).code === 'ERR_MODULE_NOT_FOUND') {
+    if ((error as any).code === 'MODULE_NOT_FOUND') {
       errorMessage +=
         'Module not found. ' +
         'If using a file path, ensure the file exists and the path is correct. ' +

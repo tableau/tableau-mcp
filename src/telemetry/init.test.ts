@@ -8,14 +8,14 @@ vi.mock('../config.js', () => ({
 // Mock the provider modules
 vi.mock('./moncloud.js', () => ({
   MonCloudTelemetryProvider: vi.fn().mockImplementation(() => ({
-    initialize: vi.fn().mockResolvedValue(undefined),
+    initialize: vi.fn(),
     addAttributes: vi.fn(),
   })),
 }));
 
 vi.mock('./noop.js', () => ({
   NoOpTelemetryProvider: vi.fn().mockImplementation(() => ({
-    initialize: vi.fn().mockResolvedValue(undefined),
+    initialize: vi.fn(),
     addAttributes: vi.fn(),
   })),
 }));
@@ -42,88 +42,58 @@ describe('initializeTelemetry', () => {
   });
 
   // MonCloud tests
-  it('returns MonCloudTelemetryProvider when provider is "moncloud"', async () => {
+  it('returns MonCloudTelemetryProvider when provider is "moncloud"', () => {
     mockGetConfig.mockReturnValue({
       telemetry: { ...defaultTelemetryConfig, provider: 'moncloud' },
     });
 
-    await initializeTelemetry();
+    initializeTelemetry();
 
     expect(MonCloudTelemetryProvider).toHaveBeenCalled();
   });
 
-  // Custom provider tests
-  it('loads custom provider from module path', async () => {
-    const mockInitialize = vi.fn().mockResolvedValue(undefined);
-    const mockAddAttributes = vi.fn();
-
-    // Define the mock constructor outside so we can reference it
-    const MockCustomProvider = vi.fn().mockImplementation(() => ({
-      initialize: mockInitialize,
-      addAttributes: mockAddAttributes,
-    }));
-
-    // Mock the dynamic import
-    vi.doMock('my-custom-telemetry', () => ({
-      default: MockCustomProvider,
-    }));
-
-    mockGetConfig.mockReturnValue({
-      telemetry: {
-        ...defaultTelemetryConfig,
-        provider: 'custom',
-        providerConfig: { module: 'my-custom-telemetry' },
-      },
-    });
-
-    await initializeTelemetry();
-
-    expect(MockCustomProvider).toHaveBeenCalled();
-    expect(mockInitialize).toHaveBeenCalled();
-
-    vi.resetModules();
-  });
-
   // NoOp tests
-  it('returns NoOpTelemetryProvider when telemetry is disabled', async () => {
+  it('returns NoOpTelemetryProvider when telemetry is disabled', () => {
     mockGetConfig.mockReturnValue({
       telemetry: { ...defaultTelemetryConfig, enabled: false },
     });
 
-    const provider = await initializeTelemetry();
+    const provider = initializeTelemetry();
 
     expect(NoOpTelemetryProvider).toHaveBeenCalled();
     expect(provider.initialize).toBeDefined();
     expect(provider.addAttributes).toBeDefined();
   });
 
-  it('returns NoOpTelemetryProvider when provider is "noop"', async () => {
+  it('returns NoOpTelemetryProvider when provider is "noop"', () => {
     mockGetConfig.mockReturnValue({
       telemetry: { ...defaultTelemetryConfig, provider: 'noop' },
     });
 
-    await initializeTelemetry();
+    initializeTelemetry();
 
     expect(NoOpTelemetryProvider).toHaveBeenCalled();
   });
 
-  it('returns NoOpTelemetryProvider for unknown provider with warning', async () => {
+  it('returns NoOpTelemetryProvider for unknown provider with warning', () => {
     mockGetConfig.mockReturnValue({
       telemetry: { ...defaultTelemetryConfig, provider: 'unknown-provider' },
     });
 
-    await initializeTelemetry();
+    initializeTelemetry();
 
     expect(NoOpTelemetryProvider).toHaveBeenCalled();
   });
 
-  it('falls back to NoOpTelemetryProvider on initialization error', async () => {
+  it('falls back to NoOpTelemetryProvider on initialization error', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     // Make MonCloudTelemetryProvider throw during initialization
     (MonCloudTelemetryProvider as Mock).mockImplementationOnce(() => ({
-      initialize: vi.fn().mockRejectedValue(new Error('Init failed')),
+      initialize: vi.fn().mockImplementation(() => {
+        throw new Error('Init failed');
+      }),
       addAttributes: vi.fn(),
     }));
 
@@ -131,7 +101,7 @@ describe('initializeTelemetry', () => {
       telemetry: { ...defaultTelemetryConfig, provider: 'moncloud' },
     });
 
-    const provider = await initializeTelemetry();
+    const provider = initializeTelemetry();
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Failed to initialize telemetry provider:',

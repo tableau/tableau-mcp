@@ -10,22 +10,18 @@
  *
  * @example OpenTelemetry implementation
  * ```typescript
- * import { NodeSDK } from '@opentelemetry/sdk-node';
- * import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
- * import { trace } from '@opentelemetry/api';
- *
  * export default class OpenTelemetryProvider implements TelemetryProvider {
- *   private sdk?: NodeSDK;
+ *   private trace: any;
  *
- *   async initialize(): Promise<void> {
- *     this.sdk = new NodeSDK({
- *       instrumentations: [getNodeAutoInstrumentations()],
- *     });
- *     await this.sdk.start();
+ *   initialize(): void {
+ *     const { NodeSDK } = require('@opentelemetry/sdk-node');
+ *     const sdk = new NodeSDK();
+ *     sdk.start();
+ *     this.trace = require('@opentelemetry/api').trace;
  *   }
  *
  *   addAttributes(attributes: TelemetryAttributes): void {
- *     trace.getActiveSpan()?.setAttributes(attributes);
+ *     this.trace?.getActiveSpan()?.setAttributes(attributes);
  *   }
  * }
  * ```
@@ -35,7 +31,7 @@
  * export default class DatadogProvider implements TelemetryProvider {
  *   private tracer: any;
  *
- *   async initialize(): Promise<void> {
+ *   initialize(): void {
  *     this.tracer = require('dd-trace').init();
  *   }
  *
@@ -59,7 +55,7 @@ export interface TelemetryProvider {
    * - Errors and exceptions
    * - System metrics (CPU, memory, GC)
    */
-  initialize(): Promise<void>;
+  initialize(): void;
 
   /**
    * Add custom attributes to the current auto-generated execution context.
