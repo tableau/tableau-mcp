@@ -16,6 +16,7 @@ export default [
     rules: {
       'no-console': ['error', { allow: ['warn', 'error'] }],
       'no-duplicate-imports': ['error', { includeExports: true }],
+      'no-trailing-spaces': 'error',
       quotes: ['error', 'single', { avoidEscape: true }],
       'simple-import-sort/imports': 'error',
       'simple-import-sort/exports': 'error',

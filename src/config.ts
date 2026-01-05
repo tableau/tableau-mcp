@@ -55,6 +55,7 @@ export class Config {
   disableLogMasking: boolean;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
+  maxRequestTimeoutMs: number;
   maxResultLimit: number | null;
   disableQueryDatasourceValidationRequests: boolean;
   disableMetadataApiRequests: boolean;
@@ -108,6 +109,7 @@ export class Config {
       DISABLE_LOG_MASKING: disableLogMasking,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
+      MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       MAX_RESULT_LIMIT: maxResultLimit,
       DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: disableQueryDatasourceValidationRequests,
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
@@ -274,6 +276,12 @@ export class Config {
         throw new Error('TRANSPORT must be "http" when OAUTH_ISSUER is set');
       }
     }
+
+    this.maxRequestTimeoutMs = parseNumber(maxRequestTimeoutMs, {
+      defaultValue: TEN_MINUTES_IN_MS,
+      minValue: 5000,
+      maxValue: ONE_HOUR_IN_MS,
+    });
 
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =

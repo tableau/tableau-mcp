@@ -38,7 +38,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
     },
     callback: async (
       { pulseMetricDefinitionID },
-      { requestId, authInfo },
+      { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       return await listPulseMetricsFromMetricDefinitionIdTool.logAndExecute<
@@ -54,6 +54,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
             requestId,
             server,
             jwtScopes: ['tableau:insight_definitions_metrics:read'],
+            signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricsFromMetricDefinitionId(
