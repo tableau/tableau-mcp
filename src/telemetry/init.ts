@@ -3,6 +3,7 @@
  */
 
 import { resolve } from 'path';
+
 import { getConfig } from '../config.js';
 import { MonCloudTelemetryProvider } from './moncloud.js';
 import { NoOpTelemetryProvider } from './noop.js';
@@ -60,7 +61,7 @@ export async function initializeTelemetry(): Promise<TelemetryProvider> {
       default:
         if (config.telemetry.provider !== 'noop') {
           console.warn(
-            `Unknown telemetry provider: ${config.telemetry.provider}. Using NoOp provider.`
+            `Unknown telemetry provider: ${config.telemetry.provider}. Using NoOp provider.`,
           );
         }
         provider = new NoOpTelemetryProvider();
@@ -100,13 +101,11 @@ export async function initializeTelemetry(): Promise<TelemetryProvider> {
  * TELEMETRY_PROVIDER_CONFIG='{"module":"my-company-telemetry"}'
  * ```
  */
-async function loadCustomProvider(
-  config?: Record<string, unknown>
-): Promise<TelemetryProvider> {
+async function loadCustomProvider(config?: Record<string, unknown>): Promise<TelemetryProvider> {
   if (!config?.module) {
     throw new Error(
       'Custom telemetry provider requires "module" in providerConfig. ' +
-        'Example: TELEMETRY_PROVIDER_CONFIG=\'{"module":"./my-telemetry.js"}\''
+        'Example: TELEMETRY_PROVIDER_CONFIG=\'{"module":"./my-telemetry.js"}\'',
     );
   }
 
@@ -133,7 +132,7 @@ async function loadCustomProvider(
     if (!ProviderClass) {
       throw new Error(
         `Module ${modulePath} must export a default class or named export "TelemetryProvider" ` +
-          'that implements the TelemetryProvider interface'
+          'that implements the TelemetryProvider interface',
       );
     }
 

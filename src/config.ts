@@ -237,9 +237,7 @@ export class Config {
       serviceName: telemetryServiceName || 'tableau-mcp',
       serviceVersion: telemetryServiceVersion || '1.0.0',
       environment: telemetryEnvironment || 'production',
-      providerConfig: telemetryProviderConfig
-        ? JSON.parse(telemetryProviderConfig)
-        : undefined,
+      providerConfig: telemetryProviderConfig ? JSON.parse(telemetryProviderConfig) : undefined,
     };
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';

@@ -26,4 +26,4 @@
 
 export { initializeTelemetry } from './init.js';
 export { withTelemetryMiddleware } from './middleware.js';
-export type { TelemetryProvider, TelemetryAttributes, TelemetryConfig } from './types.js';
+export type { TelemetryAttributes, TelemetryConfig, TelemetryProvider } from './types.js';

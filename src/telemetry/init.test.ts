@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi, Mock } from 'vitest';
+import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 
 // Mock the config module
 vi.mock('../config.js', () => ({
@@ -21,9 +21,9 @@ vi.mock('./noop.js', () => ({
 }));
 
 import { getConfig } from '../config.js';
+import { initializeTelemetry } from './init.js';
 import { MonCloudTelemetryProvider } from './moncloud.js';
 import { NoOpTelemetryProvider } from './noop.js';
-import { initializeTelemetry } from './init.js';
 import { TelemetryConfig } from './types.js';
 
 describe('initializeTelemetry', () => {
@@ -40,7 +40,6 @@ describe('initializeTelemetry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
-
 
   // MonCloud tests
   it('returns MonCloudTelemetryProvider when provider is "moncloud"', async () => {
@@ -136,7 +135,7 @@ describe('initializeTelemetry', () => {
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Failed to initialize telemetry provider:',
-      expect.any(Error)
+      expect.any(Error),
     );
     expect(consoleWarnSpy).toHaveBeenCalledWith('Falling back to NoOp telemetry provider');
     expect(provider).toBeDefined();

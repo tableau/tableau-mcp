@@ -25,11 +25,11 @@ export class MonCloudTelemetryProvider implements TelemetryProvider {
     try {
       // Import the Salesforce APM Agent
       // This must be done before any other application code to enable auto-instrumentation
-      const { Apm } = require('@salesforce/apmagent');
+      const { Apm } = await import('@salesforce/apmagent');
 
       // Import OpenTelemetry API for accessing spans
       // MonCloud agent is built on OpenTelemetry, so we use the standard OTEL API
-      const otel = require('@opentelemetry/api');
+      const otel = await import('@opentelemetry/api');
       this.trace = otel.trace;
 
       // Create and start the APM agent
@@ -48,7 +48,7 @@ export class MonCloudTelemetryProvider implements TelemetryProvider {
       throw new Error(
         'MonCloud APM agent initialization failed. ' +
           'Ensure @salesforce/apmagent is installed and configured correctly. ' +
-          `Error: ${error}`
+          `Error: ${error}`,
       );
     }
   }

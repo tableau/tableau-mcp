@@ -23,6 +23,7 @@
  */
 
 import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+
 import { TelemetryProvider } from './types.js';
 
 /**
@@ -58,7 +59,7 @@ import { TelemetryProvider } from './types.js';
 export function withTelemetryMiddleware(
   server: any,
   telemetry: TelemetryProvider,
-  extractAttributes?: (request: any) => Record<string, string | number | boolean | undefined>
+  extractAttributes?: (request: any) => Record<string, string | number | boolean | undefined>,
 ): void {
   // Store the original handler
   const originalSetRequestHandler = server.setRequestHandler.bind(server);
@@ -67,7 +68,7 @@ export function withTelemetryMiddleware(
   server.setRequestHandler = (schema: any, handler: any) => {
     // If this is the CallToolRequest handler, wrap it
     if (schema === CallToolRequestSchema) {
-      const wrappedHandler = async (request: any) => {
+      const wrappedHandler = async (request: any): Promise<any> => {
         const toolName = request.params.name;
 
         // Build attributes
@@ -95,7 +96,7 @@ export function withTelemetryMiddleware(
         } catch (error) {
           // Add error attributes
           telemetry.addAttributes({
-            'error': true,
+            error: true,
             'error.type': error instanceof Error ? error.constructor.name : 'Unknown',
             'error.message': error instanceof Error ? error.message : String(error),
           });
