@@ -249,6 +249,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  MAX_REQUEST_TIMEOUT_MS: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'Max Request Timeout (ms)',
+    description: 'The maximum timeout for requests to the Tableau Server REST API.',
+    required: false,
+    sensitive: false,
+  },
   MAX_RESULT_LIMIT: {
     includeInUserConfig: false,
     type: 'number',
