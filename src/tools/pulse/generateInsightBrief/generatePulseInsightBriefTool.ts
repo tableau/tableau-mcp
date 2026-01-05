@@ -104,6 +104,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
               metric: {
                 definition: { /* metric definition */ },
                 specification: { /* metric specification */ },
+                candidates: [ /* optional array of candidate definitions */ ],
               },
             }
           ],
