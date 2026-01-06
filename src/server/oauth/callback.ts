@@ -114,6 +114,24 @@ export function callback(
         return;
       }
 
+      if (
+        config.oauth.lockSite &&
+        sessionResult.value.site.name !== config.siteName &&
+        !(sessionResult.value.site.name === 'Default' && !config.siteName)
+      ) {
+        const sentences = [
+          `User signed in to site: ${sessionResult.value.site.name || 'Default'}.`,
+          `Expected site: ${config.siteName || 'Default'}.`,
+          `Please reconnect your client and choose the [${config.siteName || 'Default'}] site in the site picker if prompted.`,
+        ];
+
+        res.status(400).json({
+          error: 'invalid_request',
+          error_description: sentences.join(' '),
+        });
+        return;
+      }
+
       // Generate authorization code
       const authorizationCode = randomBytes(32).toString('hex');
       authorizationCodes.set(authorizationCode, {
