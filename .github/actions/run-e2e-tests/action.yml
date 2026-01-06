@@ -6,11 +6,3 @@ runs:
     - name: E2E Tests
       shell: bash
       run: npm run test:e2e
-      env:
-        SERVER: ${{ env.SERVER }}
-        SITE_NAME: ${{ env.SITE_NAME }}
-        AUTH: ${{ env.AUTH }}
-        JWT_SUB_CLAIM: ${{ env.JWT_SUB_CLAIM }}
-        CONNECTED_APP_CLIENT_ID: ${{ env.CONNECTED_APP_CLIENT_ID }}
-        CONNECTED_APP_SECRET_ID: ${{ env.CONNECTED_APP_SECRET_ID }}
-        CONNECTED_APP_SECRET_VALUE: ${{ env.CONNECTED_APP_SECRET_VALUE }}
