@@ -46,6 +46,7 @@ jobs:
         run: npm run coverage
 
       - name: E2E Tests
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
         run: npm run test:e2e
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}
@@ -57,6 +58,7 @@ jobs:
           CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
 
       - name: OAuth Tests
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
         run: npm run test:oauth
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}

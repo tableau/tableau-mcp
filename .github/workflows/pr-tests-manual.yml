@@ -1,0 +1,118 @@
+name: Manual PR Tests
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  pr-tests:
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/run-tests') &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER')
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: React to comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket'
+            })
+
+      - name: Post initial status comment
+        id: status_comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comment = await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,  // This is the PR number
+              body: `🚀 **PR tests running...**
+
+              Triggered by @${{ github.event.comment.user.login }}
+
+              [View workflow run →](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`
+            });
+            return comment.data.id;
+
+      - name: Get PR details
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number  // PR number = issue number
+            });
+            return {
+              ref: pr.data.head.ref,
+              sha: pr.data.head.sha,
+              repo: pr.data.head.repo.full_name
+            };
+
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ fromJSON(steps.pr.outputs.result).repo }}
+          ref: ${{ fromJSON(steps.pr.outputs.result).sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: E2E Tests
+        run: npm run test:e2e
+        env:
+          SERVER: ${{ secrets.E2E_TEST_SERVER }}
+          SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
+          AUTH: ${{ secrets.E2E_TEST_AUTH }}
+          JWT_SUB_CLAIM: ${{ secrets.E2E_TEST_JWT_SUB_CLAIM }}
+          CONNECTED_APP_CLIENT_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}
+          CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
+          CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
+
+      - name: OAuth Tests
+        run: npm run test:oauth
+        env:
+          SERVER: ${{ secrets.E2E_TEST_SERVER }}
+          SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
+          OAUTH_ISSUER: http://127.0.0.1:3927
+          OAUTH_JWE_PRIVATE_KEY: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY }}
+          OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY_PASSPHRASE }}
+
+      - name: Update comment with final result
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ job.status }}';
+            const emoji = status === 'success' ? '✅' : '❌';
+
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: ${{ steps.status_comment.outputs.result }},
+              body: `${emoji} **PR tests ${status}**
+
+              Triggered by @${{ github.event.comment.user.login }}
+              Commit: \`${{ fromJSON(steps.pr.outputs.result).sha }}\`
+
+              [View workflow run →](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`
+            })
