@@ -77,8 +77,9 @@ Whether to require the user to sign in to the site specified in [`SITE_NAME`](#s
 OAuth.
 
 - Default: `true`
-- When `true`, the user must sign in to the site specified in [`SITE_NAME`](#site_name). If they
-  choose a different site in the site picker, an error will be returned.
+- When `true`, the user must sign in to the site specified in [`SITE_NAME`](#site_name). If the user
+  already has an active Tableau session in their browser for a different site, an error will be
+  returned.
 - When `false`, the user can sign in to any site they can access.
 
 :::warning
