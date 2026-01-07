@@ -133,6 +133,10 @@ export function authorize(
     oauthUrl.searchParams.set('device_name', getDeviceName(redirect_uri, state ?? ''));
     oauthUrl.searchParams.set('client_type', 'tableau-mcp');
 
+    if (config.oauth.lockSite) {
+      oauthUrl.searchParams.set('redirected', 'true');
+    }
+
     res.redirect(oauthUrl.toString());
   });
 }
