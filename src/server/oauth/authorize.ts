@@ -137,8 +137,43 @@ export function authorize(
       oauthUrl.searchParams.set('redirected', 'true');
     }
 
-    res.redirect(oauthUrl.toString());
+    const redirectUrl = await getOAuthRedirectUrl(oauthUrl, { lockSite: config.oauth.lockSite });
+    res.redirect(redirectUrl.toString());
   });
+}
+
+async function getOAuthRedirectUrl(
+  initialOAuthUrl: URL,
+  { lockSite }: { lockSite: boolean },
+): Promise<URL> {
+  if (lockSite) {
+    // When the site is locked, Tableau does the right thing and never shows the site picker,
+    // regardless of whether the user already has an active Tableau session in their browser.
+    return initialOAuthUrl;
+  }
+
+  // When the site is not locked, Tableau does the right thing and shows the site picker, but only on Cloud.
+  // On Server, if the user does not have an active Tableau session in their browser,
+  // Tableau does not show the site picker.
+  // We can force it to by changing the path from #/signin to #/site.
+
+  try {
+    const response = await fetch(initialOAuthUrl, { redirect: 'manual' });
+    if (response.status === 302) {
+      // The response is a redirect to the Tableau OAuth login page.
+      // Force it to ultimately show the site picker by changing the path from #/signin to #/site.
+      const location = response.headers.get('location');
+
+      if (location?.startsWith('#/signin') || location?.startsWith('/#/signin')) {
+        const locationUrl = new URL(location.replace('#/signin', '#/site'), initialOAuthUrl.origin);
+        return locationUrl;
+      }
+    }
+  } catch {
+    return initialOAuthUrl;
+  }
+
+  return initialOAuthUrl;
 }
 
 // https://client.dev/servers
