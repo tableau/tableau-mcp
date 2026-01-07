@@ -77,27 +77,11 @@ Whether to require the user to sign in to the site specified in [`SITE_NAME`](#s
 OAuth.
 
 - Default: `true`
-- When `true`, the user must sign in to the site specified in [`SITE_NAME`](#site_name). If the user
-  already has an active Tableau session in their browser for a different site, an error will be
-  returned.
+- When `true`, the user must sign in to the site specified in [`SITE_NAME`](#site_name) (or the
+  Default site if empty).
+  - If the user already has an active Tableau session in their browser for a different site, an
+    error will be returned.
 - When `false`, the user can sign in to any site they can access.
-
-:::warning
-
-There currently exists some potentially undesirable behavior depending on whether the user already
-has an active Tableau session in their browser. Please see the Behavior Matrix below for details.
-
-:::
-
-#### Behavior Matrix
-
-| `SITE_NAME` | `OAUTH_LOCK_SITE` | Server Behavior                                                                 | Cloud Behavior                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ----------- | ----------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [empty]     | true              | User will be signed into the Default site without showing them the site picker. | Invalid config - There is no Default site on Cloud                                                                                                                                                                                                                                                                                                                                                             |
-| [empty]     | false             | User can choose their site.                                                     | **User already has an active Tableau session in their browser:** <br/>User can choose their site from the site picker.<br /><br /> **User does not already have an active Tableau session in their browser:** <br/>User will be asked to enter their site name before the initial authentication request, but then also unfortunately prompted to select their site from the site picker after authenticating. |
-| MySite      | true              | User will be signed into MySite without showing them the site picker.           | User will be signed into MySite without showing them the site picker.                                                                                                                                                                                                                                                                                                                                          |
-| MySite      | false             | User can choose their site.                                                     | **User already has an active Tableau session in their browser:** <br/>User can choose their site from the site picker.<br /><br /> **User does not already have an active Tableau session in their browser:** <br/>User will be asked to enter their site name before the initial authentication request, but then also unfortunately prompted to select their site from the site picker after authenticating. |
-
 <hr />
 
 ### `OAUTH_REDIRECT_URI`
