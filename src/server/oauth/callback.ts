@@ -39,10 +39,18 @@ export function callback(
     const { error, code, state } = result.data;
 
     if (error) {
-      res.status(400).json({
-        error: 'access_denied',
-        error_description: 'User denied authorization',
-      });
+      if (error === 'invalid_request') {
+        res.status(400).json({
+          error: 'invalid_request',
+          error_description: `Invalid request. Did you sign into the wrong site? Expected: ${config.siteName || 'Default site'}`,
+        });
+      } else {
+        res.status(400).json({
+          error: 'access_denied',
+          error_description: 'User denied authorization',
+        });
+      }
+
       return;
     }
 
