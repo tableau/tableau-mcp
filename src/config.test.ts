@@ -63,6 +63,7 @@ describe('Config', () => {
       OAUTH_JWE_PRIVATE_KEY: undefined,
       OAUTH_JWE_PRIVATE_KEY_PATH: undefined,
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: undefined,
+      OAUTH_CIMD_DISABLE: undefined,
       OAUTH_CIMD_DNS_SERVERS: undefined,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: undefined,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: undefined,
@@ -1087,6 +1088,7 @@ describe('Config', () => {
       jwePrivateKey: '',
       jwePrivateKeyPath: defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH,
       jwePrivateKeyPassphrase: undefined,
+      disableCimd: false,
       dnsServers: ['1.1.1.1', '1.0.0.1'],
       ...defaultOAuthTimeoutMs,
     } as const;
@@ -1106,6 +1108,7 @@ describe('Config', () => {
         jwePrivateKey: '',
         jwePrivateKeyPath: '',
         jwePrivateKeyPassphrase: undefined,
+        disableCimd: false,
         dnsServers: ['1.1.1.1', '1.0.0.1'],
         ...defaultOAuthTimeoutMs,
       });
@@ -1347,6 +1350,17 @@ describe('Config', () => {
         client1: 'secret1',
         client2: 'secret2',
       });
+    });
+
+    it('should set disableCimd to the specified value when OAUTH_CIMD_DISABLE is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_CIMD_DISABLE: 'true',
+      };
+
+      const config = new Config();
+      expect(config.oauth.disableCimd).toBe(true);
     });
 
     it('should set dnsServers to the specified value when OAUTH_CIMD_DNS_SERVERS is set', () => {

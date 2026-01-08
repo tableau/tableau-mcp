@@ -48,6 +48,14 @@ export function authorize(
     const clientIdUrl = parseUrl(client_id);
     if (clientIdUrl) {
       // Client ID is a URL, so we need to attempt to fetch the client metadata from the URL
+      if (config.oauth.disableCimd) {
+        res.status(400).json({
+          error: 'invalid_request',
+          error_description: `The provided client id is a URL, but Client ID Metadata Document discovery is not supported on this MCP server. client_id: ${client_id}`,
+        });
+        return;
+      }
+
       const clientResult = await getClientFromMetadataDoc(clientIdUrl);
       if (clientResult.isErr()) {
         res.status(400).json(clientResult.error);

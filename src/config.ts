@@ -75,6 +75,7 @@ export class Config {
     accessTokenTimeoutMs: number;
     refreshTokenTimeoutMs: number;
     clientIdSecretPairs: Record<string, string> | null;
+    disableCimd: boolean;
     dnsServers: string[];
   };
 
@@ -127,6 +128,7 @@ export class Config {
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
+      OAUTH_CIMD_DISABLE: oauthCimdDisable,
       OAUTH_CIMD_DNS_SERVERS: dnsServers,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
@@ -196,6 +198,7 @@ export class Config {
       jwePrivateKey: oauthJwePrivateKey ?? '',
       jwePrivateKeyPath: oauthJwePrivateKeyPath ?? '',
       jwePrivateKeyPassphrase: oauthJwePrivateKeyPassphrase || undefined,
+      disableCimd: oauthCimdDisable === 'true',
       dnsServers: dnsServers
         ? dnsServers.split(',').map((ip) => ip.trim())
         : ['1.1.1.1', '1.0.0.1' /* Cloudflare public DNS */],

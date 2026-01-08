@@ -405,6 +405,14 @@ const envVars = {
     required: false,
     sensitive: true,
   },
+  OAUTH_CIMD_DISABLE: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'OAuth CIMD Disable',
+    description: 'Disable Client ID Metadata Document discovery.',
+    required: false,
+    sensitive: false,
+  },
   OAUTH_CIMD_DNS_SERVERS: {
     includeInUserConfig: false,
     type: 'string',
