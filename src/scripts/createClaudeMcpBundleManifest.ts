@@ -468,7 +468,7 @@ const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>
 );
 
 const manifest = {
-  manifest_version: '0.2',
+  manifest_version: '0.3',
   name: 'Tableau',
   version: packageJson.version,
   description: packageJson.description,
