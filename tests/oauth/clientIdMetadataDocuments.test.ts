@@ -76,6 +76,7 @@ describe('clientIdMetadataDocuments', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.useRealTimers();
   });
 
@@ -417,6 +418,28 @@ describe('clientIdMetadataDocuments', () => {
     expect(response.body).toEqual({
       error: 'invalid_request',
       error_description: 'Unable to fetch client metadata',
+    });
+  });
+
+  it('should reject authorize requests when CIMD is disabled', async () => {
+    vi.stubEnv('OAUTH_CIMD_DISABLE', 'true');
+
+    const { app } = await startServer();
+
+    const response = await request(app).get('/oauth/authorize').query({
+      response_type: 'code',
+      client_id: constants.FAKE_CLIENT_METADATA_URL,
+      redirect_uri: 'http://127.0.0.1:6274/oauth/callback/debug',
+      code_challenge: 'fake-code-challenge',
+      code_challenge_method: 'S256',
+      state: 'fake-state',
+      resource: 'http://127.0.0.1:3927/tableau-mcp',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: 'invalid_request',
+      error_description: `The provided client id is a URL, but Client ID Metadata Document discovery is not supported on this MCP server. client_id: ${constants.FAKE_CLIENT_METADATA_URL}`,
     });
   });
 });

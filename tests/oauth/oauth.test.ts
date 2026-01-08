@@ -29,6 +29,8 @@ describe('OAuth', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
+
     await new Promise<void>((resolve) => {
       if (_server) {
         _server.close(() => {
@@ -97,6 +99,29 @@ describe('OAuth', () => {
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
       subject_types_supported: ['public'],
       client_id_metadata_document_supported: true,
+    });
+  });
+
+  it('should advertise that CIMD is not supported when it is disabled', async () => {
+    vi.stubEnv('OAUTH_CIMD_DISABLE', 'true');
+
+    const { app } = await startServer();
+
+    const response = await request(app).get('/.well-known/oauth-authorization-server');
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+    expect(response.body).toEqual({
+      issuer: 'http://127.0.0.1:3927',
+      authorization_endpoint: 'http://127.0.0.1:3927/oauth/authorize',
+      token_endpoint: 'http://127.0.0.1:3927/oauth/token',
+      registration_endpoint: 'http://127.0.0.1:3927/oauth/register',
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
+      code_challenge_methods_supported: ['S256'],
+      scopes_supported: [],
+      token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
+      subject_types_supported: ['public'],
+      client_id_metadata_document_supported: false,
     });
   });
 
