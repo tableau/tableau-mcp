@@ -202,11 +202,43 @@ The passphrase for the private key if it is encrypted.
 
 <hr />
 
+### `OAUTH_CIMD_DISABLE`
+
+The built-in authorization server provided by Tableau MCP supports MCP clients that register using a
+Client ID Metadata Document (CIMD) URL. When an MCP client provides the URL to its metadata JSON
+document as their client id (e.g. https://vscode.dev/oauth/client-metadata.json), the `authorize`
+endpoint will attempt to fetch the document and use its information to register the client. **This
+means that the Tableau MCP deployment server needs outbound access to the Internet.** If this is
+problematic, you can disable this feature by setting `OAUTH_CIMD_DISABLE` to `true`.
+
+:::warning
+
+Disabling CIMD is not recommended as it goes against the recommendations of the November 2025
+release of the
+[MCP spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents),
+which says that clients and authorization servers SHOULD support CIMD. When disabled, the
+authorization server will advertise to clients that it does not support CIMD and will rely on
+Dynamic Client Registration (DRC) instead, which is only included for backwards compatibility for
+clients that implement an older version of the
+[MCP spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#dynamic-client-registration).
+
+:::
+
+- Default: `false`
+
+References:
+
+- https://blog.modelcontextprotocol.io/posts/client_registration/
+- https://client.dev/
+
+<hr />
+
 ### `OAUTH_CIMD_DNS_SERVERS`
 
-The Tableau MCP server supports MCP clients that register using a Client ID Metadata Document (CIMD)
-URL. Part of this process requires resolving the IP address of the host of the document to protect
-against DNS rebinding and Server-Side Request Forgery (SSRF) attacks.
+The built-in authorization server provided by Tableau MCP supports MCP clients that register using a
+Client ID Metadata Document (CIMD) URL. Part of this process requires resolving the IP address of
+the host of the document to protect against DNS rebinding and Server-Side Request Forgery (SSRF)
+attacks.
 
 By default, the MCP server will use
 [Cloudflare's Public DNS](https://developers.cloudflare.com/1.1.1.1/ip-addresses/) (1.1.1.1 and
@@ -215,11 +247,6 @@ By default, the MCP server will use
 - Default: `1.1.1.1,1.0.0.1`
 - Format is a comma-separated list of IP addresses.
 - Example: `8.8.8.8,8.8.4.4` (Google's Public DNS)
-
-References:
-
-- https://blog.modelcontextprotocol.io/posts/client_registration/
-- https://client.dev/
 
 <hr />
 
