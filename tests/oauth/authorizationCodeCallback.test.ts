@@ -61,7 +61,8 @@ describe('authorization code callback', () => {
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
       error: 'invalid_request',
-      error_description: 'Invalid request. Did you sign into the wrong site? Expected: mcp-test',
+      error_description:
+        'Invalid request. Did you sign in to the wrong site? From your browser, please sign out of your site and reconnect your agent to Tableau MCP.',
     });
   });
 

@@ -42,7 +42,8 @@ export function callback(
       if (error === 'invalid_request') {
         res.status(400).json({
           error: 'invalid_request',
-          error_description: `Invalid request. Did you sign into the wrong site? Expected: ${config.siteName || 'Default site'}`,
+          error_description:
+            'Invalid request. Did you sign in to the wrong site? From your browser, please sign out of your site and reconnect your agent to Tableau MCP.',
         });
       } else {
         res.status(400).json({
