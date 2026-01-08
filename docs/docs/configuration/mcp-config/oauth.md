@@ -218,8 +218,8 @@ release of the
 [MCP spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents),
 which says that clients and authorization servers SHOULD support CIMD. When disabled, the
 authorization server will advertise to clients that it does not support CIMD and will rely on
-Dynamic Client Registration (DRC) instead, which is only included for backwards compatibility for
-clients that implement an older version of the
+Dynamic Client Registration instead, which is only included for backwards compatibility for clients
+that implement an older version of the
 [MCP spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#dynamic-client-registration).
 
 :::
