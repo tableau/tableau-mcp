@@ -27,19 +27,39 @@ type JwtScopes =
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
   | 'tableau:insights:read'
-  | 'tableau:views:download';
+  | 'tableau:views:download'
+  | 'tableau:insight_brief:create';
 
 const getNewRestApiInstanceAsync = async (
   config: Config,
   requestId: RequestId,
   server: Server,
   jwtScopes: Set<JwtScopes>,
+  signal: AbortSignal,
   authInfo?: TableauAuthInfo,
 ): Promise<RestApi> => {
+  signal.addEventListener(
+    'abort',
+    () => {
+      log.info(
+        server,
+        {
+          type: 'request-cancelled',
+          requestId,
+          reason: signal.reason,
+        },
+        { logger: server.name, requestId },
+      );
+    },
+    { once: true },
+  );
+
   const tableauServer = config.server || authInfo?.server;
   invariant(tableauServer, 'Tableau server could not be determined');
 
   const restApi = new RestApi(tableauServer, {
+    maxRequestTimeoutMs: config.maxRequestTimeoutMs,
+    signal,
     requestInterceptor: [
       getRequestInterceptor(server, requestId),
       getRequestErrorInterceptor(server, requestId),
@@ -61,10 +81,23 @@ const getNewRestApiInstanceAsync = async (
     await restApi.signIn({
       type: 'direct-trust',
       siteName: config.siteName,
-      username: getJwtSubClaim(config, authInfo),
+      username: getJwtUsername(config, authInfo),
       clientId: config.connectedAppClientId,
       secretId: config.connectedAppSecretId,
       secretValue: config.connectedAppSecretValue,
+      scopes: jwtScopes,
+      additionalPayload: getJwtAdditionalPayload(config, authInfo),
+    });
+  } else if (config.auth === 'uat') {
+    await restApi.signIn({
+      type: 'uat',
+      siteName: config.siteName,
+      username: getJwtUsername(config, authInfo),
+      tenantId: config.uatTenantId,
+      issuer: config.uatIssuer,
+      usernameClaimName: config.uatUsernameClaimName,
+      privateKey: config.uatPrivateKey,
+      keyId: config.uatKeyId,
       scopes: jwtScopes,
       additionalPayload: getJwtAdditionalPayload(config, authInfo),
     });
@@ -85,12 +118,14 @@ export const useRestApi = async <T>({
   server,
   callback,
   jwtScopes,
+  signal,
   authInfo,
 }: {
   config: Config;
   requestId: RequestId;
   server: Server;
   jwtScopes: Array<JwtScopes>;
+  signal: AbortSignal;
   callback: (restApi: RestApi) => Promise<T>;
   authInfo?: TableauAuthInfo;
 }): Promise<T> => {
@@ -99,6 +134,7 @@ export const useRestApi = async <T>({
     requestId,
     server,
     new Set(jwtScopes),
+    signal,
     authInfo,
   );
   try {
@@ -237,8 +273,8 @@ function getUserAgent(server: Server): string {
   return userAgentParts.join(' ');
 }
 
-function getJwtSubClaim(config: Config, authInfo: TableauAuthInfo | undefined): string {
-  return config.jwtSubClaim.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
+function getJwtUsername(config: Config, authInfo: TableauAuthInfo | undefined): string {
+  return config.jwtUsername.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
 }
 
 function getJwtAdditionalPayload(

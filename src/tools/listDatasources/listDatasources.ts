@@ -80,7 +80,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
     },
     callback: async (
       { filter, pageSize, limit },
-      { requestId, authInfo },
+      { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
@@ -94,6 +94,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
             requestId,
             server,
             jwtScopes: ['tableau:content:read'],
+            signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               const datasources = await paginate({

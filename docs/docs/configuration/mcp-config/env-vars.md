@@ -173,6 +173,15 @@ be available.
 
 <hr />
 
+## `MAX_REQUEST_TIMEOUT_MS`
+
+The maximum timeout for requests to the Tableau Server REST API.
+
+- Default: `600000` (10 minutes)
+- Must be a positive number between `5000` (5 seconds) and `3600000` (1 hour).
+
+<hr />
+
 ## `MAX_RESULT_LIMIT`
 
 If a tool has a `limit` parameter and returns an array of items, the maximum length of that array.
@@ -184,16 +193,20 @@ If a tool has a `limit` parameter and returns an array of items, the maximum len
 
 ## `DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`
 
-Disables requests that are made to the VizQl Data Service for validating queries in the [`query-datasource`](../../tools/data-qna/query-datasource.md) tool. Does not disable the ability to query the datasource.
+Disables requests that are made to the VizQl Data Service for validating queries in the
+[`query-datasource`](../../tools/data-qna/query-datasource.md) tool. Does not disable the ability to
+query the datasource.
 
 - Default: `false`
-- When `true`, skips validation of queries against metadata results and validation of SET and MATCH filters.
+- When `true`, skips validation of queries against metadata results and validation of SET and MATCH
+  filters.
 
 <hr />
 
 ## `DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION`
 
-Note: This environment variable was deprecated in Tableau MCP `v1.13.0` and replaced by `DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`.
+Note: This environment variable was deprecated in Tableau MCP `v1.13.0` and replaced by
+`DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`.
 
 Disable validation of SET and MATCH filter values in the
 [`query-datasource`](../../tools/data-qna/query-datasource.md) tool.

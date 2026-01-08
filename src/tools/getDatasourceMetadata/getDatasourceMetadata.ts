@@ -110,7 +110,10 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
       openWorldHint: false,
     },
     argsValidator: validateDatasourceLuid,
-    callback: async ({ datasourceLuid }, { requestId, authInfo }): Promise<CallToolResult> => {
+    callback: async (
+      { datasourceLuid },
+      { requestId, authInfo, signal },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       const query = getGraphqlQuery(datasourceLuid);
 
@@ -124,7 +127,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
         callback: async () => {
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
-            restApiArgs: { config, requestId, server },
+            restApiArgs: { config, requestId, server, signal },
           });
 
           if (!isDatasourceAllowedResult.allowed) {
@@ -139,6 +142,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
             requestId,
             server,
             jwtScopes: ['tableau:content:read', 'tableau:viz_data_service:read'],
+            signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               // Fetching metadata from VizQL Data Service API.

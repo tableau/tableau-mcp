@@ -46,7 +46,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
   | updatedAt         | eq, gt, gte, lt, lte |
 
   ${genericFilterDescription}
-  
+
   **Example Usage:**
   - List all workbooks on a site
   - List workbooks with the name "Superstore":
@@ -65,7 +65,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
     },
     callback: async (
       { filter, pageSize, limit },
-      { requestId, authInfo },
+      { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const validatedFilter = filter ? parseAndValidateWorkbooksFilterString(filter) : undefined;
@@ -81,6 +81,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
               requestId,
               server,
               jwtScopes: ['tableau:content:read'],
+              signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 const workbooks = await paginate({
