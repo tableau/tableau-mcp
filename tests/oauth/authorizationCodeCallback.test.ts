@@ -209,7 +209,16 @@ describe('authorization code callback', () => {
     });
 
     const authzLocation = new URL(authzResponse.headers['location']);
-    const [authKey, tableauState] = authzLocation.searchParams.get('state')?.split(':') ?? [];
+    const searchParams = new URLSearchParams(
+      authzLocation.hash.substring(authzLocation.hash.indexOf('?')),
+    );
+
+    const externalRedirectUrl = new URL(
+      searchParams.get('externalRedirect') ?? '',
+      authzLocation.origin,
+    );
+
+    const [authKey, tableauState] = externalRedirectUrl.searchParams.get('state')?.split(':') ?? [];
 
     mocks.mockGetTokenResult.mockResolvedValue({
       accessToken: 'test-access-token',
