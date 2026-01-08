@@ -483,7 +483,7 @@ const manifest = {
   documentation: 'https://tableau.github.io/tableau-mcp/',
   license: packageJson.license,
   support: 'https://github.com/tableau/tableau-mcp/issues',
-  icon: 'https://avatars.githubusercontent.com/u/828667',
+  icon: 'icon.png',
   server: {
     type: 'node',
     entry_point: 'build/index.js',
