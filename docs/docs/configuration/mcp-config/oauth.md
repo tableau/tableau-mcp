@@ -208,8 +208,10 @@ The built-in authorization server provided by Tableau MCP supports MCP clients t
 Client ID Metadata Document (CIMD) URL. When an MCP client provides the URL to its metadata JSON
 document as their client id (e.g. https://vscode.dev/oauth/client-metadata.json), the `authorize`
 endpoint will attempt to fetch the document and use its information to register the client. **This
-means that the Tableau MCP deployment server needs outbound access to the Internet.** If this is
-problematic, you can disable this feature by setting `OAUTH_CIMD_DISABLE` to `true`.
+means that the Tableau MCP deployment server needs outbound access to the Internet.** If you are
+seeing gateway timeouts or other issues when trying to register a client, this is likely the cause.
+
+You can disable this feature by setting `OAUTH_CIMD_DISABLE` to `true`.
 
 :::warning
 
