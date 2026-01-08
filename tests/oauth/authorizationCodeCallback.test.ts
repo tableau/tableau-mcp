@@ -50,6 +50,21 @@ describe('authorization code callback', () => {
     return { app };
   }
 
+  it('should reject if the request is invalid', async () => {
+    const { app } = await startServer();
+
+    const response = await request(app).get('/Callback').query({
+      error: 'invalid_request',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+    expect(response.body).toEqual({
+      error: 'invalid_request',
+      error_description: 'Invalid request. Did you sign into the wrong site? Expected: mcp-test',
+    });
+  });
+
   it('should reject if user denies authorization', async () => {
     const { app } = await startServer();
 
