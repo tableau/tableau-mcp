@@ -134,6 +134,8 @@ export function authorize(
     oauthUrl.searchParams.set('client_type', 'tableau-mcp');
 
     if (config.oauth.lockSite) {
+      // The "redirected" parameter is used by Tableau's OAuth controller to determine whether the user will be shown the site picker.
+      // When provided, the user will not be shown the site picker.
       oauthUrl.searchParams.set('redirected', 'true');
     }
 
@@ -163,7 +165,6 @@ async function getOAuthRedirectUrl(
       // The response is a redirect to the Tableau OAuth login page.
       // Force it to ultimately show the site picker by changing the path from #/signin to #/site.
       const location = response.headers.get('location');
-
       if (location?.startsWith('#/signin') || location?.startsWith('/#/signin')) {
         const locationUrl = new URL(location.replace('#/signin', '#/site'), initialOAuthUrl.origin);
         return locationUrl;
