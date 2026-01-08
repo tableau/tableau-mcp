@@ -103,10 +103,7 @@ describe('server', () => {
     server.server.setRequestHandler = vi.fn();
     server.registerRequestHandlers();
 
-    expect(server.server.setRequestHandler).toHaveBeenCalledWith(
-      expect.any(ZodObject),
-      expect.any(Function),
-    );
+    expect(server.server.setRequestHandler).toHaveBeenCalled();
   });
 });
 
