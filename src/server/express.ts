@@ -10,12 +10,12 @@ import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
-import { embedHtml } from '../tools/views/embed.html.js';
 import { handlePingRequest, validateProtocolVersion } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
+import { setupUiRoutes } from './ui/views/routes.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
 
@@ -73,10 +73,8 @@ export async function startExpressServer({
     ...middleware,
     config.disableSessionManagement ? methodNotAllowed : handleSessionRequest,
   );
-  app.get('/embed', (req, res) => {
-    res.set('Content-Type', 'text/html');
-    res.send(Buffer.from(embedHtml));
-  });
+
+  setupUiRoutes(app);
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {

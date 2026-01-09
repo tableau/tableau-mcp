@@ -8,7 +8,7 @@ import { isLoggingLevel, log, setLogLevel, setServerLogger, writeToStderr } from
 import { ServerLogger } from './logging/serverLogger.js';
 import { Server, serverName, serverVersion } from './server.js';
 import { startExpressServer } from './server/express.js';
-import { embedHtml } from './tools/views/embed.html.js';
+import { setupUiRoutes } from './server/ui/views/routes.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 async function startServer(): Promise<void> {
@@ -27,11 +27,7 @@ async function startServer(): Promise<void> {
       server.registerRequestHandlers();
 
       const app = express();
-
-      app.get('/embed', (req, res) => {
-        res.set('Content-Type', 'text/html');
-        res.send(Buffer.from(embedHtml));
-      });
+      setupUiRoutes(app);
 
       app.listen(config.httpPort, () => {
         log.info(server, `Embed server running on port ${config.httpPort}`);

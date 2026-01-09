@@ -120,8 +120,8 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
                   ]),
                 });
 
-          // TODO: https
-          const embedUrl = `http://localhost:${config.httpPort}/embed#?url=${url}&token=${token}`;
+          const protocol = config.sslCert ? 'https' : 'http';
+          const embedUrl = `${protocol}://localhost:${config.httpPort}/embed#?url=${url}&token=${token}`;
 
           const result = await BrowserController.create({ headless: !config.useHeadedBrowser })
             .then((b) => b.createNewPage({ width: 800, height: 600 }))

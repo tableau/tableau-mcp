@@ -1,10 +1,15 @@
-export const embedHtml = String.raw`<html>
+<html>
 
 <head>
   <style>
-    html, body, tableau-viz, tableau-authoring-viz, tableau-pulse {
+    html,
+    body,
+    tableau-viz,
+    tableau-authoring-viz,
+    tableau-pulse {
       height: 100%;
       width: 100%;
+      margin: 0;
     }
   </style>
 </head>
@@ -40,7 +45,7 @@ export const embedHtml = String.raw`<html>
       try {
         return JSON.stringify(error) ?? 'undefined';
       } catch {
-        return ${'`${error}`'};
+        return `${error}`;
       }
     }
 
@@ -50,7 +55,7 @@ export const embedHtml = String.raw`<html>
     const parsedUrl = new URL(url);
 
     (async () => {
-      const { TableauEventType } = await import(${'`${parsedUrl.origin}'}/javascripts/api/tableau.embedding.3.latest.js${'`'});
+      const { TableauEventType } = await import(`${parsedUrl.origin}/javascripts/api/tableau.embedding.3.latest.js`);
 
       viz.token = token;
       viz.src = parsedUrl.toString();
@@ -79,4 +84,4 @@ export const embedHtml = String.raw`<html>
   </script>
 </body>
 
-</html>`;
+</html>
