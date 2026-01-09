@@ -1,5 +1,6 @@
 import { Zodios } from '@zodios/core';
 
+import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { getJwt } from '../../../utils/getJwt.js';
 import { authenticationApis } from '../apis/authenticationApi.js';
 import { AuthConfig } from '../authConfig.js';
@@ -14,9 +15,9 @@ import Methods from './methods.js';
  * @class AuthenticationMethods
  * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm
  */
-export default class AuthenticationMethods extends Methods<typeof authenticationApis> {
-  constructor(baseUrl: string) {
-    super(new Zodios(baseUrl, authenticationApis));
+export class AuthenticationMethods extends Methods<typeof authenticationApis> {
+  constructor(baseUrl: string, axiosConfig: AxiosRequestConfig) {
+    super(new Zodios(baseUrl, authenticationApis, { axiosConfig }));
   }
 
   /**
@@ -43,10 +44,28 @@ export default class AuthenticationMethods extends Methods<typeof authentication
                 return {
                   jwt: await getJwt({
                     username: authConfig.username,
-                    connectedApp: {
+                    config: {
+                      type: 'connected-app',
                       clientId: authConfig.clientId,
                       secretId: authConfig.secretId,
                       secretValue: authConfig.secretValue,
+                    },
+                    scopes: authConfig.scopes,
+                    additionalPayload: authConfig.additionalPayload,
+                  }),
+                };
+              case 'uat':
+                return {
+                  isUat: true,
+                  jwt: await getJwt({
+                    username: authConfig.username,
+                    config: {
+                      type: 'uat',
+                      tenantId: authConfig.tenantId,
+                      issuer: authConfig.issuer,
+                      usernameClaimName: authConfig.usernameClaimName,
+                      privateKey: authConfig.privateKey,
+                      keyId: authConfig.keyId,
                     },
                     scopes: authConfig.scopes,
                     additionalPayload: authConfig.additionalPayload,
@@ -70,16 +89,16 @@ export default class AuthenticationMethods extends Methods<typeof authentication
 export class AuthenticatedAuthenticationMethods extends AuthenticatedMethods<
   typeof authenticationApis
 > {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, authenticationApis), creds);
+  constructor(baseUrl: string, creds: Credentials, axiosConfig: AxiosRequestConfig) {
+    super(new Zodios(baseUrl, authenticationApis, { axiosConfig }), creds);
   }
 
   /**
    * Signs you out of the current session. This call invalidates the authentication token that is created by a call to Sign In.
-   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#sign_out
    *
    * Required scopes: none
    *
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#sign_out
    */
   signOut = async (): Promise<void> => {
     await this._apiClient.signOut(undefined, {

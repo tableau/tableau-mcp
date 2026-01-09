@@ -11,7 +11,7 @@ Use the Deploy to Heroku button to start the app creation flow to create a Table
 [![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://www.heroku.com/deploy?template=https://github.com/tableau/tableau-mcp)
 
 As part of the deployment process, Heroku will prompt for the
-[key configuration values](../configuration/mcp-config/required.md#server):
+[key configuration values](../configuration/mcp-config/env-vars.md#server):
 
 - SERVER
 - SITE_NAME

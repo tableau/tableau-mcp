@@ -13,6 +13,7 @@ export const toolNames = [
   'list-pulse-metrics-from-metric-ids',
   'list-pulse-metric-subscriptions',
   'generate-pulse-metric-value-insight-bundle',
+  'generate-pulse-insight-brief',
   'search-content',
   'embed-workbook',
 ] as const;
@@ -39,6 +40,7 @@ export const toolGroups = {
     'list-pulse-metrics-from-metric-ids',
     'list-pulse-metric-subscriptions',
     'generate-pulse-metric-value-insight-bundle',
+    'generate-pulse-insight-brief',
   ],
   'content-exploration': ['search-content'],
   embedding: ['embed-workbook'],

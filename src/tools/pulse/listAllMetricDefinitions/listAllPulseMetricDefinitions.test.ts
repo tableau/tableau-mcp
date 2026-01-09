@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../../server.js';
+import { Provider } from '../../../utils/provider.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import { getListAllPulseMetricDefinitionsTool } from './listAllPulseMetricDefinitions.js';
 
@@ -15,6 +16,7 @@ vi.mock('../../../restApiInstance.js', () => ({
       pulseMethods: {
         listAllPulseMetricDefinitions: mocks.mockListAllPulseMetricDefinitions,
       },
+      siteId: 'test-site-id',
     }),
   ),
 }));
@@ -43,21 +45,39 @@ describe('listAllPulseMetricDefinitionsTool', () => {
     { view: 'DEFINITION_VIEW_FULL', label: 'full view' },
     { view: 'DEFINITION_VIEW_DEFAULT', label: 'default view' },
   ])('should list pulse metric definitions with $label', async ({ view }) => {
-    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(new Ok(mockPulseMetricDefinitions));
+    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(
+      new Ok({
+        pagination: { next_page_token: undefined },
+        definitions: mockPulseMetricDefinitions,
+      }),
+    );
     const result = await getToolResult({ view });
     expect(result.isError).toBe(false);
     const parsedValue = JSON.parse(result.content[0].text as string);
     expect(parsedValue).toEqual(mockPulseMetricDefinitions);
-    expect(mocks.mockListAllPulseMetricDefinitions).toHaveBeenCalledWith(view);
+    expect(mocks.mockListAllPulseMetricDefinitions).toHaveBeenCalledWith(
+      view,
+      undefined,
+      undefined,
+    );
   });
 
   it('should list pulse metric definitions with no view (default)', async () => {
-    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(new Ok(mockPulseMetricDefinitions));
+    mocks.mockListAllPulseMetricDefinitions.mockResolvedValue(
+      new Ok({
+        pagination: { next_page_token: undefined },
+        definitions: mockPulseMetricDefinitions,
+      }),
+    );
     const result = await getToolResult({});
     expect(result.isError).toBe(false);
     const parsedValue = JSON.parse(result.content[0].text as string);
     expect(parsedValue).toEqual(mockPulseMetricDefinitions);
-    expect(mocks.mockListAllPulseMetricDefinitions).toHaveBeenCalledWith(undefined);
+    expect(mocks.mockListAllPulseMetricDefinitions).toHaveBeenCalledWith(
+      undefined,
+      undefined,
+      undefined,
+    );
   });
 
   it('should handle API errors gracefully', async () => {
@@ -103,7 +123,8 @@ async function getToolResult(params: {
   view?: 'DEFINITION_VIEW_BASIC' | 'DEFINITION_VIEW_FULL' | 'DEFINITION_VIEW_DEFAULT';
 }): Promise<CallToolResult> {
   const listAllPulseMetricDefinitionsTool = getListAllPulseMetricDefinitionsTool(new Server());
-  return await listAllPulseMetricDefinitionsTool.callback(params, {
+  const callback = await Provider.from(listAllPulseMetricDefinitionsTool.callback);
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

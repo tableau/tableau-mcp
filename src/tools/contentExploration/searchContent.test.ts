@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import { Provider } from '../../utils/provider.js';
 import { getSearchContentTool } from './searchContent.js';
 
 export const mockSearchContentResponse = {
@@ -37,6 +38,28 @@ export const mockSearchContentResponse = {
       uri: 'test-uri-2',
       content: {
         type: 'datasource',
+        luid: 'datasource-1-luid',
+        title: 'Customer Data',
+        ownerName: 'Jane Smith',
+        ownerId: 456,
+        ownerEmail: 'jane.smith@example.com',
+        projectId: 987654,
+        projectName: 'Marketing',
+        containerName: 'Marketing',
+        hitsTotal: 75,
+        hitsSmallSpanTotal: 5,
+        hitsMediumSpanTotal: 15,
+        hitsLargeSpanTotal: 30,
+        favoritesTotal: 3,
+        modifiedTime: '2024-01-10T14:20:00Z',
+        createdTime: '2023-11-15T11:30:00Z',
+      },
+    },
+    {
+      uri: 'test-uri-2',
+      content: {
+        type: 'unifieddatasource',
+        luid: 'unifieddatasource-1-luid',
         datasourceLuid: 'datasource-1-luid',
         title: 'Customer Data',
         ownerName: 'Jane Smith',
@@ -319,7 +342,8 @@ describe('searchContentTool', () => {
 
 async function getToolResult(params: any): Promise<CallToolResult> {
   const searchContentTool = getSearchContentTool(new Server());
-  return await searchContentTool.callback(params, {
+  const callback = await Provider.from(searchContentTool.callback);
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

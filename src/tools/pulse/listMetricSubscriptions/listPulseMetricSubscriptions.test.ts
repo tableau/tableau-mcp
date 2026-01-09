@@ -5,6 +5,7 @@ import { getConfig } from '../../../config.js';
 import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import invariant from '../../../utils/invariant.js';
+import { Provider } from '../../../utils/provider.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import {
   constrainPulseMetricSubscriptions,
@@ -31,6 +32,7 @@ vi.mock('../../../restApiInstance.js', () => ({
           mocks.mockListPulseMetricSubscriptionsForCurrentUser,
         listPulseMetricsFromMetricIds: mocks.mockListPulseMetricsFromMetricIds,
       },
+      siteId: 'test-site-id',
     }),
   ),
 }));
@@ -87,7 +89,12 @@ describe('listPulseMetricSubscriptionsTool', () => {
   });
 
   describe('constrainPulseMetricSubscriptions', () => {
-    const restApiArgs = { config: getConfig(), requestId: 'request-id', server: getServer() };
+    const restApiArgs = {
+      config: getConfig(),
+      requestId: 'request-id',
+      server: getServer(),
+      signal: new AbortController().signal,
+    };
 
     it('should return empty result when no subscriptions are found', async () => {
       const result = await constrainPulseMetricSubscriptions({
@@ -160,7 +167,8 @@ describe('listPulseMetricSubscriptionsTool', () => {
 
 async function getToolResult(): Promise<CallToolResult> {
   const listPulseMetricSubscriptionsTool = getListPulseMetricSubscriptionsTool(new Server());
-  return await listPulseMetricSubscriptionsTool.callback(
+  const callback = await Provider.from(listPulseMetricSubscriptionsTool.callback);
+  return await callback(
     {},
     {
       signal: new AbortController().signal,

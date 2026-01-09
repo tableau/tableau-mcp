@@ -6,6 +6,7 @@ import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -97,8 +98,9 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
     server,
     name: 'get-datasource-metadata',
     description: `
-    This tool retrieves field metadata for a specified datasource by taking the basic, high level, metadata results from Tableau's VizQL Data Service and enriches them with additional context provided by Tableau's Metadata API.
-    The fields provided by this tool will contain properties such as name and dataType, but may also expose richer context such as descriptions, dataCategories, roles, etc.
+    This tool retrieves metadata for a specified datasource by taking the basic, high level, metadata results from Tableau's VizQL Data Service and enriches them with additional context provided by Tableau's Metadata API.
+    The metadata provided by this tool consists of the fields and parameters that belong to the datasource.
+    Fields will contain properties such as name and dataType, but may also expose richer context such as descriptions, dataCategories, roles, etc.
     This tool should be used for getting the metadata to ground the use of a tool that queries Tableau published data sources.
     `,
     paramsSchema,
@@ -108,7 +110,10 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
       openWorldHint: false,
     },
     argsValidator: validateDatasourceLuid,
-    callback: async ({ datasourceLuid }, { requestId }): Promise<CallToolResult> => {
+    callback: async (
+      { datasourceLuid },
+      { requestId, authInfo, signal },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       const query = getGraphqlQuery(datasourceLuid);
 
@@ -117,11 +122,12 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
         GetDatasourceMetadataError
       >({
         requestId,
+        authInfo,
         args: { datasourceLuid },
         callback: async () => {
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
-            restApiArgs: { config, requestId, server },
+            restApiArgs: { config, requestId, server, signal },
           });
 
           if (!isDatasourceAllowedResult.allowed) {
@@ -136,6 +142,8 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
             requestId,
             server,
             jwtScopes: ['tableau:content:read', 'tableau:viz_data_service:read'],
+            signal,
+            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               // Fetching metadata from VizQL Data Service API.
               const readMetadataResult = await restApi.vizqlDataServiceMethods.readMetadata({

@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getGetViewDataTool as getGetViewDataTool } from './getViewData.js';
 import { mockView } from './mockView.js';
@@ -56,7 +57,7 @@ describe('getViewDataTool', () => {
 
   it('should successfully get view data', async () => {
     mocks.mockQueryViewData.mockResolvedValue(mockViewData);
-    const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
+    const result = await getToolResult({ url: `https://example.com/view/${mockView.id}` });
     expect(result.isError).toBe(false);
     expect(result.content[0].text).toContain(
       'Country/Region,State/Province,Profit Ratio,Latitude (generated),Longitude (generated)',
@@ -71,7 +72,7 @@ describe('getViewDataTool', () => {
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
     mocks.mockQueryViewData.mockRejectedValue(new Error(errorMessage));
-    const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
+    const result = await getToolResult({ url: `https://example.com/view/${mockView.id}` });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(errorMessage);
   });
@@ -86,7 +87,7 @@ describe('getViewDataTool', () => {
     });
     mocks.mockGetView.mockResolvedValue(mockView);
 
-    const result = await getToolResult({ viewId: mockView.id });
+    const result = await getToolResult({ url: `https://example.com/view/${mockView.id}` });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toBe(
       [
@@ -99,9 +100,10 @@ describe('getViewDataTool', () => {
   });
 });
 
-async function getToolResult(params: { viewId: string }): Promise<CallToolResult> {
+async function getToolResult(params: { url: string }): Promise<CallToolResult> {
   const getViewDataTool = getGetViewDataTool(new Server());
-  return await getViewDataTool.callback(params, {
+  const callback = await Provider.from(getViewDataTool.callback);
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

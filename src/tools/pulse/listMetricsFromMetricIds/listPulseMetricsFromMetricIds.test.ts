@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../../server.js';
+import { Provider } from '../../../utils/provider.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import { getListPulseMetricsFromMetricIdsTool } from './listPulseMetricsFromMetricIds.js';
 
@@ -15,6 +16,7 @@ vi.mock('../../../restApiInstance.js', () => ({
       pulseMethods: {
         listPulseMetricsFromMetricIds: mocks.mockListPulseMetricsFromMetricIds,
       },
+      siteId: 'test-site-id',
     }),
   ),
 }));
@@ -97,7 +99,8 @@ describe('listPulseMetricsFromMetricIdsTool', () => {
 
 async function getToolResult(params: { metricIds: string[] }): Promise<CallToolResult> {
   const listPulseMetricsFromMetricIdsTool = getListPulseMetricsFromMetricIdsTool(new Server());
-  return await listPulseMetricsFromMetricIdsTool.callback(params, {
+  const callback = await Provider.from(listPulseMetricsFromMetricIdsTool.callback);
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

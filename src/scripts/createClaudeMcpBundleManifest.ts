@@ -7,10 +7,11 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { z } from 'zod';
 
-import packageJson from '../../package.json' with { type: 'json' };
+import packageJson from '../../package.json';
 import { ProcessEnvEx } from '../../types/process-env.js';
 import { toolNames } from '../tools/toolName.js';
 
+// @ts-expect-error - import.meta is not allowed in CommonJS output, but this file is built using esbuild as ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -97,6 +98,64 @@ const envVars = {
     description: 'The secret value of the Tableau Connected App.',
     required: false,
     sensitive: true,
+  },
+  UAT_TENANT_ID: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Tenant ID',
+    description: 'The tenant ID of the Tableau UAT JWT.',
+    required: false,
+    sensitive: false,
+  },
+  UAT_ISSUER: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Issuer',
+    description: 'The issuer of the Tableau UAT JWT.',
+    required: false,
+    sensitive: false,
+  },
+  UAT_USERNAME_CLAIM_NAME: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Username Claim Name',
+    description:
+      'The name of the claim of the Tableau UAT JWT that maps to the Tableau username. Defaults to `email`.',
+    required: false,
+    sensitive: false,
+  },
+  UAT_USERNAME_CLAIM: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Username Claim',
+    description:
+      'The username for the claim of the JWT specified by the `UAT_USERNAME_CLAIM_NAME` environment variable.',
+    required: false,
+    sensitive: false,
+  },
+  UAT_PRIVATE_KEY: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Private Key',
+    description: 'The private key of the Tableau UAT JWT.',
+    required: false,
+    sensitive: true,
+  },
+  UAT_PRIVATE_KEY_PATH: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Private Key Path',
+    description: 'The path to the UAT JWT private key.',
+    required: false,
+    sensitive: true,
+  },
+  UAT_KEY_ID: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'UAT JWT Key ID',
+    description: 'The key ID of the Tableau UAT JWT.',
+    required: false,
+    sensitive: false,
   },
   JWT_ADDITIONAL_PAYLOAD: {
     includeInUserConfig: false,
@@ -190,6 +249,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  MAX_REQUEST_TIMEOUT_MS: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'Max Request Timeout (ms)',
+    description: 'The maximum timeout for requests to the Tableau Server REST API.',
+    required: false,
+    sensitive: false,
+  },
   MAX_RESULT_LIMIT: {
     includeInUserConfig: false,
     type: 'number',
@@ -199,11 +266,12 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: {
+  DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: {
     includeInUserConfig: false,
     type: 'boolean',
-    title: 'Disable Query Datasource Filter Validation',
-    description: 'Disable validation of SET and MATCH filter values in query-datasource tool.',
+    title: 'Disable Query Datasource Validation Requests',
+    description:
+      'Disable requests made to the VizQL Data Service used for validating queries provided to the query-datasource tool. Does not disable the ability to query the datasource.',
     required: false,
     sensitive: false,
   },
@@ -213,6 +281,14 @@ const envVars = {
     title: 'Disable Metadata API Requests',
     description:
       'Disable requests to the Tableau Metadata API in the get-datasource-metadata tool.',
+    required: false,
+    sensitive: false,
+  },
+  DISABLE_SESSION_MANAGEMENT: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Disable Session Management',
+    description: 'Disable session management.',
     required: false,
     sensitive: false,
   },
@@ -248,11 +324,125 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  TRUST_PROXY_CONFIG: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Trust Proxy Config',
+    description: 'The trust proxy config.',
+    required: false,
+    sensitive: false,
+  },
   DISABLE_LOG_MASKING: {
     includeInUserConfig: false,
     type: 'boolean',
     title: 'Disable Log Masking',
     description: 'Disable masking of credentials in logs. For debug purposes only.',
+    required: false,
+    sensitive: false,
+  },
+  TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'Tableau Server Version Check Interval in Hours',
+    description: 'The interval in hours to check the Tableau server version.',
+    required: false,
+    sensitive: false,
+  },
+  USE_HEADED_BROWSER: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Use Headed Browser',
+    description: 'Use a headed browser.',
+    required: false,
+    sensitive: false,
+  },
+  DANGEROUSLY_DISABLE_OAUTH: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Dangerously Disable OAuth',
+    description: 'Dangerously disable OAuth when transport is http.',
+    required: false,
+    sensitive: false,
+  },
+  OAUTH_ISSUER: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth Issuer',
+    description: 'The OAuth issuer.',
+    required: false,
+    sensitive: false,
+  },
+  OAUTH_JWE_PRIVATE_KEY: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth JWE Private Key',
+    description: 'The OAuth JWE private key.',
+    required: false,
+    sensitive: true,
+  },
+  OAUTH_JWE_PRIVATE_KEY_PATH: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth JWE Private Key Path',
+    description: 'The path to the OAuth JWE private key.',
+    required: false,
+    sensitive: true,
+  },
+  OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth JWE Private Key Passphrase',
+    description: 'The passphrase for the OAuth JWE private key.',
+    required: false,
+    sensitive: true,
+  },
+  OAUTH_REDIRECT_URI: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth Redirect URI',
+    description: 'The OAuth redirect URI.',
+    required: false,
+    sensitive: false,
+  },
+  OAUTH_CLIENT_ID_SECRET_PAIRS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth Client ID Secret Pairs',
+    description:
+      'A comma-separated list of client ID and secret pairs for the OAuth client. The format is `clientId:secret`.',
+    required: false,
+    sensitive: true,
+  },
+  OAUTH_CIMD_DNS_SERVERS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth CIMD DNS Servers',
+    description:
+      'A comma-separated list of DNS server IP addresses to resolve the IP addresses of the client metadata document URLs.',
+    required: false,
+    sensitive: false,
+  },
+  OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'OAuth Authorization Code Timeout',
+    description: 'The OAuth authorization code timeout.',
+    required: false,
+    sensitive: false,
+  },
+  OAUTH_ACCESS_TOKEN_TIMEOUT_MS: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'OAuth Access Token Timeout',
+    description: 'The OAuth access token timeout.',
+    required: false,
+    sensitive: false,
+  },
+  OAUTH_REFRESH_TOKEN_TIMEOUT_MS: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'OAuth Refresh Token Timeout',
+    description: 'The OAuth refresh token timeout.',
     required: false,
     sensitive: false,
   },

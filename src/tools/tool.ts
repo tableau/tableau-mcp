@@ -1,3 +1,4 @@
+import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
@@ -7,7 +8,9 @@ import { fromError, isZodErrorLike } from 'zod-validation-error';
 
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
+import { tableauAuthInfoSchema } from '../server/oauth/schemas.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
+import { Provider, TypeOrProvider } from '../utils/provider.js';
 import { ToolName } from './toolName.js';
 
 type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args extends ZodRawShape
@@ -41,19 +44,19 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   name: ToolName;
 
   // The description of the tool
-  description: string;
+  description: TypeOrProvider<string>;
 
   // The schema of the tool's parameters
-  paramsSchema: Args;
+  paramsSchema: TypeOrProvider<Args>;
 
   // The annotations of the tool
-  annotations: ToolAnnotations;
+  annotations: TypeOrProvider<ToolAnnotations>;
 
   // A function that validates the tool's arguments provided by the client
-  argsValidator?: ArgsValidator<Args>;
+  argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
 
   // The implementation of the tool itself
-  callback: ToolCallback<Args>;
+  callback: TypeOrProvider<ToolCallback<Args>>;
 };
 
 /**
@@ -66,6 +69,9 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
 type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined> = {
   // The request ID of the tool call
   requestId: RequestId;
+
+  // The Authentication info provided when OAuth is enabled
+  authInfo: AuthInfo | undefined;
 
   // The arguments of the tool call
   args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
@@ -92,11 +98,11 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
 export class Tool<Args extends ZodRawShape | undefined = undefined> {
   server: Server;
   name: ToolName;
-  description: string;
-  paramsSchema: Args;
-  annotations: ToolAnnotations;
-  argsValidator?: ArgsValidator<Args>;
-  callback: ToolCallback<Args>;
+  description: TypeOrProvider<string>;
+  paramsSchema: TypeOrProvider<Args>;
+  annotations: TypeOrProvider<ToolAnnotations>;
+  argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
+  callback: TypeOrProvider<ToolCallback<Args>>;
 
   constructor({
     server,
@@ -116,8 +122,24 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.callback = callback;
   }
 
-  logInvocation({ requestId, args }: { requestId: RequestId; args: unknown }): void {
-    log.debug(this.server, getToolLogMessage({ requestId, toolName: this.name, args }));
+  logInvocation({
+    requestId,
+    args,
+    username,
+  }: {
+    requestId: RequestId;
+    args: unknown;
+    username?: string;
+  }): void {
+    log.debug(
+      this.server,
+      getToolLogMessage({
+        requestId,
+        toolName: this.name,
+        args,
+        username,
+      }),
+    );
   }
 
   // Overload for E = undefined (getErrorText omitted)
@@ -139,16 +161,21 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   async logAndExecute<T, E>({
     requestId,
     args,
+    authInfo,
     callback,
     getSuccessResult,
     getErrorText,
     constrainSuccessResult,
   }: LogAndExecuteParams<T, E, Args>): Promise<CallToolResult> {
-    this.logInvocation({ requestId, args });
+    const username = authInfo?.extra
+      ? tableauAuthInfoSchema.safeParse(authInfo.extra).data?.username
+      : undefined;
+
+    this.logInvocation({ requestId, args, username });
 
     if (args) {
       try {
-        this.argsValidator?.(args);
+        (await Provider.from(this.argsValidator))?.(args);
       } catch (error) {
         return getErrorResult(requestId, error);
       }

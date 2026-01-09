@@ -6,6 +6,7 @@ import { BoundedContext, getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, Tool } from '../tool.js';
@@ -23,7 +24,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
     name: 'list-datasources',
     description: `
   Retrieves a list of published data sources from a specified Tableau site using the Tableau REST API. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Views) for precise and flexible data source discovery. Use this tool when a user requests to list, search, or filter Tableau data sources on a site.
-  
+
   **Supported Filter Fields and Operators**
   | Field                  | Operators                                 |
   |------------------------|-------------------------------------------|
@@ -57,9 +58,9 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
   | tags                   | eq, in                                    |
   | type                   | eq                                        |
   | updatedAt              | eq, gt, gte, lt, lte                      |
-  
+
   ${genericFilterDescription}
-  
+
   **Example Usage:**
   - List all data sources on a site
   - List data sources with the name "Project Views":
@@ -77,11 +78,15 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, pageSize, limit }, { requestId }): Promise<CallToolResult> => {
+    callback: async (
+      { filter, pageSize, limit },
+      { requestId, authInfo, signal },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
         requestId,
+        authInfo,
         args: { filter, pageSize, limit },
         callback: async () => {
           const datasources = await useRestApi({
@@ -89,6 +94,8 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
             requestId,
             server,
             jwtScopes: ['tableau:content:read'],
+            signal,
+            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               const datasources = await paginate({
                 pageConfig: {

@@ -79,12 +79,38 @@ export function buildFilterString(filter: SearchContentFilter): string {
 export function reduceSearchContentResponse(
   response: SearchContentResponse,
 ): Array<ReducedSearchContentResponse> {
-  const searchResults: Array<ReducedSearchContentResponse> = [];
+  let searchResults: Array<ReducedSearchContentResponse> = [];
   if (response.items) {
     for (const item of response.items) {
       searchResults.push(getReducedSearchItemContent(item.content));
     }
   }
+
+  // Remove duplicate datasources with luid matching a unifieddatasource's datasourceLuid
+  const unifiedDatasourceLuids = new Set(
+    searchResults
+      .filter((item) => item.type === 'unifieddatasource')
+      .map((item) => item.datasourceLuid)
+      .filter((datasourceLuid): datasourceLuid is string => typeof datasourceLuid === 'string'),
+  );
+
+  searchResults = searchResults.filter((item) => {
+    if (item.type === 'datasource') {
+      return typeof item.luid === 'string' && !unifiedDatasourceLuids.has(item.luid);
+    }
+
+    return true;
+  });
+
+  // Normalize unifieddatasource entries to datasource entries
+  for (const item of searchResults) {
+    if (item.type === 'unifieddatasource') {
+      item.type = 'datasource';
+      item.luid = item.datasourceLuid;
+      delete item.datasourceLuid;
+    }
+  }
+
   return searchResults;
 }
 
@@ -261,9 +287,9 @@ export function constrainSearchContent({
   if (datasourceIds) {
     items = items.filter((item) => {
       if (
-        (item.type === 'datasource' || item.type === 'unifieddatasource') &&
-        typeof item.datasourceLuid === 'string' &&
-        !datasourceIds.has(item.datasourceLuid)
+        item.type === 'datasource' &&
+        typeof item.luid === 'string' &&
+        !datasourceIds.has(item.luid)
       ) {
         return false;
       }

@@ -1,13 +1,11 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs';
-import path, { dirname } from 'path';
+import path from 'path';
 import { Browser, BrowserContext, CDPSession, Page } from 'puppeteer';
 import puppeteer, { ScreenshotOptions } from 'puppeteer-core';
 import { Err, Ok, Result } from 'ts-results-es';
-import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { getDirname } from '../../utils/getDirname';
 
 export type BrowserOptions = {
   width?: number;
@@ -158,7 +156,7 @@ export class BrowserController {
 
     try {
       this._browserCDPSession = await this.browser.target().createCDPSession();
-      this._downloadPath = path.resolve(__dirname, 'downloads', randomUUID());
+      this._downloadPath = path.resolve(getDirname(), 'downloads', randomUUID());
       if (!fs.existsSync(this._downloadPath)) {
         fs.mkdirSync(this._downloadPath, { recursive: true });
       }

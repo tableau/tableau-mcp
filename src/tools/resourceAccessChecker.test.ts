@@ -31,7 +31,12 @@ vi.mock('../restApiInstance.js', () => ({
 }));
 
 describe('ResourceAccessChecker', () => {
-  const restApiArgs = { config: getConfig(), requestId: 'request-id', server: getServer() };
+  const restApiArgs = {
+    config: getConfig(),
+    requestId: 'request-id',
+    server: getServer(),
+    signal: new AbortController().signal,
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();

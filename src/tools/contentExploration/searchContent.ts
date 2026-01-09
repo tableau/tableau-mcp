@@ -9,6 +9,7 @@ import {
   searchContentFilterSchema,
 } from '../../sdks/tableau/types/contentExploration.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { Tool } from '../tool.js';
 import {
   buildFilterString,
@@ -49,7 +50,7 @@ This tool searches across all supported content types for objects relevant to th
   - \`hitsMediumSpanTotal\`: Number of times a content item was viewed in the last 3 months
   - \`hitsLargeSpanTotal\`: Number of times a content item was viewed in the last year
   - \`downstreamWorkbookCount\`: Number of workbooks in a given project. This value is only available when the content type filter includes 'database' or 'table'
-  
+
   For each sort method, you can specify a sort direction: 'asc' for ascending or 'desc' for descending (default: 'asc'). The orderBy parameter is an array of objects containing the sorting method and direction. The first element determines primary sorting, with subsequent elements used as tiebreakers.
 
 **Important Notes:**
@@ -60,12 +61,16 @@ This tool searches across all supported content types for objects relevant to th
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ terms, limit, orderBy, filter }, { requestId }): Promise<CallToolResult> => {
+    callback: async (
+      { terms, limit, orderBy, filter },
+      { requestId, authInfo, signal },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       const orderByString = orderBy ? buildOrderByString(orderBy) : undefined;
       const filterString = filter ? buildFilterString(filter) : undefined;
       return await searchContentTool.logAndExecute<Array<ReducedSearchContentResponse>>({
         requestId,
+        authInfo,
         args: {},
         callback: async () => {
           return new Ok(
@@ -74,6 +79,8 @@ This tool searches across all supported content types for objects relevant to th
               requestId,
               server,
               jwtScopes: ['tableau:content:read'],
+              signal,
+              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 const response = await restApi.contentExplorationMethods.searchContent({
                   terms,

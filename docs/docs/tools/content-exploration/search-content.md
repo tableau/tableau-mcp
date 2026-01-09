@@ -4,7 +4,8 @@ sidebar-position: 1
 
 # Search Content
 
-Searches across all supported content types in a Tableau Site for objects relevant to the search query.
+Searches across all supported content types in a Tableau Site for objects relevant to the search
+query.
 
 ## APIs called
 
@@ -14,7 +15,9 @@ Searches across all supported content types in a Tableau Site for objects releva
 
 ### `terms`
 
-A string containing one or more search terms that the search uses as the basis for determining which items are relevant to return. If the terms parameter is not provided, it searches for everything bound by the specified filters.
+A string containing one or more search terms that the search uses as the basis for determining which
+items are relevant to return. If the terms parameter is not provided, it searches for everything
+bound by the specified filters.
 
 Example: `"Regional Sales"`
 
@@ -22,11 +25,12 @@ Example: `"Regional Sales"`
 
 ### `limit`
 
-The number of items to return in the search response. Default limit is 100 and max value is 2000 items.
+The number of items to return in the search response. Default limit is 100 and max value is 2000
+items.
 
 Example: `100`
 
-See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/optional.md#max_result_limit)
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
 
 <hr />
 
@@ -38,13 +42,17 @@ Determines the sorting method for returned items. Available sorting methods:
 - `hitsSmallSpanTotal`: Number of times a content item was viewed in the last month
 - `hitsMediumSpanTotal`: Number of times a content item was viewed in the last 3 months
 - `hitsLargeSpanTotal`: Number of times a content item was viewed in the last year
-- `downstreamWorkbookCount`: Number of workbooks in a given project. This value is only available when the content type filter includes 'database' or 'table'
+- `downstreamWorkbookCount`: Number of workbooks in a given project. This value is only available
+  when the content type filter includes 'database' or 'table'
 
-For each sort method, you can specify a sort direction: `"asc"` for ascending or `"desc"` for descending (default: `"asc"`).
+For each sort method, you can specify a sort direction: `"asc"` for ascending or `"desc"` for
+descending (default: `"asc"`).
 
-The `orderBy` parameter is an array of objects containing the sorting method and direction. The first element determines primary sorting, with subsequent elements used as tiebreakers.
+The `orderBy` parameter is an array of objects containing the sorting method and direction. The
+first element determines primary sorting, with subsequent elements used as tiebreakers.
 
-If the `orderBy` parameter is omitted, the search will sort items by their "relevance score" in descending order, which is Tableau's internal algorithm for providing the most relevant results.
+If the `orderBy` parameter is omitted, the search will sort items by their "relevance score" in
+descending order, which is Tableau's internal algorithm for providing the most relevant results.
 
 Example:
 
@@ -66,17 +74,22 @@ Example:
 ### `filter`
 
 An object that allows you to limit search results based on:
-- `contentTypes`: Filter by content types (array of strings). Supported types are: `lens`, `datasource`, `virtualconnection`, `collection`, `project`, `flow`, `datarole`, `table`, `database`, `view`, `workbook`
-- `ownerIds`: Filter by specific owner IDs (array of integers)
-- `modifiedTime`: Filter by last modified times using ISO 8601 date-time strings. Can be either a range (with startDate/endDate) or an array of specific date-times to include
 
-The `filter` parameter is optional, but if it is provided it requires at least one of the three filtering methods (`contentTypes`, `ownerIds`, or `modifiedTime`)
+- `contentTypes`: Filter by content types (array of strings). Supported types are: `lens`,
+  `datasource`, `virtualconnection`, `collection`, `project`, `flow`, `datarole`, `table`,
+  `database`, `view`, `workbook`
+- `ownerIds`: Filter by specific owner IDs (array of integers)
+- `modifiedTime`: Filter by last modified times using ISO 8601 date-time strings. Can be either a
+  range (with startDate/endDate) or an array of specific date-times to include
+
+The `filter` parameter is optional, but if it is provided it requires at least one of the three
+filtering methods (`contentTypes`, `ownerIds`, or `modifiedTime`)
 
 Example:
 
 ```json
 {
-  "contentTypes": ["workbook","datasource"],
+  "contentTypes": ["workbook", "datasource"],
   "modifiedTime": {
     "startDate": "2025-01-01T00:00:00.000Z"
   }
@@ -87,7 +100,7 @@ Example:
 
 ```json
 {
-  "ownerIds": [12345,67890],
+  "ownerIds": [12345, 67890],
   "modifiedTime": [
     "2025-02-01T20:01:03Z",
     "2024-11-15T14:23:07Z",
@@ -135,12 +148,12 @@ Example:
   },
   {
     "modifiedTime": "2025-09-24T20:10:35.437Z",
-    "type": "unifieddatasource",
+    "type": "datasource",
     "ownerId": 411957,
     "title": "Test Report Data",
     "ownerName": "Bruce Springtail",
     "containerName": "Data Sources",
-    "luid": "86712226-f5d6-4712-8426-074e5070fb77",
+    "luid": "a9af708b-0d44-48f8-23e2-4ee4b12446b2",
     "totalViewCount": 42260,
     "favoritesTotal": 3,
     "viewCountLastMonth": 1947,
@@ -154,8 +167,7 @@ Example:
     "connectedWorkbooksCount": 228,
     "extractCreationPending": false,
     "hasSevereDataQualityWarning": false,
-    "datasourceLuid": "a9af708b-0d44-48f8-23e2-4ee4b12446b2",
     "hasActiveDataQualityWarning": false
-  },
+  }
 ]
 ```

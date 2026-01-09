@@ -4,8 +4,9 @@ import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
-import { getJwt, getJwtAdditionalPayload, getJwtSubClaim } from '../../utils/getJwt.js';
+import { getJwt, getJwtAdditionalPayload, getJwtUsername } from '../../utils/getJwt.js';
 import { Tool } from '../tool.js';
 import {
   BrowserController,
@@ -29,18 +30,20 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
   const getViewImageTool = new Tool({
     server,
     name: 'get-view-image',
-    description: `Retrieves an image of the specified view in a Tableau workbook. The width and height in pixels can be provided. The default width and height are both 800 pixels.`,
+    description:
+      'Retrieves an image of the specified view in a Tableau workbook. The width and height in pixels can be provided. The default width and height are both 800 pixels.',
     paramsSchema,
     annotations: {
       title: 'Get View Image',
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ url, width, height }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ url, width, height }, { requestId, authInfo }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getViewImageTool.logAndExecute<Uint8Array, GetViewImageError>({
         requestId,
+        authInfo,
         args: { url },
         callback: async () => {
           // const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
@@ -95,8 +98,14 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
             parsedUrl.host === 'public.tableau.com'
               ? ''
               : await getJwt({
-                  username: getJwtSubClaim(config),
-                  connectedApp: {
+                  username: getJwtUsername(config.jwtUsername, [
+                    {
+                      pattern: '{OAUTH_USERNAME}',
+                      replacement: getTableauAuthInfo(authInfo)?.username ?? '',
+                    },
+                  ]),
+                  config: {
+                    type: 'connected-app',
                     clientId: config.connectedAppClientId,
                     secretId: config.connectedAppSecretId,
                     secretValue: config.connectedAppSecretValue,
@@ -106,7 +115,12 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
                     'tableau:views:embed_authoring',
                     'tableau:insights:embed',
                   ]),
-                  additionalPayload: getJwtAdditionalPayload(config),
+                  additionalPayload: getJwtAdditionalPayload(config.jwtAdditionalPayload, [
+                    {
+                      pattern: '{OAUTH_USERNAME}',
+                      replacement: getTableauAuthInfo(authInfo)?.username ?? '',
+                    },
+                  ]),
                 });
 
           // TODO: https

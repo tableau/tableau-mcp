@@ -5,8 +5,9 @@ import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
-import { getJwt, getJwtAdditionalPayload, getJwtSubClaim } from '../../utils/getJwt.js';
+import { getJwt, getJwtAdditionalPayload, getJwtUsername } from '../../utils/getJwt.js';
 import { Tool } from '../tool.js';
 import {
   BrowserController,
@@ -28,14 +29,15 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
   const getViewDataTool = new Tool({
     server,
     name: 'get-view-data',
-    description: `Retrieves data in comma separated value (CSV) format for the specified view in a Tableau workbook.`,
+    description:
+      'Retrieves data in comma separated value (CSV) format for the specified view in a Tableau workbook.',
     paramsSchema,
     annotations: {
       title: 'Get View Data',
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ url, sheetName }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ url, sheetName }, { requestId, authInfo }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getViewDataTool.logAndExecute<
@@ -43,6 +45,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
         GetViewDataError
       >({
         requestId,
+        authInfo,
         args: { url, sheetName },
         callback: async () => {
           // const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
@@ -92,8 +95,14 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
             parsedUrl.host === 'public.tableau.com'
               ? ''
               : await getJwt({
-                  username: getJwtSubClaim(config),
-                  connectedApp: {
+                  username: getJwtUsername(config.jwtUsername, [
+                    {
+                      pattern: '{OAUTH_USERNAME}',
+                      replacement: getTableauAuthInfo(authInfo)?.username ?? '',
+                    },
+                  ]),
+                  config: {
+                    type: 'connected-app',
                     clientId: config.connectedAppClientId,
                     secretId: config.connectedAppSecretId,
                     secretValue: config.connectedAppSecretValue,
@@ -103,7 +112,12 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
                     'tableau:views:embed_authoring',
                     'tableau:insights:embed',
                   ]),
-                  additionalPayload: getJwtAdditionalPayload(config),
+                  additionalPayload: getJwtAdditionalPayload(config.jwtAdditionalPayload, [
+                    {
+                      pattern: '{OAUTH_USERNAME}',
+                      replacement: getTableauAuthInfo(authInfo)?.username ?? '',
+                    },
+                  ]),
                 });
 
           // TODO: https

@@ -13,11 +13,13 @@ import {
   ResponseInterceptor,
   ResponseInterceptorConfig,
 } from './sdks/tableau/interceptors.js';
-import RestApi from './sdks/tableau/restApi.js';
-import { Server } from './server.js';
+import { RestApi } from './sdks/tableau/restApi.js';
+import { Server, userAgent } from './server.js';
+import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
-import { getJwtAdditionalPayload, getJwtSubClaim } from './utils/getJwt.js';
-import { isAxiosError } from './utils/isAxiosError.js';
+import { getJwtAdditionalPayload, getJwtUsername } from './utils/getJwt.js';
+import invariant from './utils/invariant.js';
 
 type JwtScopes =
   | 'tableau:viz_data_service:read'
@@ -26,15 +28,39 @@ type JwtScopes =
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
   | 'tableau:insights:read'
-  | 'tableau:views:download';
+  | 'tableau:views:download'
+  | 'tableau:insight_brief:create';
 
 const getNewRestApiInstanceAsync = async (
   config: Config,
   requestId: RequestId,
   server: Server,
   jwtScopes: Set<JwtScopes>,
+  signal: AbortSignal,
+  authInfo?: TableauAuthInfo,
 ): Promise<RestApi> => {
-  const restApi = new RestApi(config.server, {
+  signal.addEventListener(
+    'abort',
+    () => {
+      log.info(
+        server,
+        {
+          type: 'request-cancelled',
+          requestId,
+          reason: signal.reason,
+        },
+        { logger: server.name, requestId },
+      );
+    },
+    { once: true },
+  );
+
+  const tableauServer = config.server || authInfo?.server;
+  invariant(tableauServer, 'Tableau server could not be determined');
+
+  const restApi = new RestApi(tableauServer, {
+    maxRequestTimeoutMs: config.maxRequestTimeoutMs,
+    signal,
     requestInterceptor: [
       getRequestInterceptor(server, requestId),
       getRequestErrorInterceptor(server, requestId),
@@ -56,13 +82,40 @@ const getNewRestApiInstanceAsync = async (
     await restApi.signIn({
       type: 'direct-trust',
       siteName: config.siteName,
-      username: getJwtSubClaim(config),
+      username: getJwtUsername(config.jwtUsername, [
+        { pattern: '{OAUTH_USERNAME}', replacement: authInfo?.username ?? '' },
+      ]),
       clientId: config.connectedAppClientId,
       secretId: config.connectedAppSecretId,
       secretValue: config.connectedAppSecretValue,
       scopes: jwtScopes,
-      additionalPayload: getJwtAdditionalPayload(config),
+      additionalPayload: getJwtAdditionalPayload(config.jwtAdditionalPayload, [
+        { pattern: '{OAUTH_USERNAME}', replacement: authInfo?.username ?? '' },
+      ]),
     });
+  } else if (config.auth === 'uat') {
+    await restApi.signIn({
+      type: 'uat',
+      siteName: config.siteName,
+      username: getJwtUsername(config.jwtUsername, [
+        { pattern: '{OAUTH_USERNAME}', replacement: authInfo?.username ?? '' },
+      ]),
+      tenantId: config.uatTenantId,
+      issuer: config.uatIssuer,
+      usernameClaimName: config.uatUsernameClaimName,
+      privateKey: config.uatPrivateKey,
+      keyId: config.uatKeyId,
+      scopes: jwtScopes,
+      additionalPayload: getJwtAdditionalPayload(config.jwtAdditionalPayload, [
+        { pattern: '{OAUTH_USERNAME}', replacement: authInfo?.username ?? '' },
+      ]),
+    });
+  } else {
+    if (!authInfo?.accessToken || !authInfo?.userId) {
+      throw new Error('Auth info is required when not signing in first.');
+    }
+
+    restApi.setCredentials(authInfo.accessToken, authInfo.userId);
   }
 
   return restApi;
@@ -74,25 +127,41 @@ export const useRestApi = async <T>({
   server,
   callback,
   jwtScopes,
+  signal,
+  authInfo,
 }: {
   config: Config;
   requestId: RequestId;
   server: Server;
   jwtScopes: Array<JwtScopes>;
+  signal: AbortSignal;
   callback: (restApi: RestApi) => Promise<T>;
+  authInfo?: TableauAuthInfo;
 }): Promise<T> => {
-  const restApi = await getNewRestApiInstanceAsync(config, requestId, server, new Set(jwtScopes));
+  const restApi = await getNewRestApiInstanceAsync(
+    config,
+    requestId,
+    server,
+    new Set(jwtScopes),
+    signal,
+    authInfo,
+  );
   try {
     return await callback(restApi);
   } finally {
-    await restApi.signOut();
+    if (config.auth !== 'oauth') {
+      // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.
+      // Sessions for 'oauth' are not. Signing out would invalidate the session,
+      // preventing the access token from being reused for subsequent requests.
+      await restApi.signOut();
+    }
   }
 };
 
 export const getRequestInterceptor =
   (server: Server, requestId: RequestId): RequestInterceptor =>
   (request) => {
-    request.headers['User-Agent'] = `${server.name}/${server.version}`;
+    request.headers['User-Agent'] = getUserAgent(server);
     logRequest(server, request, requestId);
     return request;
   };
@@ -153,7 +222,9 @@ export const getResponseErrorInterceptor =
 function logRequest(server: Server, request: RequestInterceptorConfig, requestId: RequestId): void {
   const config = getConfig();
   const maskedRequest = config.disableLogMasking ? request : maskRequest(request);
-  const url = new URL(maskedRequest.url ?? '', maskedRequest.baseUrl);
+  const url = new URL(
+    `${maskedRequest.baseUrl.replace(/\/$/, '')}/${maskedRequest.url?.replace(/^\//, '') ?? ''}`,
+  );
   if (request.params && Object.keys(request.params).length > 0) {
     url.search = new URLSearchParams(request.params).toString();
   }
@@ -180,7 +251,9 @@ function logResponse(
 ): void {
   const config = getConfig();
   const maskedResponse = config.disableLogMasking ? response : maskResponse(response);
-  const url = new URL(maskedResponse.url ?? '', maskedResponse.baseUrl);
+  const url = new URL(
+    `${maskedResponse.baseUrl.replace(/\/$/, '')}/${maskedResponse.url?.replace(/^\//, '') ?? ''}`,
+  );
   if (response.request?.params && Object.keys(response.request.params).length > 0) {
     url.search = new URLSearchParams(response.request.params).toString();
   }
@@ -196,4 +269,15 @@ function logResponse(
   } as const;
 
   log.info(server, messageObj, { logger: 'rest-api', requestId });
+}
+
+function getUserAgent(server: Server): string {
+  const userAgentParts = [userAgent];
+  if (server.clientInfo) {
+    const { name, version } = server.clientInfo;
+    if (name) {
+      userAgentParts.push(version ? `(${name} ${version})` : `(${name})`);
+    }
+  }
+  return userAgentParts.join(' ');
 }

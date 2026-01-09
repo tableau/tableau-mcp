@@ -6,6 +6,7 @@ import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
@@ -22,23 +23,25 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
   const getWorkbookTool = new Tool({
     server,
     name: 'get-workbook',
-    description: `Retrieves information about the specified workbook, including information about the views contained in the workbook.`,
+    description:
+      'Retrieves information about the specified workbook, including information about the views contained in the workbook.',
     paramsSchema,
     annotations: {
       title: 'Get Workbook',
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ workbookId }, { requestId }): Promise<CallToolResult> => {
+    callback: async ({ workbookId }, { requestId, authInfo, signal }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getWorkbookTool.logAndExecute<Workbook, GetWorkbookError>({
         requestId,
+        authInfo,
         args: { workbookId },
         callback: async () => {
           const isWorkbookAllowedResult = await resourceAccessChecker.isWorkbookAllowed({
             workbookId,
-            restApiArgs: { config, requestId, server },
+            restApiArgs: { config, requestId, server, signal },
           });
 
           if (!isWorkbookAllowedResult.allowed) {
@@ -54,6 +57,8 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
               requestId,
               server,
               jwtScopes: ['tableau:content:read'],
+              signal,
+              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 // Notice that we already have the workbook if it had been allowed by a project scope.
                 const workbook =

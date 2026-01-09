@@ -46,7 +46,8 @@ jobs:
         run: npm run coverage
 
       - name: E2E Tests
-        run: npm run test:e2e
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+        uses: ./.github/actions/run-e2e-tests
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}
           SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
@@ -55,6 +56,15 @@ jobs:
           CONNECTED_APP_CLIENT_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}
           CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
           CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
+
+      - name: OAuth Tests
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+        uses: ./.github/actions/run-oauth-tests
+        env:
+          SERVER: ${{ secrets.E2E_TEST_SERVER }}
+          SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
+          OAUTH_JWE_PRIVATE_KEY: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY }}
+          OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY_PASSPHRASE }}
 
       - name: Build Claude MCP Bundle
         run: |
