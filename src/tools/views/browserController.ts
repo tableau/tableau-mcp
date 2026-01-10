@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { Browser, BrowserContext, CDPSession, Page } from 'puppeteer';
-import puppeteer, { ScreenshotOptions } from 'puppeteer-core';
+import puppeteer, { Browser, BrowserContext, CDPSession, Page } from 'puppeteer';
+import { ScreenshotOptions } from 'puppeteer-core';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { getDirname } from '../../utils/getDirname';
@@ -47,8 +47,20 @@ export class BrowserController {
 
   private constructor() {}
 
-  static async create({ headless = true }: { headless?: boolean } = {}): Promise<
-    Pick<BrowserController, 'createNewPage'>
+  static async use<T>(
+    options: { headless?: boolean } = {},
+    callback: (controller: Pick<BrowserController, 'createNewPage' | 'close'>) => Promise<T>,
+  ): Promise<T> {
+    const browserController = await BrowserController.create(options);
+    try {
+      return await callback(browserController);
+    } finally {
+      browserController.close();
+    }
+  }
+
+  private static async create({ headless = true }: { headless?: boolean } = {}): Promise<
+    Pick<BrowserController, 'createNewPage' | 'close'>
   > {
     return Promise.resolve(new BrowserController())
       .then((renderer) => renderer._createBrowser({ headless }))
@@ -269,14 +281,13 @@ export class BrowserController {
       return Err(this._error);
     }
 
-    try {
-      await this._page?.close();
-      await this._browserContext?.close();
-    } catch {
-      // ignore
-    }
-
     return Ok(this);
+  }
+
+  close(): void {
+    this._page?.close().catch(() => {});
+    this._browserContext?.close().catch(() => {});
+    this._browser?.close().catch(() => {});
   }
 }
 

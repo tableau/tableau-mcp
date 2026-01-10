@@ -123,54 +123,59 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
           const protocol = config.sslCert ? 'https' : 'http';
           const embedUrl = `${protocol}://localhost:${config.httpPort}/embed#?url=${url}&token=${token}`;
 
-          const result = await BrowserController.create({ headless: !config.useHeadedBrowser })
-            .then((b) => b.createNewPage({ width: 800, height: 600 }))
-            .then((b) => b.enableDownloads())
-            .then((b) => b.navigate(embedUrl))
-            .then((b) => b.waitForPageLoad())
-            .then((b) => b.takeScreenshot())
-            .then((b) => b.getResult());
+          return await BrowserController.use(
+            { headless: !config.useHeadedBrowser },
+            async (controller) => {
+              const result = await controller
+                .createNewPage({ width: 800, height: 600 })
+                .then((b) => b.enableDownloads())
+                .then((b) => b.navigate(embedUrl))
+                .then((b) => b.waitForPageLoad())
+                .then((b) => b.takeScreenshot())
+                .then((b) => b.getResult());
 
-          if (result.isErr()) {
-            return result;
-          }
+              if (result.isErr()) {
+                return result;
+              }
 
-          const browserController = result.value;
-          await browserController.page.evaluate(
-            async ({ sheetName, SheetType }) => {
-              const viz = document.getElementById('viz') as TableauViz;
-              const activeSheet = viz.workbook.activeSheet;
-              if (activeSheet.sheetType === SheetType.Worksheet) {
-                await viz.exportDataAsync(activeSheet.name);
-              } else if (activeSheet.sheetType === SheetType.Dashboard) {
-                if (sheetName) {
-                  await viz.exportDataAsync(sheetName);
-                } else {
-                  for (const worksheet of (activeSheet as Dashboard).worksheets) {
-                    await viz.exportDataAsync(worksheet.name);
-                  }
-                }
-              } else {
-                const containedSheet = (activeSheet as Story).activeStoryPoint.containedSheet;
-                if (containedSheet && containedSheet.sheetType === SheetType.Worksheet) {
-                  await viz.exportDataAsync(containedSheet.name);
-                } else if (containedSheet && containedSheet.sheetType === SheetType.Dashboard) {
-                  if (sheetName) {
-                    await viz.exportDataAsync(sheetName);
+              const browserController = result.value;
+              await browserController.page.evaluate(
+                async ({ sheetName, SheetType }) => {
+                  const viz = document.getElementById('viz') as TableauViz;
+                  const activeSheet = viz.workbook.activeSheet;
+                  if (activeSheet.sheetType === SheetType.Worksheet) {
+                    await viz.exportDataAsync(activeSheet.name);
+                  } else if (activeSheet.sheetType === SheetType.Dashboard) {
+                    if (sheetName) {
+                      await viz.exportDataAsync(sheetName);
+                    } else {
+                      for (const worksheet of (activeSheet as Dashboard).worksheets) {
+                        await viz.exportDataAsync(worksheet.name);
+                      }
+                    }
                   } else {
-                    for (const worksheet of (containedSheet as Dashboard).worksheets) {
-                      await viz.exportDataAsync(worksheet.name);
+                    const containedSheet = (activeSheet as Story).activeStoryPoint.containedSheet;
+                    if (containedSheet && containedSheet.sheetType === SheetType.Worksheet) {
+                      await viz.exportDataAsync(containedSheet.name);
+                    } else if (containedSheet && containedSheet.sheetType === SheetType.Dashboard) {
+                      if (sheetName) {
+                        await viz.exportDataAsync(sheetName);
+                      } else {
+                        for (const worksheet of (containedSheet as Dashboard).worksheets) {
+                          await viz.exportDataAsync(worksheet.name);
+                        }
+                      }
                     }
                   }
-                }
-              }
-            },
-            { sheetName, SheetType },
-          );
+                },
+                { sheetName, SheetType },
+              );
 
-          await browserController.waitForDownloads();
-          const fileContents = await browserController.getAndDeleteDownloads();
-          return Ok(fileContents);
+              await browserController.waitForDownloads();
+              const fileContents = await browserController.getAndDeleteDownloads();
+              return Ok(fileContents);
+            },
+          );
         },
         constrainSuccessResult: (viewData) => {
           return {

@@ -63,7 +63,7 @@
 
       try {
         await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => reject('firstinteractive event did not fire within 30 seconds'), 30000);
+          const timeout = setTimeout(() => reject(JSON.stringify({ status: 'error', error: 'firstinteractive event did not fire within 30 seconds' })), 30000);
 
           viz.addEventListener(TableauEventType.FirstInteractive, () => {
             showSuccess('Viz is interactive!');

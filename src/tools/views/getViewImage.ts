@@ -126,13 +126,18 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
           const protocol = config.sslCert ? 'https' : 'http';
           const embedUrl = `${protocol}://localhost:${config.httpPort}/embed#?url=${url}&token=${token}`;
 
-          const result = await BrowserController.create({ headless: !config.useHeadedBrowser })
-            .then((b) => b.createNewPage(rendererOptions))
-            .then((b) => b.enableDownloads())
-            .then((b) => b.navigate(embedUrl))
-            .then((b) => b.waitForPageLoad())
-            .then((b) => b.takeScreenshot())
-            .then((b) => b.getResult());
+          const result = await BrowserController.use(
+            { headless: !config.useHeadedBrowser },
+            (browserController) => {
+              return browserController
+                .createNewPage(rendererOptions)
+                .then((b) => b.enableDownloads())
+                .then((b) => b.navigate(embedUrl))
+                .then((b) => b.waitForPageLoad())
+                .then((b) => b.takeScreenshot())
+                .then((b) => b.getResult());
+            },
+          );
 
           if (result.isErr()) {
             return result;
