@@ -68,7 +68,7 @@ export class RestApi {
     this._responseInterceptor = options.responseInterceptor;
   }
 
-  private get creds(): Credentials {
+  get creds(): Credentials {
     if (!this._creds) {
       throw new Error('No credentials found. Authenticate by calling signIn() first.');
     }

@@ -4,6 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
+import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
@@ -37,7 +38,10 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ url, sheetName }, { requestId, authInfo }): Promise<CallToolResult> => {
+    callback: async (
+      { url, sheetName },
+      { requestId, authInfo, signal },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getViewDataTool.logAndExecute<
@@ -48,6 +52,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
         authInfo,
         args: { url, sheetName },
         callback: async () => {
+          const tableauAuthInfo = getTableauAuthInfo(authInfo);
           // const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
           //   viewId,
           //   restApiArgs: { config, requestId, server },
@@ -91,34 +96,37 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
             });
           }
 
-          const token =
-            parsedUrl.host === 'public.tableau.com'
-              ? ''
-              : await getJwt({
-                  username: getJwtUsername(config.jwtUsername, [
-                    {
-                      pattern: '{OAUTH_USERNAME}',
-                      replacement: getTableauAuthInfo(authInfo)?.username ?? '',
+          let token = '';
+          if (config.auth === 'oauth') {
+            token =
+              parsedUrl.host === 'public.tableau.com'
+                ? ''
+                : await getJwt({
+                    username: getJwtUsername(config.jwtUsername, [
+                      {
+                        pattern: '{OAUTH_USERNAME}',
+                        replacement: getTableauAuthInfo(authInfo)?.username ?? '',
+                      },
+                    ]),
+                    config: {
+                      type: 'connected-app',
+                      clientId: config.connectedAppClientId,
+                      secretId: config.connectedAppSecretId,
+                      secretValue: config.connectedAppSecretValue,
                     },
-                  ]),
-                  config: {
-                    type: 'connected-app',
-                    clientId: config.connectedAppClientId,
-                    secretId: config.connectedAppSecretId,
-                    secretValue: config.connectedAppSecretValue,
-                  },
-                  scopes: new Set([
-                    'tableau:views:embed',
-                    'tableau:views:embed_authoring',
-                    'tableau:insights:embed',
-                  ]),
-                  additionalPayload: getJwtAdditionalPayload(config.jwtAdditionalPayload, [
-                    {
-                      pattern: '{OAUTH_USERNAME}',
-                      replacement: getTableauAuthInfo(authInfo)?.username ?? '',
-                    },
-                  ]),
-                });
+                    scopes: new Set([
+                      'tableau:views:embed',
+                      'tableau:views:embed_authoring',
+                      'tableau:insights:embed',
+                    ]),
+                    additionalPayload: getJwtAdditionalPayload(config.jwtAdditionalPayload, [
+                      {
+                        pattern: '{OAUTH_USERNAME}',
+                        replacement: getTableauAuthInfo(authInfo)?.username ?? '',
+                      },
+                    ]),
+                  });
+          }
 
           const protocol = config.sslCert ? 'https' : 'http';
           const embedUrl = `${protocol}://localhost:${config.httpPort}/embed#?url=${url}&token=${token}`;
@@ -130,6 +138,46 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
                 .createNewPage({ width: 800, height: 600 })
                 .then((b) => b.enableDownloads())
                 .then((b) => b.navigate(embedUrl))
+                .then(async (b) => {
+                  let accessToken = '';
+                  let domain = '';
+
+                  switch (config.auth) {
+                    case 'direct-trust':
+                    case 'uat':
+                      return b;
+                    case 'pat':
+                      accessToken = await useRestApi({
+                        config,
+                        requestId,
+                        server,
+                        jwtScopes: [],
+                        signal,
+                        callback: async (restApi) => restApi.creds.token,
+                      });
+                      domain = new URL(config.server).hostname;
+                      break;
+                    case 'oauth':
+                      accessToken = tableauAuthInfo?.accessToken ?? '';
+                      domain = tableauAuthInfo?.server ?? '';
+                      break;
+                  }
+
+                  const tableauFrame = b.page.frames()[1];
+                  await tableauFrame.evaluate(() => {
+                    document.cookie = [
+                      `workgroup_session_id=${accessToken}`,
+                      `domain=${domain}`,
+                      'path=/',
+                      'secure',
+                      'samesite=none',
+                      'partitioned',
+                    ].join('; ');
+                  });
+
+                  await b.page.reload();
+                  return b;
+                })
                 .then((b) => b.waitForPageLoad())
                 .then((b) => b.takeScreenshot())
                 .then((b) => b.getResult());

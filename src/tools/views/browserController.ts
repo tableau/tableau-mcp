@@ -67,7 +67,7 @@ export class BrowserController {
       .then((renderer) => renderer._createBrowserContext());
   }
 
-  private get browser(): Browser {
+  get browser(): Browser {
     if (!this._browser) {
       throw new Error('Browser not created');
     }
@@ -191,7 +191,9 @@ export class BrowserController {
     return this;
   }
 
-  async navigate(url: string): Promise<Pick<BrowserController, 'waitForPageLoad'>> {
+  async navigate(
+    url: string,
+  ): Promise<Pick<BrowserController, 'waitForPageLoad' | 'browser' | 'page'>> {
     if (this._error) {
       return this;
     }
