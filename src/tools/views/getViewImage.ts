@@ -4,9 +4,8 @@ import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
 import { Server } from '../../server.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
-import { getJwt, getJwtAdditionalPayload, getJwtUsername } from '../../utils/getJwt.js';
+import { getEmbeddingJwt } from '../../utils/getTableauAccessTokens.js';
 import { Tool } from '../tool.js';
 import {
   BrowserController,
@@ -95,33 +94,9 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
           };
 
           const token =
-            parsedUrl.host === 'public.tableau.com'
+            config.auth !== 'oauth' || parsedUrl.host === 'public.tableau.com'
               ? ''
-              : await getJwt({
-                  username: getJwtUsername(config.jwtUsername, [
-                    {
-                      pattern: '{OAUTH_USERNAME}',
-                      replacement: getTableauAuthInfo(authInfo)?.username ?? '',
-                    },
-                  ]),
-                  config: {
-                    type: 'connected-app',
-                    clientId: config.connectedAppClientId,
-                    secretId: config.connectedAppSecretId,
-                    secretValue: config.connectedAppSecretValue,
-                  },
-                  scopes: new Set([
-                    'tableau:views:embed',
-                    'tableau:views:embed_authoring',
-                    'tableau:insights:embed',
-                  ]),
-                  additionalPayload: getJwtAdditionalPayload(config.jwtAdditionalPayload, [
-                    {
-                      pattern: '{OAUTH_USERNAME}',
-                      replacement: getTableauAuthInfo(authInfo)?.username ?? '',
-                    },
-                  ]),
-                });
+              : await getEmbeddingJwt({ config, authInfo });
 
           const protocol = config.sslCert ? 'https' : 'http';
           const embedUrl = `${protocol}://localhost:${config.httpPort}/embed#?url=${url}&token=${token}`;

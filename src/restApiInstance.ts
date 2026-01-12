@@ -18,7 +18,7 @@ import { Server, userAgent } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
-import { getJwtAdditionalPayload, getJwtUsername } from './utils/getJwt.js';
+import { getJwtAdditionalPayload, getJwtUsername } from './utils/getTableauAccessTokens.js';
 import invariant from './utils/invariant.js';
 
 type JwtScopes =
@@ -30,6 +30,13 @@ type JwtScopes =
   | 'tableau:insights:read'
   | 'tableau:views:download'
   | 'tableau:insight_brief:create';
+
+export type RestApiArgs = {
+  config: Config;
+  requestId: RequestId;
+  server: Server;
+  signal: AbortSignal;
+};
 
 const getNewRestApiInstanceAsync = async (
   config: Config,
@@ -82,33 +89,25 @@ const getNewRestApiInstanceAsync = async (
     await restApi.signIn({
       type: 'direct-trust',
       siteName: config.siteName,
-      username: getJwtUsername(config.jwtUsername, [
-        { pattern: '{OAUTH_USERNAME}', replacement: authInfo?.username ?? '' },
-      ]),
+      username: getJwtUsername(config.jwtUsername, authInfo),
       clientId: config.connectedAppClientId,
       secretId: config.connectedAppSecretId,
       secretValue: config.connectedAppSecretValue,
       scopes: jwtScopes,
-      additionalPayload: getJwtAdditionalPayload(config.jwtAdditionalPayload, [
-        { pattern: '{OAUTH_USERNAME}', replacement: authInfo?.username ?? '' },
-      ]),
+      additionalPayload: getJwtAdditionalPayload(config.jwtAdditionalPayload, authInfo),
     });
   } else if (config.auth === 'uat') {
     await restApi.signIn({
       type: 'uat',
       siteName: config.siteName,
-      username: getJwtUsername(config.jwtUsername, [
-        { pattern: '{OAUTH_USERNAME}', replacement: authInfo?.username ?? '' },
-      ]),
+      username: getJwtUsername(config.jwtUsername, authInfo),
       tenantId: config.uatTenantId,
       issuer: config.uatIssuer,
       usernameClaimName: config.uatUsernameClaimName,
       privateKey: config.uatPrivateKey,
       keyId: config.uatKeyId,
       scopes: jwtScopes,
-      additionalPayload: getJwtAdditionalPayload(config.jwtAdditionalPayload, [
-        { pattern: '{OAUTH_USERNAME}', replacement: authInfo?.username ?? '' },
-      ]),
+      additionalPayload: getJwtAdditionalPayload(config.jwtAdditionalPayload, authInfo),
     });
   } else {
     if (!authInfo?.accessToken || !authInfo?.userId) {
@@ -129,6 +128,7 @@ export const useRestApi = async <T>({
   jwtScopes,
   signal,
   authInfo,
+  options,
 }: {
   config: Config;
   requestId: RequestId;
@@ -137,7 +137,12 @@ export const useRestApi = async <T>({
   signal: AbortSignal;
   callback: (restApi: RestApi) => Promise<T>;
   authInfo?: TableauAuthInfo;
+  options?: Partial<{
+    bypassSignOut: boolean;
+  }>;
 }): Promise<T> => {
+  const { bypassSignOut = false } = options ?? {};
+
   const restApi = await getNewRestApiInstanceAsync(
     config,
     requestId,
@@ -149,7 +154,7 @@ export const useRestApi = async <T>({
   try {
     return await callback(restApi);
   } finally {
-    if (config.auth !== 'oauth') {
+    if (config.auth !== 'oauth' && !bypassSignOut) {
       // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.
       // Sessions for 'oauth' are not. Signing out would invalidate the session,
       // preventing the access token from being reused for subsequent requests.

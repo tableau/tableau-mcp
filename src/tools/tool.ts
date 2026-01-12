@@ -59,6 +59,9 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   callback: TypeOrProvider<ToolCallback<Args>>;
 };
 
+// Any cleanup actions to be performed after tool is executed
+export type CleanupActions = Array<() => Promise<void>>;
+
 /**
  * The parameters the logAndExecute method
  *
@@ -77,7 +80,7 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
   args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
 
   // A function that contains the business logic of the tool to be logged and executed
-  callback: () => Promise<Result<T, E | ZodiosError>>;
+  callback: (context: { cleanupActions: CleanupActions }) => Promise<Result<T, E | ZodiosError>>;
 
   // A function that can transform a successful result of the callback into a CallToolResult
   getSuccessResult?: (result: T) => CallToolResult;
@@ -181,8 +184,9 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       }
     }
 
+    const cleanupActions: CleanupActions = [];
     try {
-      const result = await callback();
+      const result = await callback({ cleanupActions });
 
       if (result.isOk()) {
         const constrainedResult = await constrainSuccessResult(result.value);
@@ -228,6 +232,8 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       }
     } catch (error) {
       return getErrorResult(requestId, error);
+    } finally {
+      await Promise.allSettled(cleanupActions.map((cleanupAction) => cleanupAction()));
     }
   }
 }

@@ -69,29 +69,3 @@ export async function getJwt({
     return await new SignJWT(payload).setProtectedHeader(header).sign(privateKey);
   }
 }
-
-export function getJwtUsername(
-  username: string,
-  replacers?: Array<{ pattern: string; replacement: string }>,
-): string {
-  if (replacers) {
-    for (const replacer of replacers) {
-      username = username.replace(replacer.pattern, replacer.replacement);
-    }
-  }
-
-  return username;
-}
-
-export function getJwtAdditionalPayload(
-  payload: string,
-  replacers?: Array<{ pattern: string; replacement: string }>,
-): Record<string, unknown> {
-  if (replacers) {
-    for (const replacer of replacers) {
-      payload = payload.replace(replacer.pattern, replacer.replacement);
-    }
-  }
-
-  return JSON.parse(payload || '{}');
-}

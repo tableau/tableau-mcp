@@ -1,21 +1,11 @@
-import { RequestId } from '@modelcontextprotocol/sdk/types.js';
-
-import { BoundedContext, Config, getConfig } from '../config.js';
-import { useRestApi } from '../restApiInstance.js';
+import { BoundedContext, getConfig } from '../config.js';
+import { RestApiArgs, useRestApi } from '../restApiInstance.js';
 import { Workbook } from '../sdks/tableau/types/workbook.js';
-import { Server } from '../server.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
 type AllowedResult<T = unknown> =
   | { allowed: true; content?: T }
   | { allowed: false; message: string };
-
-export type RestApiArgs = {
-  config: Config;
-  requestId: RequestId;
-  server: Server;
-  signal: AbortSignal;
-};
 
 class ResourceAccessChecker {
   private _allowedProjectIds: Set<string> | null | undefined;

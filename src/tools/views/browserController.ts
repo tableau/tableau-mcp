@@ -6,6 +6,7 @@ import { ScreenshotOptions } from 'puppeteer-core';
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { getDirname } from '../../utils/getDirname';
+import { getExceptionMessage } from '../../utils/getExceptionMessage';
 
 export type BrowserOptions = {
   width?: number;
@@ -19,6 +20,7 @@ const browserControllerErrors = [
   'enable-downloads-failed',
   'download-failed',
   'navigation-failed',
+  'tableau-frame-not-found',
   'page-failed-to-load',
   'viz-load-error',
   'screenshot-failed',
@@ -193,7 +195,7 @@ export class BrowserController {
 
   async navigate(
     url: string,
-  ): Promise<Pick<BrowserController, 'waitForPageLoad' | 'browser' | 'page'>> {
+  ): Promise<Pick<BrowserController, 'waitForPageLoad' | 'setWorkgroupSessionId'>> {
     if (this._error) {
       return this;
     }
@@ -204,6 +206,51 @@ export class BrowserController {
       this._error = { type: 'navigation-failed', error };
     }
 
+    return this;
+  }
+
+  async setWorkgroupSessionId({
+    workgroupSessionId,
+    domain,
+  }: {
+    workgroupSessionId: string;
+    domain: string;
+  }): Promise<Pick<BrowserController, 'waitForPageLoad'>> {
+    if (this._error) {
+      return this;
+    }
+
+    const tableauFrame = this.page.frames().find((frame) => frame !== this.page.mainFrame());
+    if (!tableauFrame) {
+      this._error = {
+        type: 'tableau-frame-not-found',
+        error: new Error(
+          `Could not find the Tableau iframe from the page's frames: ${this.page
+            .frames()
+            .map((frame) => frame.url())
+            .join(', ')}`,
+        ),
+      };
+
+      return this;
+    }
+
+    await tableauFrame.evaluate(
+      (workgroupSessionId, domain) => {
+        document.cookie = [
+          `workgroup_session_id=${workgroupSessionId}`,
+          `domain=${domain}`,
+          'path=/',
+          'secure',
+          'samesite=none',
+          'partitioned',
+        ].join('; ');
+      },
+      workgroupSessionId,
+      domain,
+    );
+
+    await this.page.reload();
     return this;
   }
 
@@ -319,8 +366,11 @@ function isPageLoadedAndStable():
   return false;
 }
 
-export function getBrowserControllerErrorMessage(error: BrowserControllerErrorType): string {
-  switch (error) {
+export function getBrowserControllerErrorMessage(
+  type: BrowserControllerErrorType,
+  error?: unknown,
+): string {
+  switch (type) {
     case 'browser-creation-failed':
       return 'Failed to create browser.';
     case 'browser-context-creation-failed':
@@ -333,6 +383,8 @@ export function getBrowserControllerErrorMessage(error: BrowserControllerErrorTy
       return 'Failed to download files.';
     case 'navigation-failed':
       return 'Failed to navigate to the page.';
+    case 'tableau-frame-not-found':
+      return getExceptionMessage(error);
     case 'page-failed-to-load':
       return 'Failed to load the page.';
     case 'viz-load-error':

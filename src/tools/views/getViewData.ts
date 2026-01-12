@@ -4,11 +4,9 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
-import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
-import { getJwt, getJwtAdditionalPayload, getJwtUsername } from '../../utils/getJwt.js';
+import { getEmbeddingJwt, getWorkgroupSessionId } from '../../utils/getTableauAccessTokens.js';
 import { Tool } from '../tool.js';
 import {
   BrowserController,
@@ -19,7 +17,11 @@ import {
 
 type GetViewDataError =
   | BrowserControllerError
-  | { type: 'invalid-url' | 'embedding-api-not-found'; url: string; error: unknown };
+  | {
+      type: 'invalid-url' | 'embedding-api-not-found' | 'tableau-frame-not-found';
+      url: string;
+      error: unknown;
+    };
 
 const paramsSchema = {
   url: z.string(),
@@ -51,8 +53,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
         requestId,
         authInfo,
         args: { url, sheetName },
-        callback: async () => {
-          const tableauAuthInfo = getTableauAuthInfo(authInfo);
+        callback: async ({ cleanupActions }) => {
           // const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
           //   viewId,
           //   restApiArgs: { config, requestId, server },
@@ -96,37 +97,10 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
             });
           }
 
-          let token = '';
-          if (config.auth === 'oauth') {
-            token =
-              parsedUrl.host === 'public.tableau.com'
-                ? ''
-                : await getJwt({
-                    username: getJwtUsername(config.jwtUsername, [
-                      {
-                        pattern: '{OAUTH_USERNAME}',
-                        replacement: getTableauAuthInfo(authInfo)?.username ?? '',
-                      },
-                    ]),
-                    config: {
-                      type: 'connected-app',
-                      clientId: config.connectedAppClientId,
-                      secretId: config.connectedAppSecretId,
-                      secretValue: config.connectedAppSecretValue,
-                    },
-                    scopes: new Set([
-                      'tableau:views:embed',
-                      'tableau:views:embed_authoring',
-                      'tableau:insights:embed',
-                    ]),
-                    additionalPayload: getJwtAdditionalPayload(config.jwtAdditionalPayload, [
-                      {
-                        pattern: '{OAUTH_USERNAME}',
-                        replacement: getTableauAuthInfo(authInfo)?.username ?? '',
-                      },
-                    ]),
-                  });
-          }
+          const token =
+            config.auth !== 'oauth' || parsedUrl.host === 'public.tableau.com'
+              ? ''
+              : await getEmbeddingJwt({ config, authInfo });
 
           const protocol = config.sslCert ? 'https' : 'http';
           const embedUrl = `${protocol}://localhost:${config.httpPort}/embed#?url=${url}&token=${token}`;
@@ -139,44 +113,27 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
                 .then((b) => b.enableDownloads())
                 .then((b) => b.navigate(embedUrl))
                 .then(async (b) => {
-                  let accessToken = '';
-                  let domain = '';
-
-                  switch (config.auth) {
-                    case 'direct-trust':
-                    case 'uat':
-                      return b;
-                    case 'pat':
-                      accessToken = await useRestApi({
-                        config,
-                        requestId,
-                        server,
-                        jwtScopes: [],
-                        signal,
-                        callback: async (restApi) => restApi.creds.token,
-                      });
-                      domain = new URL(config.server).hostname;
-                      break;
-                    case 'oauth':
-                      accessToken = tableauAuthInfo?.accessToken ?? '';
-                      domain = tableauAuthInfo?.server ?? '';
-                      break;
+                  if (parsedUrl.host === 'public.tableau.com') {
+                    // No auth for Public
+                    return b;
                   }
 
-                  const tableauFrame = b.page.frames()[1];
-                  await tableauFrame.evaluate(() => {
-                    document.cookie = [
-                      `workgroup_session_id=${accessToken}`,
-                      `domain=${domain}`,
-                      'path=/',
-                      'secure',
-                      'samesite=none',
-                      'partitioned',
-                    ].join('; ');
-                  });
+                  if (config.auth === 'direct-trust' || config.auth === 'uat') {
+                    // For Direct Trust and UAT, the JWT will be provided to the /embed endpoint.
+                    // The Embedding API will use the JWT to authenticate.
+                    return b;
+                  }
 
-                  await b.page.reload();
-                  return b;
+                  // For PAT and OAuth, we need to set the workgroup_session_id cookie ourselves.
+                  const { workgroupSessionId, domain } = await getWorkgroupSessionId(
+                    config.auth,
+                    config,
+                    authInfo,
+                    { config, requestId, server, signal },
+                    cleanupActions,
+                  );
+
+                  return await b.setWorkgroupSessionId({ workgroupSessionId, domain });
                 })
                 .then((b) => b.waitForPageLoad())
                 .then((b) => b.takeScreenshot())
@@ -188,7 +145,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
 
               const browserController = result.value;
               await browserController.page.evaluate(
-                async ({ sheetName, SheetType }) => {
+                async (sheetName, SheetType) => {
                   const viz = document.getElementById('viz') as TableauViz;
                   const activeSheet = viz.workbook.activeSheet;
                   if (activeSheet.sheetType === SheetType.Worksheet) {
@@ -216,7 +173,8 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
                     }
                   }
                 },
-                { sheetName, SheetType },
+                sheetName,
+                SheetType,
               );
 
               await browserController.waitForDownloads();
@@ -246,7 +204,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
 
 function getErrorMessage(error: GetViewDataError): string {
   if (isBrowserControllerErrorType(error.type)) {
-    return getBrowserControllerErrorMessage(error.type);
+    return getBrowserControllerErrorMessage(error.type, error.error);
   }
 
   switch (error.type) {
