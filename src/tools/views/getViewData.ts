@@ -98,7 +98,9 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
           }
 
           const token =
-            config.auth !== 'oauth' || parsedUrl.host === 'public.tableau.com'
+            config.auth === 'pat' ||
+            config.auth === 'oauth' ||
+            parsedUrl.host === 'public.tableau.com'
               ? ''
               : await getEmbeddingJwt({ config, authInfo });
 
