@@ -133,9 +133,6 @@ export class Config {
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       TELEMETRY_ENABLED: telemetryEnabled,
       TELEMETRY_PROVIDER: telemetryProvider,
-      TELEMETRY_SERVICE_NAME: telemetryServiceName,
-      TELEMETRY_SERVICE_VERSION: telemetryServiceVersion,
-      TELEMETRY_ENVIRONMENT: telemetryEnvironment,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
     } = cleansedVars;
 
@@ -234,9 +231,6 @@ export class Config {
     this.telemetry = {
       enabled: telemetryEnabled === 'true',
       provider: (telemetryProvider as 'noop' | 'moncloud' | 'custom') || 'noop',
-      serviceName: telemetryServiceName || 'tableau-mcp',
-      serviceVersion: telemetryServiceVersion || '1.0.0',
-      environment: telemetryEnvironment || 'production',
       providerConfig: telemetryProviderConfig ? JSON.parse(telemetryProviderConfig) : undefined,
     };
 

@@ -32,9 +32,6 @@ describe('initializeTelemetry', () => {
   const defaultTelemetryConfig: TelemetryConfig = {
     enabled: true,
     provider: 'noop',
-    serviceName: 'test-service',
-    serviceVersion: '1.0.0',
-    environment: 'test',
   };
 
   beforeEach(() => {

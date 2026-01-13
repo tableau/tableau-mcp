@@ -38,7 +38,6 @@ export function initializeTelemetry(): TelemetryProvider {
 
   // If telemetry is disabled, use NoOp provider
   if (!config.telemetry.enabled) {
-    console.log('telemetry is disabled, using noop telemetry provider');
     const provider = new NoOpTelemetryProvider();
     provider.initialize();
     return provider;
@@ -50,19 +49,16 @@ export function initializeTelemetry(): TelemetryProvider {
     // Select provider based on configuration
     switch (config.telemetry.provider) {
       case 'moncloud':
-        console.log('initializing moncloud telemetry provider');
         provider = new MonCloudTelemetryProvider();
         break;
 
       case 'custom':
-        console.log('initializing custom telemetry provider');
         // Load custom provider from user's filesystem
         provider = loadCustomProvider(config.telemetry.providerConfig);
         break;
 
       case 'noop':
       default:
-        console.log('initializing noop telemetry provider');
         if (config.telemetry.provider !== 'noop') {
           console.warn(
             `Unknown telemetry provider: ${config.telemetry.provider}. Using NoOp provider.`,

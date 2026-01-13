@@ -69,15 +69,6 @@ export interface TelemetryProvider {
    * - Custom business dimensions
    *
    * @param attributes - Key-value pairs to attach to the current span
-   *
-   * @example
-   * ```typescript
-   * telemetry.addAttributes({
-   *   'mcp.tool': 'query_workbook',
-   *   'tableau.workbook_id': 'abc123',
-   *   'user.id': 'user123'
-   * });
-   * ```
    */
   addAttributes(attributes: TelemetryAttributes): void;
 }
@@ -106,21 +97,6 @@ export interface TelemetryConfig {
    * - 'custom': Load custom provider from user's filesystem
    */
   provider: 'noop' | 'moncloud' | 'custom';
-
-  /**
-   * Service name for telemetry
-   */
-  serviceName: string;
-
-  /**
-   * Service version
-   */
-  serviceVersion: string;
-
-  /**
-   * Environment (e.g., 'production', 'staging', 'development')
-   */
-  environment: string;
 
   /**
    * Additional configuration specific to the provider.

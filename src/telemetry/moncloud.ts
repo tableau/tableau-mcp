@@ -24,8 +24,6 @@ export class MonCloudTelemetryProvider implements TelemetryProvider {
       const { Apm } = require('@salesforce/apmagent');
       const apm = new Apm();
       apm.start();
-
-      console.log('MonCloud APM agent initialized successfully');
     } catch (error) {
       console.error('Failed to initialize MonCloud telemetry:', error);
       throw new Error(
