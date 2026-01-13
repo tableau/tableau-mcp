@@ -2,6 +2,7 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
+import { TelemetryConfig } from './telemetry/types.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
@@ -77,6 +78,7 @@ export class Config {
     clientIdSecretPairs: Record<string, string> | null;
     dnsServers: string[];
   };
+  telemetry: TelemetryConfig;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -131,6 +133,9 @@ export class Config {
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
+      TELEMETRY_ENABLED: telemetryEnabled,
+      TELEMETRY_PROVIDER: telemetryProvider,
+      TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -223,6 +228,12 @@ export class Config {
             return acc;
           }, {})
         : null,
+    };
+
+    this.telemetry = {
+      enabled: telemetryEnabled === 'true',
+      provider: (telemetryProvider as 'noop' | 'moncloud' | 'custom') || 'noop',
+      providerConfig: telemetryProviderConfig ? JSON.parse(telemetryProviderConfig) : undefined,
     };
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
