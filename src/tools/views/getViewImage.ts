@@ -6,18 +6,32 @@ import { getConfig } from '../../config.js';
 import { Server } from '../../server.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getEmbeddingJwt } from '../../utils/getTableauAccessTokens.js';
+import { parseUrl } from '../../utils/parseUrl.js';
+import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 import {
   BrowserController,
   BrowserControllerError,
   BrowserOptions,
   getBrowserControllerErrorMessage,
-  isBrowserControllerErrorType,
+  isBrowserControllerError,
 } from './browserController.js';
 
 type GetViewImageError =
   | BrowserControllerError
-  | { type: 'invalid-url' | 'embedding-api-not-found'; url: string; error: unknown };
+  | {
+      type: 'embedding-api-not-found';
+      url: string;
+      error: unknown;
+    }
+  | {
+      type: 'invalid-url';
+      url: string;
+    }
+  | {
+      type: 'view-not-allowed';
+      message: string;
+    };
 
 const paramsSchema = {
   url: z.string(),
@@ -37,7 +51,10 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ url, width, height }, { requestId, authInfo }): Promise<CallToolResult> => {
+    callback: async (
+      { url, width, height },
+      { requestId, authInfo, signal },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getViewImageTool.logAndExecute<Uint8Array, GetViewImageError>({
@@ -45,26 +62,23 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
         authInfo,
         args: { url },
         callback: async () => {
-          // const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
-          //   viewId,
-          //   restApiArgs: { config, requestId, server },
-          // });
-
-          // if (!isViewAllowedResult.allowed) {
-          //   return new Err({
-          //     type: 'view-not-allowed',
-          //     message: isViewAllowedResult.message,
-          //   });
-          // }
-
-          let parsedUrl: URL;
-          try {
-            parsedUrl = new URL(url);
-          } catch (error) {
+          const parsedUrl = parseUrl(url);
+          if (!parsedUrl) {
             return Err({
               type: 'invalid-url',
               url,
-              error,
+            });
+          }
+
+          const isViewAllowedResult = await resourceAccessChecker.isViewAllowedByUrl({
+            url: parsedUrl,
+            restApiArgs: { config, requestId, server, signal },
+          });
+
+          if (!isViewAllowedResult.allowed) {
+            return new Err({
+              type: 'view-not-allowed',
+              message: isViewAllowedResult.message,
             });
           }
 
@@ -145,7 +159,9 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
         getErrorText: (error: GetViewImageError) => {
           return JSON.stringify({
             reason: getErrorMessage(error),
-            exception: getExceptionMessage(error.error),
+            exception: isBrowserControllerError(error)
+              ? getExceptionMessage(error.error)
+              : undefined,
           });
         },
       });
@@ -156,8 +172,8 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
 };
 
 function getErrorMessage(error: GetViewImageError): string {
-  if (isBrowserControllerErrorType(error.type)) {
-    return getBrowserControllerErrorMessage(error.type);
+  if (isBrowserControllerError(error)) {
+    return getBrowserControllerErrorMessage(error.type, error.error);
   }
 
   switch (error.type) {
@@ -165,5 +181,7 @@ function getErrorMessage(error: GetViewImageError): string {
       return `The URL is invalid: ${error.url}`;
     case 'embedding-api-not-found':
       return `The Embedding API JavaScript module was not found at ${error.url}.`;
+    case 'view-not-allowed':
+      return error.message;
   }
 }

@@ -7,20 +7,30 @@ import { getConfig } from '../../config.js';
 import { Server } from '../../server.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getEmbeddingJwt, getWorkgroupSessionId } from '../../utils/getTableauAccessTokens.js';
+import { parseUrl } from '../../utils/parseUrl.js';
+import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 import {
   BrowserController,
   BrowserControllerError,
   getBrowserControllerErrorMessage,
-  isBrowserControllerErrorType,
+  isBrowserControllerError,
 } from './browserController.js';
 
 type GetViewDataError =
   | BrowserControllerError
   | {
-      type: 'invalid-url' | 'embedding-api-not-found' | 'tableau-frame-not-found';
+      type: 'embedding-api-not-found';
       url: string;
       error: unknown;
+    }
+  | {
+      type: 'invalid-url';
+      url: string;
+    }
+  | {
+      type: 'view-not-allowed';
+      message: string;
     };
 
 const paramsSchema = {
@@ -54,26 +64,23 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
         authInfo,
         args: { url, sheetName },
         callback: async ({ cleanupActions }) => {
-          // const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
-          //   viewId,
-          //   restApiArgs: { config, requestId, server },
-          // });
-
-          // if (!isViewAllowedResult.allowed) {
-          //   return new Err({
-          //     type: 'view-not-allowed',
-          //     message: isViewAllowedResult.message,
-          //   });
-          // }
-
-          let parsedUrl: URL;
-          try {
-            parsedUrl = new URL(url);
-          } catch (error) {
+          const parsedUrl = parseUrl(url);
+          if (!parsedUrl) {
             return Err({
               type: 'invalid-url',
               url,
-              error,
+            });
+          }
+
+          const isViewAllowedResult = await resourceAccessChecker.isViewAllowedByUrl({
+            url: parsedUrl,
+            restApiArgs: { config, requestId, server, signal },
+          });
+
+          if (!isViewAllowedResult.allowed) {
+            return new Err({
+              type: 'view-not-allowed',
+              message: isViewAllowedResult.message,
             });
           }
 
@@ -194,7 +201,9 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
         getErrorText: (error: GetViewDataError) => {
           return JSON.stringify({
             reason: getErrorMessage(error),
-            exception: getExceptionMessage(error.error),
+            exception: isBrowserControllerError(error)
+              ? getExceptionMessage(error.error)
+              : undefined,
           });
         },
       });
@@ -205,7 +214,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
 };
 
 function getErrorMessage(error: GetViewDataError): string {
-  if (isBrowserControllerErrorType(error.type)) {
+  if (isBrowserControllerError(error)) {
     return getBrowserControllerErrorMessage(error.type, error.error);
   }
 
@@ -214,5 +223,7 @@ function getErrorMessage(error: GetViewDataError): string {
       return `The URL is invalid: ${error.url}`;
     case 'embedding-api-not-found':
       return `The Embedding API JavaScript module was not found at ${error.url}.`;
+    case 'view-not-allowed':
+      return error.message;
   }
 }

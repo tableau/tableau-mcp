@@ -33,6 +33,16 @@ export function isBrowserControllerErrorType(value: unknown): value is BrowserCo
   return browserControllerErrors.find((error) => error === value) !== undefined;
 }
 
+export function isBrowserControllerError(value: unknown): value is BrowserControllerError {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    isBrowserControllerErrorType(value.type) &&
+    'error' in value
+  );
+}
+
 export type BrowserControllerError = {
   type: BrowserControllerErrorType;
   error: unknown;

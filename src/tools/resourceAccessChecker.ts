@@ -1,5 +1,6 @@
 import { BoundedContext, getConfig } from '../config.js';
 import { RestApiArgs, useRestApi } from '../restApiInstance.js';
+import { View } from '../sdks/tableau/types/view.js';
 import { Workbook } from '../sdks/tableau/types/workbook.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
@@ -108,11 +109,32 @@ class ResourceAccessChecker {
     restApiArgs: RestApiArgs;
   }): Promise<AllowedResult> {
     const result = await this._isViewAllowed({
+      type: 'view-id',
       viewId,
       restApiArgs,
     });
 
     if (!this.allowedProjectIds) {
+      // If project filtering is enabled, we cannot cache the result since the workbook containing the view may be moved between projects.
+      this._cachedViewIds.set(viewId, result);
+    }
+
+    return result;
+  }
+
+  async isViewAllowedByUrl({
+    url,
+    restApiArgs,
+  }: {
+    url: URL;
+    restApiArgs: RestApiArgs;
+  }): Promise<AllowedResult> {
+    const { result, viewId } = await this._isViewAllowedByUrl({
+      url,
+      restApiArgs,
+    });
+
+    if (viewId && !this.allowedProjectIds) {
       // If project filtering is enabled, we cannot cache the result since the workbook containing the view may be moved between projects.
       this._cachedViewIds.set(viewId, result);
     }
@@ -249,13 +271,17 @@ class ResourceAccessChecker {
     return { allowed: true, content: workbook };
   }
 
-  private async _isViewAllowed({
-    viewId,
-    restApiArgs: { config, requestId, server, signal },
-  }: {
-    viewId: string;
-    restApiArgs: RestApiArgs;
-  }): Promise<AllowedResult> {
+  private async _isViewAllowed(
+    input: ({ type: 'view'; view: View } | { type: 'view-id'; viewId: string }) & {
+      restApiArgs: RestApiArgs;
+    },
+  ): Promise<AllowedResult> {
+    const {
+      type,
+      restApiArgs: { config, requestId, server, signal },
+    } = input;
+
+    const viewId = type === 'view' ? input.view.id : input.viewId;
     const cachedResult = this._cachedViewIds.get(viewId);
     if (cachedResult) {
       return cachedResult;
@@ -266,19 +292,22 @@ class ResourceAccessChecker {
 
     if (this.allowedWorkbookIds) {
       try {
-        const view = await useRestApi({
-          config,
-          requestId,
-          server,
-          jwtScopes: ['tableau:content:read'],
-          signal,
-          callback: async (restApi) => {
-            return await restApi.viewsMethods.getView({
-              siteId: restApi.siteId,
-              viewId,
-            });
-          },
-        });
+        const view =
+          type === 'view'
+            ? input.view
+            : await useRestApi({
+                config,
+                requestId,
+                server,
+                jwtScopes: ['tableau:content:read'],
+                signal,
+                callback: async (restApi) => {
+                  return await restApi.viewsMethods.getView({
+                    siteId: restApi.siteId,
+                    viewId,
+                  });
+                },
+              });
 
         viewWorkbookId = view.workbook?.id ?? '';
         viewProjectId = view.project?.id ?? '';
@@ -306,6 +335,7 @@ class ResourceAccessChecker {
 
     if (this.allowedProjectIds) {
       try {
+        viewProjectId = type === 'view' ? (input.view.project?.id ?? '') : '';
         viewProjectId =
           viewProjectId ||
           (await useRestApi({
@@ -346,6 +376,65 @@ class ResourceAccessChecker {
     }
 
     return { allowed: true };
+  }
+
+  private async _isViewAllowedByUrl({
+    url,
+    restApiArgs: { config, requestId, server, signal },
+  }: {
+    url: URL;
+    restApiArgs: RestApiArgs;
+  }): Promise<{ result: AllowedResult; viewId?: string }> {
+    if (!this.allowedProjectIds && !this.allowedWorkbookIds) {
+      return { result: { allowed: true } };
+    }
+
+    const pathParts = url.toString().includes('/t/')
+      ? url.pathname.split('/')
+      : url.hash.split('?')[0].split('/');
+
+    const viewsIndex = pathParts.indexOf('views');
+    if (viewsIndex === -1) {
+      return { result: { allowed: false, message: 'Could not identify view in URL' } };
+    }
+
+    const workbookContentUrl = pathParts[viewsIndex + 1];
+    const sheetContentUrl = pathParts[viewsIndex + 2];
+    if (!workbookContentUrl || !sheetContentUrl) {
+      return {
+        result: { allowed: false, message: 'Could not identify workbook and sheet name in URL' },
+      };
+    }
+
+    const view: View | undefined = await useRestApi({
+      config,
+      requestId,
+      server,
+      jwtScopes: ['tableau:content:read'],
+      signal,
+      callback: async (restApi) => {
+        const { views } = await restApi.viewsMethods.queryViewsForSite({
+          siteId: restApi.siteId,
+          filter: `contentUrl:eq:${[workbookContentUrl, 'sheets', sheetContentUrl].join('/')}`,
+        });
+
+        return views[0];
+      },
+    });
+
+    if (!view) {
+      return {
+        result: { allowed: false, message: 'Could not find the view for the given workbook URL' },
+      };
+    }
+
+    const result = await this._isViewAllowed({
+      type: 'view',
+      view,
+      restApiArgs: { config, requestId, server, signal },
+    });
+
+    return { result, viewId: view.id };
   }
 }
 
