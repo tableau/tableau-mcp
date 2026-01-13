@@ -66,11 +66,22 @@ The MCP transport type to use for the server.
 
 ### `SITE_NAME`
 
-The target Tableau site for OAuth.
+The target Tableau site for OAuth. The user must sign in to this site unless
+[`OAUTH_LOCK_SITE`](#oauth_lock_site) is `false`.
 
-- When [`AUTH`](#auth) is `oauth`, leaving this empty means any site will be supported, determined
-  by the site the user signed into when connecting to the MCP server.
+<hr />
 
+### `OAUTH_LOCK_SITE`
+
+Whether to require the user to sign in to the site specified in [`SITE_NAME`](#site_name) when using
+OAuth.
+
+- Default: `true`
+- When `true`, the user must sign in to the site specified in [`SITE_NAME`](#site_name) (or the
+  Default site if empty).
+  - If the user already has an active Tableau session in their browser for a different site, an
+    error will be returned.
+- When `false`, the user can sign in to any site they can access.
 <hr />
 
 ### `OAUTH_REDIRECT_URI`

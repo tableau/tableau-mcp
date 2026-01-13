@@ -396,6 +396,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  OAUTH_LOCK_SITE: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'OAuth Lock Site',
+    description: 'Whether to lock the site when using OAuth.',
+    required: false,
+    sensitive: false,
+  },
   OAUTH_CLIENT_ID_SECRET_PAIRS: {
     includeInUserConfig: false,
     type: 'string',

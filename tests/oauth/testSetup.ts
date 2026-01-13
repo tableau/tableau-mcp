@@ -13,7 +13,7 @@ vi.mock('../../src/sdks/tableau/restApi.js', async (importOriginal) => ({
         Ok({
           site: {
             id: 'site_id',
-            name: 'test-site',
+            name: 'mcp-test',
           },
           user: {
             id: 'user_id',

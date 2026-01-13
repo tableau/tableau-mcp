@@ -68,6 +68,7 @@ export class Config {
     enabled: boolean;
     issuer: string;
     redirectUri: string;
+    lockSite: boolean;
     jwePrivateKey: string;
     jwePrivateKeyPath: string;
     jwePrivateKeyPassphrase: string | undefined;
@@ -122,6 +123,7 @@ export class Config {
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
+      OAUTH_LOCK_SITE: oauthLockSite,
       OAUTH_JWE_PRIVATE_KEY: oauthJwePrivateKey,
       OAUTH_JWE_PRIVATE_KEY_PATH: oauthJwePrivateKeyPath,
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
@@ -193,6 +195,7 @@ export class Config {
       enabled: disableOauthOverride ? false : !!oauthIssuer,
       issuer: oauthIssuer ?? '',
       redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
+      lockSite: oauthLockSite !== 'false', // Site locking is enabled by default
       jwePrivateKey: oauthJwePrivateKey ?? '',
       jwePrivateKeyPath: oauthJwePrivateKeyPath ?? '',
       jwePrivateKeyPassphrase: oauthJwePrivateKeyPassphrase || undefined,

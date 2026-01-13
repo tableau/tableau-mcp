@@ -60,6 +60,7 @@ describe('Config', () => {
       DANGEROUSLY_DISABLE_OAUTH: undefined,
       OAUTH_ISSUER: undefined,
       OAUTH_REDIRECT_URI: undefined,
+      OAUTH_LOCK_SITE: undefined,
       OAUTH_JWE_PRIVATE_KEY: undefined,
       OAUTH_JWE_PRIVATE_KEY_PATH: undefined,
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: undefined,
@@ -1084,6 +1085,7 @@ describe('Config', () => {
       clientIdSecretPairs: null,
       issuer: defaultOAuthEnvVars.OAUTH_ISSUER,
       redirectUri: `${defaultOAuthEnvVars.OAUTH_ISSUER}/Callback`,
+      lockSite: true,
       jwePrivateKey: '',
       jwePrivateKeyPath: defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH,
       jwePrivateKeyPassphrase: undefined,
@@ -1103,6 +1105,7 @@ describe('Config', () => {
         issuer: '',
         clientIdSecretPairs: null,
         redirectUri: '',
+        lockSite: true,
         jwePrivateKey: '',
         jwePrivateKeyPath: '',
         jwePrivateKeyPassphrase: undefined,
@@ -1157,6 +1160,20 @@ describe('Config', () => {
       expect(config.oauth).toEqual({
         ...defaultOAuthConfig,
         redirectUri: `${defaultOAuthEnvVars.OAUTH_ISSUER}/Callback`,
+      });
+    });
+
+    it('should set lockSite to the specified value when OAUTH_LOCK_SITE is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_LOCK_SITE: 'false',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        lockSite: false,
       });
     });
 
