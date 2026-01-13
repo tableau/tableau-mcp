@@ -9,6 +9,10 @@
  * - TELEMETRY_PROVIDER=moncloud - Use MonCloud APM
  */
 
+// Load .env before anything else
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { initializeTelemetry } from './init.js';
 
 try {
