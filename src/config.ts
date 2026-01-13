@@ -64,6 +64,7 @@ export class Config {
   serverLogDirectory: string;
   boundedContext: BoundedContext;
   tableauServerVersionCheckIntervalInHours: number;
+  useHeadedBrowser: boolean;
   oauth: {
     enabled: boolean;
     issuer: string;
@@ -121,6 +122,7 @@ export class Config {
       INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
       INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
+      USE_HEADED_BROWSER: useHeadedBrowser,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
       OAUTH_LOCK_SITE: oauthLockSite,
@@ -155,6 +157,7 @@ export class Config {
       disableQueryDatasourceValidationRequests === 'true';
     this.disableMetadataApiRequests = disableMetadataApiRequests === 'true';
     this.disableSessionManagement = disableSessionManagement === 'true';
+    this.useHeadedBrowser = useHeadedBrowser === 'true';
     this.enableServerLogging = enableServerLogging === 'true';
     this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
     this.boundedContext = {

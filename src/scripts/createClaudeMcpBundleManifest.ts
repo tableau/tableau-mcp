@@ -348,6 +348,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  USE_HEADED_BROWSER: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Use Headed Browser',
+    description: 'Use a headed browser.',
+    required: false,
+    sensitive: false,
+  },
   DANGEROUSLY_DISABLE_OAUTH: {
     includeInUserConfig: false,
     type: 'boolean',

@@ -1,21 +1,41 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Dashboard, SheetType, Story, TableauViz } from '@tableau/embedding-api';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
-import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
+import { getEmbeddingJwt, getWorkgroupSessionId } from '../../utils/getTableauAccessTokens.js';
+import { parseUrl } from '../../utils/parseUrl.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
+import {
+  BrowserController,
+  BrowserControllerError,
+  getBrowserControllerErrorMessage,
+  isBrowserControllerError,
+} from './browserController.js';
+
+type GetViewDataError =
+  | BrowserControllerError
+  | {
+      type: 'embedding-api-not-found';
+      url: string;
+      error: unknown;
+    }
+  | {
+      type: 'invalid-url';
+      url: string;
+    }
+  | {
+      type: 'view-not-allowed';
+      message: string;
+    };
 
 const paramsSchema = {
-  viewId: z.string(),
-};
-
-export type GetViewDataError = {
-  type: 'view-not-allowed';
-  message: string;
+  url: z.string(),
+  sheetName: z.string().optional(),
 };
 
 export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -30,16 +50,30 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ viewId }, { requestId, authInfo, signal }): Promise<CallToolResult> => {
+    callback: async (
+      { url, sheetName },
+      { requestId, authInfo, signal },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
 
-      return await getViewDataTool.logAndExecute<string, GetViewDataError>({
+      return await getViewDataTool.logAndExecute<
+        Array<{ filename: string; content: string }>,
+        GetViewDataError
+      >({
         requestId,
         authInfo,
-        args: { viewId },
-        callback: async () => {
-          const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
-            viewId,
+        args: { url, sheetName },
+        callback: async ({ cleanupActions }) => {
+          const parsedUrl = parseUrl(url);
+          if (!parsedUrl) {
+            return Err({
+              type: 'invalid-url',
+              url,
+            });
+          }
+
+          const isViewAllowedResult = await resourceAccessChecker.isViewAllowedByUrl({
+            url: parsedUrl,
             restApiArgs: { config, requestId, server, signal },
           });
 
@@ -50,21 +84,92 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
             });
           }
 
-          return new Ok(
-            await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: ['tableau:views:download'],
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
-              callback: async (restApi) => {
-                return await restApi.viewsMethods.queryViewData({
-                  viewId,
-                  siteId: restApi.siteId,
-                });
-              },
-            }),
+          const token =
+            config.auth === 'pat' ||
+            config.auth === 'oauth' ||
+            parsedUrl.host === 'public.tableau.com'
+              ? ''
+              : await getEmbeddingJwt({ config, authInfo });
+
+          const protocol = config.sslCert ? 'https' : 'http';
+          const embedUrl = `${protocol}://localhost:${config.httpPort}/embed#?url=${url}&token=${token}`;
+
+          return await BrowserController.use(
+            { headless: !config.useHeadedBrowser },
+            async (controller) => {
+              const result = await controller
+                .createNewPage({ width: 800, height: 600 })
+                .then((b) => b.enableDownloads())
+                .then((b) => b.navigate(embedUrl))
+                .then(async (b) => {
+                  if (parsedUrl.host === 'public.tableau.com') {
+                    // No auth for Public
+                    return b;
+                  }
+
+                  if (config.auth === 'direct-trust' || config.auth === 'uat') {
+                    // For Direct Trust and UAT, the JWT will be provided to the /embed endpoint.
+                    // The Embedding API will use the JWT to authenticate.
+                    return b;
+                  }
+
+                  // For PAT and OAuth, we need to set the workgroup_session_id cookie ourselves.
+                  const { workgroupSessionId, domain } = await getWorkgroupSessionId(
+                    config.auth,
+                    config,
+                    authInfo,
+                    { config, requestId, server, signal },
+                    cleanupActions,
+                  );
+
+                  return await b.setWorkgroupSessionId({ workgroupSessionId, domain });
+                })
+                .then((b) => b.waitForPageLoad())
+                .then((b) => b.takeScreenshot())
+                .then((b) => b.getResult());
+
+              if (result.isErr()) {
+                return result;
+              }
+
+              const browserController = result.value;
+              await browserController.page.evaluate(
+                async (sheetName, SheetType) => {
+                  const viz = document.getElementById('viz') as TableauViz;
+                  const activeSheet = viz.workbook.activeSheet;
+                  if (activeSheet.sheetType === SheetType.Worksheet) {
+                    await viz.exportDataAsync(activeSheet.name);
+                  } else if (activeSheet.sheetType === SheetType.Dashboard) {
+                    if (sheetName) {
+                      await viz.exportDataAsync(sheetName);
+                    } else {
+                      for (const worksheet of (activeSheet as Dashboard).worksheets) {
+                        await viz.exportDataAsync(worksheet.name);
+                      }
+                    }
+                  } else {
+                    const containedSheet = (activeSheet as Story).activeStoryPoint.containedSheet;
+                    if (containedSheet && containedSheet.sheetType === SheetType.Worksheet) {
+                      await viz.exportDataAsync(containedSheet.name);
+                    } else if (containedSheet && containedSheet.sheetType === SheetType.Dashboard) {
+                      if (sheetName) {
+                        await viz.exportDataAsync(sheetName);
+                      } else {
+                        for (const worksheet of (containedSheet as Dashboard).worksheets) {
+                          await viz.exportDataAsync(worksheet.name);
+                        }
+                      }
+                    }
+                  }
+                },
+                sheetName,
+                SheetType,
+              );
+
+              await browserController.waitForDownloads();
+              const fileContents = await browserController.getAndDeleteDownloads();
+              return Ok(fileContents);
+            },
           );
         },
         constrainSuccessResult: (viewData) => {
@@ -74,10 +179,12 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
           };
         },
         getErrorText: (error: GetViewDataError) => {
-          switch (error.type) {
-            case 'view-not-allowed':
-              return error.message;
-          }
+          return JSON.stringify({
+            reason: getErrorMessage(error),
+            exception: isBrowserControllerError(error)
+              ? getExceptionMessage(error.error)
+              : undefined,
+          });
         },
       });
     },
@@ -85,3 +192,18 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
 
   return getViewDataTool;
 };
+
+function getErrorMessage(error: GetViewDataError): string {
+  if (isBrowserControllerError(error)) {
+    return getBrowserControllerErrorMessage(error.type, error.error);
+  }
+
+  switch (error.type) {
+    case 'invalid-url':
+      return `The URL is invalid: ${error.url}`;
+    case 'embedding-api-not-found':
+      return `The Embedding API JavaScript module was not found at ${error.url}.`;
+    case 'view-not-allowed':
+      return error.message;
+  }
+}

@@ -15,6 +15,7 @@ import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
+import { setupUiRoutes } from './ui/views/routes.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
 
@@ -72,6 +73,8 @@ export async function startExpressServer({
     ...middleware,
     config.disableSessionManagement ? methodNotAllowed : handleSessionRequest,
   );
+
+  setupUiRoutes(app);
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
