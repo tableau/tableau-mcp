@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { getConfig } from '../../config.js';
 import { Server } from '../../server.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
-import { getEmbeddingJwt } from '../../utils/getTableauAccessTokens.js';
+import { getEmbeddingJwt, getWorkgroupSessionId } from '../../utils/getTableauAccessTokens.js';
 import { parseUrl } from '../../utils/parseUrl.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -61,7 +61,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
         requestId,
         authInfo,
         args: { url },
-        callback: async () => {
+        callback: async ({ cleanupActions }) => {
           const parsedUrl = parseUrl(url);
           if (!parsedUrl) {
             return Err({
@@ -79,26 +79,6 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
             return new Err({
               type: 'view-not-allowed',
               message: isViewAllowedResult.message,
-            });
-          }
-
-          const embeddingApiUrl = `${parsedUrl.origin}/javascripts/api/tableau.embedding.3.latest.js`;
-          try {
-            const response = await fetch(embeddingApiUrl);
-            if (!response.ok) {
-              return Err({
-                type: 'embedding-api-not-found',
-                url: embeddingApiUrl,
-                error: new Error(
-                  `Failed to fetch embedding API JavaScript module: ${response.status} ${response.statusText}`,
-                ),
-              });
-            }
-          } catch (error) {
-            return Err({
-              type: 'embedding-api-not-found',
-              url: embeddingApiUrl,
-              error,
             });
           }
 
@@ -124,6 +104,29 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
                 .createNewPage(rendererOptions)
                 .then((b) => b.enableDownloads())
                 .then((b) => b.navigate(embedUrl))
+                .then(async (b) => {
+                  if (parsedUrl.host === 'public.tableau.com') {
+                    // No auth for Public
+                    return b;
+                  }
+
+                  if (config.auth === 'direct-trust' || config.auth === 'uat') {
+                    // For Direct Trust and UAT, the JWT will be provided to the /embed endpoint.
+                    // The Embedding API will use the JWT to authenticate.
+                    return b;
+                  }
+
+                  // For PAT and OAuth, we need to set the workgroup_session_id cookie ourselves.
+                  const { workgroupSessionId, domain } = await getWorkgroupSessionId(
+                    config.auth,
+                    config,
+                    authInfo,
+                    { config, requestId, server, signal },
+                    cleanupActions,
+                  );
+
+                  return await b.setWorkgroupSessionId({ workgroupSessionId, domain });
+                })
                 .then((b) => b.waitForPageLoad())
                 .then((b) => b.takeScreenshot())
                 .then((b) => b.getResult());

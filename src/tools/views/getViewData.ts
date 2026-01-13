@@ -84,26 +84,6 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
             });
           }
 
-          const embeddingApiUrl = `${parsedUrl.origin}/javascripts/api/tableau.embedding.3.latest.js`;
-          try {
-            const response = await fetch(embeddingApiUrl);
-            if (!response.ok) {
-              return Err({
-                type: 'embedding-api-not-found',
-                url: embeddingApiUrl,
-                error: new Error(
-                  `Failed to fetch embedding API JavaScript module: ${response.status} ${response.statusText}`,
-                ),
-              });
-            }
-          } catch (error) {
-            return Err({
-              type: 'embedding-api-not-found',
-              url: embeddingApiUrl,
-              error,
-            });
-          }
-
           const token =
             config.auth === 'pat' ||
             config.auth === 'oauth' ||

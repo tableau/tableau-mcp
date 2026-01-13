@@ -55,7 +55,15 @@
     const parsedUrl = new URL(url);
 
     (async () => {
-      const { TableauEventType } = await import(`${parsedUrl.origin}/javascripts/api/tableau.embedding.3.latest.js`);
+      let module;
+      try {
+        module = await import(`${parsedUrl.origin}/javascripts/api/tableau.embedding.3.latest.js`);
+      } catch (e) {
+        showError(getExceptionMessage(e));
+        return;
+      }
+
+      const { TableauEventType } = module;
 
       viz.token = token;
       viz.src = parsedUrl.toString();
