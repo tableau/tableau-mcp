@@ -6,7 +6,7 @@ import { chmod, rm } from 'fs/promises';
 const dev = process.argv.includes('--dev');
 
 (async () => {
-  await rm('./build', { recursive: true });
+  await rm('./build', { recursive: true, force: true });
 
   console.log('🏗️ Building...');
   const result = await build({
