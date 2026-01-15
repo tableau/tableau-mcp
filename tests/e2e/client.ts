@@ -105,10 +105,6 @@ export async function getClient(env?: Record<string, string>): Promise<Client> {
   const client = new Client({
     name: 'tableau-mcp-e2e-tests',
     version: '1.0.0',
-    capabilities: {
-      listTools: true,
-      callTool: true,
-    },
   });
 
   await client.connect(transport);

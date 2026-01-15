@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { mockView } from '../views/mockView.js';
@@ -60,6 +61,7 @@ describe('getWorkbookTool', () => {
     mocks.mockQueryViewsForWorkbook.mockResolvedValue([mockView]);
     const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
     expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Superstore');
     expect(mocks.mockGetWorkbook).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -72,6 +74,7 @@ describe('getWorkbookTool', () => {
     mocks.mockGetWorkbook.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -87,6 +90,7 @@ describe('getWorkbookTool', () => {
 
     const result = await getToolResult({ workbookId: mockWorkbook.id });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       [
         'The set of allowed workbooks that can be queried is limited by the server configuration.',

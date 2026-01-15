@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../server.js';
+import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
@@ -245,7 +246,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
 
     expect(responseData).toMatchObject({
       fields: [
@@ -335,7 +337,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
     expect(responseData).toEqual({
       fields: [],
       parameters: [],
@@ -349,7 +352,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
     expect(responseData).toEqual({
       fields: [
         {
@@ -407,7 +411,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
 
     // Should have basic fields from readMetadata without enrichment
     expect(responseData).toMatchObject({
@@ -477,7 +482,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
 
     // Should have basic fields from readMetadata without enrichment
     expect(responseData.fields).toHaveLength(3);
@@ -526,7 +532,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
 
     expect(responseData.fields).toHaveLength(2);
 
@@ -565,7 +572,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
 
     expect(responseData.fields[0]).toMatchObject({
       name: 'Binned Field',
@@ -581,6 +589,7 @@ describe('getDatasourceMetadataTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       'requestId: test-request-id, error: ReadMetadata API Error',
     );
@@ -593,7 +602,8 @@ describe('getDatasourceMetadataTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
     expect(responseData).toMatchObject({
       fields: [
         {
@@ -624,6 +634,7 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     // Should fail with the first error (readMetadata is called first)
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       'requestId: test-request-id, error: ReadMetadata API Error',
     );
@@ -646,7 +657,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
 
     // Should only have basic fields from readMetadata without enrichment
     expect(responseData).toMatchObject({
@@ -700,6 +712,7 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       'requestId: test-request-id, error: ReadMetadata API Error',
     );
@@ -718,6 +731,7 @@ describe('getDatasourceMetadataTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
@@ -733,6 +747,7 @@ describe('getDatasourceMetadataTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       [
         'The set of allowed data sources that can be queried is limited by the server configuration.',

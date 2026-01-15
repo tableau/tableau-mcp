@@ -3,6 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { PulseInsightBundleType } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './generatePulseMetricValueInsightBundleTool.js';
@@ -135,7 +136,8 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
       'ban',
     );
     expect(result.isError).toBe(false);
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockBundleRequestResponse);
   });
 
@@ -149,7 +151,8 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
       'springboard',
     );
     expect(result.isError).toBe(false);
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockBundleRequestResponse);
   });
 
@@ -165,7 +168,8 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
         bundleType,
       );
       expect(result.isError).toBe(false);
-      const parsedValue = JSON.parse(result.content[0].text as string);
+      invariant(result.content[0].type === 'text');
+      const parsedValue = JSON.parse(result.content[0].text);
       expect(parsedValue).toEqual(mockBundleRequestResponse);
     },
   );
@@ -184,6 +188,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -193,6 +198,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('bundleRequest');
   });
 
@@ -200,6 +206,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(new Err('tableau-server'));
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
   });
 
@@ -207,6 +214,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(new Err('pulse-disabled'));
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
   });
 
@@ -221,6 +229,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       [
         'The set of allowed metric insights that can be queried is limited by the server configuration.',
@@ -235,11 +244,14 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   async function getToolResult(bundleType?: PulseInsightBundleType): Promise<CallToolResult> {
     const tool = getGeneratePulseMetricValueInsightBundleTool(new Server());
     const callback = await Provider.from(tool.callback);
-    return await callback(bundleType ? { bundleRequest, bundleType } : { bundleRequest }, {
-      signal: new AbortController().signal,
-      requestId: 'test-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    });
+    return await callback(
+      { bundleRequest, bundleType },
+      {
+        signal: new AbortController().signal,
+        requestId: 'test-request-id',
+        sendNotification: vi.fn(),
+        sendRequest: vi.fn(),
+      },
+    );
   }
 });

@@ -144,7 +144,7 @@ export function getCallToolResult<Z extends z.ZodTypeAny = z.ZodNever>(
 export function getCallToolResultSafe<Z extends z.ZodTypeAny = z.ZodNever>(
   toolExecution: ToolExecution,
   schema: Z,
-): Result<z.infer<Z>, z.ZodError> {
+): Result<z.infer<Z>, Error> {
   const callToolResult = CallToolResultSchema.safeParse(JSON.parse(toolExecution.output));
   if (!callToolResult.success) {
     return Err(callToolResult.error);

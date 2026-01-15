@@ -476,7 +476,7 @@ const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>
 );
 
 const manifest = {
-  manifest_version: '0.2',
+  manifest_version: '0.3',
   name: 'Tableau',
   version: packageJson.version,
   description: packageJson.description,
@@ -491,7 +491,7 @@ const manifest = {
   documentation: 'https://tableau.github.io/tableau-mcp/',
   license: packageJson.license,
   support: 'https://github.com/tableau/tableau-mcp/issues',
-  icon: 'https://avatars.githubusercontent.com/u/828667',
+  icon: 'icon.png',
   server: {
     type: 'node',
     entry_point: 'build/index.js',

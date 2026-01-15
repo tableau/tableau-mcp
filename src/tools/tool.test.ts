@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
+import invariant from '../utils/invariant.js';
 import { Tool } from './tool.js';
 
 describe('Tool', () => {
@@ -74,8 +75,8 @@ describe('Tool', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(result.content[0].type).toBe('text');
-    expect(JSON.parse(result.content[0].text as string)).toEqual(successResult);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual(successResult);
 
     expect(spy).toHaveBeenCalledExactlyOnceWith({
       requestId: '2',
@@ -106,7 +107,7 @@ describe('Tool', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].type).toBe('text');
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('requestId: 2, error: Test error');
   });
 
@@ -162,7 +163,7 @@ describe('Tool', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].type).toBe('text');
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('requestId: 2, error: Test error');
   });
 
@@ -187,8 +188,8 @@ describe('Tool', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(result.content[0].type).toBe('text');
-    expect(JSON.parse(result.content[0].text as string)).toEqual({
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual({
       ...successResult,
       additionalField: 'extra',
     });
@@ -212,7 +213,7 @@ describe('Tool', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(result.content[0].type).toBe('text');
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('No data found');
   });
 
@@ -234,7 +235,7 @@ describe('Tool', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].type).toBe('text');
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('An error occurred');
   });
 });
