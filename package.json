@@ -21,7 +21,6 @@
   "scripts": {
     "build": "tsx src/scripts/build.ts",
     "build:dev": "tsx src/scripts/build.ts --dev",
-    "build:watch": "npm run :build:dev -- --watch",
     "build:docker": "docker build -t tableau-mcp .",
     ":build:mcpb": "npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb",
     "build:mcpb": "run-s build:manifest :build:mcpb",
