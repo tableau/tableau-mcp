@@ -69,6 +69,18 @@ Example:
 }
 ```
 
+<hr />
+
+### `limit`
+
+The maximum number of rows to return. The tool will return at most this many rows.
+
+Example: `2000`
+
+- Only available on Tableau 2026.1.0 and later.
+
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
+
 ## Example result
 
 ```json
