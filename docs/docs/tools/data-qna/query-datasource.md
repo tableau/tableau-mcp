@@ -71,6 +71,8 @@ Example:
 
 <hr />
 
+## Optional arguments
+
 ### `limit`
 
 The maximum number of rows to return. The tool will return at most this many rows.
