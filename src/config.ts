@@ -228,11 +228,22 @@ export class Config {
         : null,
     };
 
-    this.telemetry = {
-      enabled: telemetryEnabled === 'true',
-      provider: (telemetryProvider as 'noop' | 'moncloud' | 'custom') || 'noop',
-      providerConfig: telemetryProviderConfig ? JSON.parse(telemetryProviderConfig) : undefined,
-    };
+    const parsedProvider = (telemetryProvider as 'noop' | 'moncloud' | 'custom') || 'noop';
+    if (parsedProvider === 'custom') {
+      if (!telemetryProviderConfig) {
+        throw new Error('TELEMETRY_PROVIDER_CONFIG is required when TELEMETRY_PROVIDER is "custom"');
+      }
+      this.telemetry = {
+        enabled: telemetryEnabled === 'true',
+        provider: 'custom',
+        providerConfig: JSON.parse(telemetryProviderConfig),
+      };
+    } else {
+      this.telemetry = {
+        enabled: telemetryEnabled === 'true',
+        provider: parsedProvider,
+      };
+    }
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';

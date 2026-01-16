@@ -82,26 +82,35 @@ export interface TelemetryAttributes {
 }
 
 /**
- * Configuration for telemetry providers
+ * Base telemetry config
  */
-export interface TelemetryConfig {
-  /**
-   * Enable or disable telemetry
-   */
+interface TelemetryConfigBase {
   enabled: boolean;
+}
 
-  /**
-   * Type of telemetry provider to use:
-   * - 'noop': No telemetry (default)
-   * - 'moncloud': Salesforce MonCloud (for hosted version)
-   * - 'custom': Load custom provider from user's filesystem
-   */
-  provider: 'noop' | 'moncloud' | 'custom';
+/**
+ * Configuration for noop provider (no telemetry)
+ */
+interface NoopTelemetryConfig extends TelemetryConfigBase {
+  provider: 'noop';
+}
 
+/**
+ * Configuration for MonCloud provider (Salesforce hosted)
+ */
+interface MonCloudTelemetryConfig extends TelemetryConfigBase {
+  provider: 'moncloud';
+}
+
+/**
+ * Configuration for custom provider with required providerConfig
+ */
+interface CustomTelemetryConfig extends TelemetryConfigBase {
+  provider: 'custom';
   /**
-   * Additional configuration specific to the provider.
+   * Configuration for the custom provider.
    *
-   * For custom providers, must include:
+   * Must include:
    * - module: Path to the provider implementation (e.g., "./my-telemetry.js")
    *
    * @example
@@ -111,5 +120,11 @@ export interface TelemetryConfig {
    * }
    * ```
    */
-  providerConfig?: Record<string, unknown>;
+  providerConfig: Record<string, unknown>;
 }
+
+/**
+ * Configuration for telemetry providers.
+ * providerConfig is required only when provider is 'custom'.
+ */
+export type TelemetryConfig = NoopTelemetryConfig | MonCloudTelemetryConfig | CustomTelemetryConfig;
