@@ -273,6 +273,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
         {
           signal: new AbortController().signal,
@@ -324,6 +325,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
         {
           signal: new AbortController().signal,
@@ -369,6 +371,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
         {
           signal: new AbortController().signal,
@@ -412,6 +415,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
         {
           signal: new AbortController().signal,
@@ -474,6 +478,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
         {
           signal: new AbortController().signal,
@@ -541,6 +546,7 @@ async function getToolResult(): Promise<CallToolResult> {
           { fieldCaption: 'Profit', function: 'SUM', sortDirection: 'DESC' },
         ],
       },
+      limit: undefined,
     },
     {
       signal: new AbortController().signal,

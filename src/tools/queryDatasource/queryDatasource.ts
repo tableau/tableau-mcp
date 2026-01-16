@@ -30,6 +30,7 @@ import { validateQueryAgainstDatasourceMetadata } from './validators/validateQue
 const paramsSchema = {
   datasourceLuid: z.string().nonempty(),
   query: querySchema,
+  limit: z.number().min(1).optional(),
 };
 
 export type QueryDatasourceError =
@@ -68,7 +69,16 @@ export const getQueryDatasourceTool = (
           },
         }),
     ),
-    paramsSchema,
+    paramsSchema: new Provider(
+      async () =>
+        await getResultForTableauVersion({
+          server: config.server || authInfo?.server,
+          mappings: {
+            '2026.1.0': paramsSchema,
+            default: { ...paramsSchema, limit: z.NEVER },
+          },
+        }),
+    ),
     annotations: {
       title: 'Query Datasource',
       readOnlyHint: true,
@@ -76,7 +86,7 @@ export const getQueryDatasourceTool = (
     },
     argsValidator: validateQuery,
     callback: async (
-      { datasourceLuid, query },
+      { datasourceLuid, query, limit },
       { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
       return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
@@ -101,6 +111,11 @@ export const getQueryDatasourceTool = (
             returnFormat: 'OBJECTS',
             debug: true,
             disaggregate: false,
+            ...(limit
+              ? {
+                  rowLimit: config.maxResultLimit ? Math.min(config.maxResultLimit, limit) : limit,
+                }
+              : {}),
           } as const;
 
           const credentials = getDatasourceCredentials(datasourceLuid);
