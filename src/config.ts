@@ -241,7 +241,7 @@ export class Config {
     } else {
     this.telemetry = {
       enabled: telemetryEnabled === 'true',
-        provider: parsedProvider,
+      provider: parsedProvider,
     };
     }
 
