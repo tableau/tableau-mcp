@@ -239,10 +239,10 @@ export class Config {
         providerConfig: JSON.parse(telemetryProviderConfig),
       };
     } else {
-      this.telemetry = {
-        enabled: telemetryEnabled === 'true',
+    this.telemetry = {
+      enabled: telemetryEnabled === 'true',
         provider: parsedProvider,
-      };
+    };
     }
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
