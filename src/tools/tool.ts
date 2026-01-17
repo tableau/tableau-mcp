@@ -9,6 +9,7 @@ import { fromError, isZodErrorLike } from 'zod-validation-error';
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
 import { tableauAuthInfoSchema } from '../server/oauth/schemas.js';
+import { getTelemetryProvider } from '../telemetry/init.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { Provider, TypeOrProvider } from '../utils/provider.js';
 import { ToolName } from './toolName.js';
@@ -172,6 +173,14 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       : undefined;
 
     this.logInvocation({ requestId, args, username });
+
+    // Record custom metric for this tool call
+    const telemetry = getTelemetryProvider();
+    telemetry.recordMetric('mcp.tool.calls', 1, {
+      'mcp.tool.name': this.name,
+      'mcp.request.id': String(requestId),
+      ...(username && { 'mcp.user.name': username }),
+    });
 
     if (args) {
       try {

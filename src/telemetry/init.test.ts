@@ -9,14 +9,14 @@ vi.mock('../config.js', () => ({
 vi.mock('./moncloud.js', () => ({
   MonCloudTelemetryProvider: vi.fn().mockImplementation(() => ({
     initialize: vi.fn(),
-    addAttributes: vi.fn(),
+    recordMetric: vi.fn(),
   })),
 }));
 
 vi.mock('./noop.js', () => ({
   NoOpTelemetryProvider: vi.fn().mockImplementation(() => ({
     initialize: vi.fn(),
-    addAttributes: vi.fn(),
+    recordMetric: vi.fn(),
   })),
 }));
 
@@ -59,7 +59,7 @@ describe('initializeTelemetry', () => {
 
     expect(NoOpTelemetryProvider).toHaveBeenCalled();
     expect(provider.initialize).toBeDefined();
-    expect(provider.addAttributes).toBeDefined();
+    expect(provider.recordMetric).toBeDefined();
   });
 
   it('returns NoOpTelemetryProvider when provider is "noop"', () => {
@@ -91,7 +91,7 @@ describe('initializeTelemetry', () => {
       initialize: vi.fn().mockImplementation(() => {
         throw new Error('Init failed');
       }),
-      addAttributes: vi.fn(),
+      recordMetric: vi.fn(),
     }));
 
     mockGetConfig.mockReturnValue({

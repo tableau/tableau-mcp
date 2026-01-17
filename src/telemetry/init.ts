@@ -9,6 +9,26 @@ import { MonCloudTelemetryProvider } from './moncloud.js';
 import { NoOpTelemetryProvider } from './noop.js';
 import { TelemetryProvider } from './types.js';
 
+// Use global to share provider across bundles (tracing.js and index.js)
+declare global {
+  // eslint-disable-next-line no-var
+  var __telemetryProvider: TelemetryProvider | undefined;
+}
+
+/**
+ * Get the current telemetry provider instance.
+ * If not initialized, returns a NoOp provider.
+ *
+ * @returns The telemetry provider
+ */
+export function getTelemetryProvider(): TelemetryProvider {
+  if (!global.__telemetryProvider) {
+    // return a NoOp provider for this request if telemetry hasn't been initialized
+    return new NoOpTelemetryProvider();
+  }
+  return global.__telemetryProvider;
+}
+
 /**
  * Initialize the telemetry provider based on configuration.
  *
@@ -23,12 +43,6 @@ import { TelemetryProvider } from './types.js';
  *   // Initialize telemetry first
  *   const telemetry = initializeTelemetry();
  *
- *   // Add global attributes
- *   telemetry.addAttributes({
- *     'tableau.server': config.server,
- *     'mcp.version': '1.0.0',
- *   });
- *
  *   // Start application...
  * }
  * ```
@@ -40,6 +54,7 @@ export function initializeTelemetry(): TelemetryProvider {
   if (!config.telemetry.enabled) {
     const provider = new NoOpTelemetryProvider();
     provider.initialize();
+    global.__telemetryProvider = provider;
     return provider;
   }
 
@@ -69,6 +84,7 @@ export function initializeTelemetry(): TelemetryProvider {
 
     // Initialize the provider
     provider.initialize();
+    global.__telemetryProvider = provider;
     return provider;
   } catch (error) {
     console.error('Failed to initialize telemetry provider:', error);
@@ -77,6 +93,7 @@ export function initializeTelemetry(): TelemetryProvider {
     // Fallback to NoOp on error - telemetry failures shouldn't break the application
     const fallbackProvider = new NoOpTelemetryProvider();
     fallbackProvider.initialize();
+    global.__telemetryProvider = fallbackProvider;
     return fallbackProvider;
   }
 }

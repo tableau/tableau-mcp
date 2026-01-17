@@ -3,74 +3,47 @@
  */
 
 /**
- * Telemetry provider interface for auto-instrumentation.
- *
- * Providers automatically capture HTTP requests, database calls, errors, etc.
- * This interface is for initializing the provider and adding custom business context.
+ * Telemetry provider interface for metrics collection.
  *
  * @example OpenTelemetry implementation
  * ```typescript
  * export default class OpenTelemetryProvider implements TelemetryProvider {
- *   private trace: any;
+ *   private meter: any;
  *
  *   initialize(): void {
  *     const { NodeSDK } = require('@opentelemetry/sdk-node');
  *     const sdk = new NodeSDK();
  *     sdk.start();
- *     this.trace = require('@opentelemetry/api').trace;
+ *     this.meter = require('@opentelemetry/api').metrics.getMeter('my-app');
  *   }
  *
- *   addAttributes(attributes: TelemetryAttributes): void {
- *     this.trace?.getActiveSpan()?.setAttributes(attributes);
- *   }
- * }
- * ```
- *
- * @example Datadog implementation
- * ```typescript
- * export default class DatadogProvider implements TelemetryProvider {
- *   private tracer: any;
- *
- *   initialize(): void {
- *     this.tracer = require('dd-trace').init();
- *   }
- *
- *   addAttributes(attributes: TelemetryAttributes): void {
- *     const span = this.tracer.scope().active();
- *     if (span) {
- *       Object.entries(attributes).forEach(([k, v]) => span.setTag(k, v));
- *     }
+ *   recordMetric(name: string, value: number, attributes: TelemetryAttributes): void {
+ *     this.meter.createCounter(name).add(value, attributes);
  *   }
  * }
  * ```
  */
 export interface TelemetryProvider {
   /**
-   * Initialize the telemetry provider and start auto-instrumentation.
-   *
-   * This should start the APM agent which will automatically instrument:
-   * - HTTP requests and responses
-   * - Database queries
-   * - External API calls
-   * - Errors and exceptions
-   * - System metrics (CPU, memory, GC)
+   * Initialize the telemetry provider.
    */
   initialize(): void;
 
   /**
-   * Add custom attributes to the current auto-generated execution context.
-   * These will be attached to all auto-generated spans/traces in the current context.
+   * Record a custom metric with the given name and attributes.
    *
-   * Use this to add business-specific context that auto-instrumentation can't capture,
-   * such as:
-   * - MCP tool names
-   * - Tableau resource IDs (workbook, datasource, etc.)
-   * - User identifiers
-   * - Custom business dimensions
+   * @param name - The metric name (e.g., 'mcp.tool.calls')
+   * @param value - The metric value (default: 1 for counters)
+   * @param attributes - Dimensions/tags for the metric
    *
-   * @param attributes - Key-value pairs to attach to the current span
+   * @example
+   * ```typescript
+   * telemetry.recordMetric('mcp.tool.calls', 1, {
+   *   'mcp.tool.name': 'list-pulse-metric-subscriptions',
+   * });
+   * ```
    */
-  addAttributes(attributes: TelemetryAttributes): void;
+  recordMetric(name: string, value: number, attributes: TelemetryAttributes): void;
 }
 
 /**

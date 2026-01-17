@@ -13,7 +13,7 @@ export class NoOpTelemetryProvider implements TelemetryProvider {
     // No-op
   }
 
-  addAttributes(_attributes: TelemetryAttributes): void {
+  recordMetric(_name: string, _value: number, _attributes: TelemetryAttributes): void {
     // No-op
   }
 }
