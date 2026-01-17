@@ -87,11 +87,12 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
               signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
+                const maxResultLimit = config.getMaxResultLimit('list-views');
                 const views = await paginate({
                   pageConfig: {
                     pageSize,
-                    limit: config.maxResultLimit
-                      ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                    limit: maxResultLimit
+                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
                       : limit,
                   },
                   getDataFn: async (pageConfig) => {

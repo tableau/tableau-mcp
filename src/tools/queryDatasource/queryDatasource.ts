@@ -113,16 +113,14 @@ export const getQueryDatasourceTool = (
           }
 
           const datasource: Datasource = { datasourceLuid };
+          const maxResultLimit = config.getMaxResultLimit('query-datasource');
           const options = {
             returnFormat: 'OBJECTS',
             debug: true,
             disaggregate: false,
-            rowLimit:
-              limit === undefined
-                ? undefined
-                : config.maxResultLimit
-                  ? Math.min(config.maxResultLimit, limit)
-                  : limit,
+            rowLimit: maxResultLimit
+              ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+              : limit,
           } as const;
 
           const credentials = getDatasourceCredentials(datasourceLuid);
