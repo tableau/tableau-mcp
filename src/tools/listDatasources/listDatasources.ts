@@ -97,7 +97,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
             signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
-              const maxResultLimit = config.getMaxResultLimit('list-datasources');
+              const maxResultLimit = config.getMaxResultLimit(listDatasourcesTool.name);
               const datasources = await paginate({
                 pageConfig: {
                   pageSize,

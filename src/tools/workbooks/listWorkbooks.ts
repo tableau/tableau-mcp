@@ -84,7 +84,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
               signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
-                const maxResultLimit = config.getMaxResultLimit('list-workbooks');
+                const maxResultLimit = config.getMaxResultLimit(listWorkbooksTool.name);
                 const workbooks = await paginate({
                   pageConfig: {
                     pageSize,

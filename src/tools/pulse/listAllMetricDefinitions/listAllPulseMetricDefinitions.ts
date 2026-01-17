@@ -75,7 +75,9 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
             signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
-              const maxResultLimit = config.getMaxResultLimit('list-all-pulse-metric-definitions');
+              const maxResultLimit = config.getMaxResultLimit(
+                listAllPulseMetricDefinitionsTool.name,
+              );
               const definitions = await pulsePaginate({
                 config: {
                   limit: maxResultLimit

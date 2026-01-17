@@ -82,7 +82,7 @@ This tool searches across all supported content types for objects relevant to th
               signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
-                const maxResultLimit = config.getMaxResultLimit('search-content');
+                const maxResultLimit = config.getMaxResultLimit(searchContentTool.name);
                 const response = await restApi.contentExplorationMethods.searchContent({
                   terms,
                   page: 0,
