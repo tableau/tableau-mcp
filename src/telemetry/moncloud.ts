@@ -15,11 +15,11 @@
 
 import { TelemetryAttributes, TelemetryProvider } from './types.js';
 import { Apm } from '@salesforce/apmagent';
-import otelApi, { Meter } from '@opentelemetry/api';
+import otelApi, { Counter, Meter } from '@opentelemetry/api';
 
 export class MonCloudTelemetryProvider implements TelemetryProvider {
   private meter: Meter | undefined;
-  private counters: Map<string, any> = new Map();
+  private counters = new Map<string, Counter>();
 
   initialize(): void {
     try {
