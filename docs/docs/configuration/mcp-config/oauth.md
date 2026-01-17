@@ -14,7 +14,7 @@ is accessed using a local development URL e.g. `http://127.0.0.1:3927/tableau-mc
 
 ## How to Enable OAuth
 
-To enable OAuth, set the [`OAUTH_ISSUER`](#oauth_issuer) environment variable to the URL of your MCP server. When a URL for `OAUTH_ISSUER` is provided, the MCP server will act as an OAuth 2.1 resource server, capable of accepting and responding to protected resource requests using encrypted access tokens.
+To enable OAuth, set the [`OAUTH_ISSUER`](#oauth_issuer) environment variable to the origin of your MCP server. When a URL for `OAUTH_ISSUER` is provided, the MCP server will act as an OAuth 2.1 resource server, capable of accepting and responding to protected resource requests using encrypted access tokens.
 
 When OAuth is enabled:
 - MCP clients will be required to authenticate via Tableau OAuth before connecting to the MCP server
@@ -46,7 +46,7 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 ### `OAUTH_ISSUER`
 
-**Setting this environment variable enables OAuth.** This should be the URL of your MCP server (the issuer of access tokens).
+**Setting this environment variable enables OAuth.** This should be the origin of your MCP server (the issuer of access tokens).
 
 - Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for production)
 - Required if `AUTH` is `oauth`
