@@ -33,6 +33,12 @@ const paramsSchema = {
   limit: z.number().min(1).optional(),
 };
 
+type ParamsSchema = {
+  datasourceLuid: z.ZodString;
+  query: z.ZodObject<typeof querySchema.shape>;
+  limit?: z.ZodOptional<z.ZodNumber>;
+};
+
 export type QueryDatasourceError =
   | {
       type: 'feature-disabled';
@@ -53,7 +59,7 @@ export type QueryDatasourceError =
 export const getQueryDatasourceTool = (
   server: Server,
   authInfo?: TableauAuthInfo,
-): Tool<typeof paramsSchema> => {
+): Tool<ParamsSchema> => {
   const config = getConfig();
 
   const queryDatasourceTool = new Tool({
@@ -71,11 +77,11 @@ export const getQueryDatasourceTool = (
     ),
     paramsSchema: new Provider(
       async () =>
-        await getResultForTableauVersion({
+        await getResultForTableauVersion<ParamsSchema>({
           server: config.server || authInfo?.server,
           mappings: {
             '2026.1.0': paramsSchema,
-            default: { ...paramsSchema, limit: z.NEVER },
+            default: (({ limit: _, ...rest }) => rest)(paramsSchema), // remove 'limit' for older versions
           },
         }),
     ),
@@ -111,11 +117,12 @@ export const getQueryDatasourceTool = (
             returnFormat: 'OBJECTS',
             debug: true,
             disaggregate: false,
-            ...(limit
-              ? {
-                  rowLimit: config.maxResultLimit ? Math.min(config.maxResultLimit, limit) : limit,
-                }
-              : {}),
+            rowLimit:
+              limit === undefined
+                ? undefined
+                : config.maxResultLimit
+                  ? Math.min(config.maxResultLimit, limit)
+                  : limit,
           } as const;
 
           const credentials = getDatasourceCredentials(datasourceLuid);
