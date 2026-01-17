@@ -1,5 +1,5 @@
 import axiosRetry from 'axios-retry';
-import { randomBytes, randomUUID } from 'crypto';
+import { randomBytes, randomInt, randomUUID } from 'crypto';
 import express from 'express';
 import { isIP } from 'net';
 import { isSSRFSafeURL } from 'ssrfcheck';
@@ -103,7 +103,7 @@ export function authorize(
 
     const tableauClientId = randomUUID();
     // 22-64 bytes (44-128 chars) is the recommended length for code verifiers
-    const numCodeVerifierBytes = Math.floor(Math.random() * (64 - 22 + 1)) + 22;
+    const numCodeVerifierBytes = randomInt(22, 65);
     const tableauCodeVerifier = randomBytes(numCodeVerifierBytes).toString('hex');
     const tableauCodeChallenge = generateCodeChallenge(tableauCodeVerifier);
     pendingAuthorizations.set(authKey, {
