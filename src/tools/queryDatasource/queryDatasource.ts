@@ -30,7 +30,7 @@ import { validateQueryAgainstDatasourceMetadata } from './validators/validateQue
 const paramsSchema = {
   datasourceLuid: z.string().nonempty(),
   query: querySchema,
-  limit: z.number().min(1).optional(),
+  limit: z.number().int().min(1).optional(),
 };
 
 type ParamsSchema = {
