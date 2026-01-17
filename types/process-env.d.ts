@@ -29,6 +29,7 @@ export interface ProcessEnvEx {
   EXCLUDE_TOOLS: string | undefined;
   MAX_REQUEST_TIMEOUT_MS: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
+  MAX_RESULT_LIMITS: string | undefined;
   DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: string | undefined;
   DISABLE_METADATA_API_REQUESTS: string | undefined;
   DISABLE_SESSION_MANAGEMENT: string | undefined;

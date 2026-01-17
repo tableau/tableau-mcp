@@ -27,11 +27,13 @@ describe('server', () => {
 
     const tools = toolFactories.map((toolFactory) => toolFactory(server));
     for (const tool of tools) {
-      expect(server.tool).toHaveBeenCalledWith(
+      expect(server.registerTool).toHaveBeenCalledWith(
         tool.name,
-        await Provider.from(tool.description),
-        expect.any(Object),
-        expect.any(Object),
+        {
+          description: await Provider.from(tool.description),
+          inputSchema: await Provider.from(tool.paramsSchema),
+          annotations: await Provider.from(tool.annotations),
+        },
         expect.any(Function),
       );
     }
@@ -43,11 +45,13 @@ describe('server', () => {
     await server.registerTools();
 
     const tool = getQueryDatasourceTool(server);
-    expect(server.tool).toHaveBeenCalledWith(
+    expect(server.registerTool).toHaveBeenCalledWith(
       tool.name,
-      await Provider.from(tool.description),
-      expect.any(Object),
-      expect.any(Object),
+      {
+        description: await Provider.from(tool.description),
+        inputSchema: await Provider.from(tool.paramsSchema),
+        annotations: await Provider.from(tool.annotations),
+      },
       expect.any(Function),
     );
   });
@@ -60,19 +64,23 @@ describe('server', () => {
     const tools = toolFactories.map((toolFactory) => toolFactory(server));
     for (const tool of tools) {
       if (tool.name === 'query-datasource') {
-        expect(server.tool).not.toHaveBeenCalledWith(
+        expect(server.registerTool).not.toHaveBeenCalledWith(
           tool.name,
-          tool.description,
-          expect.any(Object),
-          expect.any(Object),
+          {
+            description: await Provider.from(tool.description),
+            inputSchema: await Provider.from(tool.paramsSchema),
+            annotations: await Provider.from(tool.annotations),
+          },
           expect.any(Function),
         );
       } else {
-        expect(server.tool).toHaveBeenCalledWith(
+        expect(server.registerTool).toHaveBeenCalledWith(
           tool.name,
-          tool.description,
-          expect.any(Object),
-          expect.any(Object),
+          {
+            description: await Provider.from(tool.description),
+            inputSchema: await Provider.from(tool.paramsSchema),
+            annotations: await Provider.from(tool.annotations),
+          },
           expect.any(Function),
         );
       }
@@ -107,6 +115,6 @@ describe('server', () => {
 
 function getServer(): InstanceType<typeof Server> {
   const server = new Server();
-  server.tool = vi.fn();
+  server.registerTool = vi.fn();
   return server;
 }

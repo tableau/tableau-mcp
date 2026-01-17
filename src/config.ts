@@ -29,6 +29,9 @@ export type BoundedContext = {
 };
 
 export class Config {
+  private maxResultLimit: number | null;
+  private maxResultLimits: Map<ToolName, number | null> | null;
+
   auth: AuthType;
   server: string;
   transport: TransportName;
@@ -56,7 +59,6 @@ export class Config {
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
   maxRequestTimeoutMs: number;
-  maxResultLimit: number | null;
   disableQueryDatasourceValidationRequests: boolean;
   disableMetadataApiRequests: boolean;
   disableSessionManagement: boolean;
@@ -78,6 +80,10 @@ export class Config {
     clientIdSecretPairs: Record<string, string> | null;
     dnsServers: string[];
   };
+
+  getMaxResultLimit(toolName: ToolName): number | null {
+    return this.maxResultLimits?.get(toolName) ?? this.maxResultLimit;
+  }
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -112,6 +118,7 @@ export class Config {
       EXCLUDE_TOOLS: excludeTools,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       MAX_RESULT_LIMIT: maxResultLimit,
+      MAX_RESULT_LIMITS: maxResultLimits,
       DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: disableQueryDatasourceValidationRequests,
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
@@ -290,6 +297,8 @@ export class Config {
     this.maxResultLimit =
       isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
 
+    this.maxResultLimits = maxResultLimits ? getMaxResultLimits(maxResultLimits) : null;
+
     this.includeTools = includeTools
       ? includeTools.split(',').flatMap((s) => {
           const v = s.trim();
@@ -463,6 +472,32 @@ function removeClaudeMcpBundleUserConfigTemplates(
     }
     return acc;
   }, {});
+}
+
+function getMaxResultLimits(maxResultLimits: string): Map<ToolName, number | null> {
+  const map = new Map<ToolName, number | null>();
+  if (!maxResultLimits) {
+    return map;
+  }
+
+  maxResultLimits.split(',').forEach((curr) => {
+    const [toolName, maxResultLimit] = curr.split(':');
+    const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
+    const actualLimit =
+      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
+    if (isToolName(toolName)) {
+      map.set(toolName, actualLimit);
+    } else if (isToolGroupName(toolName)) {
+      toolGroups[toolName].forEach((toolName) => {
+        if (!map.has(toolName)) {
+          // Tool names take precedence over group names
+          map.set(toolName, actualLimit);
+        }
+      });
+    }
+  });
+
+  return map;
 }
 
 function parseNumber(

@@ -184,10 +184,54 @@ The maximum timeout for requests to the Tableau Server REST API.
 
 ## `MAX_RESULT_LIMIT`
 
-If a tool has a `limit` parameter and returns an array of items, the maximum length of that array.
+The maximum number of results that every tool with a `limit` parameter can return when no
+tool-specific max result limit is set in the [`MAX_RESULT_LIMITS`](#max_result_limits) environment
+variable.
+
+:::warning
+
+Take care when setting this value and be sure to set appropriate tool-specific limits in the
+[`MAX_RESULT_LIMITS`](#max_result_limits) environment variable.
+
+:::
 
 - Default: Empty string (_no limit_)
 - Must be a positive number.
+
+<hr />
+
+## `MAX_RESULT_LIMITS`
+
+A comma-separated list of tool names (or tool group names) and the maximum number of results that
+each tool (or tools in the group) can return.
+
+:::info
+
+Example:
+
+```
+MAX_RESULT_LIMIT=30
+MAX_RESULT_LIMITS=query-datasource:10,list-datasources:20
+```
+
+This means that:
+
+- The `query-datasource` tool can return up to 10 results.
+- The `list-datasources` tool can return up to 20 data sources.
+- Every other tool is limited to 30 results.
+
+:::
+
+- Default: Empty string (_no limits_)
+- For a list of available tools and groups, see
+  [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.ts).
+- Only applies to tools that have a `limit` parameter and return an array of items.
+- Tool names take precedence over tool group names. That is, `datasource:10,list-datasources:20`
+  means that the `list-datasources` tool can return up to 20 data sources but the `query-datasource`
+  tool can only return up to 10 results.
+- If a tool-specific limit is not set, the global limit specified by the
+  [`MAX_RESULT_LIMIT`](#max_result_limit) environment variable will be used instead.
+- Each limit must be a positive number.
 
 <hr />
 

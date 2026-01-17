@@ -61,11 +61,13 @@ export class Server extends McpServer {
       annotations,
       callback,
     } of this._getToolsToRegister(authInfo)) {
-      this.tool(
+      this.registerTool(
         name,
-        await Provider.from(description),
-        await Provider.from(paramsSchema),
-        await Provider.from(annotations),
+        {
+          description: await Provider.from(description),
+          inputSchema: await Provider.from(paramsSchema),
+          annotations: await Provider.from(annotations),
+        },
         await Provider.from(callback),
       );
     }
