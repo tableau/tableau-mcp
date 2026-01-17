@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "An MCP server for Tableau, providing a suite of tools that will make it easier for developers to build AI applications that integrate with Tableau.",
-  "version": "1.13.8",
+  "version": "1.14.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -19,17 +19,12 @@
     "tableau-mcp-server": "./build/index.js"
   },
   "scripts": {
-    "clean": "npx rimraf ./build",
-    ":build": "esbuild src/index.ts --bundle --platform=node --format=cjs --minify --outfile=build/index.js --sourcemap --log-override:empty-import-meta=silent",
-    ":build:dev": "esbuild src/index.ts --bundle --packages=external --platform=node --format=cjs --outfile=build/index.js --sourcemap",
-    "build": "run-s clean :build exec-perms",
-    "build:dev": "run-s clean :build:dev exec-perms",
-    "build:watch": "npm run :build:dev -- --watch",
+    "build": "tsx src/scripts/build.ts",
+    "build:dev": "tsx src/scripts/build.ts --dev",
     "build:docker": "docker build -t tableau-mcp .",
     ":build:mcpb": "npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb",
-    "build:mcpb": "run-s build:manifest:script build:manifest :build:mcpb",
-    "build:manifest": "node build/scripts/createClaudeMcpBundleManifest.mjs",
-    "build:manifest:script": "esbuild src/scripts/createClaudeMcpBundleManifest.ts --bundle --platform=node --format=esm --outdir=build/scripts --sourcemap=inline --out-extension:.js=.mjs",
+    "build:mcpb": "run-s build:manifest :build:mcpb",
+    "build:manifest": "tsx src/scripts/createClaudeMcpBundleManifest.ts",
     "start:http": "node build/index.js",
     "start:http:docker": "docker run -p 3927:3927 -i --rm --env-file env.list tableau-mcp",
     "lint": "npm exec eslint",
@@ -41,7 +36,6 @@
     "build:inspect": "run-s build inspect",
     "build:inspect:docker": "run-s build:docker inspect:docker",
     "build:inspect:docker:http": "run-s build:docker inspect:docker:http",
-    "exec-perms": "shx chmod +x build/*.js",
     "test": "vitest --config ./vitest.config.ts",
     "test:e2e": "vitest --config ./vitest.config.e2e.ts",
     "test:eval": "vitest --config ./vitest.config.eval.ts",
@@ -52,7 +46,7 @@
     "version:patch": "npm version patch --no-git-tag-version"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "@zodios/core": "^10.9.6",
     "axios-retry": "^4.5.0",
     "cors": "^2.8.5",
@@ -69,7 +63,6 @@
     "@anthropic-ai/mcpb": "^1.0.0",
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.25.1",
-    "@modelcontextprotocol/inspector": "^0.16.6",
     "@openai/agents": "^0.1.9",
     "@types/cors": "^2.8.19",
     "@types/eslint__js": "^8.42.3",
@@ -88,9 +81,8 @@
     "npm-run-all": "^4.1.5",
     "openai": "^5.23.2",
     "prettier": "^3.5.3",
-    "rimraf": "^6.0.1",
-    "shx": "^0.4.0",
     "supertest": "^7.1.4",
+    "tsx": "^4.21.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.31.1",
     "vitest": "^3.1.3"

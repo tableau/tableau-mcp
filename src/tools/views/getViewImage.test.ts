@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getGetViewImageTool } from './getViewImage.js';
@@ -82,6 +83,7 @@ describe('getViewImageTool', () => {
     mocks.mockQueryViewImage.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -98,6 +100,7 @@ describe('getViewImageTool', () => {
 
     const result = await getToolResult({ viewId: mockView.id });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       [
         'The set of allowed workbooks that can be queried is limited by the server configuration.',
@@ -112,10 +115,13 @@ describe('getViewImageTool', () => {
 async function getToolResult(params: { viewId: string }): Promise<CallToolResult> {
   const getViewImageTool = getGetViewImageTool(new Server());
   const callback = await Provider.from(getViewImageTool.callback);
-  return await callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  return await callback(
+    { viewId: params.viewId, width: undefined, height: undefined },
+    {
+      signal: new AbortController().signal,
+      requestId: 'test-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    },
+  );
 }

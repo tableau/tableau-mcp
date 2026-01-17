@@ -48,6 +48,7 @@ describe('listWorkbooksTool', () => {
     mocks.mockQueryWorkbooksForSite.mockResolvedValue(mockWorkbooksResponse);
     const result = await getToolResult({ filter: 'name:eq:Superstore' });
     expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Superstore');
     expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -62,6 +63,7 @@ describe('listWorkbooksTool', () => {
     mocks.mockQueryWorkbooksForSite.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ filter: 'name:eq:Superstore' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -122,10 +124,13 @@ describe('listWorkbooksTool', () => {
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
   const listWorkbooksTool = getListWorkbooksTool(new Server());
   const callback = await Provider.from(listWorkbooksTool.callback);
-  return await callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  return await callback(
+    { filter: params.filter, pageSize: undefined, limit: undefined },
+    {
+      signal: new AbortController().signal,
+      requestId: 'test-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    },
+  );
 }

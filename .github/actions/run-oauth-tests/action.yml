@@ -1,0 +1,10 @@
+name: 'Run OAuth Tests'
+description: 'Runs OAuth tests with required secrets'
+runs:
+  using: 'composite'
+  steps:
+    - name: OAuth Tests
+      shell: bash
+      run: npm run test:oauth
+      env:
+        OAUTH_ISSUER: http://127.0.0.1:3927

@@ -39,10 +39,19 @@ export function callback(
     const { error, code, state } = result.data;
 
     if (error) {
-      res.status(400).json({
-        error: 'access_denied',
-        error_description: 'User denied authorization',
-      });
+      if (error === 'invalid_request') {
+        res.status(400).json({
+          error: 'invalid_request',
+          error_description:
+            'Invalid request. Did you sign in to the wrong site? From your browser, please sign out of your site and reconnect your agent to Tableau MCP.',
+        });
+      } else {
+        res.status(400).json({
+          error: 'access_denied',
+          error_description: 'User denied authorization',
+        });
+      }
+
       return;
     }
 
@@ -92,7 +101,10 @@ export function callback(
       }
 
       const server = originHostUrl.toString();
-      const restApi = new RestApi(server);
+      const restApi = new RestApi(server, {
+        maxRequestTimeoutMs: config.maxRequestTimeoutMs,
+      });
+
       restApi.setCredentials(accessToken, 'unknown user id');
       const sessionResult = await restApi.authenticatedServerMethods.getCurrentServerSession();
       if (sessionResult.isErr()) {
@@ -108,6 +120,24 @@ export function callback(
               'Internal server error during authorization. Unable to get the Tableau server session. Contact your administrator.',
           });
         }
+        return;
+      }
+
+      if (
+        config.oauth.lockSite &&
+        sessionResult.value.site.name !== config.siteName &&
+        !(sessionResult.value.site.name === 'Default' && !config.siteName)
+      ) {
+        const sentences = [
+          `User signed in to site: ${sessionResult.value.site.name || 'Default'}.`,
+          `Expected site: ${config.siteName || 'Default'}.`,
+          `Please reconnect your client and choose the [${config.siteName || 'Default'}] site in the site picker if prompted.`,
+        ];
+
+        res.status(400).json({
+          error: 'invalid_request',
+          error_description: sentences.join(' '),
+        });
         return;
       }
 
@@ -172,13 +202,19 @@ async function exchangeAuthorizationCode({
   codeVerifier: string;
 }): Promise<Result<TableauAccessToken, string>> {
   try {
-    const result = await getTokenResult(server, {
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: redirectUri,
-      client_id: clientId,
-      code_verifier: codeVerifier,
-    });
+    const result = await getTokenResult(
+      server,
+      {
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: redirectUri,
+        client_id: clientId,
+        code_verifier: codeVerifier,
+      },
+      {
+        timeout: getConfig().maxRequestTimeoutMs,
+      },
+    );
 
     return Ok(result);
   } catch {

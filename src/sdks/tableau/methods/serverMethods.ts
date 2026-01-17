@@ -1,7 +1,7 @@
 import { isErrorFromAlias, Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { isAxiosError } from '../../../utils/axios.js';
+import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { serverApis, Session } from '../apis/serverApi.js';
 import { Credentials } from '../types/credentials.js';
@@ -18,8 +18,8 @@ import Methods from './methods.js';
  * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_server.htm
  */
 export class ServerMethods extends Methods<typeof serverApis> {
-  constructor(baseUrl: string) {
-    super(new Zodios(baseUrl, serverApis));
+  constructor(baseUrl: string, axiosConfig: AxiosRequestConfig) {
+    super(new Zodios(baseUrl, serverApis, { axiosConfig }));
   }
 
   /**
@@ -41,8 +41,8 @@ export class ServerMethods extends Methods<typeof serverApis> {
  * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_server.htm
  */
 export class AuthenticatedServerMethods extends AuthenticatedMethods<typeof serverApis> {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, serverApis), creds);
+  constructor(baseUrl: string, creds: Credentials, axiosConfig: AxiosRequestConfig) {
+    super(new Zodios(baseUrl, serverApis, { axiosConfig }), creds);
   }
 
   /**
