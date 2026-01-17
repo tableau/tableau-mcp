@@ -15,8 +15,10 @@ is accessed using a local development URL e.g. `http://127.0.0.1:3927/tableau-mc
 When `AUTH` is `oauth`, the MCP server will use a Tableau session initiated by the Tableau OAuth
 flow to authenticate to the Tableau REST APIs.
 
+OAuth is enabled by setting the `OAUTH_ISSUER` environment variable to the origin of your MCP server.
+
 :::info
 
-See [Enabling OAuth](../oauth.md) for details on how to configure the MCP server to use OAuth.
+See [Enabling OAuth](../oauth.md) for full details on configuring OAuth.
 
 :::
