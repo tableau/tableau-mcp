@@ -353,7 +353,7 @@ const queryDatasourceOptionsSchema = queryOptionsSchema.and(
   z
     .object({
       disaggregate: z.boolean(),
-      rowLimit: z.number().min(1).optional(),
+      rowLimit: z.number().int().min(1).optional(),
     })
     .partial()
     .passthrough(),
