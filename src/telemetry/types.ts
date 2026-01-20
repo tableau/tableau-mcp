@@ -1,27 +1,5 @@
 /**
- * Telemetry types and interfaces for the MCP server
- */
-
-/**
  * Telemetry provider interface for metrics collection.
- *
- * @example OpenTelemetry implementation
- * ```typescript
- * export default class OpenTelemetryProvider implements TelemetryProvider {
- *   private meter: any;
- *
- *   initialize(): void {
- *     const { NodeSDK } = require('@opentelemetry/sdk-node');
- *     const sdk = new NodeSDK();
- *     sdk.start();
- *     this.meter = require('@opentelemetry/api').metrics.getMeter('my-app');
- *   }
- *
- *   recordMetric(name: string, value: number, attributes: TelemetryAttributes): void {
- *     this.meter.createCounter(name).add(value, attributes);
- *   }
- * }
- * ```
  */
 export interface TelemetryProvider {
   /**
@@ -83,9 +61,6 @@ interface CustomTelemetryConfig extends TelemetryConfigBase {
   /**
    * Configuration for the custom provider.
    *
-   * Must include:
-   * - module: Path to the provider implementation (e.g., "./my-telemetry.js")
-   *
    * @example
    * ```json
    * {
@@ -96,8 +71,4 @@ interface CustomTelemetryConfig extends TelemetryConfigBase {
   providerConfig: Record<string, unknown>;
 }
 
-/**
- * Configuration for telemetry providers.
- * providerConfig is required only when provider is 'custom'.
- */
 export type TelemetryConfig = NoopTelemetryConfig | MonCloudTelemetryConfig | CustomTelemetryConfig;
