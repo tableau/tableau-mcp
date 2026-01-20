@@ -76,6 +76,7 @@ describe('queryDatasourceTool', () => {
         datasourceIds: null,
         workbookIds: null,
       },
+      getMaxResultLimit: vi.fn().mockReturnValue(null),
     });
   });
 
@@ -191,6 +192,7 @@ describe('queryDatasourceTool', () => {
         datasourceIds: null,
         workbookIds: null,
       },
+      getMaxResultLimit: vi.fn().mockReturnValue(null),
     });
 
     const result = await getToolResult();
@@ -551,6 +553,7 @@ describe('queryDatasourceTool', () => {
         datasourceIds: new Set(['some-other-datasource-luid']),
         workbookIds: null,
       },
+      getMaxResultLimit: vi.fn().mockReturnValue(null),
     });
 
     const result = await getToolResult();

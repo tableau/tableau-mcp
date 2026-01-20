@@ -33,12 +33,6 @@ const paramsSchema = {
   limit: z.number().int().min(1).optional(),
 };
 
-type ParamsSchema = {
-  datasourceLuid: z.ZodString;
-  query: z.ZodObject<typeof querySchema.shape>;
-  limit?: z.ZodOptional<z.ZodNumber>;
-};
-
 export type QueryDatasourceError =
   | {
       type: 'feature-disabled';
@@ -59,7 +53,7 @@ export type QueryDatasourceError =
 export const getQueryDatasourceTool = (
   server: Server,
   authInfo?: TableauAuthInfo,
-): Tool<ParamsSchema> => {
+): Tool<typeof paramsSchema> => {
   const config = getConfig();
 
   const queryDatasourceTool = new Tool({
@@ -75,16 +69,7 @@ export const getQueryDatasourceTool = (
           },
         }),
     ),
-    paramsSchema: new Provider(
-      async () =>
-        await getResultForTableauVersion<ParamsSchema>({
-          server: config.server || authInfo?.server,
-          mappings: {
-            '2026.1.0': paramsSchema,
-            default: (({ limit: _, ...rest }) => rest)(paramsSchema), // remove 'limit' for older versions
-          },
-        }),
-    ),
+    paramsSchema,
     annotations: {
       title: 'Query Datasource',
       readOnlyHint: true,
@@ -114,13 +99,15 @@ export const getQueryDatasourceTool = (
 
           const datasource: Datasource = { datasourceLuid };
           const maxResultLimit = config.getMaxResultLimit(queryDatasourceTool.name);
+          const rowLimit = maxResultLimit
+            ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+            : limit;
+
           const options = {
             returnFormat: 'OBJECTS',
             debug: true,
             disaggregate: false,
-            rowLimit: maxResultLimit
-              ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
-              : limit,
+            rowLimit,
           } as const;
 
           const credentials = getDatasourceCredentials(datasourceLuid);
@@ -190,6 +177,11 @@ export const getQueryDatasourceTool = (
                         },
                 );
               }
+
+              if (rowLimit && result.value.data && result.value.data.length > rowLimit) {
+                result.value.data.length = rowLimit;
+              }
+
               return result;
             },
           });
