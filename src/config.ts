@@ -2,7 +2,7 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
-import { TelemetryConfig } from './telemetry/types.js';
+import { isTelemetryProvider, TelemetryConfig } from './telemetry/types.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
@@ -228,7 +228,7 @@ export class Config {
         : null,
     };
 
-    const parsedProvider = (telemetryProvider as 'noop' | 'moncloud' | 'custom') || 'noop';
+    const parsedProvider = isTelemetryProvider(telemetryProvider) ? telemetryProvider : 'noop';
     if (parsedProvider === 'custom') {
       if (!telemetryProviderConfig) {
         throw new Error('TELEMETRY_PROVIDER_CONFIG is required when TELEMETRY_PROVIDER is "custom"');
@@ -239,10 +239,10 @@ export class Config {
         providerConfig: JSON.parse(telemetryProviderConfig),
       };
     } else {
-    this.telemetry = {
-      enabled: telemetryEnabled === 'true',
-      provider: parsedProvider,
-    };
+      this.telemetry = {
+        enabled: telemetryEnabled === 'true',
+        provider: parsedProvider,
+      };
     }
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';

@@ -72,3 +72,16 @@ interface CustomTelemetryConfig extends TelemetryConfigBase {
 }
 
 export type TelemetryConfig = NoopTelemetryConfig | MonCloudTelemetryConfig | CustomTelemetryConfig;
+
+/**
+ * Valid telemetry provider names
+ */
+const telemetryProviders = ['noop', 'moncloud', 'custom'] as const;
+type TelemetryProviderType = (typeof telemetryProviders)[number];
+
+/**
+ * Type guard for telemetry provider names
+ */
+export function isTelemetryProvider(provider: unknown): provider is TelemetryProviderType {
+  return telemetryProviders.some((p) => p === provider);
+}
