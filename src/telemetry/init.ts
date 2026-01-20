@@ -71,13 +71,8 @@ export function initializeTelemetry(): TelemetryProvider {
         break;
 
       case 'noop':
-      default:
-        if (config.telemetry.provider !== 'noop') {
-          console.warn(
-            `Unknown telemetry provider: ${config.telemetry.provider}. Using NoOp provider.`,
-          );
-        }
         provider = new NoOpTelemetryProvider();
+        break;
     }
 
     // Initialize the provider
