@@ -1,16 +1,5 @@
 /**
  * MonCloud telemetry provider for Salesforce's internal monitoring platform.
- *
- * Configuration is done via environment variables:
- * - SFDC_SERVICE_NAME: Service name
- * - SFDC_SUBSERVICE_NAME: Subservice name
- * - SFDC_ENV: Environment (e.g., 'prod', 'test')
- * - SFDC_SCOPE1, SFDC_SCOPE2, SFDC_SCOPE3: Scope identifiers
- * - SFDC_METRICS_ENDPOINT: Metrics endpoint URL
- * - SFDC_TRACES_ENDPOINT: Traces endpoint URL
- * - SFDC_EVENTS_ENDPOINT: Events endpoint URL
- *
- * See: https://git.soma.salesforce.com/monitoring/salesforce-apmagent
  */
 
 import { TelemetryAttributes, TelemetryProvider } from './types.js';
@@ -23,12 +12,10 @@ export class MonCloudTelemetryProvider implements TelemetryProvider {
 
   initialize(): void {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports -- Sync load for preload script
       const apm = new Apm();
       apm.start();
 
       // Get the OpenTelemetry metrics API
-      // eslint-disable-next-line @typescript-eslint/no-require-imports -- Sync load for preload script
       this.meter = otelApi.metrics.getMeter('tableau-mcp');
     } catch (error) {
       console.error('Failed to initialize MonCloud telemetry:', error);
