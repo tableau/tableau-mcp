@@ -38,14 +38,12 @@ export function getTelemetryProvider(): TelemetryProvider {
  * @returns A configured telemetry provider
  *
  * @example
- * ```typescript
  * function main() {
  *   // Initialize telemetry first
  *   const telemetry = initializeTelemetry();
  *
  *   // Start application...
  * }
- * ```
  */
 export function initializeTelemetry(): TelemetryProvider {
   const config = getConfig();
@@ -107,16 +105,8 @@ export function initializeTelemetry(): TelemetryProvider {
  * @returns A configured custom telemetry provider
  *
  * @example Custom provider from file
- * ```bash
  * TELEMETRY_PROVIDER=custom
  * TELEMETRY_PROVIDER_CONFIG='{"module":"./my-telemetry.js"}'
- * ```
- *
- * @example Custom provider from npm package
- * ```bash
- * TELEMETRY_PROVIDER=custom
- * TELEMETRY_PROVIDER_CONFIG='{"module":"my-company-telemetry"}'
- * ```
  */
 function loadCustomProvider(config?: Record<string, unknown>): TelemetryProvider {
   if (!config?.module) {
