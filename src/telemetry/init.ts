@@ -9,6 +9,46 @@ import { MonCloudTelemetryProvider } from './moncloud.js';
 import { NoOpTelemetryProvider } from './noop.js';
 import { TelemetryProvider } from './types.js';
 
+/**
+ * Get all instance methods from a class prototype
+ */
+function getInstanceMethods(cls: new (...args: unknown[]) => unknown): string[] {
+  const methods = new Set<string>();
+  let prototype = cls.prototype;
+
+  while (prototype && prototype !== Object.prototype) {
+    Object.getOwnPropertyNames(prototype).forEach((name) => {
+      if (name !== 'constructor' && typeof prototype[name] === 'function') {
+        methods.add(name);
+      }
+    });
+    prototype = Object.getPrototypeOf(prototype);
+  }
+
+  return [...methods];
+}
+
+/**
+ * Validate that a provider implements all required TelemetryProvider methods
+ */
+function validateTelemetryProvider(provider: unknown): asserts provider is TelemetryProvider {
+  if (typeof provider !== 'object' || provider === null) {
+    throw new Error('Provider must be an object');
+  }
+
+  // Use NoOpTelemetryProvider as the reference implementation
+  const requiredMethods = getInstanceMethods(NoOpTelemetryProvider);
+  const missingMethods = requiredMethods.filter(
+    (method) => typeof (provider as Record<string, unknown>)[method] !== 'function',
+  );
+
+  if (missingMethods.length > 0) {
+    throw new Error(
+      `Custom provider missing required methods: ${missingMethods.join(', ')}`,
+    );
+  }
+}
+
 // Use global to share provider across bundles (tracing.js and index.js)
 declare global {
   // eslint-disable-next-line no-var
@@ -139,7 +179,12 @@ function loadCustomProvider(config?: Record<string, unknown>): TelemetryProvider
     }
 
     // Instantiate the provider with the full config
-    return new ProviderClass(config);
+    const provider = new ProviderClass(config);
+
+    // Validate the provider implements TelemetryProvider interface
+    validateTelemetryProvider(provider);
+
+    return provider;
   } catch (error) {
     // Provide helpful error message with common issues
     let errorMessage = `Failed to load custom telemetry provider from "${modulePath}". `;
