@@ -2,13 +2,19 @@ import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
+import { randomUUID } from 'crypto';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { join } from 'path';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 import { fromError, isZodErrorLike } from 'zod-validation-error';
 
+import { getConfig } from '../config.js';
+import { getServerUrl } from '../index.js';
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
 import { tableauAuthInfoSchema } from '../server/oauth/schemas.js';
+import { getDirname } from '../utils/getDirname.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { Provider, TypeOrProvider } from '../utils/provider.js';
 import { ToolName } from './toolName.js';
@@ -195,18 +201,19 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
         }
 
         if (getSuccessResult) {
-          return getSuccessResult(constrainedResult.result);
+          return getSizeLimitedResult({
+            result: getSuccessResult(constrainedResult.result),
+            requestId,
+          });
         }
 
-        return {
-          isError: false,
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(constrainedResult.result),
-            },
-          ],
-        };
+        return getSizeLimitedResult({
+          result: {
+            isError: false,
+            content: [{ type: 'text', text: JSON.stringify(constrainedResult.result) }],
+          },
+          requestId,
+        });
       }
 
       if (result.error instanceof ZodiosError) {
@@ -230,6 +237,56 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       return getErrorResult(requestId, error);
     }
   }
+}
+
+function getSizeLimitedResult({
+  result,
+  requestId,
+}: {
+  result: CallToolResult;
+  requestId: RequestId;
+}): CallToolResult {
+  const { resultSizeLimitKb, transport } = getConfig();
+  if (resultSizeLimitKb === null) {
+    return result;
+  }
+
+  if (result.content.length > 0 && result.content[0].type === 'text') {
+    const text = result.content[0].text;
+    const bytes = new TextEncoder().encode(text);
+    const fileSizeKb = Math.ceil(bytes.length / 1024);
+
+    if (fileSizeKb > resultSizeLimitKb) {
+      const resultsDirectory = join(getDirname(), 'results');
+      if (!existsSync(resultsDirectory)) {
+        mkdirSync(resultsDirectory, { recursive: true });
+      }
+
+      const filename =
+        transport === 'http'
+          ? randomUUID()
+          : `${new Date().toISOString().replace(/[:.]/g, '-')}_request-${requestId}`;
+
+      const fullFilePath = join(resultsDirectory, `${filename}.txt`);
+      writeFileSync(fullFilePath, text);
+
+      return {
+        isError: true,
+        content: [
+          {
+            type: 'text',
+            text: [
+              `The tool result is ${fileSizeKb} KB, which is larger than the allowed size of ${resultSizeLimitKb} KB.`,
+              transport === 'http'
+                ? `The full results can be accessed at: ${getServerUrl()}/results/${filename} but once accessed, the file will be deleted from the server.`
+                : `The full results have been written to: ${fullFilePath}`,
+            ].join(' '),
+          },
+        ],
+      };
+    }
+  }
+  return result;
 }
 
 function getErrorResult(requestId: RequestId, error: unknown): CallToolResult {

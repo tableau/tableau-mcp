@@ -2,15 +2,17 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import cors from 'cors';
 import express, { Request, RequestHandler, Response } from 'express';
-import fs, { existsSync } from 'fs';
+import fs, { existsSync, unlinkSync } from 'fs';
 import http from 'http';
 import https from 'https';
+import { join } from 'path';
 
 import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
-import { handlePingRequest, validateProtocolVersion } from './middleware.js';
+import { getDirname } from '../utils/getDirname.js';
+import { handlePingRequest, rateLimitMiddleware, validateProtocolVersion } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
@@ -71,6 +73,42 @@ export async function startExpressServer({
     path,
     ...middleware,
     config.disableSessionManagement ? methodNotAllowed : handleSessionRequest,
+  );
+
+  app.get(
+    `${path}/results/:filename`,
+    rateLimitMiddleware({ windowMs: 1000, maxRequests: 1 }),
+    (req, res) => {
+      const filename = req.params.filename;
+
+      const uuidV4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+      if (!uuidV4Regex.test(filename)) {
+        res.status(400).send('Invalid filename');
+        return;
+      }
+
+      const filePath = join(getDirname(), 'results', `${filename}.txt`);
+      if (!existsSync(filePath)) {
+        res.status(404).send('Result not found');
+        return;
+      }
+
+      res.sendFile(filePath, (err) => {
+        if (err) {
+          // Don't delete the file if there was an error sending it
+          console.error(`Error sending file ${filePath}:`, err);
+          return;
+        }
+
+        // File was successfully sent, it is now safe to delete
+        try {
+          unlinkSync(filePath);
+        } catch (deleteErr) {
+          console.error(`Error deleting file ${filePath}:`, deleteErr);
+        }
+      });
+    },
   );
 
   const useSsl = !!(config.sslKey && config.sslCert);

@@ -9,6 +9,8 @@ import { Server, serverName, serverVersion } from './server.js';
 import { startExpressServer } from './server/express.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
+let serverUrl: string | undefined;
+
 async function startServer(): Promise<void> {
   dotenv.config();
   const config = getConfig();
@@ -33,6 +35,7 @@ async function startServer(): Promise<void> {
     }
     case 'http': {
       const { url } = await startExpressServer({ basePath: serverName, config, logLevel });
+      serverUrl = url;
 
       if (!config.oauth.enabled) {
         console.warn(
@@ -57,3 +60,7 @@ startServer().catch((error) => {
   writeToStderr(`Fatal error when starting the server: ${getExceptionMessage(error)}`);
   process.exit(1);
 });
+
+export function getServerUrl(): string | undefined {
+  return serverUrl;
+}
