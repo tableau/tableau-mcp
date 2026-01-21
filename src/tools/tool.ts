@@ -63,6 +63,9 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
 
   // The implementation of the tool itself
   callback: TypeOrProvider<ToolCallback<Args>>;
+
+  // Whether the result size of the tool is unlimited
+  isResultSizeUnlimited?: TypeOrProvider<boolean>;
 };
 
 /**
@@ -109,6 +112,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   annotations: TypeOrProvider<ToolAnnotations>;
   argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
   callback: TypeOrProvider<ToolCallback<Args>>;
+  isResultSizeUnlimited?: TypeOrProvider<boolean>;
 
   constructor({
     server,
@@ -118,6 +122,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     annotations,
     argsValidator,
     callback,
+    isResultSizeUnlimited,
   }: ToolParams<Args>) {
     this.server = server;
     this.name = name;
@@ -126,6 +131,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.annotations = annotations;
     this.argsValidator = argsValidator;
     this.callback = callback;
+    this.isResultSizeUnlimited = isResultSizeUnlimited;
   }
 
   logInvocation({
@@ -200,20 +206,31 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
           };
         }
 
+        const isResultSizeUnlimited = await Provider.from(this.isResultSizeUnlimited);
+        const rowCount = Array.isArray(constrainedResult.result)
+          ? constrainedResult.result.length
+          : undefined;
         if (getSuccessResult) {
-          return getSizeLimitedResult({
-            result: getSuccessResult(constrainedResult.result),
-            requestId,
-          });
+          const successResult = getSuccessResult(constrainedResult.result);
+          return isResultSizeUnlimited
+            ? successResult
+            : getSizeLimitedResult({
+                result: getSuccessResult(constrainedResult.result),
+                rowCount,
+              });
         }
 
-        return getSizeLimitedResult({
-          result: {
-            isError: false,
-            content: [{ type: 'text', text: JSON.stringify(constrainedResult.result) }],
-          },
-          requestId,
-        });
+        const successResult: CallToolResult = {
+          isError: false,
+          content: [{ type: 'text', text: JSON.stringify(constrainedResult.result) }],
+        };
+
+        return isResultSizeUnlimited
+          ? successResult
+          : getSizeLimitedResult({
+              result: successResult,
+              rowCount,
+            });
       }
 
       if (result.error instanceof ZodiosError) {
@@ -241,10 +258,10 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
 
 function getSizeLimitedResult({
   result,
-  requestId,
+  rowCount,
 }: {
   result: CallToolResult;
-  requestId: RequestId;
+  rowCount: number | undefined;
 }): CallToolResult {
   const { resultSizeLimitKb, transport } = getConfig();
   if (resultSizeLimitKb === null) {
@@ -262,25 +279,36 @@ function getSizeLimitedResult({
         mkdirSync(resultsDirectory, { recursive: true });
       }
 
-      const filename =
-        transport === 'http'
-          ? randomUUID()
-          : `${new Date().toISOString().replace(/[:.]/g, '-')}_request-${requestId}`;
-
+      const filename = randomUUID();
       const fullFilePath = join(resultsDirectory, `${filename}.txt`);
       writeFileSync(fullFilePath, text);
+
+      const largeResult = {
+        status: 'size_limit_exceeded',
+        actual_size_kb: fileSizeKb,
+        file_resource_id: filename,
+        ...(rowCount !== undefined ? { row_count: rowCount } : {}),
+        ...(transport === 'http'
+          ? { file_resource_url: `${getServerUrl()}/results/${filename}` }
+          : { file_resource_path: fullFilePath }),
+        instruction: [
+          'The result is too large for the context window.',
+          'Consider refining your original query with more specific filters (LIMIT, WHERE) to reduce the volume.',
+          'You can also access the full results with a one-time request:',
+          '  1) Use the get-large-result tool to retrieve them.',
+          transport === 'http'
+            ? "  2) Download them from the URL specified by the 'file_resource_url' field."
+            : "  2) View them in the file specified by the 'file_resource_path' field.",
+          'Once accessed, the file will be deleted from the server.',
+        ].join('\n'),
+      };
 
       return {
         isError: true,
         content: [
           {
             type: 'text',
-            text: [
-              `The tool result is ${fileSizeKb} KB, which is larger than the allowed size of ${resultSizeLimitKb} KB.`,
-              transport === 'http'
-                ? `The full results can be accessed at: ${getServerUrl()}/results/${filename} but once accessed, the file will be deleted from the server.`
-                : `The full results have been written to: ${fullFilePath}`,
-            ].join(' '),
+            text: JSON.stringify(largeResult),
           },
         ],
       };
