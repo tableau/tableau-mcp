@@ -1,8 +1,7 @@
 import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-
-import { isTelemetryProvider, TelemetryConfig } from './telemetry/types.js';
+import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
@@ -236,7 +235,7 @@ export class Config {
       this.telemetry = {
         enabled: telemetryEnabled === 'true',
         provider: 'custom',
-        providerConfig: JSON.parse(telemetryProviderConfig),
+        providerConfig: providerConfigSchema.parse(JSON.parse(telemetryProviderConfig)),
       };
     } else {
       this.telemetry = {

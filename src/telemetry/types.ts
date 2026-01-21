@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 /**
  * Telemetry provider interface for metrics collection.
  */
@@ -54,6 +56,16 @@ interface MonCloudTelemetryConfig extends TelemetryConfigBase {
 }
 
 /**
+ * Schema for custom telemetry provider config.
+ * Requires 'module' field, allows additional provider-specific options.
+ */
+export const providerConfigSchema = z
+  .object({
+    module: z.string({ required_error: 'Custom provider requires "module" path' }),
+  })
+  .passthrough();
+
+/**
  * Configuration for custom provider with required providerConfig
  */
 interface CustomTelemetryConfig extends TelemetryConfigBase {
@@ -68,7 +80,7 @@ interface CustomTelemetryConfig extends TelemetryConfigBase {
    * }
    * ```
    */
-  providerConfig: Record<string, unknown>;
+  providerConfig: z.infer<typeof providerConfigSchema>;
 }
 
 export type TelemetryConfig = NoopTelemetryConfig | MonCloudTelemetryConfig | CustomTelemetryConfig;
