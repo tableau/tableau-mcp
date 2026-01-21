@@ -13,33 +13,27 @@ import { TelemetryProvider } from './types.js';
  * Get all instance methods from a class prototype
  */
 function getInstanceMethods(cls: new (...args: unknown[]) => unknown): string[] {
-  const methods = new Set<string>();
-  let prototype = cls.prototype;
+  return Object.getOwnPropertyNames(cls.prototype).filter(
+    (name) => name !== 'constructor' && typeof cls.prototype[name] === 'function',
+  );
+}
 
-  while (prototype && prototype !== Object.prototype) {
-    Object.getOwnPropertyNames(prototype).forEach((name) => {
-      if (name !== 'constructor' && typeof prototype[name] === 'function') {
-        methods.add(name);
-      }
-    });
-    prototype = Object.getPrototypeOf(prototype);
-  }
-
-  return [...methods];
+function isRecord(obj: unknown): obj is Record<string, unknown> {
+  return typeof obj === 'object' && obj !== null && !Array.isArray(obj);
 }
 
 /**
  * Validate that a provider implements all required TelemetryProvider methods
  */
 function validateTelemetryProvider(provider: unknown): asserts provider is TelemetryProvider {
-  if (typeof provider !== 'object' || provider === null) {
+  if (!isRecord(provider)) {
     throw new Error('Provider must be an object');
   }
 
-  // Use NoOpTelemetryProvider as the reference implementation
   const requiredMethods = getInstanceMethods(NoOpTelemetryProvider);
+  // Keep only methods that provider doesn't have (i.e., missing or miscategorized methods)
   const missingMethods = requiredMethods.filter(
-    (method) => typeof (provider as Record<string, unknown>)[method] !== 'function',
+    (method) => typeof provider[method] !== 'function',
   );
 
   if (missingMethods.length > 0) {
