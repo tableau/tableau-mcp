@@ -87,15 +87,6 @@ export function getTelemetryProvider(): TelemetryProvider {
  */
 export function initializeTelemetry(): TelemetryProvider {
   const config = getConfig();
-
-  // If telemetry is disabled, use NoOp provider
-  if (!config.telemetry.enabled) {
-    const provider = new NoOpTelemetryProvider();
-    provider.initialize();
-    global.__telemetryProvider = provider;
-    return provider;
-  }
-
   let provider: TelemetryProvider;
 
   try {

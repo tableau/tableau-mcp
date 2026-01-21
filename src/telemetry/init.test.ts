@@ -30,7 +30,6 @@ describe('initializeTelemetry', () => {
   const mockGetConfig = getConfig as Mock;
 
   const defaultTelemetryConfig: TelemetryConfig = {
-    enabled: true,
     provider: 'noop',
   };
 
@@ -50,18 +49,6 @@ describe('initializeTelemetry', () => {
   });
 
   // NoOp tests
-  it('returns NoOpTelemetryProvider when telemetry is disabled', () => {
-    mockGetConfig.mockReturnValue({
-      telemetry: { ...defaultTelemetryConfig, enabled: false },
-    });
-
-    const provider = initializeTelemetry();
-
-    expect(NoOpTelemetryProvider).toHaveBeenCalled();
-    expect(provider.initialize).toBeDefined();
-    expect(provider.recordMetric).toBeDefined();
-  });
-
   it('returns NoOpTelemetryProvider when provider is "noop"', () => {
     mockGetConfig.mockReturnValue({
       telemetry: { ...defaultTelemetryConfig, provider: 'noop' },

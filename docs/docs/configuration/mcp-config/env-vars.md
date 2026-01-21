@@ -184,16 +184,20 @@ If a tool has a `limit` parameter and returns an array of items, the maximum len
 
 ## `DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`
 
-Disables requests that are made to the VizQl Data Service for validating queries in the [`query-datasource`](../../tools/data-qna/query-datasource.md) tool. Does not disable the ability to query the datasource.
+Disables requests that are made to the VizQl Data Service for validating queries in the
+[`query-datasource`](../../tools/data-qna/query-datasource.md) tool. Does not disable the ability to
+query the datasource.
 
 - Default: `false`
-- When `true`, skips validation of queries against metadata results and validation of SET and MATCH filters.
+- When `true`, skips validation of queries against metadata results and validation of SET and MATCH
+  filters.
 
 <hr />
 
 ## `DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION`
 
-Note: This environment variable was deprecated in Tableau MCP `v1.13.0` and replaced by `DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`.
+Note: This environment variable was deprecated in Tableau MCP `v1.13.0` and replaced by
+`DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`.
 
 Disable validation of SET and MATCH filter values in the
 [`query-datasource`](../../tools/data-qna/query-datasource.md) tool.
@@ -246,16 +250,6 @@ variable.
 
 <hr />
 
-## `TELEMETRY_ENABLED`
-
-Enable or disable telemetry collection.
-
-- Default: `false`
-- Possible values: `true` or `false`
-- When `true`, the server will collect and export metrics based on the configured provider.
-
-<hr />
-
 ## `TELEMETRY_PROVIDER`
 
 The telemetry provider to use for metrics collection.
@@ -264,16 +258,19 @@ The telemetry provider to use for metrics collection.
 - Possible values:
   - `noop` - No telemetry (default)
   - `moncloud` - Salesforce MonCloud APM (requires additional MonCloud configuration)
-  - `custom` - Use a custom telemetry provider (requires [`TELEMETRY_PROVIDER_CONFIG`](#telemetry_provider_config))
+  - `custom` - Use a custom telemetry provider (requires
+    [`TELEMETRY_PROVIDER_CONFIG`](#telemetry_provider_config))
 
 <hr />
 
 ## `TELEMETRY_PROVIDER_CONFIG`
 
-Configuration for the custom telemetry provider. Required when [`TELEMETRY_PROVIDER`](#telemetry_provider) is `custom`.
+Configuration for the custom telemetry provider. Required when
+[`TELEMETRY_PROVIDER`](#telemetry_provider) is `custom`.
 
 - Format: JSON string with at least a `module` field
-- The `module` field should be a path to a JavaScript file or npm package that exports a class implementing the `TelemetryProvider` interface.
+- The `module` field should be a path to a JavaScript file or npm package that exports a class
+  implementing the `TelemetryProvider` interface.
 
 **Example:**
 
@@ -281,7 +278,8 @@ Configuration for the custom telemetry provider. Required when [`TELEMETRY_PROVI
 TELEMETRY_PROVIDER_CONFIG='{"module": "./my-telemetry-provider.js"}'
 ```
 
-The custom provider module should export a default class (or named export `TelemetryProvider`) that implements:
+The custom provider module should export a default class (or named export `TelemetryProvider`) that
+implements:
 
 ```typescript
 interface TelemetryProvider {

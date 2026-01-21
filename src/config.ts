@@ -130,7 +130,6 @@ export class Config {
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
-      TELEMETRY_ENABLED: telemetryEnabled,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
     } = cleansedVars;
@@ -233,13 +232,11 @@ export class Config {
         throw new Error('TELEMETRY_PROVIDER_CONFIG is required when TELEMETRY_PROVIDER is "custom"');
       }
       this.telemetry = {
-        enabled: telemetryEnabled === 'true',
         provider: 'custom',
         providerConfig: providerConfigSchema.parse(JSON.parse(telemetryProviderConfig)),
       };
     } else {
       this.telemetry = {
-        enabled: telemetryEnabled === 'true',
         provider: parsedProvider,
       };
     }

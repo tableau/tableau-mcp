@@ -35,23 +35,16 @@ export interface TelemetryAttributes {
 }
 
 /**
- * Base telemetry config
- */
-interface TelemetryConfigBase {
-  enabled: boolean;
-}
-
-/**
  * Configuration for noop provider (no telemetry)
  */
-interface NoopTelemetryConfig extends TelemetryConfigBase {
+interface NoopTelemetryConfig {
   provider: 'noop';
 }
 
 /**
  * Configuration for MonCloud provider (Salesforce hosted)
  */
-interface MonCloudTelemetryConfig extends TelemetryConfigBase {
+interface MonCloudTelemetryConfig {
   provider: 'moncloud';
 }
 
@@ -68,7 +61,7 @@ export const providerConfigSchema = z
 /**
  * Configuration for custom provider with required providerConfig
  */
-interface CustomTelemetryConfig extends TelemetryConfigBase {
+interface CustomTelemetryConfig {
   provider: 'custom';
   /**
    * Configuration for the custom provider.
