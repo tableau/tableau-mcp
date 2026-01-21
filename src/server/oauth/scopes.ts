@@ -114,7 +114,9 @@ export function getRequiredScopesForTool(toolName: ToolName | string): string[] 
     'get-view-data': ['tableau:views:download'],
     'get-view-image': ['tableau:views:download'],
     'list-all-pulse-metric-definitions': ['tableau:insight_definitions_metrics:read'],
-    'list-pulse-metric-definitions-from-definition-ids': ['tableau:insight_definitions_metrics:read'],
+    'list-pulse-metric-definitions-from-definition-ids': [
+      'tableau:insight_definitions_metrics:read',
+    ],
     'list-pulse-metrics-from-metric-definition-id': ['tableau:insight_metrics:read'],
     'list-pulse-metrics-from-metric-ids': ['tableau:insight_metrics:read'],
     'list-pulse-metric-subscriptions': ['tableau:metric_subscriptions:read'],
@@ -139,5 +141,3 @@ export function getRequiredScopesForTool(toolName: ToolName | string): string[] 
 export function formatScopes(scopes: string[]): string {
   return scopes.join(' ');
 }
-
-

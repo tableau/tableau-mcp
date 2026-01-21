@@ -120,8 +120,7 @@ export function authorize(
       return;
     }
 
-    const scopesToGrant =
-      enforceScopes && validScopes.length === 0 ? requiredScopes : validScopes;
+    const scopesToGrant = enforceScopes && validScopes.length === 0 ? requiredScopes : validScopes;
     if (enforceScopes) {
       const missingRequiredScopes = requiredScopes.filter((s) => !scopesToGrant.includes(s));
       if (missingRequiredScopes.length > 0) {
