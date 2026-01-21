@@ -447,6 +447,32 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  OAUTH_SCOPES_SUPPORTED: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth Scopes Supported',
+    description:
+      'A space- or comma-separated list of scopes supported by the MCP server.',
+    required: false,
+    sensitive: false,
+  },
+  OAUTH_REQUIRED_SCOPES: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth Required Scopes',
+    description:
+      'A space- or comma-separated list of scopes required to access the MCP server.',
+    required: false,
+    sensitive: false,
+  },
+  OAUTH_DISABLE_SCOPES: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'OAuth Disable Scopes',
+    description: 'Disable scope enforcement and scope challenges when set to true.',
+    required: false,
+    sensitive: false,
+  },
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: {
     includeInUserConfig: false,
     type: 'number',
