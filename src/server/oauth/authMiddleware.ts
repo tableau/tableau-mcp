@@ -47,7 +47,9 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
       const baseUrl = `${req.protocol}://${req.get('host')}`;
       const { enforceScopes, requiredScopes } = getConfig().oauth;
       const scopeParam =
-        enforceScopes && requiredScopes.length > 0 ? `, scope="${formatScopes(requiredScopes)}"` : '';
+        enforceScopes && requiredScopes.length > 0
+          ? `, scope="${formatScopes(requiredScopes)}"`
+          : '';
       res
         .status(401)
         .header(
@@ -87,7 +89,9 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
     const authInfo = result.value;
     const { enforceScopes, requiredScopes } = getConfig().oauth;
     if (enforceScopes && requiredScopes.length > 0) {
-      const missingRequiredScopes = requiredScopes.filter((scope) => !authInfo.scopes.includes(scope));
+      const missingRequiredScopes = requiredScopes.filter(
+        (scope) => !authInfo.scopes.includes(scope),
+      );
       if (missingRequiredScopes.length > 0) {
         const baseUrl = `${req.protocol}://${req.get('host')}`;
         const scopeParam = `scope="${formatScopes(requiredScopes)}"`;
@@ -102,7 +106,7 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
           });
           res.write('event: error\n');
           res.write(
-            `data: {"error": "insufficient_scope", "error_description": "Missing required scopes"}\n\n`,
+            'data: {"error": "insufficient_scope", "error_description": "Missing required scopes"}\n\n',
           );
           res.end();
           return;
