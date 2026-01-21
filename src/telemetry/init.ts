@@ -32,9 +32,7 @@ function validateTelemetryProvider(provider: unknown): asserts provider is Telem
 
   const requiredMethods = getInstanceMethods(NoOpTelemetryProvider);
   // Keep only methods that provider doesn't have (i.e., missing or miscategorized methods)
-  const missingMethods = requiredMethods.filter(
-    (method) => typeof provider[method] !== 'function',
-  );
+  const missingMethods = requiredMethods.filter((method) => typeof provider[method] !== 'function');
 
   if (missingMethods.length > 0) {
     throw new Error(`Custom provider missing required methods: ${missingMethods.join(', ')}`);
@@ -134,7 +132,7 @@ function loadCustomProvider(config?: Record<string, unknown>): TelemetryProvider
     );
   }
 
-  let modulePath = config.module
+  const modulePath = config.module;
 
   if (typeof modulePath !== 'string') {
     throw new Error('Custom telemetry provider requires "module" to be a string');
