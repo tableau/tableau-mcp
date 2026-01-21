@@ -173,6 +173,15 @@ be available.
 
 <hr />
 
+## `MAX_REQUEST_TIMEOUT_MS`
+
+The maximum timeout for requests to the Tableau Server REST API.
+
+- Default: `600000` (10 minutes)
+- Must be a positive number between `5000` (5 seconds) and `3600000` (1 hour).
+
+<hr />
+
 ## `MAX_RESULT_LIMIT`
 
 If a tool has a `limit` parameter and returns an array of items, the maximum length of that array.

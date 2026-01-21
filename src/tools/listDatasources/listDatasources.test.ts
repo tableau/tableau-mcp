@@ -37,6 +37,7 @@ describe('listDatasourcesTool', () => {
     mocks.mockListDatasources.mockResolvedValue(mockDatasources);
     const result = await getToolResult({ filter: 'name:eq:Superstore' });
     expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Superstore');
     expect(mocks.mockListDatasources).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -51,6 +52,7 @@ describe('listDatasourcesTool', () => {
     mocks.mockListDatasources.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ filter: 'name:eq:Superstore' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -125,10 +127,13 @@ describe('listDatasourcesTool', () => {
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
   const listDatasourcesTool = getListDatasourcesTool(new Server());
   const callback = await Provider.from(listDatasourcesTool.callback);
-  return await callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  return await callback(
+    { filter: params.filter, pageSize: undefined, limit: undefined },
+    {
+      signal: new AbortController().signal,
+      requestId: 'test-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    },
+  );
 }

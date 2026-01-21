@@ -5,7 +5,7 @@ Executes VizQL queries against Tableau data sources to answer business questions
 ## Prerequisites
 Before using this tool, you should:
 1. Understand available fields and their types
-3. Understand the data structure and field relationships
+2. Understand the data structure and field relationships
 
 ## Best Practices
 
@@ -75,6 +75,37 @@ When a query might return large amounts of data, follow this profiling approach:
 **Step 3: Apply appropriate aggregation or filtering based on counts**
 
 ## Filter Types and Usage
+### Filter Context Property
+All filters support an optional \`context\` property (boolean) that controls how filters are applied:
+- **\`context: true\`** - Filter applies to the overall query context (dimension/scope filters)
+- **\`context: false\`** - Filter applies after context is established (ranking/limiting filters)
+
+**When to use:**
+- Set \`context: true\` on dimension filters (SET, DATE, QUANTITATIVE) that define the scope of analysis
+- Set \`context: false\` on TOP filters to rank/limit results within the established context
+- Omit \`context\` property for simple queries with single filters
+
+**Example: Finding top products within a region:**
+\`\`\`json
+{
+  "filters": [
+    {
+      "field": { "fieldCaption": "State" },
+      "filterType": "SET",
+      "values": ["California"],
+      "context": true  // Establish California as the context
+    },
+    {
+      "field": { "fieldCaption": "Product Name" },
+      "filterType": "TOP",
+      "howMany": 1,
+      "direction": "TOP",
+      "context": false,  // Find top product within California
+      "fieldToMeasure": { "fieldCaption": "Sales", "function": "SUM" }
+    }
+  ]
+}
+\`\`\`
 
 ### SET Filters
 Filter by specific values:
@@ -213,6 +244,44 @@ Filter relative date periods:
         "fieldToMeasure": {"fieldCaption": "Sales", "function": "SUM"}
       }
     ]
+  }
+}
+\`\`\`
+
+### Example 2: Top N Dimension Query (Using TOP Filter and context property)
+**Question:** "What is the top selling product in California?"
+\`\`\`json
+{
+  "datasourceLuid": "abc123",
+    "query": {
+    "fields": [
+      {
+        "fieldCaption": "Product Name"
+      },
+      {
+        "fieldCaption": "Sales",
+        "function": "SUM",
+        "fieldAlias": "Total Sales",
+        "sortDirection": "DESC",
+        "sortPriority": 1
+      }
+    ],
+      "filters": [
+        {
+          "field": { "fieldCaption": "State" },
+          "filterType": "SET",
+          "values": ["California"],
+          "context": true
+        },
+        {
+          "field": { "fieldCaption": "Product Name" },
+          "filterType": "TOP",
+          "howMany": 1,
+          "direction": "TOP",
+          "context": false,
+          "fieldToMeasure": { "fieldCaption": "Sales", "function": "SUM" }
+        }
+      ]
   }
 }
 \`\`\`

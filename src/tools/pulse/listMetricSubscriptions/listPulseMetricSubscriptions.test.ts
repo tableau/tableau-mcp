@@ -58,7 +58,8 @@ describe('listPulseMetricSubscriptionsTool', () => {
     const result = await getToolResult();
     expect(result.isError).toBe(false);
     expect(mocks.mockListPulseMetricSubscriptionsForCurrentUser).toHaveBeenCalled();
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockPulseMetricSubscriptions);
   });
 
@@ -67,6 +68,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
     mocks.mockListPulseMetricSubscriptionsForCurrentUser.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -76,6 +78,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
     );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
   });
 
@@ -85,11 +88,17 @@ describe('listPulseMetricSubscriptionsTool', () => {
     );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
   });
 
   describe('constrainPulseMetricSubscriptions', () => {
-    const restApiArgs = { config: getConfig(), requestId: 'request-id', server: getServer() };
+    const restApiArgs = {
+      config: getConfig(),
+      requestId: 'request-id',
+      server: getServer(),
+      signal: new AbortController().signal,
+    };
 
     it('should return empty result when no subscriptions are found', async () => {
       const result = await constrainPulseMetricSubscriptions({

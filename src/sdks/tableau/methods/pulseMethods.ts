@@ -2,7 +2,7 @@ import { Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 import z from 'zod';
 
-import { isAxiosError } from '../../../utils/axios.js';
+import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { pulseApis } from '../apis/pulseApi.js';
 import { Credentials } from '../types/credentials.js';
 import { PulsePagination } from '../types/pagination.js';
@@ -27,8 +27,8 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm
  */
 export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis> {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, pulseApis), creds);
+  constructor(baseUrl: string, creds: Credentials, axiosConfig: AxiosRequestConfig) {
+    super(new Zodios(baseUrl, pulseApis, { axiosConfig }), creds);
   }
 
   /**

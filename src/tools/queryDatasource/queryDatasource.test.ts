@@ -4,6 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { queryOutputSchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
+import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
@@ -91,7 +92,8 @@ describe('queryDatasourceTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    expect(JSON.parse(result.content[0].text as string)).toEqual(mockVdsResponses.success);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual(mockVdsResponses.success);
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
       datasource: {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
@@ -136,7 +138,8 @@ describe('queryDatasourceTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    expect(JSON.parse(result.content[0].text as string)).toEqual({
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual({
       data: badResponse,
       warning: 'Validation error: Expected array, received string at "data"',
     });
@@ -196,6 +199,7 @@ describe('queryDatasourceTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       JSON.stringify({
         requestId: 'test-request-id',
@@ -234,6 +238,7 @@ describe('queryDatasourceTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('requestId: test-request-id, error: API Error');
   });
 
@@ -278,7 +283,8 @@ describe('queryDatasourceTool', () => {
       );
 
       expect(result.isError).toBe(true);
-      const errorResponse = JSON.parse(result.content[0].text as string);
+      invariant(result.content[0].type === 'text');
+      const errorResponse = JSON.parse(result.content[0].text);
       expect(errorResponse.message).toContain('Filter validation failed for field "Region"');
       expect(errorResponse.message).toContain('Wast');
       expect(errorResponse.message).toContain('Did you mean:');
@@ -328,7 +334,8 @@ describe('queryDatasourceTool', () => {
       );
 
       expect(result.isError).toBe(true);
-      const errorResponse = JSON.parse(result.content[0].text as string);
+      invariant(result.content[0].type === 'text');
+      const errorResponse = JSON.parse(result.content[0].text);
       expect(errorResponse.message).toContain('Filter validation failed for field "Customer Name"');
       expect(errorResponse.message).toContain('starts with "Jon"');
       expect(errorResponse.message).toContain('Similar values in this field:');
@@ -372,7 +379,8 @@ describe('queryDatasourceTool', () => {
       );
 
       expect(result.isError).toBe(false);
-      expect(JSON.parse(result.content[0].text as string)).toEqual(mockMainQueryResult);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toEqual(mockMainQueryResult);
 
       // Should only call the main query (no validation needed)
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
@@ -414,7 +422,8 @@ describe('queryDatasourceTool', () => {
       );
 
       expect(result.isError).toBe(false);
-      expect(JSON.parse(result.content[0].text as string)).toEqual(mockMainQueryResult);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toEqual(mockMainQueryResult);
 
       // Should only call the main query (no validation needed)
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
@@ -475,7 +484,8 @@ describe('queryDatasourceTool', () => {
       );
 
       expect(result.isError).toBe(true);
-      const errorResponse = JSON.parse(result.content[0].text as string);
+      invariant(result.content[0].type === 'text');
+      const errorResponse = JSON.parse(result.content[0].text);
       expect(errorResponse.message).toContain('Filter validation failed for field "Region"');
       expect(errorResponse.message).toContain('Filter validation failed for field "Category"');
       expect(errorResponse.message).toContain('InvalidRegion');
@@ -491,6 +501,7 @@ describe('queryDatasourceTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
   });
 
@@ -506,6 +517,7 @@ describe('queryDatasourceTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       [
         'The set of allowed data sources that can be queried is limited by the server configuration.',
