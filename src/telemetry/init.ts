@@ -134,7 +134,11 @@ function loadCustomProvider(config?: Record<string, unknown>): TelemetryProvider
     );
   }
 
-  const modulePath = config.module as string;
+  let modulePath = config.module
+
+  if (typeof modulePath !== 'string') {
+    throw new Error('Custom telemetry provider requires "module" to be a string');
+  }
 
   // Determine if it's a file path or npm package name
   let resolvedPath: string;
@@ -166,13 +170,12 @@ function loadCustomProvider(config?: Record<string, unknown>): TelemetryProvider
 
     // Validate the provider implements TelemetryProvider interface
     validateTelemetryProvider(provider);
-
     return provider;
   } catch (error) {
     // Provide helpful error message with common issues
     let errorMessage = `Failed to load custom telemetry provider from "${modulePath}". `;
 
-    if ((error as any).code === 'MODULE_NOT_FOUND') {
+    if (error instanceof Error && 'code' in error && error.code === 'MODULE_NOT_FOUND') {
       errorMessage +=
         'Module not found. ' +
         'If using a file path, ensure the file exists and the path is correct. ' +
