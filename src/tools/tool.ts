@@ -177,9 +177,8 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     // Record custom metric for this tool call
     const telemetry = getTelemetryProvider();
     telemetry.recordMetric('mcp.tool.calls', 1, {
-      'mcp.tool.name': this.name,
-      'mcp.request.id': requestId.toString(),
-      ...(username && { 'mcp.user.name': username }),
+      tool_name: this.name,
+      request_id: requestId.toString(),
     });
 
     if (args) {

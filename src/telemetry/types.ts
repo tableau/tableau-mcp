@@ -19,7 +19,7 @@ export interface TelemetryProvider {
    * @example
    * ```typescript
    * telemetry.recordMetric('mcp.tool.calls', 1, {
-   *   'mcp.tool.name': 'list-pulse-metric-subscriptions',
+   *   tool_name: 'list-pulse-metric-subscriptions',
    * });
    * ```
    */
