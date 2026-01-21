@@ -34,14 +34,24 @@ const dev = process.argv.includes('--dev');
 
   console.log('🏗️ Building telemetry/tracing.js...');
   await mkdir('./build/telemetry', { recursive: true });
-  await build({
+  const tracingResult = await build({
     entryPoints: ['./src/telemetry/tracing.ts'],
     bundle: true,
     platform: 'node',
     format: 'cjs',
+    minify: !dev,
     packages: 'external',
+    sourcemap: true,
     outfile: './build/telemetry/tracing.js',
   });
+
+  for (const error of tracingResult.errors) {
+    console.log(`❌ ${error.text}`);
+  }
+
+  for (const warning of tracingResult.warnings) {
+    console.log(`⚠️ ${warning.text}`);
+  }
 
   await chmod('./build/index.js', '755');
 })();
