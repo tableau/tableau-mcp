@@ -2,13 +2,19 @@ import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
+import { randomUUID } from 'crypto';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { join } from 'path';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 import { fromError, isZodErrorLike } from 'zod-validation-error';
 
+import { getConfig } from '../config.js';
+import { getServerUrl } from '../index.js';
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
 import { tableauAuthInfoSchema } from '../server/oauth/schemas.js';
+import { getDirname } from '../utils/getDirname.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { Provider, TypeOrProvider } from '../utils/provider.js';
 import { ToolName } from './toolName.js';
@@ -57,6 +63,9 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
 
   // The implementation of the tool itself
   callback: TypeOrProvider<ToolCallback<Args>>;
+
+  // Whether the result size of the tool is unlimited
+  isResultSizeUnlimited?: TypeOrProvider<boolean>;
 };
 
 /**
@@ -103,6 +112,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   annotations: TypeOrProvider<ToolAnnotations>;
   argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
   callback: TypeOrProvider<ToolCallback<Args>>;
+  isResultSizeUnlimited?: TypeOrProvider<boolean>;
 
   constructor({
     server,
@@ -112,6 +122,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     annotations,
     argsValidator,
     callback,
+    isResultSizeUnlimited,
   }: ToolParams<Args>) {
     this.server = server;
     this.name = name;
@@ -120,6 +131,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.annotations = annotations;
     this.argsValidator = argsValidator;
     this.callback = callback;
+    this.isResultSizeUnlimited = isResultSizeUnlimited;
   }
 
   logInvocation({
@@ -194,19 +206,31 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
           };
         }
 
+        const isResultSizeUnlimited = await Provider.from(this.isResultSizeUnlimited);
+        const rowCount = Array.isArray(constrainedResult.result)
+          ? constrainedResult.result.length
+          : undefined;
         if (getSuccessResult) {
-          return getSuccessResult(constrainedResult.result);
+          const successResult = getSuccessResult(constrainedResult.result);
+          return isResultSizeUnlimited
+            ? successResult
+            : getSizeLimitedResult({
+                result: getSuccessResult(constrainedResult.result),
+                rowCount,
+              });
         }
 
-        return {
+        const successResult: CallToolResult = {
           isError: false,
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(constrainedResult.result),
-            },
-          ],
+          content: [{ type: 'text', text: JSON.stringify(constrainedResult.result) }],
         };
+
+        return isResultSizeUnlimited
+          ? successResult
+          : getSizeLimitedResult({
+              result: successResult,
+              rowCount,
+            });
       }
 
       if (result.error instanceof ZodiosError) {
@@ -230,6 +254,67 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       return getErrorResult(requestId, error);
     }
   }
+}
+
+function getSizeLimitedResult({
+  result,
+  rowCount,
+}: {
+  result: CallToolResult;
+  rowCount: number | undefined;
+}): CallToolResult {
+  const { resultSizeLimitKb, transport } = getConfig();
+  if (resultSizeLimitKb === null) {
+    return result;
+  }
+
+  if (result.content.length > 0 && result.content[0].type === 'text') {
+    const text = result.content[0].text;
+    const bytes = new TextEncoder().encode(text);
+    const fileSizeKb = Math.ceil(bytes.length / 1024);
+
+    if (fileSizeKb > resultSizeLimitKb) {
+      const resultsDirectory = join(getDirname(), 'results');
+      if (!existsSync(resultsDirectory)) {
+        mkdirSync(resultsDirectory, { recursive: true });
+      }
+
+      const filename = randomUUID();
+      const fullFilePath = join(resultsDirectory, `${filename}.txt`);
+      writeFileSync(fullFilePath, text);
+
+      const largeResult = {
+        status: 'size_limit_exceeded',
+        actual_size_kb: fileSizeKb,
+        file_resource_id: filename,
+        ...(rowCount !== undefined ? { row_count: rowCount } : {}),
+        ...(transport === 'http'
+          ? { file_resource_url: `${getServerUrl()}/results/${filename}` }
+          : { file_resource_path: fullFilePath }),
+        instruction: [
+          'The result is too large for the context window.',
+          'Consider refining your original query with more specific filters (LIMIT, WHERE) to reduce the volume.',
+          'You can also access the full results with a one-time request:',
+          '  1) Use the get-large-result tool to retrieve them.',
+          transport === 'http'
+            ? "  2) Download them from the URL specified by the 'file_resource_url' field."
+            : "  2) View them in the file specified by the 'file_resource_path' field.",
+          'Once accessed, the file will be deleted from the server.',
+        ].join('\n'),
+      };
+
+      return {
+        isError: true,
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(largeResult),
+          },
+        ],
+      };
+    }
+  }
+  return result;
 }
 
 function getErrorResult(requestId: RequestId, error: unknown): CallToolResult {

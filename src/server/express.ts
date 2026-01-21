@@ -2,7 +2,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import cors from 'cors';
 import express, { Request, RequestHandler, Response } from 'express';
-import fs, { existsSync } from 'fs';
+import fs, { existsSync, unlinkSync } from 'fs';
 import http from 'http';
 import https from 'https';
 
@@ -10,7 +10,12 @@ import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
-import { handlePingRequest, validateProtocolVersion } from './middleware.js';
+import { getLargeResultFilePath } from './getLargeResult.js';
+import {
+  getRateLimitMiddleware,
+  handlePingRequest,
+  validateProtocolVersion,
+} from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
@@ -52,7 +57,11 @@ export async function startExpressServer({
     app.set('trust proxy', config.trustProxyConfig);
   }
 
-  const middleware: Array<RequestHandler> = [handlePingRequest];
+  const middleware: Array<RequestHandler> = [
+    handlePingRequest,
+    getRateLimitMiddleware({ windowMs: 60000, maxRequests: 30, responseFormat: 'mcp' }),
+  ];
+
   if (config.oauth.enabled) {
     const oauthProvider = new OAuthProvider();
     oauthProvider.setupRoutes(app);
@@ -71,6 +80,36 @@ export async function startExpressServer({
     path,
     ...middleware,
     config.disableSessionManagement ? methodNotAllowed : handleSessionRequest,
+  );
+
+  app.get(
+    `${path}/results/:filename`,
+    getRateLimitMiddleware({ windowMs: 60000, maxRequests: 5, responseFormat: 'html' }),
+    (req, res) => {
+      const filename = req.params.filename;
+
+      const result = getLargeResultFilePath(filename);
+      if (result.isErr()) {
+        res.status(result.error.status).send(result.error.message);
+        return;
+      }
+
+      const { fullFilePath } = result.value;
+      res.download(fullFilePath, `${filename}.txt`, (err) => {
+        if (err) {
+          // Don't delete the file if there was an error sending it
+          console.error(`Error sending file ${fullFilePath}:`, err);
+          return;
+        }
+
+        // File was successfully sent, it is now safe to delete
+        try {
+          unlinkSync(fullFilePath);
+        } catch (deleteErr) {
+          console.error(`Error deleting file ${fullFilePath}:`, deleteErr);
+        }
+      });
+    },
   );
 
   const useSsl = !!(config.sslKey && config.sslCert);

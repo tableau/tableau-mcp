@@ -348,6 +348,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  RESULT_SIZE_LIMIT_KB: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'Result Size Limit (kb)',
+    description: 'The maximum size of the result in kilobytes.',
+    required: false,
+    sensitive: false,
+  },
   DANGEROUSLY_DISABLE_OAUTH: {
     includeInUserConfig: false,
     type: 'boolean',

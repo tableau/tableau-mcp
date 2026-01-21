@@ -64,6 +64,7 @@ export class Config {
   serverLogDirectory: string;
   boundedContext: BoundedContext;
   tableauServerVersionCheckIntervalInHours: number;
+  resultSizeLimitKb: number | null;
   oauth: {
     enabled: boolean;
     issuer: string;
@@ -121,6 +122,7 @@ export class Config {
       INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
       INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
+      RESULT_SIZE_LIMIT_KB: resultSizeLimitKb,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
       OAUTH_LOCK_SITE: oauthLockSite,
@@ -189,6 +191,13 @@ export class Config {
         maxValue: 24 * 7, // 7 days
       },
     );
+
+    this.resultSizeLimitKb = resultSizeLimitKb
+      ? parseNumber(resultSizeLimitKb, {
+          defaultValue: 1024,
+          minValue: 0,
+        })
+      : null;
 
     const disableOauthOverride = disableOauth === 'true';
     this.oauth = {
