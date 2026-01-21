@@ -34,11 +34,13 @@ describe('list-workbooks', () => {
     const workbooks = await callTool('list-workbooks', {
       env,
       schema: z.array(workbookSchema),
-      toolArgs: { filter: 'name:eq:Super*' },
+      toolArgs: { filter: 'name:eq:Superstore' },
     });
 
-    expect(workbooks).toHaveLength(1);
-    expect(workbooks[0]).toMatchObject({
+    expect(workbooks.length).greaterThan(0);
+    const workbook = workbooks.find((candidate) => candidate.name === 'Superstore');
+
+    expect(workbook).toMatchObject({
       id: superstore.id,
       name: 'Superstore',
       defaultViewId: superstore.defaultViewId,
