@@ -19,7 +19,7 @@ export const AUDIENCE = 'tableau-mcp-server';
  * OAuth 2.1 Provider
  *
  * Implements the complete MCP OAuth 2.1 flow with PKCE
- * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
+ * @see https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
  *
  */
 export class OAuthProvider {

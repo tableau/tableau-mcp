@@ -9,6 +9,7 @@ export const mcpAuthorizeSchema = z.object({
   code_challenge: requiredString('code_challenge'),
   code_challenge_method: requiredString('code_challenge_method'),
   state: z.string().optional(),
+  scope: z.string().optional(),
 });
 
 export const mcpTokenSchema = z
@@ -43,13 +44,15 @@ export const mcpTokenSchema = z
       // Optional because client/secret pair may be provided in the request body instead of the query string
       client_id: z.string().optional(),
       client_secret: z.string().optional(),
+      scope: z.string().optional(),
     }),
   )
   .transform((data) => {
-    const { client_id, client_secret } = data;
+    const { client_id, client_secret, scope } = data;
     const clientIdSecretPair = {
       clientId: client_id,
       clientSecret: client_secret,
+      scope,
     };
 
     if (data.grant_type === 'authorization_code') {
@@ -91,6 +94,7 @@ export const mcpAccessTokenUserOnlySchema = z.object({
   tableauServer: requiredString('tableauServer'),
   // Optional because there may not be a user associated with the access token, e.g. for client credentials grant type
   tableauUserId: z.string().optional(),
+  scope: z.string().optional(),
 });
 
 export const mcpAccessTokenSchema = mcpAccessTokenUserOnlySchema.extend({

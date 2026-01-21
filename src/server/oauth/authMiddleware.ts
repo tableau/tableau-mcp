@@ -8,6 +8,7 @@ import { fromError } from 'zod-validation-error';
 import { getConfig } from '../../config.js';
 import { AUDIENCE } from './provider.js';
 import { mcpAccessTokenSchema, mcpAccessTokenUserOnlySchema, TableauAuthInfo } from './schemas.js';
+import { formatScopes, parseScopes } from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
 
 /**
@@ -44,11 +45,14 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
       }
 
       const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const { enforceScopes, requiredScopes } = getConfig().oauth;
+      const scopeParam =
+        enforceScopes && requiredScopes.length > 0 ? `, scope="${formatScopes(requiredScopes)}"` : '';
       res
         .status(401)
         .header(
           'WWW-Authenticate',
-          `Bearer realm="MCP", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
+          `Bearer realm="MCP", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"${scopeParam}`,
         )
         .json({
           error: 'unauthorized',
@@ -80,7 +84,39 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
       });
       return;
     }
-    req.auth = result.value;
+    const authInfo = result.value;
+    const { enforceScopes, requiredScopes } = getConfig().oauth;
+    if (enforceScopes && requiredScopes.length > 0) {
+      const missingRequiredScopes = requiredScopes.filter((scope) => !authInfo.scopes.includes(scope));
+      if (missingRequiredScopes.length > 0) {
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const scopeParam = `scope="${formatScopes(requiredScopes)}"`;
+        const wwwAuthenticate = `Bearer realm="MCP", error="insufficient_scope", error_description="Missing required scopes", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource", ${scopeParam}`;
+
+        if (req.method === 'GET' && req.headers.accept?.includes('text/event-stream')) {
+          res.writeHead(403, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'WWW-Authenticate': wwwAuthenticate,
+          });
+          res.write('event: error\n');
+          res.write(
+            `data: {"error": "insufficient_scope", "error_description": "Missing required scopes"}\n\n`,
+          );
+          res.end();
+          return;
+        }
+
+        res.status(403).header('WWW-Authenticate', wwwAuthenticate).json({
+          error: 'insufficient_scope',
+          error_description: 'Missing required scopes',
+        });
+        return;
+      }
+    }
+
+    req.auth = authInfo;
     next();
   };
 }
@@ -118,6 +154,7 @@ async function verifyAccessToken(
       return new Err('Invalid or expired access token');
     }
 
+    const tokenScopes = parseScopes(mcpAccessToken.data.scope);
     let tableauAuthInfo: TableauAuthInfo;
     if (config.auth === 'oauth') {
       const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
@@ -157,7 +194,7 @@ async function verifyAccessToken(
     return Ok({
       token,
       clientId,
-      scopes: [],
+      scopes: tokenScopes,
       expiresAt: payload.exp,
       extra: tableauAuthInfo,
     });

@@ -16,6 +16,7 @@ import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
+import { formatScopes, parseScopes, validateScopes } from './scopes.js';
 import { PendingAuthorization } from './types.js';
 
 /**
@@ -42,8 +43,15 @@ export function authorize(
       return;
     }
 
-    const { client_id, redirect_uri, response_type, code_challenge, code_challenge_method, state } =
-      result.data;
+    const {
+      client_id,
+      redirect_uri,
+      response_type,
+      code_challenge,
+      code_challenge_method,
+      state,
+      scope,
+    } = result.data;
 
     const clientIdUrl = parseUrl(client_id);
     if (clientIdUrl) {
@@ -97,6 +105,34 @@ export function authorize(
       return;
     }
 
+    const { enforceScopes, requiredScopes, scopesSupported } = config.oauth;
+    const requestedScopes = parseScopes(scope);
+    const { valid: validScopes, invalid: invalidScopes } = validateScopes(
+      requestedScopes,
+      scopesSupported,
+    );
+
+    if (invalidScopes.length > 0) {
+      res.status(400).json({
+        error: 'invalid_scope',
+        error_description: `Unsupported scopes: ${invalidScopes.join(', ')}`,
+      });
+      return;
+    }
+
+    const scopesToGrant =
+      enforceScopes && validScopes.length === 0 ? requiredScopes : validScopes;
+    if (enforceScopes) {
+      const missingRequiredScopes = requiredScopes.filter((s) => !scopesToGrant.includes(s));
+      if (missingRequiredScopes.length > 0) {
+        res.status(400).json({
+          error: 'invalid_scope',
+          error_description: `Missing required scopes: ${missingRequiredScopes.join(', ')}`,
+        });
+        return;
+      }
+    }
+
     // Generate Tableau state and store pending authorization
     const tableauState = randomBytes(32).toString('hex');
     const authKey = randomBytes(32).toString('hex');
@@ -114,6 +150,7 @@ export function authorize(
       tableauState,
       tableauClientId,
       tableauCodeVerifier,
+      scopes: scopesToGrant,
     });
 
     // Clean up expired authorizations
@@ -132,6 +169,9 @@ export function authorize(
     oauthUrl.searchParams.set('target_site', config.siteName);
     oauthUrl.searchParams.set('device_name', getDeviceName(redirect_uri, state ?? ''));
     oauthUrl.searchParams.set('client_type', 'tableau-mcp');
+    if (scopesToGrant.length > 0) {
+      oauthUrl.searchParams.set('scope', formatScopes(scopesToGrant));
+    }
 
     if (config.oauth.lockSite) {
       // The "redirected" parameter is used by Tableau's OAuth controller to determine whether the user will be shown the site picker.

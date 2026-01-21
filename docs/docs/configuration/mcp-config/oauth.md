@@ -14,15 +14,19 @@ is accessed using a local development URL e.g. `http://127.0.0.1:3927/tableau-mc
 
 ## How to Enable OAuth
 
-To enable OAuth, set the [`OAUTH_ISSUER`](#oauth_issuer) environment variable to the origin of your MCP server. When a URL for `OAUTH_ISSUER` is provided, the MCP server will act as an OAuth 2.1 resource server, capable of accepting and responding to protected resource requests using encrypted access tokens.
+To enable OAuth, set the [`OAUTH_ISSUER`](#oauth_issuer) environment variable to the origin of your
+MCP server. When a URL for `OAUTH_ISSUER` is provided, the MCP server will act as an OAuth 2.1
+resource server, capable of accepting and responding to protected resource requests using encrypted
+access tokens.
 
 When OAuth is enabled:
-- MCP clients will be required to authenticate via Tableau OAuth before connecting to the MCP server
+- MCP clients will be required to authenticate via Tableau OAuth before connecting to the MCP
+  server
 - The [`TRANSPORT`](#transport) will default to `http` (required for OAuth)
 - The [`AUTH`](#auth) method will default to `oauth`
 
 For more information, please see the
-[MCP Authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
+[MCP Authorization spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization).
 
 <hr />
 
@@ -165,6 +169,78 @@ Authorization: Basic Y2xpZW50SWQ6c2VjcmV0
 ```
 
 Where `Y2xpZW50SWQ6c2VjcmV0` is the base64 encoding of `clientId:secret`.
+
+<hr />
+
+### `OAUTH_SCOPES_SUPPORTED`
+
+A space- or comma-separated list of scopes supported by the MCP server.
+
+- Optional, but recommended when OAuth is enabled.
+- Used to populate `scopes_supported` in the OAuth metadata.
+- Example: `tableau:content:read tableau:view:read tableau:datasource:query`
+
+<hr />
+
+## Recommended scope set (beta)
+
+For the initial release, use an inclusive scope set (MCP + Tableau API scopes) to avoid token
+exchange. This keeps consent simple and aligns with the current MCP server behavior.
+
+Suggested initial scopes:
+
+- `tableau:content:read`
+- `tableau:content:write`
+- `tableau:datasource:query`
+- `tableau:datasource:read`
+- `tableau:workbook:read`
+- `tableau:workbook:write`
+- `tableau:view:read`
+- `tableau:view:download`
+- `tableau:project:read`
+- `tableau:metrics:read`
+- `tableau:insights:read`
+
+Example configuration:
+
+```
+OAUTH_SCOPES_SUPPORTED=tableau:content:read tableau:content:write tableau:datasource:query tableau:datasource:read tableau:workbook:read tableau:workbook:write tableau:view:read tableau:view:download tableau:project:read tableau:metrics:read tableau:insights:read
+OAUTH_REQUIRED_SCOPES=tableau:content:read tableau:content:write tableau:datasource:query tableau:datasource:read tableau:workbook:read tableau:workbook:write tableau:view:read tableau:view:download tableau:project:read tableau:metrics:read tableau:insights:read
+```
+
+<hr />
+
+## Why MCP scopes (in addition to Tableau API scopes)
+
+Tableau API scopes alone are not sufficient to protect all MCP functionality.
+
+- Not all MCP tools call Tableau APIs. Some tools can operate entirely within the MCP server
+  (for example, generating a TWB). Tableau API scopes do not describe those operations.
+- MCP also exposes non-API concepts like prompts and resources that should be gated behind MCP
+  scopes. Those do not have a natural Tableau API scope equivalent.
+- Keeping MCP scopes separate from API scopes clarifies intent and avoids over-granting: MCP scopes
+  authorize what the MCP server can do; Tableau API scopes authorize what downstream APIs can do.
+
+<hr />
+
+### `OAUTH_REQUIRED_SCOPES`
+
+A space- or comma-separated list of scopes required to access the MCP server.
+
+- Optional. If not set, all values from `OAUTH_SCOPES_SUPPORTED` are required.
+- The MCP server will include these in `WWW-Authenticate` challenges and enforce them on requests.
+- Example: `tableau:content:read tableau:view:read`
+
+<hr />
+
+### `OAUTH_DISABLE_SCOPES`
+
+Disable scope enforcement and scope challenges.
+
+- Default: `false`
+- Useful for Tableau Server deployments that do not want to enforce scopes yet.
+- When `true`, the MCP server will not include scopes in `WWW-Authenticate` challenges and will not
+  enforce scopes on incoming access tokens.
 
 <hr />
 
