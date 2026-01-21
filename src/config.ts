@@ -1,6 +1,7 @@
 import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
@@ -234,7 +235,9 @@ export class Config {
     const parsedProvider = isTelemetryProvider(telemetryProvider) ? telemetryProvider : 'noop';
     if (parsedProvider === 'custom') {
       if (!telemetryProviderConfig) {
-        throw new Error('TELEMETRY_PROVIDER_CONFIG is required when TELEMETRY_PROVIDER is "custom"');
+        throw new Error(
+          'TELEMETRY_PROVIDER_CONFIG is required when TELEMETRY_PROVIDER is "custom"',
+        );
       }
       this.telemetry = {
         provider: 'custom',

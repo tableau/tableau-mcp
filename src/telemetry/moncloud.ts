@@ -2,9 +2,10 @@
  * MonCloud telemetry provider for Salesforce's internal monitoring platform.
  */
 
-import { TelemetryAttributes, TelemetryProvider } from './types.js';
-import { Apm } from '@salesforce/apmagent';
 import otelApi, { Counter, Meter } from '@opentelemetry/api';
+import { Apm } from '@salesforce/apmagent';
+
+import { TelemetryAttributes, TelemetryProvider } from './types.js';
 
 export class MonCloudTelemetryProvider implements TelemetryProvider {
   private meter: Meter | undefined;

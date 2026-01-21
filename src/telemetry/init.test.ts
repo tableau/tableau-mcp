@@ -1,4 +1,5 @@
 import { MockInstance } from 'vitest';
+
 import { initializeTelemetry } from './init.js';
 import { TelemetryConfig } from './types.js';
 

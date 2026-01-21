@@ -43,9 +43,7 @@ function validateTelemetryProvider(provider: unknown): asserts provider is Telem
   );
 
   if (missingMethods.length > 0) {
-    throw new Error(
-      `Custom provider missing required methods: ${missingMethods.join(', ')}`,
-    );
+    throw new Error(`Custom provider missing required methods: ${missingMethods.join(', ')}`);
   }
 }
 
