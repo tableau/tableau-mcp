@@ -120,6 +120,7 @@ describe('refresh token grant type', () => {
       refresh_token: expect.any(String),
       token_type: 'Bearer',
       expires_in: 3600,
+      scope: '',
     });
 
     // Verify that the refresh token is rotated
