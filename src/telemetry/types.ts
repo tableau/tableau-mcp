@@ -27,19 +27,27 @@ export interface TelemetryProvider {
 }
 
 /**
- * Attributes that can be attached to telemetry data.
+ * Schema for telemetry attributes.
  * Values can be strings, numbers, booleans, or undefined.
  */
-export interface TelemetryAttributes {
-  [key: string]: string | number | boolean | undefined;
-}
+export const telemetryAttributesSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean(), z.undefined()]),
+);
+export type TelemetryAttributes = z.infer<typeof telemetryAttributesSchema>;
 
 /**
- * Configuration for noop provider (no telemetry)
+ * Valid telemetry provider names
  */
-interface NoopTelemetryConfig {
-  provider: 'noop';
-}
+export const telemetryProviderSchema = z.enum(['noop', 'custom']);
+export type TelemetryProviderType = z.infer<typeof telemetryProviderSchema>;
+
+/**
+ * Schema for noop telemetry config (no telemetry)
+ */
+export const noopTelemetryConfigSchema = z.object({
+  provider: z.literal('noop'),
+});
 
 /**
  * Schema for custom telemetry provider config.
@@ -52,34 +60,36 @@ export const providerConfigSchema = z
   .passthrough();
 
 /**
- * Configuration for custom provider with required providerConfig
+ * Schema for custom telemetry config
+ *
+ * @example
+ * ```json
+ * {
+ *   "provider": "custom",
+ *   "providerConfig": {
+ *     "module": "./my-otel-provider.js"
+ *   }
+ * }
+ * ```
  */
-interface CustomTelemetryConfig {
-  provider: 'custom';
-  /**
-   * Configuration for the custom provider.
-   *
-   * @example
-   * ```json
-   * {
-   *   "module": "./my-otel-provider.js"
-   * }
-   * ```
-   */
-  providerConfig: z.infer<typeof providerConfigSchema>;
-}
-
-export type TelemetryConfig = NoopTelemetryConfig | CustomTelemetryConfig;
+export const customTelemetryConfigSchema = z.object({
+  provider: z.literal('custom'),
+  providerConfig: providerConfigSchema,
+});
 
 /**
- * Valid telemetry provider names
+ * Combined telemetry config schema (discriminated union)
  */
-const telemetryProviders = ['noop', 'custom'] as const;
-type TelemetryProviderType = (typeof telemetryProviders)[number];
+export const telemetryConfigSchema = z.discriminatedUnion('provider', [
+  noopTelemetryConfigSchema,
+  customTelemetryConfigSchema,
+]);
+
+export type TelemetryConfig = z.infer<typeof telemetryConfigSchema>;
 
 /**
  * Type guard for telemetry provider names
  */
 export function isTelemetryProvider(provider: unknown): provider is TelemetryProviderType {
-  return telemetryProviders.some((p) => p === provider);
+  return telemetryProviderSchema.safeParse(provider).success;
 }
