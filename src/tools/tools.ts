@@ -1,3 +1,11 @@
+import { getAddAssumptionTool } from './analysisSession/addAssumption.js';
+import { getAddFactTool } from './analysisSession/addFact.js';
+import { getCreateAnalysisSessionTool } from './analysisSession/createAnalysisSession.js';
+import { getDeleteAnalysisSessionTool } from './analysisSession/deleteAnalysisSession.js';
+import { getGetAnalysisSessionTool } from './analysisSession/getAnalysisSession.js';
+import { getImportWorkbookFactsTool } from './analysisSession/importWorkbookFacts.js';
+import { getSummarizeSessionTool } from './analysisSession/summarizeSession.js';
+import { getUpdateHypothesisTool } from './analysisSession/updateHypothesis.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
@@ -32,4 +40,13 @@ export const toolFactories = [
   getListWorkbooksTool,
   getListViewsTool,
   getSearchContentTool,
+  // Analysis Session tools
+  getCreateAnalysisSessionTool,
+  getGetAnalysisSessionTool,
+  getDeleteAnalysisSessionTool,
+  getUpdateHypothesisTool,
+  getAddFactTool,
+  getAddAssumptionTool,
+  getImportWorkbookFactsTool,
+  getSummarizeSessionTool,
 ];

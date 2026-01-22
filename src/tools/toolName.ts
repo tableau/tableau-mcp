@@ -16,6 +16,15 @@ export const toolNames = [
   'generate-pulse-insight-brief',
   'search-content',
   'embed-workbook',
+  // Analysis Session tools
+  'create-analysis-session',
+  'get-analysis-session',
+  'delete-analysis-session',
+  'update-hypothesis',
+  'add-fact',
+  'add-assumption',
+  'import-workbook-facts',
+  'summarize-analysis-session',
 ] as const;
 export type ToolName = (typeof toolNames)[number];
 
@@ -26,6 +35,7 @@ export const toolGroupNames = [
   'pulse',
   'content-exploration',
   'embedding',
+  'analysis-session',
 ] as const;
 export type ToolGroupName = (typeof toolGroupNames)[number];
 
@@ -44,6 +54,16 @@ export const toolGroups = {
   ],
   'content-exploration': ['search-content'],
   embedding: ['embed-workbook'],
+  'analysis-session': [
+    'create-analysis-session',
+    'get-analysis-session',
+    'delete-analysis-session',
+    'update-hypothesis',
+    'add-fact',
+    'add-assumption',
+    'import-workbook-facts',
+    'summarize-analysis-session',
+  ],
 } as const satisfies Record<ToolGroupName, Array<ToolName>>;
 
 export function isToolName(value: unknown): value is ToolName {
