@@ -259,6 +259,43 @@ variable.
 
 <hr />
 
+## `TELEMETRY_PROVIDER`
+
+The telemetry provider to use for metrics collection.
+
+- Default: `noop`
+- Possible values:
+  - `noop` - No telemetry (default)
+  - `custom` - Use a custom telemetry provider (requires
+    [`TELEMETRY_PROVIDER_CONFIG`](#telemetry_provider_config))
+
+<hr />
+
+## `TELEMETRY_PROVIDER_CONFIG`
+
+Configuration for the custom telemetry provider. Required when
+[`TELEMETRY_PROVIDER`](#telemetry_provider) is `custom`.
+
+- Format: JSON string with at least a `module` field
+- The `module` field should be a path to a JavaScript file or npm package that exports a class
+  implementing the `TelemetryProvider` interface.
+
+**Example:**
+
+```bash
+TELEMETRY_PROVIDER_CONFIG='{"module": "./my-telemetry-provider.js"}'
+```
+
+The custom provider module should export a default class (or named export `TelemetryProvider`) that
+implements:
+
+```typescript
+interface TelemetryProvider {
+  initialize(): void;
+  recordMetric(name: string, value: number, attributes: Record<string, unknown>): void;
+}
+```
+
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [tab-ds-connections]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source_connections
