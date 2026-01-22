@@ -42,13 +42,6 @@ interface NoopTelemetryConfig {
 }
 
 /**
- * Configuration for MonCloud provider (Salesforce hosted)
- */
-interface MonCloudTelemetryConfig {
-  provider: 'moncloud';
-}
-
-/**
  * Schema for custom telemetry provider config.
  * Requires 'module' field, allows additional provider-specific options.
  */
@@ -76,12 +69,12 @@ interface CustomTelemetryConfig {
   providerConfig: z.infer<typeof providerConfigSchema>;
 }
 
-export type TelemetryConfig = NoopTelemetryConfig | MonCloudTelemetryConfig | CustomTelemetryConfig;
+export type TelemetryConfig = NoopTelemetryConfig | CustomTelemetryConfig;
 
 /**
  * Valid telemetry provider names
  */
-const telemetryProviders = ['noop', 'moncloud', 'custom'] as const;
+const telemetryProviders = ['noop', 'custom'] as const;
 type TelemetryProviderType = (typeof telemetryProviders)[number];
 
 /**

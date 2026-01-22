@@ -5,7 +5,7 @@
  *   node -r ./build/telemetry/tracing.js build/index.js
  *
  * Environment variables:
- * - TELEMETRY_PROVIDER=moncloud - Use MonCloud APM (default: noop)
+ * - TELEMETRY_PROVIDER=custom - Use custom telemetry provider (default: noop)
  */
 
 // Load .env before anything else

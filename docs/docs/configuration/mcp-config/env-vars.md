@@ -266,7 +266,6 @@ The telemetry provider to use for metrics collection.
 - Default: `noop`
 - Possible values:
   - `noop` - No telemetry (default)
-  - `moncloud` - Salesforce MonCloud APM (requires additional MonCloud configuration)
   - `custom` - Use a custom telemetry provider (requires
     [`TELEMETRY_PROVIDER_CONFIG`](#telemetry_provider_config))
 

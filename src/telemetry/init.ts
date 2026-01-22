@@ -5,7 +5,6 @@
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
-import { MonCloudTelemetryProvider } from './moncloud.js';
 import { NoOpTelemetryProvider } from './noop.js';
 import { TelemetryProvider } from './types.js';
 
@@ -82,10 +81,6 @@ export function initializeTelemetry(): TelemetryProvider {
   try {
     // Select provider based on configuration
     switch (config.telemetry.provider) {
-      case 'moncloud':
-        provider = new MonCloudTelemetryProvider();
-        break;
-
       case 'custom':
         // Load custom provider from user's filesystem
         provider = loadCustomProvider(config.telemetry.providerConfig);
