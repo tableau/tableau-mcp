@@ -14,6 +14,7 @@ import {
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from '../../server/oauth/schemas.js';
+import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
@@ -118,7 +119,7 @@ export const getQueryDatasourceTool = (
             config,
             requestId,
             server,
-            jwtScopes: ['tableau:viz_data_service:read'],
+            jwtScopes: getRequiredApiScopesForTool('query-datasource'),
             signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {

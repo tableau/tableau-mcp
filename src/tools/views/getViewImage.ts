@@ -6,6 +6,7 @@ import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { convertPngDataToToolResult } from '../convertPngDataToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -61,7 +62,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
               config,
               requestId,
               server,
-              jwtScopes: ['tableau:views:download'],
+            jwtScopes: getRequiredApiScopesForTool('get-view-image'),
               signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
