@@ -10,9 +10,22 @@ import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
 import { tableauAuthInfoSchema } from '../server/oauth/schemas.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
+import { DirectTelemetryForwarder } from '../telemetry/product_telemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { Provider, TypeOrProvider } from '../utils/provider.js';
 import { ToolName } from './toolName.js';
+
+// Product telemetry - always enabled
+const PRODUCT_TELEMETRY_ENDPOINT = 'https://prod.telemetry.tableausoftware.com';
+const PRODUCT_TELEMETRY_SERVICE = 'tableau-mcp';
+let productTelemetry: DirectTelemetryForwarder | null = null;
+
+function getProductTelemetry(): DirectTelemetryForwarder {
+  if (!productTelemetry) {
+    productTelemetry = new DirectTelemetryForwarder(PRODUCT_TELEMETRY_ENDPOINT);
+  }
+  return productTelemetry;
+}
 
 type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args extends ZodRawShape
   ? (args: z.objectOutputType<Args, ZodTypeAny>) => void
@@ -20,17 +33,17 @@ type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args exte
 
 export type ConstrainedResult<T> =
   | {
-      type: 'success';
-      result: T;
-    }
+    type: 'success';
+    result: T;
+  }
   | {
-      type: 'empty';
-      message: string;
-    }
+    type: 'empty';
+    message: string;
+  }
   | {
-      type: 'error';
-      message: string;
-    };
+    type: 'error';
+    message: string;
+  };
 
 /**
  * The parameters for creating a tool instance
@@ -177,6 +190,12 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     // Record custom metric for this tool call
     const telemetry = getTelemetryProvider();
     telemetry.recordMetric('mcp.tool.calls', 1, {
+      tool_name: this.name,
+      request_id: requestId.toString(),
+    });
+
+    const productTelemetry = getProductTelemetry();
+    productTelemetry.send('mcp.tool.calls', PRODUCT_TELEMETRY_SERVICE, {
       tool_name: this.name,
       request_id: requestId.toString(),
     });
