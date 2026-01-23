@@ -56,7 +56,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
               config,
               requestId,
               server,
-            jwtScopes: getRequiredApiScopesForTool('get-view-data'),
+              jwtScopes: getRequiredApiScopesForTool('get-view-data'),
               signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {

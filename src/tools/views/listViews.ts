@@ -84,7 +84,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
               config,
               requestId,
               server,
-            jwtScopes: getRequiredApiScopesForTool('list-views'),
+              jwtScopes: getRequiredApiScopesForTool('list-views'),
               signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {

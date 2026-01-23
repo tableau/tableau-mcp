@@ -62,7 +62,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
               config,
               requestId,
               server,
-            jwtScopes: getRequiredApiScopesForTool('get-view-image'),
+              jwtScopes: getRequiredApiScopesForTool('get-view-image'),
               signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {

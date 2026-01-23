@@ -79,7 +79,7 @@ This tool searches across all supported content types for objects relevant to th
               config,
               requestId,
               server,
-            jwtScopes: getRequiredApiScopesForTool('search-content'),
+              jwtScopes: getRequiredApiScopesForTool('search-content'),
               signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {

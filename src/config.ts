@@ -141,8 +141,8 @@ export class Config {
       OAUTH_SCOPES_SUPPORTED: oauthScopesSupported,
       OAUTH_REQUIRED_SCOPES: oauthRequiredScopes,
       OAUTH_DISABLE_SCOPES: oauthDisableScopes,
-      TELEMETRY_PROVIDER: telemetryProvider,
-      TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
+      TELEMETRY_PROVIDER: _telemetryProvider,
+      TELEMETRY_PROVIDER_CONFIG: _telemetryProviderConfig,
     } = cleansedVars;
 
     let jwtUsername = '';
