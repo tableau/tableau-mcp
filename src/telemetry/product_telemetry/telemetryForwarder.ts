@@ -1,3 +1,5 @@
+import os from 'os';
+
 export type ValidPropertyValueType = string | number | boolean;
 export type PropertiesType = { [key: string]: ValidPropertyValueType };
 
@@ -43,8 +45,8 @@ export class DirectTelemetryForwarder {
 
         this.endpoint = endpoint;
         this.httpMethod = options.httpMethod ?? 'PUT';
-        this.pod = options.pod ?? safeDocumentDomain();
-        this.hostName = options.hostName ?? safeDocumentDomain();
+        this.pod = options.pod ?? getDefaultPod();
+        this.hostName = options.hostName ?? getDefaultHostName();
     }
 
     /**
@@ -81,11 +83,12 @@ export class DirectTelemetryForwarder {
     }
 }
 
-const safeDocumentDomain = (): string => {
-    if (typeof document === 'undefined' || typeof document.domain !== 'string') {
-        return '';
-    }
-    return document.domain;
+const getDefaultHostName = (): string => {
+    return os.hostname();
+};
+
+const getDefaultPod = (): string => {
+    return process.env.POD_NAME ?? '';
 };
 
 /**

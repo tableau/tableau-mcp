@@ -51,8 +51,8 @@ describe('DirectTelemetryForwarder', () => {
                 type: eventType,
                 service_name: serviceName,
                 properties,
-                pod: '',
-                host_name: '',
+                pod: expect.any(String),
+                host_name: expect.any(String),
                 host_timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} \+0000$/),
             }),
         ]);
