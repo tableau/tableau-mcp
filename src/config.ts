@@ -223,12 +223,12 @@ export class Config {
       }),
       clientIdSecretPairs: oauthClientIdSecretPairs
         ? oauthClientIdSecretPairs.split(',').reduce<Record<string, string>>((acc, curr) => {
-          const [clientId, secret] = curr.split(':');
-          if (clientId && secret) {
-            acc[clientId] = secret;
-          }
-          return acc;
-        }, {})
+            const [clientId, secret] = curr.split(':');
+            if (clientId && secret) {
+              acc[clientId] = secret;
+            }
+            return acc;
+          }, {})
         : null,
     };
 
@@ -313,16 +313,16 @@ export class Config {
 
     this.includeTools = includeTools
       ? includeTools.split(',').flatMap((s) => {
-        const v = s.trim();
-        return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
-      })
+          const v = s.trim();
+          return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
+        })
       : [];
 
     this.excludeTools = excludeTools
       ? excludeTools.split(',').flatMap((s) => {
-        const v = s.trim();
-        return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
-      })
+          const v = s.trim();
+          return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
+        })
       : [];
 
     if (this.includeTools.length > 0 && this.excludeTools.length > 0) {
@@ -493,10 +493,10 @@ function parseNumber(
     minValue,
     maxValue,
   }: { defaultValue: number; minValue?: number; maxValue?: number } = {
-      defaultValue: 0,
-      minValue: Number.NEGATIVE_INFINITY,
-      maxValue: Number.POSITIVE_INFINITY,
-    },
+    defaultValue: 0,
+    minValue: Number.NEGATIVE_INFINITY,
+    maxValue: Number.POSITIVE_INFINITY,
+  },
 ): number {
   if (!value) {
     return defaultValue;

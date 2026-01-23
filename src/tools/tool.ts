@@ -33,17 +33,17 @@ type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args exte
 
 export type ConstrainedResult<T> =
   | {
-    type: 'success';
-    result: T;
-  }
+      type: 'success';
+      result: T;
+    }
   | {
-    type: 'empty';
-    message: string;
-  }
+      type: 'empty';
+      message: string;
+    }
   | {
-    type: 'error';
-    message: string;
-  };
+      type: 'error';
+      message: string;
+    };
 
 /**
  * The parameters for creating a tool instance

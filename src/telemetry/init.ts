@@ -123,7 +123,7 @@ function loadCustomProvider(config?: Record<string, unknown>): TelemetryProvider
   if (!config?.module) {
     throw new Error(
       'Custom telemetry provider requires "module" in providerConfig. ' +
-      'Example: TELEMETRY_PROVIDER_CONFIG=\'{"module":"./my-telemetry.js"}\'',
+        'Example: TELEMETRY_PROVIDER_CONFIG=\'{"module":"./my-telemetry.js"}\'',
     );
   }
 
@@ -154,7 +154,7 @@ function loadCustomProvider(config?: Record<string, unknown>): TelemetryProvider
     if (!ProviderClass) {
       throw new Error(
         `Module ${modulePath} must export a default class or named export "TelemetryProvider" ` +
-        'that implements the TelemetryProvider interface',
+          'that implements the TelemetryProvider interface',
       );
     }
 
