@@ -15,8 +15,8 @@ import {
 } from './sdks/tableau/interceptors.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
-import { TableauApiScope } from './server/oauth/scopes.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { TableauApiScope } from './server/oauth/scopes.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
