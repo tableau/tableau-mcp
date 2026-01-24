@@ -3,7 +3,10 @@ import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
+import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
+import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getNewVizqlApiInstanceAsync } from '../../vizqlApiInstance.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
@@ -18,7 +21,7 @@ const paramsSchema = {
 };
 
 export type CreateWorkbookSessionError = {
-  type: 'workbook-not-allowed';
+  type: 'workbook-not-allowed' | 'view-not-found';
   message: string;
 };
 
@@ -34,13 +37,16 @@ export const getCreateWorkbookSessionTool = (server: Server): Tool<typeof params
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ workbookId }, { requestId, authInfo, signal }): Promise<CallToolResult> => {
+    callback: async (
+      { workbookId, viewId },
+      { requestId, authInfo, signal },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await createWorkbookSessionTool.logAndExecute<string, CreateWorkbookSessionError>({
         requestId,
         authInfo,
-        args: { workbookId },
+        args: { workbookId, viewId },
         callback: async () => {
           const isWorkbookAllowedResult = await resourceAccessChecker.isWorkbookAllowed({
             workbookId,
@@ -54,7 +60,52 @@ export const getCreateWorkbookSessionTool = (server: Server): Tool<typeof params
             });
           }
 
-          return Ok('success');
+          return await useRestApi({
+            config,
+            requestId,
+            server,
+            jwtScopes: ['tableau:content:read'],
+            signal,
+            callback: async (restApi) => {
+              const workbook = await restApi.workbooksMethods.getWorkbook({
+                siteId: restApi.siteId,
+                workbookId,
+              });
+
+              const workbookName = workbook.name;
+              const viewName = workbook.defaultViewId
+                ? workbook.views?.view.find((v) => v.id === workbook.defaultViewId)?.name
+                : undefined;
+
+              if (!viewName) {
+                return new Err({
+                  type: 'view-not-found',
+                  message: 'No view ID provided and no default view for workbook found.',
+                });
+              }
+
+              const vizqlClient = await getNewVizqlApiInstanceAsync(
+                config,
+                requestId,
+                server,
+                signal,
+                getTableauAuthInfo(authInfo),
+              );
+
+              const startSessionResponse = await vizqlClient.startSession(undefined, {
+                params: {
+                  siteName: config.siteName,
+                  workbookName,
+                  viewName,
+                },
+                headers: {
+                  Cookie: `workgroup_session_id=${restApi.creds.token};`,
+                },
+              });
+
+              return Ok(startSessionResponse.sessionId);
+            },
+          });
         },
         constrainSuccessResult: (workbook) => {
           return {
@@ -65,6 +116,8 @@ export const getCreateWorkbookSessionTool = (server: Server): Tool<typeof params
         getErrorText: (error: CreateWorkbookSessionError) => {
           switch (error.type) {
             case 'workbook-not-allowed':
+              return error.message;
+            case 'view-not-found':
               return error.message;
           }
         },
