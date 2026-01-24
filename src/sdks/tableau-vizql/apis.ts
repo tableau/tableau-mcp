@@ -22,11 +22,9 @@ export const startSessionEndpoint = makeEndpoint({
       schema: z.string(),
     },
   ],
-  response: z
-    .object({
-      sessionId: z.string(),
-    })
-    .passthrough(),
+  response: z.object({
+    sessionid: z.string(),
+  }),
 });
 
 const vizqlApi = makeApi([startSessionEndpoint]);

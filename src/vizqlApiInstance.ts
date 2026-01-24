@@ -9,16 +9,17 @@ import {
 } from './apiClients.js';
 import { Config } from './config.js';
 import { log } from './logging/log.js';
-import { useRestApi } from './restApiInstance.js';
 import { getClient, VizqlClient } from './sdks/tableau-vizql/client.js';
 import { Server } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { AxiosRequestConfig } from './utils/axios.js';
 
 export const getNewVizqlApiInstanceAsync = async (
   config: Config,
   requestId: RequestId,
   server: Server,
   signal: AbortSignal,
+  axiosConfig: AxiosRequestConfig,
   authInfo?: TableauAuthInfo,
 ): Promise<VizqlClient> => {
   signal.addEventListener(
@@ -38,21 +39,7 @@ export const getNewVizqlApiInstanceAsync = async (
   );
 
   const baseUrl = (config.server || authInfo?.server) ?? '';
-  const client = await useRestApi({
-    config,
-    requestId,
-    server,
-    jwtScopes: [],
-    signal,
-    authInfo,
-    callback: async (restApi) => {
-      return getClient(baseUrl, {
-        headers: {
-          Cookie: `workgroup_session_id=${restApi.creds.token}`,
-        },
-      });
-    },
-  });
+  const client = getClient(baseUrl, axiosConfig);
 
   addInterceptors(
     baseUrl,

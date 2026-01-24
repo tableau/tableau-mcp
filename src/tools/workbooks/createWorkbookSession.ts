@@ -2,8 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { Deferred } from '../../../tests/oauth/deferred.js';
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
+import { headerExtractorPlugin } from '../../sdks/plugins/headerExtractorPlugin.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { getNewVizqlApiInstanceAsync } from '../../vizqlApiInstance.js';
@@ -43,7 +45,10 @@ export const getCreateWorkbookSessionTool = (server: Server): Tool<typeof params
     ): Promise<CallToolResult> => {
       const config = getConfig();
 
-      return await createWorkbookSessionTool.logAndExecute<string, CreateWorkbookSessionError>({
+      return await createWorkbookSessionTool.logAndExecute<
+        { sessionid: string; globalSessionHeader: string | null },
+        CreateWorkbookSessionError
+      >({
         requestId,
         authInfo,
         args: { workbookId, viewId },
@@ -60,7 +65,7 @@ export const getCreateWorkbookSessionTool = (server: Server): Tool<typeof params
             });
           }
 
-          return await useRestApi({
+          const result = await useRestApi({
             config,
             requestId,
             server,
@@ -81,7 +86,7 @@ export const getCreateWorkbookSessionTool = (server: Server): Tool<typeof params
                 return new Err({
                   type: 'view-not-found',
                   message: 'No view ID provided and no default view for workbook found.',
-                });
+                } as const);
               }
 
               const vizqlClient = await getNewVizqlApiInstanceAsync(
@@ -89,10 +94,21 @@ export const getCreateWorkbookSessionTool = (server: Server): Tool<typeof params
                 requestId,
                 server,
                 signal,
+                {},
                 getTableauAuthInfo(authInfo),
               );
 
-              const startSessionResponse = await vizqlClient.startSession(undefined, {
+              const deferred = new Deferred<string | null>();
+              vizqlClient.use(
+                headerExtractorPlugin({
+                  headerName: 'global-session-header',
+                  onHeader: (value) => {
+                    deferred.resolve(value);
+                  },
+                }),
+              );
+
+              const { sessionid } = await vizqlClient.startSession(undefined, {
                 params: {
                   siteName: config.siteName,
                   workbookName,
@@ -103,14 +119,21 @@ export const getCreateWorkbookSessionTool = (server: Server): Tool<typeof params
                 },
               });
 
-              return Ok(startSessionResponse.sessionId);
+              const globalSessionHeader = await deferred.promise;
+
+              return new Ok({
+                sessionid,
+                globalSessionHeader,
+              });
             },
           });
+
+          return result;
         },
-        constrainSuccessResult: (workbook) => {
+        constrainSuccessResult: (result) => {
           return {
             type: 'success',
-            result: workbook,
+            result,
           };
         },
         getErrorText: (error: CreateWorkbookSessionError) => {
