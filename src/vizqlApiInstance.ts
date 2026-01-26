@@ -7,21 +7,23 @@ import {
   getResponseErrorInterceptor,
   getResponseInterceptor,
 } from './apiClients.js';
-import { Config } from './config.js';
 import { log } from './logging/log.js';
 import { getClient, VizqlClient } from './sdks/tableau-vizql/client.js';
 import { Server } from './server.js';
-import { TableauAuthInfo } from './server/oauth/schemas.js';
-import { AxiosRequestConfig } from './utils/axios.js';
 
-export const getNewVizqlApiInstanceAsync = async (
-  config: Config,
-  requestId: RequestId,
-  server: Server,
-  signal: AbortSignal,
-  axiosConfig: AxiosRequestConfig,
-  authInfo?: TableauAuthInfo,
-): Promise<VizqlClient> => {
+export const getNewVizqlApiInstanceAsync = async ({
+  baseUrl,
+  requestId,
+  server,
+  maxRequestTimeoutMs,
+  signal,
+}: {
+  baseUrl: string;
+  requestId: RequestId;
+  server: Server;
+  maxRequestTimeoutMs: number;
+  signal: AbortSignal;
+}): Promise<VizqlClient> => {
   signal.addEventListener(
     'abort',
     () => {
@@ -38,8 +40,10 @@ export const getNewVizqlApiInstanceAsync = async (
     { once: true },
   );
 
-  const baseUrl = (config.server || authInfo?.server) ?? '';
-  const client = getClient(baseUrl, axiosConfig);
+  const client = getClient(baseUrl, {
+    timeout: maxRequestTimeoutMs,
+    signal,
+  });
 
   addInterceptors(
     baseUrl,

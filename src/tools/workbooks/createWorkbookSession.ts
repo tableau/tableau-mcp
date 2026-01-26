@@ -2,10 +2,9 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { Deferred } from '../../../tests/oauth/deferred.js';
 import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
-import { headerExtractorPlugin } from '../../sdks/plugins/headerExtractorPlugin.js';
+import { useHeaderExtractorPlugin } from '../../sdks/plugins/headerExtractorPlugin.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { getNewVizqlApiInstanceAsync } from '../../vizqlApiInstance.js';
@@ -89,37 +88,35 @@ export const getCreateWorkbookSessionTool = (server: Server): Tool<typeof params
                 } as const);
               }
 
-              const vizqlClient = await getNewVizqlApiInstanceAsync(
-                config,
+              const vizqlClient = await getNewVizqlApiInstanceAsync({
+                baseUrl: config.server || getTableauAuthInfo(authInfo)?.server || '',
                 requestId,
                 server,
+                maxRequestTimeoutMs: config.maxRequestTimeoutMs,
                 signal,
-                {},
-                getTableauAuthInfo(authInfo),
-              );
-
-              const deferred = new Deferred<string | null>();
-              vizqlClient.use(
-                headerExtractorPlugin({
-                  headerName: 'global-session-header',
-                  onHeader: (value) => {
-                    deferred.resolve(value);
-                  },
-                }),
-              );
-
-              const { sessionid } = await vizqlClient.startSession(undefined, {
-                params: {
-                  siteName: config.siteName,
-                  workbookName,
-                  viewName,
-                },
-                headers: {
-                  Cookie: `workgroup_session_id=${restApi.creds.token};`,
-                },
               });
 
-              const globalSessionHeader = await deferred.promise;
+              const {
+                result: { sessionid },
+                headerValue: globalSessionHeader,
+              } = await useHeaderExtractorPlugin({
+                client: vizqlClient,
+                headerName: 'global-session-header',
+                timeoutMs: config.maxRequestTimeoutMs,
+                signal,
+                clientCallback: async (client) => {
+                  return await client.startSession(undefined, {
+                    params: {
+                      siteName: config.siteName,
+                      workbookName,
+                      viewName,
+                    },
+                    headers: {
+                      Cookie: `workgroup_session_id=${restApi.creds.token};`,
+                    },
+                  });
+                },
+              });
 
               return new Ok({
                 sessionid,
