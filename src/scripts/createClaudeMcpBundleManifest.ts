@@ -266,6 +266,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  MAX_RESULT_LIMITS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Max Result Limits',
+    description:
+      'A comma-separated list of tool names and maximum result limits. The format is `toolName:maxResultLimit`.',
+    required: false,
+    sensitive: false,
+  },
   DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: {
     includeInUserConfig: false,
     type: 'boolean',
