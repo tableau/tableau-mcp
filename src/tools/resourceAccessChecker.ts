@@ -209,14 +209,25 @@ class ResourceAccessChecker {
     }
 
     if (this.allowedTags) {
-      datasource = datasource ?? (await getDatasource());
+      try {
+        datasource = datasource ?? (await getDatasource());
 
-      if (!datasource.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+        if (!datasource.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+          return {
+            allowed: false,
+            message: [
+              'The set of allowed data sources that can be queried is limited by the server configuration.',
+              `The datasource with LUID ${datasourceLuid} cannot be queried because it does not have one of the allowed tags.`,
+            ].join(' '),
+          };
+        }
+      } catch (error) {
         return {
           allowed: false,
           message: [
             'The set of allowed data sources that can be queried is limited by the server configuration.',
-            `The datasource with LUID ${datasourceLuid} cannot be queried because it does not have one of the allowed tags.`,
+            `An error occurred while checking if the datasource with LUID ${datasourceLuid} has one of the allowed tags:`,
+            getExceptionMessage(error),
           ].join(' '),
         };
       }
@@ -289,14 +300,25 @@ class ResourceAccessChecker {
     }
 
     if (this.allowedTags) {
-      workbook = workbook ?? (await getWorkbook());
+      try {
+        workbook = workbook ?? (await getWorkbook());
 
-      if (!workbook.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+        if (!workbook.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+          return {
+            allowed: false,
+            message: [
+              'The set of allowed workbooks that can be queried is limited by the server configuration.',
+              `The workbook with LUID ${workbookId} cannot be queried because it does not have one of the allowed tags.`,
+            ].join(' '),
+          };
+        }
+      } catch (error) {
         return {
           allowed: false,
           message: [
             'The set of allowed workbooks that can be queried is limited by the server configuration.',
-            `The workbook with LUID ${workbookId} cannot be queried because it does not have one of the allowed tags.`,
+            `An error occurred while checking if the workbook with LUID ${workbookId} has one of the allowed tags:`,
+            getExceptionMessage(error),
           ].join(' '),
         };
       }
@@ -385,14 +407,25 @@ class ResourceAccessChecker {
     }
 
     if (this.allowedTags) {
-      view = view ?? (await getView());
+      try {
+        view = view ?? (await getView());
 
-      if (!view.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+        if (!view.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+          return {
+            allowed: false,
+            message: [
+              'The set of allowed views that can be queried is limited by the server configuration.',
+              `The view with LUID ${viewId} cannot be queried because it does not have one of the allowed tags.`,
+            ].join(' '),
+          };
+        }
+      } catch (error) {
         return {
           allowed: false,
           message: [
             'The set of allowed views that can be queried is limited by the server configuration.',
-            `The view with LUID ${viewId} cannot be queried because it does not have one of the allowed tags.`,
+            `An error occurred while checking if the view with LUID ${viewId} has one of the allowed tags:`,
+            getExceptionMessage(error),
           ].join(' '),
         };
       }
