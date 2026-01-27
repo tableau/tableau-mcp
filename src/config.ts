@@ -2,6 +2,7 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
+import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
@@ -80,6 +81,7 @@ export class Config {
     clientIdSecretPairs: Record<string, string> | null;
     dnsServers: string[];
   };
+  telemetry: TelemetryConfig;
 
   getMaxResultLimit(toolName: ToolName): number | null {
     return this.maxResultLimits?.get(toolName) ?? this.maxResultLimit;
@@ -140,6 +142,8 @@ export class Config {
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
+      TELEMETRY_PROVIDER: telemetryProvider,
+      TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -234,6 +238,23 @@ export class Config {
           }, {})
         : null,
     };
+
+    const parsedProvider = isTelemetryProvider(telemetryProvider) ? telemetryProvider : 'noop';
+    if (parsedProvider === 'custom') {
+      if (!telemetryProviderConfig) {
+        throw new Error(
+          'TELEMETRY_PROVIDER_CONFIG is required when TELEMETRY_PROVIDER is "custom"',
+        );
+      }
+      this.telemetry = {
+        provider: 'custom',
+        providerConfig: providerConfigSchema.parse(JSON.parse(telemetryProviderConfig)),
+      };
+    } else {
+      this.telemetry = {
+        provider: parsedProvider,
+      };
+    }
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
