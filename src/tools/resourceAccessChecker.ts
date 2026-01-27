@@ -2,6 +2,8 @@ import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { BoundedContext, Config, getConfig } from '../config.js';
 import { useRestApi } from '../restApiInstance.js';
+import { DataSource } from '../sdks/tableau/types/dataSource.js';
+import { View } from '../sdks/tableau/types/view.js';
 import { Workbook } from '../sdks/tableau/types/workbook.js';
 import { Server } from '../server.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
@@ -21,6 +23,7 @@ class ResourceAccessChecker {
   private _allowedProjectIds: Set<string> | null | undefined;
   private _allowedDatasourceIds: Set<string> | null | undefined;
   private _allowedWorkbookIds: Set<string> | null | undefined;
+  private _allowedTags: Set<string> | null | undefined;
 
   private readonly _cachedDatasourceIds: Map<string, AllowedResult>;
   private readonly _cachedWorkbookIds: Map<string, AllowedResult<Workbook>>;
@@ -40,6 +43,7 @@ class ResourceAccessChecker {
     this._allowedProjectIds = boundedContext?.projectIds;
     this._allowedDatasourceIds = boundedContext?.datasourceIds;
     this._allowedWorkbookIds = boundedContext?.workbookIds;
+    this._allowedTags = boundedContext?.tags;
 
     this._cachedDatasourceIds = new Map();
     this._cachedWorkbookIds = new Map();
@@ -70,6 +74,14 @@ class ResourceAccessChecker {
     return this._allowedWorkbookIds;
   }
 
+  private get allowedTags(): Set<string> | null {
+    if (this._allowedTags === undefined) {
+      this._allowedTags = getConfig().boundedContext.tags;
+    }
+
+    return this._allowedTags;
+  }
+
   async isDatasourceAllowed({
     datasourceLuid,
     restApiArgs,
@@ -82,8 +94,9 @@ class ResourceAccessChecker {
       restApiArgs,
     });
 
-    if (!this.allowedProjectIds) {
+    if (!this.allowedProjectIds && !this.allowedTags) {
       // If project filtering is enabled, we cannot cache the result since the datasource may be moved between projects.
+      // If tag filtering is enabled, we cannot cache the result since the datasource tags can change over time.
       this._cachedDatasourceIds.set(datasourceLuid, result);
     }
 
@@ -102,8 +115,9 @@ class ResourceAccessChecker {
       restApiArgs,
     });
 
-    if (!this.allowedProjectIds) {
+    if (!this.allowedProjectIds && !this.allowedTags) {
       // If project filtering is enabled, we cannot cache the result since the workbook may be moved between projects.
+      // If tag filtering is enabled, we cannot cache the result since the workbook tags can change over time.
       this._cachedWorkbookIds.set(workbookId, result);
     }
 
@@ -122,8 +136,9 @@ class ResourceAccessChecker {
       restApiArgs,
     });
 
-    if (!this.allowedProjectIds) {
+    if (!this.allowedProjectIds && !this.allowedTags) {
       // If project filtering is enabled, we cannot cache the result since the workbook containing the view may be moved between projects.
+      // If tag filtering is enabled, we cannot cache the result since the view tags can change over time.
       this._cachedViewIds.set(viewId, result);
     }
 
@@ -152,25 +167,27 @@ class ResourceAccessChecker {
       };
     }
 
+    let datasource: DataSource | undefined;
+    async function getDatasource(): Promise<DataSource> {
+      return await useRestApi({
+        config,
+        requestId,
+        server,
+        jwtScopes: ['tableau:content:read'],
+        signal,
+        callback: async (restApi) =>
+          await restApi.datasourcesMethods.queryDatasource({
+            siteId: restApi.siteId,
+            datasourceId: datasourceLuid,
+          }),
+      });
+    }
+
     if (this.allowedProjectIds) {
       try {
-        const datasourceProjectId = await useRestApi({
-          config,
-          requestId,
-          server,
-          jwtScopes: ['tableau:content:read'],
-          signal,
-          callback: async (restApi) => {
-            const datasource = await restApi.datasourcesMethods.queryDatasource({
-              siteId: restApi.siteId,
-              datasourceId: datasourceLuid,
-            });
+        datasource = await getDatasource();
 
-            return datasource.project.id;
-          },
-        });
-
-        if (!this.allowedProjectIds.has(datasourceProjectId)) {
+        if (!this.allowedProjectIds.has(datasource.project.id)) {
           return {
             allowed: false,
             message: [
@@ -186,6 +203,20 @@ class ResourceAccessChecker {
             'The set of allowed data sources that can be queried is limited by the server configuration.',
             `An error occurred while checking if the datasource with LUID ${datasourceLuid} is in an allowed project:`,
             getExceptionMessage(error),
+          ].join(' '),
+        };
+      }
+    }
+
+    if (this.allowedTags) {
+      datasource = datasource ?? (await getDatasource());
+
+      if (!datasource.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+        return {
+          allowed: false,
+          message: [
+            'The set of allowed data sources that can be queried is limited by the server configuration.',
+            `The datasource with LUID ${datasourceLuid} cannot be queried because it does not have one of the allowed tags.`,
           ].join(' '),
         };
       }
@@ -217,23 +248,24 @@ class ResourceAccessChecker {
     }
 
     let workbook: Workbook | undefined;
+    async function getWorkbook(): Promise<Workbook> {
+      return await useRestApi({
+        config,
+        requestId,
+        server,
+        jwtScopes: ['tableau:content:read'],
+        signal,
+        callback: async (restApi) =>
+          await restApi.workbooksMethods.getWorkbook({
+            siteId: restApi.siteId,
+            workbookId,
+          }),
+      });
+    }
+
     if (this.allowedProjectIds) {
       try {
-        workbook = await useRestApi({
-          config,
-          requestId,
-          server,
-          jwtScopes: ['tableau:content:read'],
-          signal,
-          callback: async (restApi) => {
-            const workbook = await restApi.workbooksMethods.getWorkbook({
-              siteId: restApi.siteId,
-              workbookId,
-            });
-
-            return workbook;
-          },
-        });
+        workbook = await getWorkbook();
 
         if (!this.allowedProjectIds.has(workbook.project?.id ?? '')) {
           return {
@@ -256,6 +288,20 @@ class ResourceAccessChecker {
       }
     }
 
+    if (this.allowedTags) {
+      workbook = workbook ?? (await getWorkbook());
+
+      if (!workbook.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+        return {
+          allowed: false,
+          message: [
+            'The set of allowed workbooks that can be queried is limited by the server configuration.',
+            `The workbook with LUID ${workbookId} cannot be queried because it does not have one of the allowed tags.`,
+          ].join(' '),
+        };
+      }
+    }
+
     return { allowed: true, content: workbook };
   }
 
@@ -271,29 +317,28 @@ class ResourceAccessChecker {
       return cachedResult;
     }
 
-    let viewWorkbookId = '';
-    let viewProjectId = '';
+    let view: View | undefined;
+    async function getView(): Promise<View> {
+      return await useRestApi({
+        config,
+        requestId,
+        server,
+        jwtScopes: ['tableau:content:read'],
+        signal,
+        callback: async (restApi) => {
+          return await restApi.viewsMethods.getView({
+            siteId: restApi.siteId,
+            viewId,
+          });
+        },
+      });
+    }
 
     if (this.allowedWorkbookIds) {
       try {
-        const view = await useRestApi({
-          config,
-          requestId,
-          server,
-          jwtScopes: ['tableau:content:read'],
-          signal,
-          callback: async (restApi) => {
-            return await restApi.viewsMethods.getView({
-              siteId: restApi.siteId,
-              viewId,
-            });
-          },
-        });
+        view = await getView();
 
-        viewWorkbookId = view.workbook?.id ?? '';
-        viewProjectId = view.project?.id ?? '';
-
-        if (!this.allowedWorkbookIds.has(viewWorkbookId)) {
+        if (!this.allowedWorkbookIds.has(view.workbook?.id ?? '')) {
           return {
             allowed: false,
             message: [
@@ -316,25 +361,9 @@ class ResourceAccessChecker {
 
     if (this.allowedProjectIds) {
       try {
-        viewProjectId =
-          viewProjectId ||
-          (await useRestApi({
-            config,
-            requestId,
-            server,
-            jwtScopes: ['tableau:content:read'],
-            signal,
-            callback: async (restApi) => {
-              const view = await restApi.viewsMethods.getView({
-                siteId: restApi.siteId,
-                viewId,
-              });
+        view = view ?? (await getView());
 
-              return view.project?.id ?? '';
-            },
-          }));
-
-        if (!this.allowedProjectIds.has(viewProjectId)) {
+        if (!this.allowedProjectIds.has(view.project?.id ?? '')) {
           return {
             allowed: false,
             message: [
@@ -350,6 +379,20 @@ class ResourceAccessChecker {
             'The set of allowed views that can be queried is limited by the server configuration.',
             `An error occurred while checking if the workbook containing the view with LUID ${viewId} is in an allowed project:`,
             getExceptionMessage(error),
+          ].join(' '),
+        };
+      }
+    }
+
+    if (this.allowedTags) {
+      view = view ?? (await getView());
+
+      if (!view.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+        return {
+          allowed: false,
+          message: [
+            'The set of allowed views that can be queried is limited by the server configuration.',
+            `The view with LUID ${viewId} cannot be queried because it does not have one of the allowed tags.`,
           ].join(' '),
         };
       }
