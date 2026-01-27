@@ -211,12 +211,12 @@ Example:
 
 ```
 MAX_RESULT_LIMIT=30
-MAX_RESULT_LIMITS=query-datasource:10,list-datasources:20
+MAX_RESULT_LIMITS=query-datasource:1000,list-datasources:20
 ```
 
 This means that:
 
-- The `query-datasource` tool can return up to 10 results.
+- The `query-datasource` tool can return up to 1000 results.
 - The `list-datasources` tool can return up to 20 data sources.
 - Every other tool is limited to 30 results.
 
