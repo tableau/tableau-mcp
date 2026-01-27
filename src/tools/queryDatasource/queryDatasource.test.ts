@@ -76,6 +76,7 @@ describe('queryDatasourceTool', () => {
         datasourceIds: null,
         workbookIds: null,
       },
+      getMaxResultLimit: vi.fn().mockReturnValue(null),
     });
   });
 
@@ -102,6 +103,39 @@ describe('queryDatasourceTool', () => {
         debug: true,
         disaggregate: false,
         returnFormat: 'OBJECTS',
+      },
+      query: {
+        fields: [
+          {
+            fieldCaption: 'Category',
+          },
+          {
+            fieldCaption: 'Profit',
+            function: 'SUM',
+            sortDirection: 'DESC',
+          },
+        ],
+      },
+    });
+  });
+
+  it('should successfully query the datasource with a limit', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+
+    const result = await getToolResult({ limit: 100 });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual(mockVdsResponses.success);
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
+      datasource: {
+        datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+      },
+      options: {
+        debug: true,
+        disaggregate: false,
+        returnFormat: 'OBJECTS',
+        rowLimit: 100,
       },
       query: {
         fields: [
@@ -158,6 +192,7 @@ describe('queryDatasourceTool', () => {
         datasourceIds: null,
         workbookIds: null,
       },
+      getMaxResultLimit: vi.fn().mockReturnValue(null),
     });
 
     const result = await getToolResult();
@@ -273,6 +308,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
         {
           signal: new AbortController().signal,
@@ -324,6 +360,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
         {
           signal: new AbortController().signal,
@@ -369,6 +406,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
         {
           signal: new AbortController().signal,
@@ -412,6 +450,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
         {
           signal: new AbortController().signal,
@@ -474,6 +513,7 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
         {
           signal: new AbortController().signal,
@@ -513,6 +553,7 @@ describe('queryDatasourceTool', () => {
         datasourceIds: new Set(['some-other-datasource-luid']),
         workbookIds: null,
       },
+      getMaxResultLimit: vi.fn().mockReturnValue(null),
     });
 
     const result = await getToolResult();
@@ -529,7 +570,7 @@ describe('queryDatasourceTool', () => {
   });
 });
 
-async function getToolResult(): Promise<CallToolResult> {
+async function getToolResult({ limit }: { limit?: number } = {}): Promise<CallToolResult> {
   const queryDatasourceTool = getQueryDatasourceTool(new Server());
   const callback = await Provider.from(queryDatasourceTool.callback);
   return await callback(
@@ -541,6 +582,7 @@ async function getToolResult(): Promise<CallToolResult> {
           { fieldCaption: 'Profit', function: 'SUM', sortDirection: 'DESC' },
         ],
       },
+      limit,
     },
     {
       signal: new AbortController().signal,

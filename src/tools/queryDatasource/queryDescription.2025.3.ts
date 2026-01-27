@@ -221,6 +221,37 @@ If a bin field already exists in the datasource (e.g., "Profit (bin)"), query it
 To control existing bin field behavior, use parameters if available (e.g., "Profit Bin Size").
 
 ## Filter Types and Usage
+### Filter Context Property
+All filters support an optional \`context\` property (boolean) that controls how filters are applied:
+- **\`context: true\`** - Filter applies to the overall query context (dimension/scope filters)
+- **\`context: false\`** - Filter applies after context is established (ranking/limiting filters)
+
+**When to use:**
+- Set \`context: true\` on dimension filters (SET, DATE, QUANTITATIVE) that define the scope of analysis
+- Set \`context: false\` on TOP filters to rank/limit results within the established context
+- Omit \`context\` property for simple queries with single filters
+
+**Example: Finding top products within a region:**
+\`\`\`json
+{
+  "filters": [
+    {
+      "field": { "fieldCaption": "State" },
+      "filterType": "SET",
+      "values": ["California"],
+      "context": true  // Establish California as the context
+    },
+    {
+      "field": { "fieldCaption": "Product Name" },
+      "filterType": "TOP",
+      "howMany": 1,
+      "direction": "TOP",
+      "context": false,  // Find top product within California
+      "fieldToMeasure": { "fieldCaption": "Sales", "function": "SUM" }
+    }
+  ]
+}
+\`\`\`
 
 ### SET Filters
 Filter by specific values:
@@ -233,7 +264,7 @@ Filter by specific values:
 }
 \`\`\`
 
-### TOP Filters  
+### TOP Filters
 Get top/bottom N records by a measure:
 \`\`\`json
 {
@@ -363,7 +394,45 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 3: Time Series with Aggregation
+### Example 3: Top N Dimension Query (Using TOP Filter and context property)
+**Question:** "What is the top selling product in California?"
+\`\`\`json
+{
+  "datasourceLuid": "abc123",
+    "query": {
+    "fields": [
+      {
+        "fieldCaption": "Product Name"
+      },
+      {
+        "fieldCaption": "Sales",
+        "function": "SUM",
+        "fieldAlias": "Total Sales",
+        "sortDirection": "DESC",
+        "sortPriority": 1
+      }
+    ],
+      "filters": [
+        {
+          "field": { "fieldCaption": "State" },
+          "filterType": "SET",
+          "values": ["California"],
+          "context": true
+        },
+        {
+          "field": { "fieldCaption": "Product Name" },
+          "filterType": "TOP",
+          "howMany": 1,
+          "direction": "TOP",
+          "context": false,
+          "fieldToMeasure": { "fieldCaption": "Sales", "function": "SUM" }
+        }
+      ]
+  }
+}
+\`\`\`
+
+### Example 4: Time Series with Aggregation
 **Question:** "What are our monthly sales trends?"
 
 \`\`\`json
@@ -393,7 +462,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 4: Filtered Category Analysis
+### Example 5: Filtered Category Analysis
 **Question:** "What's the performance by product category for high-value orders?"
 
 \`\`\`json
@@ -433,7 +502,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 5: Distribution Analysis Using Bins
+### Example 6: Distribution Analysis Using Bins
 **Question:** "How are our sales distributed across different price ranges?"
 
 \`\`\`json
@@ -463,7 +532,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 6: Using Parameters for Dynamic Analysis
+### Example 7: Using Parameters for Dynamic Analysis
 **Question:** "Show me sales for the selected region and year"
 
 \`\`\`json
