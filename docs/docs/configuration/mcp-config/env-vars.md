@@ -226,9 +226,9 @@ This means that:
 - For a list of available tools and groups, see
   [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.ts).
 - Only applies to tools that have a `limit` parameter and return an array of items.
-- Tool names take precedence over tool group names. That is, `datasource:10,list-datasources:20`
+- Tool names take precedence over tool group names. That is, `datasource:1000,list-datasources:20`
   means that the `list-datasources` tool can return up to 20 data sources but the `query-datasource`
-  tool can only return up to 10 results.
+  tool can only return up to 1000 results.
 - If a tool-specific limit is not set, the global limit specified by the
   [`MAX_RESULT_LIMIT`](#max_result_limit) environment variable will be used instead.
 - Each limit must be a positive number.
