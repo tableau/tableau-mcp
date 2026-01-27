@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getConfig } from './config.js';
-import { log } from './logging/log.js';
 import {
   getRequestErrorInterceptor,
   getRequestInterceptor,
   getResponseErrorInterceptor,
   getResponseInterceptor,
-  useRestApi,
-} from './restApiInstance.js';
+} from './apiClients.js';
+import { getConfig } from './config.js';
+import { log } from './logging/log.js';
+import { useRestApi } from './restApiInstance.js';
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
@@ -55,7 +55,7 @@ describe('restApiInstance', () => {
   describe('Request Interceptor', () => {
     it('should add User-Agent header and log request', () => {
       const server = new Server();
-      const interceptor = getRequestInterceptor(server, mockRequestId);
+      const interceptor = getRequestInterceptor(server, mockRequestId, 'rest-api');
       const mockRequest = {
         headers: {} as Record<string, string>,
         method: 'GET',
@@ -85,7 +85,7 @@ describe('restApiInstance', () => {
   describe('Response Interceptor', () => {
     it('should log response', () => {
       const server = new Server();
-      const interceptor = getResponseInterceptor(server, mockRequestId);
+      const interceptor = getResponseInterceptor(server, mockRequestId, 'rest-api');
       const mockResponse = {
         status: 200,
         url: '/api/test',
@@ -116,7 +116,7 @@ describe('restApiInstance', () => {
   describe('Error Handling', () => {
     it('should handle request errors', () => {
       const server = new Server();
-      const errorInterceptor = getRequestErrorInterceptor(server, mockRequestId);
+      const errorInterceptor = getRequestErrorInterceptor(server, mockRequestId, 'rest-api');
       const mockError = {
         request: {
           method: 'GET',
@@ -140,7 +140,7 @@ describe('restApiInstance', () => {
 
     it('should handle AxiosError request errors', () => {
       const server = new Server();
-      const errorInterceptor = getRequestErrorInterceptor(server, mockRequestId);
+      const errorInterceptor = getRequestErrorInterceptor(server, mockRequestId, 'rest-api');
       const mockError = {
         isAxiosError: true,
         request: {
@@ -172,7 +172,7 @@ describe('restApiInstance', () => {
 
     it('should handle response errors', () => {
       const server = new Server();
-      const errorInterceptor = getResponseErrorInterceptor(server, mockRequestId);
+      const errorInterceptor = getResponseErrorInterceptor(server, mockRequestId, 'rest-api');
       const mockError = {
         response: {
           status: 500,
@@ -197,7 +197,7 @@ describe('restApiInstance', () => {
 
     it('should handle AxiosError response errors', () => {
       const server = new Server();
-      const errorInterceptor = getResponseErrorInterceptor(server, mockRequestId);
+      const errorInterceptor = getResponseErrorInterceptor(server, mockRequestId, 'rest-api');
       const mockError = {
         isAxiosError: true,
         response: {
