@@ -51,6 +51,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: null,
           datasourceIds: new Set([mockDatasource.id]),
           workbookIds: null,
+          tags: null,
         });
 
         expect(
@@ -79,6 +80,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: new Set([mockDatasource.project.id]),
           datasourceIds: null,
           workbookIds: null,
+          tags: null,
         });
 
         expect(
@@ -107,6 +109,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: new Set([mockDatasource.project.id]),
           datasourceIds: new Set([mockDatasource.id]),
           workbookIds: null,
+          tags: null,
         });
 
         expect(
@@ -135,6 +138,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: null,
           datasourceIds: new Set(['some-datasource-luid']),
           workbookIds: null,
+          tags: null,
         });
 
         expect(
@@ -159,6 +163,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: new Set(['some-project-id']),
           datasourceIds: null,
           workbookIds: null,
+          tags: null,
         });
 
         const expectedMessage = [
@@ -198,6 +203,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: new Set(['some-project-id']),
           datasourceIds: new Set([mockDatasource.id]),
           workbookIds: null,
+          tags: null,
         });
 
         const expectedMessage = [
@@ -238,6 +244,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: new Set([mockWorkbook.id]),
+          tags: null,
         });
 
         expect(
@@ -265,6 +272,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: new Set([mockWorkbook.project.id]),
           datasourceIds: null,
           workbookIds: null,
+          tags: null,
         });
 
         expect(
@@ -292,6 +300,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: new Set([mockWorkbook.project.id]),
           datasourceIds: null,
           workbookIds: new Set([mockWorkbook.id]),
+          tags: null,
         });
 
         expect(
@@ -319,6 +328,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: new Set(['some-workbook-id']),
+          tags: null,
         });
 
         expect(
@@ -358,6 +368,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: new Set(['some-project-id']),
           datasourceIds: null,
           workbookIds: null,
+          tags: null,
         });
 
         const expectedMessage = [
@@ -395,6 +406,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: new Set(['some-project-id']),
           datasourceIds: null,
           workbookIds: new Set([mockWorkbook.id]),
+          tags: null,
         });
 
         const expectedMessage = [
@@ -437,6 +449,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: new Set([mockWorkbook.id]),
+          tags: null,
         });
 
         expect(
@@ -464,6 +477,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: new Set([mockView.project.id]),
           datasourceIds: null,
           workbookIds: null,
+          tags: null,
         });
 
         expect(
@@ -491,6 +505,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: new Set([mockView.project.id]),
           datasourceIds: null,
           workbookIds: new Set([mockWorkbook.id]),
+          tags: null,
         });
 
         expect(
@@ -519,6 +534,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: new Set(['some-workbook-id']),
+          tags: null,
         });
 
         const expectedMessage = [
@@ -556,6 +572,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: new Set(['some-project-id']),
           datasourceIds: null,
           workbookIds: null,
+          tags: null,
         });
 
         const expectedMessage = [
@@ -593,6 +610,7 @@ describe('ResourceAccessChecker', () => {
           projectIds: new Set(['some-project-id']),
           datasourceIds: null,
           workbookIds: new Set([mockWorkbook.id]),
+          tags: null,
         });
 
         const expectedMessage = [
