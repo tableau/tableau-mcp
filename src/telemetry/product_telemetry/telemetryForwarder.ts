@@ -2,6 +2,18 @@ import os from 'os';
 
 export type ValidPropertyValueType = string | number | boolean;
 export type PropertiesType = { [key: string]: ValidPropertyValueType };
+const DEFAULT_POD = 'External';
+const DEFAULT_HOST_NAME = 'External';
+const SERVICE_NAME = 'tableau-mcp';
+
+export type TableauTelemetryJsonEvent = {
+  type: string;
+  host_timestamp: string;
+  service_name: string;
+  pod?: string;
+  host_name?: string;
+  properties: PropertiesType;
+};
 
 export interface DirectTelemetryForwarderOptions {
   /**
@@ -10,14 +22,19 @@ export interface DirectTelemetryForwarderOptions {
   httpMethod?: 'POST' | 'PUT';
 
   /**
-   * Custom pod identifier. Default: document.domain (browser) or empty string (Node)
+   * Custom pod identifier. Default: empty string
    */
   pod?: string;
 
   /**
-   * Custom host_name identifier. Default: document.domain (browser) or empty string (Node)
+   * Custom host_name identifier. Default: os.hostname()
    */
   hostName?: string;
+
+  /**
+   * Service name. Default: 'tableau-mcp'
+   */
+  serviceName?: string;
 }
 
 /**
@@ -45,8 +62,8 @@ export class DirectTelemetryForwarder {
 
     this.endpoint = endpoint;
     this.httpMethod = options.httpMethod ?? 'PUT';
-    this.pod = options.pod ?? getDefaultPod();
-    this.hostName = options.hostName ?? getDefaultHostName();
+    this.pod = getDefaultPod();
+    this.hostName = getDefaultHostName();
   }
 
   /**
@@ -56,11 +73,11 @@ export class DirectTelemetryForwarder {
    * @param serviceName - The service name emitting the event
    * @param properties - Key-value properties for the event
    */
-  public send(eventType: string, serviceName: string, properties: PropertiesType): void {
-    const event = {
+  public send(eventType: string, properties: PropertiesType): void {
+    const event: TableauTelemetryJsonEvent = {
       type: eventType,
-      host_timestamp: formatHostTimestampUtc(new Date()),
-      service_name: serviceName,
+      host_timestamp: formatHostTimestamp(new Date()),
+      service_name: SERVICE_NAME,
       pod: this.pod,
       host_name: this.hostName,
       properties,
@@ -79,22 +96,35 @@ export class DirectTelemetryForwarder {
     };
 
     const req = new Request(this.endpoint, init);
-    fetch(req).catch((error) => console.error('DirectTelemetryForwarder error:', error));
+    
+    // Debug logging
+    console.log('[Telemetry] Sending event:', JSON.stringify(event, null, 2));
+    
+    fetch(req)
+      .then(async (res) => {
+        const body = await res.text();
+        if (!res.ok) {
+          console.error(`[Telemetry] Failed: ${res.status} ${res.statusText}`, body);
+        } else {
+          console.log(`[Telemetry] Success: ${res.status}`, body);
+        }
+      })
+      .catch((error) => console.error('[Telemetry] Network error:', error));
   }
 }
 
-const getDefaultHostName = (): string => {
-  return os.hostname();
+const getDefaultPod = (): string => {
+  return process.env.POD_NAME ?? DEFAULT_POD;
 };
 
-const getDefaultPod = (): string => {
-  return process.env.POD_NAME ?? '';
+const getDefaultHostName = (): string => {
+  return os.hostname() ?? DEFAULT_HOST_NAME;
 };
 
 /**
  * Format: "yyyy-MM-dd HH:mm:ss,SSS +0000" in UTC
  */
-const formatHostTimestampUtc = (d: Date): string => {
+const formatHostTimestamp = (d: Date): string => {
   const pad2 = (n: number): string => (n < 10 ? `0${n}` : `${n}`);
   const pad3 = (n: number): string => (n < 10 ? `00${n}` : n < 100 ? `0${n}` : `${n}`);
 

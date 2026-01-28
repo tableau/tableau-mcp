@@ -6,6 +6,7 @@ import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 import { fromError, isZodErrorLike } from 'zod-validation-error';
 
+import { getConfig } from '../config.js';
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
 import { tableauAuthInfoSchema } from '../server/oauth/schemas.js';
@@ -16,8 +17,7 @@ import { Provider, TypeOrProvider } from '../utils/provider.js';
 import { ToolName } from './toolName.js';
 
 // Product telemetry - always enabled
-const PRODUCT_TELEMETRY_ENDPOINT = 'https://prod.telemetry.tableausoftware.com';
-const PRODUCT_TELEMETRY_SERVICE = 'tableau-mcp';
+const PRODUCT_TELEMETRY_ENDPOINT = 'https://qa.telemetry.tableausoftware.com'; 
 let productTelemetry: DirectTelemetryForwarder | null = null;
 
 function getProductTelemetry(): DirectTelemetryForwarder {
@@ -83,6 +83,9 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
 type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined> = {
   // The request ID of the tool call
   requestId: RequestId;
+
+  // The session ID from the transport, if available
+  sessionId?: string;
 
   // The Authentication info provided when OAuth is enabled
   authInfo: AuthInfo | undefined;
@@ -174,6 +177,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   // Implementation
   async logAndExecute<T, E>({
     requestId,
+    sessionId,
     args,
     authInfo,
     callback,
@@ -194,10 +198,13 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       request_id: requestId.toString(),
     });
 
+    const config = getConfig();
     const productTelemetry = getProductTelemetry();
-    productTelemetry.send('mcp.tool.calls', PRODUCT_TELEMETRY_SERVICE, {
+    productTelemetry.send('event_tool_call', {
       tool_name: this.name,
       request_id: requestId.toString(),
+      session_id: sessionId ?? '',
+      site_name: config.siteName,
     });
 
     if (args) {

@@ -80,12 +80,13 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
     },
     callback: async (
       { filter, pageSize, limit },
-      { requestId, authInfo, signal },
+      { requestId, authInfo, sessionId, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
         requestId,
+        sessionId,
         authInfo,
         args: { filter, pageSize, limit },
         callback: async () => {
