@@ -12,7 +12,7 @@ const paramsSchema = {
 const description = `
 This tool retrieves relevant information for constructing Tableau calculations.
 Provides details on how to construct a given calculation type and which functions are available for use in calculations.
-Before you can determine whether or not you want toconstruct a calculation make sure to understand available fields and their types.
+Before you can determine whether or not you want to construct a calculation make sure to understand available fields and their types.
 
 When should you use this tool?
   - A user explicity requests a calculation to be constructed and information is needed for the given calculation type.
