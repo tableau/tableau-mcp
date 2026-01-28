@@ -364,7 +364,7 @@ class ResourceAccessChecker {
           return {
             allowed: false,
             message: [
-              'The set of allowed workbooks that can be queried is limited by the server configuration.',
+              'The set of allowed views that can be queried is limited by the server configuration.',
               `The view with LUID ${viewId} cannot be queried because it does not belong to an allowed workbook.`,
             ].join(' '),
           };
@@ -373,7 +373,7 @@ class ResourceAccessChecker {
         return {
           allowed: false,
           message: [
-            'The set of allowed workbooks that can be queried is limited by the server configuration.',
+            'The set of allowed views that can be queried is limited by the server configuration.',
             `An error occurred while checking if the workbook containing the view with LUID ${viewId} is in an allowed workbook:`,
             getExceptionMessage(error),
           ].join(' '),
@@ -399,7 +399,7 @@ class ResourceAccessChecker {
           allowed: false,
           message: [
             'The set of allowed views that can be queried is limited by the server configuration.',
-            `An error occurred while checking if the workbook containing the view with LUID ${viewId} is in an allowed project:`,
+            `An error occurred while checking if the view with LUID ${viewId} is in an allowed project:`,
             getExceptionMessage(error),
           ].join(' '),
         };
