@@ -12,6 +12,7 @@ import {
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
+import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
 import { Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -184,7 +185,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
             config,
             requestId,
             server,
-            jwtScopes: ['tableau:insights:read'],
+            jwtScopes: getRequiredApiScopesForTool('generate-pulse-metric-value-insight-bundle'),
             signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) =>

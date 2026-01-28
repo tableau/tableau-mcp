@@ -48,9 +48,14 @@ export interface ProcessEnvEx {
   OAUTH_REDIRECT_URI: string | undefined;
   OAUTH_LOCK_SITE: string | undefined;
   OAUTH_CLIENT_ID_SECRET_PAIRS: string | undefined;
+  OAUTH_SCOPES_SUPPORTED: string | undefined;
+  OAUTH_REQUIRED_SCOPES: string | undefined;
+  OAUTH_DISABLE_SCOPES: string | undefined;
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: string | undefined;
   OAUTH_ACCESS_TOKEN_TIMEOUT_MS: string | undefined;
   OAUTH_REFRESH_TOKEN_TIMEOUT_MS: string | undefined;
+  TELEMETRY_PROVIDER: string | undefined;
+  TELEMETRY_PROVIDER_CONFIG: string | undefined;
 }
 
 declare global {

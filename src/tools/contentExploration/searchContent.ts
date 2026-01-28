@@ -10,6 +10,7 @@ import {
 } from '../../sdks/tableau/types/contentExploration.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { Tool } from '../tool.js';
 import {
   buildFilterString,
@@ -78,7 +79,7 @@ This tool searches across all supported content types for objects relevant to th
               config,
               requestId,
               server,
-              jwtScopes: ['tableau:content:read'],
+              jwtScopes: getRequiredApiScopesForTool('search-content'),
               signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {

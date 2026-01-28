@@ -4,6 +4,7 @@ import { BoundedContext, Config, getConfig } from '../config.js';
 import { useRestApi } from '../restApiInstance.js';
 import { Workbook } from '../sdks/tableau/types/workbook.js';
 import { Server } from '../server.js';
+import { getRequiredApiScopesForTool } from '../server/oauth/scopes.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
 type AllowedResult<T = unknown> =
@@ -158,7 +159,7 @@ class ResourceAccessChecker {
           config,
           requestId,
           server,
-          jwtScopes: ['tableau:content:read'],
+          jwtScopes: getRequiredApiScopesForTool('list-datasources'),
           signal,
           callback: async (restApi) => {
             const datasource = await restApi.datasourcesMethods.queryDatasource({
@@ -223,7 +224,7 @@ class ResourceAccessChecker {
           config,
           requestId,
           server,
-          jwtScopes: ['tableau:content:read'],
+          jwtScopes: getRequiredApiScopesForTool('get-workbook'),
           signal,
           callback: async (restApi) => {
             const workbook = await restApi.workbooksMethods.getWorkbook({
@@ -280,7 +281,7 @@ class ResourceAccessChecker {
           config,
           requestId,
           server,
-          jwtScopes: ['tableau:content:read'],
+          jwtScopes: getRequiredApiScopesForTool('list-views'),
           signal,
           callback: async (restApi) => {
             return await restApi.viewsMethods.getView({
@@ -322,7 +323,7 @@ class ResourceAccessChecker {
             config,
             requestId,
             server,
-            jwtScopes: ['tableau:content:read'],
+            jwtScopes: getRequiredApiScopesForTool('list-views'),
             signal,
             callback: async (restApi) => {
               const view = await restApi.viewsMethods.getView({

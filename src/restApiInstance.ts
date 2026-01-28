@@ -16,25 +16,16 @@ import {
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { TableauApiScope } from './server/oauth/scopes.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
-
-type JwtScopes =
-  | 'tableau:viz_data_service:read'
-  | 'tableau:content:read'
-  | 'tableau:insight_definitions_metrics:read'
-  | 'tableau:insight_metrics:read'
-  | 'tableau:metric_subscriptions:read'
-  | 'tableau:insights:read'
-  | 'tableau:views:download'
-  | 'tableau:insight_brief:create';
 
 const getNewRestApiInstanceAsync = async (
   config: Config,
   requestId: RequestId,
   server: Server,
-  jwtScopes: Set<JwtScopes>,
+  jwtScopes: Set<TableauApiScope>,
   signal: AbortSignal,
   authInfo?: TableauAuthInfo,
 ): Promise<RestApi> => {
@@ -124,7 +115,7 @@ export const useRestApi = async <T>({
   config: Config;
   requestId: RequestId;
   server: Server;
-  jwtScopes: Array<JwtScopes>;
+  jwtScopes: Array<TableauApiScope>;
   signal: AbortSignal;
   callback: (restApi: RestApi) => Promise<T>;
   authInfo?: TableauAuthInfo;
