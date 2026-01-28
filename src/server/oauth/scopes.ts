@@ -188,6 +188,10 @@ export function getRequiredScopesForTool(toolName: ToolName): McpScope[] {
 }
 
 export function getRequiredApiScopesForTool(toolName: ToolName): TableauApiScope[] {
+  if (!getConfig().oauth.enforceScopes) {
+    return [];
+  }
+
   return toolScopeMap[toolName].api;
 }
 
