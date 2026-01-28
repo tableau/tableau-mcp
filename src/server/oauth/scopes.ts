@@ -180,7 +180,8 @@ export function validateScopes(
  * @returns Array of required scopes for the endpoint
  */
 export function getRequiredScopesForTool(toolName: ToolName): McpScope[] {
-  if (!getConfig().oauth.enforceScopes) {
+  const oauthConfig = getConfig().oauth;
+  if (!oauthConfig || !oauthConfig.enforceScopes) {
     return [];
   }
 
@@ -188,7 +189,8 @@ export function getRequiredScopesForTool(toolName: ToolName): McpScope[] {
 }
 
 export function getRequiredApiScopesForTool(toolName: ToolName): TableauApiScope[] {
-  if (!getConfig().oauth.enforceScopes) {
+  const oauthConfig = getConfig().oauth;
+  if (!oauthConfig || !oauthConfig.enforceScopes) {
     return [];
   }
 
