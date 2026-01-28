@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../../server.js';
+import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
 import { getGeneratePulseInsightBriefTool } from './generatePulseInsightBriefTool.js';
@@ -161,7 +162,8 @@ describe('getGeneratePulseInsightBriefTool', () => {
     const result = await getToolResult();
     expect(mocks.mockGeneratePulseInsightBrief).toHaveBeenCalledWith(briefRequest);
     expect(result.isError).toBe(false);
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockBriefResponse);
   });
 
@@ -170,6 +172,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
     mocks.mockGeneratePulseInsightBrief.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -177,6 +180,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
     mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Err('tableau-server'));
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
   });
 
@@ -184,6 +188,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
     mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Err('pulse-disabled'));
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
   });
 
@@ -329,6 +334,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
       'One or more messages in the request contain only metrics derived from data sources that are not in the allowed set.',
     );

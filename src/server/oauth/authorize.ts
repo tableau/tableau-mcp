@@ -1,5 +1,5 @@
 import axiosRetry from 'axios-retry';
-import { randomBytes, randomUUID } from 'crypto';
+import { randomBytes, randomInt, randomUUID } from 'crypto';
 import express from 'express';
 import { isIP } from 'net';
 import { isSSRFSafeURL } from 'ssrfcheck';
@@ -103,7 +103,7 @@ export function authorize(
 
     const tableauClientId = randomUUID();
     // 22-64 bytes (44-128 chars) is the recommended length for code verifiers
-    const numCodeVerifierBytes = Math.floor(Math.random() * (64 - 22 + 1)) + 22;
+    const numCodeVerifierBytes = randomInt(22, 65);
     const tableauCodeVerifier = randomBytes(numCodeVerifierBytes).toString('hex');
     const tableauCodeChallenge = generateCodeChallenge(tableauCodeVerifier);
     pendingAuthorizations.set(authKey, {
@@ -133,8 +133,48 @@ export function authorize(
     oauthUrl.searchParams.set('device_name', getDeviceName(redirect_uri, state ?? ''));
     oauthUrl.searchParams.set('client_type', 'tableau-mcp');
 
-    res.redirect(oauthUrl.toString());
+    if (config.oauth.lockSite) {
+      // The "redirected" parameter is used by Tableau's OAuth controller to determine whether the user will be shown the site picker.
+      // When provided, the user will not be shown the site picker.
+      oauthUrl.searchParams.set('redirected', 'true');
+    }
+
+    const redirectUrl = await getOAuthRedirectUrl(oauthUrl, { lockSite: config.oauth.lockSite });
+    res.redirect(redirectUrl.toString());
   });
+}
+
+async function getOAuthRedirectUrl(
+  initialOAuthUrl: URL,
+  { lockSite }: { lockSite: boolean },
+): Promise<URL> {
+  if (lockSite) {
+    // When the site is locked, Tableau does the right thing and never shows the site picker,
+    // regardless of whether the user already has an active Tableau session in their browser.
+    return initialOAuthUrl;
+  }
+
+  // When the site is not locked, Tableau does the right thing and shows the site picker, but only on Cloud.
+  // On Server, if the user does not have an active Tableau session in their browser,
+  // Tableau does not show the site picker.
+  // We can force it to by changing the path from #/signin to #/site.
+
+  try {
+    const response = await fetch(initialOAuthUrl, { redirect: 'manual' });
+    if (response.status === 302) {
+      // The response is a redirect to the Tableau OAuth login page.
+      // Force it to ultimately show the site picker by changing the path from #/signin to #/site.
+      const location = response.headers.get('location');
+      if (location?.startsWith('#/signin') || location?.startsWith('/#/signin')) {
+        const locationUrl = new URL(location.replace('#/signin', '#/site'), initialOAuthUrl.origin);
+        return locationUrl;
+      }
+    }
+  } catch {
+    return initialOAuthUrl;
+  }
+
+  return initialOAuthUrl;
 }
 
 // https://client.dev/servers

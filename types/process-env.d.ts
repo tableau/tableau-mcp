@@ -29,6 +29,7 @@ export interface ProcessEnvEx {
   EXCLUDE_TOOLS: string | undefined;
   MAX_REQUEST_TIMEOUT_MS: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
+  MAX_RESULT_LIMITS: string | undefined;
   DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: string | undefined;
   DISABLE_METADATA_API_REQUESTS: string | undefined;
   DISABLE_SESSION_MANAGEMENT: string | undefined;
@@ -45,6 +46,7 @@ export interface ProcessEnvEx {
   OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: string | undefined;
   OAUTH_CIMD_DNS_SERVERS: string | undefined;
   OAUTH_REDIRECT_URI: string | undefined;
+  OAUTH_LOCK_SITE: string | undefined;
   OAUTH_CLIENT_ID_SECRET_PAIRS: string | undefined;
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: string | undefined;
   OAUTH_ACCESS_TOKEN_TIMEOUT_MS: string | undefined;

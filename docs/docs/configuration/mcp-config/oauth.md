@@ -12,17 +12,23 @@ is accessed using a local development URL e.g. `http://127.0.0.1:3927/tableau-mc
 
 :::
 
-When a URL for `OAUTH_ISSUER` is provided, the MCP server will act as an OAuth 2.1 resource server,
-capable of accepting and responding to protected resource requests using encrypted access tokens.
-When enabled, MCP clients will first require logging in via Tableau OAuth to connect to the MCP
-server. For more information, please see the
+## How to Enable OAuth
+
+To enable OAuth, set the [`OAUTH_ISSUER`](#oauth_issuer) environment variable to the origin of your MCP server. When a URL for `OAUTH_ISSUER` is provided, the MCP server will act as an OAuth 2.1 resource server, capable of accepting and responding to protected resource requests using encrypted access tokens.
+
+When OAuth is enabled:
+- MCP clients will be required to authenticate via Tableau OAuth before connecting to the MCP server
+- The [`TRANSPORT`](#transport) will default to `http` (required for OAuth)
+- The [`AUTH`](#auth) method will default to `oauth`
+
+For more information, please see the
 [MCP Authorization spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization).
 
 <hr />
 
 ## Environment Variables
 
-When OAuth is enabled, the following environment variables also apply or have additional meaning:
+The following environment variables configure OAuth behavior:
 
 ### `AUTH`
 
@@ -40,11 +46,12 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 ### `OAUTH_ISSUER`
 
-The issuer of the OAuth server. This should be the host of the MCP server.
+**Setting this environment variable enables OAuth.** This should be the origin of your MCP server (the issuer of access tokens).
 
-- Required if `AUTH` is `oauth`. For testing, use `http://127.0.0.1:3927`.
+- Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for production)
+- Required if `AUTH` is `oauth`
 - Required if `TRANSPORT` is `http` unless opted out with
-  [`DANGEROUSLY_DISABLE_OAUTH`](#dangerously_disable_oauth).
+  [`DANGEROUSLY_DISABLE_OAUTH`](#dangerously_disable_oauth)
 
 <hr />
 
@@ -66,11 +73,22 @@ The MCP transport type to use for the server.
 
 ### `SITE_NAME`
 
-The target Tableau site for OAuth.
+The target Tableau site for OAuth. The user must sign in to this site unless
+[`OAUTH_LOCK_SITE`](#oauth_lock_site) is `false`.
 
-- When [`AUTH`](#auth) is `oauth`, leaving this empty means any site will be supported, determined
-  by the site the user signed into when connecting to the MCP server.
+<hr />
 
+### `OAUTH_LOCK_SITE`
+
+Whether to require the user to sign in to the site specified in [`SITE_NAME`](#site_name) when using
+OAuth.
+
+- Default: `true`
+- When `true`, the user must sign in to the site specified in [`SITE_NAME`](#site_name) (or the
+  Default site if empty).
+  - If the user already has an active Tableau session in their browser for a different site, an
+    error will be returned.
+- When `false`, the user can sign in to any site they can access.
 <hr />
 
 ### `OAUTH_REDIRECT_URI`

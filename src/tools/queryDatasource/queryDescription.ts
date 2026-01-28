@@ -118,7 +118,7 @@ Filter by specific values:
 }
 \`\`\`
 
-### TOP Filters  
+### TOP Filters
 Get top/bottom N records by a measure:
 \`\`\`json
 {
@@ -248,7 +248,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 2: Top N Dimension Query (Using TOP Filter and context property)
+### Example 3: Top N Dimension Query (Using TOP Filter and context property)
 **Question:** "What is the top selling product in California?"
 \`\`\`json
 {
@@ -286,7 +286,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 3: Time Series with Aggregation
+### Example 4: Time Series with Aggregation
 **Question:** "What are our monthly sales trends?"
 
 \`\`\`json
@@ -316,7 +316,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 4: Filtered Category Analysis
+### Example 5: Filtered Category Analysis
 **Question:** "What's the performance by product category for high-value orders?"
 
 \`\`\`json

@@ -266,6 +266,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  MAX_RESULT_LIMITS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Max Result Limits',
+    description:
+      'A comma-separated list of tool names and maximum result limits. The format is `toolName:maxResultLimit`.',
+    required: false,
+    sensitive: false,
+  },
   DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: {
     includeInUserConfig: false,
     type: 'boolean',
@@ -396,6 +405,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  OAUTH_LOCK_SITE: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'OAuth Lock Site',
+    description: 'Whether to lock the site when using OAuth.',
+    required: false,
+    sensitive: false,
+  },
   OAUTH_CLIENT_ID_SECRET_PAIRS: {
     includeInUserConfig: false,
     type: 'string',
@@ -468,7 +485,7 @@ const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>
 );
 
 const manifest = {
-  manifest_version: '0.2',
+  manifest_version: '0.3',
   name: 'Tableau',
   version: packageJson.version,
   description: packageJson.description,
@@ -483,7 +500,7 @@ const manifest = {
   documentation: 'https://tableau.github.io/tableau-mcp/',
   license: packageJson.license,
   support: 'https://github.com/tableau/tableau-mcp/issues',
-  icon: 'https://avatars.githubusercontent.com/u/828667',
+  icon: 'icon.png',
   server: {
     type: 'node',
     entry_point: 'build/index.js',
