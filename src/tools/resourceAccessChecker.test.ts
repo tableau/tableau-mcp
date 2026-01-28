@@ -194,205 +194,115 @@ describe('ResourceAccessChecker', () => {
   });
 
   describe('isWorkbookAllowed', () => {
+    beforeEach(() => {
+      mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
+    });
+
     describe('allowed', () => {
-      it('should return allowed when the workbook ID is allowed by the workbooks in the bounded context', async () => {
-        const resourceAccessChecker = createResourceAccessChecker({
-          projectIds: null,
-          datasourceIds: null,
-          workbookIds: new Set([mockWorkbook.id]),
-          tags: null,
-        });
+      test.each(
+        getCombinationsOfBoundedContextInputs({
+          projectIds: [null, new Set([mockWorkbook.project.id])],
+          datasourceIds: [null], // n/a for workbooks
+          workbookIds: [null, new Set([mockWorkbook.id])],
+          tags: [null, new Set([mockWorkbook.tags.tag[0].label])],
+        }),
+      )(
+        'should return allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
+        async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+          const resourceAccessChecker = createResourceAccessChecker({
+            projectIds,
+            datasourceIds,
+            workbookIds,
+            tags,
+          });
 
-        expect(
-          await resourceAccessChecker.isWorkbookAllowed({
-            workbookId: mockWorkbook.id,
-            restApiArgs,
-          }),
-        ).toEqual({ allowed: true });
+          expect(
+            await resourceAccessChecker.isWorkbookAllowed({
+              workbookId: mockWorkbook.id,
+              restApiArgs,
+            }),
+          ).toEqual({ allowed: true, content: projectIds || tags ? mockWorkbook : undefined });
 
-        // Check again to exercise the cache.
-        expect(
-          await resourceAccessChecker.isWorkbookAllowed({
-            workbookId: mockWorkbook.id,
-            restApiArgs,
-          }),
-        ).toEqual({ allowed: true });
+          // Check again to exercise the cache.
+          expect(
+            await resourceAccessChecker.isWorkbookAllowed({
+              workbookId: mockWorkbook.id,
+              restApiArgs,
+            }),
+          ).toEqual({ allowed: true, content: projectIds || tags ? mockWorkbook : undefined });
 
-        expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
-      });
-
-      it('should return allowed when the workbook is in a project that is allowed by the projects in the bounded context', async () => {
-        mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
-
-        const resourceAccessChecker = createResourceAccessChecker({
-          projectIds: new Set([mockWorkbook.project.id]),
-          datasourceIds: null,
-          workbookIds: null,
-          tags: null,
-        });
-
-        expect(
-          await resourceAccessChecker.isWorkbookAllowed({
-            workbookId: mockWorkbook.id,
-            restApiArgs,
-          }),
-        ).toEqual({ allowed: true, content: mockWorkbook });
-
-        expect(
-          await resourceAccessChecker.isWorkbookAllowed({
-            workbookId: mockWorkbook.id,
-            restApiArgs,
-          }),
-        ).toEqual({ allowed: true, content: mockWorkbook });
-
-        // Since project filtering is enabled, we cannot cache the result so we need to call the "Get Workbook" API each time.
-        expect(mocks.mockGetWorkbook).toHaveBeenCalledTimes(2);
-      });
-
-      it('should return allowed when the workbook is allowed by the workbooks in the bounded context and exists in a project that is allowed by the projects in the bounded context', async () => {
-        mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
-
-        const resourceAccessChecker = createResourceAccessChecker({
-          projectIds: new Set([mockWorkbook.project.id]),
-          datasourceIds: null,
-          workbookIds: new Set([mockWorkbook.id]),
-          tags: null,
-        });
-
-        expect(
-          await resourceAccessChecker.isWorkbookAllowed({
-            workbookId: mockWorkbook.id,
-            restApiArgs,
-          }),
-        ).toEqual({ allowed: true, content: mockWorkbook });
-
-        expect(
-          await resourceAccessChecker.isWorkbookAllowed({
-            workbookId: mockWorkbook.id,
-            restApiArgs,
-          }),
-        ).toEqual({ allowed: true, content: mockWorkbook });
-
-        // Since project filtering is enabled, we cannot cache the result so we need to call the "Get Workbook" API each time.
-        expect(mocks.mockGetWorkbook).toHaveBeenCalledTimes(2);
-      });
+          // If project or tag filtering is enabled, we cannot cache the result so we need to call the "Get Workbook" API each time.
+          const expectedNumberOfCalls = projectIds || tags ? 2 : 0;
+          expect(mocks.mockGetWorkbook).toHaveBeenCalledTimes(expectedNumberOfCalls);
+        },
+      );
     });
 
     describe('not allowed', () => {
-      it('should return not allowed when the workbook ID is not allowed by the workbooks in the bounded context', async () => {
-        const resourceAccessChecker = createResourceAccessChecker({
-          projectIds: null,
-          datasourceIds: null,
-          workbookIds: new Set(['some-workbook-id']),
-          tags: null,
-        });
+      const notAllowedCombinations = getCombinationsOfBoundedContextInputs({
+        projectIds: [null, new Set(['some-project-id'])],
+        datasourceIds: [null], // n/a for workbooks
+        workbookIds: [null, new Set(['some-workbook-id'])],
+        tags: [null, new Set(['some-tag-label'])],
+      }).filter(({ projectIds, datasourceIds, workbookIds, tags }) => {
+        // Remove the combination where they are all null
+        return (
+          projectIds !== null || datasourceIds !== null || workbookIds !== null || tags !== null
+        );
+      });
 
-        expect(
-          await resourceAccessChecker.isWorkbookAllowed({
-            workbookId: mockWorkbook.id,
-            restApiArgs,
-          }),
-        ).toEqual({
-          allowed: false,
-          message: [
+      test.each(notAllowedCombinations)(
+        'should return not allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
+        async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+          const resourceAccessChecker = createResourceAccessChecker({
+            projectIds,
+            datasourceIds,
+            workbookIds,
+            tags,
+          });
+
+          const sentences = [
             'The set of allowed workbooks that can be queried is limited by the server configuration.',
-            `Querying the workbook with LUID ${mockWorkbook.id} is not allowed.`,
-          ].join(' '),
-        });
+          ];
+          if (workbookIds) {
+            sentences.push(`Querying the workbook with LUID ${mockWorkbook.id} is not allowed.`);
+          } else if (projectIds) {
+            sentences.push(
+              `The workbook with LUID ${mockWorkbook.id} cannot be queried because it does not belong to an allowed project.`,
+            );
+          } else if (tags) {
+            sentences.push(
+              `The workbook with LUID ${mockWorkbook.id} cannot be queried because it does not have one of the allowed tags.`,
+            );
+          }
 
-        // Check again to exercise the cache.
-        expect(
-          await resourceAccessChecker.isWorkbookAllowed({
-            workbookId: mockWorkbook.id,
-            restApiArgs,
-          }),
-        ).toEqual({
-          allowed: false,
-          message: [
-            'The set of allowed workbooks that can be queried is limited by the server configuration.',
-            `Querying the workbook with LUID ${mockWorkbook.id} is not allowed.`,
-          ].join(' '),
-        });
+          const expectedMessage = sentences.join(' ');
 
-        expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
-      });
+          expect(
+            await resourceAccessChecker.isWorkbookAllowed({
+              workbookId: mockWorkbook.id,
+              restApiArgs,
+            }),
+          ).toEqual({
+            allowed: false,
+            message: expectedMessage,
+          });
 
-      it('should return not allowed when the workbook is in a project that is not allowed by the projects in the bounded context', async () => {
-        mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
+          expect(
+            await resourceAccessChecker.isWorkbookAllowed({
+              workbookId: mockWorkbook.id,
+              restApiArgs,
+            }),
+          ).toEqual({
+            allowed: false,
+            message: expectedMessage,
+          });
 
-        const resourceAccessChecker = createResourceAccessChecker({
-          projectIds: new Set(['some-project-id']),
-          datasourceIds: null,
-          workbookIds: null,
-          tags: null,
-        });
-
-        const expectedMessage = [
-          'The set of allowed workbooks that can be queried is limited by the server configuration.',
-          `The workbook with LUID ${mockWorkbook.id} cannot be queried because it does not belong to an allowed project.`,
-        ].join(' ');
-
-        expect(
-          await resourceAccessChecker.isWorkbookAllowed({
-            workbookId: mockWorkbook.id,
-            restApiArgs,
-          }),
-        ).toEqual({
-          allowed: false,
-          message: expectedMessage,
-        });
-
-        expect(
-          await resourceAccessChecker.isWorkbookAllowed({
-            workbookId: mockWorkbook.id,
-            restApiArgs,
-          }),
-        ).toEqual({
-          allowed: false,
-          message: expectedMessage,
-        });
-
-        // Since project filtering is enabled, we cannot cache the result so we need to call the "Get Workbook" API each time.
-        expect(mocks.mockGetWorkbook).toHaveBeenCalledTimes(2);
-      });
-
-      it('should return not allowed when the workbook is allowed by the workbooks in the bounded context and exists in a project that is not allowed by the projects in the bounded context', async () => {
-        mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
-        const resourceAccessChecker = createResourceAccessChecker({
-          projectIds: new Set(['some-project-id']),
-          datasourceIds: null,
-          workbookIds: new Set([mockWorkbook.id]),
-          tags: null,
-        });
-
-        const expectedMessage = [
-          'The set of allowed workbooks that can be queried is limited by the server configuration.',
-          `The workbook with LUID ${mockWorkbook.id} cannot be queried because it does not belong to an allowed project.`,
-        ].join(' ');
-
-        expect(
-          await resourceAccessChecker.isWorkbookAllowed({
-            workbookId: mockWorkbook.id,
-            restApiArgs,
-          }),
-        ).toEqual({
-          allowed: false,
-          message: expectedMessage,
-        });
-
-        expect(
-          await resourceAccessChecker.isWorkbookAllowed({
-            workbookId: mockWorkbook.id,
-            restApiArgs,
-          }),
-        ).toEqual({
-          allowed: false,
-          message: expectedMessage,
-        });
-
-        // Since project filtering is enabled, we cannot cache the result so we need to call the "Get Workbook" API each time.
-        expect(mocks.mockGetWorkbook).toHaveBeenCalledTimes(2);
-      });
+          // If project or tag filtering is enabled, we cannot cache the result so we need to call the "Get Workbook" API each time.
+          const expectedNumberOfCalls = !workbookIds && (projectIds || tags) ? 2 : 0;
+          expect(mocks.mockGetWorkbook).toHaveBeenCalledTimes(expectedNumberOfCalls);
+        },
+      );
     });
   });
 
