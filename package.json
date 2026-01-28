@@ -54,6 +54,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@zodios/core": "^10.9.6",
+    "axios": "^1.13.4",
     "axios-retry": "^4.5.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
