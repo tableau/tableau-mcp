@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { constrainViews, getListViewsTool } from './listViews.js';
@@ -101,35 +102,34 @@ describe('listViewsTool', () => {
       );
     });
 
-    it('should return success result when no views were filtered out by the bounded context', () => {
-      const result = constrainViews({
-        views: mockViews.views,
-        boundedContext: {
-          projectIds: null,
-          datasourceIds: null,
-          workbookIds: null,
-          tags: null,
-        },
-      });
+    test.each(
+      getCombinationsOfBoundedContextInputs({
+        projectIds: [null, new Set([mockViews.views[0].project.id])],
+        datasourceIds: [null], // n/a for views
+        workbookIds: [null, new Set([mockViews.views[0].workbook.id])],
+        tags: [null, new Set([mockViews.views[0].tags.tag[0].label])],
+      }),
+    )(
+      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
+      async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+        const result = constrainViews({
+          views: mockViews.views,
+          boundedContext: {
+            projectIds,
+            datasourceIds,
+            workbookIds,
+            tags,
+          },
+        });
 
-      invariant(result.type === 'success');
-      expect(result.result).toBe(mockViews.views);
-    });
-
-    it('should return success result when some views were filtered out by the bounded context', () => {
-      const result = constrainViews({
-        views: mockViews.views,
-        boundedContext: {
-          projectIds: new Set([mockViews.views[0].project.id]),
-          datasourceIds: null,
-          workbookIds: new Set([mockViews.views[0].workbook.id]),
-          tags: null,
-        },
-      });
-
-      invariant(result.type === 'success');
-      expect(result.result).toEqual([mockViews.views[0]]);
-    });
+        invariant(result.type === 'success');
+        if (!projectIds && !workbookIds && !tags) {
+          expect(result.result).toEqual(mockViews.views);
+        } else {
+          expect(result.result).toEqual([mockViews.views[0]]);
+        }
+      },
+    );
   });
 });
 

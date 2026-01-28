@@ -1,5 +1,6 @@
 import { getConfig } from '../config.js';
 import { Server } from '../server.js';
+import { getCombinationsOfBoundedContextInputs } from '../utils/getCombinationsOfBoundedContextInputs.js';
 import { mockDatasources } from './listDatasources/mockDatasources.js';
 import { exportedForTesting } from './resourceAccessChecker.js';
 import { mockView } from './views/mockView.js';
@@ -41,40 +42,6 @@ describe('ResourceAccessChecker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
-
-  type BoundedContextInputs = {
-    projectIds: Array<Set<string> | null>;
-    datasourceIds: Array<Set<string> | null>;
-    workbookIds: Array<Set<string> | null>;
-    tags: Array<Set<string> | null>;
-  };
-
-  function getCombinationsOfBoundedContextInputs({
-    projectIds,
-    datasourceIds,
-    workbookIds,
-    tags,
-  }: BoundedContextInputs): Array<{
-    projectIds: Set<string> | null;
-    datasourceIds: Set<string> | null;
-    workbookIds: Set<string> | null;
-    tags: Set<string> | null;
-  }> {
-    const combinations = projectIds.flatMap((projectIds) =>
-      datasourceIds.flatMap((datasourceIds) =>
-        workbookIds.flatMap((workbookIds) =>
-          tags.flatMap((tags) => ({
-            projectIds,
-            datasourceIds,
-            workbookIds,
-            tags,
-          })),
-        ),
-      ),
-    );
-
-    return combinations;
-  }
 
   describe('isDatasourceAllowed', () => {
     const mockDatasource = mockDatasources.datasources[0];

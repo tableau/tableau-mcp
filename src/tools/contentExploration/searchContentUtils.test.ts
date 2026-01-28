@@ -596,5 +596,21 @@ describe('searchContentUtils', () => {
       invariant(result.type === 'success');
       expect(result.result).toEqual([items[1]]);
     });
+
+    it('should return success result when some items were filtered out by allowed tags in the bounded context', () => {
+      const items = reduceSearchContentResponse(mockSearchContentResponse);
+      const result = constrainSearchContent({
+        items,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          tags: new Set(['sales']),
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual([items[0]]);
+    });
   });
 });

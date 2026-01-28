@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { constrainWorkbooks, getListWorkbooksTool } from './listWorkbooks.js';
@@ -100,30 +101,34 @@ describe('listWorkbooksTool', () => {
       );
     });
 
-    it('should return success result when no workbooks were filtered out by the bounded context', () => {
-      const result = constrainWorkbooks({
-        workbooks: [mockWorkbook],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
-      });
+    test.each(
+      getCombinationsOfBoundedContextInputs({
+        projectIds: [null, new Set([mockWorkbook.project.id])],
+        datasourceIds: [null], // n/a for workbooks
+        workbookIds: [null, new Set([mockWorkbook.id])],
+        tags: [null, new Set([mockWorkbook.tags.tag[0].label])],
+      }),
+    )(
+      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
+      async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+        const result = constrainWorkbooks({
+          workbooks: [mockWorkbook, mockWorkbook2],
+          boundedContext: {
+            projectIds,
+            datasourceIds,
+            workbookIds,
+            tags,
+          },
+        });
 
-      invariant(result.type === 'success');
-      expect(result.result).toEqual([mockWorkbook]);
-    });
-
-    it('should return success result when some workbooks were filtered out by the bounded context', () => {
-      const result = constrainWorkbooks({
-        workbooks: [mockWorkbook, mockWorkbook2],
-        boundedContext: {
-          projectIds: new Set([mockWorkbook.project.id]),
-          datasourceIds: new Set([mockWorkbook.id]),
-          workbookIds: null,
-          tags: null,
-        },
-      });
-
-      invariant(result.type === 'success');
-      expect(result.result).toEqual([mockWorkbook]);
-    });
+        invariant(result.type === 'success');
+        if (!projectIds && !datasourceIds && !workbookIds && !tags) {
+          expect(result.result).toEqual([mockWorkbook, mockWorkbook2]);
+        } else {
+          expect(result.result).toEqual([mockWorkbook]);
+        }
+      },
+    );
   });
 });
 
