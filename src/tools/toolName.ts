@@ -3,6 +3,7 @@ export const toolNames = [
   'list-workbooks',
   'list-views',
   'query-datasource',
+  'get-calculation-info',
   'get-datasource-metadata',
   'get-workbook',
   'get-view-data',
@@ -23,6 +24,7 @@ export const toolGroupNames = [
   'workbook',
   'view',
   'pulse',
+  'context',
   'content-exploration',
 ] as const;
 export type ToolGroupName = (typeof toolGroupNames)[number];
@@ -40,6 +42,7 @@ export const toolGroups = {
     'generate-pulse-metric-value-insight-bundle',
     'generate-pulse-insight-brief',
   ],
+  context: ['get-calculation-info'],
   'content-exploration': ['search-content'],
 } as const satisfies Record<ToolGroupName, Array<ToolName>>;
 
