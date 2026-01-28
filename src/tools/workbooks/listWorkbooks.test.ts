@@ -71,7 +71,7 @@ describe('listWorkbooksTool', () => {
     it('should return empty result when no workbooks are found', () => {
       const result = constrainWorkbooks({
         workbooks: [],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
       });
 
       invariant(result.type === 'empty');
@@ -83,7 +83,12 @@ describe('listWorkbooksTool', () => {
     it('should return empty results when all workbooks were filtered out by the bounded context', () => {
       const result = constrainWorkbooks({
         workbooks: [mockWorkbook],
-        boundedContext: { projectIds: new Set(['123']), datasourceIds: null, workbookIds: null },
+        boundedContext: {
+          projectIds: new Set(['123']),
+          datasourceIds: null,
+          workbookIds: null,
+          tags: null,
+        },
       });
 
       invariant(result.type === 'empty');
@@ -98,7 +103,7 @@ describe('listWorkbooksTool', () => {
     it('should return success result when no workbooks were filtered out by the bounded context', () => {
       const result = constrainWorkbooks({
         workbooks: [mockWorkbook],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
       });
 
       invariant(result.type === 'success');
@@ -112,6 +117,7 @@ describe('listWorkbooksTool', () => {
           projectIds: new Set([mockWorkbook.project.id]),
           datasourceIds: new Set([mockWorkbook.id]),
           workbookIds: null,
+          tags: null,
         },
       });
 

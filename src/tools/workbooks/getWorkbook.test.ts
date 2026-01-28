@@ -43,6 +43,7 @@ describe('getWorkbookTool', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        tags: null,
       },
     });
   });
@@ -84,6 +85,7 @@ describe('getWorkbookTool', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: new Set(['some-other-workbook-id']),
+        tags: null,
       },
     });
     mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);

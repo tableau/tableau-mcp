@@ -500,6 +500,7 @@ describe('searchContentUtils', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: null,
+          tags: null,
         },
       });
 
@@ -518,6 +519,7 @@ describe('searchContentUtils', () => {
           projectIds: new Set(['123']),
           datasourceIds: null,
           workbookIds: null,
+          tags: null,
         },
       });
 
@@ -539,6 +541,7 @@ describe('searchContentUtils', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: null,
+          tags: null,
         },
       });
 
@@ -554,6 +557,7 @@ describe('searchContentUtils', () => {
           projectIds: new Set(['123456']),
           datasourceIds: null,
           workbookIds: null,
+          tags: null,
         },
       });
 
@@ -569,6 +573,7 @@ describe('searchContentUtils', () => {
           projectIds: null,
           datasourceIds: new Set(['some-other-datasource-luid']),
           workbookIds: null,
+          tags: null,
         },
       });
 
@@ -584,6 +589,7 @@ describe('searchContentUtils', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: new Set(['some-other-workbook-luid']),
+          tags: null,
         },
       });
 

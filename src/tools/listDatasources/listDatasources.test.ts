@@ -60,7 +60,7 @@ describe('listDatasourcesTool', () => {
     it('should return empty result when no datasources are found', () => {
       const result = constrainDatasources({
         datasources: [],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
       });
 
       invariant(result.type === 'empty');
@@ -72,7 +72,12 @@ describe('listDatasourcesTool', () => {
     it('should return empty results when all datasources were filtered out by the bounded context', () => {
       const result = constrainDatasources({
         datasources: mockDatasources.datasources,
-        boundedContext: { projectIds: new Set(['123']), datasourceIds: null, workbookIds: null },
+        boundedContext: {
+          projectIds: new Set(['123']),
+          datasourceIds: null,
+          workbookIds: null,
+          tags: null,
+        },
       });
 
       invariant(result.type === 'empty');
@@ -87,7 +92,7 @@ describe('listDatasourcesTool', () => {
     it('should return success result when no datasources were filtered out by the bounded context', () => {
       const result = constrainDatasources({
         datasources: mockDatasources.datasources,
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
       });
 
       invariant(result.type === 'success');
@@ -101,6 +106,7 @@ describe('listDatasourcesTool', () => {
           projectIds: new Set([mockDatasources.datasources[0].project.id]),
           datasourceIds: null,
           workbookIds: null,
+          tags: null,
         },
       });
 
@@ -115,6 +121,7 @@ describe('listDatasourcesTool', () => {
           projectIds: new Set([mockDatasources.datasources[0].project.id]),
           datasourceIds: new Set([mockDatasources.datasources[0].id]),
           workbookIds: null,
+          tags: null,
         },
       });
 

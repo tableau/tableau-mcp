@@ -72,7 +72,7 @@ describe('listViewsTool', () => {
     it('should return empty result when no views are found', () => {
       const result = constrainViews({
         views: [],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
       });
 
       invariant(result.type === 'empty');
@@ -88,6 +88,7 @@ describe('listViewsTool', () => {
           projectIds: new Set(['123']),
           datasourceIds: null,
           workbookIds: null,
+          tags: null,
         },
       });
 
@@ -107,6 +108,7 @@ describe('listViewsTool', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: null,
+          tags: null,
         },
       });
 
@@ -121,6 +123,7 @@ describe('listViewsTool', () => {
           projectIds: new Set([mockViews.views[0].project.id]),
           datasourceIds: null,
           workbookIds: new Set([mockViews.views[0].workbook.id]),
+          tags: null,
         },
       });
 

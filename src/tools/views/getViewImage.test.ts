@@ -46,6 +46,7 @@ describe('getViewImageTool', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        tags: null,
       },
     });
   });
@@ -94,6 +95,7 @@ describe('getViewImageTool', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: new Set(['some-other-workbook-id']),
+        tags: null,
       },
     });
     mocks.mockGetView.mockResolvedValue(mockView);
