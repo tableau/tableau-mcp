@@ -252,7 +252,7 @@ export class Config {
       };
     } else {
       this.telemetry = {
-        provider: parsedProvider,
+        provider: 'noop',
       };
     }
 

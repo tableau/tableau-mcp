@@ -6,13 +6,26 @@ import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 import { fromError, isZodErrorLike } from 'zod-validation-error';
 
+import { getConfig } from '../config.js';
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
 import { tableauAuthInfoSchema } from '../server/oauth/schemas.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
+import { DirectTelemetryForwarder } from '../telemetry/product_telemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { Provider, TypeOrProvider } from '../utils/provider.js';
 import { ToolName } from './toolName.js';
+
+// Product telemetry - always enabled
+const PRODUCT_TELEMETRY_ENDPOINT = 'https://qa.telemetry.tableausoftware.com'; 
+let productTelemetry: DirectTelemetryForwarder | null = null;
+
+function getProductTelemetry(): DirectTelemetryForwarder {
+  if (!productTelemetry) {
+    productTelemetry = new DirectTelemetryForwarder(PRODUCT_TELEMETRY_ENDPOINT);
+  }
+  return productTelemetry;
+}
 
 type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args extends ZodRawShape
   ? (args: z.objectOutputType<Args, ZodTypeAny>) => void
@@ -70,6 +83,9 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
 type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined> = {
   // The request ID of the tool call
   requestId: RequestId;
+
+  // The session ID from the transport, if available
+  sessionId?: string;
 
   // The Authentication info provided when OAuth is enabled
   authInfo: AuthInfo | undefined;
@@ -161,6 +177,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   // Implementation
   async logAndExecute<T, E>({
     requestId,
+    sessionId,
     args,
     authInfo,
     callback,
@@ -179,6 +196,15 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     telemetry.recordMetric('mcp.tool.calls', 1, {
       tool_name: this.name,
       request_id: requestId.toString(),
+    });
+
+    const config = getConfig();
+    const productTelemetry = getProductTelemetry();
+    productTelemetry.send('event_tool_call', {
+      tool_name: this.name,
+      request_id: requestId.toString(),
+      session_id: sessionId ?? '',
+      site_name: config.siteName,
     });
 
     if (args) {
