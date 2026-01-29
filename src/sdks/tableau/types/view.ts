@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { tagsSchema } from './tags';
+import { tagsSchema } from './tags.js';
 
 export const viewSchema = z.object({
   id: z.string(),
