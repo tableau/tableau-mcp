@@ -148,13 +148,19 @@ export function constrainDatasources({
     };
   }
 
-  const { projectIds, datasourceIds } = boundedContext;
+  const { projectIds, datasourceIds, tags } = boundedContext;
   if (projectIds) {
     datasources = datasources.filter((datasource) => projectIds.has(datasource.project.id));
   }
 
   if (datasourceIds) {
     datasources = datasources.filter((datasource) => datasourceIds.has(datasource.id));
+  }
+
+  if (tags) {
+    datasources = datasources.filter((datasource) =>
+      datasource.tags.tag?.some((tag) => tags.has(tag.label)),
+    );
   }
 
   if (datasources.length === 0) {

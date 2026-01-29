@@ -221,6 +221,7 @@ describe('getDatasourceMetadataTool', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        tags: null,
       },
     });
   });
@@ -648,6 +649,7 @@ describe('getDatasourceMetadataTool', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        tags: null,
       },
     });
 
@@ -702,6 +704,7 @@ describe('getDatasourceMetadataTool', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        tags: null,
       },
     });
 
@@ -742,6 +745,7 @@ describe('getDatasourceMetadataTool', () => {
         projectIds: null,
         datasourceIds: new Set(['some-other-datasource-luid']),
         workbookIds: null,
+        tags: null,
       },
     });
 
