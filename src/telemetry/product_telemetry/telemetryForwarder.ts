@@ -9,9 +9,9 @@ const SERVICE_NAME = 'tableau-mcp';
 export type TableauTelemetryJsonEvent = {
   type: string;
   host_timestamp: string;
+  host_name: string;
   service_name: string;
   pod?: string;
-  host_name?: string;
   properties: PropertiesType;
 };
 
@@ -20,17 +20,6 @@ export interface DirectTelemetryForwarderOptions {
    * HTTP method for sending events. Default: 'PUT'
    */
   httpMethod?: 'POST' | 'PUT';
-
-  /**
-   * Custom pod identifier. Default: empty string
-   */
-  pod?: string;
-
-  /**
-   * Custom host_name identifier. Default: os.hostname()
-   */
-  hostName?: string;
-
   /**
    * Service name. Default: 'tableau-mcp'
    */
@@ -44,8 +33,6 @@ export interface DirectTelemetryForwarderOptions {
 export class DirectTelemetryForwarder {
   private readonly endpoint: string;
   private readonly httpMethod: 'POST' | 'PUT';
-  private readonly pod: string;
-  private readonly hostName: string;
 
   /**
    * @param endpoint - The telemetry endpoint URL (e.g., 'https://qa.telemetry.tableausoftware.com')
@@ -56,14 +43,8 @@ export class DirectTelemetryForwarder {
       throw new Error('Endpoint URL is required for DirectTelemetryForwarder');
     }
 
-    if (typeof fetch === 'undefined' || typeof Request === 'undefined') {
-      throw new Error('The fetch API is not available. Add a polyfill like "whatwg-fetch".');
-    }
-
     this.endpoint = endpoint;
     this.httpMethod = options.httpMethod ?? 'PUT';
-    this.pod = getDefaultPod();
-    this.hostName = getDefaultHostName();
   }
 
   /**
@@ -78,8 +59,8 @@ export class DirectTelemetryForwarder {
       type: eventType,
       host_timestamp: formatHostTimestamp(new Date()),
       service_name: SERVICE_NAME,
-      pod: this.pod,
-      host_name: this.hostName,
+      pod: getDefaultPod(),
+      host_name: getDefaultHostName(),
       properties,
     };
 
