@@ -46,6 +46,7 @@ describe('getViewImageTool', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        tags: null,
       },
     });
   });
@@ -94,6 +95,7 @@ describe('getViewImageTool', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: new Set(['some-other-workbook-id']),
+        tags: null,
       },
     });
     mocks.mockGetView.mockResolvedValue(mockView);
@@ -103,7 +105,7 @@ describe('getViewImageTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       [
-        'The set of allowed workbooks that can be queried is limited by the server configuration.',
+        'The set of allowed views that can be queried is limited by the server configuration.',
         'The view with LUID 4d18c547-bbb1-4187-ae5a-7f78b35adf2d cannot be queried because it does not belong to an allowed workbook.',
       ].join(' '),
     );

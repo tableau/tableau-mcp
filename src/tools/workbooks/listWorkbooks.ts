@@ -134,7 +134,7 @@ export function constrainWorkbooks({
     };
   }
 
-  const { projectIds, workbookIds } = boundedContext;
+  const { projectIds, workbookIds, tags } = boundedContext;
   if (projectIds) {
     workbooks = workbooks.filter((workbook) =>
       workbook.project?.id ? projectIds.has(workbook.project.id) : false,
@@ -143,6 +143,12 @@ export function constrainWorkbooks({
 
   if (workbookIds) {
     workbooks = workbooks.filter((workbook) => workbookIds.has(workbook.id));
+  }
+
+  if (tags) {
+    workbooks = workbooks.filter((workbook) =>
+      workbook.tags?.tag?.some((tag) => tags.has(tag.label)),
+    );
   }
 
   if (workbooks.length === 0) {
