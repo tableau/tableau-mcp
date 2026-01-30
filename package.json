@@ -18,6 +18,10 @@
   "bin": {
     "tableau-mcp-server": "./build/index.js"
   },
+  "exports": {
+    ".": "./build/index.js",
+    "./tracing": "./build/telemetry/tracing.js"
+  },
   "scripts": {
     "build": "tsx src/scripts/build.ts",
     "build:dev": "tsx src/scripts/build.ts --dev",
