@@ -249,6 +249,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  INCLUDE_TAGS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Tags to constrain tool results by',
+    description: 'A comma-separated list of tags to constrain tool results by.',
+    required: false,
+    sensitive: false,
+  },
   MAX_REQUEST_TIMEOUT_MS: {
     includeInUserConfig: false,
     type: 'number',

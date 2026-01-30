@@ -134,6 +134,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        tags: null,
       },
     });
   });
@@ -302,6 +303,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
         projectIds: null,
         datasourceIds: new Set([allowedDatasourceId]),
         workbookIds: null,
+        tags: null,
       },
     });
     mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Ok(mockBriefResponse));
@@ -327,6 +329,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
         projectIds: null,
         datasourceIds: new Set(['ALLOWED-DATASOURCE-ID']),
         workbookIds: null,
+        tags: null,
       },
     });
     mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Ok(mockBriefResponse));

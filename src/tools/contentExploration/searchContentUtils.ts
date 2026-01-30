@@ -269,7 +269,7 @@ export function constrainSearchContent({
     };
   }
 
-  const { projectIds, datasourceIds, workbookIds } = boundedContext;
+  const { projectIds, datasourceIds, workbookIds, tags } = boundedContext;
 
   if (projectIds) {
     items = items.filter((item) => {
@@ -304,6 +304,19 @@ export function constrainSearchContent({
         item.type === 'workbook' &&
         typeof item.luid === 'string' &&
         !workbookIds.has(item.luid)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  if (tags) {
+    items = items.filter((item) => {
+      if (
+        !Array.isArray(item.tags) ||
+        !item.tags.some((tag) => typeof tag === 'string' && tags.has(tag))
       ) {
         return false;
       }

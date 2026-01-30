@@ -122,6 +122,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        tags: null,
       },
     });
   });
@@ -224,6 +225,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
         projectIds: null,
         datasourceIds: new Set(['some-other-datasource-luid']),
         workbookIds: null,
+        tags: null,
       },
     });
 
