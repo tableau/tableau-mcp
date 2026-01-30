@@ -57,6 +57,7 @@ describe('Config', () => {
       INCLUDE_PROJECT_IDS: undefined,
       INCLUDE_DATASOURCE_IDS: undefined,
       INCLUDE_WORKBOOK_IDS: undefined,
+      INCLUDE_TAGS: undefined,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: undefined,
       DANGEROUSLY_DISABLE_OAUTH: undefined,
       OAUTH_ISSUER: undefined,
@@ -968,16 +969,18 @@ describe('Config', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        tags: null,
       });
     });
 
-    it('should set boundedContext to the specified project, datasource, and workbook IDs when provided', () => {
+    it('should set boundedContext to the specified tags and project, datasource, and workbook IDs when provided', () => {
       process.env = {
         ...process.env,
         ...defaultEnvVars,
         INCLUDE_PROJECT_IDS: ' 123, 456, 123   ', // spacing is intentional here to test trimming
         INCLUDE_DATASOURCE_IDS: '789,101',
         INCLUDE_WORKBOOK_IDS: '112,113',
+        INCLUDE_TAGS: 'tag1,tag2',
       };
 
       const config = new Config();
@@ -985,6 +988,7 @@ describe('Config', () => {
         projectIds: new Set(['123', '456']),
         datasourceIds: new Set(['789', '101']),
         workbookIds: new Set(['112', '113']),
+        tags: new Set(['tag1', 'tag2']),
       });
     });
 
@@ -1021,6 +1025,18 @@ describe('Config', () => {
 
       expect(() => new Config()).toThrow(
         'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
+      );
+    });
+
+    it('should throw error when INCLUDE_TAGS is set to an empty string', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        INCLUDE_TAGS: '',
+      };
+
+      expect(() => new Config()).toThrow(
+        'When set, the environment variable INCLUDE_TAGS must have at least one value',
       );
     });
   });

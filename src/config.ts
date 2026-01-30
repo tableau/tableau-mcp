@@ -27,6 +27,7 @@ export type BoundedContext = {
   projectIds: Set<string> | null;
   datasourceIds: Set<string> | null;
   workbookIds: Set<string> | null;
+  tags: Set<string> | null;
 };
 
 export class Config {
@@ -129,6 +130,7 @@ export class Config {
       INCLUDE_PROJECT_IDS: includeProjectIds,
       INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
       INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
+      INCLUDE_TAGS: includeTags,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
@@ -172,6 +174,7 @@ export class Config {
       projectIds: createSetFromCommaSeparatedString(includeProjectIds),
       datasourceIds: createSetFromCommaSeparatedString(includeDatasourceIds),
       workbookIds: createSetFromCommaSeparatedString(includeWorkbookIds),
+      tags: createSetFromCommaSeparatedString(includeTags),
     };
 
     if (this.boundedContext.projectIds?.size === 0) {
@@ -189,6 +192,12 @@ export class Config {
     if (this.boundedContext.workbookIds?.size === 0) {
       throw new Error(
         'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
+      );
+    }
+
+    if (this.boundedContext.tags?.size === 0) {
+      throw new Error(
+        'When set, the environment variable INCLUDE_TAGS must have at least one value',
       );
     }
 
