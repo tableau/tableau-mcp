@@ -1,9 +1,8 @@
+import { addInterceptors } from '../../apiClients.js';
 import { AuthConfig } from './authConfig.js';
 import {
   AxiosInterceptor,
   ErrorInterceptor,
-  getRequestInterceptorConfig,
-  getResponseInterceptorConfig,
   RequestInterceptor,
   ResponseInterceptor,
 } from './interceptors.js';
@@ -68,7 +67,7 @@ export class RestApi {
     this._responseInterceptor = options.responseInterceptor;
   }
 
-  private get creds(): Credentials {
+  get creds(): Credentials {
     if (!this._creds) {
       throw new Error('No credentials found. Authenticate by calling signIn() first.');
     }
@@ -249,33 +248,12 @@ export class RestApi {
     };
   };
 
-  private _addInterceptors = (baseUrl: string, interceptors: AxiosInterceptor): void => {
-    interceptors.request.use(
-      (config) => {
-        this._requestInterceptor?.[0]({
-          baseUrl,
-          ...getRequestInterceptorConfig(config),
-        });
-        return config;
-      },
-      (error) => {
-        this._requestInterceptor?.[1]?.(error, baseUrl);
-        return Promise.reject(error);
-      },
-    );
-
-    interceptors.response.use(
-      (response) => {
-        this._responseInterceptor?.[0]({
-          baseUrl,
-          ...getResponseInterceptorConfig(response),
-        });
-        return response;
-      },
-      (error) => {
-        this._responseInterceptor?.[1]?.(error, baseUrl);
-        return Promise.reject(error);
-      },
+  private _addInterceptors = (baseUrl: string, axiosInterceptors: AxiosInterceptor): void => {
+    addInterceptors(
+      baseUrl,
+      axiosInterceptors,
+      this._requestInterceptor,
+      this._responseInterceptor,
     );
   };
 }
