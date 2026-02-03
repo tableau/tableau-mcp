@@ -63,13 +63,14 @@ This tool searches across all supported content types for objects relevant to th
     },
     callback: async (
       { terms, limit, orderBy, filter },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const orderByString = orderBy ? buildOrderByString(orderBy) : undefined;
       const filterString = filter ? buildFilterString(filter) : undefined;
       return await searchContentTool.logAndExecute<Array<ReducedSearchContentResponse>>({
         requestId,
+        sessionId,
         authInfo,
         args: {},
         callback: async () => {

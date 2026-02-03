@@ -38,10 +38,11 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ metricIds }, { requestId, authInfo, signal }): Promise<CallToolResult> => {
+    callback: async ({ metricIds }, { requestId, sessionId, authInfo, signal }): Promise<CallToolResult> => {
       const config = getConfig();
       return await listPulseMetricsFromMetricIdsTool.logAndExecute({
         requestId,
+        sessionId,
         authInfo,
         args: { metricIds },
         callback: async () => {

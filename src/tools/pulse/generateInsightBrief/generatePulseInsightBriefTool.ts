@@ -194,7 +194,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
     },
     callback: async (
       { briefRequest },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       return await generatePulseInsightBriefTool.logAndExecute<
@@ -202,6 +202,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
         GeneratePulseInsightBriefError
       >({
         requestId,
+        sessionId,
         authInfo,
         args: { briefRequest },
         callback: async () => {

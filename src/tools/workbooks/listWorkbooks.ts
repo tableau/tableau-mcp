@@ -65,13 +65,14 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
     },
     callback: async (
       { filter, pageSize, limit },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const validatedFilter = filter ? parseAndValidateWorkbooksFilterString(filter) : undefined;
 
       return await listWorkbooksTool.logAndExecute({
         requestId,
+        sessionId,
         authInfo,
         args: {},
         callback: async () => {

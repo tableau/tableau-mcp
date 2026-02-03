@@ -112,7 +112,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
     argsValidator: validateDatasourceLuid,
     callback: async (
       { datasourceLuid },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const query = getGraphqlQuery(datasourceLuid);
@@ -122,6 +122,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
         GetDatasourceMetadataError
       >({
         requestId,
+        sessionId,
         authInfo,
         args: { datasourceLuid },
         callback: async () => {

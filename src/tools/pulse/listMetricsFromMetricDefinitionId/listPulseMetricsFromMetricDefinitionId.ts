@@ -38,7 +38,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
     },
     callback: async (
       { pulseMetricDefinitionID },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       return await listPulseMetricsFromMetricDefinitionIdTool.logAndExecute<
@@ -46,6 +46,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
         PulseDisabledError
       >({
         requestId,
+        sessionId,
         authInfo,
         args: { pulseMetricDefinitionID },
         callback: async () => {

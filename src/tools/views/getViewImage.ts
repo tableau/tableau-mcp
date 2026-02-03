@@ -35,12 +35,13 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
     },
     callback: async (
       { viewId, width, height },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getViewImageTool.logAndExecute<string, GetViewImageError>({
         requestId,
+        sessionId,
         authInfo,
         args: { viewId },
         callback: async () => {

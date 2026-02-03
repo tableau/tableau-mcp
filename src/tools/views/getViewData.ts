@@ -30,11 +30,12 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ viewId }, { requestId, authInfo, signal }): Promise<CallToolResult> => {
+    callback: async ({ viewId }, { requestId, sessionId, authInfo, signal }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getViewDataTool.logAndExecute<string, GetViewDataError>({
         requestId,
+        sessionId,
         authInfo,
         args: { viewId },
         callback: async () => {

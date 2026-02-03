@@ -77,10 +77,11 @@ export const getQueryDatasourceTool = (
     argsValidator: validateQuery,
     callback: async (
       { datasourceLuid, query },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
+        sessionId,
         authInfo,
         args: { datasourceLuid, query },
         callback: async () => {

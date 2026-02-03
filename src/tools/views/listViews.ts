@@ -68,13 +68,14 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
     },
     callback: async (
       { filter, pageSize, limit },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const validatedFilter = filter ? parseAndValidateViewsFilterString(filter) : undefined;
 
       return await listViewsTool.logAndExecute({
         requestId,
+        sessionId,
         authInfo,
         args: {},
         callback: async () => {

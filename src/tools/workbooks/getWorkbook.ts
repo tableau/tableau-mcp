@@ -31,11 +31,12 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ workbookId }, { requestId, authInfo, signal }): Promise<CallToolResult> => {
+    callback: async ({ workbookId }, { requestId, sessionId, authInfo, signal }): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getWorkbookTool.logAndExecute<Workbook, GetWorkbookError>({
         requestId,
+        sessionId,
         authInfo,
         args: { workbookId },
         callback: async () => {

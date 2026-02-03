@@ -59,11 +59,12 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
     },
     callback: async (
       { view, limit, pageSize },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       return await listAllPulseMetricDefinitionsTool.logAndExecute({
         requestId,
+        sessionId,
         authInfo,
         args: { view, limit, pageSize },
         callback: async () => {

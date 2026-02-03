@@ -152,7 +152,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
     },
     callback: async (
       { bundleRequest, bundleType },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       return await generatePulseMetricValueInsightBundleTool.logAndExecute<
@@ -160,6 +160,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
         GeneratePulseMetricValueInsightBundleError
       >({
         requestId,
+        sessionId,
         authInfo,
         args: { bundleRequest, bundleType },
         callback: async () => {

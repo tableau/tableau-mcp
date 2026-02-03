@@ -34,10 +34,11 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (_, { requestId, authInfo, signal }): Promise<CallToolResult> => {
+    callback: async (_, { requestId, sessionId, authInfo, signal }): Promise<CallToolResult> => {
       const config = getConfig();
       return await listPulseMetricSubscriptionsTool.logAndExecute({
         requestId,
+        sessionId: sessionId ?? '',
         authInfo,
         args: {},
         callback: async () => {

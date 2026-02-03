@@ -59,11 +59,12 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
     },
     callback: async (
       { view, metricDefinitionIds },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       return await listPulseMetricDefinitionsFromDefinitionIdsTool.logAndExecute({
         requestId,
+        sessionId,
         authInfo,
         args: { metricDefinitionIds, view },
         callback: async () => {
