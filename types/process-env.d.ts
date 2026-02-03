@@ -50,6 +50,7 @@ export interface ProcessEnvEx {
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: string | undefined;
   OAUTH_ACCESS_TOKEN_TIMEOUT_MS: string | undefined;
   OAUTH_REFRESH_TOKEN_TIMEOUT_MS: string | undefined;
+  PRODUCT_TELEMETRY_ENABLED: string | undefined;
 }
 
 declare global {

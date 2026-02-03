@@ -55,6 +55,10 @@ export class DirectTelemetryForwarder {
    * @param properties - Key-value properties for the event
    */
   public send(eventType: string, properties: PropertiesType): void {
+    if (process.env.PRODUCT_TELEMETRY_ENABLED === 'false') {
+      return;
+    }
+
     const event: TableauTelemetryJsonEvent = {
       type: eventType,
       host_timestamp: formatHostTimestamp(new Date()),
