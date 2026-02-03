@@ -61,7 +61,7 @@ export class DirectTelemetryForwarder {
       service_name: SERVICE_NAME,
       pod: getDefaultPod(),
       host_name: getDefaultHostName(),
-      properties,
+      properties: { ...properties, pod: getDefaultPod()},
     };
 
     const init: RequestInit = {
@@ -95,7 +95,7 @@ export class DirectTelemetryForwarder {
 }
 
 const getDefaultPod = (): string => {
-  return process.env.POD_NAME ?? DEFAULT_POD;
+  return process.env.SERVER || '';
 };
 
 const getDefaultHostName = (): string => {

@@ -16,8 +16,7 @@ import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { Provider, TypeOrProvider } from '../utils/provider.js';
 import { ToolName } from './toolName.js';
 
-// Product telemetry - always enabled
-const PRODUCT_TELEMETRY_ENDPOINT = 'https://qa.telemetry.tableausoftware.com'; 
+const PRODUCT_TELEMETRY_ENDPOINT = 'https://prod.telemetry.tableausoftware.com';
 let productTelemetry: DirectTelemetryForwarder | null = null;
 
 function getProductTelemetry(): DirectTelemetryForwarder {
@@ -200,7 +199,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
 
     const config = getConfig();
     const productTelemetry = getProductTelemetry();
-    productTelemetry.send('event_tool_call', {
+    productTelemetry.send('tool_call', {
       tool_name: this.name,
       request_id: requestId.toString(),
       session_id: sessionId ?? '',
