@@ -6,12 +6,13 @@ import { Tool } from '../tool.js';
 
 const paramsSchema = {
   calculationType: z.enum(['BASIC', 'LOD', 'TABLE']).optional(),
-  includeFunctionInfo: z.boolean().default(true),
+  includeFunctionInfo: z.boolean().default(true).optional(),
+  includeOperatorPrecedenceInfo: z.boolean().default(true).optional(),
 };
 
 const description = `
 This tool retrieves relevant information for constructing Tableau calculations.
-Provides details on how to construct a given calculation type and which functions are available for use in calculations.
+Provides details on how to construct a calculation given its type and which functions are available for use.
 Before you can determine whether or not you want to construct a calculation make sure to understand available fields and their types.
 
 When should you use this tool?
@@ -68,9 +69,9 @@ export const getGetCalculationInfoTool = (server: Server): Tool<typeof paramsSch
     },
     callback: ({ calculationType, includeFunctionInfo = true }): CallToolResult => {
       if (includeFunctionInfo) {
-        // TODO
+        // TODO: get function info
       }
-      
+
       return {
         content: [
           {
@@ -84,3 +85,51 @@ export const getGetCalculationInfoTool = (server: Server): Tool<typeof paramsSch
 
   return getCalculationInfoTool;
 };
+
+const basicCalculationInfo = `
+TODO
+`;
+
+const lodCalculationInfo = `
+TODO
+`;
+
+const tableCalculationInfo = `
+TODO
+`;
+
+const calculationStructureInfo = `
+Calculations are composed of the following components:
+- Fields
+- Operators
+- Functions
+- Constants
+- Parameters
+
+Fields are dimensions or measures from the data source. Fields are inserted into calculations by enclosing the field name in brackets. Example: [Sales Category].
+
+Constants are fixed values 
+
+Parameter are placeholder values that can be inserted into calculations to replace constant values. Parameters are enclosed in square brackets. Example: [Selected Year].
+
+Functions are statements used to transform the values or members in a field. They are the main components of a calculation and can be used for various purposes.
+Every functions requires a particular syntax. You can use more than one function in a calculation and functions can be nested. The type of function you use determines the type of field you can use.
+
+Operators are symbols that denote an operation. Operators have a precedence that determines the order of operations in a calculation.
+
+Operator precedence:
+1. - (negate)
+2. ^ (power)
+3. *, /, %
+4. +, -
+5. ==, =, >, <, >=, <=, !=, <>
+6. NOT
+7. AND
+8. OR
+
+Parentheses can be used as needed to force an order of precedence. Operators that appear within parentheses are evaluated before those outside the parentheses, starting from the innermost parentheses and moving outward.
+
+Calculations do not always need to contain all components.
+
+Example Calculations and what they do:
+`;
