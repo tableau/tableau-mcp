@@ -204,6 +204,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       request_id: requestId.toString(),
       session_id: sessionId ?? '',
       site_name: config.siteName,
+      podname: process.env.SERVER || ''
     });
 
     if (args) {
