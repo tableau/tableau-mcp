@@ -5,7 +5,7 @@ sidebar_position: 6
 # Tool Scoping
 
 The Tableau MCP server can be configured to limit the scope of its tools to a set of data sources,
-workbooks, or projects.
+workbooks, projects, or tags.
 
 Enabling tool scoping can cause:
 
@@ -89,3 +89,21 @@ tools.
 Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
 
 <hr />
+
+### `INCLUDE_TAGS`
+
+A comma-separated list of case-sensitive tags by which to constrain tool arguments and results. Only
+data sources, workbooks, or views with the provided tags can be queried or will be included in the
+results of the tools.
+
+- When set, cannot be empty.
+- Tags can be determined using the
+  [Tableau product](https://help.tableau.com/current/pro/desktop/en-us/tags.htm) or the REST APIs
+  for querying
+  [data sources](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source),
+  [workbooks](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook),
+  and
+  [views](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_view).
+- Has no impact on the results of the Pulse-related tools.
+
+Example: `sales,marketing`

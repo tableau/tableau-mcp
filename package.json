@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "An MCP server for Tableau, providing a suite of tools that will make it easier for developers to build AI applications that integrate with Tableau.",
-  "version": "1.14.1",
+  "version": "1.14.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -17,6 +17,10 @@
   ],
   "bin": {
     "tableau-mcp-server": "./build/index.js"
+  },
+  "exports": {
+    ".": "./build/index.js",
+    "./tracing": "./build/telemetry/tracing.js"
   },
   "scripts": {
     "build": "tsx src/scripts/build.ts",
@@ -44,7 +48,8 @@
     "coverage": "vitest run --config ./vitest.config.ts --coverage",
     "version:major": "npm version major --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
-    "version:patch": "npm version patch --no-git-tag-version"
+    "version:patch": "npm version patch --no-git-tag-version",
+    "docs:start": "npm run start --prefix docs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",

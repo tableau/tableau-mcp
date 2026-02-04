@@ -29,6 +29,7 @@ export interface ProcessEnvEx {
   EXCLUDE_TOOLS: string | undefined;
   MAX_REQUEST_TIMEOUT_MS: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
+  MAX_RESULT_LIMITS: string | undefined;
   DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: string | undefined;
   DISABLE_METADATA_API_REQUESTS: string | undefined;
   DISABLE_SESSION_MANAGEMENT: string | undefined;
@@ -37,6 +38,7 @@ export interface ProcessEnvEx {
   INCLUDE_PROJECT_IDS: string | undefined;
   INCLUDE_DATASOURCE_IDS: string | undefined;
   INCLUDE_WORKBOOK_IDS: string | undefined;
+  INCLUDE_TAGS: string | undefined;
   TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: string | undefined;
   DANGEROUSLY_DISABLE_OAUTH: string | undefined;
   OAUTH_ISSUER: string | undefined;

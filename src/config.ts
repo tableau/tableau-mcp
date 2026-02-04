@@ -27,9 +27,13 @@ export type BoundedContext = {
   projectIds: Set<string> | null;
   datasourceIds: Set<string> | null;
   workbookIds: Set<string> | null;
+  tags: Set<string> | null;
 };
 
 export class Config {
+  private maxResultLimit: number | null;
+  private maxResultLimits: Map<ToolName, number | null> | null;
+
   auth: AuthType;
   server: string;
   transport: TransportName;
@@ -57,7 +61,6 @@ export class Config {
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
   maxRequestTimeoutMs: number;
-  maxResultLimit: number | null;
   disableQueryDatasourceValidationRequests: boolean;
   disableMetadataApiRequests: boolean;
   disableSessionManagement: boolean;
@@ -80,6 +83,10 @@ export class Config {
     dnsServers: string[];
   };
   telemetry: TelemetryConfig;
+
+  getMaxResultLimit(toolName: ToolName): number | null {
+    return this.maxResultLimits?.get(toolName) ?? this.maxResultLimit;
+  }
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -114,6 +121,7 @@ export class Config {
       EXCLUDE_TOOLS: excludeTools,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       MAX_RESULT_LIMIT: maxResultLimit,
+      MAX_RESULT_LIMITS: maxResultLimits,
       DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: disableQueryDatasourceValidationRequests,
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
@@ -122,6 +130,7 @@ export class Config {
       INCLUDE_PROJECT_IDS: includeProjectIds,
       INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
       INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
+      INCLUDE_TAGS: includeTags,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
@@ -165,6 +174,7 @@ export class Config {
       projectIds: createSetFromCommaSeparatedString(includeProjectIds),
       datasourceIds: createSetFromCommaSeparatedString(includeDatasourceIds),
       workbookIds: createSetFromCommaSeparatedString(includeWorkbookIds),
+      tags: createSetFromCommaSeparatedString(includeTags),
     };
 
     if (this.boundedContext.projectIds?.size === 0) {
@@ -182,6 +192,12 @@ export class Config {
     if (this.boundedContext.workbookIds?.size === 0) {
       throw new Error(
         'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
+      );
+    }
+
+    if (this.boundedContext.tags?.size === 0) {
+      throw new Error(
+        'When set, the environment variable INCLUDE_TAGS must have at least one value',
       );
     }
 
@@ -310,6 +326,8 @@ export class Config {
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =
       isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
+
+    this.maxResultLimits = maxResultLimits ? getMaxResultLimits(maxResultLimits) : null;
 
     this.includeTools = includeTools
       ? includeTools.split(',').flatMap((s) => {
@@ -484,6 +502,32 @@ function removeClaudeMcpBundleUserConfigTemplates(
     }
     return acc;
   }, {});
+}
+
+function getMaxResultLimits(maxResultLimits: string): Map<ToolName, number | null> {
+  const map = new Map<ToolName, number | null>();
+  if (!maxResultLimits) {
+    return map;
+  }
+
+  maxResultLimits.split(',').forEach((curr) => {
+    const [toolName, maxResultLimit] = curr.split(':');
+    const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
+    const actualLimit =
+      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
+    if (isToolName(toolName)) {
+      map.set(toolName, actualLimit);
+    } else if (isToolGroupName(toolName)) {
+      toolGroups[toolName].forEach((toolName) => {
+        if (!map.has(toolName)) {
+          // Tool names take precedence over group names
+          map.set(toolName, actualLimit);
+        }
+      });
+    }
+  });
+
+  return map;
 }
 
 function parseNumber(

@@ -2,13 +2,13 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getConfig } from '../../config.js';
+import { BoundedContext, getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { Tool } from '../tool.js';
+import { ConstrainedResult, Tool } from '../tool.js';
 
 const paramsSchema = {
   workbookId: z.string(),
@@ -86,12 +86,8 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
             }),
           );
         },
-        constrainSuccessResult: (workbook) => {
-          return {
-            type: 'success',
-            result: workbook,
-          };
-        },
+        constrainSuccessResult: (workbook) =>
+          filterWorkbookViews({ workbook, boundedContext: config.boundedContext }),
         getErrorText: (error: GetWorkbookError) => {
           switch (error.type) {
             case 'workbook-not-allowed':
@@ -104,3 +100,32 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
 
   return getWorkbookTool;
 };
+
+export function filterWorkbookViews({
+  workbook,
+  boundedContext,
+}: {
+  workbook: Workbook;
+  boundedContext: BoundedContext;
+}): ConstrainedResult<Workbook> {
+  const { tags } = boundedContext;
+
+  // We don't need to check the tags on the workbook since we already
+  // did that before getting the detailed workbook information.
+  // We only need to check the tags on the workbook's views.
+  if (!workbook.views || !tags) {
+    return {
+      type: 'success',
+      result: workbook,
+    };
+  }
+
+  workbook.views.view = workbook.views.view.filter((view) =>
+    view.tags?.tag?.some((tag) => tags.has(tag.label)),
+  );
+
+  return {
+    type: 'success',
+    result: workbook,
+  };
+}

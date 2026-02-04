@@ -30,6 +30,7 @@ import { validateQueryAgainstDatasourceMetadata } from './validators/validateQue
 const paramsSchema = {
   datasourceLuid: z.string().nonempty(),
   query: querySchema,
+  limit: z.number().int().min(1).optional(),
 };
 
 export type QueryDatasourceError =
@@ -76,12 +77,12 @@ export const getQueryDatasourceTool = (
     },
     argsValidator: validateQuery,
     callback: async (
-      { datasourceLuid, query },
+      { datasourceLuid, query, limit },
       { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
-        sessionId,
+        sessionId: sessionId ?? '',
         authInfo,
         args: { datasourceLuid, query },
         callback: async () => {
@@ -98,10 +99,16 @@ export const getQueryDatasourceTool = (
           }
 
           const datasource: Datasource = { datasourceLuid };
+          const maxResultLimit = config.getMaxResultLimit(queryDatasourceTool.name);
+          const rowLimit = maxResultLimit
+            ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+            : limit;
+
           const options = {
             returnFormat: 'OBJECTS',
             debug: true,
             disaggregate: false,
+            rowLimit,
           } as const;
 
           const credentials = getDatasourceCredentials(datasourceLuid);
@@ -171,6 +178,11 @@ export const getQueryDatasourceTool = (
                         },
                 );
               }
+
+              if (rowLimit && result.value.data && result.value.data.length > rowLimit) {
+                result.value.data.length = rowLimit;
+              }
+
               return result;
             },
           });

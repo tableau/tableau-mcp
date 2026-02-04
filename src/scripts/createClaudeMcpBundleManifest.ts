@@ -249,6 +249,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  INCLUDE_TAGS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Tags to constrain tool results by',
+    description: 'A comma-separated list of tags to constrain tool results by.',
+    required: false,
+    sensitive: false,
+  },
   MAX_REQUEST_TIMEOUT_MS: {
     includeInUserConfig: false,
     type: 'number',
@@ -263,6 +271,15 @@ const envVars = {
     title: 'Max Result Limit',
     description:
       'If a tool has a "limit" parameter and returns an array of items, the maximum length of that array.',
+    required: false,
+    sensitive: false,
+  },
+  MAX_RESULT_LIMITS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Max Result Limits',
+    description:
+      'A comma-separated list of tool names and maximum result limits. The format is `toolName:maxResultLimit`.',
     required: false,
     sensitive: false,
   },

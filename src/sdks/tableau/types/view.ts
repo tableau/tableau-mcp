@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { tagsSchema } from './tags.js';
+
 export const viewSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -20,7 +22,7 @@ export const viewSchema = z.object({
       id: z.string(),
     })
     .optional(),
-  tags: z.object({ tag: z.array(z.object({ label: z.string() })).optional() }),
+  tags: tagsSchema,
   usage: z
     .object({
       totalViewCount: z.coerce.number(),

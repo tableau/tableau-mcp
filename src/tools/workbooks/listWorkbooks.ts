@@ -85,11 +85,12 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
               signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
+                const maxResultLimit = config.getMaxResultLimit(listWorkbooksTool.name);
                 const workbooks = await paginate({
                   pageConfig: {
                     pageSize,
-                    limit: config.maxResultLimit
-                      ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                    limit: maxResultLimit
+                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
                       : limit,
                   },
                   getDataFn: async (pageConfig) => {
@@ -134,7 +135,7 @@ export function constrainWorkbooks({
     };
   }
 
-  const { projectIds, workbookIds } = boundedContext;
+  const { projectIds, workbookIds, tags } = boundedContext;
   if (projectIds) {
     workbooks = workbooks.filter((workbook) =>
       workbook.project?.id ? projectIds.has(workbook.project.id) : false,
@@ -143,6 +144,12 @@ export function constrainWorkbooks({
 
   if (workbookIds) {
     workbooks = workbooks.filter((workbook) => workbookIds.has(workbook.id));
+  }
+
+  if (tags) {
+    workbooks = workbooks.filter((workbook) =>
+      workbook.tags?.tag?.some((tag) => tags.has(tag.label)),
+    );
   }
 
   if (workbooks.length === 0) {

@@ -48,6 +48,7 @@ describe('Config', () => {
       EXCLUDE_TOOLS: undefined,
       MAX_REQUEST_TIMEOUT_MS: undefined,
       MAX_RESULT_LIMIT: undefined,
+      MAX_RESULT_LIMITS: undefined,
       DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: undefined,
       DISABLE_METADATA_API_REQUESTS: undefined,
       DISABLE_SESSION_MANAGEMENT: undefined,
@@ -56,6 +57,7 @@ describe('Config', () => {
       INCLUDE_PROJECT_IDS: undefined,
       INCLUDE_DATASOURCE_IDS: undefined,
       INCLUDE_WORKBOOK_IDS: undefined,
+      INCLUDE_TAGS: undefined,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: undefined,
       DANGEROUSLY_DISABLE_OAUTH: undefined,
       OAUTH_ISSUER: undefined,
@@ -266,49 +268,6 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
-  });
-
-  it('should set maxResultLimit to null when not specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-    };
-
-    const config = new Config();
-    expect(config.maxResultLimit).toBe(null);
-  });
-
-  it('should set maxResultLimit to null when specified as a non-number', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      MAX_RESULT_LIMIT: 'abc',
-    };
-
-    const config = new Config();
-    expect(config.maxResultLimit).toBe(null);
-  });
-
-  it('should set maxResultLimit to null when specified as a negative number', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      MAX_RESULT_LIMIT: '-100',
-    };
-
-    const config = new Config();
-    expect(config.maxResultLimit).toBe(null);
-  });
-
-  it('should set maxResultLimit to the specified value when specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      MAX_RESULT_LIMIT: '100',
-    };
-
-    const config = new Config();
-    expect(config.maxResultLimit).toBe(100);
   });
 
   it('should set disableQueryDatasourceValidationRequests to false by default', () => {
@@ -1010,16 +969,18 @@ describe('Config', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        tags: null,
       });
     });
 
-    it('should set boundedContext to the specified project, datasource, and workbook IDs when provided', () => {
+    it('should set boundedContext to the specified tags and project, datasource, and workbook IDs when provided', () => {
       process.env = {
         ...process.env,
         ...defaultEnvVars,
         INCLUDE_PROJECT_IDS: ' 123, 456, 123   ', // spacing is intentional here to test trimming
         INCLUDE_DATASOURCE_IDS: '789,101',
         INCLUDE_WORKBOOK_IDS: '112,113',
+        INCLUDE_TAGS: 'tag1,tag2',
       };
 
       const config = new Config();
@@ -1027,6 +988,7 @@ describe('Config', () => {
         projectIds: new Set(['123', '456']),
         datasourceIds: new Set(['789', '101']),
         workbookIds: new Set(['112', '113']),
+        tags: new Set(['tag1', 'tag2']),
       });
     });
 
@@ -1063,6 +1025,18 @@ describe('Config', () => {
 
       expect(() => new Config()).toThrow(
         'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
+      );
+    });
+
+    it('should throw error when INCLUDE_TAGS is set to an empty string', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        INCLUDE_TAGS: '',
+      };
+
+      expect(() => new Config()).toThrow(
+        'When set, the environment variable INCLUDE_TAGS must have at least one value',
       );
     });
   });
@@ -1472,6 +1446,104 @@ describe('Config', () => {
     it('should return defaultValue for negative numbers when minValue is 0', () => {
       const result = parseNumber('-5', { defaultValue: 42, minValue: 0 });
       expect(result).toBe(42);
+    });
+  });
+
+  describe('Max results limit parsing', () => {
+    it('should return null when MAX_RESULT_LIMIT and MAX_RESULT_LIMITS are not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      expect(new Config().getMaxResultLimit('query-datasource')).toBeNull();
+    });
+
+    it('should return the max result limit when MAX_RESULT_LIMITS has a single tool', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMITS: 'query-datasource:100',
+      };
+
+      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(100);
+    });
+
+    it('should return the max result limit when MAX_RESULT_LIMITS has a single tool group', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMITS: 'datasource:200',
+      };
+
+      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(200);
+    });
+
+    it('should return the max result limit for the tool when a tool and a tool group are both specified', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMITS: 'query-datasource:100,datasource:200',
+      };
+
+      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(100);
+      expect(new Config().getMaxResultLimit('list-datasources')).toEqual(200);
+    });
+
+    it('should fallback to MAX_RESULT_LIMIT when a tool-specific max result limit is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMITS: 'query-datasource:100',
+        MAX_RESULT_LIMIT: '300',
+      };
+
+      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(100);
+      expect(new Config().getMaxResultLimit('list-datasources')).toEqual(300);
+    });
+
+    it('should return null when MAX_RESULT_LIMITS has a non-number', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMITS: 'query-datasource:abc',
+      };
+
+      const config = new Config();
+      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
+    });
+
+    it('should return null when MAX_RESULT_LIMIT is specified as a non-number', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMIT: 'abc',
+      };
+
+      const config = new Config();
+      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
+    });
+
+    it('should return null when MAX_RESULT_LIMITS has a negative number', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMITS: 'query-datasource:-100',
+      };
+
+      const config = new Config();
+      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
+    });
+
+    it('should return null when MAX_RESULT_LIMIT is specified as a negative number', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMIT: '-100',
+      };
+
+      const config = new Config();
+      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
     });
   });
 });
