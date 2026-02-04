@@ -86,7 +86,7 @@ export async function grade({
   throw new Error('Could not parse JSON from agent output');
 }
 
-export async function promptAgent({
+async function promptAgent({
   mcpServer,
   model,
   prompt,
