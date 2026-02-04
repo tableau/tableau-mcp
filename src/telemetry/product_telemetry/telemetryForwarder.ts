@@ -64,7 +64,7 @@ export class DirectTelemetryForwarder {
       service_name: SERVICE_NAME,
       pod: getDefaultPod(),
       host_name: getDefaultHostName(),
-      properties
+      properties,
     };
 
     const init: RequestInit = {
