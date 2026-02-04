@@ -2,7 +2,6 @@ import os from 'os';
 
 export type ValidPropertyValueType = string | number | boolean;
 export type PropertiesType = { [key: string]: ValidPropertyValueType };
-const DEFAULT_POD = 'External';
 const DEFAULT_HOST_NAME = 'External';
 const SERVICE_NAME = 'tableau-mcp';
 
@@ -65,7 +64,7 @@ export class DirectTelemetryForwarder {
       service_name: SERVICE_NAME,
       pod: getDefaultPod(),
       host_name: getDefaultHostName(),
-      properties: { ...properties, podname: getDefaultPod()},
+      properties: { ...properties, podname: getDefaultPod() },
     };
 
     const init: RequestInit = {
@@ -80,14 +79,14 @@ export class DirectTelemetryForwarder {
       body: JSON.stringify([event]),
     };
 
-    const req = new Request(this.endpoint, init);    
+    const req = new Request(this.endpoint, init);
     fetch(req)
       .then(async (res) => {
         const body = await res.text();
         if (!res.ok) {
           console.error(`[Telemetry] Failed: ${res.status} ${res.statusText}`, body);
         } else {
-          console.log(`[Telemetry] Success: ${res.status}`, body);
+          // Telemetry sent successfully
         }
       })
       .catch((error) => console.error('[Telemetry] Network error:', error));
