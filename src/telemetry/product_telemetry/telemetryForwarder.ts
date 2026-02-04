@@ -80,11 +80,7 @@ export class DirectTelemetryForwarder {
       body: JSON.stringify([event]),
     };
 
-    const req = new Request(this.endpoint, init);
-    
-    // Debug logging
-    console.log('[Telemetry] Sending event:', JSON.stringify(event, null, 2));
-    
+    const req = new Request(this.endpoint, init);    
     fetch(req)
       .then(async (res) => {
         const body = await res.text();
