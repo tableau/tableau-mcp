@@ -75,7 +75,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
 
       return await listViewsTool.logAndExecute({
         requestId,
-        sessionId,
+        sessionId: sessionId ?? '',
         authInfo,
         args: {},
         callback: async () => {

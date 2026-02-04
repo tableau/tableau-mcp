@@ -42,7 +42,7 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
       const config = getConfig();
       return await listPulseMetricsFromMetricIdsTool.logAndExecute({
         requestId,
-        sessionId,
+        sessionId: sessionId ?? '',
         authInfo,
         args: { metricIds },
         callback: async () => {

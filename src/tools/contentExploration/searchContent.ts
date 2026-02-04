@@ -70,7 +70,7 @@ This tool searches across all supported content types for objects relevant to th
       const filterString = filter ? buildFilterString(filter) : undefined;
       return await searchContentTool.logAndExecute<Array<ReducedSearchContentResponse>>({
         requestId,
-        sessionId,
+        sessionId: sessionId ?? '',
         authInfo,
         args: {},
         callback: async () => {

@@ -46,7 +46,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
         PulseDisabledError
       >({
         requestId,
-        sessionId,
+        sessionId: sessionId ?? '',
         authInfo,
         args: { pulseMetricDefinitionID },
         callback: async () => {

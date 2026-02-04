@@ -72,7 +72,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
 
       return await listWorkbooksTool.logAndExecute({
         requestId,
-        sessionId,
+        sessionId: sessionId ?? '',
         authInfo,
         args: {},
         callback: async () => {

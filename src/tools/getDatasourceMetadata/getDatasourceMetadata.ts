@@ -122,7 +122,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
         GetDatasourceMetadataError
       >({
         requestId,
-        sessionId,
+        sessionId: sessionId ?? '',
         authInfo,
         args: { datasourceLuid },
         callback: async () => {

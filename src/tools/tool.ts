@@ -84,7 +84,7 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
   requestId: RequestId;
 
   // The session ID from the transport, if available
-  sessionId?: string;
+  sessionId: string;
 
   // The Authentication info provided when OAuth is enabled
   authInfo: AuthInfo | undefined;

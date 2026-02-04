@@ -202,7 +202,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
         GeneratePulseInsightBriefError
       >({
         requestId,
-        sessionId,
+        sessionId: sessionId ?? '',
         authInfo,
         args: { briefRequest },
         callback: async () => {

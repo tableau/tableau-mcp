@@ -86,7 +86,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
       const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
         requestId,
-        sessionId,
+        sessionId: sessionId ?? '',
         authInfo,
         args: { filter, pageSize, limit },
         callback: async () => {
