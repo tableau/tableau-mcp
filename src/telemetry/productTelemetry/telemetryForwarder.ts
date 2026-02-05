@@ -79,9 +79,6 @@ export class DirectTelemetryForwarder {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      cache: 'default',
-      mode: 'cors',
-      credentials: 'omit',
       body: JSON.stringify([event]),
     };
 
