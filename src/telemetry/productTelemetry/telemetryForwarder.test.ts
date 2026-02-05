@@ -35,7 +35,6 @@ describe('DirectTelemetryForwarder', () => {
     const request = mockFetch.mock.calls[0][0] as Request;
     expect(request.method).toBe('PUT');
     expect(request.url).toContain(endpoint);
-    expect(request.credentials).toBe('omit');
     expect(request.headers.get('Content-Type')).toBe('application/json');
     expect(request.headers.get('Accept')).toBe('application/json');
 

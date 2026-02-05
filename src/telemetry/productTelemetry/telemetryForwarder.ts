@@ -86,17 +86,19 @@ export class DirectTelemetryForwarder {
     console.log('[Telemetry] Sending event:', JSON.stringify(event, null, 2));
 
     const req = new Request(this.endpoint, init);
-    fetch(req)
-      .then(async (res) => {
-        const body = await res.text();
-        if (!res.ok) {
-          console.error(`[Telemetry] Failed: ${res.status} ${res.statusText}`, body);
-        } else {
-          // eslint-disable-next-line no-console
-          console.log(`[Telemetry] Success: ${res.status}`, body);
-        }
-      })
-      .catch((error) => console.error('[Telemetry] Network error:', error));
+    sendTelemetryRequest(req);
+  }
+}
+
+async function sendTelemetryRequest(req: Request): Promise<void> {
+  try {
+    const res = await fetch(req);
+    const body = await res.text();
+    if (!res.ok) {
+      console.error(`[Telemetry] Failed: ${res.status} ${res.statusText}`, body);
+    }
+  } catch (error) {
+    console.error('[Telemetry] Network error:', error);
   }
 }
 
