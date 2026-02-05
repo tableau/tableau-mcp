@@ -86,6 +86,11 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
         constrainSuccessResult: (definitions) =>
           constrainPulseDefinitions({ definitions, boundedContext: config.boundedContext }),
         getErrorText: getPulseDisabledError,
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteName: config.siteName,
+          podName: config.server,
+        },
       });
     },
   });

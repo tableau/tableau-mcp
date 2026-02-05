@@ -117,6 +117,11 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
         },
         constrainSuccessResult: (views) =>
           constrainViews({ views, boundedContext: config.boundedContext }),
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteName: config.siteName,
+          podName: config.server,
+        },
       });
     },
   });

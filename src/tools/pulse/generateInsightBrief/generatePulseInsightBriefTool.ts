@@ -264,6 +264,11 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
               return error.message;
           }
         },
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteName: config.siteName,
+          podName: config.server,
+        },
       });
     },
   });

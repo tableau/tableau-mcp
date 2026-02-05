@@ -98,6 +98,11 @@ This tool searches across all supported content types for objects relevant to th
         },
         constrainSuccessResult: (items) =>
           constrainSearchContent({ items, boundedContext: config.boundedContext }),
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteName: config.siteName,
+          podName: config.server,
+        },
       });
     },
   });

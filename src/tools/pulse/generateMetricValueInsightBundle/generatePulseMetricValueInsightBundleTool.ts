@@ -218,6 +218,11 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               return error.message;
           }
         },
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteName: config.siteName,
+          podName: config.server,
+        },
       });
     },
   });

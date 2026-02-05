@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
+import { ProductTelemetryBase } from '../telemetry/product_telemetry/telemetryForwarder.js';
 import invariant from '../utils/invariant.js';
 import { Tool } from './tool.js';
 
@@ -17,6 +18,12 @@ vi.mock('../telemetry/product_telemetry/telemetryForwarder.js', () => ({
 }));
 
 describe('Tool', () => {
+  const mockProductTelemetryBase: ProductTelemetryBase = {
+    endpoint: 'https://test.telemetry.example.com',
+    siteName: 'test-site',
+    podName: 'https://test-server.example.com',
+  };
+
   const mockParams = {
     server: new Server(),
     name: 'get-datasource-metadata',
@@ -82,6 +89,7 @@ describe('Tool', () => {
           result,
         };
       },
+      productTelemetryBase: mockProductTelemetryBase,
     });
 
     expect(result.isError).toBe(false);
@@ -115,6 +123,7 @@ describe('Tool', () => {
           result,
         };
       },
+      productTelemetryBase: mockProductTelemetryBase,
     });
 
     expect(result.isError).toBe(true);
@@ -138,6 +147,7 @@ describe('Tool', () => {
           result,
         };
       },
+      productTelemetryBase: mockProductTelemetryBase,
     });
 
     expect(mockParams.argsValidator).toHaveBeenCalledWith(args);
@@ -173,6 +183,7 @@ describe('Tool', () => {
           result,
         };
       },
+      productTelemetryBase: mockProductTelemetryBase,
     });
 
     expect(result.isError).toBe(true);
@@ -199,6 +210,7 @@ describe('Tool', () => {
           },
         };
       },
+      productTelemetryBase: mockProductTelemetryBase,
     });
 
     expect(result.isError).toBe(false);
@@ -225,6 +237,7 @@ describe('Tool', () => {
           message: 'No data found',
         };
       },
+      productTelemetryBase: mockProductTelemetryBase,
     });
 
     expect(result.isError).toBe(false);
@@ -248,6 +261,7 @@ describe('Tool', () => {
           message: 'An error occurred',
         };
       },
+      productTelemetryBase: mockProductTelemetryBase,
     });
 
     expect(result.isError).toBe(true);
@@ -270,6 +284,7 @@ describe('Tool', () => {
         args: { param1: 'test-value' },
         callback: () => Promise.resolve(Ok({ data: 'success' })),
         constrainSuccessResult: (result) => ({ type: 'success', result }),
+        productTelemetryBase: mockProductTelemetryBase,
       });
 
       expect(mockTelemetrySend).toHaveBeenCalledWith(
@@ -278,6 +293,8 @@ describe('Tool', () => {
           tool_name: 'get-datasource-metadata',
           request_id: '123',
           session_id: 'session-abc',
+          site_name: 'test-site',
+          podname: 'https://test-server.example.com',
           success: true,
           error_code: '',
           parameters: JSON.stringify({ param1: 'test-value' }),
@@ -300,6 +317,7 @@ describe('Tool', () => {
         args: { param1: 'test-value' },
         callback: () => Promise.resolve(Ok({ data: 'success' })),
         constrainSuccessResult: (result) => ({ type: 'success', result }),
+        productTelemetryBase: mockProductTelemetryBase,
       });
 
       expect(mockTelemetrySend).toHaveBeenCalledWith(
@@ -323,6 +341,7 @@ describe('Tool', () => {
           throw new Error('Callback failed');
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
+        productTelemetryBase: mockProductTelemetryBase,
       });
 
       expect(mockTelemetrySend).toHaveBeenCalledWith(
@@ -337,7 +356,7 @@ describe('Tool', () => {
     it('should send telemetry with actual HTTP status code on API error', async () => {
       const tool = new Tool(mockParams);
       const axiosError = new AxiosError('Unauthorized');
-      axiosError.response = { status: 500 } as AxiosError['response'];
+      axiosError.response = { status: 401 } as AxiosError['response'];
 
       await tool.logAndExecute({
         requestId: '123',
@@ -348,13 +367,14 @@ describe('Tool', () => {
           throw axiosError;
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
+        productTelemetryBase: mockProductTelemetryBase,
       });
 
       expect(mockTelemetrySend).toHaveBeenCalledWith(
         'tool_call',
         expect.objectContaining({
           success: false,
-          error_code: '500',
+          error_code: '401',
         }),
       );
     });
@@ -369,6 +389,7 @@ describe('Tool', () => {
         args: { param1: 'test-value' },
         callback: () => Promise.resolve(Ok({ data: 'success' })),
         constrainSuccessResult: () => ({ type: 'error', message: 'Constrained error' }),
+        productTelemetryBase: mockProductTelemetryBase,
       });
 
       expect(mockTelemetrySend).toHaveBeenCalledWith(
@@ -390,6 +411,7 @@ describe('Tool', () => {
         args: { param1: 'test-value' },
         callback: () => Promise.resolve(Ok({ data: 'success' })),
         constrainSuccessResult: () => ({ type: 'empty', message: 'No data' }),
+        productTelemetryBase: mockProductTelemetryBase,
       });
 
       expect(mockTelemetrySend).toHaveBeenCalledWith(

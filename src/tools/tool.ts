@@ -6,12 +6,14 @@ import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 import { fromError, isZodErrorLike } from 'zod-validation-error';
 
-import { getConfig } from '../config.js';
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
 import { tableauAuthInfoSchema } from '../server/oauth/schemas.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
-import { DirectTelemetryForwarder } from '../telemetry/product_telemetry/telemetryForwarder.js';
+import {
+  DirectTelemetryForwarder,
+  ProductTelemetryBase,
+} from '../telemetry/product_telemetry/telemetryForwarder.js';
 import { isAxiosError } from '../utils/axios.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { Provider, TypeOrProvider } from '../utils/provider.js';
@@ -107,6 +109,9 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
   // The arguments of the tool call
   args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
 
+  // The configuration for product telemetry
+  productTelemetryBase: ProductTelemetryBase;
+
   // A function that contains the business logic of the tool to be logged and executed
   callback: () => Promise<Result<T, E | ZodiosError>>;
 
@@ -194,6 +199,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     sessionId,
     args,
     authInfo,
+    productTelemetryBase,
     callback,
     getSuccessResult,
     getErrorText,
@@ -213,8 +219,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       request_id: requestId.toString(),
     });
 
-    const config = getConfig();
-    const productTelemetry = getProductTelemetry();
+    const productTelemetryForwarder = getProductTelemetry();
 
     let success = false;
     let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls
@@ -276,12 +281,12 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       return toolResult;
     } finally {
       // Single telemetry call - always executed
-      productTelemetry.send('tool_call', {
+      productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
         request_id: requestId.toString(),
         session_id: sessionId ?? '',
-        site_name: config.siteName,
-        podname: process.env.SERVER || '',
+        site_name: productTelemetryBase.siteName,
+        podname: productTelemetryBase.podName,
         success,
         error_code: errorCode,
         parameters: JSON.stringify(args ?? {}),

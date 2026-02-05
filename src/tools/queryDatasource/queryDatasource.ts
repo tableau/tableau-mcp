@@ -212,6 +212,11 @@ export const getQueryDatasourceTool = (
               });
           }
         },
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteName: config.siteName,
+          podName: config.server,
+        },
       });
     },
   });

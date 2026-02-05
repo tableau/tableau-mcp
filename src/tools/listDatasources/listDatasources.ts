@@ -127,6 +127,11 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
         },
         constrainSuccessResult: (datasources) =>
           constrainDatasources({ datasources, boundedContext: config.boundedContext }),
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteName: config.siteName,
+          podName: config.server,
+        },
       });
     },
   });

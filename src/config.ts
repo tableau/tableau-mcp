@@ -83,6 +83,7 @@ export class Config {
     dnsServers: string[];
   };
   telemetry: TelemetryConfig;
+  productTelemetryEndpoint: string;
 
   getMaxResultLimit(toolName: ToolName): number | null {
     return this.maxResultLimits?.get(toolName) ?? this.maxResultLimit;
@@ -146,6 +147,7 @@ export class Config {
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
+      PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -264,6 +266,9 @@ export class Config {
         provider: 'noop',
       };
     }
+
+    this.productTelemetryEndpoint =
+      productTelemetryEndpoint || 'https://prod.telemetry.tableausoftware.com';
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';

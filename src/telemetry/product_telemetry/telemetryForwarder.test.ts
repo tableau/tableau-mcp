@@ -1,5 +1,3 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { DirectTelemetryForwarder, TableauTelemetryJsonEvent } from './telemetryForwarder.js';
 
 describe('DirectTelemetryForwarder', () => {

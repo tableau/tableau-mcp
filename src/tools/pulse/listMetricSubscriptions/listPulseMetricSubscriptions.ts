@@ -62,6 +62,11 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
           });
         },
         getErrorText: getPulseDisabledError,
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteName: config.siteName,
+          podName: config.server,
+        },
       });
     },
   });

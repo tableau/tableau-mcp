@@ -5,6 +5,12 @@ export type PropertiesType = { [key: string]: ValidPropertyValueType };
 const DEFAULT_HOST_NAME = 'External';
 const SERVICE_NAME = 'tableau-mcp';
 
+export type ProductTelemetryBase = {
+  endpoint: string;
+  siteName: string;
+  podName: string;
+};
+
 export type TableauTelemetryJsonEvent = {
   type: string;
   host_timestamp: string;
@@ -79,12 +85,18 @@ export class DirectTelemetryForwarder {
       body: JSON.stringify([event]),
     };
 
+    // eslint-disable-next-line no-console
+    console.log('[Telemetry] Sending event:', JSON.stringify(event, null, 2));
+
     const req = new Request(this.endpoint, init);
     fetch(req)
       .then(async (res) => {
         const body = await res.text();
         if (!res.ok) {
           console.error(`[Telemetry] Failed: ${res.status} ${res.statusText}`, body);
+        } else {
+          // eslint-disable-next-line no-console
+          console.log(`[Telemetry] Success: ${res.status}`, body);
         }
       })
       .catch((error) => console.error('[Telemetry] Network error:', error));

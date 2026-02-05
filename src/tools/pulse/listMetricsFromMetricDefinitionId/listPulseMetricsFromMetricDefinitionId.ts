@@ -67,6 +67,11 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
         constrainSuccessResult: (metrics) =>
           constrainPulseMetrics({ metrics, boundedContext: config.boundedContext }),
         getErrorText: getPulseDisabledError,
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteName: config.siteName,
+          podName: config.server,
+        },
       });
     },
   });

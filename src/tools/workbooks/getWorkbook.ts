@@ -97,6 +97,11 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
               return error.message;
           }
         },
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteName: config.siteName,
+          podName: config.server,
+        },
       });
     },
   });

@@ -191,6 +191,11 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
               return error.message;
           }
         },
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteName: config.siteName,
+          podName: config.server,
+        },
       });
     },
   });
