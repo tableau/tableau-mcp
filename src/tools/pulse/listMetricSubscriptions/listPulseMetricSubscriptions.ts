@@ -38,7 +38,7 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
       const config = getConfig();
       return await listPulseMetricSubscriptionsTool.logAndExecute({
         requestId,
-        sessionId: sessionId ?? '',
+        sessionId,
         authInfo,
         args: {},
         callback: async () => {

@@ -64,7 +64,7 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
       const config = getConfig();
       return await listAllPulseMetricDefinitionsTool.logAndExecute({
         requestId,
-        sessionId: sessionId ?? '',
+        sessionId,
         authInfo,
         args: { view, limit, pageSize },
         callback: async () => {

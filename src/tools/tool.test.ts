@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
-import { ProductTelemetryBase } from '../telemetry/product_telemetry/telemetryForwarder.js';
+import { ProductTelemetryBase } from '../telemetry/productTelemetry/telemetryForwarder.js';
 import invariant from '../utils/invariant.js';
 import { Tool } from './tool.js';
 

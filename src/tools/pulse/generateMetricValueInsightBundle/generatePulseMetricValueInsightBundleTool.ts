@@ -160,7 +160,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
         GeneratePulseMetricValueInsightBundleError
       >({
         requestId,
-        sessionId: sessionId ?? '',
+        sessionId,
         authInfo,
         args: { bundleRequest, bundleType },
         callback: async () => {

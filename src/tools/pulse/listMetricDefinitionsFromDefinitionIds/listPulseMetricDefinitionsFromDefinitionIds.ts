@@ -64,7 +64,7 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
       const config = getConfig();
       return await listPulseMetricDefinitionsFromDefinitionIdsTool.logAndExecute({
         requestId,
-        sessionId: sessionId ?? '',
+        sessionId,
         authInfo,
         args: { metricDefinitionIds, view },
         callback: async () => {

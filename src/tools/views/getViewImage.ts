@@ -41,7 +41,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
 
       return await getViewImageTool.logAndExecute<string, GetViewImageError>({
         requestId,
-        sessionId: sessionId ?? '',
+        sessionId,
         authInfo,
         args: { viewId },
         callback: async () => {

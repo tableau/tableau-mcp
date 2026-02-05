@@ -38,7 +38,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
 
       return await getViewDataTool.logAndExecute<string, GetViewDataError>({
         requestId,
-        sessionId: sessionId ?? '',
+        sessionId,
         authInfo,
         args: { viewId },
         callback: async () => {

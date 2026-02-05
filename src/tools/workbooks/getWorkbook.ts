@@ -39,7 +39,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
 
       return await getWorkbookTool.logAndExecute<Workbook, GetWorkbookError>({
         requestId,
-        sessionId: sessionId ?? '',
+        sessionId,
         authInfo,
         args: { workbookId },
         callback: async () => {

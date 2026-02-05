@@ -82,7 +82,7 @@ export const getQueryDatasourceTool = (
     ): Promise<CallToolResult> => {
       return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
-        sessionId: sessionId ?? '',
+        sessionId,
         authInfo,
         args: { datasourceLuid, query },
         callback: async () => {

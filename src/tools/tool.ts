@@ -13,7 +13,7 @@ import { getTelemetryProvider } from '../telemetry/init.js';
 import {
   DirectTelemetryForwarder,
   ProductTelemetryBase,
-} from '../telemetry/product_telemetry/telemetryForwarder.js';
+} from '../telemetry/productTelemetry/telemetryForwarder.js';
 import { isAxiosError } from '../utils/axios.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { Provider, TypeOrProvider } from '../utils/provider.js';
@@ -101,7 +101,7 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
   requestId: RequestId;
 
   // The session ID from the transport, if available
-  sessionId: string;
+  sessionId: string | undefined;
 
   // The Authentication info provided when OAuth is enabled
   authInfo: AuthInfo | undefined;
