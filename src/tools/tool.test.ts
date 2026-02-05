@@ -11,7 +11,7 @@ import { Tool } from './tool.js';
 
 // Mock for product telemetry - tracks calls to send()
 const mockTelemetrySend = vi.fn();
-vi.mock('../telemetry/product_telemetry/telemetryForwarder.js', () => ({
+vi.mock('../telemetry/productTelemetry/telemetryForwarder.js', () => ({
   DirectTelemetryForwarder: vi.fn().mockImplementation(() => ({
     send: mockTelemetrySend,
   })),

@@ -59,7 +59,7 @@ export class DirectTelemetryForwarder {
    * @param serviceName - The service name emitting the event
    * @param properties - Key-value properties for the event
    */
-  public send(eventType: string, properties: PropertiesType): void {
+  send(eventType: string, properties: PropertiesType): void {
     if (process.env.PRODUCT_TELEMETRY_ENABLED === 'false') {
       return;
     }
