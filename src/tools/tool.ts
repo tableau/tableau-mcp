@@ -12,9 +12,24 @@ import { Server } from '../server.js';
 import { tableauAuthInfoSchema } from '../server/oauth/schemas.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
 import { DirectTelemetryForwarder } from '../telemetry/product_telemetry/telemetryForwarder.js';
+import { isAxiosError } from '../utils/axios.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { Provider, TypeOrProvider } from '../utils/provider.js';
 import { ToolName } from './toolName.js';
+
+/**
+ * Extracts HTTP status code from an error if available (e.g., "401", "404", "500")
+ * Returns empty string if no HTTP status can be determined
+ */
+function getHttpStatus(error: ZodiosError | Error | unknown): string {
+  const axiosError = error instanceof ZodiosError ? error.cause : error;
+
+  if (isAxiosError(axiosError) && axiosError.response?.status) {
+    return String(axiosError.response.status);
+  }
+
+  return '';
+}
 
 const PRODUCT_TELEMETRY_ENDPOINT = 'https://prod.telemetry.tableausoftware.com';
 let productTelemetry: DirectTelemetryForwarder | null = null;
@@ -184,9 +199,10 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     getErrorText,
     constrainSuccessResult,
   }: LogAndExecuteParams<T, E, Args>): Promise<CallToolResult> {
-    const username = authInfo?.extra
-      ? tableauAuthInfoSchema.safeParse(authInfo.extra).data?.username
+    const tableauAuth = authInfo?.extra
+      ? tableauAuthInfoSchema.safeParse(authInfo.extra).data
       : undefined;
+    const username = tableauAuth?.username;
 
     this.logInvocation({ requestId, args, username });
 
@@ -199,69 +215,77 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
 
     const config = getConfig();
     const productTelemetry = getProductTelemetry();
-    productTelemetry.send('tool_call', {
-      tool_name: this.name,
-      request_id: requestId.toString(),
-      session_id: sessionId ?? '',
-      site_name: config.siteName,
-      podname: process.env.SERVER || '',
-    });
 
-    if (args) {
-      try {
-        (await Provider.from(this.argsValidator))?.(args);
-      } catch (error) {
-        return getErrorResult(requestId, error);
-      }
-    }
+    let success = false;
+    let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls
+    let toolResult: CallToolResult;
 
     try {
+      if (args) {
+        try {
+          (await Provider.from(this.argsValidator))?.(args);
+        } catch (error) {
+          errorCode = '400'; // Validation errors are client errors
+          toolResult = getErrorResult(requestId, error);
+          return toolResult;
+        }
+      }
+
       const result = await callback();
 
       if (result.isOk()) {
         const constrainedResult = await constrainSuccessResult(result.value);
 
         if (constrainedResult.type !== 'success') {
-          return {
-            isError: constrainedResult.type === 'error',
+          // Constrained result is either 'empty' or 'error'
+          const isError = constrainedResult.type === 'error';
+          success = !isError;
+          errorCode = ''; // Constrained errors don't have HTTP status
+          toolResult = {
+            isError,
             content: [{ type: 'text', text: constrainedResult.message }],
           };
+          return toolResult;
         }
 
-        if (getSuccessResult) {
-          return getSuccessResult(constrainedResult.result);
-        }
-
-        return {
-          isError: false,
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(constrainedResult.result),
-            },
-          ],
-        };
+        success = true;
+        toolResult = getSuccessResult
+          ? getSuccessResult(constrainedResult.result)
+          : {
+              isError: false,
+              content: [{ type: 'text', text: JSON.stringify(constrainedResult.result) }],
+            };
+        return toolResult;
       }
+
+      // Handle error result - extract actual HTTP status if available
+      errorCode = getHttpStatus(result.error);
 
       if (result.error instanceof ZodiosError) {
-        return getErrorResult(requestId, result.error);
+        toolResult = getErrorResult(requestId, result.error);
+        return toolResult;
       }
 
-      if (getErrorText) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: 'text',
-              text: getErrorText(result.error),
-            },
-          ],
-        };
-      } else {
-        return getErrorResult(requestId, result.error);
-      }
+      toolResult = getErrorText
+        ? { isError: true, content: [{ type: 'text', text: getErrorText(result.error) }] }
+        : getErrorResult(requestId, result.error);
+      return toolResult;
     } catch (error) {
-      return getErrorResult(requestId, error);
+      errorCode = getHttpStatus(error);
+      toolResult = getErrorResult(requestId, error);
+      return toolResult;
+    } finally {
+      // Single telemetry call - always executed
+      productTelemetry.send('tool_call', {
+        tool_name: this.name,
+        request_id: requestId.toString(),
+        session_id: sessionId ?? '',
+        site_name: config.siteName,
+        podname: process.env.SERVER || '',
+        success,
+        error_code: errorCode,
+        parameters: JSON.stringify(args ?? {}),
+      });
     }
   }
 }

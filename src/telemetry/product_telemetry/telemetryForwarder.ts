@@ -34,7 +34,7 @@ export class DirectTelemetryForwarder {
   private readonly httpMethod: 'POST' | 'PUT';
 
   /**
-   * @param endpoint - The telemetry endpoint URL (e.g., 'https://qa.telemetry.tableausoftware.com')
+   * @param endpoint - The telemetry endpoint URL
    * @param options - Optional configuration
    */
   constructor(endpoint: string, options: DirectTelemetryForwarderOptions = {}) {
@@ -85,8 +85,6 @@ export class DirectTelemetryForwarder {
         const body = await res.text();
         if (!res.ok) {
           console.error(`[Telemetry] Failed: ${res.status} ${res.statusText}`, body);
-        } else {
-          // Telemetry sent successfully
         }
       })
       .catch((error) => console.error('[Telemetry] Network error:', error));
@@ -102,19 +100,8 @@ const getDefaultHostName = (): string => {
 };
 
 /**
- * Format: "yyyy-MM-dd HH:mm:ss,SSS +0000" in UTC
+ * Format: ISO 8601 (e.g., "2026-02-05T14:30:00.123Z")
  */
 const formatHostTimestamp = (d: Date): string => {
-  const pad2 = (n: number): string => (n < 10 ? `0${n}` : `${n}`);
-  const pad3 = (n: number): string => (n < 10 ? `00${n}` : n < 100 ? `0${n}` : `${n}`);
-
-  const yyyy = d.getUTCFullYear();
-  const MM = pad2(d.getUTCMonth() + 1);
-  const dd = pad2(d.getUTCDate());
-  const HH = pad2(d.getUTCHours());
-  const mm = pad2(d.getUTCMinutes());
-  const ss = pad2(d.getUTCSeconds());
-  const SSS = pad3(d.getUTCMilliseconds());
-
-  return `${yyyy}-${MM}-${dd} ${HH}:${mm}:${ss},${SSS} +0000`;
+  return d.toISOString();
 };

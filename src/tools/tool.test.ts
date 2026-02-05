@@ -1,11 +1,20 @@
+import { AxiosError } from 'axios';
 import { Ok } from 'ts-results-es';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
 import invariant from '../utils/invariant.js';
 import { Tool } from './tool.js';
+
+// Mock for product telemetry - tracks calls to send()
+const mockTelemetrySend = vi.fn();
+vi.mock('../telemetry/product_telemetry/telemetryForwarder.js', () => ({
+  DirectTelemetryForwarder: vi.fn().mockImplementation(() => ({
+    send: mockTelemetrySend,
+  })),
+}));
 
 describe('Tool', () => {
   const mockParams = {
@@ -244,5 +253,152 @@ describe('Tool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('An error occurred');
+  });
+
+  describe('product telemetry', () => {
+    beforeEach(() => {
+      mockTelemetrySend.mockClear();
+    });
+
+    it('should send telemetry with success=true and empty error_code on success', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        requestId: '123',
+        sessionId: 'session-abc',
+        authInfo: undefined,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          tool_name: 'get-datasource-metadata',
+          request_id: '123',
+          session_id: 'session-abc',
+          success: true,
+          error_code: '',
+          parameters: JSON.stringify({ param1: 'test-value' }),
+        }),
+      );
+    });
+
+    it('should send telemetry with success=false and error_code=400 on validation error', async () => {
+      const tool = new Tool({
+        ...mockParams,
+        argsValidator: () => {
+          throw new Error('Validation failed');
+        },
+      });
+
+      await tool.logAndExecute({
+        requestId: '123',
+        sessionId: 'session-abc',
+        authInfo: undefined,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          success: false,
+          error_code: '400',
+        }),
+      );
+    });
+
+    it('should send telemetry with success=false on callback error', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        requestId: '123',
+        sessionId: 'session-abc',
+        authInfo: undefined,
+        args: { param1: 'test-value' },
+        callback: () => {
+          throw new Error('Callback failed');
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          success: false,
+          error_code: '', // No HTTP status for generic errors
+        }),
+      );
+    });
+
+    it('should send telemetry with actual HTTP status code on API error', async () => {
+      const tool = new Tool(mockParams);
+      const axiosError = new AxiosError('Unauthorized');
+      axiosError.response = { status: 500 } as AxiosError['response'];
+
+      await tool.logAndExecute({
+        requestId: '123',
+        sessionId: 'session-abc',
+        authInfo: undefined,
+        args: { param1: 'test-value' },
+        callback: () => {
+          throw axiosError;
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          success: false,
+          error_code: '500',
+        }),
+      );
+    });
+
+    it('should send telemetry with success=false and empty error_code on constrained error', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        requestId: '123',
+        sessionId: 'session-abc',
+        authInfo: undefined,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: () => ({ type: 'error', message: 'Constrained error' }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          success: false,
+          error_code: '',
+        }),
+      );
+    });
+
+    it('should send telemetry with success=true on constrained empty result', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        requestId: '123',
+        sessionId: 'session-abc',
+        authInfo: undefined,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: () => ({ type: 'empty', message: 'No data' }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          success: true,
+          error_code: '',
+        }),
+      );
+    });
   });
 });
