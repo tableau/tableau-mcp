@@ -349,7 +349,7 @@ Enables product telemetry for tool usage tracking.
 - Default: `true`
 - When `true`, the server will send telemetry events to Tableau's telemetry endpoint for each tool
   call, including tool name, request ID, session ID, and site name.
-- Set to `false` to disable product telemetry.
+- Set to `false` to disable product telemetry. Read https://help.tableau.com/current/server/en-us/usage_data_basic_product_data.htm for more information
 
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [tab-ds-connections]:
