@@ -1,7 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../utils/invariant.js';
+import { Provider } from '../../utils/provider.js';
 import { constrainWorkbooks, getListWorkbooksTool } from './listWorkbooks.js';
 import { mockWorkbook, mockWorkbook2 } from './mockWorkbook.js';
 
@@ -47,6 +49,7 @@ describe('listWorkbooksTool', () => {
     mocks.mockQueryWorkbooksForSite.mockResolvedValue(mockWorkbooksResponse);
     const result = await getToolResult({ filter: 'name:eq:Superstore' });
     expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Superstore');
     expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -61,6 +64,7 @@ describe('listWorkbooksTool', () => {
     mocks.mockQueryWorkbooksForSite.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ filter: 'name:eq:Superstore' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -68,7 +72,7 @@ describe('listWorkbooksTool', () => {
     it('should return empty result when no workbooks are found', () => {
       const result = constrainWorkbooks({
         workbooks: [],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
       });
 
       invariant(result.type === 'empty');
@@ -80,7 +84,12 @@ describe('listWorkbooksTool', () => {
     it('should return empty results when all workbooks were filtered out by the bounded context', () => {
       const result = constrainWorkbooks({
         workbooks: [mockWorkbook],
-        boundedContext: { projectIds: new Set(['123']), datasourceIds: null, workbookIds: null },
+        boundedContext: {
+          projectIds: new Set(['123']),
+          datasourceIds: null,
+          workbookIds: null,
+          tags: null,
+        },
       });
 
       invariant(result.type === 'empty');
@@ -92,38 +101,47 @@ describe('listWorkbooksTool', () => {
       );
     });
 
-    it('should return success result when no workbooks were filtered out by the bounded context', () => {
-      const result = constrainWorkbooks({
-        workbooks: [mockWorkbook],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
-      });
+    test.each(
+      getCombinationsOfBoundedContextInputs({
+        projectIds: [null, new Set([mockWorkbook.project.id])],
+        datasourceIds: [null], // n/a for workbooks
+        workbookIds: [null, new Set([mockWorkbook.id])],
+        tags: [null, new Set([mockWorkbook.tags.tag[0].label])],
+      }),
+    )(
+      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
+      async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+        const result = constrainWorkbooks({
+          workbooks: [mockWorkbook, mockWorkbook2],
+          boundedContext: {
+            projectIds,
+            datasourceIds,
+            workbookIds,
+            tags,
+          },
+        });
 
-      invariant(result.type === 'success');
-      expect(result.result).toEqual([mockWorkbook]);
-    });
-
-    it('should return success result when some workbooks were filtered out by the bounded context', () => {
-      const result = constrainWorkbooks({
-        workbooks: [mockWorkbook, mockWorkbook2],
-        boundedContext: {
-          projectIds: new Set([mockWorkbook.project.id]),
-          datasourceIds: new Set([mockWorkbook.id]),
-          workbookIds: null,
-        },
-      });
-
-      invariant(result.type === 'success');
-      expect(result.result).toEqual([mockWorkbook]);
-    });
+        invariant(result.type === 'success');
+        if (!projectIds && !datasourceIds && !workbookIds && !tags) {
+          expect(result.result).toEqual([mockWorkbook, mockWorkbook2]);
+        } else {
+          expect(result.result).toEqual([mockWorkbook]);
+        }
+      },
+    );
   });
 });
 
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
   const listWorkbooksTool = getListWorkbooksTool(new Server());
-  return await listWorkbooksTool.callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  const callback = await Provider.from(listWorkbooksTool.callback);
+  return await callback(
+    { filter: params.filter, pageSize: undefined, limit: undefined },
+    {
+      signal: new AbortController().signal,
+      requestId: 'test-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    },
+  );
 }

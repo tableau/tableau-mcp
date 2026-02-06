@@ -24,6 +24,25 @@ Possible values:
 | `DEFINITION_VIEW_FULL`    | Return the metric definition and the specified number of metrics.                  |
 | `DEFINITION_VIEW_DEFAULT` | Return the metric definition and the default metric.                               |
 
+### `limit`
+
+The maximum number of metric definitions to return. The tool will return at most this many metric
+definitions.
+
+Example: `2000`
+
+See also: [`MAX_RESULT_LIMIT`](../../configuration/mcp-config/env-vars.md#max_result_limit)
+
+### `pageSize`
+
+The number of results per page. Controls how many definitions are fetched in each API request during
+pagination.
+
+Example: `25`
+
+**Note:** This parameter is optional. If not specified, the API will use its default page size of 10 definitions. You
+may want to provide a larger value if you know in advance that you have more than the 10 definitions to retrieve.
+
 ## Example result
 
 ```json

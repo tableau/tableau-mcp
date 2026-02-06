@@ -35,7 +35,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
     },
     callback: async (
       { viewId, width, height },
-      { requestId, authInfo },
+      { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
 
@@ -46,7 +46,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
         callback: async () => {
           const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
             viewId,
-            restApiArgs: { config, requestId, server },
+            restApiArgs: { config, requestId, server, signal },
           });
 
           if (!isViewAllowedResult.allowed) {
@@ -62,6 +62,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
               requestId,
               server,
               jwtScopes: ['tableau:views:download'],
+              signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 return await restApi.viewsMethods.queryViewImage({

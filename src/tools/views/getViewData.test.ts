@@ -1,6 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import invariant from '../../utils/invariant.js';
+import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getGetViewDataTool as getGetViewDataTool } from './getViewData.js';
 import { mockView } from './mockView.js';
@@ -41,6 +43,7 @@ describe('getViewDataTool', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        tags: null,
       },
     });
   });
@@ -58,6 +61,7 @@ describe('getViewDataTool', () => {
     mocks.mockQueryViewData.mockResolvedValue(mockViewData);
     const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
     expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
       'Country/Region,State/Province,Profit Ratio,Latitude (generated),Longitude (generated)',
     );
@@ -73,6 +77,7 @@ describe('getViewDataTool', () => {
     mocks.mockQueryViewData.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -82,15 +87,17 @@ describe('getViewDataTool', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: new Set(['some-other-workbook-id']),
+        tags: null,
       },
     });
     mocks.mockGetView.mockResolvedValue(mockView);
 
     const result = await getToolResult({ viewId: mockView.id });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       [
-        'The set of allowed workbooks that can be queried is limited by the server configuration.',
+        'The set of allowed views that can be queried is limited by the server configuration.',
         'The view with LUID 4d18c547-bbb1-4187-ae5a-7f78b35adf2d cannot be queried because it does not belong to an allowed workbook.',
       ].join(' '),
     );
@@ -101,7 +108,8 @@ describe('getViewDataTool', () => {
 
 async function getToolResult(params: { viewId: string }): Promise<CallToolResult> {
   const getViewDataTool = getGetViewDataTool(new Server());
-  return await getViewDataTool.callback(params, {
+  const callback = await Provider.from(getViewDataTool.callback);
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

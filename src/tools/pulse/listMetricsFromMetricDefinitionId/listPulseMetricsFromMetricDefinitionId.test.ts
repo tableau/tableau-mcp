@@ -2,6 +2,8 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../../server.js';
+import invariant from '../../../utils/invariant.js';
+import { Provider } from '../../../utils/provider.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import { getListPulseMetricsFromMetricDefinitionIdTool } from './listPulseMetricsFromMetricDefinitionId.js';
 
@@ -50,7 +52,8 @@ describe('listPulseMetricsFromMetricDefinitionIdTool', () => {
     expect(mocks.mockListPulseMetricsFromMetricDefinitionId).toHaveBeenCalledWith(
       'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
     );
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockPulseMetrics);
   });
 
@@ -62,6 +65,7 @@ describe('listPulseMetricsFromMetricDefinitionIdTool', () => {
     });
     const result = await getToolResult({ pulseMetricDefinitionID: '' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('pulseMetricDefinitionID');
     expect(result.content[0].text).toContain('Invalid arguments for tool list-pulse-metrics');
     expect(result.content[0].text).toContain('String must contain 36 character(s)');
@@ -74,6 +78,7 @@ describe('listPulseMetricsFromMetricDefinitionIdTool', () => {
       pulseMetricDefinitionID: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
     });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -83,6 +88,7 @@ describe('listPulseMetricsFromMetricDefinitionIdTool', () => {
       pulseMetricDefinitionID: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
     });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
   });
 
@@ -92,6 +98,7 @@ describe('listPulseMetricsFromMetricDefinitionIdTool', () => {
       pulseMetricDefinitionID: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
     });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
   });
 });
@@ -100,7 +107,8 @@ async function getToolResult(params: { pulseMetricDefinitionID: string }): Promi
   const listPulseMetricsFromMetricDefinitionIdTool = getListPulseMetricsFromMetricDefinitionIdTool(
     new Server(),
   );
-  return await listPulseMetricsFromMetricDefinitionIdTool.callback(params, {
+  const callback = await Provider.from(listPulseMetricsFromMetricDefinitionIdTool.callback);
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

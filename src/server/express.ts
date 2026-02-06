@@ -1,22 +1,25 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import cors from 'cors';
 import express, { Request, RequestHandler, Response } from 'express';
 import fs, { existsSync } from 'fs';
 import http from 'http';
 import https from 'https';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 
 import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { pulseInsightBundleSchema } from '../sdks/tableau/types/pulse.js';
 import { Server } from '../server.js';
-import { validateProtocolVersion } from './middleware.js';
+import { createSession, getSession, Session } from '../sessions.js';
+import { getDirname } from '../utils/getDirname.js';
+import { handlePingRequest, validateProtocolVersion } from './middleware.js';
+import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
+import { TableauAuthInfo } from './oauth/schemas.js';
+import { AuthenticatedRequest } from './oauth/types.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const SESSION_ID_HEADER = 'mcp-session-id';
 
 export async function startExpressServer({
   basePath,
@@ -46,11 +49,16 @@ export async function startExpressServer({
         'Accept',
         'MCP-Protocol-Version',
       ],
-      exposedHeaders: ['mcp-session-id', 'x-session-id'],
+      exposedHeaders: [SESSION_ID_HEADER, 'x-session-id'],
     }),
   );
 
-  const middleware: Array<RequestHandler> = [];
+  if (config.trustProxyConfig !== null) {
+    // https://expressjs.com/en/guide/behind-proxies.html
+    app.set('trust proxy', config.trustProxyConfig);
+  }
+
+  const middleware: Array<RequestHandler> = [handlePingRequest];
   if (config.oauth.enabled) {
     const oauthProvider = new OAuthProvider();
     oauthProvider.setupRoutes(app);
@@ -60,9 +68,17 @@ export async function startExpressServer({
 
   const path = `/${basePath}`;
   app.post(path, ...middleware, createMcpServer);
-  app.get(path, ...middleware, methodNotAllowed);
-  app.delete(path, ...middleware, methodNotAllowed);
-  app.use(express.static(join(__dirname, 'web')));
+  app.get(
+    path,
+    ...middleware,
+    config.disableSessionManagement ? methodNotAllowed : handleSessionRequest,
+  );
+  app.delete(
+    path,
+    ...middleware,
+    config.disableSessionManagement ? methodNotAllowed : handleSessionRequest,
+  );
+  app.use(express.static(join(getDirname(), 'web')));
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
@@ -96,94 +112,118 @@ export async function startExpressServer({
       );
   });
 
-  async function createMcpServer(req: Request, res: Response): Promise<void> {
+  async function createMcpServer(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const server = new Server();
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-      });
+      let transport: StreamableHTTPServerTransport;
 
-      res.on('close', () => {
-        transport.close();
-        server.close();
-      });
+      if (config.disableSessionManagement) {
+        const server = new Server();
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: undefined,
+        });
 
-      server.registerResource(
-        'pulse-renderer',
-        'ui://widget/pulse-renderer.html',
-        {},
-        async () => ({
-          contents: [
-            {
-              uri: 'ui://widget/pulse-renderer.html',
-              mimeType: 'text/html+skybridge',
-              text: fs.readFileSync(join(__dirname, 'web', 'pulse-renderer.html'), 'utf8'),
-              _meta: {
-                /* 
-                  Renders the widget within a rounded border and shadow. 
+        res.on('close', () => {
+          transport.close();
+          server.close();
+        });
+
+        server.registerResource(
+          'pulse-renderer',
+          'ui://widget/pulse-renderer.html',
+          {},
+          async () => ({
+            contents: [
+              {
+                uri: 'ui://widget/pulse-renderer.html',
+                mimeType: 'text/html+skybridge',
+                text: fs.readFileSync(join(__dirname, 'web', 'pulse-renderer.html'), 'utf8'),
+                _meta: {
+                  /*
+                  Renders the widget within a rounded border and shadow.
                   Otherwise, the HTML is rendered full-bleed in the conversation
                 */
-                'openai/widgetPrefersBorder': true,
+                  'openai/widgetPrefersBorder': true,
 
-                /* 
-                  Assigns a subdomain for the HTML. 
+                  /*
+                  Assigns a subdomain for the HTML.
                   When set, the HTML is rendered within `chatgpt-com.web-sandbox.oaiusercontent.com`
                   It's also used to configure the base url for external links.
                 */
-                'openai/widgetDomain': 'https://chatgpt.com',
+                  'openai/widgetDomain': 'https://chatgpt.com',
 
-                /*
-                  Required to make external network requests from the HTML code. 
-                  Also used to validate `openai.openExternal()` requests. 
+                  /*
+                  Required to make external network requests from the HTML code.
+                  Also used to validate `openai.openExternal()` requests.
                 */
-                'openai/widgetCSP': {
-                  // Maps to `connect-src` rule in the iframe CSP
-                  connect_domains: [
-                    'https://chatgpt.com',
-                    'https://tableau-mcp-oauth-4cfa19926d6e.herokuapp.com',
-                  ],
-                  // Maps to style-src, style-src-elem, img-src, font-src, media-src etc. in the iframe CSP
-                  resource_domains: [
-                    'https://*.oaistatic.com',
-                    'https://tableau-mcp-oauth-4cfa19926d6e.herokuapp.com',
-                  ],
+                  'openai/widgetCSP': {
+                    // Maps to `connect-src` rule in the iframe CSP
+                    connect_domains: [
+                      'https://chatgpt.com',
+                      'https://tableau-mcp-oauth-4cfa19926d6e.herokuapp.com',
+                    ],
+                    // Maps to style-src, style-src-elem, img-src, font-src, media-src etc. in the iframe CSP
+                    resource_domains: [
+                      'https://*.oaistatic.com',
+                      'https://tableau-mcp-oauth-4cfa19926d6e.herokuapp.com',
+                    ],
+                  },
                 },
               },
-            },
-          ],
-        }),
-      );
+            ],
+          }),
+        );
 
-      server.registerTool(
-        'render-pulse-insight',
-        {
-          title: 'Render Pulse Insight',
-          description:
-            'Render a Pulse insight given an insight bundle. Use this tool to render a Pulse insight in a chat window.',
-          _meta: {
-            // associate this tool with the HTML template
-            'openai/outputTemplate': 'ui://widget/pulse-renderer.html',
-            // labels to display in ChatGPT when the tool is called
-            'openai/toolInvocation/invoking': 'Rendering the Pulse insight',
-            'openai/toolInvocation/invoked': 'Rendered the Pulse insight',
+        server.registerTool(
+          'render-pulse-insight',
+          {
+            title: 'Render Pulse Insight',
+            description:
+              'Render a Pulse insight given an insight bundle. Use this tool to render a Pulse insight in a chat window.',
+            _meta: {
+              // associate this tool with the HTML template
+              'openai/outputTemplate': 'ui://widget/pulse-renderer.html',
+              // labels to display in ChatGPT when the tool is called
+              'openai/toolInvocation/invoking': 'Rendering the Pulse insight',
+              'openai/toolInvocation/invoked': 'Rendered the Pulse insight',
+            },
+            inputSchema: { bundle: pulseInsightBundleSchema },
           },
-          inputSchema: { bundle: pulseInsightBundleSchema },
-        },
-        async ({ bundle }) => {
-          return {
-            content: [{ type: 'text', text: 'Rendered the Pulse insight!' }],
-            structuredContent: {
-              bundle,
+          async ({ bundle }) => {
+            return {
+              content: [{ type: 'text', text: 'Rendered the Pulse insight!' }],
+              structuredContent: {
+                bundle,
+              },
+            };
+          },
+        );
+
+        await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
+      } else {
+        const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
+
+        let session: Session | undefined;
+        if (sessionId && (session = getSession(sessionId))) {
+          transport = session.transport;
+        } else if (!sessionId && isInitializeRequest(req.body)) {
+          const clientInfo = req.body.params.clientInfo;
+          transport = createSession({ clientInfo });
+
+          const server = new Server({ clientInfo });
+          await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
+        } else {
+          // Invalid request
+          res.status(400).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32000,
+              message: 'Bad Request: No valid session ID provided',
             },
-          };
-        },
-      );
-
-      server.registerTools();
-      server.registerRequestHandlers();
-
-      await server.connect(transport);
-      setLogLevel(server, logLevel);
+            id: null,
+          });
+          return;
+        }
+      }
 
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
@@ -202,6 +242,19 @@ export async function startExpressServer({
   }
 }
 
+async function connect(
+  server: Server,
+  transport: StreamableHTTPServerTransport,
+  logLevel: LoggingLevel,
+  authInfo: TableauAuthInfo | undefined,
+): Promise<void> {
+  await server.registerTools(authInfo);
+  server.registerRequestHandlers();
+
+  await server.connect(transport);
+  setLogLevel(server, logLevel);
+}
+
 async function methodNotAllowed(_req: Request, res: Response): Promise<void> {
   res.writeHead(405).end(
     JSON.stringify({
@@ -213,4 +266,16 @@ async function methodNotAllowed(_req: Request, res: Response): Promise<void> {
       id: null,
     }),
   );
+}
+
+async function handleSessionRequest(req: express.Request, res: express.Response): Promise<void> {
+  const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
+
+  let session: Session | undefined;
+  if (!sessionId || !(session = getSession(sessionId))) {
+    res.status(400).send('Invalid or missing session ID');
+    return;
+  }
+
+  await session.transport.handleRequest(req, res);
 }

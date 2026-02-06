@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { exportedForTesting } from './config.js';
+import { exportedForTesting, ONE_HOUR_IN_MS, TEN_MINUTES_IN_MS } from './config.js';
 
 describe('Config', () => {
   const { Config, parseNumber } = exportedForTesting;
@@ -24,6 +24,7 @@ describe('Config', () => {
       PORT: undefined,
       CUSTOM_PORT: undefined,
       CORS_ORIGIN_CONFIG: undefined,
+      TRUST_PROXY_CONFIG: undefined,
       SERVER: undefined,
       SITE_NAME: undefined,
       PAT_NAME: undefined,
@@ -32,27 +33,40 @@ describe('Config', () => {
       CONNECTED_APP_CLIENT_ID: undefined,
       CONNECTED_APP_SECRET_ID: undefined,
       CONNECTED_APP_SECRET_VALUE: undefined,
+      UAT_TENANT_ID: undefined,
+      UAT_ISSUER: undefined,
+      UAT_USERNAME_CLAIM: undefined,
+      UAT_USERNAME_CLAIM_NAME: undefined,
+      UAT_PRIVATE_KEY: undefined,
+      UAT_PRIVATE_KEY_PATH: undefined,
+      UAT_KEY_ID: undefined,
       JWT_ADDITIONAL_PAYLOAD: undefined,
       DATASOURCE_CREDENTIALS: undefined,
       DEFAULT_LOG_LEVEL: undefined,
       DISABLE_LOG_MASKING: undefined,
       INCLUDE_TOOLS: undefined,
       EXCLUDE_TOOLS: undefined,
+      MAX_REQUEST_TIMEOUT_MS: undefined,
       MAX_RESULT_LIMIT: undefined,
-      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: undefined,
+      MAX_RESULT_LIMITS: undefined,
+      DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: undefined,
       DISABLE_METADATA_API_REQUESTS: undefined,
+      DISABLE_SESSION_MANAGEMENT: undefined,
       ENABLE_SERVER_LOGGING: undefined,
       SERVER_LOG_DIRECTORY: undefined,
       INCLUDE_PROJECT_IDS: undefined,
       INCLUDE_DATASOURCE_IDS: undefined,
       INCLUDE_WORKBOOK_IDS: undefined,
+      INCLUDE_TAGS: undefined,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: undefined,
       DANGEROUSLY_DISABLE_OAUTH: undefined,
       OAUTH_ISSUER: undefined,
       OAUTH_REDIRECT_URI: undefined,
+      OAUTH_LOCK_SITE: undefined,
       OAUTH_JWE_PRIVATE_KEY: undefined,
       OAUTH_JWE_PRIVATE_KEY_PATH: undefined,
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: undefined,
+      OAUTH_CIMD_DNS_SERVERS: undefined,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: undefined,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: undefined,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: undefined,
@@ -74,15 +88,28 @@ describe('Config', () => {
     expect(() => new Config()).toThrow('The environment variable SERVER is not set');
   });
 
-  it('should throw error when SERVER is not HTTPS', () => {
+  it('should accept HTTP URLs for SERVER', () => {
     process.env = {
       ...process.env,
       SERVER: 'http://foo.com',
+      PAT_NAME: 'test-pat-name',
+      PAT_VALUE: 'test-pat-value',
+      SITE_NAME: 'test-site',
+    };
+
+    const config = new Config();
+    expect(config.server).toBe('http://foo.com');
+  });
+
+  it('should throw error when SERVER is not HTTP/HTTPS', () => {
+    process.env = {
+      ...process.env,
+      SERVER: 'gopher://foo.com',
       SITE_NAME: 'test-site',
     };
 
     expect(() => new Config()).toThrow(
-      'The environment variable SERVER must start with "https://": http://foo.com',
+      'The environment variable SERVER must start with "http://" or "https://": gopher://foo.com',
     );
   });
 
@@ -189,68 +216,79 @@ describe('Config', () => {
     expect(config.disableLogMasking).toBe(true);
   });
 
-  it('should set maxResultLimit to null when not specified', () => {
+  it('should set maxRequestTimeoutMs to the default value when not specified', () => {
     process.env = {
       ...process.env,
       ...defaultEnvVars,
     };
 
     const config = new Config();
-    expect(config.maxResultLimit).toBe(null);
+    expect(config.maxRequestTimeoutMs).toBe(10 * 60 * 1000);
   });
 
-  it('should set maxResultLimit to null when specified as a non-number', () => {
+  it('should set maxRequestTimeoutMs to the specified value when specified', () => {
     process.env = {
       ...process.env,
       ...defaultEnvVars,
-      MAX_RESULT_LIMIT: 'abc',
+      MAX_REQUEST_TIMEOUT_MS: '123456',
     };
 
     const config = new Config();
-    expect(config.maxResultLimit).toBe(null);
+    expect(config.maxRequestTimeoutMs).toBe(123456);
   });
 
-  it('should set maxResultLimit to null when specified as a negative number', () => {
+  it('should set maxRequestTimeoutMs to the default value when specified as a non-number', () => {
     process.env = {
       ...process.env,
       ...defaultEnvVars,
-      MAX_RESULT_LIMIT: '-100',
+      MAX_REQUEST_TIMEOUT_MS: 'abc',
     };
 
     const config = new Config();
-    expect(config.maxResultLimit).toBe(null);
+    expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
   });
 
-  it('should set maxResultLimit to the specified value when specified', () => {
+  it('should set maxRequestTimeoutMs to the default value when specified as a negative number', () => {
     process.env = {
       ...process.env,
       ...defaultEnvVars,
-      MAX_RESULT_LIMIT: '100',
+      MAX_REQUEST_TIMEOUT_MS: '-100',
     };
 
     const config = new Config();
-    expect(config.maxResultLimit).toBe(100);
+    expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
   });
 
-  it('should set disableQueryDatasourceFilterValidation to false by default', () => {
+  it('should set maxRequestTimeoutMs to the default value when specified as a number greater than one hour', () => {
     process.env = {
       ...process.env,
       ...defaultEnvVars,
+      MAX_REQUEST_TIMEOUT_MS: `${ONE_HOUR_IN_MS + 1}`,
     };
 
     const config = new Config();
-    expect(config.disableQueryDatasourceFilterValidation).toBe(false);
+    expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
   });
 
-  it('should set disableQueryDatasourceFilterValidation to true when specified', () => {
+  it('should set disableQueryDatasourceValidationRequests to false by default', () => {
     process.env = {
       ...process.env,
       ...defaultEnvVars,
-      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: 'true',
     };
 
     const config = new Config();
-    expect(config.disableQueryDatasourceFilterValidation).toBe(true);
+    expect(config.disableQueryDatasourceValidationRequests).toBe(false);
+  });
+
+  it('should set disableQueryDatasourceValidationRequests to true when specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: 'true',
+    };
+
+    const config = new Config();
+    expect(config.disableQueryDatasourceValidationRequests).toBe(true);
   });
 
   it('should set disableMetadataApiRequests to false by default', () => {
@@ -272,6 +310,27 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.disableMetadataApiRequests).toBe(true);
+  });
+
+  it('should set disableSessionManagement to false by default', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+    };
+
+    const config = new Config();
+    expect(config.disableSessionManagement).toBe(false);
+  });
+
+  it('should set disableMetadataApiRequests to true when specified', () => {
+    process.env = {
+      ...process.env,
+      ...defaultEnvVars,
+      DISABLE_SESSION_MANAGEMENT: 'true',
+    };
+
+    const config = new Config();
+    expect(config.disableSessionManagement).toBe(true);
   });
 
   it('should default transport to stdio when not specified', () => {
@@ -620,6 +679,62 @@ describe('Config', () => {
     });
   });
 
+  describe('Trust proxy config parsing', () => {
+    it('should set trustProxyConfig to null when TRUST_PROXY_CONFIG is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe(null);
+    });
+
+    it('should set trustProxyConfig to true when TRUST_PROXY_CONFIG is "true"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        TRUST_PROXY_CONFIG: 'true',
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe(true);
+    });
+
+    it('should set trustProxyConfig to false when TRUST_PROXY_CONFIG is "false"', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        TRUST_PROXY_CONFIG: 'false',
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe(false);
+    });
+
+    it('should set trustProxyConfig to the specified number when TRUST_PROXY_CONFIG is a valid number', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        TRUST_PROXY_CONFIG: '1',
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe(1);
+    });
+
+    it('should set trustProxyConfig to the specified string when TRUST_PROXY_CONFIG is a valid string', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        TRUST_PROXY_CONFIG: 'loopback, linklocal, uniquelocal',
+      };
+
+      const config = new Config();
+      expect(config.trustProxyConfig).toBe('loopback, linklocal, uniquelocal');
+    });
+  });
+
   describe('Connected App config parsing', () => {
     const defaultDirectTrustEnvVars = {
       ...defaultEnvVars,
@@ -638,7 +753,7 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.auth).toBe('direct-trust');
-      expect(config.jwtSubClaim).toBe('test-jwt-sub-claim');
+      expect(config.jwtUsername).toBe('test-jwt-sub-claim');
       expect(config.connectedAppClientId).toBe('test-client-id');
       expect(config.connectedAppSecretId).toBe('test-secret-id');
       expect(config.connectedAppSecretValue).toBe('test-secret-value');
@@ -724,11 +839,121 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.auth).toBe('pat');
-      expect(config.jwtSubClaim).toBe('');
+      expect(config.jwtUsername).toBe('');
       expect(config.connectedAppClientId).toBe('');
       expect(config.connectedAppSecretId).toBe('');
       expect(config.connectedAppSecretValue).toBe('');
       expect(config.jwtAdditionalPayload).toBe('{}');
+    });
+  });
+
+  describe('UAT configuration config parsing', () => {
+    const defaultUatEnvVars = {
+      ...defaultEnvVars,
+      AUTH: 'uat',
+      UAT_TENANT_ID: 'test-tenant-id',
+      UAT_ISSUER: 'test-issuer',
+      UAT_USERNAME_CLAIM: 'test-username',
+      UAT_PRIVATE_KEY: 'test-private-key',
+      UAT_KEY_ID: 'test-key-id',
+    } as const;
+
+    it('should configure uat authentication when all required variables are provided', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+      };
+
+      const config = new Config();
+      expect(config.auth).toBe('uat');
+      expect(config.uatTenantId).toBe('test-tenant-id');
+      expect(config.uatIssuer).toBe('test-issuer');
+      expect(config.uatUsernameClaimName).toBe('email');
+      expect(config.jwtUsername).toBe('test-username');
+      expect(config.uatPrivateKey).toBe('test-private-key');
+      expect(config.uatKeyId).toBe('test-key-id');
+    });
+
+    it('should fall back to JWT_SUB_CLAIM when UAT_USERNAME_CLAIM is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_USERNAME_CLAIM: undefined,
+        JWT_SUB_CLAIM: 'test-jwt-sub-claim',
+      };
+
+      const config = new Config();
+      expect(config.jwtUsername).toBe('test-jwt-sub-claim');
+    });
+
+    it('should set uatUsernameClaimName to the specified value when UAT_USERNAME_CLAIM_NAME is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_USERNAME_CLAIM_NAME: 'test-username-claim-name',
+      };
+
+      const config = new Config();
+      expect(config.uatUsernameClaimName).toBe('test-username-claim-name');
+    });
+
+    it('should throw error when UAT_TENANT_ID is missing', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_TENANT_ID: undefined,
+      };
+
+      expect(() => new Config()).toThrow('The environment variable UAT_TENANT_ID is not set');
+    });
+
+    it('should throw error when UAT_ISSUER is missing', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_ISSUER: undefined,
+      };
+
+      expect(() => new Config()).toThrow('The environment variable UAT_ISSUER is not set');
+    });
+
+    it('should throw error when UAT_USERNAME_CLAIM is missing and JWT_SUB_CLAIM is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_USERNAME_CLAIM: undefined,
+        JWT_SUB_CLAIM: undefined,
+      };
+
+      expect(() => new Config()).toThrow(
+        'One of the environment variables: UAT_USERNAME_CLAIM or JWT_SUB_CLAIM must be set',
+      );
+    });
+
+    it('should throw error when UAT_PRIVATE_KEY and UAT_PRIVATE_KEY_PATH is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_PRIVATE_KEY: undefined,
+        UAT_PRIVATE_KEY_PATH: undefined,
+      };
+
+      expect(() => new Config()).toThrow(
+        'One of the environment variables: UAT_PRIVATE_KEY_PATH or UAT_PRIVATE_KEY must be set',
+      );
+    });
+
+    it('should throw error when UAT_PRIVATE_KEY and UAT_PRIVATE_KEY_PATH are both set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultUatEnvVars,
+        UAT_PRIVATE_KEY: 'hamburgers',
+        UAT_PRIVATE_KEY_PATH: 'hotdogs',
+      };
+
+      expect(() => new Config()).toThrow(
+        'Only one of the environment variables: UAT_PRIVATE_KEY or UAT_PRIVATE_KEY_PATH must be set',
+      );
     });
   });
 
@@ -744,16 +969,18 @@ describe('Config', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        tags: null,
       });
     });
 
-    it('should set boundedContext to the specified project, datasource, and workbook IDs when provided', () => {
+    it('should set boundedContext to the specified tags and project, datasource, and workbook IDs when provided', () => {
       process.env = {
         ...process.env,
         ...defaultEnvVars,
         INCLUDE_PROJECT_IDS: ' 123, 456, 123   ', // spacing is intentional here to test trimming
         INCLUDE_DATASOURCE_IDS: '789,101',
         INCLUDE_WORKBOOK_IDS: '112,113',
+        INCLUDE_TAGS: 'tag1,tag2',
       };
 
       const config = new Config();
@@ -761,6 +988,7 @@ describe('Config', () => {
         projectIds: new Set(['123', '456']),
         datasourceIds: new Set(['789', '101']),
         workbookIds: new Set(['112', '113']),
+        tags: new Set(['tag1', 'tag2']),
       });
     });
 
@@ -799,6 +1027,18 @@ describe('Config', () => {
         'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
       );
     });
+
+    it('should throw error when INCLUDE_TAGS is set to an empty string', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        INCLUDE_TAGS: '',
+      };
+
+      expect(() => new Config()).toThrow(
+        'When set, the environment variable INCLUDE_TAGS must have at least one value',
+      );
+    });
   });
 
   describe('OAuth configuration', () => {
@@ -819,9 +1059,11 @@ describe('Config', () => {
       clientIdSecretPairs: null,
       issuer: defaultOAuthEnvVars.OAUTH_ISSUER,
       redirectUri: `${defaultOAuthEnvVars.OAUTH_ISSUER}/Callback`,
+      lockSite: true,
       jwePrivateKey: '',
       jwePrivateKeyPath: defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH,
       jwePrivateKeyPassphrase: undefined,
+      dnsServers: ['1.1.1.1', '1.0.0.1'],
       ...defaultOAuthTimeoutMs,
     } as const;
 
@@ -837,9 +1079,11 @@ describe('Config', () => {
         issuer: '',
         clientIdSecretPairs: null,
         redirectUri: '',
+        lockSite: true,
         jwePrivateKey: '',
         jwePrivateKeyPath: '',
         jwePrivateKeyPassphrase: undefined,
+        dnsServers: ['1.1.1.1', '1.0.0.1'],
         ...defaultOAuthTimeoutMs,
       });
     });
@@ -890,6 +1134,20 @@ describe('Config', () => {
       expect(config.oauth).toEqual({
         ...defaultOAuthConfig,
         redirectUri: `${defaultOAuthEnvVars.OAUTH_ISSUER}/Callback`,
+      });
+    });
+
+    it('should set lockSite to the specified value when OAUTH_LOCK_SITE is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_LOCK_SITE: 'false',
+      };
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        lockSite: false,
       });
     });
 
@@ -1081,6 +1339,17 @@ describe('Config', () => {
         client2: 'secret2',
       });
     });
+
+    it('should set dnsServers to the specified value when OAUTH_CIMD_DNS_SERVERS is set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultOAuthEnvVars,
+        OAUTH_CIMD_DNS_SERVERS: '8.8.8.8,8.8.4.4',
+      };
+
+      const config = new Config();
+      expect(config.oauth.dnsServers).toEqual(['8.8.8.8', '8.8.4.4']);
+    });
   });
 
   describe('parseNumber', () => {
@@ -1177,6 +1446,104 @@ describe('Config', () => {
     it('should return defaultValue for negative numbers when minValue is 0', () => {
       const result = parseNumber('-5', { defaultValue: 42, minValue: 0 });
       expect(result).toBe(42);
+    });
+  });
+
+  describe('Max results limit parsing', () => {
+    it('should return null when MAX_RESULT_LIMIT and MAX_RESULT_LIMITS are not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+      };
+
+      expect(new Config().getMaxResultLimit('query-datasource')).toBeNull();
+    });
+
+    it('should return the max result limit when MAX_RESULT_LIMITS has a single tool', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMITS: 'query-datasource:100',
+      };
+
+      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(100);
+    });
+
+    it('should return the max result limit when MAX_RESULT_LIMITS has a single tool group', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMITS: 'datasource:200',
+      };
+
+      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(200);
+    });
+
+    it('should return the max result limit for the tool when a tool and a tool group are both specified', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMITS: 'query-datasource:100,datasource:200',
+      };
+
+      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(100);
+      expect(new Config().getMaxResultLimit('list-datasources')).toEqual(200);
+    });
+
+    it('should fallback to MAX_RESULT_LIMIT when a tool-specific max result limit is not set', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMITS: 'query-datasource:100',
+        MAX_RESULT_LIMIT: '300',
+      };
+
+      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(100);
+      expect(new Config().getMaxResultLimit('list-datasources')).toEqual(300);
+    });
+
+    it('should return null when MAX_RESULT_LIMITS has a non-number', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMITS: 'query-datasource:abc',
+      };
+
+      const config = new Config();
+      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
+    });
+
+    it('should return null when MAX_RESULT_LIMIT is specified as a non-number', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMIT: 'abc',
+      };
+
+      const config = new Config();
+      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
+    });
+
+    it('should return null when MAX_RESULT_LIMITS has a negative number', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMITS: 'query-datasource:-100',
+      };
+
+      const config = new Config();
+      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
+    });
+
+    it('should return null when MAX_RESULT_LIMIT is specified as a negative number', () => {
+      process.env = {
+        ...process.env,
+        ...defaultEnvVars,
+        MAX_RESULT_LIMIT: '-100',
+      };
+
+      const config = new Config();
+      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
     });
   });
 });

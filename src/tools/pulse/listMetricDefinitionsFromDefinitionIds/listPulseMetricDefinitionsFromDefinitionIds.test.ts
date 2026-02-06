@@ -2,6 +2,8 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../../server.js';
+import invariant from '../../../utils/invariant.js';
+import { Provider } from '../../../utils/provider.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import { getListPulseMetricDefinitionsFromDefinitionIdsTool } from './listPulseMetricDefinitionsFromDefinitionIds.js';
 
@@ -61,7 +63,8 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
       view,
     });
     expect(result.isError).toBe(false);
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockPulseMetricDefinitions);
     expect(mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds).toHaveBeenCalledWith(
       [
@@ -85,7 +88,8 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
       ],
     });
     expect(result.isError).toBe(false);
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockPulseMetricDefinitions);
     expect(mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds).toHaveBeenCalledWith(
       [
@@ -107,6 +111,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
       view: 'DEFINITION_VIEW_BASIC',
     });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -122,6 +127,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
       view: 'INVALID_VIEW',
     } as any);
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('view');
     expect(result.content[0].text).toContain('Enumeration value must be one of');
     expect(result.content[0].text).toContain(
@@ -149,6 +155,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
     // Intentionally omitting required parameter for testing
     const result = await getToolResult({} as any);
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('metricDefinitionIds');
     expect(result.content[0].text).toContain('Array must contain at least 1 element(s)');
   });
@@ -176,6 +183,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
       metricDefinitionIds: ['123'],
     });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('metricDefinitionIds');
     expect(result.content[0].text).toContain('String must contain exactly 36 character(s)');
   });
@@ -192,6 +200,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
       ],
     });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
   });
 
@@ -207,6 +216,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
       ],
     });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
   });
 });
@@ -217,10 +227,14 @@ async function getToolResult(params: {
 }): Promise<CallToolResult> {
   const listPulseMetricDefinitionsFromDefinitionIdsTool =
     getListPulseMetricDefinitionsFromDefinitionIdsTool(new Server());
-  return await listPulseMetricDefinitionsFromDefinitionIdsTool.callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  const callback = await Provider.from(listPulseMetricDefinitionsFromDefinitionIdsTool.callback);
+  return await callback(
+    { metricDefinitionIds: params.metricDefinitionIds, view: params.view },
+    {
+      signal: new AbortController().signal,
+      requestId: 'test-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    },
+  );
 }

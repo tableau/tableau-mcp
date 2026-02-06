@@ -3,3 +3,8 @@
  * bundles Infima by default. Infima is a CSS framework designed to
  * work well for content-centric websites.
  */
+
+table td,
+table th {
+  vertical-align: top;
+}

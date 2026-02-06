@@ -1,7 +1,7 @@
 import { isErrorFromAlias, Zodios, ZodiosError } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
-import { z } from 'zod';
 
+import { AxiosRequestConfig } from '../../../utils/axios.js';
 import {
   MetadataResponse,
   QueryOutput,
@@ -24,8 +24,8 @@ import AuthenticatedMethods from './authenticatedMethods.js';
 export default class VizqlDataServiceMethods extends AuthenticatedMethods<
   typeof vizqlDataServiceApis
 > {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, vizqlDataServiceApis), creds);
+  constructor(baseUrl: string, creds: Credentials, axiosConfig: AxiosRequestConfig) {
+    super(new Zodios(baseUrl, vizqlDataServiceApis, { axiosConfig }), creds);
   }
 
   /**
@@ -33,11 +33,11 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    *
    * Required scopes: `tableau:viz_data_service:read`
    *
-   * @param {z.infer<typeof QueryRequest>} queryRequest
+   * @param {QueryRequest} queryRequest
    * @link https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/QueryDatasource
    */
   queryDatasource = async (
-    queryRequest: z.infer<typeof QueryRequest>,
+    queryRequest: QueryRequest,
   ): Promise<Result<QueryOutput, 'feature-disabled' | TableauError | ZodiosError>> => {
     try {
       return Ok(await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader }));
@@ -63,11 +63,11 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    *
    * Required scopes: `tableau:viz_data_service:read`
    *
-   * @param {z.infer<typeof ReadMetadataRequest>} readMetadataRequest
+   * @param {ReadMetadataRequest} readMetadataRequest
    * @link https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/ReadMetadata
    */
   readMetadata = async (
-    readMetadataRequest: z.infer<typeof ReadMetadataRequest>,
+    readMetadataRequest: ReadMetadataRequest,
   ): Promise<Result<MetadataResponse, 'feature-disabled'>> => {
     try {
       return Ok(await this._apiClient.readMetadata(readMetadataRequest, { ...this.authHeader }));

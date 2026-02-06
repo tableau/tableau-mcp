@@ -1,7 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../utils/invariant.js';
+import { Provider } from '../../utils/provider.js';
 import { constrainDatasources, getListDatasourcesTool } from './listDatasources.js';
 import { mockDatasources } from './mockDatasources.js';
 
@@ -36,6 +38,7 @@ describe('listDatasourcesTool', () => {
     mocks.mockListDatasources.mockResolvedValue(mockDatasources);
     const result = await getToolResult({ filter: 'name:eq:Superstore' });
     expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Superstore');
     expect(mocks.mockListDatasources).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -50,6 +53,7 @@ describe('listDatasourcesTool', () => {
     mocks.mockListDatasources.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ filter: 'name:eq:Superstore' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -57,7 +61,7 @@ describe('listDatasourcesTool', () => {
     it('should return empty result when no datasources are found', () => {
       const result = constrainDatasources({
         datasources: [],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
       });
 
       invariant(result.type === 'empty');
@@ -69,7 +73,12 @@ describe('listDatasourcesTool', () => {
     it('should return empty results when all datasources were filtered out by the bounded context', () => {
       const result = constrainDatasources({
         datasources: mockDatasources.datasources,
-        boundedContext: { projectIds: new Set(['123']), datasourceIds: null, workbookIds: null },
+        boundedContext: {
+          projectIds: new Set(['123']),
+          datasourceIds: null,
+          workbookIds: null,
+          tags: null,
+        },
       });
 
       invariant(result.type === 'empty');
@@ -81,52 +90,47 @@ describe('listDatasourcesTool', () => {
       );
     });
 
-    it('should return success result when no datasources were filtered out by the bounded context', () => {
-      const result = constrainDatasources({
-        datasources: mockDatasources.datasources,
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
-      });
+    test.each(
+      getCombinationsOfBoundedContextInputs({
+        projectIds: [null, new Set([mockDatasources.datasources[0].project.id])],
+        datasourceIds: [null, new Set([mockDatasources.datasources[0].id])],
+        workbookIds: [null], // n/a for datasources
+        tags: [null, new Set([mockDatasources.datasources[0].tags.tag[0].label])],
+      }),
+    )(
+      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
+      async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+        const result = constrainDatasources({
+          datasources: mockDatasources.datasources,
+          boundedContext: {
+            projectIds,
+            datasourceIds,
+            workbookIds,
+            tags,
+          },
+        });
 
-      invariant(result.type === 'success');
-      expect(result.result).toBe(mockDatasources.datasources);
-    });
-
-    it('should return success result when some datasources were filtered out by a bounded context with a project filter', () => {
-      const result = constrainDatasources({
-        datasources: mockDatasources.datasources,
-        boundedContext: {
-          projectIds: new Set([mockDatasources.datasources[0].project.id]),
-          datasourceIds: null,
-          workbookIds: null,
-        },
-      });
-
-      invariant(result.type === 'success');
-      expect(result.result).toEqual([mockDatasources.datasources[0]]);
-    });
-
-    it('should return success result when some datasources were filtered out by a bounded context including both project and datasource filters', () => {
-      const result = constrainDatasources({
-        datasources: mockDatasources.datasources,
-        boundedContext: {
-          projectIds: new Set([mockDatasources.datasources[0].project.id]),
-          datasourceIds: new Set([mockDatasources.datasources[0].id]),
-          workbookIds: null,
-        },
-      });
-
-      invariant(result.type === 'success');
-      expect(result.result).toEqual([mockDatasources.datasources[0]]);
-    });
+        invariant(result.type === 'success');
+        if (!projectIds && !datasourceIds && !tags) {
+          expect(result.result).toEqual(mockDatasources.datasources);
+        } else {
+          expect(result.result).toEqual([mockDatasources.datasources[0]]);
+        }
+      },
+    );
   });
 });
 
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
   const listDatasourcesTool = getListDatasourcesTool(new Server());
-  return await listDatasourcesTool.callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  const callback = await Provider.from(listDatasourcesTool.callback);
+  return await callback(
+    { filter: params.filter, pageSize: undefined, limit: undefined },
+    {
+      signal: new AbortController().signal,
+      requestId: 'test-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    },
+  );
 }

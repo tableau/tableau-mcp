@@ -1,13 +1,21 @@
-import { randomBytes, randomUUID } from 'crypto';
+import axiosRetry from 'axios-retry';
+import { randomBytes, randomInt, randomUUID } from 'crypto';
 import express from 'express';
+import { isIP } from 'net';
+import { isSSRFSafeURL } from 'ssrfcheck';
+import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error';
 
-import { getConfig } from '../../config.js';
+import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
+import { axios, AxiosResponse, getStringResponseHeader } from '../../utils/axios.js';
+import { parseUrl } from '../../utils/parseUrl.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
+import { clientMetadataCache } from './clientMetadataCache.js';
+import { getDnsResolver } from './dnsResolver.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
-import { mcpAuthorizeSchema } from './schemas.js';
+import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
 import { PendingAuthorization } from './types.js';
 
 /**
@@ -23,7 +31,7 @@ export function authorize(
 ): void {
   const config = getConfig();
 
-  app.get('/oauth/authorize', (req, res) => {
+  app.get('/oauth/authorize', async (req, res) => {
     const result = mcpAuthorizeSchema.safeParse(req.query);
 
     if (!result.success) {
@@ -34,10 +42,38 @@ export function authorize(
       return;
     }
 
-    const { clientId, redirectUri, responseType, codeChallenge, codeChallengeMethod, state } =
+    const { client_id, redirect_uri, response_type, code_challenge, code_challenge_method, state } =
       result.data;
 
-    if (responseType !== 'code') {
+    const clientIdUrl = parseUrl(client_id);
+    if (clientIdUrl) {
+      // Client ID is a URL, so we need to attempt to fetch the client metadata from the URL
+      const clientResult = await getClientFromMetadataDoc(clientIdUrl);
+      if (clientResult.isErr()) {
+        res.status(400).json(clientResult.error);
+        return;
+      }
+
+      const { redirect_uris, response_types } = clientResult.value;
+
+      if (response_types && !response_types.find((type) => type === response_type)) {
+        res.status(400).json({
+          error: 'unsupported_response_type',
+          error_description: `Unsupported response type: ${response_type}`,
+        });
+        return;
+      }
+
+      if (redirect_uris && !redirect_uris.includes(redirect_uri)) {
+        res.status(400).json({
+          error: 'invalid_request',
+          error_description: `Invalid redirect URI: ${redirect_uri}`,
+        });
+        return;
+      }
+    }
+
+    if (response_type !== 'code') {
       res.status(400).json({
         error: 'unsupported_response_type',
         error_description: 'Only authorization code flow is supported',
@@ -45,7 +81,7 @@ export function authorize(
       return;
     }
 
-    if (codeChallengeMethod !== 'S256') {
+    if (code_challenge_method !== 'S256') {
       res.status(400).json({
         error: 'invalid_request',
         error_description: 'Only S256 code challenge method is supported',
@@ -53,10 +89,10 @@ export function authorize(
       return;
     }
 
-    if (!isValidRedirectUri(redirectUri)) {
+    if (!isValidRedirectUri(redirect_uri)) {
       res.status(400).json({
         error: 'invalid_request',
-        error_description: `Invalid redirect URI: ${redirectUri}`,
+        error_description: `Invalid redirect URI: ${redirect_uri}`,
       });
       return;
     }
@@ -67,13 +103,13 @@ export function authorize(
 
     const tableauClientId = randomUUID();
     // 22-64 bytes (44-128 chars) is the recommended length for code verifiers
-    const numCodeVerifierBytes = Math.floor(Math.random() * (64 - 22 + 1)) + 22;
+    const numCodeVerifierBytes = randomInt(22, 65);
     const tableauCodeVerifier = randomBytes(numCodeVerifierBytes).toString('hex');
     const tableauCodeChallenge = generateCodeChallenge(tableauCodeVerifier);
     pendingAuthorizations.set(authKey, {
-      clientId,
-      redirectUri,
-      codeChallenge,
+      clientId: client_id,
+      redirectUri: redirect_uri,
+      codeChallenge: code_challenge,
       state: state ?? '',
       tableauState,
       tableauClientId,
@@ -94,11 +130,180 @@ export function authorize(
     oauthUrl.searchParams.set('state', `${authKey}:${tableauState}`);
     oauthUrl.searchParams.set('device_id', randomUUID());
     oauthUrl.searchParams.set('target_site', config.siteName);
-    oauthUrl.searchParams.set('device_name', getDeviceName(redirectUri, state ?? ''));
+    oauthUrl.searchParams.set('device_name', getDeviceName(redirect_uri, state ?? ''));
     oauthUrl.searchParams.set('client_type', 'tableau-mcp');
 
-    res.redirect(oauthUrl.toString());
+    if (config.oauth.lockSite) {
+      // The "redirected" parameter is used by Tableau's OAuth controller to determine whether the user will be shown the site picker.
+      // When provided, the user will not be shown the site picker.
+      oauthUrl.searchParams.set('redirected', 'true');
+    }
+
+    const redirectUrl = await getOAuthRedirectUrl(oauthUrl, { lockSite: config.oauth.lockSite });
+    res.redirect(redirectUrl.toString());
   });
+}
+
+async function getOAuthRedirectUrl(
+  initialOAuthUrl: URL,
+  { lockSite }: { lockSite: boolean },
+): Promise<URL> {
+  if (lockSite) {
+    // When the site is locked, Tableau does the right thing and never shows the site picker,
+    // regardless of whether the user already has an active Tableau session in their browser.
+    return initialOAuthUrl;
+  }
+
+  // When the site is not locked, Tableau does the right thing and shows the site picker, but only on Cloud.
+  // On Server, if the user does not have an active Tableau session in their browser,
+  // Tableau does not show the site picker.
+  // We can force it to by changing the path from #/signin to #/site.
+
+  try {
+    const response = await fetch(initialOAuthUrl, { redirect: 'manual' });
+    if (response.status === 302) {
+      // The response is a redirect to the Tableau OAuth login page.
+      // Force it to ultimately show the site picker by changing the path from #/signin to #/site.
+      const location = response.headers.get('location');
+      if (location?.startsWith('#/signin') || location?.startsWith('/#/signin')) {
+        const locationUrl = new URL(location.replace('#/signin', '#/site'), initialOAuthUrl.origin);
+        return locationUrl;
+      }
+    }
+  } catch {
+    return initialOAuthUrl;
+  }
+
+  return initialOAuthUrl;
+}
+
+// https://client.dev/servers
+async function getClientFromMetadataDoc(
+  clientMetadataUrl: URL,
+): Promise<Result<ClientMetadata, { error: string; error_description: string }>> {
+  const originalUrl = clientMetadataUrl.toString();
+  const cache = clientMetadataCache.get(originalUrl);
+  if (cache) {
+    return Ok(cache);
+  }
+
+  const originalHostname = clientMetadataUrl.hostname;
+  if (!isIP(clientMetadataUrl.hostname)) {
+    try {
+      // Resolve the IP from DNS
+      const dnsResolver = getDnsResolver();
+      const resolvedIps = await dnsResolver.resolve4(clientMetadataUrl.hostname);
+      let ipAddress = resolvedIps.find(Boolean);
+      if (!ipAddress) {
+        const resolvedIps = await dnsResolver.resolve6(clientMetadataUrl.hostname);
+        ipAddress = resolvedIps.find(Boolean);
+        if (!ipAddress) {
+          return Err({
+            error: 'invalid_request',
+            error_description: 'IP address of Client Metadata URL could not be resolved',
+          });
+        }
+      }
+      // Replace the hostname with the resolved IP Address
+      clientMetadataUrl.hostname = ipAddress;
+    } catch {
+      return Err({
+        error: 'invalid_request',
+        error_description: 'IP address of Client Metadata URL could not be resolved',
+      });
+    }
+  }
+
+  const isSafe = isSSRFSafeURL(clientMetadataUrl.toString(), {
+    allowedProtocols: ['https'],
+    autoPrependProtocol: false,
+  });
+
+  if (!isSafe) {
+    return Err({
+      error: 'invalid_request',
+      error_description: 'Client Metadata URL is not allowed',
+    });
+  }
+
+  let response: AxiosResponse;
+  try {
+    const client = axios.create();
+    axiosRetry(client, { retries: 3, retryDelay: axiosRetry.exponentialDelay });
+
+    response = await client.get(clientMetadataUrl.toString(), {
+      timeout: 5000,
+      maxContentLength: 5 * 1024, // 5 KB
+      maxRedirects: 3,
+      headers: {
+        Accept: 'application/json',
+        Host: originalHostname,
+      },
+    });
+  } catch {
+    return Err({
+      error: 'invalid_request',
+      error_description: 'Unable to fetch client metadata',
+    });
+  }
+
+  const contentType = getStringResponseHeader(response.headers, 'content-type');
+  if (!contentType) {
+    return Err({
+      error: 'invalid_client_metadata',
+      error_description: 'Client Metadata URL must return a valid Content-Type header',
+    });
+  }
+
+  const contentTypes = contentType.split(';').map((s) => s.trim());
+  if (!contentTypes.includes('application/json')) {
+    return Err({
+      error: 'invalid_client_metadata',
+      error_description: 'Client Metadata URL must return a JSON response',
+    });
+  }
+
+  const clientMetadataResult = cimdMetadataSchema.safeParse(response.data);
+  if (!clientMetadataResult.success) {
+    return Err({
+      error: 'invalid_client_metadata',
+      error_description: `Client metadata is invalid: ${fromError(clientMetadataResult.error).toString()}`,
+    });
+  }
+
+  if (clientMetadataResult.data.client_id !== originalUrl) {
+    return Err({
+      error: 'invalid_client_metadata',
+      error_description: 'Client ID mismatch',
+    });
+  }
+
+  const cacheControl = getStringResponseHeader(response.headers, 'cache-control');
+  let cacheControlMaxAge: string | undefined;
+  if (cacheControl) {
+    const maxAgeDirective = cacheControl
+      .split(',')
+      .map((s) => s.trim())
+      .find((s) => /^max-age\s*=\s*\d+$/i.test(s));
+
+    if (maxAgeDirective) {
+      cacheControlMaxAge = maxAgeDirective.split('=')[1].trim();
+    }
+  }
+
+  let cacheExpiryMs = clientMetadataCache.defaultExpirationTimeMs;
+  if (cacheControlMaxAge) {
+    const cacheControlMaxAgeSeconds = parseInt(cacheControlMaxAge);
+    if (!isNaN(cacheControlMaxAgeSeconds) && cacheControlMaxAgeSeconds >= 0) {
+      cacheExpiryMs = Math.min(ONE_DAY_IN_MS, cacheControlMaxAgeSeconds * 1000);
+    }
+  }
+
+  if (cacheExpiryMs > 0) {
+    clientMetadataCache.set(originalUrl, clientMetadataResult.data, cacheExpiryMs);
+  }
+
+  return Ok(clientMetadataResult.data);
 }
 
 function getDeviceName(redirectUri: string, state: string): string {

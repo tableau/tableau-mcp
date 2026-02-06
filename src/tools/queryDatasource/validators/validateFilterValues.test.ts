@@ -1,9 +1,9 @@
 import { Err, Ok } from 'ts-results-es';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { Query } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
 import { Server } from '../../../server.js';
-import { Query } from '../queryDatasourceValidator.js';
 import { getFuzzyMatches, validateFilterValues } from './validateFilterValues.js';
 
 // Mock the VizqlDataServiceMethods

@@ -49,7 +49,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
   | workbookName        | eq, in               |
 
   ${genericFilterDescription}
-  
+
   **Example Usage:**
   - List all views on a site
   - List views with the name "Overview":
@@ -68,7 +68,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
     },
     callback: async (
       { filter, pageSize, limit },
-      { requestId, authInfo },
+      { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const validatedFilter = filter ? parseAndValidateViewsFilterString(filter) : undefined;
@@ -84,13 +84,15 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
               requestId,
               server,
               jwtScopes: ['tableau:content:read'],
+              signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
+                const maxResultLimit = config.getMaxResultLimit(listViewsTool.name);
                 const views = await paginate({
                   pageConfig: {
                     pageSize,
-                    limit: config.maxResultLimit
-                      ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                    limit: maxResultLimit
+                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
                       : limit,
                   },
                   getDataFn: async (pageConfig) => {
@@ -135,13 +137,17 @@ export function constrainViews({
     };
   }
 
-  const { projectIds, workbookIds } = boundedContext;
+  const { projectIds, workbookIds, tags } = boundedContext;
   if (projectIds) {
     views = views.filter((view) => (view.project?.id ? projectIds.has(view.project.id) : false));
   }
 
   if (workbookIds) {
     views = views.filter((view) => (view.workbook?.id ? workbookIds.has(view.workbook.id) : false));
+  }
+
+  if (tags) {
+    views = views.filter((view) => view.tags?.tag?.some((tag) => tags.has(tag.label)));
   }
 
   if (views.length === 0) {

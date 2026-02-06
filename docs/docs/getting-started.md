@@ -30,6 +30,77 @@ This standard config works in most MCP clients:
 }
 ```
 
+<hr />
+
+## Node.js Single Executable Applications
+
+Node.js [Single Executable Applications](https://nodejs.org/api/single-executable-applications.html)
+(SEA) are a way to package a Node.js application into a single executable file.
+
+This provides a simple method for administrators to deploy Tableau MCP to their users without having
+to install Node.js or any other dependencies. Tableau MCP is available as a SEA for both Windows and
+Linux.
+
+### Windows
+
+Run [Manage-Server.ps1](https://github.com/tableau/tableau-mcp/blob/main/scripts/Manage-Server.ps1).
+
+This PowerShell script can help you:
+
+1. Download the single executable application for any of the latest releases.
+2. Create a `.env` file with your Tableau MCP settings.
+3. Start the MCP server.
+4. Check the status of the MCP server.
+5. Upgrade the MCP server.
+6. Stop the MCP server.
+
+:::warning
+
+- Never run scripts from untrusted sources.
+- Verify that the URL of the script correctly points to the main branch of the official Tableau MCP
+  repository (https://github.com/tableau/tableau-mcp) and not some fork.
+- Consider downloading the script first and inspecting it before running it, confirming that it is
+  the correct script and not malicious.
+
+:::
+
+Run the script directly from the command line:
+
+```powershell
+iex (iwr -Uri "https://raw.githubusercontent.com/tableau/tableau-mcp/refs/heads/main/scripts/Manage-Server.ps1").Content
+```
+
+Or, download the script first:
+
+```powershell
+iwr -Uri "https://raw.githubusercontent.com/tableau/tableau-mcp/refs/heads/main/scripts/Manage-Server.ps1" -OutFile "Manage-Server.ps1"
+```
+
+:::info
+
+- `iex` is short for
+  [`Invoke-Expression`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-expression?view=powershell-7.5)
+  and executes the contents of the script.
+- `iwr` is short for
+  [`Invoke-WebRequest`](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest?view=powershell-7.5)
+  and downloads the script from the URL.
+
+:::
+
+### Linux or Manual Windows Installation
+
+1. Go to the latest [Tableau MCP release][releases] on GitHub
+2. Under Assets, download the `tableau-mcp.zip` (Windows) or `tableau-mcp.tar.gz` (Linux) archive
+   for your operating system.
+   - If no archives exist, the release is too old and you'll need to choose a newer release.
+3. Extract the archive
+4. Create a [.env](https://www.dotenv.org/docs/security/env.html) file with your Tableau MCP
+   settings. See [Environment Variables](./configuration/mcp-config/env-vars.md) section for more
+   details.
+5. Run the application
+
+<hr />
+
 ## Claude Desktop Extension
 
 Claude Desktop users can also install Tableau MCP as a [Desktop Extension][mcpb]. This is a single

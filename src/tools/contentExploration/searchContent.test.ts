@@ -1,6 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import invariant from '../../utils/invariant.js';
+import { Provider } from '../../utils/provider.js';
 import { getSearchContentTool } from './searchContent.js';
 
 export const mockSearchContentResponse = {
@@ -124,7 +126,8 @@ describe('searchContentTool', () => {
       filter: undefined,
     });
 
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
     expect(responseData).toHaveLength(2);
     expect(responseData[0]).toMatchObject({
       type: 'workbook',
@@ -319,6 +322,7 @@ describe('searchContentTool', () => {
     const result = await getToolResult({ terms: 'test' });
 
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -332,7 +336,8 @@ describe('searchContentTool', () => {
     const result = await getToolResult({ terms: 'nonexistent' });
 
     expect(result.isError).toBe(false);
-    const responseData = result.content[0].text as string;
+    invariant(result.content[0].type === 'text');
+    const responseData = result.content[0].text;
     expect(responseData).toEqual(
       'No search results were found. Either none exist or you do not have permission to view them.',
     );
@@ -341,7 +346,8 @@ describe('searchContentTool', () => {
 
 async function getToolResult(params: any): Promise<CallToolResult> {
   const searchContentTool = getSearchContentTool(new Server());
-  return await searchContentTool.callback(params, {
+  const callback = await Provider.from(searchContentTool.callback);
+  return await callback(params, {
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

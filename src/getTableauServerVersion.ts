@@ -15,19 +15,15 @@ let tableauServerVersions: ExpiringMap<string, ProductVersion> | undefined;
  * @param server - The host name of the Tableau Server or Cloud pod.
  * @returns The version of the Tableau Server or Cloud pod.
  */
-export const getTableauServerVersion = async (server: string): Promise<ProductVersion> => {
+export const getTableauServerVersion = async (server?: string): Promise<ProductVersion> => {
   if (!server) {
-    // TODO: Once OAuth is available and enabled, the SERVER environment variable may be empty.
-    // This implies the server host name comes from the Tableau Cloud session of the user,
-    // which we include in the MCP access token.
-    // Get the server host name from `req.auth.extra.server` set by the auth middleware.
-    // Remove this condition once this TODO is resolved.
     throw new Error('server cannot be empty');
   }
 
   if (!tableauServerVersions) {
     tableauServerVersions = new ExpiringMap<string, ProductVersion>({
-      expirationTimeMs: getConfig().tableauServerVersionCheckIntervalInHours * 60 * 60 * 1000,
+      defaultExpirationTimeMs:
+        getConfig().tableauServerVersionCheckIntervalInHours * 60 * 60 * 1000,
     });
   }
 
@@ -36,7 +32,10 @@ export const getTableauServerVersion = async (server: string): Promise<ProductVe
     return serverVersion;
   }
 
-  const restApi = new RestApi(server);
+  const restApi = new RestApi(server, {
+    maxRequestTimeoutMs: getConfig().maxRequestTimeoutMs,
+  });
+
   try {
     const serverVersion = (await restApi.serverMethods.getServerInfo()).productVersion;
     tableauServerVersions.set(server, serverVersion);

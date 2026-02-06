@@ -7,26 +7,30 @@ import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import {
   Datasource,
-  Query,
   QueryOutput,
+  querySchema,
   TableauError,
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { TableauAuthInfo } from '../../server/oauth/schemas.js';
+import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
+import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { validateQuery } from './queryDatasourceValidator.js';
+import { queryDatasourceToolDescription20253 } from './queryDescription.2025.3.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
 import { validateFilterValues } from './validators/validateFilterValues.js';
-
-type Datasource = z.infer<typeof Datasource>;
+import { validateQueryAgainstDatasourceMetadata } from './validators/validateQueryAgainstDatasourceMetadata.js';
 
 const paramsSchema = {
   datasourceLuid: z.string().nonempty(),
-  query: Query,
+  query: querySchema,
+  limit: z.number().int().min(1).optional(),
 };
 
 export type QueryDatasourceError =
@@ -38,19 +42,33 @@ export type QueryDatasourceError =
       message: string;
     }
   | {
-      type: 'filter-validation';
+      type: 'query-validation';
       message: string;
     }
   | {
       type: 'tableau-error';
-      error: z.infer<typeof TableauError>;
+      error: TableauError;
     };
 
-export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema> => {
+export const getQueryDatasourceTool = (
+  server: Server,
+  authInfo?: TableauAuthInfo,
+): Tool<typeof paramsSchema> => {
+  const config = getConfig();
+
   const queryDatasourceTool = new Tool({
     server,
     name: 'query-datasource',
-    description: queryDatasourceToolDescription,
+    description: new Provider(
+      async () =>
+        await getResultForTableauVersion({
+          server: config.server || authInfo?.server,
+          mappings: {
+            '2025.3.0': queryDatasourceToolDescription20253,
+            default: queryDatasourceToolDescription,
+          },
+        }),
+    ),
     paramsSchema,
     annotations: {
       title: 'Query Datasource',
@@ -59,10 +77,9 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
     },
     argsValidator: validateQuery,
     callback: async (
-      { datasourceLuid, query },
-      { requestId, authInfo },
+      { datasourceLuid, query, limit },
+      { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
-      const config = getConfig();
       return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
         authInfo,
@@ -70,7 +87,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
         callback: async () => {
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
-            restApiArgs: { config, requestId, server },
+            restApiArgs: { config, requestId, server, signal },
           });
 
           if (!isDatasourceAllowedResult.allowed) {
@@ -81,11 +98,27 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
           }
 
           const datasource: Datasource = { datasourceLuid };
-          const options = {
-            returnFormat: 'OBJECTS',
-            debug: true,
-            disaggregate: false,
-          } as const;
+          const maxResultLimit = config.getMaxResultLimit(queryDatasourceTool.name);
+          const rowLimit = maxResultLimit
+            ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+            : limit;
+
+          const options = await getResultForTableauVersion({
+            server: config.server || getTableauAuthInfo(authInfo)?.server,
+            mappings: {
+              '2026.1.0': {
+                returnFormat: 'OBJECTS',
+                debug: true,
+                disaggregate: false,
+                rowLimit, // rowLimit can only be provided in 2026.1.0 and later
+              } as const,
+              default: {
+                returnFormat: 'OBJECTS',
+                debug: true,
+                disaggregate: false,
+              } as const,
+            },
+          });
 
           const credentials = getDatasourceCredentials(datasourceLuid);
           if (credentials) {
@@ -103,9 +136,26 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
             requestId,
             server,
             jwtScopes: ['tableau:viz_data_service:read'],
+            signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
-              if (!config.disableQueryDatasourceFilterValidation) {
+              if (!config.disableQueryDatasourceValidationRequests) {
+                // Validate query against metadata
+                const metadataValidationResult = await validateQueryAgainstDatasourceMetadata(
+                  query,
+                  restApi.vizqlDataServiceMethods,
+                  datasource,
+                );
+
+                if (metadataValidationResult.isErr()) {
+                  const errors = metadataValidationResult.error;
+                  const errorMessage = errors.map((error) => error.message).join('\n\n');
+                  return new Err({
+                    type: 'query-validation',
+                    message: errorMessage,
+                  });
+                }
+
                 // Validate filters values for SET and MATCH filters
                 const filterValidationResult = await validateFilterValues(
                   server,
@@ -118,7 +168,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
                   const errors = filterValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join(', ');
                   return new Err({
-                    type: 'filter-validation',
+                    type: 'query-validation',
                     message: errorMessage,
                   });
                 }
@@ -137,6 +187,11 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
                         },
                 );
               }
+
+              if (rowLimit && result.value.data && result.value.data.length > rowLimit) {
+                result.value.data.length = rowLimit;
+              }
+
               return result;
             },
           });
@@ -153,7 +208,7 @@ export const getQueryDatasourceTool = (server: Server): Tool<typeof paramsSchema
               return getVizqlDataServiceDisabledError();
             case 'datasource-not-allowed':
               return error.message;
-            case 'filter-validation':
+            case 'query-validation':
               return JSON.stringify({
                 requestId,
                 errorType: 'validation',

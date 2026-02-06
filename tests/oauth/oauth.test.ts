@@ -94,8 +94,9 @@ describe('OAuth', () => {
       grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
       code_challenge_methods_supported: ['S256'],
       scopes_supported: [],
-      token_endpoint_auth_methods_supported: ['client_secret_basic'],
+      token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
       subject_types_supported: ['public'],
+      client_id_metadata_document_supported: true,
     });
   });
 
@@ -113,15 +114,40 @@ describe('OAuth', () => {
 
     const awaitableWritableStream = new AwaitableWritableStream();
 
-    request(app)
+    const response = await request(app)
       .post(`/${serverName}`)
       .set('Authorization', `Bearer ${access_token}`)
       .set('Content-Type', 'application/json')
       .set('Accept', 'application/json, text/event-stream')
       .send({
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {
+            elicitation: {},
+          },
+          clientInfo: {
+            name: 'tableau-mcp-tests',
+            version: '1.0.0',
+          },
+        },
+        jsonrpc: '2.0',
+        id: 0,
+      })
+      .expect(200);
+
+    const sessionId = response.headers['mcp-session-id'];
+
+    request(app)
+      .post(`/${serverName}`)
+      .set('Authorization', `Bearer ${access_token}`)
+      .set('Content-Type', 'application/json')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('mcp-session-id', sessionId)
+      .send({
         jsonrpc: '2.0',
         id: '1',
-        method: 'ping',
+        method: 'tools/list',
       })
       .pipe(awaitableWritableStream.stream);
 
@@ -129,13 +155,13 @@ describe('OAuth', () => {
       Buffer.from(chunk).toString('utf-8'),
     );
 
-    expect(messages).toHaveLength(1);
-    const message = messages[0];
+    expect(messages.length).toBeGreaterThan(0);
+    const message = messages.join('');
     const lines = message.split('\n').filter(Boolean);
-    expect(lines).toHaveLength(2);
+    expect(lines.length).toBeGreaterThan(1);
     expect(lines[0]).toBe('event: message');
-    const data = JSON.parse(lines[1].split('data: ')[1]);
-    expect(data).toEqual({ result: {}, jsonrpc: '2.0', id: '1' });
+    const data = JSON.parse(lines[1].substring(lines[1].indexOf('data: ') + 6));
+    expect(data).toMatchObject({ result: { tools: expect.any(Array) } });
   });
 
   it('should reject if the access token is invalid or expired', async () => {
@@ -149,7 +175,7 @@ describe('OAuth', () => {
       .send({
         jsonrpc: '2.0',
         id: '1',
-        method: 'ping',
+        method: 'tools/list',
       });
 
     expect(response.status).toBe(401);

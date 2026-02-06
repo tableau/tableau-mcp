@@ -1,20 +1,22 @@
 import { CorsOptions } from 'cors';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { fileURLToPath } from 'url';
 
+import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
+import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const __dirname = getDirname();
 
-const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
-const ONE_HOUR_IN_MS = 60 * 60 * 1000;
-const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
-const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
+export const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+export const ONE_HOUR_IN_MS = 60 * 60 * 1000;
+export const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
+export const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
+export const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
-const authTypes = ['pat', 'direct-trust', 'oauth'] as const;
+const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
 
 function isAuthType(auth: unknown): auth is AuthType {
@@ -25,9 +27,13 @@ export type BoundedContext = {
   projectIds: Set<string> | null;
   datasourceIds: Set<string> | null;
   workbookIds: Set<string> | null;
+  tags: Set<string> | null;
 };
 
 export class Config {
+  private maxResultLimit: number | null;
+  private maxResultLimits: Map<ToolName, number | null> | null;
+
   auth: AuthType;
   server: string;
   transport: TransportName;
@@ -35,22 +41,29 @@ export class Config {
   sslCert: string;
   httpPort: number;
   corsOriginConfig: CorsOptions['origin'];
+  trustProxyConfig: boolean | number | string | null;
   siteName: string;
   patName: string;
   patValue: string;
-  jwtSubClaim: string;
+  jwtUsername: string;
   connectedAppClientId: string;
   connectedAppSecretId: string;
   connectedAppSecretValue: string;
+  uatTenantId: string;
+  uatIssuer: string;
+  uatUsernameClaimName: string;
+  uatPrivateKey: string;
+  uatKeyId: string;
   jwtAdditionalPayload: string;
   datasourceCredentials: string;
   defaultLogLevel: string;
   disableLogMasking: boolean;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
-  maxResultLimit: number | null;
-  disableQueryDatasourceFilterValidation: boolean;
+  maxRequestTimeoutMs: number;
+  disableQueryDatasourceValidationRequests: boolean;
   disableMetadataApiRequests: boolean;
+  disableSessionManagement: boolean;
   enableServerLogging: boolean;
   serverLogDirectory: string;
   boundedContext: BoundedContext;
@@ -59,6 +72,7 @@ export class Config {
     enabled: boolean;
     issuer: string;
     redirectUri: string;
+    lockSite: boolean;
     jwePrivateKey: string;
     jwePrivateKeyPath: string;
     jwePrivateKeyPassphrase: string | undefined;
@@ -66,7 +80,13 @@ export class Config {
     accessTokenTimeoutMs: number;
     refreshTokenTimeoutMs: number;
     clientIdSecretPairs: Record<string, string> | null;
+    dnsServers: string[];
   };
+  telemetry: TelemetryConfig;
+
+  getMaxResultLimit(toolName: ToolName): number | null {
+    return this.maxResultLimits?.get(toolName) ?? this.maxResultLimit;
+  }
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -79,38 +99,56 @@ export class Config {
       SSL_CERT: sslCert,
       HTTP_PORT_ENV_VAR_NAME: httpPortEnvVarName,
       CORS_ORIGIN_CONFIG: corsOriginConfig,
+      TRUST_PROXY_CONFIG: trustProxyConfig,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
       JWT_SUB_CLAIM: jwtSubClaim,
       CONNECTED_APP_CLIENT_ID: clientId,
       CONNECTED_APP_SECRET_ID: secretId,
       CONNECTED_APP_SECRET_VALUE: secretValue,
+      UAT_TENANT_ID: uatTenantId,
+      UAT_ISSUER: uatIssuer,
+      UAT_USERNAME_CLAIM_NAME: uatUsernameClaimName,
+      UAT_USERNAME_CLAIM: uatUsernameClaim,
+      UAT_PRIVATE_KEY: uatPrivateKey,
+      UAT_PRIVATE_KEY_PATH: uatPrivateKeyPath,
+      UAT_KEY_ID: uatKeyId,
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
       INCLUDE_TOOLS: includeTools,
       EXCLUDE_TOOLS: excludeTools,
+      MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       MAX_RESULT_LIMIT: maxResultLimit,
-      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
+      MAX_RESULT_LIMITS: maxResultLimits,
+      DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: disableQueryDatasourceValidationRequests,
       DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
+      DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
       ENABLE_SERVER_LOGGING: enableServerLogging,
       SERVER_LOG_DIRECTORY: serverLogDirectory,
       INCLUDE_PROJECT_IDS: includeProjectIds,
       INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
       INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
+      INCLUDE_TAGS: includeTags,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
+      OAUTH_LOCK_SITE: oauthLockSite,
       OAUTH_JWE_PRIVATE_KEY: oauthJwePrivateKey,
       OAUTH_JWE_PRIVATE_KEY_PATH: oauthJwePrivateKeyPath,
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
+      OAUTH_CIMD_DNS_SERVERS: dnsServers,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
+      TELEMETRY_PROVIDER: telemetryProvider,
+      TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
     } = cleansedVars;
+
+    let jwtUsername = '';
 
     this.siteName = siteName ?? '';
 
@@ -122,17 +160,21 @@ export class Config {
       maxValue: 65535,
     });
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
+    this.trustProxyConfig = getTrustProxyConfig(trustProxyConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
-    this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
+    this.disableQueryDatasourceValidationRequests =
+      disableQueryDatasourceValidationRequests === 'true';
     this.disableMetadataApiRequests = disableMetadataApiRequests === 'true';
+    this.disableSessionManagement = disableSessionManagement === 'true';
     this.enableServerLogging = enableServerLogging === 'true';
     this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
     this.boundedContext = {
       projectIds: createSetFromCommaSeparatedString(includeProjectIds),
       datasourceIds: createSetFromCommaSeparatedString(includeDatasourceIds),
       workbookIds: createSetFromCommaSeparatedString(includeWorkbookIds),
+      tags: createSetFromCommaSeparatedString(includeTags),
     };
 
     if (this.boundedContext.projectIds?.size === 0) {
@@ -153,6 +195,12 @@ export class Config {
       );
     }
 
+    if (this.boundedContext.tags?.size === 0) {
+      throw new Error(
+        'When set, the environment variable INCLUDE_TAGS must have at least one value',
+      );
+    }
+
     this.tableauServerVersionCheckIntervalInHours = parseNumber(
       tableauServerVersionCheckIntervalInHours,
       {
@@ -167,9 +215,13 @@ export class Config {
       enabled: disableOauthOverride ? false : !!oauthIssuer,
       issuer: oauthIssuer ?? '',
       redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
+      lockSite: oauthLockSite !== 'false', // Site locking is enabled by default
       jwePrivateKey: oauthJwePrivateKey ?? '',
       jwePrivateKeyPath: oauthJwePrivateKeyPath ?? '',
       jwePrivateKeyPassphrase: oauthJwePrivateKeyPassphrase || undefined,
+      dnsServers: dnsServers
+        ? dnsServers.split(',').map((ip) => ip.trim())
+        : ['1.1.1.1', '1.0.0.1' /* Cloudflare public DNS */],
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
         defaultValue: TEN_MINUTES_IN_MS,
         minValue: 0,
@@ -195,6 +247,23 @@ export class Config {
           }, {})
         : null,
     };
+
+    const parsedProvider = isTelemetryProvider(telemetryProvider) ? telemetryProvider : 'noop';
+    if (parsedProvider === 'custom') {
+      if (!telemetryProviderConfig) {
+        throw new Error(
+          'TELEMETRY_PROVIDER_CONFIG is required when TELEMETRY_PROVIDER is "custom"',
+        );
+      }
+      this.telemetry = {
+        provider: 'custom',
+        providerConfig: providerConfigSchema.parse(JSON.parse(telemetryProviderConfig)),
+      };
+    } else {
+      this.telemetry = {
+        provider: parsedProvider,
+      };
+    }
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
@@ -248,9 +317,17 @@ export class Config {
       }
     }
 
+    this.maxRequestTimeoutMs = parseNumber(maxRequestTimeoutMs, {
+      defaultValue: TEN_MINUTES_IN_MS,
+      minValue: 5000,
+      maxValue: ONE_HOUR_IN_MS,
+    });
+
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     this.maxResultLimit =
       isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
+
+    this.maxResultLimits = maxResultLimits ? getMaxResultLimits(maxResultLimits) : null;
 
     this.includeTools = includeTools
       ? includeTools.split(',').flatMap((s) => {
@@ -278,22 +355,63 @@ export class Config {
       invariant(clientId, 'The environment variable CONNECTED_APP_CLIENT_ID is not set');
       invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
       invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
+
+      jwtUsername = jwtSubClaim ?? '';
+    } else if (this.auth === 'uat') {
+      invariant(uatTenantId, 'The environment variable UAT_TENANT_ID is not set');
+      invariant(uatIssuer, 'The environment variable UAT_ISSUER is not set');
+
+      if (!uatUsernameClaim && !jwtSubClaim) {
+        throw new Error(
+          'One of the environment variables: UAT_USERNAME_CLAIM or JWT_SUB_CLAIM must be set',
+        );
+      }
+
+      jwtUsername = uatUsernameClaim ?? jwtSubClaim ?? '';
+
+      if (!uatPrivateKey && !uatPrivateKeyPath) {
+        throw new Error(
+          'One of the environment variables: UAT_PRIVATE_KEY_PATH or UAT_PRIVATE_KEY must be set',
+        );
+      }
+
+      if (uatPrivateKey && uatPrivateKeyPath) {
+        throw new Error(
+          'Only one of the environment variables: UAT_PRIVATE_KEY or UAT_PRIVATE_KEY_PATH must be set',
+        );
+      }
+
+      if (
+        uatPrivateKeyPath &&
+        process.env.TABLEAU_MCP_TEST !== 'true' &&
+        !existsSync(uatPrivateKeyPath)
+      ) {
+        throw new Error(`UAT private key path does not exist: ${uatPrivateKeyPath}`);
+      }
     }
 
     this.server = server ?? '';
     this.patName = patName ?? '';
     this.patValue = patValue ?? '';
-    this.jwtSubClaim = jwtSubClaim ?? '';
+    this.jwtUsername = jwtUsername ?? '';
     this.connectedAppClientId = clientId ?? '';
     this.connectedAppSecretId = secretId ?? '';
     this.connectedAppSecretValue = secretValue ?? '';
+    this.uatTenantId = uatTenantId ?? '';
+    this.uatIssuer = uatIssuer ?? '';
+    this.uatUsernameClaimName = uatUsernameClaimName || 'email';
+    this.uatPrivateKey =
+      uatPrivateKey || (uatPrivateKeyPath ? readFileSync(uatPrivateKeyPath, 'utf8') : '');
+    this.uatKeyId = uatKeyId ?? '';
     this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
   }
 }
 
 function validateServer(server: string): void {
-  if (!server.startsWith('https://')) {
-    throw new Error(`The environment variable SERVER must start with "https://": ${server}`);
+  if (!['https://', 'http://'].find((prefix) => server.startsWith(prefix))) {
+    throw new Error(
+      `The environment variable SERVER must start with "http://" or "https://": ${server}`,
+    );
   }
 
   try {
@@ -339,6 +457,22 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
   }
 }
 
+function getTrustProxyConfig(trustProxyConfig: string): boolean | number | string | null {
+  if (!trustProxyConfig) {
+    return null;
+  }
+
+  if (trustProxyConfig.match(/^true|false$/i)) {
+    return trustProxyConfig.toLowerCase() === 'true';
+  }
+
+  if (trustProxyConfig.match(/^\d+$/)) {
+    return parseInt(trustProxyConfig, 10);
+  }
+
+  return trustProxyConfig;
+}
+
 // Creates a set from a comma-separated string of values.
 // Returns null if the value is undefined.
 function createSetFromCommaSeparatedString(value: string | undefined): Set<string> | null {
@@ -368,6 +502,32 @@ function removeClaudeMcpBundleUserConfigTemplates(
     }
     return acc;
   }, {});
+}
+
+function getMaxResultLimits(maxResultLimits: string): Map<ToolName, number | null> {
+  const map = new Map<ToolName, number | null>();
+  if (!maxResultLimits) {
+    return map;
+  }
+
+  maxResultLimits.split(',').forEach((curr) => {
+    const [toolName, maxResultLimit] = curr.split(':');
+    const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
+    const actualLimit =
+      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
+    if (isToolName(toolName)) {
+      map.set(toolName, actualLimit);
+    } else if (isToolGroupName(toolName)) {
+      toolGroups[toolName].forEach((toolName) => {
+        if (!map.has(toolName)) {
+          // Tool names take precedence over group names
+          map.set(toolName, actualLimit);
+        }
+      });
+    }
+  });
+
+  return map;
 }
 
 function parseNumber(
