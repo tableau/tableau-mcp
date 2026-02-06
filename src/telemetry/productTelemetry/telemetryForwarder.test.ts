@@ -24,11 +24,10 @@ describe('DirectTelemetryForwarder', () => {
   });
 
   it('sends telemetry with PUT method by default', async () => {
-    const eventType = 'test_event';
     const properties = { action: 'click', count: 42 };
 
     const forwarder = new DirectTelemetryForwarder(endpoint, true);
-    forwarder.send(eventType, properties);
+    forwarder.send('tool_call', properties);
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
@@ -43,7 +42,7 @@ describe('DirectTelemetryForwarder', () => {
     expect(body).toHaveLength(1);
     expect(body[0]).toEqual(
       expect.objectContaining({
-        type: eventType,
+        type: 'tool_call',
         service_name: 'tableau-mcp',
         properties,
         pod: expect.any(String),
@@ -55,7 +54,7 @@ describe('DirectTelemetryForwarder', () => {
 
   it('uses default pod and host_name from environment', async () => {
     const forwarder = new DirectTelemetryForwarder(endpoint, true);
-    forwarder.send('event', { foo: 'bar' });
+    forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
@@ -70,7 +69,7 @@ describe('DirectTelemetryForwarder', () => {
 
   it('uses default service_name', async () => {
     const forwarder = new DirectTelemetryForwarder(endpoint, true);
-    forwarder.send('event', { foo: 'bar' });
+    forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
@@ -82,7 +81,7 @@ describe('DirectTelemetryForwarder', () => {
 
   it('does not send telemetry when enabled is false', () => {
     const forwarder = new DirectTelemetryForwarder(endpoint, false);
-    forwarder.send('event', { foo: 'bar' });
+    forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).not.toHaveBeenCalled();
   });

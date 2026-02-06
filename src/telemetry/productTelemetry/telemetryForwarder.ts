@@ -5,6 +5,8 @@ type PropertiesType = { [key: string]: ValidPropertyValueType };
 const DEFAULT_HOST_NAME = 'External';
 const SERVICE_NAME = 'tableau-mcp';
 
+type TelemetryEventType = 'tool_call';
+
 export type ProductTelemetryBase = {
   endpoint: string;
   siteName: string;
@@ -13,7 +15,7 @@ export type ProductTelemetryBase = {
 };
 
 export type TableauTelemetryJsonEvent = {
-  type: string;
+  type: TelemetryEventType;
   host_timestamp: string;
   host_name: string;
   service_name: string;
@@ -46,10 +48,9 @@ class DirectTelemetryForwarder {
    * Build and send a telemetry event.
    *
    * @param eventType - The event type/name
-   * @param serviceName - The service name emitting the event
    * @param properties - Key-value properties for the event
    */
-  send(eventType: string, properties: PropertiesType): void {
+  send(eventType: TelemetryEventType, properties: PropertiesType): void {
     if (!this.enabled) {
       return;
     }
