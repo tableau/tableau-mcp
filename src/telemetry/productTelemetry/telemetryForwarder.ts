@@ -27,7 +27,7 @@ export type TableauTelemetryJsonEvent = {
  * A simplified telemetry forwarder that sends events directly to Tableau's
  * telemetry JSON endpoint (e.g., qa.telemetry.tableausoftware.com).
  */
-export class DirectTelemetryForwarder {
+class DirectTelemetryForwarder {
   private readonly endpoint: string;
   private readonly enabled: boolean;
 
