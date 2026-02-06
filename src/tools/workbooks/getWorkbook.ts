@@ -7,6 +7,7 @@ import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ConstrainedResult, Tool } from '../tool.js';
 
@@ -99,7 +100,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
         },
         productTelemetryBase: {
           endpoint: config.productTelemetryEndpoint,
-          siteName: config.siteName,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
           podName: config.server,
           enabled: config.productTelemetryEnabled,
         },

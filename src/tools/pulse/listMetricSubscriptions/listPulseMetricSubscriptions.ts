@@ -6,6 +6,7 @@ import { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { getSiteLuidFromAccessToken } from '../../../utils/getSiteLuidFromAccessToken.js';
 import { RestApiArgs } from '../../resourceAccessChecker.js';
 import { ConstrainedResult, Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -64,7 +65,7 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
         getErrorText: getPulseDisabledError,
         productTelemetryBase: {
           endpoint: config.productTelemetryEndpoint,
-          siteName: config.siteName,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
           podName: config.server,
           enabled: config.productTelemetryEnabled,
         },

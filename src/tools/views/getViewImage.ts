@@ -6,6 +6,7 @@ import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { convertPngDataToToolResult } from '../convertPngDataToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -92,7 +93,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
         },
         productTelemetryBase: {
           endpoint: config.productTelemetryEndpoint,
-          siteName: config.siteName,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
           podName: config.server,
           enabled: config.productTelemetryEnabled,
         },

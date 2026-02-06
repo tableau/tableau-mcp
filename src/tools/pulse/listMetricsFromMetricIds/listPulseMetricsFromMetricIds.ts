@@ -5,6 +5,7 @@ import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../../utils/getSiteLuidFromAccessToken.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -66,7 +67,7 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
         getErrorText: getPulseDisabledError,
         productTelemetryBase: {
           endpoint: config.productTelemetryEndpoint,
-          siteName: config.siteName,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
           podName: config.server,
           enabled: config.productTelemetryEnabled,
         },

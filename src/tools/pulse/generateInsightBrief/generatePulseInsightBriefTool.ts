@@ -10,6 +10,7 @@ import {
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../../utils/getSiteLuidFromAccessToken.js';
 import { Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -266,7 +267,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
         },
         productTelemetryBase: {
           endpoint: config.productTelemetryEndpoint,
-          siteName: config.siteName,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
           podName: config.server,
           enabled: config.productTelemetryEnabled,
         },

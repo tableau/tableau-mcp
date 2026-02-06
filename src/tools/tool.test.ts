@@ -20,7 +20,7 @@ vi.mock('../telemetry/productTelemetry/telemetryForwarder.js', () => ({
 describe('Tool', () => {
   const mockProductTelemetryBase: ProductTelemetryBase = {
     endpoint: 'https://test.telemetry.example.com',
-    siteName: 'test-site',
+    siteLuid: 'test-site-luid',
     podName: 'https://test-server.example.com',
     enabled: true,
   };
@@ -294,7 +294,7 @@ describe('Tool', () => {
           tool_name: 'get-datasource-metadata',
           request_id: '123',
           session_id: 'session-abc',
-          site_name: 'test-site',
+          site_luid: 'test-site-luid',
           podname: 'https://test-server.example.com',
           success: true,
           error_code: '',

@@ -9,7 +9,7 @@ export type TelemetryEventType = 'tool_call';
 
 export type ProductTelemetryBase = {
   endpoint: string;
-  siteName: string;
+  siteLuid: string;
   podName: string;
   enabled: boolean;
 };

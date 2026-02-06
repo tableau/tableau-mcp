@@ -276,7 +276,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
         tool_name: this.name,
         request_id: requestId.toString(),
         session_id: sessionId ?? '',
-        site_name: productTelemetryBase.siteName,
+        site_luid: productTelemetryBase.siteLuid,
         podname: productTelemetryBase.podName,
         success,
         error_code: errorCode,

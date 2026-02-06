@@ -10,6 +10,7 @@ import {
 } from '../../sdks/tableau/types/contentExploration.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { Tool } from '../tool.js';
 import {
   buildFilterString,
@@ -100,7 +101,7 @@ This tool searches across all supported content types for objects relevant to th
           constrainSearchContent({ items, boundedContext: config.boundedContext }),
         productTelemetryBase: {
           endpoint: config.productTelemetryEndpoint,
-          siteName: config.siteName,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
           podName: config.server,
           enabled: config.productTelemetryEnabled,
         },
