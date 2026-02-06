@@ -298,7 +298,6 @@ describe('Tool', () => {
           podname: 'https://test-server.example.com',
           success: true,
           error_code: '',
-          parameters: JSON.stringify({ param1: 'test-value' }),
         }),
       );
     });

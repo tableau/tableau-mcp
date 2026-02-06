@@ -280,7 +280,6 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
         podname: productTelemetryBase.podName,
         success,
         error_code: errorCode,
-        parameters: JSON.stringify(args ?? {}),
       });
     }
   }
