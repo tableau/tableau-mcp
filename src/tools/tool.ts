@@ -23,14 +23,8 @@ import { ToolName } from './toolName.js';
  * Extracts HTTP status code from an error if available (e.g., "401", "404", "500")
  * Returns empty string if no HTTP status can be determined
  */
-function getHttpStatus(error: ZodiosError | Error | unknown): string {
-  const axiosError = error instanceof ZodiosError ? error.cause : error;
-
-  if (isAxiosError(axiosError) && axiosError.response?.status) {
-    return String(axiosError.response.status);
-  }
-
-  return '';
+function getHttpStatus(error: Error): string {
+  return isAxiosError(error) && error.response?.status ? String(error.response.status) : '';
 }
 
 type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args extends ZodRawShape
@@ -257,7 +251,9 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       }
 
       // Handle error result - extract actual HTTP status if available
-      errorCode = getHttpStatus(result.error);
+      if (result.error instanceof Error) {
+        errorCode = getHttpStatus(result.error);
+      }
 
       if (result.error instanceof ZodiosError) {
         toolResult = getErrorResult(requestId, result.error);
@@ -269,7 +265,9 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
         : getErrorResult(requestId, result.error);
       return toolResult;
     } catch (error) {
-      errorCode = getHttpStatus(error);
+      if (error instanceof Error) {
+        errorCode = getHttpStatus(error);
+      }
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     } finally {
