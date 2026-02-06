@@ -129,7 +129,7 @@ for (const out of outputs) {
 }
 console.groupEnd();
 
-const defaultBaseUrl = 'https://tableau-mcp-oauth-4cfa19926d6e.herokuapp.com';
+const defaultBaseUrl = 'http://localhost:3927';
 const baseUrlCandidate = process.env.BASE_URL?.trim() ?? '';
 const baseUrlRaw = baseUrlCandidate.length > 0 ? baseUrlCandidate : defaultBaseUrl;
 const normalizedBaseUrl = baseUrlRaw.replace(/\/+$/, '') || defaultBaseUrl;

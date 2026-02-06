@@ -78,7 +78,8 @@ export async function startExpressServer({
     ...middleware,
     config.disableSessionManagement ? methodNotAllowed : handleSessionRequest,
   );
-  app.use(express.static(join(getDirname(), 'web')));
+  const web = join(getDirname(), 'web');
+  app.use(express.static(web));
 
   const useSsl = !!(config.sslKey && config.sslCert);
   if (!useSsl) {
@@ -127,6 +128,9 @@ export async function startExpressServer({
           server.close();
         });
 
+        const htmlPath = join(getDirname(), 'web', 'pulse-renderer.html');
+        const html = fs.readFileSync(htmlPath, 'utf8');
+
         server.registerResource(
           'pulse-renderer',
           'ui://widget/pulse-renderer.html',
@@ -136,7 +140,7 @@ export async function startExpressServer({
               {
                 uri: 'ui://widget/pulse-renderer.html',
                 mimeType: 'text/html+skybridge',
-                text: fs.readFileSync(join(__dirname, 'web', 'pulse-renderer.html'), 'utf8'),
+                text: html,
                 _meta: {
                   /*
                   Renders the widget within a rounded border and shadow.
