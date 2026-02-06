@@ -1,7 +1,7 @@
 import os from 'os';
 
-export type ValidPropertyValueType = string | number | boolean;
-export type PropertiesType = { [key: string]: ValidPropertyValueType };
+type ValidPropertyValueType = string | number | boolean;
+type PropertiesType = { [key: string]: ValidPropertyValueType };
 const DEFAULT_HOST_NAME = 'External';
 const SERVICE_NAME = 'tableau-mcp';
 
@@ -25,7 +25,7 @@ export type TableauTelemetryJsonEvent = {
  * A simplified telemetry forwarder that sends events directly to Tableau's
  * telemetry JSON endpoint (e.g., qa.telemetry.tableausoftware.com).
  */
-export class DirectTelemetryForwarder {
+class DirectTelemetryForwarder {
   private readonly endpoint: string;
   private readonly enabled: boolean;
 
