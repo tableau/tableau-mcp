@@ -1,19 +1,21 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { Server } from '../../server.js';
 import { Tool } from '../tool.js';
 
 const paramsSchema = {
-  calculationType: z.enum(['BASIC', 'LOD', 'TABLE']).optional(),
-  includeFunctionInfo: z.boolean().default(true).optional(),
-  includeOperatorPrecedenceInfo: z.boolean().default(true).optional(),
+  calculationType: z.enum(['BASIC', 'LOD', 'TABLE']),
+  excludeFunctionsList: z.boolean().default(false).optional(),
+  excludeCalculationStructureInfo: z.boolean().default(false).optional(),
+  excludeExamplesForCalculationType: z.boolean().default(false).optional(),
 };
 
 const description = `
 This tool retrieves relevant information for constructing Tableau calculations.
 Provides details on how to construct a calculation given its type and which functions are available for use.
-Before you can determine whether or not you want to construct a calculation make sure to understand available fields and their types.
+Before you can determine whether or not you want to construct a calculation be sure to understand available fields and their types.
 
 When should you use this tool?
   - A user explicity requests a calculation to be constructed and information is needed for the given calculation type.
@@ -56,44 +58,18 @@ Algorithm to determine which calculation type to use:
 5. Otherwise, choose LOD.
 `;
 
-export const getGetCalculationInfoTool = (server: Server): Tool<typeof paramsSchema> => {
-  const getCalculationInfoTool = new Tool({
-    server,
-    name: 'get-calculation-info',
-    description,
-    paramsSchema,
-    annotations: {
-      title: 'Get Calculation Info',
-      readOnlyHint: true,
-      openWorldHint: false,
-    },
-    callback: ({ calculationType, includeFunctionInfo = true }): CallToolResult => {
-      if (includeFunctionInfo) {
-        // TODO: get function info
-      }
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: calculationType,
-          },
-        ],
-      };
-    },
-  });
-
-  return getCalculationInfoTool;
-};
-
 const basicCalculationExamples = `
-Example calculations and what they do:
+1. 
 
 `;
 
 const lodCalculationExamples = `
 Example calculations and what they do:
 
+`;
+
+const basicCalculationInfo = `
+Basic calculations transform values at the datasource level of detail (a row-level calculation) or at the visualization level of detail (an aggregate calculation).
 `;
 
 const lodCalculationInfo = `
@@ -104,12 +80,12 @@ LOD syntax: { [FIXED | INCLUDE | EXCLUDE] <dimension declaration> : <aggregate e
 FIXED:
 - computes values using the specified dimensions without reference to the view level of detail.
 - ignores all the filters in the view other than context filters, data source filters, and extract filters.
-- Exmaple: { FIXED [Region] : SUM([Sales]) } computes the sum of Sales per region.
+- Example: { FIXED [Region] : SUM([Sales]) } computes the sum of Sales per region.
 
 INCLUDE:
 - computes values using the specified dimensions in addition to whatever dimensions are in the view.
 - are more useful when including dimensions that are not in the view.
-- Example: { INCLUDE [Customer Name] : SUM([Sales]) } computes the total sales
+- Example: { INCLUDE [Customer Name] : SUM([Sales]) } computes the total sales per customer.
 
 EXCLUDE:
 - explicitly remove dimensions from the expression and are more useful when excluding dimensions that are in the view.
@@ -117,12 +93,21 @@ EXCLUDE:
 
 <dimension declaration>:
 - Specifies one or more dimensions that set the scope of the aggregate expression, according to the keyword. Use commas to separate multiple dimensions.
-- Example: [Name] or [Segment], [Category], [Region]
+- Example: [Name] or [Segment], [Category], [Region] for multiple dimensions.
 - You can use any expression that evaluates as dimension, including Date expressions.
 - Example: {FIXED YEAR([Order Date]) : SUM([Sales])} aggregates the sum of Sales at the Year level.
 
 <aggregate expression>:
 - The aggregate expression is the calculation that is performed.
+- Example: SUM([Sales]) or AVG([Discount]).
+- The results of the calculation in the aggregate expression depend on the dimension declaration and keyword.
+- The aggregate expression must be aggregated. The ATTR aggregation isn’t supported, however. It doesn't have to be a simple aggregation, it can contain calculations, including other LOD expressions.
+- Example: {FIXED [Question] : AVG(IF [Answer] = "Red" THEN 1 ELSE 0 END )}
+- Table calculations aren't permitted in the aggregate expression.
+
+Table-Scoped LOD calculations:
+- Are level of detail expressions at the table level without using any of the scoping keywords (i.e. only the agreggate expression is used).
+- Example: { MIN([Order Date]) } is the minimum (earliest) order date for the entire table. This is equivalent to a FIXED level of detail expression with no dimension declaration (i.e. { FIXED : MIN([Order Date]) }).
 `;
 
 const tableCalculationInfo = `
@@ -130,7 +115,7 @@ TODO
 `;
 
 const calculationStructureInfo = `
-Calculations are composed of the following components:
+Calculations are expressions composed of the following components:
 - Fields
 - Operators
 - Functions
@@ -167,7 +152,13 @@ Parentheses can be used as needed to force an order of precedence. Operators tha
 Calculations do not always need to contain all components.
 `;
 
-const functionInfo = [
+type functionInfo = {
+  command: string;
+  syntax: string;
+  description: string;
+};
+
+const functionsList: Array<functionInfo> = [
   {
     command: 'ABS',
     syntax: 'ABS(number)',
@@ -973,3 +964,61 @@ const functionInfo = [
       'Returns a target numeric value within the probable range defined by the target expression and other predictors, at a specified quantile. This is the Posterior Predictive Quantile. Example: MODEL_QUANTILE(0.5, SUM([Sales]), COUNT([Orders]))',
   },
 ];
+
+export const getGetCalculationInfoTool = (server: Server): Tool<typeof paramsSchema> => {
+  const getCalculationInfoTool = new Tool({
+    server,
+    name: 'get-calculation-info',
+    description,
+    paramsSchema,
+    annotations: {
+      title: 'Get Calculation Info',
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
+    callback: async (
+      {
+        calculationType,
+        excludeFunctionsList,
+        excludeCalculationStructureInfo,
+        excludeExamplesForCalculationType,
+      },
+      { requestId, authInfo },
+    ): Promise<CallToolResult> => {
+      return await getCalculationInfoTool.logAndExecute({
+        requestId,
+        authInfo,
+        args: {
+          calculationType,
+          excludeFunctionsList: excludeFunctionsList ?? false,
+          excludeCalculationStructureInfo: excludeCalculationStructureInfo ?? false,
+          excludeExamplesForCalculationType: excludeExamplesForCalculationType ?? false,
+        },
+        callback: async () => {
+          const toReturn: Record<string, any> = {};
+
+          switch (calculationType) {
+            case 'BASIC':
+              toReturn.calculationInfo = basicCalculationInfo;
+              break;
+            case 'LOD':
+              toReturn.calculationInfo = lodCalculationInfo;
+              break;
+            case 'TABLE':
+              toReturn.tableCalculationInfo = tableCalculationInfo;
+              break;
+          }
+          return new Ok(toReturn);
+        },
+        constrainSuccessResult: (calculationInfo) => {
+          return {
+            type: 'success',
+            result: calculationInfo,
+          };
+        },
+      });
+    },
+  });
+
+  return getCalculationInfoTool;
+};
