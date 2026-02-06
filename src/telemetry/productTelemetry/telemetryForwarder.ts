@@ -5,7 +5,7 @@ type PropertiesType = { [key: string]: ValidPropertyValueType };
 const DEFAULT_HOST_NAME = 'External';
 const SERVICE_NAME = 'tableau-mcp';
 
-type TelemetryEventType = 'tool_call';
+export type TelemetryEventType = 'tool_call';
 
 export type ProductTelemetryBase = {
   endpoint: string;
@@ -27,7 +27,7 @@ export type TableauTelemetryJsonEvent = {
  * A simplified telemetry forwarder that sends events directly to Tableau's
  * telemetry JSON endpoint (e.g., qa.telemetry.tableausoftware.com).
  */
-class DirectTelemetryForwarder {
+export class DirectTelemetryForwarder {
   private readonly endpoint: string;
   private readonly enabled: boolean;
 
@@ -117,7 +117,3 @@ export function getProductTelemetry(endpoint: string, enabled: boolean): DirectT
   }
   return productTelemetryInstance;
 }
-
-export const exportedForTesting = {
-  DirectTelemetryForwarder,
-};
