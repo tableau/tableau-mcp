@@ -6,6 +6,7 @@ import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
@@ -30,11 +31,15 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ viewId }, { requestId, authInfo, signal }): Promise<CallToolResult> => {
+    callback: async (
+      { viewId },
+      { requestId, sessionId, authInfo, signal },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getViewDataTool.logAndExecute<string, GetViewDataError>({
         requestId,
+        sessionId,
         authInfo,
         args: { viewId },
         callback: async () => {
@@ -78,6 +83,12 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
             case 'view-not-allowed':
               return error.message;
           }
+        },
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
+          podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },

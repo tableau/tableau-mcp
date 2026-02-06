@@ -7,6 +7,7 @@ import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.j
 import { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../../utils/getSiteLuidFromAccessToken.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -38,7 +39,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
     },
     callback: async (
       { pulseMetricDefinitionID },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       return await listPulseMetricsFromMetricDefinitionIdTool.logAndExecute<
@@ -46,6 +47,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
         PulseDisabledError
       >({
         requestId,
+        sessionId,
         authInfo,
         args: { pulseMetricDefinitionID },
         callback: async () => {
@@ -66,6 +68,12 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
         constrainSuccessResult: (metrics) =>
           constrainPulseMetrics({ metrics, boundedContext: config.boundedContext }),
         getErrorText: getPulseDisabledError,
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
+          podName: config.server,
+          enabled: config.productTelemetryEnabled,
+        },
       });
     },
   });

@@ -5,6 +5,7 @@ import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../../utils/getSiteLuidFromAccessToken.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -38,10 +39,14 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ metricIds }, { requestId, authInfo, signal }): Promise<CallToolResult> => {
+    callback: async (
+      { metricIds },
+      { requestId, sessionId, authInfo, signal },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       return await listPulseMetricsFromMetricIdsTool.logAndExecute({
         requestId,
+        sessionId,
         authInfo,
         args: { metricIds },
         callback: async () => {
@@ -60,6 +65,12 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
         constrainSuccessResult: (metrics) =>
           constrainPulseMetrics({ metrics, boundedContext: config.boundedContext }),
         getErrorText: getPulseDisabledError,
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
+          podName: config.server,
+          enabled: config.productTelemetryEnabled,
+        },
       });
     },
   });
