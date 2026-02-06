@@ -217,6 +217,7 @@ describe('getDatasourceMetadataTool', () => {
     resetResourceAccessCheckerSingleton();
     mocks.mockGetConfig.mockReturnValue({
       productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      productTelemetryEnabled: true,
       siteName: 'test-site',
       server: 'https://test-server.example.com',
       disableMetadataApiRequests: false,
@@ -648,6 +649,7 @@ describe('getDatasourceMetadataTool', () => {
     // Configure to disable metadata API requests
     mocks.mockGetConfig.mockReturnValue({
       productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      productTelemetryEnabled: true,
       siteName: 'test-site',
       server: 'https://test-server.example.com',
       disableMetadataApiRequests: true,
@@ -706,6 +708,7 @@ describe('getDatasourceMetadataTool', () => {
     // Configure to disable metadata API requests
     mocks.mockGetConfig.mockReturnValue({
       productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      productTelemetryEnabled: true,
       siteName: 'test-site',
       server: 'https://test-server.example.com',
       disableMetadataApiRequests: true,
@@ -751,6 +754,7 @@ describe('getDatasourceMetadataTool', () => {
   it('should return data source not allowed error when datasource is not allowed', async () => {
     mocks.mockGetConfig.mockReturnValue({
       productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      productTelemetryEnabled: true,
       siteName: 'test-site',
       server: 'https://test-server.example.com',
       boundedContext: {

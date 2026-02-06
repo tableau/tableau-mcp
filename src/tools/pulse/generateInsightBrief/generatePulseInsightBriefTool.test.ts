@@ -131,6 +131,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
     resetResourceAccessCheckerSingleton();
     mocks.mockGetConfig.mockReturnValue({
       productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      productTelemetryEnabled: true,
       siteName: 'test-site',
       server: 'https://test-server.example.com',
       boundedContext: {
@@ -303,6 +304,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
 
     mocks.mockGetConfig.mockReturnValue({
       productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      productTelemetryEnabled: true,
       siteName: 'test-site',
       server: 'https://test-server.example.com',
       boundedContext: {
@@ -332,6 +334,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
   it('should return an error when all metrics are filtered out', async () => {
     mocks.mockGetConfig.mockReturnValue({
       productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      productTelemetryEnabled: true,
       siteName: 'test-site',
       server: 'https://test-server.example.com',
       boundedContext: {

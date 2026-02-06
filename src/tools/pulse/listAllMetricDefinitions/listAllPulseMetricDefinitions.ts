@@ -114,6 +114,7 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
           endpoint: config.productTelemetryEndpoint,
           siteName: config.siteName,
           podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },

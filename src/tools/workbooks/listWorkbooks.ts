@@ -117,6 +117,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
           endpoint: config.productTelemetryEndpoint,
           siteName: config.siteName,
           podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },

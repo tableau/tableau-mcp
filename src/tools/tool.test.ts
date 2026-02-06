@@ -22,6 +22,7 @@ describe('Tool', () => {
     endpoint: 'https://test.telemetry.example.com',
     siteName: 'test-site',
     podName: 'https://test-server.example.com',
+    enabled: true,
   };
 
   const mockParams = {

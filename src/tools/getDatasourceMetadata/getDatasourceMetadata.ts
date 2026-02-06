@@ -195,6 +195,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
           endpoint: config.productTelemetryEndpoint,
           siteName: config.siteName,
           podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },

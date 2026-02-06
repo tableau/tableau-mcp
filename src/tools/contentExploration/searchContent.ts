@@ -102,6 +102,7 @@ This tool searches across all supported content types for objects relevant to th
           endpoint: config.productTelemetryEndpoint,
           siteName: config.siteName,
           podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },

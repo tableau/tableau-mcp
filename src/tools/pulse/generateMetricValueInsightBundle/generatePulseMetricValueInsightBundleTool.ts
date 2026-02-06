@@ -222,6 +222,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
           endpoint: config.productTelemetryEndpoint,
           siteName: config.siteName,
           podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },

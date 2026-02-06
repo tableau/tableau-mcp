@@ -68,6 +68,7 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
           endpoint: config.productTelemetryEndpoint,
           siteName: config.siteName,
           podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },

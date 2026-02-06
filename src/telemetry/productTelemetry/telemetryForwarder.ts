@@ -9,6 +9,7 @@ export type ProductTelemetryBase = {
   endpoint: string;
   siteName: string;
   podName: string;
+  enabled: boolean;
 };
 
 export type TableauTelemetryJsonEvent = {
@@ -20,36 +21,25 @@ export type TableauTelemetryJsonEvent = {
   properties: PropertiesType;
 };
 
-export interface DirectTelemetryForwarderOptions {
-  /**
-   * HTTP method for sending events. Default: 'PUT'
-   */
-  httpMethod?: 'POST' | 'PUT';
-  /**
-   * Service name. Default: 'tableau-mcp'
-   */
-  serviceName?: string;
-}
-
 /**
  * A simplified telemetry forwarder that sends events directly to Tableau's
  * telemetry JSON endpoint (e.g., qa.telemetry.tableausoftware.com).
  */
 export class DirectTelemetryForwarder {
   private readonly endpoint: string;
-  private readonly httpMethod: 'POST' | 'PUT';
+  private readonly enabled: boolean;
 
   /**
    * @param endpoint - The telemetry endpoint URL
-   * @param options - Optional configuration
+   * @param enabled - Whether telemetry is enabled
    */
-  constructor(endpoint: string, options: DirectTelemetryForwarderOptions = {}) {
+  constructor(endpoint: string, enabled: boolean) {
     if (!endpoint) {
       throw new Error('Endpoint URL is required for DirectTelemetryForwarder');
     }
 
     this.endpoint = endpoint;
-    this.httpMethod = options.httpMethod ?? 'PUT';
+    this.enabled = enabled;
   }
 
   /**
@@ -60,7 +50,7 @@ export class DirectTelemetryForwarder {
    * @param properties - Key-value properties for the event
    */
   send(eventType: string, properties: PropertiesType): void {
-    if (process.env.PRODUCT_TELEMETRY_ENABLED === 'false') {
+    if (!this.enabled) {
       return;
     }
 
@@ -74,7 +64,7 @@ export class DirectTelemetryForwarder {
     };
 
     const init: RequestInit = {
-      method: this.httpMethod,
+      method: 'PUT',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
@@ -120,9 +110,9 @@ const formatHostTimestamp = (d: Date): string => {
 // Singleton access pattern
 let productTelemetryInstance: DirectTelemetryForwarder | null = null;
 
-export function getProductTelemetry(endpoint: string): DirectTelemetryForwarder {
+export function getProductTelemetry(endpoint: string, enabled: boolean): DirectTelemetryForwarder {
   if (!productTelemetryInstance) {
-    productTelemetryInstance = new DirectTelemetryForwarder(endpoint);
+    productTelemetryInstance = new DirectTelemetryForwarder(endpoint, enabled);
   }
   return productTelemetryInstance;
 }

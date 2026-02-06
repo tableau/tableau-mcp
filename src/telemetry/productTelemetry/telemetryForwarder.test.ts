@@ -18,7 +18,7 @@ describe('DirectTelemetryForwarder', () => {
   });
 
   it('throws error when endpoint is empty', () => {
-    expect(() => new DirectTelemetryForwarder('')).toThrowError(
+    expect(() => new DirectTelemetryForwarder('', true)).toThrowError(
       'Endpoint URL is required for DirectTelemetryForwarder',
     );
   });
@@ -27,7 +27,7 @@ describe('DirectTelemetryForwarder', () => {
     const eventType = 'test_event';
     const properties = { action: 'click', count: 42 };
 
-    const forwarder = new DirectTelemetryForwarder(endpoint);
+    const forwarder = new DirectTelemetryForwarder(endpoint, true);
     forwarder.send(eventType, properties);
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -53,18 +53,8 @@ describe('DirectTelemetryForwarder', () => {
     );
   });
 
-  it('can override HTTP method to POST', async () => {
-    const forwarder = new DirectTelemetryForwarder(endpoint, { httpMethod: 'POST' });
-    forwarder.send('event', { foo: 'bar' });
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-
-    const request = mockFetch.mock.calls[0][0] as Request;
-    expect(request.method).toBe('POST');
-  });
-
   it('uses default pod and host_name from environment', async () => {
-    const forwarder = new DirectTelemetryForwarder(endpoint);
+    const forwarder = new DirectTelemetryForwarder(endpoint, true);
     forwarder.send('event', { foo: 'bar' });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -79,7 +69,7 @@ describe('DirectTelemetryForwarder', () => {
   });
 
   it('uses default service_name', async () => {
-    const forwarder = new DirectTelemetryForwarder(endpoint);
+    const forwarder = new DirectTelemetryForwarder(endpoint, true);
     forwarder.send('event', { foo: 'bar' });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -88,5 +78,12 @@ describe('DirectTelemetryForwarder', () => {
     const body = (await request.clone().json()) as TableauTelemetryJsonEvent[];
 
     expect(body[0].service_name).toBe('tableau-mcp');
+  });
+
+  it('does not send telemetry when enabled is false', () => {
+    const forwarder = new DirectTelemetryForwarder(endpoint, false);
+    forwarder.send('event', { foo: 'bar' });
+
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });

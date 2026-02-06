@@ -90,6 +90,7 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
           endpoint: config.productTelemetryEndpoint,
           siteName: config.siteName,
           podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },

@@ -40,6 +40,7 @@ describe('getViewDataTool', () => {
     resetResourceAccessCheckerSingleton();
     mocks.mockGetConfig.mockReturnValue({
       productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      productTelemetryEnabled: true,
       siteName: 'test-site',
       server: 'https://test-server.example.com',
       boundedContext: {

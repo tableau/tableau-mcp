@@ -209,7 +209,10 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       request_id: requestId.toString(),
     });
 
-    const productTelemetryForwarder = getProductTelemetry(productTelemetryBase.endpoint);
+    const productTelemetryForwarder = getProductTelemetry(
+      productTelemetryBase.endpoint,
+      productTelemetryBase.enabled,
+    );
 
     let success = false;
     let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls

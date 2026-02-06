@@ -66,6 +66,7 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
           endpoint: config.productTelemetryEndpoint,
           siteName: config.siteName,
           podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },
