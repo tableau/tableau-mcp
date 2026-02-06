@@ -73,9 +73,6 @@ export class DirectTelemetryForwarder {
       body: JSON.stringify([event]),
     };
 
-    // eslint-disable-next-line no-console
-    console.log('[Telemetry] Sending event:', JSON.stringify(event, null, 2));
-
     const req = new Request(this.endpoint, init);
     sendTelemetryRequest(req);
   }
