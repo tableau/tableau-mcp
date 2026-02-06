@@ -11,7 +11,7 @@ import { Server } from '../server.js';
 import { tableauAuthInfoSchema } from '../server/oauth/schemas.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
 import {
-  DirectTelemetryForwarder,
+  getProductTelemetry,
   ProductTelemetryBase,
 } from '../telemetry/productTelemetry/telemetryForwarder.js';
 import { isAxiosError } from '../utils/axios.js';
@@ -31,16 +31,6 @@ function getHttpStatus(error: ZodiosError | Error | unknown): string {
   }
 
   return '';
-}
-
-const PRODUCT_TELEMETRY_ENDPOINT = 'https://prod.telemetry.tableausoftware.com';
-let productTelemetry: DirectTelemetryForwarder | null = null;
-
-function getProductTelemetry(): DirectTelemetryForwarder {
-  if (!productTelemetry) {
-    productTelemetry = new DirectTelemetryForwarder(PRODUCT_TELEMETRY_ENDPOINT);
-  }
-  return productTelemetry;
 }
 
 type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args extends ZodRawShape
@@ -219,7 +209,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       request_id: requestId.toString(),
     });
 
-    const productTelemetryForwarder = getProductTelemetry();
+    const productTelemetryForwarder = getProductTelemetry(productTelemetryBase.endpoint);
 
     let success = false;
     let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls

@@ -117,6 +117,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     // Set default config for existing tests
     resetResourceAccessCheckerSingleton();
     mocks.mockGetConfig.mockReturnValue({
+      productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      siteName: 'test-site',
+      server: 'https://test-server.example.com',
       disableMetadataApiRequests: false,
       boundedContext: {
         projectIds: null,
@@ -221,6 +224,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
 
   it('should return data source not allowed error when datasource is not allowed', async () => {
     mocks.mockGetConfig.mockReturnValue({
+      productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      siteName: 'test-site',
+      server: 'https://test-server.example.com',
       boundedContext: {
         projectIds: null,
         datasourceIds: new Set(['some-other-datasource-luid']),

@@ -10,11 +10,11 @@ import invariant from '../utils/invariant.js';
 import { Tool } from './tool.js';
 
 // Mock for product telemetry - tracks calls to send()
-const mockTelemetrySend = vi.fn();
+const mockTelemetrySend = vi.hoisted(() => vi.fn());
 vi.mock('../telemetry/productTelemetry/telemetryForwarder.js', () => ({
-  DirectTelemetryForwarder: vi.fn().mockImplementation(() => ({
+  getProductTelemetry: vi.fn().mockReturnValue({
     send: mockTelemetrySend,
-  })),
+  }),
 }));
 
 describe('Tool', () => {

@@ -70,6 +70,9 @@ describe('queryDatasourceTool', () => {
     resetDatasourceCredentials();
     resetResourceAccessCheckerSingleton();
     mocks.mockGetConfig.mockReturnValue({
+      productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      siteName: 'test-site',
+      server: 'https://test-server.example.com',
       datasourceCredentials: undefined,
       boundedContext: {
         projectIds: null,

@@ -130,6 +130,9 @@ describe('getGeneratePulseInsightBriefTool', () => {
     vi.clearAllMocks();
     resetResourceAccessCheckerSingleton();
     mocks.mockGetConfig.mockReturnValue({
+      productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      siteName: 'test-site',
+      server: 'https://test-server.example.com',
       boundedContext: {
         projectIds: null,
         datasourceIds: null,
@@ -299,6 +302,9 @@ describe('getGeneratePulseInsightBriefTool', () => {
     };
 
     mocks.mockGetConfig.mockReturnValue({
+      productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      siteName: 'test-site',
+      server: 'https://test-server.example.com',
       boundedContext: {
         projectIds: null,
         datasourceIds: new Set([allowedDatasourceId]),
@@ -325,6 +331,9 @@ describe('getGeneratePulseInsightBriefTool', () => {
 
   it('should return an error when all metrics are filtered out', async () => {
     mocks.mockGetConfig.mockReturnValue({
+      productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      siteName: 'test-site',
+      server: 'https://test-server.example.com',
       boundedContext: {
         projectIds: null,
         datasourceIds: new Set(['ALLOWED-DATASOURCE-ID']),

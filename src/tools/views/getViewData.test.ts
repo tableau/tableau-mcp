@@ -39,6 +39,9 @@ describe('getViewDataTool', () => {
     vi.clearAllMocks();
     resetResourceAccessCheckerSingleton();
     mocks.mockGetConfig.mockReturnValue({
+      productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      siteName: 'test-site',
+      server: 'https://test-server.example.com',
       boundedContext: {
         projectIds: null,
         datasourceIds: null,

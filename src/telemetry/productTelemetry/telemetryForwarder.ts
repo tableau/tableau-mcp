@@ -116,3 +116,13 @@ const getDefaultHostName = (): string => {
 const formatHostTimestamp = (d: Date): string => {
   return d.toISOString();
 };
+
+// Singleton access pattern
+let productTelemetryInstance: DirectTelemetryForwarder | null = null;
+
+export function getProductTelemetry(endpoint: string): DirectTelemetryForwarder {
+  if (!productTelemetryInstance) {
+    productTelemetryInstance = new DirectTelemetryForwarder(endpoint);
+  }
+  return productTelemetryInstance;
+}
