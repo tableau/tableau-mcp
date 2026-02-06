@@ -140,7 +140,6 @@ describe('queryDatasourceTool', () => {
         debug: true,
         disaggregate: false,
         returnFormat: 'OBJECTS',
-        rowLimit: 100,
       },
       query: {
         fields: [
@@ -187,6 +186,7 @@ describe('queryDatasourceTool', () => {
   it('should add datasource credentials to the request when provided', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
     mocks.mockGetConfig.mockReturnValue({
+      server: 'https://10ax.online.tableau.com',
       datasourceCredentials: JSON.stringify({
         '71db762b-6201-466b-93da-57cc0aec8ed9': [
           { luid: 'test-luid', u: 'test-user', p: 'test-pass' },

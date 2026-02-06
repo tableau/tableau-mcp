@@ -105,12 +105,22 @@ export const getQueryDatasourceTool = (
             ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
             : limit;
 
-          const options = {
-            returnFormat: 'OBJECTS',
-            debug: true,
-            disaggregate: false,
-            rowLimit,
-          } as const;
+          const options = await getResultForTableauVersion({
+            server: config.server || getTableauAuthInfo(authInfo)?.server,
+            mappings: {
+              '2026.1.0': {
+                returnFormat: 'OBJECTS',
+                debug: true,
+                disaggregate: false,
+                rowLimit, // rowLimit can only be provided in 2026.1.0 and later
+              } as const,
+              default: {
+                returnFormat: 'OBJECTS',
+                debug: true,
+                disaggregate: false,
+              } as const,
+            },
+          });
 
           const credentials = getDatasourceCredentials(datasourceLuid);
           if (credentials) {
