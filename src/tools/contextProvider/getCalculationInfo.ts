@@ -115,7 +115,7 @@ TODO
 `;
 
 const calculationStructureInfo = `
-Calculations are expressions composed of the following components:
+Calculation expressions arecomposed of the following components:
 - Fields
 - Operators
 - Functions
