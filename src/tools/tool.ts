@@ -14,18 +14,10 @@ import {
   getProductTelemetry,
   ProductTelemetryBase,
 } from '../telemetry/productTelemetry/telemetryForwarder.js';
-import { isAxiosError } from '../utils/axios.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
+import { getHttpStatus } from '../utils/getHttpStatus.js';
 import { Provider, TypeOrProvider } from '../utils/provider.js';
 import { ToolName } from './toolName.js';
-
-/**
- * Extracts HTTP status code from an error if available (e.g., "401", "404", "500")
- * Returns empty string if no HTTP status can be determined
- */
-function getHttpStatus(error: Error): string {
-  return isAxiosError(error) && error.response?.status ? String(error.response.status) : '';
-}
 
 type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args extends ZodRawShape
   ? (args: z.objectOutputType<Args, ZodTypeAny>) => void
@@ -43,6 +35,7 @@ export type ConstrainedResult<T> =
   | {
       type: 'error';
       message: string;
+      error?: Error;
     };
 
 /**
@@ -232,7 +225,8 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
           // Constrained result is either 'empty' or 'error'
           const isError = constrainedResult.type === 'error';
           success = !isError;
-          errorCode = ''; // Constrained errors don't have HTTP status
+          errorCode =
+            isError && constrainedResult.error ? getHttpStatus(constrainedResult.error) : '';
           toolResult = {
             isError,
             content: [{ type: 'text', text: constrainedResult.message }],

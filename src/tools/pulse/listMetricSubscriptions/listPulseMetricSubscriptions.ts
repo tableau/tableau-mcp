@@ -126,6 +126,7 @@ export async function constrainPulseMetricSubscriptions({
           'While Pulse Metric Subscriptions were found, an error occurred while retrieving information about them to determine if they are allowed to be viewed.',
           getExceptionMessage(metricsResult.error),
         ].join(' '),
+        error: metricsResult.error,
       };
     }
 
@@ -161,6 +162,7 @@ export async function constrainPulseMetricSubscriptions({
         'While Pulse Metric Subscriptions were found, an error occurred while retrieving information about them to determine if they are allowed to be viewed.',
         getExceptionMessage(error),
       ].join(' '),
+      error: error instanceof Error ? error : undefined,
     };
   }
 }
