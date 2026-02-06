@@ -1,4 +1,8 @@
-import { DirectTelemetryForwarder, TableauTelemetryJsonEvent } from './telemetryForwarder.js';
+import {
+  exportedForTesting,
+  getProductTelemetry,
+  TableauTelemetryJsonEvent,
+} from './telemetryForwarder.js';
 
 describe('DirectTelemetryForwarder', () => {
   const endpoint = 'https://qa.telemetry.tableausoftware.com';
@@ -6,6 +10,7 @@ describe('DirectTelemetryForwarder', () => {
   const mockFetch = vi.fn();
 
   beforeEach(() => {
+    exportedForTesting.resetProductTelemetry();
     mockFetch.mockImplementation(() => {
       return Promise.resolve(new Response('', { status: 200 }));
     });
@@ -18,7 +23,7 @@ describe('DirectTelemetryForwarder', () => {
   });
 
   it('throws error when endpoint is empty', () => {
-    expect(() => new DirectTelemetryForwarder('', true)).toThrowError(
+    expect(() => getProductTelemetry('', true)).toThrowError(
       'Endpoint URL is required for DirectTelemetryForwarder',
     );
   });
@@ -26,7 +31,7 @@ describe('DirectTelemetryForwarder', () => {
   it('sends telemetry with PUT method by default', async () => {
     const properties = { action: 'click', count: 42 };
 
-    const forwarder = new DirectTelemetryForwarder(endpoint, true);
+    const forwarder = getProductTelemetry(endpoint, true);
     forwarder.send('tool_call', properties);
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -53,7 +58,7 @@ describe('DirectTelemetryForwarder', () => {
   });
 
   it('uses default pod and host_name from environment', async () => {
-    const forwarder = new DirectTelemetryForwarder(endpoint, true);
+    const forwarder = getProductTelemetry(endpoint, true);
     forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -68,7 +73,7 @@ describe('DirectTelemetryForwarder', () => {
   });
 
   it('uses default service_name', async () => {
-    const forwarder = new DirectTelemetryForwarder(endpoint, true);
+    const forwarder = getProductTelemetry(endpoint, true);
     forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -80,7 +85,7 @@ describe('DirectTelemetryForwarder', () => {
   });
 
   it('does not send telemetry when enabled is false', () => {
-    const forwarder = new DirectTelemetryForwarder(endpoint, false);
+    const forwarder = getProductTelemetry(endpoint, false);
     forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).not.toHaveBeenCalled();

@@ -114,3 +114,10 @@ export function getProductTelemetry(endpoint: string, enabled: boolean): DirectT
   }
   return productTelemetryInstance;
 }
+
+export const exportedForTesting = {
+  DirectTelemetryForwarder,
+  resetProductTelemetry: () => {
+    productTelemetryInstance = null;
+  },
+};
