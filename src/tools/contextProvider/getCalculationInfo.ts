@@ -59,13 +59,26 @@ Algorithm to determine which calculation type to use:
 `;
 
 const basicCalculationExamples = `
-1. 
+1. SUM([Profit])/SUM([Sales]) - Calculates the profit ratio
+2. 
 
 `;
 
 const lodCalculationExamples = `
-Example calculations and what they do:
+1. Customer order frequency: { FIXED [Customer Id] : COUNTD([Order Id]) }
+- Calculates the number of orders per customer. You can use this calculation to create a histogram of customer order frequency.
 
+2. Comparitive sales analysis: { EXCLUDE [Category] : SUM([Selected Sales]) }
+- Excludes the Category from grouping the sum of selected sales will total the selected sales across all rows
+- This will make it easy to compare the sales of each Category to a selected Category.
+
+3. Top deals by sales rep: { INCLUDE [Sales Rep] : MAX([Sales]) }
+- This calculation can be used to find the top deals by sales rep.
+- MAX([Sales]) will only find the the largest deal size since there is only one record per deal, so we include the Sales Rep to group the deals by sales rep.
+`;
+
+const tableCalculationExamples = `
+TODO
 `;
 
 const basicCalculationInfo = `
@@ -115,7 +128,7 @@ TODO
 `;
 
 const calculationStructureInfo = `
-Calculation expressions arecomposed of the following components:
+Calculation expressions are composed of the following components:
 - Fields
 - Operators
 - Functions
@@ -999,15 +1012,35 @@ export const getGetCalculationInfoTool = (server: Server): Tool<typeof paramsSch
 
           switch (calculationType) {
             case 'BASIC':
-              toReturn.calculationInfo = basicCalculationInfo;
+              toReturn.type = 'BASIC';
+              toReturn.info = basicCalculationInfo;
+              if (!excludeExamplesForCalculationType) {
+                toReturn.examples = basicCalculationExamples;
+              }
               break;
             case 'LOD':
-              toReturn.calculationInfo = lodCalculationInfo;
+              toReturn.type = 'LOD';
+              toReturn.info = lodCalculationInfo;
+              if (!excludeExamplesForCalculationType) {
+                toReturn.examples = lodCalculationExamples;
+              }
               break;
             case 'TABLE':
-              toReturn.tableCalculationInfo = tableCalculationInfo;
+              toReturn.type = 'TABLE';
+              toReturn.info = tableCalculationInfo;
+              if (!excludeExamplesForCalculationType) {
+                toReturn.examples = tableCalculationExamples;
+              }
               break;
           }
+
+          if (!excludeCalculationStructureInfo) {
+            toReturn.expressionStructureInfo = calculationStructureInfo;
+          }
+          if (!excludeFunctionsList) {
+            toReturn.functions = functionsList;
+          }
+
           return new Ok(toReturn);
         },
         constrainSuccessResult: (calculationInfo) => {
