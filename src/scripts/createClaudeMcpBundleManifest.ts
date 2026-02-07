@@ -365,6 +365,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  ENABLE_MCP_SITE_SETTINGS: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable MCP Site Settings',
+    description: 'Enable MCP site settings.',
+    required: false,
+    sensitive: false,
+  },
   DANGEROUSLY_DISABLE_OAUTH: {
     includeInUserConfig: false,
     type: 'boolean',

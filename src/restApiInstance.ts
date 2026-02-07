@@ -28,31 +28,43 @@ type JwtScopes =
   | 'tableau:metric_subscriptions:read'
   | 'tableau:insights:read'
   | 'tableau:views:download'
-  | 'tableau:insight_brief:create';
+  | 'tableau:insight_brief:create'
+  | 'tableau:mcp_site_settings:read';
 
-const getNewRestApiInstanceAsync = async (
-  config: Config,
-  requestId: RequestId,
-  server: Server,
-  jwtScopes: Set<JwtScopes>,
-  signal: AbortSignal,
-  authInfo?: TableauAuthInfo,
-): Promise<RestApi> => {
-  signal.addEventListener(
-    'abort',
-    () => {
-      log.info(
-        server,
-        {
-          type: 'request-cancelled',
-          requestId,
-          reason: signal.reason,
-        },
-        { logger: server.name, requestId },
-      );
-    },
-    { once: true },
-  );
+const getNewRestApiInstanceAsync = async ({
+  config,
+  requestId,
+  server,
+  jwtScopes,
+  signal,
+  authInfo,
+  disableLogging,
+}: {
+  config: Config;
+  requestId: RequestId;
+  server: Server;
+  jwtScopes: Set<JwtScopes>;
+  signal: AbortSignal;
+  authInfo?: TableauAuthInfo;
+  disableLogging: boolean;
+}): Promise<RestApi> => {
+  if (!disableLogging) {
+    signal.addEventListener(
+      'abort',
+      () => {
+        log.info(
+          server,
+          {
+            type: 'request-cancelled',
+            requestId,
+            reason: signal.reason,
+          },
+          { logger: server.name, requestId },
+        );
+      },
+      { once: true },
+    );
+  }
 
   const tableauServer = config.server || authInfo?.server;
   invariant(tableauServer, 'Tableau server could not be determined');
@@ -60,14 +72,12 @@ const getNewRestApiInstanceAsync = async (
   const restApi = new RestApi(tableauServer, {
     maxRequestTimeoutMs: config.maxRequestTimeoutMs,
     signal,
-    requestInterceptor: [
-      getRequestInterceptor(server, requestId),
-      getRequestErrorInterceptor(server, requestId),
-    ],
-    responseInterceptor: [
-      getResponseInterceptor(server, requestId),
-      getResponseErrorInterceptor(server, requestId),
-    ],
+    requestInterceptor: disableLogging
+      ? undefined
+      : [getRequestInterceptor(server, requestId), getRequestErrorInterceptor(server, requestId)],
+    responseInterceptor: disableLogging
+      ? undefined
+      : [getResponseInterceptor(server, requestId), getResponseErrorInterceptor(server, requestId)],
   });
 
   if (config.auth === 'pat') {
@@ -120,6 +130,7 @@ export const useRestApi = async <T>({
   jwtScopes,
   signal,
   authInfo,
+  disableLogging = false,
 }: {
   config: Config;
   requestId: RequestId;
@@ -128,15 +139,17 @@ export const useRestApi = async <T>({
   signal: AbortSignal;
   callback: (restApi: RestApi) => Promise<T>;
   authInfo?: TableauAuthInfo;
+  disableLogging?: boolean;
 }): Promise<T> => {
-  const restApi = await getNewRestApiInstanceAsync(
+  const restApi = await getNewRestApiInstanceAsync({
     config,
     requestId,
     server,
-    new Set(jwtScopes),
+    jwtScopes: new Set(jwtScopes),
     signal,
     authInfo,
-  );
+    disableLogging,
+  });
   try {
     return await callback(restApi);
   } finally {

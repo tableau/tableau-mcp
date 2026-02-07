@@ -1,4 +1,5 @@
 import { AuthConfig } from './authConfig.js';
+import { getSiteIdFromAccessToken } from './getSiteIdFromAccessToken.js';
 import {
   AxiosInterceptor,
   ErrorInterceptor,
@@ -20,6 +21,7 @@ import ViewsMethods from './methods/viewsMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
 import WorkbooksMethods from './methods/workbooksMethods.js';
 import { Credentials } from './types/credentials.js';
+import { McpSiteSettings } from './types/mcpSiteSettings.js';
 
 /**
  * Interface for the Tableau REST APIs
@@ -185,6 +187,18 @@ export class RestApi {
     return this._serverMethods;
   }
 
+  // Temporary until we have proper site methods
+  get siteMethods(): { getMcpSettings: () => Promise<McpSiteSettings> } {
+    return {
+      getMcpSettings: async (): Promise<McpSiteSettings> => {
+        return {
+          INCLUDE_DATASOURCE_IDS: '2d935df8-fe7e-4fd8-bb14-35eb4ba31d4',
+          EXCLUDE_TOOLS: 'pulse',
+        };
+      },
+    };
+  }
+
   get vizqlDataServiceMethods(): VizqlDataServiceMethods {
     if (!this._vizqlDataServiceMethods) {
       const baseUrl = `${this._host}/api/v1/vizql-data-service`;
@@ -232,12 +246,7 @@ export class RestApi {
   };
 
   setCredentials = (accessToken: string, userId: string): void => {
-    const parts = accessToken.split('|');
-    if (parts.length < 3) {
-      throw new Error('Could not determine site ID. Access token must have 3 parts.');
-    }
-
-    const siteId = parts[2];
+    const siteId = getSiteIdFromAccessToken(accessToken);
     this._creds = {
       site: {
         id: siteId,

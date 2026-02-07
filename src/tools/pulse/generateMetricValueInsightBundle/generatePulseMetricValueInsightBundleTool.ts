@@ -12,6 +12,7 @@ import {
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
+import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -163,7 +164,17 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
         authInfo,
         args: { bundleRequest, bundleType },
         callback: async () => {
-          const { datasourceIds } = config.boundedContext;
+          const configWithOverrides = await getConfigWithOverrides({
+            restApiArgs: {
+              config,
+              requestId,
+              server,
+              signal,
+              authInfo: getTableauAuthInfo(authInfo),
+            },
+          });
+
+          const { datasourceIds } = configWithOverrides.boundedContext;
           if (datasourceIds) {
             const datasourceLuid =
               bundleRequest.bundle_request.input.metric.definition.datasource.id;

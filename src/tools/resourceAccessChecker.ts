@@ -1,23 +1,15 @@
-import { RequestId } from '@modelcontextprotocol/sdk/types.js';
-
-import { BoundedContext, Config, getConfig } from '../config.js';
+import { BoundedContext } from '../config.js';
 import { useRestApi } from '../restApiInstance.js';
 import { DataSource } from '../sdks/tableau/types/dataSource.js';
 import { View } from '../sdks/tableau/types/view.js';
 import { Workbook } from '../sdks/tableau/types/workbook.js';
-import { Server } from '../server.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
+import { getConfigWithOverrides } from '../utils/mcpSiteSettings.js';
+import { RestApiArgs } from '../utils/restApiArgs.js';
 
 type AllowedResult<T = unknown> =
   | { allowed: true; content?: T }
   | { allowed: false; message: string };
-
-export type RestApiArgs = {
-  config: Config;
-  requestId: RequestId;
-  server: Server;
-  signal: AbortSignal;
-};
 
 class ResourceAccessChecker {
   private _allowedProjectIds: Set<string> | null | undefined;
@@ -50,36 +42,51 @@ class ResourceAccessChecker {
     this._cachedViewIds = new Map();
   }
 
-  private get allowedProjectIds(): Set<string> | null {
-    if (this._allowedProjectIds === undefined) {
-      this._allowedProjectIds = getConfig().boundedContext.projectIds;
-    }
+  private async setBoundedContext({ restApiArgs }: { restApiArgs: RestApiArgs }): Promise<void> {
+    const { boundedContext } = await getConfigWithOverrides({
+      restApiArgs,
+    });
 
-    return this._allowedProjectIds;
+    this._allowedProjectIds = boundedContext.projectIds;
+    this._allowedDatasourceIds = boundedContext.datasourceIds;
+    this._allowedWorkbookIds = boundedContext.workbookIds;
+    this._allowedTags = boundedContext.tags;
   }
 
-  private get allowedDatasourceIds(): Set<string> | null {
-    if (this._allowedDatasourceIds === undefined) {
-      this._allowedDatasourceIds = getConfig().boundedContext.datasourceIds;
-    }
-
-    return this._allowedDatasourceIds;
+  private async getAllowedProjectIds({
+    restApiArgs,
+  }: {
+    restApiArgs: RestApiArgs;
+  }): Promise<Set<string> | null> {
+    await this.setBoundedContext({ restApiArgs });
+    return this._allowedProjectIds!;
   }
 
-  private get allowedWorkbookIds(): Set<string> | null {
-    if (this._allowedWorkbookIds === undefined) {
-      this._allowedWorkbookIds = getConfig().boundedContext.workbookIds;
-    }
-
-    return this._allowedWorkbookIds;
+  private async getAllowedDatasourceIds({
+    restApiArgs,
+  }: {
+    restApiArgs: RestApiArgs;
+  }): Promise<Set<string> | null> {
+    await this.setBoundedContext({ restApiArgs });
+    return this._allowedDatasourceIds!;
   }
 
-  private get allowedTags(): Set<string> | null {
-    if (this._allowedTags === undefined) {
-      this._allowedTags = getConfig().boundedContext.tags;
-    }
+  private async getAllowedWorkbookIds({
+    restApiArgs,
+  }: {
+    restApiArgs: RestApiArgs;
+  }): Promise<Set<string> | null> {
+    await this.setBoundedContext({ restApiArgs });
+    return this._allowedWorkbookIds!;
+  }
 
-    return this._allowedTags;
+  private async getAllowedTags({
+    restApiArgs,
+  }: {
+    restApiArgs: RestApiArgs;
+  }): Promise<Set<string> | null> {
+    await this.setBoundedContext({ restApiArgs });
+    return this._allowedTags!;
   }
 
   async isDatasourceAllowed({
@@ -94,7 +101,9 @@ class ResourceAccessChecker {
       restApiArgs,
     });
 
-    if (!this.allowedProjectIds && !this.allowedTags) {
+    const allowedProjectIds = await this.getAllowedProjectIds({ restApiArgs });
+    const allowedTags = await this.getAllowedTags({ restApiArgs });
+    if (!allowedProjectIds && !allowedTags) {
       // If project filtering is enabled, we cannot cache the result since the datasource may be moved between projects.
       // If tag filtering is enabled, we cannot cache the result since the datasource tags can change over time.
       this._cachedDatasourceIds.set(datasourceLuid, result);
@@ -115,7 +124,9 @@ class ResourceAccessChecker {
       restApiArgs,
     });
 
-    if (!this.allowedProjectIds && !this.allowedTags) {
+    const allowedProjectIds = await this.getAllowedProjectIds({ restApiArgs });
+    const allowedTags = await this.getAllowedTags({ restApiArgs });
+    if (!allowedProjectIds && !allowedTags) {
       // If project filtering is enabled, we cannot cache the result since the workbook may be moved between projects.
       // If tag filtering is enabled, we cannot cache the result since the workbook tags can change over time.
       this._cachedWorkbookIds.set(workbookId, result);
@@ -136,7 +147,9 @@ class ResourceAccessChecker {
       restApiArgs,
     });
 
-    if (!this.allowedProjectIds && !this.allowedTags) {
+    const allowedProjectIds = await this.getAllowedProjectIds({ restApiArgs });
+    const allowedTags = await this.getAllowedTags({ restApiArgs });
+    if (!allowedProjectIds && !allowedTags) {
       // If project filtering is enabled, we cannot cache the result since the workbook containing the view may be moved between projects.
       // If tag filtering is enabled, we cannot cache the result since the view tags can change over time.
       this._cachedViewIds.set(viewId, result);
@@ -147,7 +160,7 @@ class ResourceAccessChecker {
 
   private async _isDatasourceAllowed({
     datasourceLuid,
-    restApiArgs: { config, requestId, server, signal },
+    restApiArgs,
   }: {
     datasourceLuid: string;
     restApiArgs: RestApiArgs;
@@ -157,7 +170,8 @@ class ResourceAccessChecker {
       return cachedResult;
     }
 
-    if (this.allowedDatasourceIds && !this.allowedDatasourceIds.has(datasourceLuid)) {
+    const allowedDatasourceIds = await this.getAllowedDatasourceIds({ restApiArgs });
+    if (allowedDatasourceIds && !allowedDatasourceIds.has(datasourceLuid)) {
       return {
         allowed: false,
         message: [
@@ -170,11 +184,8 @@ class ResourceAccessChecker {
     let datasource: DataSource | undefined;
     async function getDatasource(): Promise<DataSource> {
       return await useRestApi({
-        config,
-        requestId,
-        server,
+        ...restApiArgs,
         jwtScopes: ['tableau:content:read'],
-        signal,
         callback: async (restApi) =>
           await restApi.datasourcesMethods.queryDatasource({
             siteId: restApi.siteId,
@@ -183,11 +194,12 @@ class ResourceAccessChecker {
       });
     }
 
-    if (this.allowedProjectIds) {
+    const allowedProjectIds = await this.getAllowedProjectIds({ restApiArgs });
+    if (allowedProjectIds) {
       try {
         datasource = await getDatasource();
 
-        if (!this.allowedProjectIds.has(datasource.project.id)) {
+        if (!allowedProjectIds?.has(datasource.project.id)) {
           return {
             allowed: false,
             message: [
@@ -208,11 +220,12 @@ class ResourceAccessChecker {
       }
     }
 
-    if (this.allowedTags) {
+    const allowedTags = await this.getAllowedTags({ restApiArgs });
+    if (allowedTags) {
       try {
         datasource = datasource ?? (await getDatasource());
 
-        if (!datasource.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+        if (!datasource.tags?.tag?.some((tag) => allowedTags?.has(tag.label))) {
           return {
             allowed: false,
             message: [
@@ -238,7 +251,7 @@ class ResourceAccessChecker {
 
   private async _isWorkbookAllowed({
     workbookId,
-    restApiArgs: { config, requestId, server, signal },
+    restApiArgs,
   }: {
     workbookId: string;
     restApiArgs: RestApiArgs;
@@ -248,7 +261,8 @@ class ResourceAccessChecker {
       return cachedResult;
     }
 
-    if (this.allowedWorkbookIds && !this.allowedWorkbookIds.has(workbookId)) {
+    const allowedWorkbookIds = await this.getAllowedWorkbookIds({ restApiArgs });
+    if (allowedWorkbookIds && !allowedWorkbookIds.has(workbookId)) {
       return {
         allowed: false,
         message: [
@@ -261,11 +275,8 @@ class ResourceAccessChecker {
     let workbook: Workbook | undefined;
     async function getWorkbook(): Promise<Workbook> {
       return await useRestApi({
-        config,
-        requestId,
-        server,
+        ...restApiArgs,
         jwtScopes: ['tableau:content:read'],
-        signal,
         callback: async (restApi) =>
           await restApi.workbooksMethods.getWorkbook({
             siteId: restApi.siteId,
@@ -274,11 +285,12 @@ class ResourceAccessChecker {
       });
     }
 
-    if (this.allowedProjectIds) {
+    const allowedProjectIds = await this.getAllowedProjectIds({ restApiArgs });
+    if (allowedProjectIds) {
       try {
         workbook = await getWorkbook();
 
-        if (!this.allowedProjectIds.has(workbook.project?.id ?? '')) {
+        if (!allowedProjectIds.has(workbook.project?.id ?? '')) {
           return {
             allowed: false,
             message: [
@@ -299,11 +311,12 @@ class ResourceAccessChecker {
       }
     }
 
-    if (this.allowedTags) {
+    const allowedTags = await this.getAllowedTags({ restApiArgs });
+    if (allowedTags) {
       try {
         workbook = workbook ?? (await getWorkbook());
 
-        if (!workbook.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+        if (!workbook.tags?.tag?.some((tag) => allowedTags?.has(tag.label))) {
           return {
             allowed: false,
             message: [
@@ -329,7 +342,7 @@ class ResourceAccessChecker {
 
   private async _isViewAllowed({
     viewId,
-    restApiArgs: { config, requestId, server, signal },
+    restApiArgs,
   }: {
     viewId: string;
     restApiArgs: RestApiArgs;
@@ -342,11 +355,8 @@ class ResourceAccessChecker {
     let view: View | undefined;
     async function getView(): Promise<View> {
       return await useRestApi({
-        config,
-        requestId,
-        server,
+        ...restApiArgs,
         jwtScopes: ['tableau:content:read'],
-        signal,
         callback: async (restApi) => {
           return await restApi.viewsMethods.getView({
             siteId: restApi.siteId,
@@ -356,11 +366,12 @@ class ResourceAccessChecker {
       });
     }
 
-    if (this.allowedWorkbookIds) {
+    const allowedWorkbookIds = await this.getAllowedWorkbookIds({ restApiArgs });
+    if (allowedWorkbookIds) {
       try {
         view = await getView();
 
-        if (!this.allowedWorkbookIds.has(view.workbook?.id ?? '')) {
+        if (!allowedWorkbookIds.has(view.workbook?.id ?? '')) {
           return {
             allowed: false,
             message: [
@@ -381,11 +392,12 @@ class ResourceAccessChecker {
       }
     }
 
-    if (this.allowedProjectIds) {
+    const allowedProjectIds = await this.getAllowedProjectIds({ restApiArgs });
+    if (allowedProjectIds) {
       try {
         view = view ?? (await getView());
 
-        if (!this.allowedProjectIds.has(view.project?.id ?? '')) {
+        if (!allowedProjectIds.has(view.project?.id ?? '')) {
           return {
             allowed: false,
             message: [
@@ -406,11 +418,12 @@ class ResourceAccessChecker {
       }
     }
 
-    if (this.allowedTags) {
+    const allowedTags = await this.getAllowedTags({ restApiArgs });
+    if (allowedTags) {
       try {
         view = view ?? (await getView());
 
-        if (!view.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+        if (!view.tags?.tag?.some((tag) => allowedTags?.has(tag.label))) {
           return {
             allowed: false,
             message: [

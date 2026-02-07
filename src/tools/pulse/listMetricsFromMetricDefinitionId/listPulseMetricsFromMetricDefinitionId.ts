@@ -7,6 +7,7 @@ import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.j
 import { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
+import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -63,8 +64,22 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
             },
           });
         },
-        constrainSuccessResult: (metrics) =>
-          constrainPulseMetrics({ metrics, boundedContext: config.boundedContext }),
+        constrainSuccessResult: async (metrics) => {
+          const configWithOverrides = await getConfigWithOverrides({
+            restApiArgs: {
+              config,
+              requestId,
+              server,
+              signal,
+              authInfo: getTableauAuthInfo(authInfo),
+            },
+          });
+
+          return constrainPulseMetrics({
+            metrics,
+            boundedContext: configWithOverrides.boundedContext,
+          });
+        },
         getErrorText: getPulseDisabledError,
       });
     },

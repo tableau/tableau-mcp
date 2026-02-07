@@ -2,6 +2,7 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
+import { ProcessEnvEx } from '../types/process-env.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
@@ -20,7 +21,35 @@ const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
 
 function isAuthType(auth: unknown): auth is AuthType {
-  return !!authTypes.find((type) => type === auth);
+  return authTypes.some((type) => type === auth);
+}
+
+export const overrideableEnvironmentVariables = [
+  'INCLUDE_TOOLS',
+  'EXCLUDE_TOOLS',
+  'INCLUDE_PROJECT_IDS',
+  'INCLUDE_DATASOURCE_IDS',
+  'INCLUDE_WORKBOOK_IDS',
+  'INCLUDE_TAGS',
+  'MAX_RESULT_LIMIT',
+  'MAX_RESULT_LIMITS',
+  'DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS',
+  'DISABLE_METADATA_API_REQUESTS',
+] as const satisfies ReadonlyArray<keyof ProcessEnvEx>;
+
+type OverrideableEnvironmentVariable = (typeof overrideableEnvironmentVariables)[number];
+function isOverrideableEnvironmentVariable(
+  variable: unknown,
+): variable is OverrideableEnvironmentVariable {
+  return overrideableEnvironmentVariables.some((v) => v === variable);
+}
+
+function filterEnvVarsToOverrideable(
+  environmentVariables: Record<string, string | undefined>,
+): Record<OverrideableEnvironmentVariable, string | undefined> {
+  return Object.fromEntries(
+    Object.entries(environmentVariables).filter(([key]) => isOverrideableEnvironmentVariable(key)),
+  ) as Record<OverrideableEnvironmentVariable, string | undefined>;
 }
 
 export type BoundedContext = {
@@ -68,6 +97,7 @@ export class Config {
   serverLogDirectory: string;
   boundedContext: BoundedContext;
   tableauServerVersionCheckIntervalInHours: number;
+  enableMcpSiteSettings: boolean;
   oauth: {
     enabled: boolean;
     issuer: string;
@@ -88,8 +118,12 @@ export class Config {
     return this.maxResultLimits?.get(toolName) ?? this.maxResultLimit;
   }
 
-  constructor() {
+  constructor(overrides?: Record<string, string | undefined>) {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
+    const filteredVars = overrides
+      ? { ...cleansedVars, ...filterEnvVarsToOverrideable(overrides) }
+      : cleansedVars;
+
     const {
       AUTH: auth,
       SERVER: server,
@@ -132,6 +166,7 @@ export class Config {
       INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
       INCLUDE_TAGS: includeTags,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
+      ENABLE_MCP_SITE_SETTINGS: enableMcpSiteSettings,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
       OAUTH_LOCK_SITE: oauthLockSite,
@@ -146,7 +181,7 @@ export class Config {
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
-    } = cleansedVars;
+    } = filteredVars;
 
     let jwtUsername = '';
 
@@ -210,6 +245,7 @@ export class Config {
       },
     );
 
+    this.enableMcpSiteSettings = enableMcpSiteSettings === 'true';
     const disableOauthOverride = disableOauth === 'true';
     this.oauth = {
       enabled: disableOauthOverride ? false : !!oauthIssuer,
@@ -554,7 +590,8 @@ function parseNumber(
     : number;
 }
 
-export const getConfig = (): Config => new Config();
+export const getConfig = (overrides?: Record<string, string | undefined>): Config =>
+  new Config(overrides);
 
 export const exportedForTesting = {
   Config,

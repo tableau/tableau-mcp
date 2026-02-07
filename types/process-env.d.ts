@@ -40,6 +40,7 @@ export interface ProcessEnvEx {
   INCLUDE_WORKBOOK_IDS: string | undefined;
   INCLUDE_TAGS: string | undefined;
   TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: string | undefined;
+  ENABLE_MCP_SITE_SETTINGS: string | undefined;
   DANGEROUSLY_DISABLE_OAUTH: string | undefined;
   OAUTH_ISSUER: string | undefined;
   OAUTH_JWE_PRIVATE_KEY: string | undefined;

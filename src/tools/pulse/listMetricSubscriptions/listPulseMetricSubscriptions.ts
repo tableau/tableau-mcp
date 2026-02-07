@@ -6,7 +6,8 @@ import { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { RestApiArgs } from '../../resourceAccessChecker.js';
+import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
+import { RestApiArgs } from '../../../utils/restApiArgs.js';
 import { ConstrainedResult, Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -54,10 +55,22 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
           });
         },
         constrainSuccessResult: async (subscriptions) => {
+          const restApiArgs = {
+            config,
+            requestId,
+            server,
+            signal,
+            authInfo: getTableauAuthInfo(authInfo),
+          };
+
+          const configWithOverrides = await getConfigWithOverrides({
+            restApiArgs,
+          });
+
           return await constrainPulseMetricSubscriptions({
             subscriptions,
-            boundedContext: config.boundedContext,
-            restApiArgs: { config, requestId, server, signal },
+            boundedContext: configWithOverrides.boundedContext,
+            restApiArgs,
           });
         },
         getErrorText: getPulseDisabledError,

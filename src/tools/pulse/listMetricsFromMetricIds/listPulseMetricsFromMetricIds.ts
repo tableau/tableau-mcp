@@ -5,6 +5,7 @@ import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
+import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -57,8 +58,22 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
             },
           });
         },
-        constrainSuccessResult: (metrics) =>
-          constrainPulseMetrics({ metrics, boundedContext: config.boundedContext }),
+        constrainSuccessResult: async (metrics) => {
+          const configWithOverrides = await getConfigWithOverrides({
+            restApiArgs: {
+              config,
+              requestId,
+              server,
+              signal,
+              authInfo: getTableauAuthInfo(authInfo),
+            },
+          });
+
+          return constrainPulseMetrics({
+            metrics,
+            boundedContext: configWithOverrides.boundedContext,
+          });
+        },
         getErrorText: getPulseDisabledError,
       });
     },

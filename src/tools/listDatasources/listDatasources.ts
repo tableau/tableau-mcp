@@ -7,6 +7,7 @@ import { useRestApi } from '../../restApiInstance.js';
 import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, Tool } from '../tool.js';
@@ -124,8 +125,22 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
 
           return new Ok(datasources);
         },
-        constrainSuccessResult: (datasources) =>
-          constrainDatasources({ datasources, boundedContext: config.boundedContext }),
+        constrainSuccessResult: async (datasources) => {
+          const configWithOverrides = await getConfigWithOverrides({
+            restApiArgs: {
+              config,
+              requestId,
+              server,
+              signal,
+              authInfo: getTableauAuthInfo(authInfo),
+            },
+          });
+
+          return constrainDatasources({
+            datasources,
+            boundedContext: configWithOverrides.boundedContext,
+          });
+        },
       });
     },
   });

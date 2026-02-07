@@ -10,6 +10,7 @@ import {
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
+import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { pulsePaginate } from '../../../utils/paginate.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
@@ -106,8 +107,22 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
             },
           });
         },
-        constrainSuccessResult: (definitions: Array<PulseMetricDefinition>) =>
-          constrainPulseDefinitions({ definitions, boundedContext: config.boundedContext }),
+        constrainSuccessResult: async (definitions: Array<PulseMetricDefinition>) => {
+          const configWithOverrides = await getConfigWithOverrides({
+            restApiArgs: {
+              config,
+              requestId,
+              server,
+              signal,
+              authInfo: getTableauAuthInfo(authInfo),
+            },
+          });
+
+          return constrainPulseDefinitions({
+            definitions,
+            boundedContext: configWithOverrides.boundedContext,
+          });
+        },
         getErrorText: getPulseDisabledError,
       });
     },

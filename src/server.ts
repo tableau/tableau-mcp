@@ -1,13 +1,17 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { InitializeRequest, SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  InitializeRequest,
+  RequestId,
+  SetLevelRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 
 import pkg from '../package.json';
-import { getConfig } from './config.js';
 import { setLogLevel } from './logging/log.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { Tool } from './tools/tool.js';
 import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
+import { getConfigWithOverrides } from './utils/mcpSiteSettings';
 import { Provider } from './utils/provider.js';
 
 export const serverName = 'tableau-mcp';
@@ -53,14 +57,14 @@ export class Server extends McpServer {
     this._clientInfo = clientInfo;
   }
 
-  registerTools = async (authInfo?: TableauAuthInfo): Promise<void> => {
+  registerTools = async (requestId?: RequestId, authInfo?: TableauAuthInfo): Promise<void> => {
     for (const {
       name,
       description,
       paramsSchema,
       annotations,
       callback,
-    } of this._getToolsToRegister(authInfo)) {
+    } of await this._getToolsToRegister(requestId ?? 'no-request-id', authInfo)) {
       this.registerTool(
         name,
         {
@@ -80,8 +84,20 @@ export class Server extends McpServer {
     });
   };
 
-  private _getToolsToRegister = (authInfo?: TableauAuthInfo): Array<Tool<any>> => {
-    const { includeTools, excludeTools } = getConfig();
+  private _getToolsToRegister = async (
+    requestId: RequestId,
+    authInfo?: TableauAuthInfo,
+  ): Promise<Array<Tool<any>>> => {
+    const config = await getConfigWithOverrides({
+      restApiArgs: {
+        requestId,
+        server: this,
+        authInfo,
+        disableLogging: true, // MCP server is not connected yet so we can't send logging notifications
+      },
+    });
+
+    const { includeTools, excludeTools } = config;
 
     const tools = toolFactories.map((toolFactory) => toolFactory(this, authInfo));
     const toolsToRegister = tools.filter((tool) => {

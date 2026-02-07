@@ -10,6 +10,7 @@ import {
 } from '../../sdks/tableau/types/contentExploration.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { Tool } from '../tool.js';
 import {
   buildFilterString,
@@ -95,8 +96,22 @@ This tool searches across all supported content types for objects relevant to th
             }),
           );
         },
-        constrainSuccessResult: (items) =>
-          constrainSearchContent({ items, boundedContext: config.boundedContext }),
+        constrainSuccessResult: async (items) => {
+          const configWithOverrides = await getConfigWithOverrides({
+            restApiArgs: {
+              config,
+              requestId,
+              server,
+              signal,
+              authInfo: getTableauAuthInfo(authInfo),
+            },
+          });
+
+          return constrainSearchContent({
+            items,
+            boundedContext: configWithOverrides.boundedContext,
+          });
+        },
       });
     },
   });

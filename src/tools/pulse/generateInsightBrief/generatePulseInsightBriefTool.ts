@@ -10,6 +10,7 @@ import {
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
+import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -196,6 +197,15 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
       { briefRequest },
       { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
+      const configWithOverrides = await getConfigWithOverrides({
+        restApiArgs: {
+          requestId,
+          server,
+          signal,
+          authInfo: getTableauAuthInfo(authInfo),
+        },
+      });
+
       const config = getConfig();
       return await generatePulseInsightBriefTool.logAndExecute<
         PulseInsightBriefResponse,
@@ -206,7 +216,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
         args: { briefRequest },
         callback: async () => {
           // Filter out metrics that are not in the allowed datasource set
-          const { datasourceIds } = config.boundedContext;
+          const { datasourceIds } = configWithOverrides.boundedContext;
           if (datasourceIds) {
             for (const message of briefRequest.messages) {
               if (message.metric_group_context) {
