@@ -12,10 +12,12 @@ type AllowedResult<T = unknown> =
   | { allowed: false; message: string };
 
 class ResourceAccessChecker {
-  private _allowedProjectIds: Set<string> | null | undefined;
-  private _allowedDatasourceIds: Set<string> | null | undefined;
-  private _allowedWorkbookIds: Set<string> | null | undefined;
-  private _allowedTags: Set<string> | null | undefined;
+  private _testOverrides: {
+    projectIds: Set<string> | null | undefined;
+    datasourceIds: Set<string> | null | undefined;
+    workbookIds: Set<string> | null | undefined;
+    tags: Set<string> | null | undefined;
+  };
 
   private readonly _cachedDatasourceIds: Map<string, AllowedResult>;
   private readonly _cachedWorkbookIds: Map<string, AllowedResult<Workbook>>;
@@ -30,27 +32,18 @@ class ResourceAccessChecker {
   }
 
   // Optional bounded context to use for testing.
-  private constructor(boundedContext?: BoundedContext) {
+  private constructor(testOverrides?: BoundedContext) {
     // The methods assume these sets are non-empty.
-    this._allowedProjectIds = boundedContext?.projectIds;
-    this._allowedDatasourceIds = boundedContext?.datasourceIds;
-    this._allowedWorkbookIds = boundedContext?.workbookIds;
-    this._allowedTags = boundedContext?.tags;
+    this._testOverrides = {
+      projectIds: testOverrides?.projectIds,
+      datasourceIds: testOverrides?.datasourceIds,
+      workbookIds: testOverrides?.workbookIds,
+      tags: testOverrides?.tags,
+    };
 
     this._cachedDatasourceIds = new Map();
     this._cachedWorkbookIds = new Map();
     this._cachedViewIds = new Map();
-  }
-
-  private async setBoundedContext({ restApiArgs }: { restApiArgs: RestApiArgs }): Promise<void> {
-    const { boundedContext } = await getConfigWithOverrides({
-      restApiArgs,
-    });
-
-    this._allowedProjectIds = boundedContext.projectIds;
-    this._allowedDatasourceIds = boundedContext.datasourceIds;
-    this._allowedWorkbookIds = boundedContext.workbookIds;
-    this._allowedTags = boundedContext.tags;
   }
 
   private async getAllowedProjectIds({
@@ -58,8 +51,14 @@ class ResourceAccessChecker {
   }: {
     restApiArgs: RestApiArgs;
   }): Promise<Set<string> | null> {
-    await this.setBoundedContext({ restApiArgs });
-    return this._allowedProjectIds!;
+    return (
+      this._testOverrides.projectIds ??
+      (
+        await getConfigWithOverrides({
+          restApiArgs,
+        })
+      ).boundedContext.projectIds
+    );
   }
 
   private async getAllowedDatasourceIds({
@@ -67,8 +66,14 @@ class ResourceAccessChecker {
   }: {
     restApiArgs: RestApiArgs;
   }): Promise<Set<string> | null> {
-    await this.setBoundedContext({ restApiArgs });
-    return this._allowedDatasourceIds!;
+    return (
+      this._testOverrides.datasourceIds ??
+      (
+        await getConfigWithOverrides({
+          restApiArgs,
+        })
+      ).boundedContext.datasourceIds
+    );
   }
 
   private async getAllowedWorkbookIds({
@@ -76,8 +81,14 @@ class ResourceAccessChecker {
   }: {
     restApiArgs: RestApiArgs;
   }): Promise<Set<string> | null> {
-    await this.setBoundedContext({ restApiArgs });
-    return this._allowedWorkbookIds!;
+    return (
+      this._testOverrides.workbookIds ??
+      (
+        await getConfigWithOverrides({
+          restApiArgs,
+        })
+      ).boundedContext.workbookIds
+    );
   }
 
   private async getAllowedTags({
@@ -85,8 +96,14 @@ class ResourceAccessChecker {
   }: {
     restApiArgs: RestApiArgs;
   }): Promise<Set<string> | null> {
-    await this.setBoundedContext({ restApiArgs });
-    return this._allowedTags!;
+    return (
+      this._testOverrides.tags ??
+      (
+        await getConfigWithOverrides({
+          restApiArgs,
+        })
+      ).boundedContext.tags
+    );
   }
 
   async isDatasourceAllowed({
