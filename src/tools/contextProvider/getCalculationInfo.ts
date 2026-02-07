@@ -60,7 +60,6 @@ Algorithm to determine which calculation type to use:
 
 const basicCalculationExamples = `
 1. SUM([Profit])/SUM([Sales]) - Calculates the profit ratio
-2. 
 
 `;
 
