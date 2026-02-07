@@ -1,0 +1,3053 @@
+{
+  "workbookId": "Superstore_us",
+  "workbookName": "Superstore_us",
+  "sourceFile": "Superstore.twb",
+  "dataSources": [
+    {
+      "dataSourceId": "federated.0hgpf0j1fdpvv316shikk0mmdlec",
+      "dataSourceName": "Sales Target",
+      "caption": "Sales Target",
+      "isEmbedded": true,
+      "fields": [
+        {
+          "fieldName": "Category",
+          "fieldCaption": "Category",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "CustomerOverview",
+            "CustomerRank",
+            "CustomerScatter",
+            "Performance",
+            "Product Detail Sheet",
+            "ProductDetails",
+            "ProductView",
+            "Sales by Product"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Order Date",
+          "fieldCaption": "Order Date",
+          "dataType": "date",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "CustomerOverview",
+            "CustomerRank",
+            "CustomerScatter",
+            "DaystoShip",
+            "Forecast",
+            "Performance",
+            "Product Detail Sheet",
+            "ProductDetails",
+            "ProductView",
+            "Sale Map",
+            "Sales by Product",
+            "Sales by Segment",
+            "ShipSummary",
+            "ShippingTrend",
+            "Tooltip: Profit Ratio by City",
+            "Total Sales",
+            "What If Forecast"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Segment",
+          "fieldCaption": "Segment",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "CustomerOverview",
+            "CustomerRank",
+            "CustomerScatter",
+            "Forecast",
+            "Performance",
+            "Product Detail Sheet",
+            "ProductDetails",
+            "Sales by Segment"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Sales Target",
+          "fieldCaption": "Sales Target",
+          "dataType": "integer",
+          "role": "measure",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        }
+      ],
+      "calculations": [],
+      "hierarchies": [],
+      "tables": [
+        {
+          "name": "Sheet1",
+          "connection": "excel-direct.1sj83no0zjgqcn11x69nn1f7rbzm",
+          "columns": [
+            "Category",
+            "Order Date",
+            "Segment",
+            "Sales Target"
+          ]
+        }
+      ]
+    },
+    {
+      "dataSourceId": "federated.0a01cod1oxl83l1f5yves1cfciqo",
+      "dataSourceName": "Sales Commission",
+      "caption": "Sales Commission",
+      "isEmbedded": true,
+      "fields": [
+        {
+          "fieldName": "Achievement (copy)",
+          "fieldCaption": "Achievement (estimated)",
+          "dataType": "integer",
+          "role": "measure",
+          "defaultFormat": "C1033%",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [
+            "QuotaAttainment"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Achievement (variable) (copy)",
+          "fieldCaption": "Achieved Quota",
+          "dataType": "string",
+          "role": "measure",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Base (Variable)",
+          "dataType": "integer",
+          "role": "measure",
+          "defaultFormat": "C1033%",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Calculation_0440925131659539",
+          "fieldCaption": "% of quota achieved",
+          "dataType": "real",
+          "role": "measure",
+          "defaultFormat": "p0%",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Calculation_4120925132203686",
+          "fieldCaption": "Rank over 3",
+          "dataType": "real",
+          "role": "measure",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [
+            "CommissionProjection",
+            "QuotaAttainment"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Calculation_8140925133029303",
+          "fieldCaption": "Sort by field",
+          "dataType": "real",
+          "role": "measure",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Commission (Variable)",
+          "dataType": "real",
+          "role": "measure",
+          "defaultFormat": "C1033%",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Estimate Compensation label",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "OTE (Variable)",
+          "dataType": "real",
+          "role": "measure",
+          "defaultFormat": "C1033%",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Sales",
+          "dataType": "integer",
+          "role": "measure",
+          "defaultFormat": "c\"$\"#,##0.00;(\"$\"#,##0.00)",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "CustomerRank",
+            "CustomerScatter",
+            "Performance",
+            "ProductDetails",
+            "Sales by Product",
+            "Sales by Segment"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Total Compensation",
+          "dataType": "real",
+          "role": "measure",
+          "defaultFormat": "C1033%",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Total Sales label",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Order Date",
+          "fieldCaption": "Order Date",
+          "dataType": "datetime",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "CustomerOverview",
+            "CustomerRank",
+            "CustomerScatter",
+            "DaystoShip",
+            "Forecast",
+            "Performance",
+            "Product Detail Sheet",
+            "ProductDetails",
+            "ProductView",
+            "Sale Map",
+            "Sales by Product",
+            "Sales by Segment",
+            "ShipSummary",
+            "ShippingTrend",
+            "Tooltip: Profit Ratio by City",
+            "Total Sales",
+            "What If Forecast"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Region",
+          "fieldCaption": "Region",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "CustomerOverview",
+            "CustomerRank",
+            "CustomerScatter",
+            "DaystoShip",
+            "Forecast",
+            "Performance",
+            "Product Detail Sheet",
+            "ProductDetails",
+            "ProductView",
+            "Sale Map",
+            "Sales by Product",
+            "Sales by Segment",
+            "ShipSummary",
+            "ShippingTrend",
+            "Total Sales",
+            "What If Forecast"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Sales Person",
+          "fieldCaption": "Sales Person",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "CommissionProjection",
+            "QuotaAttainment"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        }
+      ],
+      "calculations": [
+        {
+          "name": "Achievement (copy)",
+          "caption": "Achievement (estimated)",
+          "formula": "[Sales]",
+          "dataType": "integer",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Sales"
+          ]
+        },
+        {
+          "name": "Achievement (variable) (copy)",
+          "caption": "Achieved Quota",
+          "formula": "if SUM([Achievement (copy)]) >= [Parameters].[New Quota] then \"100% +\"&#13;&#10;elseif SUM([Achievement (copy)]) >= 0.75 * [Parameters].[New Quota] then \"75-100%\"&#13;&#10;elseif SUM([Achievement (copy)]) >= 0.5 * [Parameters].[New Quota] then \"50-75%\"&#13;&#10;else \"Below 50%\" end",
+          "dataType": "string",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Achievement (copy)",
+            "Parameters",
+            "New Quota"
+          ]
+        },
+        {
+          "name": "Base (Variable)",
+          "formula": "[Parameters].[Base Salary]",
+          "dataType": "integer",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Parameters",
+            "Base Salary"
+          ]
+        },
+        {
+          "name": "Calculation_0440925131659539",
+          "caption": "% of quota achieved",
+          "formula": "AVG([Achievement (copy)])/[Parameters].[New Quota]",
+          "dataType": "real",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Achievement (copy)",
+            "Parameters",
+            "New Quota"
+          ]
+        },
+        {
+          "name": "Calculation_4120925132203686",
+          "caption": "Rank over 3",
+          "formula": "ROUND(INDEX() / 3 - 0.6,0) + 1",
+          "dataType": "real",
+          "role": "measure",
+          "isTableCalc": true,
+          "dependencies": []
+        },
+        {
+          "name": "Calculation_8140925133029303",
+          "caption": "Sort by field",
+          "formula": "if [Parameters].[Parameter 1 1]=\"Names\" then 0&#13;&#10;elseif [Parameters].[Parameter 1 1]=\"% quota descending\" then -[Calculation_0440925131659539]&#13;&#10;else [Calculation_0440925131659539] end",
+          "dataType": "real",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Parameters",
+            "Parameter 1 1",
+            "Calculation_0440925131659539"
+          ]
+        },
+        {
+          "name": "Commission (Variable)",
+          "formula": "([Parameters].[Commission Rate]*[Sales])/100",
+          "dataType": "real",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Parameters",
+            "Commission Rate",
+            "Sales"
+          ]
+        },
+        {
+          "name": "Estimate Compensation label",
+          "formula": "\"Estimated Compensation:\"",
+          "dataType": "string",
+          "role": "dimension",
+          "isTableCalc": false,
+          "dependencies": []
+        },
+        {
+          "name": "OTE (Variable)",
+          "formula": "[Parameters].[Base Salary] + ([Parameters].[Commission Rate]*[Parameters].[New Quota])/100",
+          "dataType": "real",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Parameters",
+            "Base Salary",
+            "Commission Rate",
+            "New Quota"
+          ]
+        },
+        {
+          "name": "Total Compensation",
+          "formula": "MIN([Base (Variable)]) + SUM([Commission (Variable)])",
+          "dataType": "real",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Base (Variable)",
+            "Commission (Variable)"
+          ]
+        },
+        {
+          "name": "Total Sales label",
+          "formula": "\"Total Sales:\"",
+          "dataType": "string",
+          "role": "dimension",
+          "isTableCalc": false,
+          "dependencies": []
+        }
+      ],
+      "hierarchies": [],
+      "tables": [
+        {
+          "name": "Sales Commission.csv",
+          "connection": "textscan.0bdqfzt0f0ynar1egmoso1fglwo7",
+          "columns": [
+            "Order Date",
+            "Region",
+            "Sales Person",
+            "Sales"
+          ]
+        }
+      ]
+    },
+    {
+      "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+      "dataSourceName": "Sample - Superstore",
+      "caption": "Sample - Superstore",
+      "isEmbedded": true,
+      "fields": [
+        {
+          "fieldName": ":Measure Names",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Calculation_0831103151444568",
+          "fieldCaption": "Days to Ship Actual",
+          "dataType": "integer",
+          "role": "measure",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Calculation_5421109230915137",
+          "fieldCaption": "Sales Forecast",
+          "dataType": "real",
+          "role": "measure",
+          "defaultFormat": "c\"$\"#,##0;(\"$\"#,##0)",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Calculation_6401103171259723",
+          "fieldCaption": "Ship Status",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [
+            "DaystoShip",
+            "ShipSummary"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Calculation_6861103170623145",
+          "fieldCaption": "Days to Ship Scheduled",
+          "dataType": "integer",
+          "role": "measure",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Calculation_9060122104947471",
+          "fieldCaption": "Order Profitable?",
+          "dataType": "boolean",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [
+            "Sale Map",
+            "Sales by Product",
+            "Sales by Segment"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Calculation_9321103144526191",
+          "fieldCaption": "Sales per Customer",
+          "dataType": "real",
+          "role": "measure",
+          "defaultFormat": "C1033%",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Calculation_9921103144103743",
+          "fieldCaption": "Profit Ratio",
+          "dataType": "real",
+          "role": "measure",
+          "defaultFormat": "p0.0%",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [
+            "Sale Map",
+            "Tooltip: Profit Ratio by City"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Calculation_9951107165644870",
+          "fieldCaption": "Sales above Target?",
+          "dataType": "string",
+          "role": "measure",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Category",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "CustomerOverview",
+            "CustomerRank",
+            "CustomerScatter",
+            "Performance",
+            "Product Detail Sheet",
+            "ProductDetails",
+            "ProductView",
+            "Sales by Product"
+          ],
+          "inHierarchy": true,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "City",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "Product Detail Sheet",
+            "Tooltip: Profit Ratio by City"
+          ],
+          "inHierarchy": true,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Country/Region",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [],
+          "inHierarchy": true,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Customer Name",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "CustomerRank",
+            "Product Detail Sheet"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Discount",
+          "dataType": "real",
+          "role": "measure",
+          "defaultFormat": "p0.00%",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Order Date",
+          "dataType": "date",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "CustomerOverview",
+            "CustomerRank",
+            "CustomerScatter",
+            "DaystoShip",
+            "Forecast",
+            "Performance",
+            "Product Detail Sheet",
+            "ProductDetails",
+            "ProductView",
+            "Sale Map",
+            "Sales by Product",
+            "Sales by Segment",
+            "ShipSummary",
+            "ShippingTrend",
+            "Tooltip: Profit Ratio by City",
+            "Total Sales",
+            "What If Forecast"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Order ID (Returns)",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": true,
+          "isCalculated": false,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Order ID",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "Product Detail Sheet"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Postal Code",
+          "dataType": "string",
+          "role": "dimension",
+          "defaultFormat": "*00000",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [],
+          "inHierarchy": true,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Product Name",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "DaystoShip"
+          ],
+          "inHierarchy": true,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Profit",
+          "dataType": "real",
+          "role": "measure",
+          "defaultFormat": "c\"$\"#,##0;(\"$\"#,##0)",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "CustomerScatter"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Region (People)",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": true,
+          "isCalculated": false,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Region",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "CustomerOverview",
+            "CustomerRank",
+            "CustomerScatter",
+            "DaystoShip",
+            "Forecast",
+            "Performance",
+            "Product Detail Sheet",
+            "ProductDetails",
+            "ProductView",
+            "Sale Map",
+            "Sales by Product",
+            "Sales by Segment",
+            "ShipSummary",
+            "ShippingTrend",
+            "Total Sales",
+            "What If Forecast"
+          ],
+          "inHierarchy": true,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Row ID",
+          "dataType": "integer",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Sales est (copy)",
+          "fieldCaption": "Units estimate",
+          "dataType": "real",
+          "role": "measure",
+          "defaultFormat": "n#,##0;-#,##0",
+          "isHidden": true,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Sales per Customer (copy)",
+          "fieldCaption": "Profit per Order",
+          "dataType": "real",
+          "role": "measure",
+          "defaultFormat": "C1033%",
+          "isHidden": false,
+          "isCalculated": true,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Sales",
+          "dataType": "real",
+          "role": "measure",
+          "defaultFormat": "c\"$\"#,##0;(\"$\"#,##0)",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "CustomerRank",
+            "CustomerScatter",
+            "Performance",
+            "ProductDetails",
+            "Sales by Product",
+            "Sales by Segment"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Segment",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "CustomerOverview",
+            "CustomerRank",
+            "CustomerScatter",
+            "Forecast",
+            "Performance",
+            "Product Detail Sheet",
+            "ProductDetails",
+            "Sales by Segment"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Ship Mode",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "DaystoShip",
+            "Product Detail Sheet",
+            "ShipSummary",
+            "ShippingTrend"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "State/Province",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "Product Detail Sheet"
+          ],
+          "inHierarchy": true,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Sub-Category",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "ProductDetails"
+          ],
+          "inHierarchy": true,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Ship Date",
+          "fieldCaption": "Ship Date",
+          "dataType": "date",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [
+            "Product Detail Sheet"
+          ],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Customer ID",
+          "fieldCaption": "Customer ID",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Product ID",
+          "fieldCaption": "Product ID",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Quantity",
+          "fieldCaption": "Quantity",
+          "dataType": "integer",
+          "role": "measure",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Regional Manager",
+          "fieldCaption": "Regional Manager",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        },
+        {
+          "fieldName": "Returned",
+          "fieldCaption": "Returned",
+          "dataType": "string",
+          "role": "dimension",
+          "isHidden": false,
+          "isCalculated": false,
+          "usedInViews": [],
+          "inHierarchy": false,
+          "hasDescription": false,
+          "agentVisibility": null
+        }
+      ],
+      "calculations": [
+        {
+          "name": "Calculation_0831103151444568",
+          "caption": "Days to Ship Actual",
+          "formula": "DATEDIFF('day',[Order Date],[Ship Date])",
+          "dataType": "integer",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Order Date",
+            "Ship Date"
+          ]
+        },
+        {
+          "name": "Calculation_5421109230915137",
+          "caption": "Sales Forecast",
+          "formula": "[Sales]*(1-[Parameters].[Parameter 2])*(1+[Parameters].[Parameter 1])",
+          "dataType": "real",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Sales",
+            "Parameters",
+            "Parameter 2",
+            "Parameter 1"
+          ]
+        },
+        {
+          "name": "Calculation_6401103171259723",
+          "caption": "Ship Status",
+          "formula": "if [Calculation_0831103151444568]> [Calculation_6861103170623145] then \"Shipped Late\" &#13;&#10;elseIF [Calculation_0831103151444568]= [Calculation_6861103170623145] then \"Shipped On Time\"&#13;&#10;Else \"Shipped Early\" end",
+          "dataType": "string",
+          "role": "dimension",
+          "isTableCalc": false,
+          "dependencies": [
+            "Calculation_0831103151444568",
+            "Calculation_6861103170623145"
+          ]
+        },
+        {
+          "name": "Calculation_6861103170623145",
+          "caption": "Days to Ship Scheduled",
+          "formula": "CASE  [Ship Mode]&#13;&#10;WHEN \"Same Day\" THEN 0&#13;&#10;WHEN \"First Class\" THEN 1&#13;&#10;WHEN \"Second Class\" THEN 3&#13;&#10;WHEN \"Standard Class\" THEN 6&#13;&#10;END",
+          "dataType": "integer",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Ship Mode"
+          ]
+        },
+        {
+          "name": "Calculation_9060122104947471",
+          "caption": "Order Profitable?",
+          "formula": "{fixed [Order ID]:sum([Profit])}>0&#13;&#10;// calculates the profit at the order level",
+          "dataType": "boolean",
+          "role": "dimension",
+          "isTableCalc": false,
+          "dependencies": [
+            "Order ID",
+            "Profit"
+          ]
+        },
+        {
+          "name": "Calculation_9321103144526191",
+          "caption": "Sales per Customer",
+          "formula": "Sum([Sales])/countD([Customer Name])",
+          "dataType": "real",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Sales",
+            "Customer Name"
+          ]
+        },
+        {
+          "name": "Calculation_9921103144103743",
+          "caption": "Profit Ratio",
+          "formula": "sum([Profit])/sum([Sales])",
+          "dataType": "real",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Profit",
+            "Sales"
+          ]
+        },
+        {
+          "name": "Calculation_9951107165644870",
+          "caption": "Sales above Target?",
+          "formula": "If Sum([Sales])>SUM([federated.0hgpf0j1fdpvv316shikk0mmdlec].[Sales Target]) then \"Above Target\" else \"Below Target\" end",
+          "dataType": "string",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Sales",
+            "federated.0hgpf0j1fdpvv316shikk0mmdlec",
+            "Sales Target"
+          ]
+        },
+        {
+          "name": "Sales est (copy)",
+          "caption": "Units estimate",
+          "formula": "ROUND([Quantity]*(1-[Parameters].[Parameter 2])*(1+[Parameters].[Parameter 1]),0)",
+          "dataType": "real",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Quantity",
+            "Parameters",
+            "Parameter 2",
+            "Parameter 1"
+          ]
+        },
+        {
+          "name": "Sales per Customer (copy)",
+          "caption": "Profit per Order",
+          "formula": "Sum([Profit])/countD([Order ID])",
+          "dataType": "real",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Profit",
+            "Order ID"
+          ]
+        }
+      ],
+      "hierarchies": [
+        {
+          "name": "Location",
+          "levels": [
+            "Country/Region",
+            "Region",
+            "State/Province",
+            "City",
+            "Postal Code"
+          ]
+        },
+        {
+          "name": "Product",
+          "levels": [
+            "Category",
+            "Sub-Category",
+            "Product Name"
+          ]
+        }
+      ],
+      "tables": [
+        {
+          "name": "Orders",
+          "connection": "excel-direct.0lad5au144tqkt16qnaz70tec6fn",
+          "columns": [
+            "Row ID",
+            "Order ID",
+            "Order Date",
+            "Ship Date",
+            "Ship Mode",
+            "Customer ID",
+            "Customer Name",
+            "Segment",
+            "Country/Region",
+            "City",
+            "State/Province",
+            "Postal Code",
+            "Region",
+            "Product ID",
+            "Category",
+            "Sub-Category",
+            "Product Name",
+            "Sales",
+            "Quantity",
+            "Discount",
+            "Profit"
+          ]
+        },
+        {
+          "name": "People",
+          "connection": "excel-direct.0lad5au144tqkt16qnaz70tec6fn",
+          "columns": [
+            "Regional Manager",
+            "Region"
+          ]
+        },
+        {
+          "name": "Returns",
+          "connection": "excel-direct.0lad5au144tqkt16qnaz70tec6fn",
+          "columns": [
+            "Order ID",
+            "Returned"
+          ]
+        }
+      ]
+    }
+  ],
+  "requiredFilters": {
+    "dataSourceFilters": [],
+    "applyToAllFilters": [
+      {
+        "fieldName": "Order Date",
+        "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+        "filterType": "quantitative",
+        "filterGroup": 8,
+        "rangeMin": "#2021-01-03#",
+        "rangeMax": "#2024-12-30#",
+        "includeNulls": false,
+        "isApplyToAll": true
+      }
+    ]
+  },
+  "worksheets": [
+    {
+      "worksheetId": "{36448873-7407-41E3-8AFE-AEB3321FBB0D}",
+      "worksheetName": "CommissionProjection",
+      "title": "Total Compensation with These Assumptions",
+      "dataSourceRefs": [
+        "federated.0a01cod1oxl83l1f5yves1cfciqo",
+        "Parameters"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Calculation_4120925132203686",
+            "dataSourceId": "federated.0a01cod1oxl83l1f5yves1cfciqo",
+            "aggregation": "usr"
+          },
+          {
+            "fieldName": "Sales Person",
+            "dataSourceId": "federated.0a01cod1oxl83l1f5yves1cfciqo",
+            "aggregation": "none"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "Multiple Values",
+            "dataSourceId": "federated.0a01cod1oxl83l1f5yves1cfciqo"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Measure Names",
+            "dataSourceId": "federated.0a01cod1oxl83l1f5yves1cfciqo",
+            "filterType": "categorical",
+            "selectedValues": [
+              "[federated.0a01cod1oxl83l1f5yves1cfciqo].[sum:Commission (Variable):qk]",
+              "[federated.0a01cod1oxl83l1f5yves1cfciqo].[min:Base (Variable):qk]"
+            ],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{716A1723-D83D-4947-A886-252F673CC354}",
+      "worksheetName": "CustomerOverview",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+          },
+          {
+            "fieldName": "Multiple Values",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Measure Names",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[ctd:Customer Name:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[sum:Sales:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[sum:Quantity:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[usr:Calculation_9321103144526191:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[sum:Profit:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[usr:Calculation_9921103144103743:qk]"
+            ],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Category",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 10,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "quantitative",
+            "filterGroup": 8,
+            "rangeMin": "#2021-01-03#",
+            "rangeMax": "#2024-12-30#",
+            "includeNulls": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Segment",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 12,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 9,
+            "selectedValues": [],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{828CC476-5F68-4417-874C-AC37B89EF744}",
+      "worksheetName": "CustomerRank",
+      "title": "Customer Ranking",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Customer Name",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "Sales",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "sum"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Action (Region)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Category",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 10,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "quantitative",
+            "filterGroup": 8,
+            "rangeMin": "#2021-01-03#",
+            "rangeMax": "#2024-12-30#",
+            "includeNulls": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Segment",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 12,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 9,
+            "selectedValues": [],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{51CBF548-F6AE-4379-BFC9-0FD0A412EDF7}",
+      "worksheetName": "CustomerScatter",
+      "title": "Sales and Profit by Customer",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Profit",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "sum"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "Sales",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "sum"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Action (Region)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Category",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 10,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "quantitative",
+            "filterGroup": 8,
+            "rangeMin": "#2021-01-03#",
+            "rangeMax": "#2024-12-30#",
+            "includeNulls": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Segment",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 12,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 9,
+            "selectedValues": [],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{25C0645E-FDD7-4D90-8E5E-9A7884550D5A}",
+      "worksheetName": "DaystoShip",
+      "title": "Days to Ship by Product for<[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[qr:Order Date:ok]>of<[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[yr:Order Date:ok]>",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Product Name",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Action (Delayed?)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Action (Ship Status)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Action (Ship Status,YEAR(Order Date),WEEK(Order Date))",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Calculation_6401103171259723",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 5,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 7,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Ship Mode",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 11,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 3,
+            "selectedValues": [
+              "4"
+            ],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 18,
+            "selectedValues": [
+              "2024"
+            ],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{ECB2B0A5-1D53-4864-BB7E-57A06356E867}",
+      "worksheetName": "Forecast",
+      "title": "Sales Forecast",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Segment",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          },
+          {
+            "fieldName": "fVal",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "tmn"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "quantitative",
+            "filterGroup": 8,
+            "rangeMin": "#2021-01-03#",
+            "rangeMax": "#2024-12-30#",
+            "includeNulls": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{A511AAF7-132B-4AE5-BF37-7A4812BC7B3C}",
+      "worksheetName": "OTE",
+      "title": "Estimated Compensation:Æ&#10;",
+      "dataSourceRefs": [
+        "federated.0a01cod1oxl83l1f5yves1cfciqo",
+        "Parameters"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [
+          {
+            "fieldName": "",
+            "dataSourceId": "federated.0a01cod1oxl83l1f5yves1cfciqo"
+          }
+        ],
+        "fieldsOnColumns": [],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Measure Names",
+            "dataSourceId": "federated.0a01cod1oxl83l1f5yves1cfciqo",
+            "filterType": "categorical",
+            "selectedValues": [
+              "[federated.0a01cod1oxl83l1f5yves1cfciqo].[sum:OTE (Variable):qk]",
+              "[federated.0a01cod1oxl83l1f5yves1cfciqo].[avg:OTE (Variable):qk]"
+            ],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{3C0E278A-F937-4CB4-A0E5-B49BDD4DFCE0}",
+      "worksheetName": "Performance",
+      "title": "Sales Performance vs Target",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+        "federated.0hgpf0j1fdpvv316shikk0mmdlec"
+      ],
+      "visualSpec": {
+        "markType": "Bar",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "yr"
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "mn"
+          },
+          {
+            "fieldName": "Segment",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "Category",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          },
+          {
+            "fieldName": "Sales",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "sum"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [
+        {
+          "name": "Calculation_5144658905056067585",
+          "caption": "SUM([Sales])-SUM([Sales Target].[Sales Target])",
+          "formula": "SUM([Sales])-SUM([federated.0hgpf0j1fdpvv316shikk0mmdlec].[Sales Target])",
+          "dataType": "real",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Sales",
+            "federated.0hgpf0j1fdpvv316shikk0mmdlec",
+            "Sales Target"
+          ]
+        }
+      ],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{780CD4D1-ED2E-4BB1-BE93-FCFBD5AF4B2B}",
+      "worksheetName": "Product Detail Sheet",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Order ID",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          },
+          {
+            "fieldName": "Customer Name",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          },
+          {
+            "fieldName": "Ship Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          },
+          {
+            "fieldName": "Ship Mode",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Measure Names",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[sum:Sales:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[sum:Quantity:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[sum:Discount:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[sum:Profit:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[usr:Calculation_9921103144103743:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[sum:Calculation_6861103170623145:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[sum:Calculation_0831103151444568:qk]"
+            ],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Action (Order Profitable?,MONTH(Order Date),Segment)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Action (Postal Code,State/Province) 1",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Category",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "City",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [
+              "%null%"
+            ],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "quantitative",
+            "filterGroup": 8,
+            "rangeMin": "#2021-01-03#",
+            "rangeMax": "#2024-12-30#",
+            "includeNulls": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Segment",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "State/Province",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{E5B7F5E5-C698-479A-94B1-1B0A6130503E}",
+      "worksheetName": "ProductDetails",
+      "title": "Sales and Profit by Product Names\n                            \nYear: <[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[yr:Order Date:ok]>, Month: <[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[mn:Order Date:ok]>, Product Category: <[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[none:Category:nk]>",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Circle",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Category",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          },
+          {
+            "fieldName": "Sub-Category",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "Segment",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          },
+          {
+            "fieldName": "Sales",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "sum"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Action (Category,YEAR(Order Date),MONTH(Order Date))",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Action (YEAR(Order Date),MONTH(Order Date))",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Action (YEAR(Order Date),MONTH(Order Date),Product Category)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "quantitative",
+            "filterGroup": 8,
+            "rangeMin": "#2021-01-03#",
+            "rangeMax": "#2024-12-30#",
+            "includeNulls": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 4,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{EE4CDF32-9999-470D-99D3-5A28D63F99D5}",
+      "worksheetName": "ProductView",
+      "title": "Sales by Product Category",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Square",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Category",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "yr"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "mn"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Category",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 4,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{9BDA2D94-9F67-48BD-8BFA-E9431029F796}",
+      "worksheetName": "QuotaAttainment",
+      "title": "Estimated Quota Attainment Results with These Assumptions",
+      "dataSourceRefs": [
+        "federated.0a01cod1oxl83l1f5yves1cfciqo",
+        "Parameters"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Calculation_4120925132203686",
+            "dataSourceId": "federated.0a01cod1oxl83l1f5yves1cfciqo",
+            "aggregation": "usr"
+          },
+          {
+            "fieldName": "Sales Person",
+            "dataSourceId": "federated.0a01cod1oxl83l1f5yves1cfciqo",
+            "aggregation": "none"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "Achievement (copy)",
+            "dataSourceId": "federated.0a01cod1oxl83l1f5yves1cfciqo",
+            "aggregation": "sum"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": []
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{394FA14F-E0A9-43D2-8B8B-4B36271D57A5}",
+      "worksheetName": "Sale Map",
+      "title": "Sales by Geography",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Multipolygon",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Latitude (generated)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "Longitude (generated)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Calculation_9060122104947471",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 6,
+            "selectedValues": [
+              "true"
+            ],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "quantitative",
+            "filterGroup": 8,
+            "rangeMin": "#2021-01-03#",
+            "rangeMax": "#2024-12-30#",
+            "includeNulls": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 14,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Calculation_9921103144103743",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "quantitative",
+            "rangeMin": -0.2168640535982099,
+            "rangeMax": "0.36983661545120111",
+            "includeNulls": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{FBE1CA60-CDEB-46FF-9585-9A8B2FF2E5E8}",
+      "worksheetName": "Sales",
+      "title": "Estimated Sales:Æ&#10;",
+      "dataSourceRefs": [
+        "federated.0a01cod1oxl83l1f5yves1cfciqo",
+        "Parameters"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [
+          {
+            "fieldName": "",
+            "dataSourceId": "federated.0a01cod1oxl83l1f5yves1cfciqo"
+          }
+        ],
+        "fieldsOnColumns": [],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Measure Names",
+            "dataSourceId": "federated.0a01cod1oxl83l1f5yves1cfciqo",
+            "filterType": "categorical",
+            "selectedValues": [
+              "[federated.0a01cod1oxl83l1f5yves1cfciqo].[sum:Sales:qk]",
+              "[federated.0a01cod1oxl83l1f5yves1cfciqo].[usr:Calculation_0440925131659539:qk]"
+            ],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{179C7F7F-361C-4BF5-A0E8-78F1B32ADF6C}",
+      "worksheetName": "Sales by Product",
+      "title": "Monthly Sales by Product Category - States/Provinces:<[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[State/Province]>",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Area",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Category",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          },
+          {
+            "fieldName": "Sales",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "sum"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "tmn"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Action (MONTH(Order Date),Segment)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Action (Postal Code,State/Province)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Action (State/Province)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Calculation_9060122104947471",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 6,
+            "selectedValues": [
+              "true"
+            ],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "quantitative",
+            "filterGroup": 8,
+            "rangeMin": "#2021-01-03#",
+            "rangeMax": "#2024-12-30#",
+            "includeNulls": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 14,
+            "selectedValues": [],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{3781A3C6-AA06-418E-ABB3-E3F4B0721A19}",
+      "worksheetName": "Sales by Segment",
+      "title": "Monthly Sales by Segment - States/Provinces:<[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[State/Province]>",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Area",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Segment",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          },
+          {
+            "fieldName": "Sales",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "sum"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "tmn"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Action (MONTH(Order Date),Product Category)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Action (Postal Code,State/Province)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Action (State/Province)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Calculation_9060122104947471",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 6,
+            "selectedValues": [
+              "true"
+            ],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "quantitative",
+            "filterGroup": 8,
+            "rangeMin": "#2021-01-03#",
+            "rangeMax": "#2024-12-30#",
+            "includeNulls": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 14,
+            "selectedValues": [],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{5E20E1B9-ED7C-41C8-8A12-A1615E1FAA6F}",
+      "worksheetName": "ShipSummary",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "cnt",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "pcto"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Calculation_6401103171259723",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 5,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Ship Mode",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 11,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 3,
+            "selectedValues": [
+              "4"
+            ],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 18,
+            "selectedValues": [
+              "2024"
+            ],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{5EB69FD7-ED3C-487A-9C71-E1688F2EA3D1}",
+      "worksheetName": "ShippingTrend",
+      "title": "Shipments by Mode",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Area",
+        "fieldsOnRows": [
+          {
+            "fieldName": "__tableau_internal_object_id__",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "yr"
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "twk"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Action (Delayed?)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Action (Ship Status)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 7,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Ship Mode",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 11,
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 3,
+            "selectedValues": [
+              "4"
+            ],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 18,
+            "selectedValues": [
+              "2024"
+            ],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{55C1D994-932D-41F8-B085-1313D143CDB9}",
+      "worksheetName": "Tooltip: Profit Ratio by City",
+      "title": "Profit Ratio by City",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [
+          {
+            "fieldName": "City",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          }
+        ],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "Calculation_9921103144103743",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "usr"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Tooltip (Country/Region,State/Province)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Tooltip (State/Province)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "quantitative",
+            "filterGroup": 8,
+            "rangeMin": "#2021-01-03#",
+            "rangeMax": "#2024-12-30#",
+            "includeNulls": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{B20CF4EC-11CA-492A-8ABB-448E7C3F2377}",
+      "worksheetName": "Total Sales",
+      "title": "Executive Overview - Profitability(<[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[State/Province]>)",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [],
+        "fieldsOnColumns": [
+          {
+            "fieldName": "",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+          }
+        ],
+        "marks": {}
+      },
+      "typeInCalculations": [],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Measure Names",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[sum:Sales:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[sum:Profit:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[usr:Calculation_9921103144103743:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[usr:Sales per Customer (copy):qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[usr:Calculation_9321103144526191:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[avg:Discount:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[sum:Quantity:qk]"
+            ],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Action (Order Profitable?,Category,MONTH(Order Date))",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Action (Order Profitable?,MONTH(Order Date),Segment)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Action (State/Province)",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "quantitative",
+            "filterGroup": 8,
+            "rangeMin": "#2021-01-03#",
+            "rangeMax": "#2024-12-30#",
+            "includeNulls": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "filterGroup": 14,
+            "selectedValues": [],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{562E7E21-9D87-4DD8-8744-E85B4097CF61}",
+      "worksheetName": "What If Forecast",
+      "title": "What if Forecast Based on<[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[yr:Order Date:ok]>Sales (<[Parameters].[Parameter 1]>Growth,<[Parameters].[Parameter 2]>Churn)",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+        "Parameters"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [],
+        "fieldsOnColumns": [],
+        "marks": {}
+      },
+      "typeInCalculations": [
+        {
+          "name": "Calculation_9330126204734562",
+          "caption": "SUM([Sales])-SUM([Sales Forecast])",
+          "formula": "SUM([Sales])-SUM([Calculation_5421109230915137])",
+          "dataType": "real",
+          "role": "measure",
+          "isTableCalc": false,
+          "dependencies": [
+            "Sales",
+            "Calculation_5421109230915137"
+          ]
+        }
+      ],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": [
+          {
+            "fieldName": "Measure Names",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[sum:Sales:qk]",
+              "[federated.10nnk8d1vgmw8q17yu76u06pnbcj].[sum:Calculation_5421109230915137:qk]"
+            ],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "quantitative",
+            "filterGroup": 8,
+            "rangeMin": "#2021-01-03#",
+            "rangeMax": "#2024-12-30#",
+            "includeNulls": false
+          },
+          {
+            "fieldName": "Region",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          },
+          {
+            "fieldName": "Order Date",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "filterType": "categorical",
+            "selectedValues": [],
+            "excludeMode": false
+          }
+        ]
+      },
+      "currentState": null
+    },
+    {
+      "worksheetId": "{215073D9-23FD-49BE-9C09-D2202EAE318C}",
+      "worksheetName": "type-in calc demonstration",
+      "dataSourceRefs": [
+        "federated.10nnk8d1vgmw8q17yu76u06pnbcj"
+      ],
+      "visualSpec": {
+        "markType": "Automatic",
+        "fieldsOnRows": [
+          {
+            "fieldName": "Calculation_3436176182975791105",
+            "dataSourceId": "federated.10nnk8d1vgmw8q17yu76u06pnbcj",
+            "aggregation": "none"
+          }
+        ],
+        "fieldsOnColumns": [],
+        "marks": {}
+      },
+      "typeInCalculations": [
+        {
+          "name": "Calculation_3436176182975791105",
+          "caption": "SPLIT([Customer Name],\" \", 2)",
+          "formula": "SPLIT([Customer Name],\" \", 2)",
+          "dataType": "string",
+          "role": "dimension",
+          "isTableCalc": false,
+          "dependencies": [
+            "Customer Name"
+          ]
+        }
+      ],
+      "sheetFilters": {
+        "contextFilters": [],
+        "regularFilters": []
+      },
+      "currentState": null
+    }
+  ],
+  "dashboards": [
+    {
+      "dashboardId": "{E3BA5297-0201-4550-9803-9CA72503A85C}",
+      "dashboardName": "Commission Model",
+      "title": "Sales Commission Model",
+      "worksheetRefs": [
+        "QuotaAttainment",
+        "CommissionProjection",
+        "Sales",
+        "OTE"
+      ],
+      "filterActions": [],
+      "parameterActions": [],
+      "highlightActions": [
+        {
+          "name": "[Action20_86CA95173E314FD4B8C65A3811374884]",
+          "caption": "Highlight 3 (generated) 1",
+          "actionType": "highlight",
+          "activation": "on-select",
+          "fields": [
+            "Sales Person"
+          ],
+          "targetWorksheets": [
+            "OTE",
+            "Sales"
+          ]
+        }
+      ],
+      "currentState": null
+    },
+    {
+      "dashboardId": "{B9B93188-C5C9-404C-8260-D46D8E7AC9D4}",
+      "dashboardName": "Customers",
+      "title": "Customer Analysis",
+      "worksheetRefs": [
+        "CustomerScatter",
+        "CustomerRank",
+        "CustomerOverview"
+      ],
+      "filterActions": [
+        {
+          "name": "[Action16_A6953E536F6E4F3AA33A737752417D5B]",
+          "caption": "Filter Region 1",
+          "actionType": "filter",
+          "sourceWorksheet": "CustomerOverview",
+          "activation": "on-select",
+          "fields": [],
+          "targetWorksheets": [
+            "CustomerOverview"
+          ]
+        }
+      ],
+      "parameterActions": [],
+      "highlightActions": [
+        {
+          "name": "[Action15_439B3916560D46D790CBFA2B6580CCFE]",
+          "caption": "Highlight Customer Name (Hover) 1",
+          "actionType": "highlight",
+          "activation": "on-hover",
+          "fields": [
+            "Customer Name"
+          ],
+          "targetWorksheets": [
+            "CustomerOverview"
+          ]
+        },
+        {
+          "name": "[Action17_9DDBE16F055F42D999EBCCD14822697B]",
+          "caption": "Highlight 1 (generated) 1",
+          "actionType": "highlight",
+          "activation": "on-select",
+          "fields": [],
+          "targetWorksheets": [
+            "CustomerOverview"
+          ]
+        }
+      ],
+      "currentState": null
+    },
+    {
+      "dashboardId": "{58F95BC3-D587-4DF0-A362-855F1C6B6431}",
+      "dashboardName": "Order Details",
+      "title": "<Sheet Name>",
+      "worksheetRefs": [
+        "Product Detail Sheet"
+      ],
+      "filterActions": [],
+      "parameterActions": [],
+      "highlightActions": [],
+      "currentState": null
+    },
+    {
+      "dashboardId": "{251BA216-C3B7-40F9-BF9F-6695D8538234}",
+      "dashboardName": "Overview",
+      "title": "Executive Overview - Profitability",
+      "worksheetRefs": [
+        "Total Sales",
+        "Sale Map",
+        "Sales by Segment",
+        "Sales by Product"
+      ],
+      "filterActions": [
+        {
+          "name": "[Action11_AF915869FB4D4490BE0E4360C949F608]",
+          "caption": "State/Province Filter 1",
+          "actionType": "filter",
+          "sourceWorksheet": "Sale Map",
+          "activation": "on-select",
+          "fields": [],
+          "targetWorksheets": [
+            "Sale Map"
+          ]
+        }
+      ],
+      "parameterActions": [],
+      "highlightActions": [
+        {
+          "name": "[Action12_D74A828A49084529A4E8D5B225C76520]",
+          "caption": "State/Province Highlight (map) 1",
+          "actionType": "highlight",
+          "activation": "on-select",
+          "fields": [
+            "State/Province"
+          ],
+          "targetWorksheets": [
+            "Sales by Product",
+            "Sales by Segment"
+          ]
+        },
+        {
+          "name": "[Action13_58E3F639935B4FB2A5FCAB9FB3C220EE]",
+          "caption": "Month Highlight 1",
+          "actionType": "highlight",
+          "activation": "on-select",
+          "fields": [
+            "MONTH(Order Date)",
+            "Order Profitable?"
+          ],
+          "targetWorksheets": [
+            "Sale Map"
+          ]
+        }
+      ],
+      "currentState": null
+    },
+    {
+      "dashboardId": "{3F8D6657-DB35-4994-803C-857C75F01BB8}",
+      "dashboardName": "Product",
+      "title": "Product Drilldown",
+      "worksheetRefs": [
+        "ProductView",
+        "ProductDetails"
+      ],
+      "filterActions": [
+        {
+          "name": "[Action14_F8610F43EC9042B4B10A413BDFB9FECC]",
+          "caption": "Filter Product Sales 1",
+          "actionType": "filter",
+          "sourceWorksheet": "ProductView",
+          "activation": "on-select",
+          "fields": []
+        }
+      ],
+      "parameterActions": [],
+      "highlightActions": [],
+      "currentState": null
+    },
+    {
+      "dashboardId": "{E53EB0E6-2459-4FE9-87D9-A9EDF35B04C9}",
+      "dashboardName": "Shipping",
+      "title": "On-Time Shipment Trends",
+      "worksheetRefs": [
+        "ShipSummary",
+        "ShippingTrend",
+        "DaystoShip"
+      ],
+      "filterActions": [
+        {
+          "name": "[Action18_DF6BD9ED65114B6EBFF139D71189FBA8]",
+          "caption": "Filter Details 1",
+          "actionType": "filter",
+          "sourceWorksheet": "ShippingTrend",
+          "activation": "on-select",
+          "fields": [],
+          "targetWorksheets": [
+            "ShipSummary"
+          ]
+        },
+        {
+          "name": "[Action19_C26090812FA443EEB2F32C67F44BC898]",
+          "caption": "Filter 1 (generated) 1",
+          "actionType": "filter",
+          "sourceWorksheet": "ShipSummary",
+          "activation": "on-select",
+          "fields": []
+        }
+      ],
+      "parameterActions": [],
+      "highlightActions": [],
+      "currentState": null
+    }
+  ],
+  "parameters": [
+    {
+      "name": "Base Salary",
+      "caption": "Base Salary",
+      "dataType": "integer",
+      "currentValue": 50000,
+      "domainType": "range",
+      "defaultFormat": "c\"$\"#,##0;(\"$\"#,##0)",
+      "rangeMin": 0,
+      "rangeStep": 1000
+    },
+    {
+      "name": "Commission Rate",
+      "caption": "Commission Rate",
+      "dataType": "real",
+      "currentValue": 18.4,
+      "domainType": "range",
+      "defaultFormat": "n#,##0.0\"%\";-#,##0.0\"%\"",
+      "rangeMin": 1,
+      "rangeMax": 100,
+      "rangeStep": "0.10000000000000001"
+    },
+    {
+      "name": "New Quota",
+      "caption": "New Quota",
+      "dataType": "integer",
+      "currentValue": 500000,
+      "domainType": "range",
+      "defaultFormat": "c\"$\"#,##0,K;(\"$\"#,##0,K)",
+      "rangeMin": 100000,
+      "rangeStep": 25000
+    },
+    {
+      "name": "Parameter 1 1",
+      "caption": "Sort by",
+      "dataType": "string",
+      "currentValue": "Names",
+      "domainType": "list",
+      "allowedValues": [
+        "\\% quota ascending",
+        "\\% quota descending",
+        "Names"
+      ]
+    },
+    {
+      "name": "Parameter 1",
+      "caption": "New Business Growth",
+      "dataType": "real",
+      "currentValue": 0.6,
+      "domainType": "range",
+      "defaultFormat": "p0%",
+      "rangeMin": 0,
+      "rangeMax": 1,
+      "rangeStep": 0.01
+    },
+    {
+      "name": "Parameter 2",
+      "caption": "Churn Rate",
+      "dataType": "real",
+      "currentValue": 0.064,
+      "domainType": "range",
+      "defaultFormat": "p0.00%",
+      "rangeMin": 0,
+      "rangeMax": 0.25,
+      "rangeStep": 0.001
+    }
+  ]
+}

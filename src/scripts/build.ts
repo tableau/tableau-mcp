@@ -11,6 +11,11 @@ const staticAssets = [
   { source: './src/server/ui/views', destination: './build/server/ui/views', ext: '.html' },
 ];
 
+// WASM files that need to be copied to build directory
+const wasmAssets = [
+  { source: './node_modules/jq-web/jq.wasm', destination: './build/jq.wasm' },
+];
+
 (async () => {
   const ctx = await context({
     entryPoints: ['./src/index.ts'],
@@ -28,6 +33,17 @@ const staticAssets = [
   });
 
   await ctx.rebuild();
+
+  // Copy WASM assets
+  for (const { source, destination } of wasmAssets) {
+    try {
+      cpSync(source, destination);
+      console.log(`📦 ${source} -> ${destination}`);
+    } catch (error) {
+      console.warn(`⚠️ Failed to copy ${source}: ${error}`);
+    }
+  }
+
   for (const { source, destination, ext } of staticAssets) {
     copyStaticAssets(source, destination, ext);
 

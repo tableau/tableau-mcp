@@ -42,6 +42,18 @@ const queryWorkbooksForSiteEndpoint = makeEndpoint({
   }),
 });
 
-const workbooksApi = makeApi([queryWorkbooksForSiteEndpoint, getWorkbookEndpoint]);
+const downloadWorkbookEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/workbooks/:workbookId/content',
+  alias: 'downloadWorkbook',
+  description: 'Downloads the specified workbook as a .twbx file.',
+  response: z.string(), // Binary data returned as arraybuffer
+});
+
+const workbooksApi = makeApi([
+  queryWorkbooksForSiteEndpoint,
+  getWorkbookEndpoint,
+  downloadWorkbookEndpoint,
+]);
 
 export const workbooksApis = [...workbooksApi] as const satisfies ZodiosEndpointDefinitions;

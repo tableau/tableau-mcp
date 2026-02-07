@@ -75,4 +75,30 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       workbooks: response.workbooks.workbook ?? [],
     };
   };
+
+  /**
+   * Downloads the specified workbook as a .twbx file.
+   *
+   * Required scopes: `tableau:content:read`
+   *
+   * @param {string} workbookId The ID of the workbook to download.
+   * @param {string} siteId - The Tableau site ID
+   * @returns {Promise<Buffer>} The workbook file content as a Buffer
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#download_workbook
+   */
+  downloadWorkbook = async ({
+    workbookId,
+    siteId,
+  }: {
+    workbookId: string;
+    siteId: string;
+  }): Promise<Buffer> => {
+    const response = await this._apiClient.downloadWorkbook({
+      params: { siteId, workbookId },
+      ...this.authHeader,
+      responseType: 'arraybuffer',
+    });
+    // Response is an ArrayBuffer, convert to Buffer
+    return Buffer.from(response as unknown as ArrayBuffer);
+  };
 }

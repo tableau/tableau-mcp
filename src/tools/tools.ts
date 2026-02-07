@@ -7,6 +7,10 @@ import { getImportWorkbookFactsTool } from './analysisSession/importWorkbookFact
 import { getSummarizeSessionTool } from './analysisSession/summarizeSession.js';
 import { getUpdateHypothesisTool } from './analysisSession/updateHypothesis.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
+import { getLoadWorkbookContextTool } from './workbookContext/loadWorkbookContext.js';
+import { getDownloadWorkbookContextTool } from './workbookContext/downloadWorkbookContext.js';
+import { getPopulateWorksheetFactsTool } from './workbookContext/populateWorksheetFacts.js';
+import { getQueryWorkbookContextTool } from './workbookContext/queryWorkbookContext.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
@@ -49,4 +53,9 @@ export const toolFactories = [
   getAddAssumptionTool,
   getImportWorkbookFactsTool,
   getSummarizeSessionTool,
+  // Workbook Context tools
+  getLoadWorkbookContextTool,
+  getDownloadWorkbookContextTool,
+  getPopulateWorksheetFactsTool,
+  getQueryWorkbookContextTool,
 ];

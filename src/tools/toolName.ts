@@ -25,6 +25,11 @@ export const toolNames = [
   'add-assumption',
   'import-workbook-facts',
   'summarize-analysis-session',
+  // Workbook Context tools
+  'load-workbook-context',
+  'download-workbook-context',
+  'populate-worksheet-facts',
+  'query-workbook-context',
 ] as const;
 export type ToolName = (typeof toolNames)[number];
 
@@ -36,6 +41,7 @@ export const toolGroupNames = [
   'content-exploration',
   'embedding',
   'analysis-session',
+  'workbook-context',
 ] as const;
 export type ToolGroupName = (typeof toolGroupNames)[number];
 
@@ -63,6 +69,12 @@ export const toolGroups = {
     'add-assumption',
     'import-workbook-facts',
     'summarize-analysis-session',
+  ],
+  'workbook-context': [
+    'load-workbook-context',
+    'download-workbook-context',
+    'populate-worksheet-facts',
+    'query-workbook-context',
   ],
 } as const satisfies Record<ToolGroupName, Array<ToolName>>;
 
