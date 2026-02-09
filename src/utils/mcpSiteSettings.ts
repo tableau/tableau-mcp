@@ -1,4 +1,4 @@
-import { Config, getConfig, TEN_MINUTES_IN_MS } from '../config.js';
+import { Config, getConfig } from '../config.js';
 import { getOverrideableConfig, OverrideableConfig } from '../overrideableConfig.js';
 import { RestApiArgs, useRestApi } from '../restApiInstance.js';
 import { getSiteIdFromAccessToken } from '../sdks/tableau/getSiteIdFromAccessToken.js';
@@ -6,9 +6,7 @@ import { McpSiteSettings } from '../sdks/tableau/types/mcpSiteSettings.js';
 import { ExpiringMap } from './expiringMap.js';
 
 type SiteNameOrSiteId = string;
-const mcpSiteSettingsCache = new ExpiringMap<SiteNameOrSiteId, McpSiteSettings>({
-  defaultExpirationTimeMs: TEN_MINUTES_IN_MS,
-});
+let mcpSiteSettingsCache: ExpiringMap<SiteNameOrSiteId, McpSiteSettings>;
 
 async function getMcpSiteSettings({
   restApiArgs,
@@ -18,6 +16,12 @@ async function getMcpSiteSettings({
   const { config, authInfo } = restApiArgs;
   if (!config.enableMcpSiteSettings) {
     return;
+  }
+
+  if (!mcpSiteSettingsCache) {
+    mcpSiteSettingsCache = new ExpiringMap<SiteNameOrSiteId, McpSiteSettings>({
+      defaultExpirationTimeMs: config.mcpSiteSettingsCheckIntervalInMinutes * 60 * 1000,
+    });
   }
 
   const cacheKey = config.siteName || getSiteIdFromAccessToken(authInfo?.accessToken ?? '');

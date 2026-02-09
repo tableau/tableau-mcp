@@ -187,10 +187,10 @@ export class RestApi {
     return this._serverMethods;
   }
 
-  // Temporary until we have proper site methods
   get siteMethods(): { getMcpSettings: () => Promise<McpSiteSettings> } {
     return {
       getMcpSettings: async (): Promise<McpSiteSettings> => {
+        // Remove this comment and add documentation when the "Get MCP Site Settings" REST API is available
         return {};
       },
     };

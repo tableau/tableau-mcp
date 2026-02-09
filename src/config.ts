@@ -52,6 +52,7 @@ export class Config {
   enableServerLogging: boolean;
   serverLogDirectory: string;
   tableauServerVersionCheckIntervalInHours: number;
+  mcpSiteSettingsCheckIntervalInMinutes: number;
   enableMcpSiteSettings: boolean;
   oauth: {
     enabled: boolean;
@@ -104,6 +105,7 @@ export class Config {
       ENABLE_SERVER_LOGGING: enableServerLogging,
       SERVER_LOG_DIRECTORY: serverLogDirectory,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
+      MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: mcpSiteSettingsCheckIntervalInMinutes,
       ENABLE_MCP_SITE_SETTINGS: enableMcpSiteSettings,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
@@ -148,6 +150,15 @@ export class Config {
         defaultValue: 1,
         minValue: 1,
         maxValue: 24 * 7, // 7 days
+      },
+    );
+
+    this.mcpSiteSettingsCheckIntervalInMinutes = parseNumber(
+      mcpSiteSettingsCheckIntervalInMinutes,
+      {
+        defaultValue: 10,
+        minValue: 1,
+        maxValue: 60 * 24, // 24 hours
       },
     );
 
