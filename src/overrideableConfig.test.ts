@@ -345,4 +345,149 @@ describe('OverrideableConfig', () => {
       expect(config.getMaxResultLimit('query-datasource')).toBe(null);
     });
   });
+
+  describe('Override behavior', () => {
+    it('should override INCLUDE_TOOLS', () => {
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('INCLUDE_TOOLS', 'list-views');
+
+      const config = new OverrideableConfig({
+        INCLUDE_TOOLS: 'query-datasource',
+      });
+
+      expect(config.includeTools).toEqual(['query-datasource']);
+    });
+
+    it('should override EXCLUDE_TOOLS', () => {
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('EXCLUDE_TOOLS', 'list-views');
+
+      const config = new OverrideableConfig({
+        EXCLUDE_TOOLS: 'get-datasource-metadata',
+      });
+
+      expect(config.excludeTools).toEqual(['get-datasource-metadata']);
+    });
+
+    it('should override INCLUDE_PROJECT_IDS', () => {
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('INCLUDE_PROJECT_IDS', '999');
+
+      const config = new OverrideableConfig({
+        INCLUDE_PROJECT_IDS: '123,456',
+      });
+
+      expect(config.boundedContext.projectIds).toEqual(new Set(['123', '456']));
+    });
+
+    it('should override INCLUDE_DATASOURCE_IDS', () => {
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('INCLUDE_DATASOURCE_IDS', '999');
+
+      const config = new OverrideableConfig({
+        INCLUDE_DATASOURCE_IDS: '123,456',
+      });
+
+      expect(config.boundedContext.datasourceIds).toEqual(new Set(['123', '456']));
+    });
+
+    it('should override INCLUDE_WORKBOOK_IDS', () => {
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('INCLUDE_WORKBOOK_IDS', '999');
+
+      const config = new OverrideableConfig({
+        INCLUDE_WORKBOOK_IDS: '123,456',
+      });
+
+      expect(config.boundedContext.workbookIds).toEqual(new Set(['123', '456']));
+    });
+
+    it('should override INCLUDE_TAGS', () => {
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('INCLUDE_TAGS', '999');
+
+      const config = new OverrideableConfig({
+        INCLUDE_TAGS: '123,456',
+      });
+
+      expect(config.boundedContext.tags).toEqual(new Set(['123', '456']));
+    });
+
+    it('should override MAX_RESULT_LIMIT', () => {
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('MAX_RESULT_LIMIT', '10');
+
+      const config = new OverrideableConfig({
+        MAX_RESULT_LIMIT: '99',
+      });
+
+      expect(config.getMaxResultLimit('query-datasource')).toEqual(99);
+    });
+
+    it('should override MAX_RESULT_LIMITS', () => {
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('MAX_RESULT_LIMIT', '10');
+      vi.stubEnv('MAX_RESULT_LIMITS', 'query-datasource:100');
+
+      const config = new OverrideableConfig({
+        MAX_RESULT_LIMIT: '99',
+        MAX_RESULT_LIMITS: 'query-datasource:999',
+      });
+
+      expect(config.getMaxResultLimit('list-datasources')).toEqual(99);
+      expect(config.getMaxResultLimit('query-datasource')).toEqual(999);
+    });
+
+    it('should override DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS', () => {
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS', 'false');
+
+      const config = new OverrideableConfig({
+        DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: 'true',
+      });
+
+      expect(config.disableQueryDatasourceValidationRequests).toEqual(true);
+    });
+
+    it('should override DISABLE_METADATA_API_REQUESTS', () => {
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'false');
+
+      const config = new OverrideableConfig({
+        DISABLE_METADATA_API_REQUESTS: 'true',
+      });
+
+      expect(config.disableMetadataApiRequests).toEqual(true);
+    });
+  });
 });
