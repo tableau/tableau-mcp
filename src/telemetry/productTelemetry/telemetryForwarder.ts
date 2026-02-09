@@ -77,6 +77,7 @@ class DirectTelemetryForwarder {
     };
 
     const req = new Request(this.endpoint, init);
+    // Intentionally not awaiting: telemetry should not block execution.
     sendTelemetryRequest(req);
   }
 }
