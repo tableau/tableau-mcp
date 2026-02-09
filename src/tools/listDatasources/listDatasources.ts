@@ -2,7 +2,8 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { BoundedContext, getConfig } from '../../config.js';
+import { getConfig } from '../../config.js';
+import { BoundedContext } from '../../overrideableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { Server } from '../../server.js';
@@ -84,6 +85,18 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
       { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
+      const restApiArgs = {
+        config,
+        requestId,
+        server,
+        signal,
+        authInfo: getTableauAuthInfo(authInfo),
+      };
+
+      const configWithOverrides = await getConfigWithOverrides({
+        restApiArgs,
+      });
+
       const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
         requestId,
@@ -91,14 +104,13 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
         args: { filter, pageSize, limit },
         callback: async () => {
           const datasources = await useRestApi({
-            config,
-            requestId,
-            server,
+            ...restApiArgs,
             jwtScopes: ['tableau:content:read'],
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
-              const maxResultLimit = config.getMaxResultLimit(listDatasourcesTool.name);
+              const maxResultLimit = configWithOverrides.getMaxResultLimit(
+                listDatasourcesTool.name,
+              );
+
               const datasources = await paginate({
                 pageConfig: {
                   pageSize,
@@ -126,16 +138,6 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
           return new Ok(datasources);
         },
         constrainSuccessResult: async (datasources) => {
-          const configWithOverrides = await getConfigWithOverrides({
-            restApiArgs: {
-              config,
-              requestId,
-              server,
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
-            },
-          });
-
           return constrainDatasources({
             datasources,
             boundedContext: configWithOverrides.boundedContext,

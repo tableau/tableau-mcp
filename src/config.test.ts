@@ -1,11 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { exportedForTesting, ONE_HOUR_IN_MS, TEN_MINUTES_IN_MS } from './config.js';
 
 describe('Config', () => {
   const { Config, parseNumber } = exportedForTesting;
-
-  const originalEnv = process.env;
 
   const defaultEnvVars = {
     SERVER: 'https://test-server.com',
@@ -16,97 +12,32 @@ describe('Config', () => {
 
   beforeEach(() => {
     vi.resetModules();
-    process.env = {
-      ...originalEnv,
-      AUTH: undefined,
-      TRANSPORT: undefined,
-      HTTP_PORT_ENV_VAR_NAME: undefined,
-      PORT: undefined,
-      CUSTOM_PORT: undefined,
-      CORS_ORIGIN_CONFIG: undefined,
-      TRUST_PROXY_CONFIG: undefined,
-      SERVER: undefined,
-      SITE_NAME: undefined,
-      PAT_NAME: undefined,
-      PAT_VALUE: undefined,
-      JWT_SUB_CLAIM: undefined,
-      CONNECTED_APP_CLIENT_ID: undefined,
-      CONNECTED_APP_SECRET_ID: undefined,
-      CONNECTED_APP_SECRET_VALUE: undefined,
-      UAT_TENANT_ID: undefined,
-      UAT_ISSUER: undefined,
-      UAT_USERNAME_CLAIM: undefined,
-      UAT_USERNAME_CLAIM_NAME: undefined,
-      UAT_PRIVATE_KEY: undefined,
-      UAT_PRIVATE_KEY_PATH: undefined,
-      UAT_KEY_ID: undefined,
-      JWT_ADDITIONAL_PAYLOAD: undefined,
-      DATASOURCE_CREDENTIALS: undefined,
-      DEFAULT_LOG_LEVEL: undefined,
-      DISABLE_LOG_MASKING: undefined,
-      INCLUDE_TOOLS: undefined,
-      EXCLUDE_TOOLS: undefined,
-      MAX_REQUEST_TIMEOUT_MS: undefined,
-      MAX_RESULT_LIMIT: undefined,
-      MAX_RESULT_LIMITS: undefined,
-      DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: undefined,
-      DISABLE_METADATA_API_REQUESTS: undefined,
-      DISABLE_SESSION_MANAGEMENT: undefined,
-      ENABLE_SERVER_LOGGING: undefined,
-      SERVER_LOG_DIRECTORY: undefined,
-      INCLUDE_PROJECT_IDS: undefined,
-      INCLUDE_DATASOURCE_IDS: undefined,
-      INCLUDE_WORKBOOK_IDS: undefined,
-      INCLUDE_TAGS: undefined,
-      TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: undefined,
-      DANGEROUSLY_DISABLE_OAUTH: undefined,
-      OAUTH_ISSUER: undefined,
-      OAUTH_REDIRECT_URI: undefined,
-      OAUTH_LOCK_SITE: undefined,
-      OAUTH_JWE_PRIVATE_KEY: undefined,
-      OAUTH_JWE_PRIVATE_KEY_PATH: undefined,
-      OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: undefined,
-      OAUTH_CIMD_DNS_SERVERS: undefined,
-      OAUTH_ACCESS_TOKEN_TIMEOUT_MS: undefined,
-      OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: undefined,
-      OAUTH_REFRESH_TOKEN_TIMEOUT_MS: undefined,
-      OAUTH_CLIENT_ID_SECRET_PAIRS: undefined,
-    };
   });
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    vi.unstubAllEnvs();
   });
 
   it('should throw error when SERVER is missing', () => {
-    process.env = {
-      ...process.env,
-      SERVER: undefined,
-      SITE_NAME: 'test-site',
-    };
+    vi.stubEnv('SERVER', undefined);
+    vi.stubEnv('SITE_NAME', 'test-site');
 
     expect(() => new Config()).toThrow('The environment variable SERVER is not set');
   });
 
   it('should accept HTTP URLs for SERVER', () => {
-    process.env = {
-      ...process.env,
-      SERVER: 'http://foo.com',
-      PAT_NAME: 'test-pat-name',
-      PAT_VALUE: 'test-pat-value',
-      SITE_NAME: 'test-site',
-    };
+    vi.stubEnv('SERVER', 'http://foo.com');
+    vi.stubEnv('PAT_NAME', 'test-pat-name');
+    vi.stubEnv('PAT_VALUE', 'test-pat-value');
+    vi.stubEnv('SITE_NAME', 'test-site');
 
     const config = new Config();
     expect(config.server).toBe('http://foo.com');
   });
 
   it('should throw error when SERVER is not HTTP/HTTPS', () => {
-    process.env = {
-      ...process.env,
-      SERVER: 'gopher://foo.com',
-      SITE_NAME: 'test-site',
-    };
+    vi.stubEnv('SERVER', 'gopher://foo.com');
+    vi.stubEnv('SITE_NAME', 'test-site');
 
     expect(() => new Config()).toThrow(
       'The environment variable SERVER must start with "http://" or "https://": gopher://foo.com',
@@ -114,11 +45,8 @@ describe('Config', () => {
   });
 
   it('should throw error when SERVER is not a valid URL', () => {
-    process.env = {
-      ...process.env,
-      SERVER: 'https://',
-      SITE_NAME: 'test-site',
-    };
+    vi.stubEnv('SERVER', 'https://');
+    vi.stubEnv('SITE_NAME', 'test-site');
 
     expect(() => new Config()).toThrow(
       'The environment variable SERVER is not a valid URL: https:// -- Invalid URL',
@@ -126,47 +54,38 @@ describe('Config', () => {
   });
 
   it('should set siteName to empty string when SITE_NAME is "${user_config.site_name}"', () => {
-    process.env = {
-      ...process.env,
-      SERVER: 'https://test-server.com',
-      PAT_NAME: 'test-pat-name',
-      PAT_VALUE: 'test-pat-value',
-      SITE_NAME: '${user_config.site_name}',
-    };
+    vi.stubEnv('SERVER', 'https://test-server.com');
+    vi.stubEnv('PAT_NAME', 'test-pat-name');
+    vi.stubEnv('PAT_VALUE', 'test-pat-value');
+    vi.stubEnv('SITE_NAME', '${user_config.site_name}');
 
     const config = new Config();
     expect(config.siteName).toBe('');
   });
 
   it('should throw error when PAT_NAME is missing', () => {
-    process.env = {
-      ...process.env,
-      SERVER: 'https://test-server.com',
-      SITE_NAME: 'test-site',
-      PAT_NAME: undefined,
-      PAT_VALUE: 'test-pat-value',
-    };
+    vi.stubEnv('SERVER', 'https://test-server.com');
+    vi.stubEnv('SITE_NAME', 'test-site');
+    vi.stubEnv('PAT_NAME', undefined);
+    vi.stubEnv('PAT_VALUE', 'test-pat-value');
 
     expect(() => new Config()).toThrow('The environment variable PAT_NAME is not set');
   });
 
   it('should throw error when PAT_VALUE is missing', () => {
-    process.env = {
-      ...process.env,
-      SERVER: 'https://test-server.com',
-      SITE_NAME: 'test-site',
-      PAT_NAME: 'test-pat-name',
-      PAT_VALUE: undefined,
-    };
+    vi.stubEnv('SERVER', 'https://test-server.com');
+    vi.stubEnv('SITE_NAME', 'test-site');
+    vi.stubEnv('PAT_NAME', 'test-pat-name');
+    vi.stubEnv('PAT_VALUE', undefined);
 
     expect(() => new Config()).toThrow('The environment variable PAT_VALUE is not set');
   });
 
   it('should configure PAT authentication when PAT credentials are provided', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
 
     const config = new Config();
     expect(config.patName).toBe('test-pat-name');
@@ -175,413 +94,271 @@ describe('Config', () => {
   });
 
   it('should set default log level to debug when not specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
 
     const config = new Config();
     expect(config.defaultLogLevel).toBe('debug');
   });
 
   it('should set custom log level when specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      DEFAULT_LOG_LEVEL: 'info',
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+    vi.stubEnv('DEFAULT_LOG_LEVEL', 'info');
 
     const config = new Config();
     expect(config.defaultLogLevel).toBe('info');
   });
 
   it('should set disableLogMasking to false by default', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
 
     const config = new Config();
     expect(config.disableLogMasking).toBe(false);
   });
 
   it('should set disableLogMasking to true when specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      DISABLE_LOG_MASKING: 'true',
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+    vi.stubEnv('DISABLE_LOG_MASKING', 'true');
 
     const config = new Config();
     expect(config.disableLogMasking).toBe(true);
   });
 
   it('should set maxRequestTimeoutMs to the default value when not specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
 
     const config = new Config();
     expect(config.maxRequestTimeoutMs).toBe(10 * 60 * 1000);
   });
 
   it('should set maxRequestTimeoutMs to the specified value when specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      MAX_REQUEST_TIMEOUT_MS: '123456',
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+    vi.stubEnv('MAX_REQUEST_TIMEOUT_MS', '123456');
 
     const config = new Config();
     expect(config.maxRequestTimeoutMs).toBe(123456);
   });
 
   it('should set maxRequestTimeoutMs to the default value when specified as a non-number', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      MAX_REQUEST_TIMEOUT_MS: 'abc',
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+    vi.stubEnv('MAX_REQUEST_TIMEOUT_MS', 'abc');
 
     const config = new Config();
     expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
   });
 
   it('should set maxRequestTimeoutMs to the default value when specified as a negative number', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      MAX_REQUEST_TIMEOUT_MS: '-100',
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+    vi.stubEnv('MAX_REQUEST_TIMEOUT_MS', '-100');
 
     const config = new Config();
     expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
   });
 
   it('should set maxRequestTimeoutMs to the default value when specified as a number greater than one hour', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      MAX_REQUEST_TIMEOUT_MS: `${ONE_HOUR_IN_MS + 1}`,
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+    vi.stubEnv('MAX_REQUEST_TIMEOUT_MS', `${ONE_HOUR_IN_MS + 1}`);
 
     const config = new Config();
     expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
   });
 
-  it('should set disableQueryDatasourceValidationRequests to false by default', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-    };
-
-    const config = new Config();
-    expect(config.disableQueryDatasourceValidationRequests).toBe(false);
-  });
-
-  it('should set disableQueryDatasourceValidationRequests to true when specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: 'true',
-    };
-
-    const config = new Config();
-    expect(config.disableQueryDatasourceValidationRequests).toBe(true);
-  });
-
-  it('should set disableMetadataApiRequests to false by default', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-    };
-
-    const config = new Config();
-    expect(config.disableMetadataApiRequests).toBe(false);
-  });
-
-  it('should set disableMetadataApiRequests to true when specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      DISABLE_METADATA_API_REQUESTS: 'true',
-    };
-
-    const config = new Config();
-    expect(config.disableMetadataApiRequests).toBe(true);
-  });
-
   it('should set disableSessionManagement to false by default', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
 
     const config = new Config();
     expect(config.disableSessionManagement).toBe(false);
   });
 
-  it('should set disableMetadataApiRequests to true when specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      DISABLE_SESSION_MANAGEMENT: 'true',
-    };
+  it('should set disableSessionManagement to true when specified', () => {
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+    vi.stubEnv('DISABLE_SESSION_MANAGEMENT', 'true');
 
     const config = new Config();
     expect(config.disableSessionManagement).toBe(true);
   });
 
   it('should default transport to stdio when not specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
 
     const config = new Config();
     expect(config.transport).toBe('stdio');
   });
 
   it('should set transport to http when specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      TRANSPORT: 'http',
-      DANGEROUSLY_DISABLE_OAUTH: 'true',
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+    vi.stubEnv('TRANSPORT', 'http');
+    vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
 
     const config = new Config();
     expect(config.transport).toBe('http');
   });
 
   it('should set tableauServerVersionCheckIntervalInHours to default when not specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: undefined,
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+    vi.stubEnv('TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS', undefined);
 
     const config = new Config();
     expect(config.tableauServerVersionCheckIntervalInHours).toBe(1);
   });
 
   it('should set tableauServerVersionCheckIntervalInHours to the specified value when specified', () => {
-    process.env = {
-      ...process.env,
-      ...defaultEnvVars,
-      TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: '2',
-    };
+    vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+    vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+    vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+    vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+    vi.stubEnv('TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS', '2');
 
     const config = new Config();
     expect(config.tableauServerVersionCheckIntervalInHours).toBe(2);
   });
 
-  describe('Tool filtering', () => {
-    it('should set empty arrays for includeTools and excludeTools when not specified', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-      };
-
-      const config = new Config();
-      expect(config.includeTools).toEqual([]);
-      expect(config.excludeTools).toEqual([]);
-    });
-
-    it('should parse INCLUDE_TOOLS into an array of valid tool names', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        INCLUDE_TOOLS: 'query-datasource,get-datasource-metadata',
-      };
-
-      const config = new Config();
-      expect(config.includeTools).toEqual(['query-datasource', 'get-datasource-metadata']);
-    });
-
-    it('should parse INCLUDE_TOOLS into an array of valid tool names when tool group names are used', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        INCLUDE_TOOLS: 'query-datasource,workbook',
-      };
-
-      const config = new Config();
-      expect(config.includeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
-    });
-
-    it('should parse EXCLUDE_TOOLS into an array of valid tool names', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        EXCLUDE_TOOLS: 'query-datasource',
-      };
-
-      const config = new Config();
-      expect(config.excludeTools).toEqual(['query-datasource']);
-    });
-
-    it('should parse EXCLUDE_TOOLS into an array of valid tool names when tool group names are used', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        EXCLUDE_TOOLS: 'query-datasource,workbook',
-      };
-
-      const config = new Config();
-      expect(config.excludeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
-    });
-
-    it('should filter out invalid tool names from INCLUDE_TOOLS', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        INCLUDE_TOOLS: 'query-datasource,order-hamburgers',
-      };
-
-      const config = new Config();
-      expect(config.includeTools).toEqual(['query-datasource']);
-    });
-
-    it('should filter out invalid tool names from EXCLUDE_TOOLS', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        EXCLUDE_TOOLS: 'query-datasource,order-hamburgers',
-      };
-
-      const config = new Config();
-      expect(config.excludeTools).toEqual(['query-datasource']);
-    });
-
-    it('should throw error when both INCLUDE_TOOLS and EXCLUDE_TOOLS are specified', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        INCLUDE_TOOLS: 'query-datasource',
-        EXCLUDE_TOOLS: 'get-datasource-metadata',
-      };
-
-      expect(() => new Config()).toThrow('Cannot include and exclude tools simultaneously');
-    });
-
-    it('should throw error when both INCLUDE_TOOLS and EXCLUDE_TOOLS are specified with tool group names', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        INCLUDE_TOOLS: 'datasource',
-        EXCLUDE_TOOLS: 'workbook',
-      };
-      expect(() => new Config()).toThrow('Cannot include and exclude tools simultaneously');
-    });
-  });
-
   describe('HTTP server config parsing', () => {
     it('should set sslKey to default when SSL_KEY is not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
 
       const config = new Config();
       expect(config.sslKey).toBe('');
     });
 
     it('should set sslKey to the specified value when SSL_KEY is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        SSL_KEY: 'path/to/ssl-key.pem',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('SSL_KEY', 'path/to/ssl-key.pem');
 
       const config = new Config();
       expect(config.sslKey).toBe('path/to/ssl-key.pem');
     });
 
     it('should set sslCert to default when SSL_CERT is not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
 
       const config = new Config();
       expect(config.sslCert).toBe('');
     });
 
     it('should set sslCert to the specified value when SSL_CERT is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        SSL_CERT: 'path/to/ssl-cert.pem',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('SSL_CERT', 'path/to/ssl-cert.pem');
 
       const config = new Config();
       expect(config.sslCert).toBe('path/to/ssl-cert.pem');
     });
 
     it('should set httpPort to default when HTTP_PORT_ENV_VAR_NAME and PORT are not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
 
       const config = new Config();
       expect(config.httpPort).toBe(3927);
     });
 
     it('should set httpPort to the value of PORT when set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        PORT: '8080',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('PORT', '8080');
 
       const config = new Config();
       expect(config.httpPort).toBe(8080);
     });
 
     it('should set httpPort to the value of the environment variable specified by HTTP_PORT_ENV_VAR_NAME when set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        HTTP_PORT_ENV_VAR_NAME: 'CUSTOM_PORT',
-        CUSTOM_PORT: '41664',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('HTTP_PORT_ENV_VAR_NAME', 'CUSTOM_PORT');
+      vi.stubEnv('CUSTOM_PORT', '41664');
 
       const config = new Config();
       expect(config.httpPort).toBe(41664);
     });
 
     it('should set httpPort to default when HTTP_PORT_ENV_VAR_NAME is set and custom port is not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        HTTP_PORT_ENV_VAR_NAME: 'CUSTOM_PORT',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('HTTP_PORT_ENV_VAR_NAME', 'CUSTOM_PORT');
 
       const config = new Config();
       expect(config.httpPort).toBe(3927);
     });
 
     it('should set httpPort to default when PORT is set to an invalid value', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        PORT: 'invalid',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('PORT', 'invalid');
 
       const config = new Config();
       expect(config.httpPort).toBe(3927);
     });
 
     it('should set httpPort to default when HTTP_PORT_ENV_VAR_NAME is set and custom port is invalid', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        HTTP_PORT_ENV_VAR_NAME: 'CUSTOM_PORT',
-        CUSTOM_PORT: 'invalid',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('HTTP_PORT_ENV_VAR_NAME', 'CUSTOM_PORT');
+      vi.stubEnv('CUSTOM_PORT', 'invalid');
 
       const config = new Config();
       expect(config.httpPort).toBe(3927);
@@ -590,76 +367,76 @@ describe('Config', () => {
 
   describe('CORS origin config parsing', () => {
     it('should set corsOriginConfig to true when CORS_ORIGIN_CONFIG is not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
 
       const config = new Config();
       expect(config.corsOriginConfig).toBe(true);
     });
 
     it('should set corsOriginConfig to true when CORS_ORIGIN_CONFIG is "true"', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        CORS_ORIGIN_CONFIG: 'true',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('CORS_ORIGIN_CONFIG', 'true');
 
       const config = new Config();
       expect(config.corsOriginConfig).toBe(true);
     });
 
     it('should set corsOriginConfig to "*" when CORS_ORIGIN_CONFIG is "*"', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        CORS_ORIGIN_CONFIG: '*',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('CORS_ORIGIN_CONFIG', '*');
 
       const config = new Config();
       expect(config.corsOriginConfig).toBe('*');
     });
 
     it('should set corsOriginConfig to false when CORS_ORIGIN_CONFIG is "false"', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        CORS_ORIGIN_CONFIG: 'false',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('CORS_ORIGIN_CONFIG', 'false');
 
       const config = new Config();
       expect(config.corsOriginConfig).toBe(false);
     });
 
     it('should set corsOriginConfig to the specified origin when CORS_ORIGIN_CONFIG is a valid URL', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        CORS_ORIGIN_CONFIG: 'https://example.com:8080',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('CORS_ORIGIN_CONFIG', 'https://example.com:8080');
 
       const config = new Config();
       expect(config.corsOriginConfig).toBe('https://example.com:8080');
     });
 
     it('should set corsOriginConfig to the specified origins when CORS_ORIGIN_CONFIG is an array of URLs', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        CORS_ORIGIN_CONFIG: '["https://example.com", "https://example.org"]',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('CORS_ORIGIN_CONFIG', '["https://example.com", "https://example.org"]');
 
       const config = new Config();
       expect(config.corsOriginConfig).toEqual(['https://example.com', 'https://example.org']);
     });
 
     it('should throw error when CORS_ORIGIN_CONFIG is not a valid URL', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        CORS_ORIGIN_CONFIG: 'invalid',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('CORS_ORIGIN_CONFIG', 'invalid');
 
       expect(() => new Config()).toThrow(
         'The environment variable CORS_ORIGIN_CONFIG is not a valid URL: invalid',
@@ -667,11 +444,11 @@ describe('Config', () => {
     });
 
     it('should throw error when CORS_ORIGIN_CONFIG is not a valid array of URLs', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        CORS_ORIGIN_CONFIG: '["https://example.com", "invalid"]',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('CORS_ORIGIN_CONFIG', '["https://example.com", "invalid"]');
 
       expect(() => new Config()).toThrow(
         'The environment variable CORS_ORIGIN_CONFIG is not a valid array of URLs: ["https://example.com", "invalid"]',
@@ -681,54 +458,54 @@ describe('Config', () => {
 
   describe('Trust proxy config parsing', () => {
     it('should set trustProxyConfig to null when TRUST_PROXY_CONFIG is not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
 
       const config = new Config();
       expect(config.trustProxyConfig).toBe(null);
     });
 
     it('should set trustProxyConfig to true when TRUST_PROXY_CONFIG is "true"', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        TRUST_PROXY_CONFIG: 'true',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('TRUST_PROXY_CONFIG', 'true');
 
       const config = new Config();
       expect(config.trustProxyConfig).toBe(true);
     });
 
     it('should set trustProxyConfig to false when TRUST_PROXY_CONFIG is "false"', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        TRUST_PROXY_CONFIG: 'false',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('TRUST_PROXY_CONFIG', 'false');
 
       const config = new Config();
       expect(config.trustProxyConfig).toBe(false);
     });
 
     it('should set trustProxyConfig to the specified number when TRUST_PROXY_CONFIG is a valid number', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        TRUST_PROXY_CONFIG: '1',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('TRUST_PROXY_CONFIG', '1');
 
       const config = new Config();
       expect(config.trustProxyConfig).toBe(1);
     });
 
     it('should set trustProxyConfig to the specified string when TRUST_PROXY_CONFIG is a valid string', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        TRUST_PROXY_CONFIG: 'loopback, linklocal, uniquelocal',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('TRUST_PROXY_CONFIG', 'loopback, linklocal, uniquelocal');
 
       const config = new Config();
       expect(config.trustProxyConfig).toBe('loopback, linklocal, uniquelocal');
@@ -746,10 +523,18 @@ describe('Config', () => {
     } as const;
 
     it('should configure direct-trust authentication when all required variables are provided', () => {
-      process.env = {
-        ...process.env,
-        ...defaultDirectTrustEnvVars,
-      };
+      vi.stubEnv('SERVER', defaultDirectTrustEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultDirectTrustEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultDirectTrustEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultDirectTrustEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', defaultDirectTrustEnvVars.AUTH);
+      vi.stubEnv('JWT_SUB_CLAIM', defaultDirectTrustEnvVars.JWT_SUB_CLAIM);
+      vi.stubEnv('CONNECTED_APP_CLIENT_ID', defaultDirectTrustEnvVars.CONNECTED_APP_CLIENT_ID);
+      vi.stubEnv('CONNECTED_APP_SECRET_ID', defaultDirectTrustEnvVars.CONNECTED_APP_SECRET_ID);
+      vi.stubEnv(
+        'CONNECTED_APP_SECRET_VALUE',
+        defaultDirectTrustEnvVars.CONNECTED_APP_SECRET_VALUE,
+      );
 
       const config = new Config();
       expect(config.auth).toBe('direct-trust');
@@ -761,32 +546,54 @@ describe('Config', () => {
     });
 
     it('should set jwtAdditionalPayload to the specified value when JWT_ADDITIONAL_PAYLOAD is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultDirectTrustEnvVars,
-        JWT_ADDITIONAL_PAYLOAD: '{"custom":"payload"}',
-      };
+      vi.stubEnv('SERVER', defaultDirectTrustEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultDirectTrustEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultDirectTrustEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultDirectTrustEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', defaultDirectTrustEnvVars.AUTH);
+      vi.stubEnv('JWT_SUB_CLAIM', defaultDirectTrustEnvVars.JWT_SUB_CLAIM);
+      vi.stubEnv('CONNECTED_APP_CLIENT_ID', defaultDirectTrustEnvVars.CONNECTED_APP_CLIENT_ID);
+      vi.stubEnv('CONNECTED_APP_SECRET_ID', defaultDirectTrustEnvVars.CONNECTED_APP_SECRET_ID);
+      vi.stubEnv(
+        'CONNECTED_APP_SECRET_VALUE',
+        defaultDirectTrustEnvVars.CONNECTED_APP_SECRET_VALUE,
+      );
+      vi.stubEnv('JWT_ADDITIONAL_PAYLOAD', '{"custom":"payload"}');
 
       const config = new Config();
       expect(JSON.parse(config.jwtAdditionalPayload)).toEqual({ custom: 'payload' });
     });
 
     it('should throw error when JWT_SUB_CLAIM is missing for direct-trust auth', () => {
-      process.env = {
-        ...process.env,
-        ...defaultDirectTrustEnvVars,
-        JWT_SUB_CLAIM: undefined,
-      };
+      vi.stubEnv('SERVER', defaultDirectTrustEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultDirectTrustEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultDirectTrustEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultDirectTrustEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', defaultDirectTrustEnvVars.AUTH);
+      vi.stubEnv('JWT_SUB_CLAIM', undefined);
+      vi.stubEnv('CONNECTED_APP_CLIENT_ID', defaultDirectTrustEnvVars.CONNECTED_APP_CLIENT_ID);
+      vi.stubEnv('CONNECTED_APP_SECRET_ID', defaultDirectTrustEnvVars.CONNECTED_APP_SECRET_ID);
+      vi.stubEnv(
+        'CONNECTED_APP_SECRET_VALUE',
+        defaultDirectTrustEnvVars.CONNECTED_APP_SECRET_VALUE,
+      );
 
       expect(() => new Config()).toThrow('The environment variable JWT_SUB_CLAIM is not set');
     });
 
     it('should throw error when CONNECTED_APP_CLIENT_ID is missing for direct-trust auth', () => {
-      process.env = {
-        ...process.env,
-        ...defaultDirectTrustEnvVars,
-        CONNECTED_APP_CLIENT_ID: undefined,
-      };
+      vi.stubEnv('SERVER', defaultDirectTrustEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultDirectTrustEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultDirectTrustEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultDirectTrustEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', defaultDirectTrustEnvVars.AUTH);
+      vi.stubEnv('JWT_SUB_CLAIM', defaultDirectTrustEnvVars.JWT_SUB_CLAIM);
+      vi.stubEnv('CONNECTED_APP_CLIENT_ID', undefined);
+      vi.stubEnv('CONNECTED_APP_SECRET_ID', defaultDirectTrustEnvVars.CONNECTED_APP_SECRET_ID);
+      vi.stubEnv(
+        'CONNECTED_APP_SECRET_VALUE',
+        defaultDirectTrustEnvVars.CONNECTED_APP_SECRET_VALUE,
+      );
 
       expect(() => new Config()).toThrow(
         'The environment variable CONNECTED_APP_CLIENT_ID is not set',
@@ -794,11 +601,18 @@ describe('Config', () => {
     });
 
     it('should throw error when CONNECTED_APP_SECRET_ID is missing for direct-trust auth', () => {
-      process.env = {
-        ...process.env,
-        ...defaultDirectTrustEnvVars,
-        CONNECTED_APP_SECRET_ID: undefined,
-      };
+      vi.stubEnv('SERVER', defaultDirectTrustEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultDirectTrustEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultDirectTrustEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultDirectTrustEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', defaultDirectTrustEnvVars.AUTH);
+      vi.stubEnv('JWT_SUB_CLAIM', defaultDirectTrustEnvVars.JWT_SUB_CLAIM);
+      vi.stubEnv('CONNECTED_APP_CLIENT_ID', defaultDirectTrustEnvVars.CONNECTED_APP_CLIENT_ID);
+      vi.stubEnv('CONNECTED_APP_SECRET_ID', undefined);
+      vi.stubEnv(
+        'CONNECTED_APP_SECRET_VALUE',
+        defaultDirectTrustEnvVars.CONNECTED_APP_SECRET_VALUE,
+      );
 
       expect(() => new Config()).toThrow(
         'The environment variable CONNECTED_APP_SECRET_ID is not set',
@@ -806,11 +620,15 @@ describe('Config', () => {
     });
 
     it('should throw error when CONNECTED_APP_SECRET_VALUE is missing for direct-trust auth', () => {
-      process.env = {
-        ...process.env,
-        ...defaultDirectTrustEnvVars,
-        CONNECTED_APP_SECRET_VALUE: undefined,
-      };
+      vi.stubEnv('SERVER', defaultDirectTrustEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultDirectTrustEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultDirectTrustEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultDirectTrustEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', defaultDirectTrustEnvVars.AUTH);
+      vi.stubEnv('JWT_SUB_CLAIM', defaultDirectTrustEnvVars.JWT_SUB_CLAIM);
+      vi.stubEnv('CONNECTED_APP_CLIENT_ID', defaultDirectTrustEnvVars.CONNECTED_APP_CLIENT_ID);
+      vi.stubEnv('CONNECTED_APP_SECRET_ID', defaultDirectTrustEnvVars.CONNECTED_APP_SECRET_ID);
+      vi.stubEnv('CONNECTED_APP_SECRET_VALUE', undefined);
 
       expect(() => new Config()).toThrow(
         'The environment variable CONNECTED_APP_SECRET_VALUE is not set',
@@ -818,12 +636,18 @@ describe('Config', () => {
     });
 
     it('should allow PAT_NAME and PAT_VALUE to be empty when AUTH is "direct-trust"', () => {
-      process.env = {
-        ...process.env,
-        ...defaultDirectTrustEnvVars,
-        PAT_NAME: undefined,
-        PAT_VALUE: undefined,
-      };
+      vi.stubEnv('SERVER', defaultDirectTrustEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultDirectTrustEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', undefined);
+      vi.stubEnv('PAT_VALUE', undefined);
+      vi.stubEnv('AUTH', defaultDirectTrustEnvVars.AUTH);
+      vi.stubEnv('JWT_SUB_CLAIM', defaultDirectTrustEnvVars.JWT_SUB_CLAIM);
+      vi.stubEnv('CONNECTED_APP_CLIENT_ID', defaultDirectTrustEnvVars.CONNECTED_APP_CLIENT_ID);
+      vi.stubEnv('CONNECTED_APP_SECRET_ID', defaultDirectTrustEnvVars.CONNECTED_APP_SECRET_ID);
+      vi.stubEnv(
+        'CONNECTED_APP_SECRET_VALUE',
+        defaultDirectTrustEnvVars.CONNECTED_APP_SECRET_VALUE,
+      );
 
       const config = new Config();
       expect(config.patName).toBe('');
@@ -831,11 +655,11 @@ describe('Config', () => {
     });
 
     it('should allow all direct-trust fields to be empty when AUTH is not "direct-trust"', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        AUTH: 'pat',
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', 'pat');
 
       const config = new Config();
       expect(config.auth).toBe('pat');
@@ -859,10 +683,16 @@ describe('Config', () => {
     } as const;
 
     it('should configure uat authentication when all required variables are provided', () => {
-      process.env = {
-        ...process.env,
-        ...defaultUatEnvVars,
-      };
+      vi.stubEnv('SERVER', defaultUatEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultUatEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultUatEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultUatEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', defaultUatEnvVars.AUTH);
+      vi.stubEnv('UAT_TENANT_ID', defaultUatEnvVars.UAT_TENANT_ID);
+      vi.stubEnv('UAT_ISSUER', defaultUatEnvVars.UAT_ISSUER);
+      vi.stubEnv('UAT_USERNAME_CLAIM', defaultUatEnvVars.UAT_USERNAME_CLAIM);
+      vi.stubEnv('UAT_PRIVATE_KEY', defaultUatEnvVars.UAT_PRIVATE_KEY);
+      vi.stubEnv('UAT_KEY_ID', defaultUatEnvVars.UAT_KEY_ID);
 
       const config = new Config();
       expect(config.auth).toBe('uat');
@@ -875,55 +705,81 @@ describe('Config', () => {
     });
 
     it('should fall back to JWT_SUB_CLAIM when UAT_USERNAME_CLAIM is not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultUatEnvVars,
-        UAT_USERNAME_CLAIM: undefined,
-        JWT_SUB_CLAIM: 'test-jwt-sub-claim',
-      };
+      vi.stubEnv('SERVER', defaultUatEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultUatEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultUatEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultUatEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', defaultUatEnvVars.AUTH);
+      vi.stubEnv('UAT_TENANT_ID', defaultUatEnvVars.UAT_TENANT_ID);
+      vi.stubEnv('UAT_ISSUER', defaultUatEnvVars.UAT_ISSUER);
+      vi.stubEnv('UAT_USERNAME_CLAIM', undefined);
+      vi.stubEnv('JWT_SUB_CLAIM', 'test-jwt-sub-claim');
+      vi.stubEnv('UAT_PRIVATE_KEY', defaultUatEnvVars.UAT_PRIVATE_KEY);
+      vi.stubEnv('UAT_KEY_ID', defaultUatEnvVars.UAT_KEY_ID);
 
       const config = new Config();
       expect(config.jwtUsername).toBe('test-jwt-sub-claim');
     });
 
     it('should set uatUsernameClaimName to the specified value when UAT_USERNAME_CLAIM_NAME is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultUatEnvVars,
-        UAT_USERNAME_CLAIM_NAME: 'test-username-claim-name',
-      };
+      vi.stubEnv('SERVER', defaultUatEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultUatEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultUatEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultUatEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', defaultUatEnvVars.AUTH);
+      vi.stubEnv('UAT_TENANT_ID', defaultUatEnvVars.UAT_TENANT_ID);
+      vi.stubEnv('UAT_ISSUER', defaultUatEnvVars.UAT_ISSUER);
+      vi.stubEnv('UAT_USERNAME_CLAIM', defaultUatEnvVars.UAT_USERNAME_CLAIM);
+      vi.stubEnv('UAT_USERNAME_CLAIM_NAME', 'test-username-claim-name');
+      vi.stubEnv('UAT_PRIVATE_KEY', defaultUatEnvVars.UAT_PRIVATE_KEY);
+      vi.stubEnv('UAT_KEY_ID', defaultUatEnvVars.UAT_KEY_ID);
 
       const config = new Config();
       expect(config.uatUsernameClaimName).toBe('test-username-claim-name');
     });
 
     it('should throw error when UAT_TENANT_ID is missing', () => {
-      process.env = {
-        ...process.env,
-        ...defaultUatEnvVars,
-        UAT_TENANT_ID: undefined,
-      };
+      vi.stubEnv('SERVER', defaultUatEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultUatEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultUatEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultUatEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', defaultUatEnvVars.AUTH);
+      vi.stubEnv('UAT_TENANT_ID', undefined);
+      vi.stubEnv('UAT_ISSUER', defaultUatEnvVars.UAT_ISSUER);
+      vi.stubEnv('UAT_USERNAME_CLAIM', defaultUatEnvVars.UAT_USERNAME_CLAIM);
+      vi.stubEnv('UAT_PRIVATE_KEY', defaultUatEnvVars.UAT_PRIVATE_KEY);
+      vi.stubEnv('UAT_KEY_ID', defaultUatEnvVars.UAT_KEY_ID);
 
       expect(() => new Config()).toThrow('The environment variable UAT_TENANT_ID is not set');
     });
 
     it('should throw error when UAT_ISSUER is missing', () => {
-      process.env = {
-        ...process.env,
-        ...defaultUatEnvVars,
-        UAT_ISSUER: undefined,
-      };
+      vi.stubEnv('SERVER', defaultUatEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultUatEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultUatEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultUatEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', defaultUatEnvVars.AUTH);
+      vi.stubEnv('UAT_TENANT_ID', defaultUatEnvVars.UAT_TENANT_ID);
+      vi.stubEnv('UAT_ISSUER', undefined);
+      vi.stubEnv('UAT_USERNAME_CLAIM', defaultUatEnvVars.UAT_USERNAME_CLAIM);
+      vi.stubEnv('UAT_PRIVATE_KEY', defaultUatEnvVars.UAT_PRIVATE_KEY);
+      vi.stubEnv('UAT_KEY_ID', defaultUatEnvVars.UAT_KEY_ID);
 
       expect(() => new Config()).toThrow('The environment variable UAT_ISSUER is not set');
     });
 
     it('should throw error when UAT_USERNAME_CLAIM is missing and JWT_SUB_CLAIM is not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultUatEnvVars,
-        UAT_USERNAME_CLAIM: undefined,
-        JWT_SUB_CLAIM: undefined,
-      };
+      vi.stubEnv('SERVER', defaultUatEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultUatEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultUatEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultUatEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', defaultUatEnvVars.AUTH);
+      vi.stubEnv('UAT_TENANT_ID', defaultUatEnvVars.UAT_TENANT_ID);
+      vi.stubEnv('UAT_ISSUER', defaultUatEnvVars.UAT_ISSUER);
+      vi.stubEnv('UAT_USERNAME_CLAIM', undefined);
+      vi.stubEnv('JWT_SUB_CLAIM', undefined);
+      vi.stubEnv('UAT_PRIVATE_KEY', defaultUatEnvVars.UAT_PRIVATE_KEY);
+      vi.stubEnv('UAT_KEY_ID', defaultUatEnvVars.UAT_KEY_ID);
 
       expect(() => new Config()).toThrow(
         'One of the environment variables: UAT_USERNAME_CLAIM or JWT_SUB_CLAIM must be set',
@@ -931,12 +787,17 @@ describe('Config', () => {
     });
 
     it('should throw error when UAT_PRIVATE_KEY and UAT_PRIVATE_KEY_PATH is not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultUatEnvVars,
-        UAT_PRIVATE_KEY: undefined,
-        UAT_PRIVATE_KEY_PATH: undefined,
-      };
+      vi.stubEnv('SERVER', defaultUatEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultUatEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultUatEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultUatEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', defaultUatEnvVars.AUTH);
+      vi.stubEnv('UAT_TENANT_ID', defaultUatEnvVars.UAT_TENANT_ID);
+      vi.stubEnv('UAT_ISSUER', defaultUatEnvVars.UAT_ISSUER);
+      vi.stubEnv('UAT_USERNAME_CLAIM', defaultUatEnvVars.UAT_USERNAME_CLAIM);
+      vi.stubEnv('UAT_PRIVATE_KEY', undefined);
+      vi.stubEnv('UAT_PRIVATE_KEY_PATH', undefined);
+      vi.stubEnv('UAT_KEY_ID', defaultUatEnvVars.UAT_KEY_ID);
 
       expect(() => new Config()).toThrow(
         'One of the environment variables: UAT_PRIVATE_KEY_PATH or UAT_PRIVATE_KEY must be set',
@@ -944,99 +805,20 @@ describe('Config', () => {
     });
 
     it('should throw error when UAT_PRIVATE_KEY and UAT_PRIVATE_KEY_PATH are both set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultUatEnvVars,
-        UAT_PRIVATE_KEY: 'hamburgers',
-        UAT_PRIVATE_KEY_PATH: 'hotdogs',
-      };
+      vi.stubEnv('SERVER', defaultUatEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultUatEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultUatEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultUatEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', defaultUatEnvVars.AUTH);
+      vi.stubEnv('UAT_TENANT_ID', defaultUatEnvVars.UAT_TENANT_ID);
+      vi.stubEnv('UAT_ISSUER', defaultUatEnvVars.UAT_ISSUER);
+      vi.stubEnv('UAT_USERNAME_CLAIM', defaultUatEnvVars.UAT_USERNAME_CLAIM);
+      vi.stubEnv('UAT_PRIVATE_KEY', 'hamburgers');
+      vi.stubEnv('UAT_PRIVATE_KEY_PATH', 'hotdogs');
+      vi.stubEnv('UAT_KEY_ID', defaultUatEnvVars.UAT_KEY_ID);
 
       expect(() => new Config()).toThrow(
         'Only one of the environment variables: UAT_PRIVATE_KEY or UAT_PRIVATE_KEY_PATH must be set',
-      );
-    });
-  });
-
-  describe('Bounded context parsing', () => {
-    it('should set boundedContext to null sets when no project, datasource, or workbook IDs are provided', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-      };
-
-      const config = new Config();
-      expect(config.boundedContext).toEqual({
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      });
-    });
-
-    it('should set boundedContext to the specified tags and project, datasource, and workbook IDs when provided', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        INCLUDE_PROJECT_IDS: ' 123, 456, 123   ', // spacing is intentional here to test trimming
-        INCLUDE_DATASOURCE_IDS: '789,101',
-        INCLUDE_WORKBOOK_IDS: '112,113',
-        INCLUDE_TAGS: 'tag1,tag2',
-      };
-
-      const config = new Config();
-      expect(config.boundedContext).toEqual({
-        projectIds: new Set(['123', '456']),
-        datasourceIds: new Set(['789', '101']),
-        workbookIds: new Set(['112', '113']),
-        tags: new Set(['tag1', 'tag2']),
-      });
-    });
-
-    it('should throw error when INCLUDE_PROJECT_IDS is set to an empty string', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        INCLUDE_PROJECT_IDS: '',
-      };
-
-      expect(() => new Config()).toThrow(
-        'When set, the environment variable INCLUDE_PROJECT_IDS must have at least one value',
-      );
-    });
-
-    it('should throw error when INCLUDE_DATASOURCE_IDS is set to an empty string', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        INCLUDE_DATASOURCE_IDS: '',
-      };
-
-      expect(() => new Config()).toThrow(
-        'When set, the environment variable INCLUDE_DATASOURCE_IDS must have at least one value',
-      );
-    });
-
-    it('should throw error when INCLUDE_WORKBOOK_IDS is set to an empty string', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        INCLUDE_WORKBOOK_IDS: '',
-      };
-
-      expect(() => new Config()).toThrow(
-        'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
-      );
-    });
-
-    it('should throw error when INCLUDE_TAGS is set to an empty string', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        INCLUDE_TAGS: '',
-      };
-
-      expect(() => new Config()).toThrow(
-        'When set, the environment variable INCLUDE_TAGS must have at least one value',
       );
     });
   });
@@ -1067,11 +849,15 @@ describe('Config', () => {
       ...defaultOAuthTimeoutMs,
     } as const;
 
+    beforeEach(() => {
+      vi.stubEnv('TABLEAU_MCP_TEST', 'true');
+    });
+
     it('should default to disabled', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-      };
+      vi.stubEnv('SERVER', defaultEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultEnvVars.PAT_VALUE);
 
       const config = new Config();
       expect(config.oauth).toEqual({
@@ -1089,32 +875,38 @@ describe('Config', () => {
     });
 
     it('should enable OAuth when OAUTH_ISSUER is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
 
       const config = new Config();
       expect(config.oauth).toEqual(defaultOAuthConfig);
     });
 
     it('should disable OAuth when DANGEROUSLY_DISABLE_OAUTH is "true"', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        DANGEROUSLY_DISABLE_OAUTH: 'true',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
+      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
 
       const config = new Config();
       expect(config.oauth.enabled).toEqual(false);
     });
 
     it('should set redirectUri to the specified value when OAUTH_REDIRECT_URI is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        OAUTH_REDIRECT_URI: 'https://example.com/CustomCallback',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
+      vi.stubEnv('OAUTH_REDIRECT_URI', 'https://example.com/CustomCallback');
 
       const config = new Config();
       expect(config.oauth).toEqual({
@@ -1124,11 +916,13 @@ describe('Config', () => {
     });
 
     it('should set redirectUri to the default value when OAUTH_REDIRECT_URI is not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        OAUTH_REDIRECT_URI: '',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
+      vi.stubEnv('OAUTH_REDIRECT_URI', '');
 
       const config = new Config();
       expect(config.oauth).toEqual({
@@ -1138,11 +932,13 @@ describe('Config', () => {
     });
 
     it('should set lockSite to the specified value when OAUTH_LOCK_SITE is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        OAUTH_LOCK_SITE: 'false',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
+      vi.stubEnv('OAUTH_LOCK_SITE', 'false');
 
       const config = new Config();
       expect(config.oauth).toEqual({
@@ -1152,12 +948,13 @@ describe('Config', () => {
     });
 
     it('should set jwePrivateKey to the specified value when OAUTH_JWE_PRIVATE_KEY is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        OAUTH_JWE_PRIVATE_KEY: 'hamburgers',
-        OAUTH_JWE_PRIVATE_KEY_PATH: '',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY', 'hamburgers');
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', '');
 
       const config = new Config();
       expect(config.oauth).toEqual({
@@ -1169,11 +966,13 @@ describe('Config', () => {
     });
 
     it('should set authzCodeTimeoutMs to the specified value when OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: '5678',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
+      vi.stubEnv('OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS', '5678');
 
       const config = new Config();
       expect(config.oauth).toEqual({
@@ -1183,11 +982,13 @@ describe('Config', () => {
     });
 
     it('should set accessTokenTimeoutMs to the specified value when OAUTH_ACCESS_TOKEN_TIMEOUT_MS is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        OAUTH_ACCESS_TOKEN_TIMEOUT_MS: '1234',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
+      vi.stubEnv('OAUTH_ACCESS_TOKEN_TIMEOUT_MS', '1234');
 
       const config = new Config();
       expect(config.oauth).toEqual({
@@ -1197,23 +998,26 @@ describe('Config', () => {
     });
 
     it('should set refreshTokenTimeoutMs to the specified value when OAUTH_REFRESH_TOKEN_TIMEOUT_MS is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        OAUTH_REFRESH_TOKEN_TIMEOUT_MS: '1234',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
+      vi.stubEnv('OAUTH_REFRESH_TOKEN_TIMEOUT_MS', '1234');
 
       const config = new Config();
       expect(config.oauth.refreshTokenTimeoutMs).toBe(1234);
     });
 
     it('should throw error when TRANSPORT is "http" and OAUTH_ISSUER is not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        TRANSPORT: 'http',
-        OAUTH_ISSUER: undefined,
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('TRANSPORT', 'http');
+      vi.stubEnv('OAUTH_ISSUER', undefined);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
 
       expect(() => new Config()).toThrow(
         'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true"',
@@ -1221,11 +1025,12 @@ describe('Config', () => {
     });
 
     it('should throw error when OAUTH_JWE_PRIVATE_KEY and OAUTH_JWE_PRIVATE_KEY_PATH is not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        OAUTH_JWE_PRIVATE_KEY_PATH: '',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', '');
 
       expect(() => new Config()).toThrow(
         'One of the environment variables: OAUTH_JWE_PRIVATE_KEY_PATH or OAUTH_JWE_PRIVATE_KEY must be set',
@@ -1233,12 +1038,13 @@ describe('Config', () => {
     });
 
     it('should throw error when OAUTH_JWE_PRIVATE_KEY and OAUTH_JWE_PRIVATE_KEY_PATH are both set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        OAUTH_JWE_PRIVATE_KEY: 'hamburgers',
-        OAUTH_JWE_PRIVATE_KEY_PATH: 'hotdogs',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY', 'hamburgers');
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', 'hotdogs');
 
       expect(() => new Config()).toThrow(
         'Only one of the environment variables: OAUTH_JWE_PRIVATE_KEY or OAUTH_JWE_PRIVATE_KEY_PATH must be set',
@@ -1246,23 +1052,26 @@ describe('Config', () => {
     });
 
     it('should throw error when AUTH is "oauth" and OAUTH_ISSUER is not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        AUTH: 'oauth',
-        OAUTH_ISSUER: '',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', 'oauth');
+      vi.stubEnv('OAUTH_ISSUER', '');
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
 
       expect(() => new Config()).toThrow('When AUTH is "oauth", OAUTH_ISSUER must be set');
     });
 
     it('should throw error when AUTH is "oauth" and DANGEROUSLY_DISABLE_OAUTH is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        AUTH: 'oauth',
-        DANGEROUSLY_DISABLE_OAUTH: 'true',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', 'oauth');
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
+      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
 
       expect(() => new Config()).toThrow(
         'When AUTH is "oauth", DANGEROUSLY_DISABLE_OAUTH cannot be "true"',
@@ -1270,44 +1079,50 @@ describe('Config', () => {
     });
 
     it('should default transport to "http" when OAUTH_ISSUER is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        TRANSPORT: undefined,
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('TRANSPORT', undefined);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
 
       const config = new Config();
       expect(config.transport).toBe('http');
     });
 
     it('should default auth to "oauth" when OAUTH_ISSUER is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
 
       const config = new Config();
       expect(config.auth).toBe('oauth');
     });
 
     it('should throw error when transport is stdio and auth is "oauth"', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        TRANSPORT: 'stdio',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('TRANSPORT', 'stdio');
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
 
       expect(() => new Config()).toThrow('TRANSPORT must be "http" when OAUTH_ISSUER is set');
     });
 
     it('should allow PAT_NAME and PAT_VALUE to be empty when AUTH is "oauth"', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        PAT_NAME: undefined,
-        PAT_VALUE: undefined,
-        AUTH: 'oauth',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', undefined);
+      vi.stubEnv('PAT_VALUE', undefined);
+      vi.stubEnv('AUTH', 'oauth');
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
 
       const config = new Config();
       expect(config.patName).toBe('');
@@ -1315,23 +1130,26 @@ describe('Config', () => {
     });
 
     it('should allow SITE_NAME to be empty when AUTH is "oauth"', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        AUTH: 'oauth',
-        SITE_NAME: '',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', '');
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('AUTH', 'oauth');
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
 
       const config = new Config();
       expect(config.siteName).toBe('');
     });
 
     it('should set clientIdSecretPairs to the specified value when OAUTH_CLIENT_ID_SECRET_PAIRS is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        OAUTH_CLIENT_ID_SECRET_PAIRS: 'client1:secret1,client2:secret2',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
+      vi.stubEnv('OAUTH_CLIENT_ID_SECRET_PAIRS', 'client1:secret1,client2:secret2');
 
       const config = new Config();
       expect(config.oauth.clientIdSecretPairs).toEqual({
@@ -1341,11 +1159,13 @@ describe('Config', () => {
     });
 
     it('should set dnsServers to the specified value when OAUTH_CIMD_DNS_SERVERS is set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultOAuthEnvVars,
-        OAUTH_CIMD_DNS_SERVERS: '8.8.8.8,8.8.4.4',
-      };
+      vi.stubEnv('SERVER', defaultOAuthEnvVars.SERVER);
+      vi.stubEnv('SITE_NAME', defaultOAuthEnvVars.SITE_NAME);
+      vi.stubEnv('PAT_NAME', defaultOAuthEnvVars.PAT_NAME);
+      vi.stubEnv('PAT_VALUE', defaultOAuthEnvVars.PAT_VALUE);
+      vi.stubEnv('OAUTH_ISSUER', defaultOAuthEnvVars.OAUTH_ISSUER);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', defaultOAuthEnvVars.OAUTH_JWE_PRIVATE_KEY_PATH);
+      vi.stubEnv('OAUTH_CIMD_DNS_SERVERS', '8.8.8.8,8.8.4.4');
 
       const config = new Config();
       expect(config.oauth.dnsServers).toEqual(['8.8.8.8', '8.8.4.4']);
@@ -1446,104 +1266,6 @@ describe('Config', () => {
     it('should return defaultValue for negative numbers when minValue is 0', () => {
       const result = parseNumber('-5', { defaultValue: 42, minValue: 0 });
       expect(result).toBe(42);
-    });
-  });
-
-  describe('Max results limit parsing', () => {
-    it('should return null when MAX_RESULT_LIMIT and MAX_RESULT_LIMITS are not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-      };
-
-      expect(new Config().getMaxResultLimit('query-datasource')).toBeNull();
-    });
-
-    it('should return the max result limit when MAX_RESULT_LIMITS has a single tool', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        MAX_RESULT_LIMITS: 'query-datasource:100',
-      };
-
-      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(100);
-    });
-
-    it('should return the max result limit when MAX_RESULT_LIMITS has a single tool group', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        MAX_RESULT_LIMITS: 'datasource:200',
-      };
-
-      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(200);
-    });
-
-    it('should return the max result limit for the tool when a tool and a tool group are both specified', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        MAX_RESULT_LIMITS: 'query-datasource:100,datasource:200',
-      };
-
-      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(100);
-      expect(new Config().getMaxResultLimit('list-datasources')).toEqual(200);
-    });
-
-    it('should fallback to MAX_RESULT_LIMIT when a tool-specific max result limit is not set', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        MAX_RESULT_LIMITS: 'query-datasource:100',
-        MAX_RESULT_LIMIT: '300',
-      };
-
-      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(100);
-      expect(new Config().getMaxResultLimit('list-datasources')).toEqual(300);
-    });
-
-    it('should return null when MAX_RESULT_LIMITS has a non-number', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        MAX_RESULT_LIMITS: 'query-datasource:abc',
-      };
-
-      const config = new Config();
-      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
-    });
-
-    it('should return null when MAX_RESULT_LIMIT is specified as a non-number', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        MAX_RESULT_LIMIT: 'abc',
-      };
-
-      const config = new Config();
-      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
-    });
-
-    it('should return null when MAX_RESULT_LIMITS has a negative number', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        MAX_RESULT_LIMITS: 'query-datasource:-100',
-      };
-
-      const config = new Config();
-      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
-    });
-
-    it('should return null when MAX_RESULT_LIMIT is specified as a negative number', () => {
-      process.env = {
-        ...process.env,
-        ...defaultEnvVars,
-        MAX_RESULT_LIMIT: '-100',
-      };
-
-      const config = new Config();
-      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
     });
   });
 });

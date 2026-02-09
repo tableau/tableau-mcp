@@ -15,6 +15,7 @@ import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from '../../server/oauth/schemas.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
+import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -54,15 +55,13 @@ export const getQueryDatasourceTool = (
   server: Server,
   authInfo?: TableauAuthInfo,
 ): Tool<typeof paramsSchema> => {
-  const config = getConfig();
-
   const queryDatasourceTool = new Tool({
     server,
     name: 'query-datasource',
     description: new Provider(
       async () =>
         await getResultForTableauVersion({
-          server: config.server || authInfo?.server,
+          server: getConfig().server || authInfo?.server,
           mappings: {
             '2025.3.0': queryDatasourceToolDescription20253,
             default: queryDatasourceToolDescription,
@@ -80,6 +79,19 @@ export const getQueryDatasourceTool = (
       { datasourceLuid, query, limit },
       { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
+      const config = getConfig();
+      const restApiArgs = {
+        config,
+        requestId,
+        server,
+        signal,
+        authInfo: getTableauAuthInfo(authInfo),
+      };
+
+      const configWithOverrides = await getConfigWithOverrides({
+        restApiArgs,
+      });
+
       return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
         authInfo,
@@ -87,7 +99,7 @@ export const getQueryDatasourceTool = (
         callback: async () => {
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
-            restApiArgs: { config, requestId, server, signal },
+            restApiArgs,
           });
 
           if (!isDatasourceAllowedResult.allowed) {
@@ -98,7 +110,7 @@ export const getQueryDatasourceTool = (
           }
 
           const datasource: Datasource = { datasourceLuid };
-          const maxResultLimit = config.getMaxResultLimit(queryDatasourceTool.name);
+          const maxResultLimit = configWithOverrides.getMaxResultLimit(queryDatasourceTool.name);
           const rowLimit = maxResultLimit
             ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
             : limit;
@@ -132,14 +144,10 @@ export const getQueryDatasourceTool = (
           };
 
           return await useRestApi({
-            config,
-            requestId,
-            server,
+            ...restApiArgs,
             jwtScopes: ['tableau:viz_data_service:read'],
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
-              if (!config.disableQueryDatasourceValidationRequests) {
+              if (!configWithOverrides.disableQueryDatasourceValidationRequests) {
                 // Validate query against metadata
                 const metadataValidationResult = await validateQueryAgainstDatasourceMetadata(
                   query,

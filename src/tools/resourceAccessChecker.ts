@@ -1,11 +1,10 @@
-import { BoundedContext } from '../config.js';
-import { useRestApi } from '../restApiInstance.js';
+import { BoundedContext } from '../overrideableConfig.js';
+import { RestApiArgs, useRestApi } from '../restApiInstance.js';
 import { DataSource } from '../sdks/tableau/types/dataSource.js';
 import { View } from '../sdks/tableau/types/view.js';
 import { Workbook } from '../sdks/tableau/types/workbook.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getConfigWithOverrides } from '../utils/mcpSiteSettings.js';
-import { RestApiArgs } from '../utils/restApiArgs.js';
 
 type AllowedResult<T = unknown> =
   | { allowed: true; content?: T }
@@ -216,7 +215,7 @@ class ResourceAccessChecker {
       try {
         datasource = await getDatasource();
 
-        if (!allowedProjectIds?.has(datasource.project.id)) {
+        if (!allowedProjectIds.has(datasource.project.id)) {
           return {
             allowed: false,
             message: [
@@ -242,7 +241,7 @@ class ResourceAccessChecker {
       try {
         datasource = datasource ?? (await getDatasource());
 
-        if (!datasource.tags?.tag?.some((tag) => allowedTags?.has(tag.label))) {
+        if (!datasource.tags?.tag?.some((tag) => allowedTags.has(tag.label))) {
           return {
             allowed: false,
             message: [
@@ -333,7 +332,7 @@ class ResourceAccessChecker {
       try {
         workbook = workbook ?? (await getWorkbook());
 
-        if (!workbook.tags?.tag?.some((tag) => allowedTags?.has(tag.label))) {
+        if (!workbook.tags?.tag?.some((tag) => allowedTags.has(tag.label))) {
           return {
             allowed: false,
             message: [
@@ -440,7 +439,7 @@ class ResourceAccessChecker {
       try {
         view = view ?? (await getView());
 
-        if (!view.tags?.tag?.some((tag) => allowedTags?.has(tag.label))) {
+        if (!view.tags?.tag?.some((tag) => allowedTags.has(tag.label))) {
           return {
             allowed: false,
             message: [

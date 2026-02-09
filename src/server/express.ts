@@ -113,7 +113,8 @@ export async function startExpressServer({
   async function createMcpServer(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       let transport: StreamableHTTPServerTransport;
-      const requestId = (isJSONRPCRequest(req.body) && req.body.id) || 'no-request-id';
+      const requestId =
+        isJSONRPCRequest(req.body) && req.body.id !== '' ? req.body.id : 'no-request-id';
 
       if (config.disableSessionManagement) {
         const server = new Server();

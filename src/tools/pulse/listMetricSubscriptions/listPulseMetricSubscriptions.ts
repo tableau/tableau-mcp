@@ -1,13 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { BoundedContext, getConfig } from '../../../config.js';
-import { useRestApi } from '../../../restApiInstance.js';
+import { getConfig } from '../../../config.js';
+import { BoundedContext } from '../../../overrideableConfig.js';
+import { RestApiArgs, useRestApi } from '../../../restApiInstance.js';
 import { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
-import { RestApiArgs } from '../../../utils/restApiArgs.js';
 import { ConstrainedResult, Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 

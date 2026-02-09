@@ -1,4 +1,4 @@
-import { BoundedContext } from '../../config.js';
+import { BoundedContext } from '../../overrideableConfig.js';
 import {
   OrderBy,
   SearchContentFilter,

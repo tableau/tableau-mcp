@@ -67,6 +67,18 @@ This tool searches across all supported content types for objects relevant to th
       { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
+      const restApiArgs = {
+        config,
+        requestId,
+        server,
+        signal,
+        authInfo: getTableauAuthInfo(authInfo),
+      };
+
+      const configWithOverrides = await getConfigWithOverrides({
+        restApiArgs,
+      });
+
       const orderByString = orderBy ? buildOrderByString(orderBy) : undefined;
       const filterString = filter ? buildFilterString(filter) : undefined;
       return await searchContentTool.logAndExecute<Array<ReducedSearchContentResponse>>({
@@ -76,14 +88,14 @@ This tool searches across all supported content types for objects relevant to th
         callback: async () => {
           return new Ok(
             await useRestApi({
+              ...restApiArgs,
               config,
-              requestId,
-              server,
               jwtScopes: ['tableau:content:read'],
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
-                const maxResultLimit = config.getMaxResultLimit(searchContentTool.name);
+                const maxResultLimit = configWithOverrides.getMaxResultLimit(
+                  searchContentTool.name,
+                );
+
                 const response = await restApi.contentExplorationMethods.searchContent({
                   terms,
                   page: 0,
@@ -97,16 +109,6 @@ This tool searches across all supported content types for objects relevant to th
           );
         },
         constrainSuccessResult: async (items) => {
-          const configWithOverrides = await getConfigWithOverrides({
-            restApiArgs: {
-              config,
-              requestId,
-              server,
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
-            },
-          });
-
           return constrainSearchContent({
             items,
             boundedContext: configWithOverrides.boundedContext,

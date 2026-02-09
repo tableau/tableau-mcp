@@ -63,22 +63,31 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
       { requestId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
+      const restApiArgs = {
+        config,
+        requestId,
+        server,
+        signal,
+        authInfo: getTableauAuthInfo(authInfo),
+      };
+
+      const configWithOverrides = await getConfigWithOverrides({
+        restApiArgs,
+      });
+
       return await listAllPulseMetricDefinitionsTool.logAndExecute({
         requestId,
         authInfo,
         args: { view, limit, pageSize },
         callback: async () => {
           return await useRestApi({
-            config,
-            requestId,
-            server,
+            ...restApiArgs,
             jwtScopes: ['tableau:insight_definitions_metrics:read'],
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
-              const maxResultLimit = config.getMaxResultLimit(
+              const maxResultLimit = configWithOverrides.getMaxResultLimit(
                 listAllPulseMetricDefinitionsTool.name,
               );
+
               const definitions = await pulsePaginate({
                 config: {
                   limit: maxResultLimit
@@ -108,16 +117,6 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
           });
         },
         constrainSuccessResult: async (definitions: Array<PulseMetricDefinition>) => {
-          const configWithOverrides = await getConfigWithOverrides({
-            restApiArgs: {
-              config,
-              requestId,
-              server,
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
-            },
-          });
-
           return constrainPulseDefinitions({
             definitions,
             boundedContext: configWithOverrides.boundedContext,

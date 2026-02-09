@@ -1,9 +1,9 @@
 import { Config, getConfig, TEN_MINUTES_IN_MS } from '../config.js';
-import { useRestApi } from '../restApiInstance.js';
+import { getOverrideableConfig, OverrideableConfig } from '../overrideableConfig.js';
+import { RestApiArgs, useRestApi } from '../restApiInstance.js';
 import { getSiteIdFromAccessToken } from '../sdks/tableau/getSiteIdFromAccessToken.js';
 import { McpSiteSettings } from '../sdks/tableau/types/mcpSiteSettings.js';
 import { ExpiringMap } from './expiringMap.js';
-import { RestApiArgs } from './restApiArgs.js';
 
 type SiteNameOrSiteId = string;
 const mcpSiteSettingsCache = new ExpiringMap<SiteNameOrSiteId, McpSiteSettings>({
@@ -11,10 +11,11 @@ const mcpSiteSettingsCache = new ExpiringMap<SiteNameOrSiteId, McpSiteSettings>(
 });
 
 async function getMcpSiteSettings({
-  restApiArgs: { config, requestId, server, signal, disableLogging, authInfo },
+  restApiArgs,
 }: {
   restApiArgs: RestApiArgs;
 }): Promise<McpSiteSettings | undefined> {
+  const { config, authInfo } = restApiArgs;
   if (!config.enableMcpSiteSettings) {
     return;
   }
@@ -26,13 +27,8 @@ async function getMcpSiteSettings({
   }
 
   const settings = await useRestApi({
-    config,
-    requestId,
-    server,
+    ...restApiArgs,
     jwtScopes: ['tableau:mcp_site_settings:read'],
-    signal,
-    authInfo,
-    disableLogging,
     callback: async (restApi) => await restApi.siteMethods.getMcpSettings(),
   });
 
@@ -45,7 +41,7 @@ export async function getConfigWithOverrides({
 }: {
   restApiArgs: Omit<RestApiArgs, 'config' | 'signal'> &
     Partial<{ config: Config; signal: AbortSignal }>;
-}): Promise<Config> {
+}): Promise<OverrideableConfig> {
   const config = restApiArgs.config ?? getConfig();
   const signal = restApiArgs.signal ?? AbortSignal.timeout(config.maxRequestTimeoutMs);
 
@@ -53,5 +49,5 @@ export async function getConfigWithOverrides({
     restApiArgs: { ...restApiArgs, config, signal },
   });
 
-  return overrides ? getConfig(overrides) : config;
+  return getOverrideableConfig(overrides);
 }

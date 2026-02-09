@@ -31,6 +31,15 @@ type JwtScopes =
   | 'tableau:insight_brief:create'
   | 'tableau:mcp_site_settings:read';
 
+export type RestApiArgs = {
+  config: Config;
+  requestId: RequestId;
+  server: Server;
+  signal: AbortSignal;
+  disableLogging?: boolean;
+  authInfo?: TableauAuthInfo;
+};
+
 const getNewRestApiInstanceAsync = async ({
   config,
   requestId,
@@ -39,14 +48,8 @@ const getNewRestApiInstanceAsync = async ({
   signal,
   authInfo,
   disableLogging,
-}: {
-  config: Config;
-  requestId: RequestId;
-  server: Server;
+}: RestApiArgs & {
   jwtScopes: Set<JwtScopes>;
-  signal: AbortSignal;
-  authInfo?: TableauAuthInfo;
-  disableLogging: boolean;
 }): Promise<RestApi> => {
   if (!disableLogging) {
     signal.addEventListener(
@@ -131,15 +134,9 @@ export const useRestApi = async <T>({
   signal,
   authInfo,
   disableLogging = false,
-}: {
-  config: Config;
-  requestId: RequestId;
-  server: Server;
+}: RestApiArgs & {
   jwtScopes: Array<JwtScopes>;
-  signal: AbortSignal;
   callback: (restApi: RestApi) => Promise<T>;
-  authInfo?: TableauAuthInfo;
-  disableLogging?: boolean;
 }): Promise<T> => {
   const restApi = await getNewRestApiInstanceAsync({
     config,
