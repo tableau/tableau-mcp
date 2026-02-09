@@ -10,7 +10,12 @@ import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
 import { tableauAuthInfoSchema } from '../server/oauth/schemas.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
+import {
+  getProductTelemetry,
+  ProductTelemetryBase,
+} from '../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
+import { getHttpStatus } from '../utils/getHttpStatus.js';
 import { Provider, TypeOrProvider } from '../utils/provider.js';
 import { ToolName } from './toolName.js';
 
@@ -30,6 +35,7 @@ export type ConstrainedResult<T> =
   | {
       type: 'error';
       message: string;
+      error?: Error;
     };
 
 /**
@@ -71,11 +77,17 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
   // The request ID of the tool call
   requestId: RequestId;
 
+  // The session ID from the transport, if available
+  sessionId: string | undefined;
+
   // The Authentication info provided when OAuth is enabled
   authInfo: AuthInfo | undefined;
 
   // The arguments of the tool call
   args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
+
+  // The configuration for product telemetry
+  productTelemetryBase: ProductTelemetryBase;
 
   // A function that contains the business logic of the tool to be logged and executed
   callback: () => Promise<Result<T, E | ZodiosError>>;
@@ -161,16 +173,19 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   // Implementation
   async logAndExecute<T, E>({
     requestId,
+    sessionId,
     args,
     authInfo,
+    productTelemetryBase,
     callback,
     getSuccessResult,
     getErrorText,
     constrainSuccessResult,
   }: LogAndExecuteParams<T, E, Args>): Promise<CallToolResult> {
-    const username = authInfo?.extra
-      ? tableauAuthInfoSchema.safeParse(authInfo.extra).data?.username
+    const tableauAuth = authInfo?.extra
+      ? tableauAuthInfoSchema.safeParse(authInfo.extra).data
       : undefined;
+    const username = tableauAuth?.username;
 
     this.logInvocation({ requestId, args, username });
 
@@ -181,61 +196,86 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       request_id: requestId.toString(),
     });
 
-    if (args) {
-      try {
-        (await Provider.from(this.argsValidator))?.(args);
-      } catch (error) {
-        return getErrorResult(requestId, error);
-      }
-    }
+    const productTelemetryForwarder = getProductTelemetry(
+      productTelemetryBase.endpoint,
+      productTelemetryBase.enabled,
+      productTelemetryBase.podName,
+    );
+
+    let success = false;
+    let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls
+    let toolResult: CallToolResult;
 
     try {
+      if (args) {
+        try {
+          (await Provider.from(this.argsValidator))?.(args);
+        } catch (error) {
+          errorCode = '400'; // Validation errors are client errors
+          toolResult = getErrorResult(requestId, error);
+          return toolResult;
+        }
+      }
+
       const result = await callback();
 
       if (result.isOk()) {
         const constrainedResult = await constrainSuccessResult(result.value);
 
         if (constrainedResult.type !== 'success') {
-          return {
-            isError: constrainedResult.type === 'error',
+          // Constrained result is either 'empty' or 'error'
+          const isError = constrainedResult.type === 'error';
+          success = !isError;
+          errorCode =
+            isError && constrainedResult.error ? getHttpStatus(constrainedResult.error) : '';
+          toolResult = {
+            isError,
             content: [{ type: 'text', text: constrainedResult.message }],
           };
+          return toolResult;
         }
 
-        if (getSuccessResult) {
-          return getSuccessResult(constrainedResult.result);
-        }
+        success = true;
+        toolResult = getSuccessResult
+          ? getSuccessResult(constrainedResult.result)
+          : {
+              isError: false,
+              content: [{ type: 'text', text: JSON.stringify(constrainedResult.result) }],
+            };
+        return toolResult;
+      }
 
-        return {
-          isError: false,
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(constrainedResult.result),
-            },
-          ],
-        };
+      // Handle error result - extract actual HTTP status if available
+      if (result.error instanceof Error) {
+        errorCode = getHttpStatus(result.error);
       }
 
       if (result.error instanceof ZodiosError) {
-        return getErrorResult(requestId, result.error);
+        toolResult = getErrorResult(requestId, result.error);
+        return toolResult;
       }
 
-      if (getErrorText) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: 'text',
-              text: getErrorText(result.error),
-            },
-          ],
-        };
-      } else {
-        return getErrorResult(requestId, result.error);
-      }
+      toolResult = getErrorText
+        ? { isError: true, content: [{ type: 'text', text: getErrorText(result.error) }] }
+        : getErrorResult(requestId, result.error);
+      return toolResult;
     } catch (error) {
-      return getErrorResult(requestId, error);
+      if (error instanceof Error) {
+        errorCode = getHttpStatus(error);
+      }
+      toolResult = getErrorResult(requestId, error);
+      return toolResult;
+    } finally {
+      // Single telemetry call - always executed
+      productTelemetryForwarder.send('tool_call', {
+        tool_name: this.name,
+        request_id: requestId.toString(),
+        session_id: sessionId ?? '',
+        site_luid: productTelemetryBase.siteLuid,
+        podname: productTelemetryBase.podName,
+        success,
+        error_code: errorCode,
+      });
     }
   }
 }

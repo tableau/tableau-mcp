@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
+import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { PulseInsightBundleType } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import invariant from '../../../utils/invariant.js';
@@ -117,6 +118,10 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     // Set default config for existing tests
     resetResourceAccessCheckerSingleton();
     mocks.mockGetConfig.mockReturnValue({
+      productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      productTelemetryEnabled: true,
+      siteName: 'test-site',
+      server: 'https://test-server.example.com',
       disableMetadataApiRequests: false,
       boundedContext: {
         projectIds: null,
@@ -204,7 +209,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   it('should return an error when executing the tool against Tableau Server', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(new Err('tableau-server'));
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Err(new PulseDisabledError('tableau-server', 404)),
+    );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -212,7 +219,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   it('should return an error when Pulse is disabled', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(new Err('pulse-disabled'));
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Err(new PulseDisabledError('pulse-disabled', 400)),
+    );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -221,6 +230,10 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
 
   it('should return data source not allowed error when datasource is not allowed', async () => {
     mocks.mockGetConfig.mockReturnValue({
+      productTelemetryEndpoint: 'https://test.telemetry.example.com',
+      productTelemetryEnabled: true,
+      siteName: 'test-site',
+      server: 'https://test-server.example.com',
       boundedContext: {
         projectIds: null,
         datasourceIds: new Set(['some-other-datasource-luid']),
