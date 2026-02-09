@@ -463,6 +463,22 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  PRODUCT_TELEMETRY_ENABLED: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Product Telemetry Enabled',
+    description: 'Enable or disable product telemetry. Set to "false" to disable.',
+    required: false,
+    sensitive: false,
+  },
+  PRODUCT_TELEMETRY_ENDPOINT: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Product Telemetry Endpoint',
+    description: 'The endpoint URL for product telemetry.',
+    required: false,
+    sensitive: false,
+  },
 } satisfies EnvVars;
 
 const userConfig = Object.entries(envVars).reduce<Record<string, McpbUserConfigurationOption>>(

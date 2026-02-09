@@ -6,6 +6,7 @@ import { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { getSiteLuidFromAccessToken } from '../../../utils/getSiteLuidFromAccessToken.js';
 import { RestApiArgs } from '../../resourceAccessChecker.js';
 import { ConstrainedResult, Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -34,10 +35,11 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (_, { requestId, authInfo, signal }): Promise<CallToolResult> => {
+    callback: async (_, { requestId, sessionId, authInfo, signal }): Promise<CallToolResult> => {
       const config = getConfig();
       return await listPulseMetricSubscriptionsTool.logAndExecute({
         requestId,
+        sessionId,
         authInfo,
         args: {},
         callback: async () => {
@@ -61,6 +63,12 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
           });
         },
         getErrorText: getPulseDisabledError,
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
+          podName: config.server,
+          enabled: config.productTelemetryEnabled,
+        },
       });
     },
   });
@@ -118,6 +126,7 @@ export async function constrainPulseMetricSubscriptions({
           'While Pulse Metric Subscriptions were found, an error occurred while retrieving information about them to determine if they are allowed to be viewed.',
           getExceptionMessage(metricsResult.error),
         ].join(' '),
+        error: metricsResult.error,
       };
     }
 
@@ -153,6 +162,7 @@ export async function constrainPulseMetricSubscriptions({
         'While Pulse Metric Subscriptions were found, an error occurred while retrieving information about them to determine if they are allowed to be viewed.',
         getExceptionMessage(error),
       ].join(' '),
+      error: error instanceof Error ? error : undefined,
     };
   }
 }

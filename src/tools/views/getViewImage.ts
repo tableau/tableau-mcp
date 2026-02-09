@@ -6,6 +6,7 @@ import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { convertPngDataToToolResult } from '../convertPngDataToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -35,12 +36,13 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
     },
     callback: async (
       { viewId, width, height },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
 
       return await getViewImageTool.logAndExecute<string, GetViewImageError>({
         requestId,
+        sessionId,
         authInfo,
         args: { viewId },
         callback: async () => {
@@ -88,6 +90,12 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
             case 'view-not-allowed':
               return error.message;
           }
+        },
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
+          podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },
