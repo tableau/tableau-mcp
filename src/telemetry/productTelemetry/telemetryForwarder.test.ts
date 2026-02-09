@@ -6,6 +6,7 @@ import {
 
 describe('DirectTelemetryForwarder', () => {
   const endpoint = 'https://qa.telemetry.tableausoftware.com';
+  const podName = 'https://test-server.example.com';
 
   const mockFetch = vi.fn();
 
@@ -23,7 +24,7 @@ describe('DirectTelemetryForwarder', () => {
   });
 
   it('throws error when endpoint is empty', () => {
-    expect(() => getProductTelemetry('', true)).toThrowError(
+    expect(() => getProductTelemetry('', true, podName)).toThrowError(
       'Endpoint URL is required for DirectTelemetryForwarder',
     );
   });
@@ -31,7 +32,7 @@ describe('DirectTelemetryForwarder', () => {
   it('sends telemetry with PUT method by default', async () => {
     const properties = { action: 'click', count: 42 };
 
-    const forwarder = getProductTelemetry(endpoint, true);
+    const forwarder = getProductTelemetry(endpoint, true, podName);
     forwarder.send('tool_call', properties);
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -50,15 +51,15 @@ describe('DirectTelemetryForwarder', () => {
         type: 'tool_call',
         service_name: 'tableau-mcp',
         properties,
-        pod: expect.any(String),
+        pod: podName,
         host_name: expect.any(String),
         host_timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
       }),
     );
   });
 
-  it('uses default pod and host_name from environment', async () => {
-    const forwarder = getProductTelemetry(endpoint, true);
+  it('uses provided podName for pod field', async () => {
+    const forwarder = getProductTelemetry(endpoint, true, podName);
     forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -66,14 +67,13 @@ describe('DirectTelemetryForwarder', () => {
     const request = mockFetch.mock.calls[0][0] as Request;
     const body = (await request.clone().json()) as TableauTelemetryJsonEvent[];
 
-    // pod comes from POD_NAME env var or defaults to 'External'
-    expect(body[0].pod).toBeDefined();
+    expect(body[0].pod).toBe(podName);
     // host_name comes from os.hostname()
     expect(body[0].host_name).toBeDefined();
   });
 
   it('uses default service_name', async () => {
-    const forwarder = getProductTelemetry(endpoint, true);
+    const forwarder = getProductTelemetry(endpoint, true, podName);
     forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -85,7 +85,7 @@ describe('DirectTelemetryForwarder', () => {
   });
 
   it('does not send telemetry when enabled is false', () => {
-    const forwarder = getProductTelemetry(endpoint, false);
+    const forwarder = getProductTelemetry(endpoint, false, podName);
     forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).not.toHaveBeenCalled();

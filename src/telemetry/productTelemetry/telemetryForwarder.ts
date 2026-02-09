@@ -30,18 +30,21 @@ export type TableauTelemetryJsonEvent = {
 class DirectTelemetryForwarder {
   private readonly endpoint: string;
   private readonly enabled: boolean;
+  private readonly podName: string;
 
   /**
    * @param endpoint - The telemetry endpoint URL
    * @param enabled - Whether telemetry is enabled
+   * @param podName - The pod name for telemetry events
    */
-  constructor(endpoint: string, enabled: boolean) {
+  constructor(endpoint: string, enabled: boolean, podName: string) {
     if (!endpoint) {
       throw new Error('Endpoint URL is required for DirectTelemetryForwarder');
     }
 
     this.endpoint = endpoint;
     this.enabled = enabled;
+    this.podName = podName;
   }
 
   /**
@@ -59,7 +62,7 @@ class DirectTelemetryForwarder {
       type: eventType,
       host_timestamp: formatHostTimestamp(new Date()),
       service_name: SERVICE_NAME,
-      pod: getDefaultPod(),
+      pod: this.podName,
       host_name: getDefaultHostName(),
       properties,
     };
@@ -90,10 +93,6 @@ async function sendTelemetryRequest(req: Request): Promise<void> {
   }
 }
 
-const getDefaultPod = (): string => {
-  return process.env.SERVER || '';
-};
-
 const getDefaultHostName = (): string => {
   return os.hostname() ?? DEFAULT_HOST_NAME;
 };
@@ -108,9 +107,13 @@ const formatHostTimestamp = (d: Date): string => {
 // Singleton access pattern
 let productTelemetryInstance: DirectTelemetryForwarder | null = null;
 
-export function getProductTelemetry(endpoint: string, enabled: boolean): DirectTelemetryForwarder {
+export function getProductTelemetry(
+  endpoint: string,
+  enabled: boolean,
+  podName: string,
+): DirectTelemetryForwarder {
   if (!productTelemetryInstance) {
-    productTelemetryInstance = new DirectTelemetryForwarder(endpoint, enabled);
+    productTelemetryInstance = new DirectTelemetryForwarder(endpoint, enabled, podName);
   }
   return productTelemetryInstance;
 }

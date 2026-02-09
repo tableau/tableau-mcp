@@ -199,6 +199,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     const productTelemetryForwarder = getProductTelemetry(
       productTelemetryBase.endpoint,
       productTelemetryBase.enabled,
+      productTelemetryBase.podName,
     );
 
     let success = false;
