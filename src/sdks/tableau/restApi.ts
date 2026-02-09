@@ -191,10 +191,7 @@ export class RestApi {
   get siteMethods(): { getMcpSettings: () => Promise<McpSiteSettings> } {
     return {
       getMcpSettings: async (): Promise<McpSiteSettings> => {
-        return {
-          INCLUDE_DATASOURCE_IDS: '2d935df8-fe7e-4fd8-bb14-35eb4ba31d4',
-          EXCLUDE_TOOLS: 'pulse',
-        };
+        return {};
       },
     };
   }
