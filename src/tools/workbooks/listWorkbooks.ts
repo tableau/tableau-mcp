@@ -8,6 +8,7 @@ import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
@@ -67,7 +68,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
     },
     callback: async (
       { filter, pageSize, limit },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const restApiArgs = {
@@ -86,6 +87,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
 
       return await listWorkbooksTool.logAndExecute({
         requestId,
+        sessionId,
         authInfo,
         args: {},
         callback: async () => {
@@ -125,6 +127,12 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
         },
         constrainSuccessResult: (workbooks) =>
           constrainWorkbooks({ workbooks, boundedContext: configWithOverrides.boundedContext }),
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
+          podName: config.server,
+          enabled: config.productTelemetryEnabled,
+        },
       });
     },
   });

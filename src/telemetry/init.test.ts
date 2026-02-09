@@ -1,15 +1,9 @@
 import { MockInstance } from 'vitest';
 
 import { initializeTelemetry } from './init.js';
-import { TelemetryConfig } from './types.js';
 
 const mocks = vi.hoisted(() => ({
-  mockGetConfig: vi.fn(),
   MockNoOpTelemetryProvider: vi.fn(),
-}));
-
-vi.mock('../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
 }));
 
 vi.mock('./noop.js', () => ({
@@ -17,15 +11,16 @@ vi.mock('./noop.js', () => ({
 }));
 
 describe('initializeTelemetry', () => {
-  const defaultTelemetryConfig: TelemetryConfig = {
-    provider: 'noop',
-  };
-
   let consoleErrorSpy: MockInstance;
   let consoleWarnSpy: MockInstance;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    vi.stubEnv('SERVER', 'https://test-server.example.com');
+    vi.stubEnv('SITE_NAME', 'test-site');
+    vi.stubEnv('PAT_NAME', 'test-pat-name');
+    vi.stubEnv('PAT_VALUE', 'test-pat-value');
 
     // Suppress console output
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -39,25 +34,23 @@ describe('initializeTelemetry', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     consoleErrorSpy.mockRestore();
     consoleWarnSpy.mockRestore();
   });
 
   // NoOp tests
   it('returns NoOpTelemetryProvider when provider is "noop"', () => {
-    mocks.mockGetConfig.mockReturnValue({
-      telemetry: { ...defaultTelemetryConfig, provider: 'noop' },
-    });
+    vi.stubEnv('TELEMETRY_PROVIDER', 'noop');
 
     initializeTelemetry();
 
     expect(mocks.MockNoOpTelemetryProvider).toHaveBeenCalled();
   });
 
-  it('returns NoOpTelemetryProvider for unknown provider with warning', () => {
-    mocks.mockGetConfig.mockReturnValue({
-      telemetry: { ...defaultTelemetryConfig, provider: 'unknown-provider' },
-    });
+  it('returns NoOpTelemetryProvider for custom provider with invalid module path', () => {
+    vi.stubEnv('TELEMETRY_PROVIDER', 'custom');
+    vi.stubEnv('TELEMETRY_PROVIDER_CONFIG', '{"module":"./invalid-module.js"}');
 
     initializeTelemetry();
 

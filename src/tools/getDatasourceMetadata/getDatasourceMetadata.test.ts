@@ -190,7 +190,6 @@ const mockListFieldsResponses = vi.hoisted(() => ({
 const mocks = vi.hoisted(() => ({
   mockReadMetadata: vi.fn(),
   mockGraphql: vi.fn(),
-  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -206,24 +205,20 @@ vi.mock('../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
-}));
-
 describe('getDatasourceMetadataTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     // Set default config for existing tests
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      disableMetadataApiRequests: false,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      },
-    });
+    vi.stubEnv('SERVER', 'https://test-server.example.com');
+    vi.stubEnv('SITE_NAME', 'test-site');
+    vi.stubEnv('PAT_NAME', 'test-pat-name');
+    vi.stubEnv('PAT_VALUE', 'test-pat-value');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -642,16 +637,7 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should return only readMetadata result when disableMetadataApiRequests is true and readMetadata succeeds', async () => {
-    // Configure to disable metadata API requests
-    mocks.mockGetConfig.mockReturnValue({
-      disableMetadataApiRequests: true,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      },
-    });
+    vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
 
     mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
     mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
@@ -697,16 +683,7 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should return error when disableMetadataApiRequests is true and readMetadata fails', async () => {
-    // Configure to disable metadata API requests
-    mocks.mockGetConfig.mockReturnValue({
-      disableMetadataApiRequests: true,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      },
-    });
+    vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
 
     const errorMessage = 'ReadMetadata API Error';
     mocks.mockReadMetadata.mockRejectedValue(new Error(errorMessage));
@@ -740,14 +717,7 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should return data source not allowed error when datasource is not allowed', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: new Set(['some-other-datasource-luid']),
-        workbookIds: null,
-        tags: null,
-      },
-    });
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);

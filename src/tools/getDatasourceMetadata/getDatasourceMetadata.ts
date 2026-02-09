@@ -7,6 +7,7 @@ import { useRestApi } from '../../restApiInstance.js';
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -113,7 +114,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
     argsValidator: validateDatasourceLuid,
     callback: async (
       { datasourceLuid },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const query = getGraphqlQuery(datasourceLuid);
@@ -123,6 +124,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
         GetDatasourceMetadataError
       >({
         requestId,
+        sessionId,
         authInfo,
         args: { datasourceLuid },
         callback: async () => {
@@ -198,6 +200,12 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
             case 'datasource-not-allowed':
               return error.message;
           }
+        },
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
+          podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },

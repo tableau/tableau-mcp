@@ -15,7 +15,6 @@ const mockViewData =
 const mocks = vi.hoisted(() => ({
   mockGetView: vi.fn(),
   mockQueryViewData: vi.fn(),
-  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -30,22 +29,15 @@ vi.mock('../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
-}));
-
 describe('getViewDataTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    vi.stubEnv('SERVER', 'https://test-server.example.com');
+    vi.stubEnv('SITE_NAME', 'test-site');
+    vi.stubEnv('PAT_NAME', 'test-pat-name');
+    vi.stubEnv('PAT_VALUE', 'test-pat-value');
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      },
-    });
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -82,14 +74,7 @@ describe('getViewDataTool', () => {
   });
 
   it('should return view not allowed error when view is not allowed', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: new Set(['some-other-workbook-id']),
-        tags: null,
-      },
-    });
+    vi.stubEnv('INCLUDE_WORKBOOK_IDS', 'some-other-workbook-id');
     mocks.mockGetView.mockResolvedValue(mockView);
 
     const result = await getToolResult({ viewId: mockView.id });

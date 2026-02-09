@@ -8,6 +8,7 @@ import { useRestApi } from '../../restApiInstance.js';
 import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
@@ -82,7 +83,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
     },
     callback: async (
       { filter, pageSize, limit },
-      { requestId, authInfo, signal },
+      { requestId, authInfo, sessionId, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const restApiArgs = {
@@ -100,6 +101,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
       const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
         requestId,
+        sessionId,
         authInfo,
         args: { filter, pageSize, limit },
         callback: async () => {
@@ -142,6 +144,12 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
             datasources,
             boundedContext: configWithOverrides.boundedContext,
           });
+        },
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
+          podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },

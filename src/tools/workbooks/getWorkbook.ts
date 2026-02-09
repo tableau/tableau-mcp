@@ -8,6 +8,7 @@ import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ConstrainedResult, Tool } from '../tool.js';
@@ -33,7 +34,10 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ workbookId }, { requestId, authInfo, signal }): Promise<CallToolResult> => {
+    callback: async (
+      { workbookId },
+      { requestId, sessionId, authInfo, signal },
+    ): Promise<CallToolResult> => {
       const config = getConfig();
       const restApiArgs = {
         config,
@@ -49,6 +53,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
 
       return await getWorkbookTool.logAndExecute<Workbook, GetWorkbookError>({
         requestId,
+        sessionId,
         authInfo,
         args: { workbookId },
         callback: async () => {
@@ -101,6 +106,12 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
             case 'workbook-not-allowed':
               return error.message;
           }
+        },
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
+          podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },

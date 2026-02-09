@@ -1,5 +1,5 @@
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { AuthConfig } from './authConfig.js';
-import { getSiteIdFromAccessToken } from './getSiteIdFromAccessToken.js';
 import {
   AxiosInterceptor,
   ErrorInterceptor,
@@ -243,7 +243,11 @@ export class RestApi {
   };
 
   setCredentials = (accessToken: string, userId: string): void => {
-    const siteId = getSiteIdFromAccessToken(accessToken);
+    const siteId = getSiteLuidFromAccessToken(accessToken);
+    if (!siteId) {
+      throw new Error('Could not determine site ID. Access token must have 3 parts.');
+    }
+
     this._creds = {
       site: {
         id: siteId,

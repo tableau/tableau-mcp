@@ -13,7 +13,6 @@ const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedFor
 const mocks = vi.hoisted(() => ({
   mockGetWorkbook: vi.fn(),
   mockQueryViewsForWorkbook: vi.fn(),
-  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -30,22 +29,15 @@ vi.mock('../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
-}));
-
 describe('getWorkbookTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    vi.stubEnv('SERVER', 'https://test-server.example.com');
+    vi.stubEnv('SITE_NAME', 'test-site');
+    vi.stubEnv('PAT_NAME', 'test-pat-name');
+    vi.stubEnv('PAT_VALUE', 'test-pat-value');
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      },
-    });
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -80,14 +72,7 @@ describe('getWorkbookTool', () => {
   });
 
   it('should return workbook not allowed error when workbook is not allowed', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: new Set(['some-other-workbook-id']),
-        tags: null,
-      },
-    });
+    vi.stubEnv('INCLUDE_WORKBOOK_IDS', 'some-other-workbook-id');
     mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
 
     const result = await getToolResult({ workbookId: mockWorkbook.id });

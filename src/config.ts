@@ -6,6 +6,7 @@ import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './te
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
+import { removeClaudeMcpBundleUserConfigTemplates } from './utils/removeClaudeMcpBundleUserConfigTemplates.js';
 
 const __dirname = getDirname();
 
@@ -69,6 +70,8 @@ export class Config {
     dnsServers: string[];
   };
   telemetry: TelemetryConfig;
+  productTelemetryEndpoint: string;
+  productTelemetryEnabled: boolean;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -121,6 +124,8 @@ export class Config {
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
+      PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
+      PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -214,9 +219,13 @@ export class Config {
       };
     } else {
       this.telemetry = {
-        provider: parsedProvider,
+        provider: 'noop',
       };
     }
+
+    this.productTelemetryEndpoint =
+      productTelemetryEndpoint || 'https://prod.telemetry.tableausoftware.com';
+    this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
@@ -400,21 +409,6 @@ function getTrustProxyConfig(trustProxyConfig: string): boolean | number | strin
   }
 
   return trustProxyConfig;
-}
-
-// When the user does not provide a site name in the Claude MCP Bundle configuration,
-// Claude doesn't replace its value and sets the site name to "${user_config.site_name}".
-export function removeClaudeMcpBundleUserConfigTemplates(
-  envVars: Record<string, string | undefined>,
-): Record<string, string | undefined> {
-  return Object.entries(envVars).reduce<Record<string, string | undefined>>((acc, [key, value]) => {
-    if (value?.startsWith('${user_config.')) {
-      acc[key] = '';
-    } else {
-      acc[key] = value;
-    }
-    return acc;
-  }, {});
 }
 
 function parseNumber(

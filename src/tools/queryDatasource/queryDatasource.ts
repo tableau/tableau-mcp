@@ -14,6 +14,7 @@ import {
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from '../../server/oauth/schemas.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { Provider } from '../../utils/provider.js';
@@ -77,7 +78,7 @@ export const getQueryDatasourceTool = (
     argsValidator: validateQuery,
     callback: async (
       { datasourceLuid, query, limit },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const restApiArgs = {
@@ -94,6 +95,7 @@ export const getQueryDatasourceTool = (
 
       return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
+        sessionId,
         authInfo,
         args: { datasourceLuid, query },
         callback: async () => {
@@ -228,6 +230,12 @@ export const getQueryDatasourceTool = (
                 ...handleQueryDatasourceError(error.error),
               });
           }
+        },
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
+          podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },

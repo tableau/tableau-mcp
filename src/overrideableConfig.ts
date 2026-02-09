@@ -1,6 +1,6 @@
 import { ProcessEnvEx } from '../types/process-env.js';
-import { removeClaudeMcpBundleUserConfigTemplates } from './config.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
+import { removeClaudeMcpBundleUserConfigTemplates } from './utils/removeClaudeMcpBundleUserConfigTemplates.js';
 
 const overrideableVariables = [
   'INCLUDE_TOOLS',

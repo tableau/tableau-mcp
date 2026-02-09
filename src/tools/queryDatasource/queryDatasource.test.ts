@@ -45,7 +45,6 @@ const mockVdsResponses = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   mockQueryDatasource: vi.fn(),
-  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -60,26 +59,16 @@ vi.mock('../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
-}));
-
 describe('queryDatasourceTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    vi.stubEnv('SERVER', 'https://test-server.example.com');
+    vi.stubEnv('SITE_NAME', 'test-site');
+    vi.stubEnv('PAT_NAME', 'test-pat-name');
+    vi.stubEnv('PAT_VALUE', 'test-pat-value');
     resetDatasourceCredentials();
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      server: 'https://10ax.online.tableau.com',
-      datasourceCredentials: undefined,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      },
-      getMaxResultLimit: vi.fn().mockReturnValue(null),
-    });
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -182,21 +171,14 @@ describe('queryDatasourceTool', () => {
 
   it('should add datasource credentials to the request when provided', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
-    mocks.mockGetConfig.mockReturnValue({
-      server: 'https://10ax.online.tableau.com',
-      datasourceCredentials: JSON.stringify({
+    vi.stubEnv(
+      'DATASOURCE_CREDENTIALS',
+      JSON.stringify({
         '71db762b-6201-466b-93da-57cc0aec8ed9': [
           { luid: 'test-luid', u: 'test-user', p: 'test-pass' },
         ],
       }),
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      },
-      getMaxResultLimit: vi.fn().mockReturnValue(null),
-    });
+    );
 
     const result = await getToolResult();
     expect(result.isError).toBe(false);
@@ -549,16 +531,7 @@ describe('queryDatasourceTool', () => {
   });
 
   it('should return data source not allowed error when datasource is not allowed', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      datasourceCredentials: undefined,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: new Set(['some-other-datasource-luid']),
-        workbookIds: null,
-        tags: null,
-      },
-      getMaxResultLimit: vi.fn().mockReturnValue(null),
-    });
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);

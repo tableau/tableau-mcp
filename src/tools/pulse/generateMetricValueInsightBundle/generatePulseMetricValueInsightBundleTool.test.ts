@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
+import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { PulseInsightBundleType } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import invariant from '../../../utils/invariant.js';
@@ -11,7 +12,6 @@ import { getGeneratePulseMetricValueInsightBundleTool } from './generatePulseMet
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
 const mocks = vi.hoisted(() => ({
   mockGeneratePulseMetricValueInsightBundle: vi.fn(),
-  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -22,10 +22,6 @@ vi.mock('../../../restApiInstance.js', () => ({
       },
     }),
   ),
-}));
-
-vi.mock('../../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
 }));
 
 describe('getGeneratePulseMetricValueInsightBundleTool', () => {
@@ -114,17 +110,12 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Set default config for existing tests
+    vi.unstubAllEnvs();
+    vi.stubEnv('SERVER', 'https://test-server.example.com');
+    vi.stubEnv('SITE_NAME', 'test-site');
+    vi.stubEnv('PAT_NAME', 'test-pat-name');
+    vi.stubEnv('PAT_VALUE', 'test-pat-value');
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      disableMetadataApiRequests: false,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      },
-    });
   });
 
   it('should call generatePulseMetricValueInsightBundle without bundleType and return Ok result', async () => {
@@ -204,7 +195,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   it('should return an error when executing the tool against Tableau Server', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(new Err('tableau-server'));
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Err(new PulseDisabledError('tableau-server', 404)),
+    );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -212,7 +205,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   it('should return an error when Pulse is disabled', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(new Err('pulse-disabled'));
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Err(new PulseDisabledError('pulse-disabled', 400)),
+    );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -220,14 +215,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   it('should return data source not allowed error when datasource is not allowed', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: new Set(['some-other-datasource-luid']),
-        workbookIds: null,
-        tags: null,
-      },
-    });
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);

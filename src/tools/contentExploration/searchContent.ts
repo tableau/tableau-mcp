@@ -10,6 +10,7 @@ import {
 } from '../../sdks/tableau/types/contentExploration.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { Tool } from '../tool.js';
 import {
@@ -64,7 +65,7 @@ This tool searches across all supported content types for objects relevant to th
     },
     callback: async (
       { terms, limit, orderBy, filter },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const restApiArgs = {
@@ -83,6 +84,7 @@ This tool searches across all supported content types for objects relevant to th
       const filterString = filter ? buildFilterString(filter) : undefined;
       return await searchContentTool.logAndExecute<Array<ReducedSearchContentResponse>>({
         requestId,
+        sessionId,
         authInfo,
         args: {},
         callback: async () => {
@@ -113,6 +115,12 @@ This tool searches across all supported content types for objects relevant to th
             items,
             boundedContext: configWithOverrides.boundedContext,
           });
+        },
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
+          podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },

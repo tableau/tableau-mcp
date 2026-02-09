@@ -10,6 +10,7 @@ import {
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
+import { getSiteLuidFromAccessToken } from '../../../utils/getSiteLuidFromAccessToken.js';
 import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { pulsePaginate } from '../../../utils/paginate.js';
 import { Tool } from '../../tool.js';
@@ -60,7 +61,7 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
     },
     callback: async (
       { view, limit, pageSize },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
       const restApiArgs = {
@@ -77,6 +78,7 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
 
       return await listAllPulseMetricDefinitionsTool.logAndExecute({
         requestId,
+        sessionId,
         authInfo,
         args: { view, limit, pageSize },
         callback: async () => {
@@ -123,6 +125,12 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
           });
         },
         getErrorText: getPulseDisabledError,
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
+          podName: config.server,
+          enabled: config.productTelemetryEnabled,
+        },
       });
     },
   });

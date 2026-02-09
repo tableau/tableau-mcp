@@ -1,9 +1,9 @@
 import { Config, getConfig } from '../config.js';
 import { getOverrideableConfig, OverrideableConfig } from '../overrideableConfig.js';
 import { RestApiArgs, useRestApi } from '../restApiInstance.js';
-import { getSiteIdFromAccessToken } from '../sdks/tableau/getSiteIdFromAccessToken.js';
 import { McpSiteSettings } from '../sdks/tableau/types/mcpSiteSettings.js';
 import { ExpiringMap } from './expiringMap.js';
+import { getSiteLuidFromAccessToken } from './getSiteLuidFromAccessToken.js';
 
 type SiteNameOrSiteId = string;
 let mcpSiteSettingsCache: ExpiringMap<SiteNameOrSiteId, McpSiteSettings>;
@@ -24,7 +24,11 @@ async function getMcpSiteSettings({
     });
   }
 
-  const cacheKey = config.siteName || getSiteIdFromAccessToken(authInfo?.accessToken ?? '');
+  const cacheKey = config.siteName || getSiteLuidFromAccessToken(authInfo?.accessToken);
+  if (!cacheKey) {
+    throw new Error('Could not determine site ID/name');
+  }
+
   const cachedSettings = mcpSiteSettingsCache.get(cacheKey);
   if (cachedSettings) {
     return cachedSettings;
