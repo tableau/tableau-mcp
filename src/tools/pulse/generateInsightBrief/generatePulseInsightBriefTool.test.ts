@@ -3,6 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { Server } from '../../../server.js';
+import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
@@ -12,7 +13,6 @@ const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedFor
 
 const mocks = vi.hoisted(() => ({
   mockGeneratePulseInsightBrief: vi.fn(),
-  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -23,10 +23,6 @@ vi.mock('../../../restApiInstance.js', () => ({
       },
     }),
   ),
-}));
-
-vi.mock('../../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
 }));
 
 describe('getGeneratePulseInsightBriefTool', () => {
@@ -129,19 +125,13 @@ describe('getGeneratePulseInsightBriefTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      productTelemetryEndpoint: 'https://test.telemetry.example.com',
-      productTelemetryEnabled: true,
-      siteName: 'test-site',
-      server: 'https://test-server.example.com',
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      },
-    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should have correct tool name', () => {
@@ -307,18 +297,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
       ],
     };
 
-    mocks.mockGetConfig.mockReturnValue({
-      productTelemetryEndpoint: 'https://test.telemetry.example.com',
-      productTelemetryEnabled: true,
-      siteName: 'test-site',
-      server: 'https://test-server.example.com',
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: new Set([allowedDatasourceId]),
-        workbookIds: null,
-        tags: null,
-      },
-    });
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', allowedDatasourceId);
     mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Ok(mockBriefResponse));
 
     const result = await getToolResult(twoMetricRequest);
@@ -337,18 +316,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
   });
 
   it('should return an error when all metrics are filtered out', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      productTelemetryEndpoint: 'https://test.telemetry.example.com',
-      productTelemetryEnabled: true,
-      siteName: 'test-site',
-      server: 'https://test-server.example.com',
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: new Set(['ALLOWED-DATASOURCE-ID']),
-        workbookIds: null,
-        tags: null,
-      },
-    });
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
     mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Ok(mockBriefResponse));
 
     const result = await getToolResult();
