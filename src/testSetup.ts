@@ -1,10 +1,6 @@
-import { testProductVersion } from './testShared.js';
+import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 
-vi.stubEnv('SERVER', 'https://my-tableau-server.com');
-vi.stubEnv('SITE_NAME', 'tc25');
-vi.stubEnv('PAT_NAME', 'sponge');
-vi.stubEnv('PAT_VALUE', 'bob');
-vi.stubEnv('TABLEAU_MCP_TEST', 'true');
+stubDefaultEnvVars();
 
 vi.mock('./server.js', async (importOriginal) => ({
   ...(await importOriginal()),
