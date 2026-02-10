@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../server.js';
+import { stubDefaultEnvVars } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
@@ -190,7 +191,6 @@ const mockListFieldsResponses = vi.hoisted(() => ({
 const mocks = vi.hoisted(() => ({
   mockReadMetadata: vi.fn(),
   mockGraphql: vi.fn(),
-  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -206,28 +206,12 @@ vi.mock('../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
-}));
-
 describe('getDatasourceMetadataTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Set default config for existing tests
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      productTelemetryEndpoint: 'https://test.telemetry.example.com',
-      productTelemetryEnabled: true,
-      siteName: 'test-site',
-      server: 'https://test-server.example.com',
-      disableMetadataApiRequests: false,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      },
-    });
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -646,20 +630,7 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should return only readMetadata result when disableMetadataApiRequests is true and readMetadata succeeds', async () => {
-    // Configure to disable metadata API requests
-    mocks.mockGetConfig.mockReturnValue({
-      productTelemetryEndpoint: 'https://test.telemetry.example.com',
-      productTelemetryEnabled: true,
-      siteName: 'test-site',
-      server: 'https://test-server.example.com',
-      disableMetadataApiRequests: true,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      },
-    });
+    vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
 
     mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
     mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
@@ -705,20 +676,7 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should return error when disableMetadataApiRequests is true and readMetadata fails', async () => {
-    // Configure to disable metadata API requests
-    mocks.mockGetConfig.mockReturnValue({
-      productTelemetryEndpoint: 'https://test.telemetry.example.com',
-      productTelemetryEnabled: true,
-      siteName: 'test-site',
-      server: 'https://test-server.example.com',
-      disableMetadataApiRequests: true,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      },
-    });
+    vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
 
     const errorMessage = 'ReadMetadata API Error';
     mocks.mockReadMetadata.mockRejectedValue(new Error(errorMessage));
@@ -752,18 +710,7 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should return data source not allowed error when datasource is not allowed', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      productTelemetryEndpoint: 'https://test.telemetry.example.com',
-      productTelemetryEnabled: true,
-      siteName: 'test-site',
-      server: 'https://test-server.example.com',
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: new Set(['some-other-datasource-luid']),
-        workbookIds: null,
-        tags: null,
-      },
-    });
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);

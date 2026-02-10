@@ -4,6 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { PulseInsightBundleType } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
@@ -12,7 +13,6 @@ import { getGeneratePulseMetricValueInsightBundleTool } from './generatePulseMet
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
 const mocks = vi.hoisted(() => ({
   mockGeneratePulseMetricValueInsightBundle: vi.fn(),
-  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -23,10 +23,6 @@ vi.mock('../../../restApiInstance.js', () => ({
       },
     }),
   ),
-}));
-
-vi.mock('../../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
 }));
 
 describe('getGeneratePulseMetricValueInsightBundleTool', () => {
@@ -115,21 +111,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Set default config for existing tests
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      productTelemetryEndpoint: 'https://test.telemetry.example.com',
-      productTelemetryEnabled: true,
-      siteName: 'test-site',
-      server: 'https://test-server.example.com',
-      disableMetadataApiRequests: false,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      },
-    });
   });
 
   it('should call generatePulseMetricValueInsightBundle without bundleType and return Ok result', async () => {
@@ -229,18 +213,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   it('should return data source not allowed error when datasource is not allowed', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      productTelemetryEndpoint: 'https://test.telemetry.example.com',
-      productTelemetryEnabled: true,
-      siteName: 'test-site',
-      server: 'https://test-server.example.com',
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: new Set(['some-other-datasource-luid']),
-        workbookIds: null,
-        tags: null,
-      },
-    });
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);

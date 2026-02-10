@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import { stubDefaultEnvVars } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
@@ -13,7 +14,6 @@ const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedFor
 const mocks = vi.hoisted(() => ({
   mockGetWorkbook: vi.fn(),
   mockQueryViewsForWorkbook: vi.fn(),
-  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -30,26 +30,12 @@ vi.mock('../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
-}));
-
 describe('getWorkbookTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      productTelemetryEndpoint: 'https://test.telemetry.example.com',
-      productTelemetryEnabled: true,
-      siteName: 'test-site',
-      server: 'https://test-server.example.com',
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      },
-    });
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -84,14 +70,7 @@ describe('getWorkbookTool', () => {
   });
 
   it('should return workbook not allowed error when workbook is not allowed', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: new Set(['some-other-workbook-id']),
-        tags: null,
-      },
-    });
+    vi.stubEnv('INCLUDE_WORKBOOK_IDS', 'some-other-workbook-id');
     mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
 
     const result = await getToolResult({ workbookId: mockWorkbook.id });

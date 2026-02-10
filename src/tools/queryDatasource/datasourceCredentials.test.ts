@@ -1,3 +1,4 @@
+import { stubDefaultEnvVars } from '../../testShared.js';
 import {
   exportedForTesting as datasourceCredentialsExportedForTesting,
   getDatasourceCredentials,
@@ -5,20 +6,11 @@ import {
 
 const { resetDatasourceCredentials } = datasourceCredentialsExportedForTesting;
 
-const mocks = vi.hoisted(() => ({
-  mockGetConfig: vi.fn(),
-}));
-
-vi.mock('../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
-}));
-
 describe('getDatasourceCredentials', () => {
   beforeEach(() => {
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
     resetDatasourceCredentials();
-    mocks.mockGetConfig.mockReturnValue({
-      datasourceCredentials: undefined,
-    });
   });
 
   it('should return undefined when DATASOURCE_CREDENTIALS is not set', () => {
@@ -30,11 +22,12 @@ describe('getDatasourceCredentials', () => {
   });
 
   it('should return credentials for a valid datasource LUID', () => {
-    mocks.mockGetConfig.mockReturnValue({
-      datasourceCredentials: JSON.stringify({
+    vi.stubEnv(
+      'DATASOURCE_CREDENTIALS',
+      JSON.stringify({
         'ds-luid': [{ luid: 'test-luid', u: 'test-user', p: 'test-pass' }],
       }),
-    });
+    );
 
     expect(getDatasourceCredentials('ds-luid')).toEqual([
       {
@@ -55,19 +48,18 @@ describe('getDatasourceCredentials', () => {
   });
 
   it('should return undefined for a non-existent datasource LUID', () => {
-    mocks.mockGetConfig.mockReturnValue({
-      datasourceCredentials: JSON.stringify({
+    vi.stubEnv(
+      'DATASOURCE_CREDENTIALS',
+      JSON.stringify({
         'ds-luid': [{ luid: 'test-luid', u: 'test-user', p: 'test-pass' }],
       }),
-    });
+    );
 
     expect(getDatasourceCredentials('other-luid')).toBeUndefined();
   });
 
   it('should throw error when DATASOURCE_CREDENTIALS is invalid JSON', () => {
-    mocks.mockGetConfig.mockReturnValue({
-      datasourceCredentials: 'invalid-json',
-    });
+    vi.stubEnv('DATASOURCE_CREDENTIALS', 'invalid-json');
 
     expect(() => getDatasourceCredentials('test-luid')).toThrow(
       'Invalid datasource credentials format. Could not parse JSON string: invalid-json',
@@ -75,11 +67,12 @@ describe('getDatasourceCredentials', () => {
   });
 
   it('should throw error when credential schema is invalid', () => {
-    mocks.mockGetConfig.mockReturnValue({
-      datasourceCredentials: JSON.stringify({
+    vi.stubEnv(
+      'DATASOURCE_CREDENTIALS',
+      JSON.stringify({
         'ds-luid': [{ luid: 'test-luid', x: 'test-user', y: 'test-pass' }],
       }),
-    });
+    );
 
     expect(() => getDatasourceCredentials('ds-luid')).toThrow();
   });
