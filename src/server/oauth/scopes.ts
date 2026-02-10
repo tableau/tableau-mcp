@@ -5,6 +5,7 @@
  * for scope validation and management.
  */
 
+import { getConfig } from '../../config.js';
 import { ToolName } from '../../tools/toolName.js';
 
 /**
@@ -14,6 +15,15 @@ import { ToolName } from '../../tools/toolName.js';
  * when authenticating with the MCP server.
  */
 export type McpScope =
+  | 'tableau:mcp:content:read'
+  | 'tableau:mcp:datasource:read'
+  | 'tableau:mcp:workbook:read'
+  | 'tableau:mcp:view:read'
+  | 'tableau:mcp:view:download'
+  | 'tableau:mcp:pulse:read'
+  | 'tableau:mcp:insight:create';
+
+export type TableauApiScope =
   | 'tableau:content:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
@@ -29,27 +39,93 @@ export type McpScope =
  * This list can be configured via environment variable or config file.
  */
 export const DEFAULT_SCOPES_SUPPORTED: McpScope[] = [
-  'tableau:content:read',
-  'tableau:viz_data_service:read',
-  'tableau:views:download',
-  'tableau:insight_definitions_metrics:read',
-  'tableau:insight_metrics:read',
-  'tableau:metric_subscriptions:read',
-  'tableau:insights:read',
-  'tableau:insight_brief:create',
+  'tableau:mcp:content:read',
+  'tableau:mcp:datasource:read',
+  'tableau:mcp:workbook:read',
+  'tableau:mcp:view:read',
+  'tableau:mcp:view:download',
+  'tableau:mcp:pulse:read',
+  'tableau:mcp:insight:create',
 ];
 
 /**
  * Minimal default scopes suggested when no specific tool is known.
  */
-export const DEFAULT_REQUIRED_SCOPES: McpScope[] = ['tableau:content:read'];
+export const DEFAULT_REQUIRED_SCOPES: McpScope[] = ['tableau:mcp:content:read'];
 
 /**
  * Validates that a scope string is a valid MCP scope
  */
 export function isValidScope(scope: string): scope is McpScope {
-  return DEFAULT_SCOPES_SUPPORTED.includes(scope as McpScope);
+  return DEFAULT_SCOPES_SUPPORTED.some((supported) => supported === scope);
 }
+
+const toolScopeMap: Record<ToolName, { mcp: McpScope[]; api: TableauApiScope[] }> = {
+  'list-datasources': {
+    mcp: ['tableau:mcp:datasource:read'],
+    api: ['tableau:content:read'],
+  },
+  'list-workbooks': {
+    mcp: ['tableau:mcp:workbook:read'],
+    api: ['tableau:content:read'],
+  },
+  'list-views': {
+    mcp: ['tableau:mcp:view:read'],
+    api: ['tableau:content:read'],
+  },
+  'query-datasource': {
+    mcp: ['tableau:mcp:datasource:read'],
+    api: ['tableau:viz_data_service:read'],
+  },
+  'get-datasource-metadata': {
+    mcp: ['tableau:mcp:datasource:read'],
+    api: ['tableau:content:read', 'tableau:viz_data_service:read'],
+  },
+  'get-workbook': {
+    mcp: ['tableau:mcp:workbook:read'],
+    api: ['tableau:content:read'],
+  },
+  'get-view-data': {
+    mcp: ['tableau:mcp:view:download'],
+    api: ['tableau:views:download'],
+  },
+  'get-view-image': {
+    mcp: ['tableau:mcp:view:download'],
+    api: ['tableau:views:download'],
+  },
+  'list-all-pulse-metric-definitions': {
+    mcp: ['tableau:mcp:pulse:read'],
+    api: ['tableau:insight_definitions_metrics:read'],
+  },
+  'list-pulse-metric-definitions-from-definition-ids': {
+    mcp: ['tableau:mcp:pulse:read'],
+    api: ['tableau:insight_definitions_metrics:read'],
+  },
+  'list-pulse-metrics-from-metric-definition-id': {
+    mcp: ['tableau:mcp:pulse:read'],
+    api: ['tableau:insight_metrics:read'],
+  },
+  'list-pulse-metrics-from-metric-ids': {
+    mcp: ['tableau:mcp:pulse:read'],
+    api: ['tableau:insight_metrics:read'],
+  },
+  'list-pulse-metric-subscriptions': {
+    mcp: ['tableau:mcp:pulse:read'],
+    api: ['tableau:metric_subscriptions:read'],
+  },
+  'generate-pulse-metric-value-insight-bundle': {
+    mcp: ['tableau:mcp:insight:create'],
+    api: ['tableau:insights:read'],
+  },
+  'generate-pulse-insight-brief': {
+    mcp: ['tableau:mcp:insight:create'],
+    api: ['tableau:insight_brief:create'],
+  },
+  'search-content': {
+    mcp: ['tableau:mcp:content:read'],
+    api: ['tableau:content:read'],
+  },
+};
 
 /**
  * Parses a space-separated scope string into an array of scopes
@@ -103,33 +179,16 @@ export function validateScopes(
  * @param endpoint - The MCP endpoint or tool name
  * @returns Array of required scopes for the endpoint
  */
-export function getRequiredScopesForTool(toolName: ToolName | string): string[] {
-  const toolScopeMap: Record<ToolName, McpScope[]> = {
-    'list-datasources': ['tableau:content:read'],
-    'list-workbooks': ['tableau:content:read'],
-    'list-views': ['tableau:content:read'],
-    'query-datasource': ['tableau:viz_data_service:read'],
-    'get-datasource-metadata': ['tableau:content:read', 'tableau:viz_data_service:read'],
-    'get-workbook': ['tableau:content:read'],
-    'get-view-data': ['tableau:views:download'],
-    'get-view-image': ['tableau:views:download'],
-    'list-all-pulse-metric-definitions': ['tableau:insight_definitions_metrics:read'],
-    'list-pulse-metric-definitions-from-definition-ids': [
-      'tableau:insight_definitions_metrics:read',
-    ],
-    'list-pulse-metrics-from-metric-definition-id': ['tableau:insight_metrics:read'],
-    'list-pulse-metrics-from-metric-ids': ['tableau:insight_metrics:read'],
-    'list-pulse-metric-subscriptions': ['tableau:metric_subscriptions:read'],
-    'generate-pulse-metric-value-insight-bundle': ['tableau:insights:read'],
-    'generate-pulse-insight-brief': ['tableau:insight_brief:create'],
-    'search-content': ['tableau:content:read'],
-  };
-
-  if (toolName in toolScopeMap) {
-    return toolScopeMap[toolName as ToolName];
+export function getRequiredScopesForTool(toolName: ToolName): McpScope[] {
+  if (!getConfig().oauth.enforceScopes) {
+    return [];
   }
 
-  return DEFAULT_REQUIRED_SCOPES;
+  return toolScopeMap[toolName].mcp;
+}
+
+export function getRequiredApiScopesForTool(toolName: ToolName): TableauApiScope[] {
+  return toolScopeMap[toolName].api;
 }
 
 /**

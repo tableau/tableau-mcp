@@ -7,6 +7,7 @@ import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
@@ -60,7 +61,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
               config,
               requestId,
               server,
-              jwtScopes: ['tableau:views:download'],
+              jwtScopes: getRequiredApiScopesForTool('get-view-data'),
               signal,
               authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {

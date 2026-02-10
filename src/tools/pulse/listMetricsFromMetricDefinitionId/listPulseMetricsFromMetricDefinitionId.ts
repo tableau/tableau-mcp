@@ -8,6 +8,7 @@ import { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
 import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -55,7 +56,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
             config,
             requestId,
             server,
-            jwtScopes: ['tableau:insight_definitions_metrics:read'],
+            jwtScopes: getRequiredApiScopesForTool('list-pulse-metrics-from-metric-definition-id'),
             signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {

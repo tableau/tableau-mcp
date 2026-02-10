@@ -3,6 +3,7 @@ import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 import { Config, getConfig } from './config.js';
 import { log, shouldLogWhenLevelIsAtLeast } from './logging/log.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
+import { TableauApiScope } from './server/oauth/scopes.js';
 import {
   AxiosResponseInterceptorConfig,
   ErrorInterceptor,
@@ -20,15 +21,7 @@ import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
 
-type JwtScopes =
-  | 'tableau:viz_data_service:read'
-  | 'tableau:content:read'
-  | 'tableau:insight_definitions_metrics:read'
-  | 'tableau:insight_metrics:read'
-  | 'tableau:metric_subscriptions:read'
-  | 'tableau:insights:read'
-  | 'tableau:views:download'
-  | 'tableau:insight_brief:create';
+type JwtScopes = TableauApiScope;
 
 const getNewRestApiInstanceAsync = async (
   config: Config,

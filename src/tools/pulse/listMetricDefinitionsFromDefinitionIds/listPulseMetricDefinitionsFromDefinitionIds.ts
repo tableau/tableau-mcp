@@ -7,6 +7,7 @@ import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
 import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -73,7 +74,7 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
             config,
             requestId,
             server,
-            jwtScopes: ['tableau:insight_definitions_metrics:read'],
+            jwtScopes: getRequiredApiScopesForTool('list-pulse-metric-definitions-from-definition-ids'),
             signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {

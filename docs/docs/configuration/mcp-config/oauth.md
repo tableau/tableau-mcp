@@ -182,47 +182,6 @@ A space- or comma-separated list of scopes supported by the MCP server.
 
 <hr />
 
-## Recommended scope set (beta)
-
-For the initial release, use an inclusive scope set (MCP + Tableau API scopes) to avoid token
-exchange. This keeps consent simple and aligns with the current MCP server behavior.
-
-Suggested initial scopes:
-
-- `tableau:content:read`
-- `tableau:content:write`
-- `tableau:datasource:query`
-- `tableau:datasource:read`
-- `tableau:workbook:read`
-- `tableau:workbook:write`
-- `tableau:view:read`
-- `tableau:view:download`
-- `tableau:project:read`
-- `tableau:metrics:read`
-- `tableau:insights:read`
-
-Example configuration:
-
-```
-OAUTH_SCOPES_SUPPORTED=tableau:content:read tableau:content:write tableau:datasource:query tableau:datasource:read tableau:workbook:read tableau:workbook:write tableau:view:read tableau:view:download tableau:project:read tableau:metrics:read tableau:insights:read
-OAUTH_REQUIRED_SCOPES=tableau:content:read tableau:content:write tableau:datasource:query tableau:datasource:read tableau:workbook:read tableau:workbook:write tableau:view:read tableau:view:download tableau:project:read tableau:metrics:read tableau:insights:read
-```
-
-<hr />
-
-## Why MCP scopes (in addition to Tableau API scopes)
-
-Tableau API scopes alone are not sufficient to protect all MCP functionality.
-
-- Not all MCP tools call Tableau APIs. Some tools can operate entirely within the MCP server
-  (for example, generating a TWB). Tableau API scopes do not describe those operations.
-- MCP also exposes non-API concepts like prompts and resources that should be gated behind MCP
-  scopes. Those do not have a natural Tableau API scope equivalent.
-- Keeping MCP scopes separate from API scopes clarifies intent and avoids over-granting: MCP scopes
-  authorize what the MCP server can do; Tableau API scopes authorize what downstream APIs can do.
-
-<hr />
-
 ### `OAUTH_REQUIRED_SCOPES`
 
 A space- or comma-separated list of scopes required to access the MCP server.

@@ -13,6 +13,7 @@ import {
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
+import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { TableauAuthInfo } from '../../server/oauth/schemas.js';
 import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
@@ -137,7 +138,7 @@ export const getQueryDatasourceTool = (
             config,
             requestId,
             server,
-            jwtScopes: ['tableau:viz_data_service:read'],
+            jwtScopes: getRequiredApiScopesForTool('query-datasource'),
             signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {

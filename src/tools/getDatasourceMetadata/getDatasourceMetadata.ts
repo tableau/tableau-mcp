@@ -8,6 +8,7 @@ import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -143,7 +144,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
             config,
             requestId,
             server,
-            jwtScopes: ['tableau:content:read', 'tableau:viz_data_service:read'],
+            jwtScopes: getRequiredApiScopesForTool('get-datasource-metadata'),
             signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {

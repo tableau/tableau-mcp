@@ -8,6 +8,7 @@ import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, Tool } from '../tool.js';
@@ -95,7 +96,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
             config,
             requestId,
             server,
-            jwtScopes: ['tableau:content:read'],
+            jwtScopes: getRequiredApiScopesForTool('list-datasources'),
             signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {

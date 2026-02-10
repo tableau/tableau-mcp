@@ -16,7 +16,7 @@ import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
-import { formatScopes, parseScopes, validateScopes } from './scopes.js';
+import { parseScopes, validateScopes } from './scopes.js';
 import { PendingAuthorization } from './types.js';
 
 /**
@@ -168,9 +168,6 @@ export function authorize(
     oauthUrl.searchParams.set('target_site', config.siteName);
     oauthUrl.searchParams.set('device_name', getDeviceName(redirect_uri, state ?? ''));
     oauthUrl.searchParams.set('client_type', 'tableau-mcp');
-    if (scopesToGrant.length > 0) {
-      oauthUrl.searchParams.set('scope', formatScopes(scopesToGrant));
-    }
 
     if (config.oauth.lockSite) {
       // The "redirected" parameter is used by Tableau's OAuth controller to determine whether the user will be shown the site picker.

@@ -11,6 +11,7 @@ import {
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
 import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
 import { Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -235,7 +236,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
             config,
             requestId,
             server,
-            jwtScopes: ['tableau:insight_brief:create'],
+            jwtScopes: getRequiredApiScopesForTool('generate-pulse-insight-brief'),
             signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) =>
