@@ -1,7 +1,7 @@
 import { MockInstance } from 'vitest';
 
+import { stubDefaultEnvVars } from '../testShared.js';
 import { initializeTelemetry } from './init.js';
-
 const mocks = vi.hoisted(() => ({
   MockNoOpTelemetryProvider: vi.fn(),
 }));
@@ -17,10 +17,7 @@ describe('initializeTelemetry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
-    vi.stubEnv('SERVER', 'https://test-server.example.com');
-    vi.stubEnv('SITE_NAME', 'test-site');
-    vi.stubEnv('PAT_NAME', 'test-pat-name');
-    vi.stubEnv('PAT_VALUE', 'test-pat-value');
+    stubDefaultEnvVars();
 
     // Suppress console output
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -34,9 +31,9 @@ describe('initializeTelemetry', () => {
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
     consoleErrorSpy.mockRestore();
     consoleWarnSpy.mockRestore();
+    vi.unstubAllEnvs();
   });
 
   // NoOp tests
@@ -48,7 +45,7 @@ describe('initializeTelemetry', () => {
     expect(mocks.MockNoOpTelemetryProvider).toHaveBeenCalled();
   });
 
-  it('returns NoOpTelemetryProvider for custom provider with invalid module path', () => {
+  it('returns NoOpTelemetryProvider when provider is "custom" and module path is invalid', () => {
     vi.stubEnv('TELEMETRY_PROVIDER', 'custom');
     vi.stubEnv('TELEMETRY_PROVIDER_CONFIG', '{"module":"./invalid-module.js"}');
 

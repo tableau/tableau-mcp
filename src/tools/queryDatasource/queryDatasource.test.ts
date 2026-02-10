@@ -4,6 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { queryOutputSchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
+import { stubDefaultEnvVars } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
@@ -63,12 +64,13 @@ describe('queryDatasourceTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
-    vi.stubEnv('SERVER', 'https://test-server.example.com');
-    vi.stubEnv('SITE_NAME', 'test-site');
-    vi.stubEnv('PAT_NAME', 'test-pat-name');
-    vi.stubEnv('PAT_VALUE', 'test-pat-value');
+    stubDefaultEnvVars();
     resetDatasourceCredentials();
     resetResourceAccessCheckerSingleton();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should create a tool instance with correct properties', () => {

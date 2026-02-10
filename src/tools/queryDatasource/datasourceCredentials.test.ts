@@ -1,3 +1,4 @@
+import { stubDefaultEnvVars } from '../../testShared.js';
 import {
   exportedForTesting as datasourceCredentialsExportedForTesting,
   getDatasourceCredentials,
@@ -7,12 +8,13 @@ const { resetDatasourceCredentials } = datasourceCredentialsExportedForTesting;
 
 describe('getDatasourceCredentials', () => {
   beforeEach(() => {
-    resetDatasourceCredentials();
     vi.unstubAllEnvs();
-    vi.stubEnv('SERVER', 'https://test-server.example.com');
-    vi.stubEnv('SITE_NAME', 'test-site');
-    vi.stubEnv('PAT_NAME', 'test-pat-name');
-    vi.stubEnv('PAT_VALUE', 'test-pat-value');
+    stubDefaultEnvVars();
+    resetDatasourceCredentials();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should return undefined when DATASOURCE_CREDENTIALS is not set', () => {

@@ -3,6 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { Server } from '../../../server.js';
+import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
@@ -125,11 +126,12 @@ describe('getGeneratePulseInsightBriefTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
-    vi.stubEnv('SERVER', 'https://test-server.example.com');
-    vi.stubEnv('SITE_NAME', 'test-site');
-    vi.stubEnv('PAT_NAME', 'test-pat-name');
-    vi.stubEnv('PAT_VALUE', 'test-pat-value');
+    stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should have correct tool name', () => {
@@ -314,7 +316,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
   });
 
   it('should return an error when all metrics are filtered out', async () => {
-    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'ALLOWED-DATASOURCE-ID');
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
     mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Ok(mockBriefResponse));
 
     const result = await getToolResult();
