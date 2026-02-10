@@ -43,6 +43,14 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
       { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
+      const restApiArgs = {
+        config,
+        requestId,
+        server,
+        signal,
+        authInfo: getTableauAuthInfo(authInfo),
+      };
+
       return await listPulseMetricsFromMetricDefinitionIdTool.logAndExecute<
         Array<PulseMetric>,
         PulseDisabledError
@@ -53,12 +61,8 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
         args: { pulseMetricDefinitionID },
         callback: async () => {
           return await useRestApi({
-            config,
-            requestId,
-            server,
+            ...restApiArgs,
             jwtScopes: ['tableau:insight_definitions_metrics:read'],
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricsFromMetricDefinitionId(
                 pulseMetricDefinitionID,
@@ -68,13 +72,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
         },
         constrainSuccessResult: async (metrics) => {
           const configWithOverrides = await getConfigWithOverrides({
-            restApiArgs: {
-              config,
-              requestId,
-              server,
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
-            },
+            restApiArgs,
           });
 
           return constrainPulseMetrics({

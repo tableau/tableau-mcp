@@ -38,6 +38,14 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
     },
     callback: async (_, { requestId, sessionId, authInfo, signal }): Promise<CallToolResult> => {
       const config = getConfig();
+      const restApiArgs = {
+        config,
+        requestId,
+        server,
+        signal,
+        authInfo: getTableauAuthInfo(authInfo),
+      };
+
       return await listPulseMetricSubscriptionsTool.logAndExecute({
         requestId,
         sessionId,
@@ -45,26 +53,14 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
         args: {},
         callback: async () => {
           return await useRestApi({
-            config,
-            requestId,
-            server,
+            ...restApiArgs,
             jwtScopes: ['tableau:metric_subscriptions:read'],
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
             },
           });
         },
         constrainSuccessResult: async (subscriptions) => {
-          const restApiArgs = {
-            config,
-            requestId,
-            server,
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
-          };
-
           const configWithOverrides = await getConfigWithOverrides({
             restApiArgs,
           });

@@ -166,15 +166,14 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
         authInfo,
         args: { bundleRequest, bundleType },
         callback: async () => {
-          const configWithOverrides = await getConfigWithOverrides({
-            restApiArgs: {
-              config,
-              requestId,
-              server,
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
-            },
-          });
+          const restApiArgs = {
+            config,
+            requestId,
+            server,
+            signal,
+            authInfo: getTableauAuthInfo(authInfo),
+          };
+          const configWithOverrides = await getConfigWithOverrides({ restApiArgs });
 
           const { datasourceIds } = configWithOverrides.boundedContext;
           if (datasourceIds) {
@@ -194,12 +193,8 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
           }
 
           const result = await useRestApi({
-            config,
-            requestId,
-            server,
+            ...restApiArgs,
             jwtScopes: ['tableau:insights:read'],
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
                 bundleRequest,

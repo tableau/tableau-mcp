@@ -198,16 +198,16 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
       { briefRequest },
       { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
-      const configWithOverrides = await getConfigWithOverrides({
-        restApiArgs: {
-          requestId,
-          server,
-          signal,
-          authInfo: getTableauAuthInfo(authInfo),
-        },
-      });
-
       const config = getConfig();
+      const restApiArgs = {
+        config,
+        requestId,
+        server,
+        signal,
+        authInfo: getTableauAuthInfo(authInfo),
+      };
+      const configWithOverrides = await getConfigWithOverrides({ restApiArgs });
+
       return await generatePulseInsightBriefTool.logAndExecute<
         PulseInsightBriefResponse,
         GeneratePulseInsightBriefError
@@ -242,12 +242,8 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
           }
 
           const result = await useRestApi({
-            config,
-            requestId,
-            server,
+            ...restApiArgs,
             jwtScopes: ['tableau:insight_brief:create'],
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseInsightBrief(briefRequest),
           });
