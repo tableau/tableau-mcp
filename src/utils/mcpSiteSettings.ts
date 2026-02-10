@@ -45,11 +45,14 @@ async function getMcpSiteSettings({
   return settings;
 }
 
+// Make "config" and "signal" optional
+type GetConfigWithOverridesArgs = DistributiveOmit<RestApiArgs, 'config' | 'signal'> &
+  Partial<{ config: Config; signal: AbortSignal }>;
+
 export async function getConfigWithOverrides({
   restApiArgs,
 }: {
-  restApiArgs: DistributiveOmit<RestApiArgs, 'config' | 'signal'> &
-    Partial<{ config: Config; signal: AbortSignal }>;
+  restApiArgs: GetConfigWithOverridesArgs;
 }): Promise<OverrideableConfig> {
   const config = restApiArgs.config ?? getConfig();
   const signal = restApiArgs.signal ?? AbortSignal.timeout(config.maxRequestTimeoutMs);
