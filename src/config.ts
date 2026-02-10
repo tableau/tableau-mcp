@@ -27,6 +27,7 @@ export type BoundedContext = {
   projectIds: Set<string> | null;
   datasourceIds: Set<string> | null;
   workbookIds: Set<string> | null;
+  tags: Set<string> | null;
 };
 
 export class Config {
@@ -82,6 +83,8 @@ export class Config {
     dnsServers: string[];
   };
   telemetry: TelemetryConfig;
+  productTelemetryEndpoint: string;
+  productTelemetryEnabled: boolean;
 
   getMaxResultLimit(toolName: ToolName): number | null {
     return this.maxResultLimits?.get(toolName) ?? this.maxResultLimit;
@@ -129,6 +132,7 @@ export class Config {
       INCLUDE_PROJECT_IDS: includeProjectIds,
       INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
       INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
+      INCLUDE_TAGS: includeTags,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
@@ -144,6 +148,8 @@ export class Config {
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
+      PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
+      PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -172,6 +178,7 @@ export class Config {
       projectIds: createSetFromCommaSeparatedString(includeProjectIds),
       datasourceIds: createSetFromCommaSeparatedString(includeDatasourceIds),
       workbookIds: createSetFromCommaSeparatedString(includeWorkbookIds),
+      tags: createSetFromCommaSeparatedString(includeTags),
     };
 
     if (this.boundedContext.projectIds?.size === 0) {
@@ -189,6 +196,12 @@ export class Config {
     if (this.boundedContext.workbookIds?.size === 0) {
       throw new Error(
         'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
+      );
+    }
+
+    if (this.boundedContext.tags?.size === 0) {
+      throw new Error(
+        'When set, the environment variable INCLUDE_TAGS must have at least one value',
       );
     }
 
@@ -252,9 +265,13 @@ export class Config {
       };
     } else {
       this.telemetry = {
-        provider: parsedProvider,
+        provider: 'noop',
       };
     }
+
+    this.productTelemetryEndpoint =
+      productTelemetryEndpoint || 'https://prod.telemetry.tableausoftware.com';
+    this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';

@@ -14,6 +14,7 @@ import {
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from '../../server/oauth/schemas.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
@@ -78,10 +79,11 @@ export const getQueryDatasourceTool = (
     argsValidator: validateQuery,
     callback: async (
       { datasourceLuid, query, limit },
-      { requestId, authInfo, signal },
+      { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
         requestId,
+        sessionId,
         authInfo,
         args: { datasourceLuid, query },
         callback: async () => {
@@ -103,12 +105,22 @@ export const getQueryDatasourceTool = (
             ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
             : limit;
 
-          const options = {
-            returnFormat: 'OBJECTS',
-            debug: true,
-            disaggregate: false,
-            rowLimit,
-          } as const;
+          const options = await getResultForTableauVersion({
+            server: config.server || getTableauAuthInfo(authInfo)?.server,
+            mappings: {
+              '2026.1.0': {
+                returnFormat: 'OBJECTS',
+                debug: true,
+                disaggregate: false,
+                rowLimit, // rowLimit can only be provided in 2026.1.0 and later
+              } as const,
+              default: {
+                returnFormat: 'OBJECTS',
+                debug: true,
+                disaggregate: false,
+              } as const,
+            },
+          });
 
           const credentials = getDatasourceCredentials(datasourceLuid);
           if (credentials) {
@@ -210,6 +222,12 @@ export const getQueryDatasourceTool = (
                 ...handleQueryDatasourceError(error.error),
               });
           }
+        },
+        productTelemetryBase: {
+          endpoint: config.productTelemetryEndpoint,
+          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
+          podName: config.server,
+          enabled: config.productTelemetryEnabled,
         },
       });
     },

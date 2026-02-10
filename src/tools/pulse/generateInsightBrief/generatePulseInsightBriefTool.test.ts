@@ -1,7 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
+import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { Server } from '../../../server.js';
+import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
@@ -11,7 +13,6 @@ const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedFor
 
 const mocks = vi.hoisted(() => ({
   mockGeneratePulseInsightBrief: vi.fn(),
-  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -22,10 +23,6 @@ vi.mock('../../../restApiInstance.js', () => ({
       },
     }),
   ),
-}));
-
-vi.mock('../../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
 }));
 
 describe('getGeneratePulseInsightBriefTool', () => {
@@ -128,14 +125,13 @@ describe('getGeneratePulseInsightBriefTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-      },
-    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should have correct tool name', () => {
@@ -177,7 +173,9 @@ describe('getGeneratePulseInsightBriefTool', () => {
   });
 
   it('should return an error when executing the tool against Tableau Server', async () => {
-    mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Err('tableau-server'));
+    mocks.mockGeneratePulseInsightBrief.mockResolvedValue(
+      new Err(new PulseDisabledError('tableau-server', 404)),
+    );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -185,7 +183,9 @@ describe('getGeneratePulseInsightBriefTool', () => {
   });
 
   it('should return an error when Pulse is disabled', async () => {
-    mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Err('pulse-disabled'));
+    mocks.mockGeneratePulseInsightBrief.mockResolvedValue(
+      new Err(new PulseDisabledError('pulse-disabled', 400)),
+    );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -297,13 +297,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
       ],
     };
 
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: new Set([allowedDatasourceId]),
-        workbookIds: null,
-      },
-    });
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', allowedDatasourceId);
     mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Ok(mockBriefResponse));
 
     const result = await getToolResult(twoMetricRequest);
@@ -322,13 +316,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
   });
 
   it('should return an error when all metrics are filtered out', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: new Set(['ALLOWED-DATASOURCE-ID']),
-        workbookIds: null,
-      },
-    });
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
     mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Ok(mockBriefResponse));
 
     const result = await getToolResult();

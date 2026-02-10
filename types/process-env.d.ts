@@ -38,6 +38,7 @@ export interface ProcessEnvEx {
   INCLUDE_PROJECT_IDS: string | undefined;
   INCLUDE_DATASOURCE_IDS: string | undefined;
   INCLUDE_WORKBOOK_IDS: string | undefined;
+  INCLUDE_TAGS: string | undefined;
   TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: string | undefined;
   DANGEROUSLY_DISABLE_OAUTH: string | undefined;
   OAUTH_ISSUER: string | undefined;
@@ -51,6 +52,8 @@ export interface ProcessEnvEx {
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: string | undefined;
   OAUTH_ACCESS_TOKEN_TIMEOUT_MS: string | undefined;
   OAUTH_REFRESH_TOKEN_TIMEOUT_MS: string | undefined;
+  PRODUCT_TELEMETRY_ENABLED: string | undefined;
+  PRODUCT_TELEMETRY_ENDPOINT: string | undefined;
 }
 
 declare global {

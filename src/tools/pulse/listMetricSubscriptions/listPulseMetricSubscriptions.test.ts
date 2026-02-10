@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../config.js';
+import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import invariant from '../../../utils/invariant.js';
@@ -74,7 +75,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
 
   it('should return an error when executing the tool against Tableau Server', async () => {
     mocks.mockListPulseMetricSubscriptionsForCurrentUser.mockResolvedValue(
-      new Err('tableau-server'),
+      new Err(new PulseDisabledError('tableau-server', 404)),
     );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
@@ -84,7 +85,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
 
   it('should return an error when Pulse is disabled', async () => {
     mocks.mockListPulseMetricSubscriptionsForCurrentUser.mockResolvedValue(
-      new Err('pulse-disabled'),
+      new Err(new PulseDisabledError('pulse-disabled', 400)),
     );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
@@ -103,7 +104,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
     it('should return empty result when no subscriptions are found', async () => {
       const result = await constrainPulseMetricSubscriptions({
         subscriptions: [],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
         restApiArgs,
       });
 
@@ -120,7 +121,12 @@ describe('listPulseMetricSubscriptionsTool', () => {
 
       const result = await constrainPulseMetricSubscriptions({
         subscriptions: mockPulseMetricSubscriptions,
-        boundedContext: { projectIds: null, datasourceIds: new Set(['123']), workbookIds: null },
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: new Set(['123']),
+          workbookIds: null,
+          tags: null,
+        },
         restApiArgs,
       });
 
@@ -140,7 +146,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
 
       const result = await constrainPulseMetricSubscriptions({
         subscriptions: mockPulseMetricSubscriptions,
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
         restApiArgs,
       });
 
@@ -159,6 +165,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
           projectIds: null,
           datasourceIds: new Set([mockPulseMetrics[0].datasource_luid]),
           workbookIds: null,
+          tags: null,
         },
         restApiArgs,
       });

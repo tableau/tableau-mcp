@@ -4,6 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { queryOutputSchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
+import { stubDefaultEnvVars } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
@@ -45,7 +46,6 @@ const mockVdsResponses = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   mockQueryDatasource: vi.fn(),
-  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -60,24 +60,17 @@ vi.mock('../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
-}));
-
 describe('queryDatasourceTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
     resetDatasourceCredentials();
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      datasourceCredentials: undefined,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-      },
-      getMaxResultLimit: vi.fn().mockReturnValue(null),
-    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -135,7 +128,6 @@ describe('queryDatasourceTool', () => {
         debug: true,
         disaggregate: false,
         returnFormat: 'OBJECTS',
-        rowLimit: 100,
       },
       query: {
         fields: [
@@ -181,19 +173,14 @@ describe('queryDatasourceTool', () => {
 
   it('should add datasource credentials to the request when provided', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
-    mocks.mockGetConfig.mockReturnValue({
-      datasourceCredentials: JSON.stringify({
+    vi.stubEnv(
+      'DATASOURCE_CREDENTIALS',
+      JSON.stringify({
         '71db762b-6201-466b-93da-57cc0aec8ed9': [
           { luid: 'test-luid', u: 'test-user', p: 'test-pass' },
         ],
       }),
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-      },
-      getMaxResultLimit: vi.fn().mockReturnValue(null),
-    });
+    );
 
     const result = await getToolResult();
     expect(result.isError).toBe(false);
@@ -546,15 +533,7 @@ describe('queryDatasourceTool', () => {
   });
 
   it('should return data source not allowed error when datasource is not allowed', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      datasourceCredentials: undefined,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: new Set(['some-other-datasource-luid']),
-        workbookIds: null,
-      },
-      getMaxResultLimit: vi.fn().mockReturnValue(null),
-    });
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
