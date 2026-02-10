@@ -214,6 +214,10 @@ describe('getDatasourceMetadataTool', () => {
     resetResourceAccessCheckerSingleton();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('should create a tool instance with correct properties', () => {
     const getDatasourceMetadataTool = getGetDatasourceMetadataTool(new Server());
     expect(getDatasourceMetadataTool.name).toBe('get-datasource-metadata');

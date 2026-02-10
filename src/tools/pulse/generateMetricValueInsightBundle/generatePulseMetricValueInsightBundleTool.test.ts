@@ -116,6 +116,10 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     resetResourceAccessCheckerSingleton();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('should call generatePulseMetricValueInsightBundle without bundleType and return Ok result', async () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
       new Ok(mockBundleRequestResponse),

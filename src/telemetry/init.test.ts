@@ -33,6 +33,7 @@ describe('initializeTelemetry', () => {
   afterEach(() => {
     consoleErrorSpy.mockRestore();
     consoleWarnSpy.mockRestore();
+    vi.unstubAllEnvs();
   });
 
   // NoOp tests

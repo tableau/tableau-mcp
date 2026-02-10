@@ -130,6 +130,10 @@ describe('getGeneratePulseInsightBriefTool', () => {
     resetResourceAccessCheckerSingleton();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('should have correct tool name', () => {
     const tool = getGeneratePulseInsightBriefTool(new Server());
     expect(tool.name).toBe('generate-pulse-insight-brief');

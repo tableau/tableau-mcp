@@ -41,6 +41,10 @@ describe('getViewImageTool', () => {
     resetResourceAccessCheckerSingleton();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('should create a tool instance with correct properties', () => {
     const getViewImageTool = getGetViewImageTool(new Server());
     expect(getViewImageTool.name).toBe('get-view-image');

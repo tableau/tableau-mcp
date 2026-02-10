@@ -38,6 +38,10 @@ describe('getWorkbookTool', () => {
     resetResourceAccessCheckerSingleton();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('should create a tool instance with correct properties', () => {
     const getWorkbookTool = getGetWorkbookTool(new Server());
     expect(getWorkbookTool.name).toBe('get-workbook');

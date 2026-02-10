@@ -13,6 +13,10 @@ describe('getDatasourceCredentials', () => {
     resetDatasourceCredentials();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('should return undefined when DATASOURCE_CREDENTIALS is not set', () => {
     expect(getDatasourceCredentials('test-luid')).toBeUndefined();
   });

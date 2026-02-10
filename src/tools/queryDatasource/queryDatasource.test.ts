@@ -69,6 +69,10 @@ describe('queryDatasourceTool', () => {
     resetResourceAccessCheckerSingleton();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('should create a tool instance with correct properties', () => {
     const queryDatasourceTool = getQueryDatasourceTool(new Server());
     expect(queryDatasourceTool.name).toBe('query-datasource');

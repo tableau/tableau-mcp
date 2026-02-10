@@ -38,6 +38,10 @@ describe('getViewDataTool', () => {
     resetResourceAccessCheckerSingleton();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('should create a tool instance with correct properties', () => {
     const getViewDataTool = getGetViewDataTool(new Server());
     expect(getViewDataTool.name).toBe('get-view-data');
