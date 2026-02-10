@@ -163,6 +163,30 @@ describe('Config', () => {
     expect(config.tableauServerVersionCheckIntervalInHours).toBe(2);
   });
 
+  it('should set mcpSiteSettingsCheckIntervalInMinutes to default when not specified', () => {
+    const config = new Config();
+    expect(config.mcpSiteSettingsCheckIntervalInMinutes).toBe(10);
+  });
+
+  it('should set mcpSiteSettingsCheckIntervalInMinutes to the specified value when specified', () => {
+    vi.stubEnv('MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES', '2');
+
+    const config = new Config();
+    expect(config.mcpSiteSettingsCheckIntervalInMinutes).toBe(2);
+  });
+
+  it('should set enableMcpSiteSettings to false by default', () => {
+    const config = new Config();
+    expect(config.enableMcpSiteSettings).toBe(false);
+  });
+
+  it('should set enableMcpSiteSettings to true when specified', () => {
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'true');
+
+    const config = new Config();
+    expect(config.enableMcpSiteSettings).toBe(true);
+  });
+
   describe('HTTP server config parsing', () => {
     it('should set sslKey to default when SSL_KEY is not set', () => {
       const config = new Config();
