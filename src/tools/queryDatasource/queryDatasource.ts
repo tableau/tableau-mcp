@@ -13,9 +13,9 @@ import {
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
-import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { TableauAuthInfo } from '../../server/oauth/schemas.js';
 import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
