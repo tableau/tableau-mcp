@@ -55,6 +55,8 @@ export interface ProcessEnvEx {
   OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: string | undefined;
   OAUTH_ACCESS_TOKEN_TIMEOUT_MS: string | undefined;
   OAUTH_REFRESH_TOKEN_TIMEOUT_MS: string | undefined;
+  TELEMETRY_PROVIDER: string | undefined;
+  TELEMETRY_PROVIDER_CONFIG: string | undefined;
   PRODUCT_TELEMETRY_ENABLED: string | undefined;
   PRODUCT_TELEMETRY_ENDPOINT: string | undefined;
   IS_HYPERFORCE: string | undefined;

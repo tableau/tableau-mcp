@@ -190,6 +190,22 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  TELEMETRY_PROVIDER: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Telemetry Provider',
+    description: 'The telemetry provider to use for server telemetry.',
+    required: false,
+    sensitive: false,
+  },
+  TELEMETRY_PROVIDER_CONFIG: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Telemetry Provider Config',
+    description: 'Provider-specific configuration for telemetry.',
+    required: false,
+    sensitive: false,
+  },
   DEFAULT_LOG_LEVEL: {
     includeInUserConfig: false,
     type: 'string',

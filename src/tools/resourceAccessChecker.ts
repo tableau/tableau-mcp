@@ -6,8 +6,8 @@ import { DataSource } from '../sdks/tableau/types/dataSource.js';
 import { View } from '../sdks/tableau/types/view.js';
 import { Workbook } from '../sdks/tableau/types/workbook.js';
 import { Server } from '../server.js';
-import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getRequiredApiScopesForTool } from '../server/oauth/scopes.js';
+import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
 type AllowedResult<T = unknown> =
   | { allowed: true; content?: T }

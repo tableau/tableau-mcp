@@ -3,7 +3,6 @@ import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 import { Config, getConfig } from './config.js';
 import { log, shouldLogWhenLevelIsAtLeast } from './logging/log.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
-import { TableauApiScope } from './server/oauth/scopes.js';
 import {
   AxiosResponseInterceptorConfig,
   ErrorInterceptor,
@@ -16,6 +15,7 @@ import {
 } from './sdks/tableau/interceptors.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
+import { TableauApiScope } from './server/oauth/scopes.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
