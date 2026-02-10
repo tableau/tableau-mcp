@@ -21,19 +21,6 @@ When should you use this tool?
   - A user explicity requests a calculation to be constructed and information is needed for the given calculation type.
   - When you need to construct a calculation as part of a query and information is needed for the given calculation type.
 
-When do you need to construct a calculation?
-  - To segment data
-  - To convert the data type of a field, such as converting string to date
-  - To aggregate data
-  - To filter results
-  - To calculate ratios
-  - When the data you need for analysis is not present in the data source
-  - When you want to transform values in your visualization
-  - When you want to quickly categorize data
-
-When should you not construct a calculation?
-- If a user request can be answered with an already existing field or by aggregating an existing field.
-
 Types of Tableau calculations:
   - Basic
   - LOD (level of detail)
