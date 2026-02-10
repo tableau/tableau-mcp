@@ -1,16 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { exportedForTesting, ONE_HOUR_IN_MS, TEN_MINUTES_IN_MS } from './config.js';
+import { stubDefaultEnvVars } from './testShared.js';
 
 describe('Config', () => {
   const { Config, parseNumber } = exportedForTesting;
-
-  function stubDefaultEnvVars(): void {
-    vi.stubEnv('SERVER', 'https://test-server.com');
-    vi.stubEnv('SITE_NAME', 'test-site');
-    vi.stubEnv('PAT_NAME', 'test-pat-name');
-    vi.stubEnv('PAT_VALUE', 'test-pat-value');
-  }
 
   beforeEach(() => {
     vi.resetModules();
@@ -72,9 +66,9 @@ describe('Config', () => {
 
   it('should configure PAT authentication when PAT credentials are provided', () => {
     const config = new Config();
-    expect(config.patName).toBe('test-pat-name');
-    expect(config.patValue).toBe('test-pat-value');
-    expect(config.siteName).toBe('test-site');
+    expect(config.patName).toBe('sponge');
+    expect(config.patValue).toBe('bob');
+    expect(config.siteName).toBe('tc25');
   });
 
   it('should set default log level to debug when not specified', () => {
