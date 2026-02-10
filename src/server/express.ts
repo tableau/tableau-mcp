@@ -1,10 +1,5 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {
-  isInitializeRequest,
-  isJSONRPCRequest,
-  LoggingLevel,
-  RequestId,
-} from '@modelcontextprotocol/sdk/types.js';
+import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import cors from 'cors';
 import express, { Request, RequestHandler, Response } from 'express';
 import fs, { existsSync } from 'fs';
@@ -113,8 +108,6 @@ export async function startExpressServer({
   async function createMcpServer(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       let transport: StreamableHTTPServerTransport;
-      const requestId =
-        isJSONRPCRequest(req.body) && req.body.id !== '' ? req.body.id : 'no-request-id';
 
       if (config.disableSessionManagement) {
         const server = new Server();
@@ -127,7 +120,7 @@ export async function startExpressServer({
           server.close();
         });
 
-        await connect(server, transport, logLevel, requestId, getTableauAuthInfo(req.auth));
+        await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
       } else {
         const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
 
@@ -139,7 +132,7 @@ export async function startExpressServer({
           transport = createSession({ clientInfo });
 
           const server = new Server({ clientInfo });
-          await connect(server, transport, logLevel, requestId, getTableauAuthInfo(req.auth));
+          await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
         } else {
           // Invalid request
           res.status(400).json({
@@ -175,10 +168,9 @@ async function connect(
   server: Server,
   transport: StreamableHTTPServerTransport,
   logLevel: LoggingLevel,
-  requestId: RequestId,
   authInfo: TableauAuthInfo | undefined,
 ): Promise<void> {
-  await server.registerTools(requestId, authInfo);
+  await server.registerTools(authInfo);
   server.registerRequestHandlers();
 
   await server.connect(transport);

@@ -116,14 +116,10 @@ export async function constrainPulseMetricSubscriptions({
     };
   }
 
-  const { config, requestId, server, signal } = restApiArgs;
   try {
     const metricsResult = await useRestApi({
-      config,
-      requestId,
-      server,
+      ...restApiArgs,
       jwtScopes: ['tableau:insight_metrics:read'],
-      signal,
       callback: async (restApi) => {
         return await restApi.pulseMethods.listPulseMetricsFromMetricIds(
           subscriptions.map((subscription) => subscription.metric_id),

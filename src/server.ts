@@ -1,9 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import {
-  InitializeRequest,
-  RequestId,
-  SetLevelRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { InitializeRequest, SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import pkg from '../package.json';
 import { setLogLevel } from './logging/log.js';
@@ -57,14 +53,14 @@ export class Server extends McpServer {
     this._clientInfo = clientInfo;
   }
 
-  registerTools = async (requestId?: RequestId, authInfo?: TableauAuthInfo): Promise<void> => {
+  registerTools = async (authInfo?: TableauAuthInfo): Promise<void> => {
     for (const {
       name,
       description,
       paramsSchema,
       annotations,
       callback,
-    } of await this._getToolsToRegister(requestId ?? 'no-request-id', authInfo)) {
+    } of await this._getToolsToRegister(authInfo)) {
       this.registerTool(
         name,
         {
@@ -84,13 +80,9 @@ export class Server extends McpServer {
     });
   };
 
-  private _getToolsToRegister = async (
-    requestId: RequestId,
-    authInfo?: TableauAuthInfo,
-  ): Promise<Array<Tool<any>>> => {
+  private _getToolsToRegister = async (authInfo?: TableauAuthInfo): Promise<Array<Tool<any>>> => {
     const config = await getConfigWithOverrides({
       restApiArgs: {
-        requestId,
         server: this,
         authInfo,
         disableLogging: true, // MCP server is not connected yet so we can't send logging notifications

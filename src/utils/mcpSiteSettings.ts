@@ -4,6 +4,7 @@ import { RestApiArgs, useRestApi } from '../restApiInstance.js';
 import { McpSiteSettings } from '../sdks/tableau/types/mcpSiteSettings.js';
 import { ExpiringMap } from './expiringMap.js';
 import { getSiteLuidFromAccessToken } from './getSiteLuidFromAccessToken.js';
+import { DistributiveOmit } from './types.js';
 
 type SiteNameOrSiteId = string;
 let mcpSiteSettingsCache: ExpiringMap<SiteNameOrSiteId, McpSiteSettings>;
@@ -47,7 +48,7 @@ async function getMcpSiteSettings({
 export async function getConfigWithOverrides({
   restApiArgs,
 }: {
-  restApiArgs: Omit<RestApiArgs, 'config' | 'signal'> &
+  restApiArgs: DistributiveOmit<RestApiArgs, 'config' | 'signal'> &
     Partial<{ config: Config; signal: AbortSignal }>;
 }): Promise<OverrideableConfig> {
   const config = restApiArgs.config ?? getConfig();

@@ -33,25 +33,28 @@ type JwtScopes =
 
 export type RestApiArgs = {
   config: Config;
-  requestId: RequestId;
   server: Server;
   signal: AbortSignal;
-  disableLogging?: boolean;
   authInfo?: TableauAuthInfo;
-};
+} & (
+  | {
+      requestId: RequestId;
+      disableLogging?: false;
+    }
+  | {
+      disableLogging: true;
+    }
+);
 
-const getNewRestApiInstanceAsync = async ({
-  config,
-  requestId,
-  server,
-  jwtScopes,
-  signal,
-  authInfo,
-  disableLogging,
-}: RestApiArgs & {
-  jwtScopes: Set<JwtScopes>;
-}): Promise<RestApi> => {
+const getNewRestApiInstanceAsync = async (
+  args: RestApiArgs & {
+    jwtScopes: Set<JwtScopes>;
+  },
+): Promise<RestApi> => {
+  const { config, server, jwtScopes, signal, authInfo, disableLogging } = args;
+
   if (!disableLogging) {
+    const { requestId } = args;
     signal.addEventListener(
       'abort',
       () => {
@@ -77,10 +80,16 @@ const getNewRestApiInstanceAsync = async ({
     signal,
     requestInterceptor: disableLogging
       ? undefined
-      : [getRequestInterceptor(server, requestId), getRequestErrorInterceptor(server, requestId)],
+      : [
+          getRequestInterceptor(server, args.requestId),
+          getRequestErrorInterceptor(server, args.requestId),
+        ],
     responseInterceptor: disableLogging
       ? undefined
-      : [getResponseInterceptor(server, requestId), getResponseErrorInterceptor(server, requestId)],
+      : [
+          getResponseInterceptor(server, args.requestId),
+          getResponseErrorInterceptor(server, args.requestId),
+        ],
   });
 
   if (config.auth === 'pat') {
@@ -125,32 +134,21 @@ const getNewRestApiInstanceAsync = async ({
   return restApi;
 };
 
-export const useRestApi = async <T>({
-  config,
-  requestId,
-  server,
-  callback,
-  jwtScopes,
-  signal,
-  authInfo,
-  disableLogging = false,
-}: RestApiArgs & {
-  jwtScopes: Array<JwtScopes>;
-  callback: (restApi: RestApi) => Promise<T>;
-}): Promise<T> => {
+export const useRestApi = async <T>(
+  args: RestApiArgs & {
+    jwtScopes: Array<JwtScopes>;
+    callback: (restApi: RestApi) => Promise<T>;
+  },
+): Promise<T> => {
+  const { callback, ...restArgs } = args;
   const restApi = await getNewRestApiInstanceAsync({
-    config,
-    requestId,
-    server,
-    jwtScopes: new Set(jwtScopes),
-    signal,
-    authInfo,
-    disableLogging,
+    ...restArgs,
+    jwtScopes: new Set(args.jwtScopes),
   });
   try {
     return await callback(restApi);
   } finally {
-    if (config.auth !== 'oauth') {
+    if (restArgs.config.auth !== 'oauth') {
       // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.
       // Sessions for 'oauth' are not. Signing out would invalidate the session,
       // preventing the access token from being reused for subsequent requests.
