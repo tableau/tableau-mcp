@@ -273,16 +273,16 @@ export class Config {
       enforceScopes,
     };
 
-    const parsedProvider = isTelemetryProvider(_telemetryProvider) ? _telemetryProvider : 'noop';
+    const parsedProvider = isTelemetryProvider(telemetryProvider) ? telemetryProvider : 'noop';
     if (parsedProvider === 'custom') {
-      if (!_telemetryProviderConfig) {
+      if (!telemetryProviderConfig) {
         throw new Error(
           'TELEMETRY_PROVIDER_CONFIG is required when TELEMETRY_PROVIDER is "custom"',
         );
       }
       this.telemetry = {
         provider: 'custom',
-        providerConfig: providerConfigSchema.parse(JSON.parse(_telemetryProviderConfig)),
+        providerConfig: providerConfigSchema.parse(JSON.parse(telemetryProviderConfig)),
       };
     } else {
       this.telemetry = {

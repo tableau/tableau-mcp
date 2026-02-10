@@ -21,13 +21,11 @@ import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
 
-type JwtScopes = TableauApiScope;
-
 const getNewRestApiInstanceAsync = async (
   config: Config,
   requestId: RequestId,
   server: Server,
-  jwtScopes: Set<JwtScopes>,
+  jwtScopes: Set<TableauApiScope>,
   signal: AbortSignal,
   authInfo?: TableauAuthInfo,
 ): Promise<RestApi> => {
@@ -117,7 +115,7 @@ export const useRestApi = async <T>({
   config: Config;
   requestId: RequestId;
   server: Server;
-  jwtScopes: Array<JwtScopes>;
+  jwtScopes: Array<TableauApiScope>;
   signal: AbortSignal;
   callback: (restApi: RestApi) => Promise<T>;
   authInfo?: TableauAuthInfo;
