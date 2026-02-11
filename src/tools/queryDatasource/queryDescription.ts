@@ -29,8 +29,25 @@ Before using this tool, you should:
 
 ### Field Usage Guidelines
 - **Prefer existing fields** - Use fields already modeled in the data source rather than creating custom calculations
-- **Use calculations sparingly** - Only create calculated fields when absolutely necessary and the calculation cannot be achieved through existing fields and aggregations
 - **Validate field availability** - Always check field metadata before constructing queries
+
+### Calculation Usage Guidelines
+
+**Create calculations when you need to:**
+- Segment data in ways not captured by existing fields
+- Convert data types (e.g., string to date)
+- Aggregate data with custom logic beyond standard functions
+- Filter results based on computed conditions (only available with QUANTITATIVE and TOP filters)
+- Calculate ratios or derived metrics
+- Perform analysis and the required data is not present in any existing field
+- Transform values during visualization
+- Quickly categorize data into custom groups
+
+**Avoid calculations if you can achieve the same result by:**
+- Applying standard aggregation functions (SUM, AVG, COUNT, etc.) to existing fields
+- Combining existing fields and filters together
+
+Note: Calculated Fields created as part of a query cannot be referenced in other calculations or filters.
 
 ### Query Construction
 - **Group by meaningful dimensions** - Ensure grouping supports the business question being asked
