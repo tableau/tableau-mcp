@@ -91,7 +91,6 @@ This tool searches across all supported content types for objects relevant to th
           return new Ok(
             await useRestApi({
               ...restApiArgs,
-              config,
               jwtScopes: ['tableau:content:read'],
               callback: async (restApi) => {
                 const maxResultLimit = configWithOverrides.getMaxResultLimit(
