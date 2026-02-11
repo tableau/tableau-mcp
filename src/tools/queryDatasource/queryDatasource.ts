@@ -56,13 +56,14 @@ export const getQueryDatasourceTool = (
   server: Server,
   authInfo?: TableauAuthInfo,
 ): Tool<typeof paramsSchema> => {
+  const config = getConfig();
   const queryDatasourceTool = new Tool({
     server,
     name: 'query-datasource',
     description: new Provider(
       async () =>
         await getResultForTableauVersion({
-          server: getConfig().server || authInfo?.server,
+          server: config.server || authInfo?.server,
           mappings: {
             '2025.3.0': queryDatasourceToolDescription20253,
             default: queryDatasourceToolDescription,
@@ -80,7 +81,6 @@ export const getQueryDatasourceTool = (
       { datasourceLuid, query, limit },
       { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
-      const config = getConfig();
       const restApiArgs = {
         config,
         requestId,
