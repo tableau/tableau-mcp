@@ -2,7 +2,7 @@ import { ProcessEnvEx } from '../types/process-env.js';
 import { removeClaudeMcpBundleUserConfigTemplates } from './config.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 
-const overrideableVariables = [
+const overridableVariables = [
   'INCLUDE_TOOLS',
   'EXCLUDE_TOOLS',
   'INCLUDE_PROJECT_IDS',
@@ -15,17 +15,17 @@ const overrideableVariables = [
   'DISABLE_METADATA_API_REQUESTS',
 ] as const satisfies ReadonlyArray<keyof ProcessEnvEx>;
 
-type OverrideableVariable = (typeof overrideableVariables)[number];
-function isOverrideableVariable(variable: unknown): variable is OverrideableVariable {
-  return overrideableVariables.some((v) => v === variable);
+type OverridableVariable = (typeof overridableVariables)[number];
+function isOverridableVariable(variable: unknown): variable is OverridableVariable {
+  return overridableVariables.some((v) => v === variable);
 }
 
-function filterEnvVarsToOverrideable(
+function filterEnvVarsToOverridable(
   environmentVariables: Record<string, string | undefined>,
-): Record<OverrideableVariable, string | undefined> {
+): Record<OverridableVariable, string | undefined> {
   return Object.fromEntries(
-    Object.entries(environmentVariables).filter(([key]) => isOverrideableVariable(key)),
-  ) as Record<OverrideableVariable, string | undefined>;
+    Object.entries(environmentVariables).filter(([key]) => isOverridableVariable(key)),
+  ) as Record<OverridableVariable, string | undefined>;
 }
 
 export type BoundedContext = {
@@ -35,7 +35,7 @@ export type BoundedContext = {
   tags: Set<string> | null;
 };
 
-export class OverrideableConfig {
+export class OverridableConfig {
   private maxResultLimit: number | null;
   private maxResultLimits: Map<ToolName, number | null> | null;
 
@@ -54,7 +54,7 @@ export class OverrideableConfig {
   constructor(overrides: Record<string, string | undefined> | undefined) {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates({
       ...process.env,
-      ...(overrides ? filterEnvVarsToOverrideable(overrides) : {}),
+      ...(overrides ? filterEnvVarsToOverridable(overrides) : {}),
     });
 
     const {
@@ -173,10 +173,10 @@ function getMaxResultLimits(maxResultLimits: string): Map<ToolName, number | nul
   return map;
 }
 
-export const getOverrideableConfig = (
+export const getOverridableConfig = (
   overrides: Record<string, string | undefined> | undefined,
-): OverrideableConfig => new OverrideableConfig(overrides);
+): OverridableConfig => new OverridableConfig(overrides);
 
 export const exportedForTesting = {
-  OverrideableConfig,
+  OverridableConfig: OverridableConfig,
 };

@@ -1,4 +1,4 @@
-import { BoundedContext } from '../overrideableConfig.js';
+import { BoundedContext } from '../overridableConfig.js';
 import { RestApiArgs, useRestApi } from '../restApiInstance.js';
 import { DataSource } from '../sdks/tableau/types/dataSource.js';
 import { View } from '../sdks/tableau/types/view.js';

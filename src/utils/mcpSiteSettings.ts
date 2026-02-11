@@ -1,5 +1,5 @@
 import { Config, getConfig } from '../config.js';
-import { getOverrideableConfig, OverrideableConfig } from '../overrideableConfig.js';
+import { getOverridableConfig, OverridableConfig } from '../overridableConfig.js';
 import { RestApiArgs, useRestApi } from '../restApiInstance.js';
 import { McpSiteSettings } from '../sdks/tableau/types/mcpSiteSettings.js';
 import { ExpiringMap } from './expiringMap.js';
@@ -53,7 +53,7 @@ export async function getConfigWithOverrides({
   restApiArgs,
 }: {
   restApiArgs: GetConfigWithOverridesArgs;
-}): Promise<OverrideableConfig> {
+}): Promise<OverridableConfig> {
   const config = restApiArgs.config ?? getConfig();
   const signal = restApiArgs.signal ?? AbortSignal.timeout(config.maxRequestTimeoutMs);
 
@@ -61,5 +61,5 @@ export async function getConfigWithOverrides({
     restApiArgs: { ...restApiArgs, config, signal },
   });
 
-  return getOverrideableConfig(overrides);
+  return getOverridableConfig(overrides);
 }

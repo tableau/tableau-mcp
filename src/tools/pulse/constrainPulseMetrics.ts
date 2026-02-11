@@ -1,4 +1,4 @@
-import { BoundedContext } from '../../overrideableConfig.js';
+import { BoundedContext } from '../../overridableConfig.js';
 import { PulseMetric } from '../../sdks/tableau/types/pulse.js';
 import { ConstrainedResult } from '../tool.js';
 
