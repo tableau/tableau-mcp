@@ -11,7 +11,13 @@ import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { AUDIENCE } from './provider.js';
 import { mcpTokenSchema } from './schemas.js';
-import { formatScopes, parseScopes, validateScopes } from './scopes.js';
+import {
+  DEFAULT_REQUIRED_SCOPES,
+  formatScopes,
+  getSupportedMcpScopes,
+  parseScopes,
+  validateScopes,
+} from './scopes.js';
 import { AuthorizationCode, ClientCredentials, RefreshTokenData, UserAndTokens } from './types.js';
 
 /**
@@ -111,11 +117,11 @@ export function token(
           return;
         }
         case 'client_credentials': {
-          const { enforceScopes, requiredScopes, scopesSupported } = config.oauth;
+          const { enforceScopes } = config.oauth;
           const requestedScopes = parseScopes(result.data.scope);
           const { valid: validScopes, invalid: invalidScopes } = validateScopes(
             requestedScopes,
-            scopesSupported,
+            getSupportedMcpScopes(),
           );
 
           if (invalidScopes.length > 0) {
@@ -127,17 +133,11 @@ export function token(
           }
 
           const scopesToGrant =
-            enforceScopes && validScopes.length === 0 ? requiredScopes : validScopes;
-          if (enforceScopes) {
-            const missingRequiredScopes = requiredScopes.filter((s) => !scopesToGrant.includes(s));
-            if (missingRequiredScopes.length > 0) {
-              res.status(400).json({
-                error: 'invalid_scope',
-                error_description: `Missing required scopes: ${missingRequiredScopes.join(', ')}`,
-              });
-              return;
-            }
-          }
+            validScopes.length > 0
+              ? validScopes
+              : enforceScopes
+                ? DEFAULT_REQUIRED_SCOPES
+                : [];
 
           // Generate access token for client credentials grant type.
           // Refresh token is not supported for client credentials grant type.

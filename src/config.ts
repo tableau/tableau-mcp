@@ -81,8 +81,6 @@ export class Config {
     refreshTokenTimeoutMs: number;
     clientIdSecretPairs: Record<string, string> | null;
     dnsServers: string[];
-    scopesSupported: string[];
-    requiredScopes: string[];
     enforceScopes: boolean;
   };
   telemetry: TelemetryConfig;
@@ -150,8 +148,6 @@ export class Config {
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
-      OAUTH_SCOPES_SUPPORTED: oauthScopesSupported,
-      OAUTH_REQUIRED_SCOPES: oauthRequiredScopes,
       OAUTH_DISABLE_SCOPES: oauthDisableScopes,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
@@ -223,15 +219,8 @@ export class Config {
     );
 
     const disableOauthOverride = disableOauth === 'true';
-    const scopesSupported = parseScopes(oauthScopesSupported);
-    const requiredScopes = parseScopes(oauthRequiredScopes);
     const disableScopes = oauthDisableScopes === 'true';
-    const effectiveRequiredScopes = disableScopes
-      ? []
-      : requiredScopes.length > 0
-        ? requiredScopes
-        : scopesSupported;
-    const enforceScopes = !disableScopes && effectiveRequiredScopes.length > 0;
+    const enforceScopes = !disableScopes;
 
     this.oauth = {
       enabled: disableOauthOverride ? false : !!oauthIssuer,
@@ -268,8 +257,6 @@ export class Config {
             return acc;
           }, {})
         : null,
-      scopesSupported,
-      requiredScopes: effectiveRequiredScopes,
       enforceScopes,
     };
 
@@ -485,17 +472,6 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
       `The environment variable CORS_ORIGIN_CONFIG is not a valid URL: ${corsOriginConfig}`,
     );
   }
-}
-
-function parseScopes(value: string | undefined): string[] {
-  if (!value) {
-    return [];
-  }
-
-  return value
-    .split(/[,\s]+/)
-    .map((scope) => scope.trim())
-    .filter((scope) => scope.length > 0);
 }
 
 function getTrustProxyConfig(trustProxyConfig: string): boolean | number | string | null {

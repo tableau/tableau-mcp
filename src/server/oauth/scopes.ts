@@ -57,7 +57,7 @@ export const DEFAULT_REQUIRED_SCOPES: McpScope[] = ['tableau:mcp:content:read'];
  * Validates that a scope string is a valid MCP scope
  */
 export function isValidScope(scope: string): scope is McpScope {
-  return DEFAULT_SCOPES_SUPPORTED.some((supported) => supported === scope);
+  return supportedMcpScopes.some((supported) => supported === scope);
 }
 
 const toolScopeMap: Record<ToolName, { mcp: McpScope[]; api: TableauApiScope[] }> = {
@@ -126,6 +126,25 @@ const toolScopeMap: Record<ToolName, { mcp: McpScope[]; api: TableauApiScope[] }
     api: ['tableau:content:read'],
   },
 };
+
+const supportedMcpScopes = Array.from(
+  new Set(Object.values(toolScopeMap).flatMap((tool) => tool.mcp)),
+);
+const supportedApiScopes = Array.from(
+  new Set(Object.values(toolScopeMap).flatMap((tool) => tool.api)),
+);
+
+export function getSupportedMcpScopes(): McpScope[] {
+  return supportedMcpScopes;
+}
+
+export function getSupportedApiScopes(): TableauApiScope[] {
+  return supportedApiScopes;
+}
+
+export function isTableauApiScope(scope: string): scope is TableauApiScope {
+  return supportedApiScopes.some((supported) => supported === scope);
+}
 
 /**
  * Parses a space-separated scope string into an array of scopes

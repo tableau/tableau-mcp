@@ -463,22 +463,6 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  OAUTH_SCOPES_SUPPORTED: {
-    includeInUserConfig: false,
-    type: 'string',
-    title: 'OAuth Scopes Supported',
-    description: 'A space- or comma-separated list of scopes supported by the MCP server.',
-    required: false,
-    sensitive: false,
-  },
-  OAUTH_REQUIRED_SCOPES: {
-    includeInUserConfig: false,
-    type: 'string',
-    title: 'OAuth Required Scopes',
-    description: 'A space- or comma-separated list of scopes required to access the MCP server.',
-    required: false,
-    sensitive: false,
-  },
   OAUTH_DISABLE_SCOPES: {
     includeInUserConfig: false,
     type: 'boolean',

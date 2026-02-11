@@ -663,9 +663,7 @@ describe('Config', () => {
       jwePrivateKeyPath: 'path/to/private.pem',
       jwePrivateKeyPassphrase: undefined,
       dnsServers: ['1.1.1.1', '1.0.0.1'],
-      scopesSupported: [],
-      requiredScopes: [],
-      enforceScopes: false,
+      enforceScopes: true,
       ...defaultOAuthTimeoutMs,
     } as const;
 
@@ -681,9 +679,7 @@ describe('Config', () => {
         jwePrivateKeyPath: '',
         jwePrivateKeyPassphrase: undefined,
         dnsServers: ['1.1.1.1', '1.0.0.1'],
-        scopesSupported: [],
-        requiredScopes: [],
-        enforceScopes: false,
+        enforceScopes: true,
         ...defaultOAuthTimeoutMs,
       });
     });

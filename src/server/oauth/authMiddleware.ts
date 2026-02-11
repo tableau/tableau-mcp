@@ -6,9 +6,17 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error';
 
 import { getConfig } from '../../config.js';
+import { isToolName, ToolName } from '../../tools/toolName.js';
 import { AUDIENCE } from './provider.js';
 import { mcpAccessTokenSchema, mcpAccessTokenUserOnlySchema, TableauAuthInfo } from './schemas.js';
-import { formatScopes, parseScopes } from './scopes.js';
+import {
+  DEFAULT_REQUIRED_SCOPES,
+  formatScopes,
+  getRequiredApiScopesForTool,
+  getRequiredScopesForTool,
+  isTableauApiScope,
+  parseScopes,
+} from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
 
 /**
@@ -45,10 +53,11 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
       }
 
       const baseUrl = `${req.protocol}://${req.get('host')}`;
-      const { enforceScopes, requiredScopes } = getConfig().oauth;
+      const { enforceScopes } = getConfig().oauth;
+      const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
       const scopeParam =
-        enforceScopes && requiredScopes.length > 0
-          ? `, scope="${formatScopes(requiredScopes)}"`
+        enforceScopes && requiredMcpScopes.length > 0
+          ? `, scope="${formatScopes(requiredMcpScopes)}"`
           : '';
       res
         .status(401)
@@ -87,14 +96,26 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
       return;
     }
     const authInfo = result.value;
-    const { enforceScopes, requiredScopes } = getConfig().oauth;
-    if (enforceScopes && requiredScopes.length > 0) {
-      const missingRequiredScopes = requiredScopes.filter(
+    const { enforceScopes } = getConfig().oauth;
+    if (enforceScopes) {
+      const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
+      const requiredApiScopes = getRequiredApiScopesForRequest(req.body);
+      const missingMcpScopes = requiredMcpScopes.filter(
         (scope) => !authInfo.scopes.includes(scope),
       );
-      if (missingRequiredScopes.length > 0) {
+      const shouldCheckApiScopes = authInfo.scopes.some(isTableauApiScope);
+      const missingApiScopes = shouldCheckApiScopes
+        ? requiredApiScopes.filter((scope) => !authInfo.scopes.includes(scope))
+        : [];
+      const missingScopes = [...missingMcpScopes, ...missingApiScopes];
+
+      if (missingScopes.length > 0) {
         const baseUrl = `${req.protocol}://${req.get('host')}`;
-        const scopeParam = `scope="${formatScopes(requiredScopes)}"`;
+        const requiredScopesForChallenge = [
+          ...requiredMcpScopes,
+          ...(shouldCheckApiScopes ? requiredApiScopes : []),
+        ];
+        const scopeParam = `scope="${formatScopes(requiredScopesForChallenge)}"`;
         const wwwAuthenticate = `Bearer realm="MCP", error="insufficient_scope", error_description="Missing required scopes", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource", ${scopeParam}`;
 
         if (req.method === 'GET' && req.headers.accept?.includes('text/event-stream')) {
@@ -123,6 +144,62 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
     req.auth = authInfo;
     next();
   };
+}
+
+function getRequiredMcpScopesForRequest(body: unknown): string[] {
+  const toolNames = getToolNamesFromRequestBody(body);
+  if (toolNames.length === 0) {
+    return DEFAULT_REQUIRED_SCOPES;
+  }
+
+  const scopes = new Set<string>();
+  for (const toolName of toolNames) {
+    for (const scope of getRequiredScopesForTool(toolName)) {
+      scopes.add(scope);
+    }
+  }
+
+  return Array.from(scopes);
+}
+
+function getRequiredApiScopesForRequest(body: unknown): string[] {
+  const toolNames = getToolNamesFromRequestBody(body);
+  if (toolNames.length === 0) {
+    return [];
+  }
+
+  const scopes = new Set<string>();
+  for (const toolName of toolNames) {
+    for (const scope of getRequiredApiScopesForTool(toolName)) {
+      scopes.add(scope);
+    }
+  }
+
+  return Array.from(scopes);
+}
+
+function getToolNamesFromRequestBody(body: unknown): ToolName[] {
+  const requests = Array.isArray(body) ? body : [body];
+  const toolNames = new Set<ToolName>();
+
+  for (const request of requests) {
+    if (!request || typeof request !== 'object') {
+      continue;
+    }
+    const maybeRequest = request as {
+      method?: unknown;
+      params?: { name?: unknown };
+    };
+    if (maybeRequest.method !== 'tools/call') {
+      continue;
+    }
+    const name = maybeRequest.params?.name;
+    if (typeof name === 'string' && isToolName(name)) {
+      toolNames.add(name);
+    }
+  }
+
+  return Array.from(toolNames);
 }
 
 /**

@@ -172,26 +172,6 @@ Where `Y2xpZW50SWQ6c2VjcmV0` is the base64 encoding of `clientId:secret`.
 
 <hr />
 
-### `OAUTH_SCOPES_SUPPORTED`
-
-A space- or comma-separated list of scopes supported by the MCP server.
-
-- Optional, but recommended when OAuth is enabled.
-- Used to populate `scopes_supported` in the OAuth metadata.
-- Example: `tableau:content:read tableau:view:read tableau:datasource:query`
-
-<hr />
-
-### `OAUTH_REQUIRED_SCOPES`
-
-A space- or comma-separated list of scopes required to access the MCP server.
-
-- Optional. If not set, all values from `OAUTH_SCOPES_SUPPORTED` are required.
-- The MCP server will include these in `WWW-Authenticate` challenges and enforce them on requests.
-- Example: `tableau:content:read tableau:view:read`
-
-<hr />
-
 ### `OAUTH_DISABLE_SCOPES`
 
 Disable scope enforcement and scope challenges.

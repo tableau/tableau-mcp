@@ -16,7 +16,7 @@ import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
-import { parseScopes, validateScopes } from './scopes.js';
+import { DEFAULT_REQUIRED_SCOPES, getSupportedMcpScopes, parseScopes, validateScopes } from './scopes.js';
 import { PendingAuthorization } from './types.js';
 
 /**
@@ -105,11 +105,11 @@ export function authorize(
       return;
     }
 
-    const { enforceScopes, requiredScopes, scopesSupported } = config.oauth;
+    const { enforceScopes } = config.oauth;
     const requestedScopes = parseScopes(scope);
     const { valid: validScopes, invalid: invalidScopes } = validateScopes(
       requestedScopes,
-      scopesSupported,
+      getSupportedMcpScopes(),
     );
 
     if (invalidScopes.length > 0) {
@@ -120,17 +120,12 @@ export function authorize(
       return;
     }
 
-    const scopesToGrant = enforceScopes && validScopes.length === 0 ? requiredScopes : validScopes;
-    if (enforceScopes) {
-      const missingRequiredScopes = requiredScopes.filter((s) => !scopesToGrant.includes(s));
-      if (missingRequiredScopes.length > 0) {
-        res.status(400).json({
-          error: 'invalid_scope',
-          error_description: `Missing required scopes: ${missingRequiredScopes.join(', ')}`,
-        });
-        return;
-      }
-    }
+    const scopesToGrant =
+      validScopes.length > 0
+        ? validScopes
+        : enforceScopes
+          ? DEFAULT_REQUIRED_SCOPES
+          : [];
 
     // Generate Tableau state and store pending authorization
     const tableauState = randomBytes(32).toString('hex');
