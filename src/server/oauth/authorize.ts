@@ -16,7 +16,12 @@ import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
-import { DEFAULT_REQUIRED_SCOPES, getSupportedMcpScopes, parseScopes, validateScopes } from './scopes.js';
+import {
+  DEFAULT_REQUIRED_SCOPES,
+  getSupportedScopes,
+  parseScopes,
+  validateScopes,
+} from './scopes.js';
 import { PendingAuthorization } from './types.js';
 
 /**
@@ -105,11 +110,11 @@ export function authorize(
       return;
     }
 
-    const { enforceScopes } = config.oauth;
+    const { enforceScopes, advertiseApiScopes } = config.oauth;
     const requestedScopes = parseScopes(scope);
     const { valid: validScopes, invalid: invalidScopes } = validateScopes(
       requestedScopes,
-      getSupportedMcpScopes(),
+      getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
     );
 
     if (invalidScopes.length > 0) {

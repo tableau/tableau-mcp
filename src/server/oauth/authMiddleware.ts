@@ -14,7 +14,6 @@ import {
   formatScopes,
   getRequiredApiScopesForTool,
   getRequiredScopesForTool,
-  isTableauApiScope,
   parseScopes,
 } from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
@@ -53,11 +52,12 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
       }
 
       const baseUrl = `${req.protocol}://${req.get('host')}`;
-      const { enforceScopes } = getConfig().oauth;
-      const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
+    const { enforceScopes, advertiseApiScopes } = getConfig().oauth;
+    const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
+    const requiredApiScopes = getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
       const scopeParam =
         enforceScopes && requiredMcpScopes.length > 0
-          ? `, scope="${formatScopes(requiredMcpScopes)}"`
+        ? `, scope="${formatScopes([...requiredMcpScopes, ...requiredApiScopes])}"`
           : '';
       res
         .status(401)
@@ -96,14 +96,14 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
       return;
     }
     const authInfo = result.value;
-    const { enforceScopes } = getConfig().oauth;
+    const { enforceScopes, advertiseApiScopes } = getConfig().oauth;
     if (enforceScopes) {
       const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
-      const requiredApiScopes = getRequiredApiScopesForRequest(req.body);
+      const requiredApiScopes = getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
       const missingMcpScopes = requiredMcpScopes.filter(
         (scope) => !authInfo.scopes.includes(scope),
       );
-      const shouldCheckApiScopes = authInfo.scopes.some(isTableauApiScope);
+      const shouldCheckApiScopes = advertiseApiScopes;
       const missingApiScopes = shouldCheckApiScopes
         ? requiredApiScopes.filter((scope) => !authInfo.scopes.includes(scope))
         : [];
@@ -162,7 +162,10 @@ function getRequiredMcpScopesForRequest(body: unknown): string[] {
   return Array.from(scopes);
 }
 
-function getRequiredApiScopesForRequest(body: unknown): string[] {
+function getRequiredApiScopesForRequest(body: unknown, includeApiScopes: boolean): string[] {
+  if (!includeApiScopes) {
+    return [];
+  }
   const toolNames = getToolNamesFromRequestBody(body);
   if (toolNames.length === 0) {
     return [];

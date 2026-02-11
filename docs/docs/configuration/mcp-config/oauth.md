@@ -256,6 +256,16 @@ References:
 
 <hr />
 
+### `ADVERTISE_API_SCOPES`
+
+Include Tableau API scopes in OAuth metadata and scope challenges.
+
+- Default: `false` (self-hosted)
+- When `true` (Falcon), `scopes_supported` includes MCP + API scopes and scope challenges may
+  include API scopes for step-up.
+
+<hr />
+
 ### `OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS`
 
 The timeout for the OAuth authorization codes.

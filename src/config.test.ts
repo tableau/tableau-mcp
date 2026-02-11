@@ -664,6 +664,7 @@ describe('Config', () => {
       jwePrivateKeyPassphrase: undefined,
       dnsServers: ['1.1.1.1', '1.0.0.1'],
       enforceScopes: true,
+      advertiseApiScopes: false,
       ...defaultOAuthTimeoutMs,
     } as const;
 
@@ -680,6 +681,7 @@ describe('Config', () => {
         jwePrivateKeyPassphrase: undefined,
         dnsServers: ['1.1.1.1', '1.0.0.1'],
         enforceScopes: true,
+        advertiseApiScopes: false,
         ...defaultOAuthTimeoutMs,
       });
     });

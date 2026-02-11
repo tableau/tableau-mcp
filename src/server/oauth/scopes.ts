@@ -142,6 +142,16 @@ export function getSupportedApiScopes(): TableauApiScope[] {
   return supportedApiScopes;
 }
 
+export function getSupportedScopes({
+  includeApiScopes,
+}: {
+  includeApiScopes: boolean;
+}): string[] {
+  return includeApiScopes
+    ? [...supportedMcpScopes, ...supportedApiScopes]
+    : supportedMcpScopes;
+}
+
 export function isTableauApiScope(scope: string): scope is TableauApiScope {
   return supportedApiScopes.some((supported) => supported === scope);
 }

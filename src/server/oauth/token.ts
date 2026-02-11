@@ -14,7 +14,7 @@ import { mcpTokenSchema } from './schemas.js';
 import {
   DEFAULT_REQUIRED_SCOPES,
   formatScopes,
-  getSupportedMcpScopes,
+  getSupportedScopes,
   parseScopes,
   validateScopes,
 } from './scopes.js';
@@ -117,11 +117,11 @@ export function token(
           return;
         }
         case 'client_credentials': {
-          const { enforceScopes } = config.oauth;
+          const { enforceScopes, advertiseApiScopes } = config.oauth;
           const requestedScopes = parseScopes(result.data.scope);
           const { valid: validScopes, invalid: invalidScopes } = validateScopes(
             requestedScopes,
-            getSupportedMcpScopes(),
+            getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
           );
 
           if (invalidScopes.length > 0) {

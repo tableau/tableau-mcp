@@ -463,6 +463,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  ADVERTISE_API_SCOPES: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Advertise API Scopes',
+    description:
+      'Include Tableau API scopes in scopes_supported and scope challenges for Falcon hosting.',
+    required: false,
+    sensitive: false,
+  },
   OAUTH_DISABLE_SCOPES: {
     includeInUserConfig: false,
     type: 'boolean',
