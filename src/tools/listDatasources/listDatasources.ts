@@ -132,6 +132,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
           endpoint: config.productTelemetryEndpoint,
           siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
           podName: config.server,
+          isHyperforce: config.isHyperforce,
           enabled: config.productTelemetryEnabled,
         },
       });

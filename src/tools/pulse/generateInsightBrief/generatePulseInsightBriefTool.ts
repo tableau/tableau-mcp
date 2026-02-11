@@ -269,6 +269,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
           endpoint: config.productTelemetryEndpoint,
           siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
           podName: config.server,
+          isHyperforce: config.isHyperforce,
           enabled: config.productTelemetryEnabled,
         },
       });

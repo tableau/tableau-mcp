@@ -72,6 +72,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
           endpoint: config.productTelemetryEndpoint,
           siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
           podName: config.server,
+          isHyperforce: config.isHyperforce,
           enabled: config.productTelemetryEnabled,
         },
       });

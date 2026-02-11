@@ -22,6 +22,7 @@ describe('Tool', () => {
     endpoint: 'https://test.telemetry.example.com',
     siteLuid: 'test-site-luid',
     podName: 'https://test-server.example.com',
+    isHyperforce: false,
     enabled: true,
   };
 
@@ -296,6 +297,7 @@ describe('Tool', () => {
           session_id: 'session-abc',
           site_luid: 'test-site-luid',
           podname: 'https://test-server.example.com',
+          is_hyperforce: false,
           success: true,
           error_code: '',
         }),
@@ -323,6 +325,7 @@ describe('Tool', () => {
       expect(mockTelemetrySend).toHaveBeenCalledWith(
         'tool_call',
         expect.objectContaining({
+          is_hyperforce: false,
           success: false,
           error_code: '400',
         }),
@@ -347,6 +350,7 @@ describe('Tool', () => {
       expect(mockTelemetrySend).toHaveBeenCalledWith(
         'tool_call',
         expect.objectContaining({
+          is_hyperforce: false,
           success: false,
           error_code: '', // No HTTP status for generic errors
         }),
@@ -373,6 +377,7 @@ describe('Tool', () => {
       expect(mockTelemetrySend).toHaveBeenCalledWith(
         'tool_call',
         expect.objectContaining({
+          is_hyperforce: false,
           success: false,
           error_code: '401',
         }),
@@ -395,6 +400,7 @@ describe('Tool', () => {
       expect(mockTelemetrySend).toHaveBeenCalledWith(
         'tool_call',
         expect.objectContaining({
+          is_hyperforce: false,
           success: false,
           error_code: '',
         }),
@@ -417,6 +423,7 @@ describe('Tool', () => {
       expect(mockTelemetrySend).toHaveBeenCalledWith(
         'tool_call',
         expect.objectContaining({
+          is_hyperforce: false,
           success: true,
           error_code: '',
         }),

@@ -223,6 +223,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
           endpoint: config.productTelemetryEndpoint,
           siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
           podName: config.server,
+          isHyperforce: config.isHyperforce,
           enabled: config.productTelemetryEnabled,
         },
       });

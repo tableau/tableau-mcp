@@ -115,6 +115,7 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
           endpoint: config.productTelemetryEndpoint,
           siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
           podName: config.server,
+          isHyperforce: config.isHyperforce,
           enabled: config.productTelemetryEnabled,
         },
       });

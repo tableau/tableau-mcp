@@ -12,6 +12,7 @@ export type ProductTelemetryBase = {
   siteLuid: string;
   podName: string;
   enabled: boolean;
+  isHyperforce: boolean;
 };
 
 export type TableauTelemetryJsonEvent = {
@@ -66,6 +67,8 @@ class DirectTelemetryForwarder {
       host_name: getDefaultHostName(),
       properties,
     };
+
+    console.log('event', event);
 
     const init: RequestInit = {
       method: 'PUT',
