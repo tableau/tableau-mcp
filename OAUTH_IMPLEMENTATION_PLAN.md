@@ -94,10 +94,10 @@ This document outlines the phased approach to integrate Tableau OAuth with the M
 
 ---
 
-## Phase 2: Scope Mapping & Token Exchange (Coordination with Auth Team)
+## Phase 2: Scope Mapping (Coordination with Auth Team)
 
 **Timeline**: 3-4 weeks  
-**Dependencies**: Auth team decisions on scope mapping and token exchange mechanism
+**Dependencies**: Auth team decisions on scope mapping
 
 ### 2.1 Scope Mapping Design & Implementation
 **Coordination needed with George:**
@@ -113,19 +113,9 @@ This document outlines the phased approach to integrate Tableau OAuth with the M
 - [ ] Integrate scope mapping into authorize endpoint (when forwarding to Tableau OAuth)
 - [ ] Integrate scope mapping into token exchange
 
-### 2.2 Token Exchange Implementation
-**Coordination needed with Auth team:**
-- [ ] Understand Tableau OAuth token format and requirements
-- [ ] Determine token exchange endpoint and mechanism
-- [ ] Understand how to convert MCP tokens to Tableau REST API-compatible tokens
-- [ ] Define token refresh strategy
-
-**Implementation tasks:**
-- [ ] Implement token exchange logic
-- [ ] Update token endpoint to handle Tableau token exchange
-- [ ] Ensure exchanged tokens work with Tableau REST APIs
-- [ ] Implement token refresh flow for exchanged tokens
-- [ ] Add error handling for token exchange failures
+### 2.2 Token Exchange
+Token exchange is **out of scope** for the initial release. Revisit only if the authorization
+strategy changes or Tableau OAuth requirements evolve.
 
 ### 2.3 Authorization Flow Updates
 - [ ] Update authorize endpoint to include mapped scopes in Tableau OAuth redirect
@@ -136,8 +126,6 @@ This document outlines the phased approach to integrate Tableau OAuth with the M
 ### 2.4 Testing
 - [ ] Integration tests with Tableau OAuth
 - [ ] Test scope mapping in various scenarios
-- [ ] Test token exchange end-to-end
-- [ ] Test token refresh with exchanged tokens
 - [ ] Test with actual Tableau REST API calls
 
 ---
@@ -262,10 +250,8 @@ oauth: {
 
 2. **Scope Mapping**: How should we map MCP scopes to Tableau scopes? One-to-one, one-to-many, or many-to-one?
 
-3. **Token Exchange**: 
-   - What is the endpoint for token exchange?
-   - What format should the request/response be?
-   - How do we convert MCP tokens to Tableau REST API tokens?
+3. **Token Exchange**:
+   - Not planned for initial release. Revisit if requirements change.
 
 4. **Scope Lifecycle**: 
    - How do we add new scopes without breaking existing clients?
