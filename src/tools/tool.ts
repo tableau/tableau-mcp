@@ -273,6 +273,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
         session_id: sessionId ?? '',
         site_luid: productTelemetryBase.siteLuid,
         podname: productTelemetryBase.podName,
+        is_hyperforce: productTelemetryBase.isHyperforce,
         success,
         error_code: errorCode,
       });

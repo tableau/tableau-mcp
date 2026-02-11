@@ -257,6 +257,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  IS_HYPERFORCE: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Is Hyperforce',
+    description: 'Whether the deployment is Hyperforce.',
+    required: false,
+    sensitive: false,
+  },
   MAX_REQUEST_TIMEOUT_MS: {
     includeInUserConfig: false,
     type: 'number',
