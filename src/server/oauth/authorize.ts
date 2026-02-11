@@ -126,11 +126,7 @@ export function authorize(
     }
 
     const scopesToGrant =
-      validScopes.length > 0
-        ? validScopes
-        : enforceScopes
-          ? DEFAULT_REQUIRED_SCOPES
-          : [];
+      validScopes.length > 0 ? validScopes : enforceScopes ? DEFAULT_REQUIRED_SCOPES : [];
 
     // Generate Tableau state and store pending authorization
     const tableauState = randomBytes(32).toString('hex');

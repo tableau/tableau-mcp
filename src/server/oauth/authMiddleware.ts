@@ -52,12 +52,12 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
       }
 
       const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const { enforceScopes, advertiseApiScopes } = getConfig().oauth;
-    const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
-    const requiredApiScopes = getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
+      const { enforceScopes, advertiseApiScopes } = getConfig().oauth;
+      const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
+      const requiredApiScopes = getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
       const scopeParam =
         enforceScopes && requiredMcpScopes.length > 0
-        ? `, scope="${formatScopes([...requiredMcpScopes, ...requiredApiScopes])}"`
+          ? `, scope="${formatScopes([...requiredMcpScopes, ...requiredApiScopes])}"`
           : '';
       res
         .status(401)

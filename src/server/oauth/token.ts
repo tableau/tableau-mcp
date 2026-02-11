@@ -133,11 +133,7 @@ export function token(
           }
 
           const scopesToGrant =
-            validScopes.length > 0
-              ? validScopes
-              : enforceScopes
-                ? DEFAULT_REQUIRED_SCOPES
-                : [];
+            validScopes.length > 0 ? validScopes : enforceScopes ? DEFAULT_REQUIRED_SCOPES : [];
 
           // Generate access token for client credentials grant type.
           // Refresh token is not supported for client credentials grant type.
