@@ -68,8 +68,6 @@ class DirectTelemetryForwarder {
       properties,
     };
 
-    console.log('event', event);
-
     const init: RequestInit = {
       method: 'PUT',
       headers: {
