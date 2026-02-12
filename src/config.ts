@@ -3,7 +3,6 @@ import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
-import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
@@ -20,20 +19,10 @@ const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
 
 function isAuthType(auth: unknown): auth is AuthType {
-  return !!authTypes.find((type) => type === auth);
+  return authTypes.some((type) => type === auth);
 }
 
-export type BoundedContext = {
-  projectIds: Set<string> | null;
-  datasourceIds: Set<string> | null;
-  workbookIds: Set<string> | null;
-  tags: Set<string> | null;
-};
-
 export class Config {
-  private maxResultLimit: number | null;
-  private maxResultLimits: Map<ToolName, number | null> | null;
-
   auth: AuthType;
   server: string;
   transport: TransportName;
@@ -58,16 +47,13 @@ export class Config {
   datasourceCredentials: string;
   defaultLogLevel: string;
   disableLogMasking: boolean;
-  includeTools: Array<ToolName>;
-  excludeTools: Array<ToolName>;
   maxRequestTimeoutMs: number;
-  disableQueryDatasourceValidationRequests: boolean;
-  disableMetadataApiRequests: boolean;
   disableSessionManagement: boolean;
   enableServerLogging: boolean;
   serverLogDirectory: string;
-  boundedContext: BoundedContext;
   tableauServerVersionCheckIntervalInHours: number;
+  mcpSiteSettingsCheckIntervalInMinutes: number;
+  enableMcpSiteSettings: boolean;
   oauth: {
     enabled: boolean;
     issuer: string;
@@ -86,10 +72,6 @@ export class Config {
   productTelemetryEndpoint: string;
   productTelemetryEnabled: boolean;
   isHyperforce: boolean;
-
-  getMaxResultLimit(toolName: ToolName): number | null {
-    return this.maxResultLimits?.get(toolName) ?? this.maxResultLimit;
-  }
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -120,21 +102,13 @@ export class Config {
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
-      INCLUDE_TOOLS: includeTools,
-      EXCLUDE_TOOLS: excludeTools,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
-      MAX_RESULT_LIMIT: maxResultLimit,
-      MAX_RESULT_LIMITS: maxResultLimits,
-      DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: disableQueryDatasourceValidationRequests,
-      DISABLE_METADATA_API_REQUESTS: disableMetadataApiRequests,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
       ENABLE_SERVER_LOGGING: enableServerLogging,
       SERVER_LOG_DIRECTORY: serverLogDirectory,
-      INCLUDE_PROJECT_IDS: includeProjectIds,
-      INCLUDE_DATASOURCE_IDS: includeDatasourceIds,
-      INCLUDE_WORKBOOK_IDS: includeWorkbookIds,
-      INCLUDE_TAGS: includeTags,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
+      MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: mcpSiteSettingsCheckIntervalInMinutes,
+      ENABLE_MCP_SITE_SETTINGS: enableMcpSiteSettings,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_ISSUER: oauthIssuer,
       OAUTH_LOCK_SITE: oauthLockSite,
@@ -170,42 +144,9 @@ export class Config {
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
-    this.disableQueryDatasourceValidationRequests =
-      disableQueryDatasourceValidationRequests === 'true';
-    this.disableMetadataApiRequests = disableMetadataApiRequests === 'true';
     this.disableSessionManagement = disableSessionManagement === 'true';
     this.enableServerLogging = enableServerLogging === 'true';
     this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
-    this.boundedContext = {
-      projectIds: createSetFromCommaSeparatedString(includeProjectIds),
-      datasourceIds: createSetFromCommaSeparatedString(includeDatasourceIds),
-      workbookIds: createSetFromCommaSeparatedString(includeWorkbookIds),
-      tags: createSetFromCommaSeparatedString(includeTags),
-    };
-
-    if (this.boundedContext.projectIds?.size === 0) {
-      throw new Error(
-        'When set, the environment variable INCLUDE_PROJECT_IDS must have at least one value',
-      );
-    }
-
-    if (this.boundedContext.datasourceIds?.size === 0) {
-      throw new Error(
-        'When set, the environment variable INCLUDE_DATASOURCE_IDS must have at least one value',
-      );
-    }
-
-    if (this.boundedContext.workbookIds?.size === 0) {
-      throw new Error(
-        'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
-      );
-    }
-
-    if (this.boundedContext.tags?.size === 0) {
-      throw new Error(
-        'When set, the environment variable INCLUDE_TAGS must have at least one value',
-      );
-    }
 
     this.tableauServerVersionCheckIntervalInHours = parseNumber(
       tableauServerVersionCheckIntervalInHours,
@@ -216,6 +157,16 @@ export class Config {
       },
     );
 
+    this.mcpSiteSettingsCheckIntervalInMinutes = parseNumber(
+      mcpSiteSettingsCheckIntervalInMinutes,
+      {
+        defaultValue: 10,
+        minValue: 1,
+        maxValue: 60 * 24, // 24 hours
+      },
+    );
+
+    this.enableMcpSiteSettings = enableMcpSiteSettings === 'true';
     const disableOauthOverride = disableOauth === 'true';
     this.oauth = {
       enabled: disableOauthOverride ? false : !!oauthIssuer,
@@ -333,30 +284,6 @@ export class Config {
       minValue: 5000,
       maxValue: ONE_HOUR_IN_MS,
     });
-
-    const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
-    this.maxResultLimit =
-      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
-
-    this.maxResultLimits = maxResultLimits ? getMaxResultLimits(maxResultLimits) : null;
-
-    this.includeTools = includeTools
-      ? includeTools.split(',').flatMap((s) => {
-          const v = s.trim();
-          return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
-        })
-      : [];
-
-    this.excludeTools = excludeTools
-      ? excludeTools.split(',').flatMap((s) => {
-          const v = s.trim();
-          return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
-        })
-      : [];
-
-    if (this.includeTools.length > 0 && this.excludeTools.length > 0) {
-      throw new Error('Cannot include and exclude tools simultaneously');
-    }
 
     if (this.auth === 'pat') {
       invariant(patName, 'The environment variable PAT_NAME is not set');
@@ -484,25 +411,9 @@ function getTrustProxyConfig(trustProxyConfig: string): boolean | number | strin
   return trustProxyConfig;
 }
 
-// Creates a set from a comma-separated string of values.
-// Returns null if the value is undefined.
-function createSetFromCommaSeparatedString(value: string | undefined): Set<string> | null {
-  if (value === undefined) {
-    return null;
-  }
-
-  return new Set(
-    value
-      .trim()
-      .split(',')
-      .map((id) => id.trim())
-      .filter(Boolean),
-  );
-}
-
 // When the user does not provide a site name in the Claude MCP Bundle configuration,
 // Claude doesn't replace its value and sets the site name to "${user_config.site_name}".
-function removeClaudeMcpBundleUserConfigTemplates(
+export function removeClaudeMcpBundleUserConfigTemplates(
   envVars: Record<string, string | undefined>,
 ): Record<string, string | undefined> {
   return Object.entries(envVars).reduce<Record<string, string | undefined>>((acc, [key, value]) => {
@@ -513,32 +424,6 @@ function removeClaudeMcpBundleUserConfigTemplates(
     }
     return acc;
   }, {});
-}
-
-function getMaxResultLimits(maxResultLimits: string): Map<ToolName, number | null> {
-  const map = new Map<ToolName, number | null>();
-  if (!maxResultLimits) {
-    return map;
-  }
-
-  maxResultLimits.split(',').forEach((curr) => {
-    const [toolName, maxResultLimit] = curr.split(':');
-    const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
-    const actualLimit =
-      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
-    if (isToolName(toolName)) {
-      map.set(toolName, actualLimit);
-    } else if (isToolGroupName(toolName)) {
-      toolGroups[toolName].forEach((toolName) => {
-        if (!map.has(toolName)) {
-          // Tool names take precedence over group names
-          map.set(toolName, actualLimit);
-        }
-      });
-    }
-  });
-
-  return map;
 }
 
 function parseNumber(

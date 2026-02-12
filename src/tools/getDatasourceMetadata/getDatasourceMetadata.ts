@@ -8,6 +8,7 @@ import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -127,9 +128,21 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
         authInfo,
         args: { datasourceLuid },
         callback: async () => {
+          const restApiArgs = {
+            config,
+            requestId,
+            server,
+            signal,
+            authInfo: getTableauAuthInfo(authInfo),
+          };
+
+          const configWithOverrides = await getConfigWithOverrides({
+            restApiArgs,
+          });
+
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
-            restApiArgs: { config, requestId, server, signal },
+            restApiArgs,
           });
 
           if (!isDatasourceAllowedResult.allowed) {
@@ -140,12 +153,8 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
           }
 
           return await useRestApi({
-            config,
-            requestId,
-            server,
+            ...restApiArgs,
             jwtScopes: ['tableau:content:read', 'tableau:viz_data_service:read'],
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               // Fetching metadata from VizQL Data Service API.
               const readMetadataResult = await restApi.vizqlDataServiceMethods.readMetadata({
@@ -158,7 +167,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
                 return Err({ type: 'feature-disabled' });
               }
 
-              if (config.disableMetadataApiRequests) {
+              if (configWithOverrides.disableMetadataApiRequests) {
                 // Exit early since requests to the Tableau Metadata API are disabled.
                 return Ok(simplifyReadMetadataResult(readMetadataResult.value));
               }
