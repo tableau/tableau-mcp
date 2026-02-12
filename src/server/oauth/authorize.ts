@@ -16,6 +16,12 @@ import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
+import {
+  DEFAULT_REQUIRED_SCOPES,
+  getSupportedScopes,
+  parseScopes,
+  validateScopes,
+} from './scopes.js';
 import { PendingAuthorization } from './types.js';
 
 /**
@@ -42,8 +48,15 @@ export function authorize(
       return;
     }
 
-    const { client_id, redirect_uri, response_type, code_challenge, code_challenge_method, state } =
-      result.data;
+    const {
+      client_id,
+      redirect_uri,
+      response_type,
+      code_challenge,
+      code_challenge_method,
+      state,
+      scope,
+    } = result.data;
 
     const clientIdUrl = parseUrl(client_id);
     if (clientIdUrl) {
@@ -97,6 +110,24 @@ export function authorize(
       return;
     }
 
+    const { enforceScopes, advertiseApiScopes } = config.oauth;
+    const requestedScopes = parseScopes(scope);
+    const { valid: validScopes, invalid: invalidScopes } = validateScopes(
+      requestedScopes,
+      getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
+    );
+
+    if (invalidScopes.length > 0) {
+      res.status(400).json({
+        error: 'invalid_scope',
+        error_description: `Unsupported scopes: ${invalidScopes.join(', ')}`,
+      });
+      return;
+    }
+
+    const scopesToGrant =
+      validScopes.length > 0 ? validScopes : enforceScopes ? DEFAULT_REQUIRED_SCOPES : [];
+
     // Generate Tableau state and store pending authorization
     const tableauState = randomBytes(32).toString('hex');
     const authKey = randomBytes(32).toString('hex');
@@ -114,6 +145,7 @@ export function authorize(
       tableauState,
       tableauClientId,
       tableauCodeVerifier,
+      scopes: scopesToGrant,
     });
 
     // Clean up expired authorizations

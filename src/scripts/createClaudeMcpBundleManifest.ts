@@ -190,6 +190,22 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  TELEMETRY_PROVIDER: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Telemetry Provider',
+    description: 'The telemetry provider to use for server telemetry.',
+    required: false,
+    sensitive: false,
+  },
+  TELEMETRY_PROVIDER_CONFIG: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Telemetry Provider Config',
+    description: 'Provider-specific configuration for telemetry.',
+    required: false,
+    sensitive: false,
+  },
   DEFAULT_LOG_LEVEL: {
     includeInUserConfig: false,
     type: 'string',
@@ -444,6 +460,23 @@ const envVars = {
     title: 'OAuth CIMD DNS Servers',
     description:
       'A comma-separated list of DNS server IP addresses to resolve the IP addresses of the client metadata document URLs.',
+    required: false,
+    sensitive: false,
+  },
+  ADVERTISE_API_SCOPES: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Advertise API Scopes',
+    description:
+      'Include Tableau API scopes in scopes_supported and scope challenges for Falcon hosting.',
+    required: false,
+    sensitive: false,
+  },
+  OAUTH_DISABLE_SCOPES: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'OAuth Disable Scopes',
+    description: 'Disable scope enforcement and scope challenges when set to true.',
     required: false,
     sensitive: false,
   },

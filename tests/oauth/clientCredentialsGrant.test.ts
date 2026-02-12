@@ -65,6 +65,7 @@ describe('client credentials grant type', () => {
       refresh_token: undefined,
       token_type: 'Bearer',
       expires_in: 3600,
+      scope: '',
     });
   });
 
@@ -88,6 +89,7 @@ describe('client credentials grant type', () => {
       refresh_token: undefined,
       token_type: 'Bearer',
       expires_in: 3600,
+      scope: '',
     });
   });
 

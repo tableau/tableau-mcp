@@ -11,6 +11,13 @@ import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { AUDIENCE } from './provider.js';
 import { mcpTokenSchema } from './schemas.js';
+import {
+  DEFAULT_REQUIRED_SCOPES,
+  formatScopes,
+  getSupportedScopes,
+  parseScopes,
+  validateScopes,
+} from './scopes.js';
 import { AuthorizationCode, ClientCredentials, RefreshTokenData, UserAndTokens } from './types.js';
 
 /**
@@ -88,6 +95,7 @@ export function token(
             server: authCode.server,
             clientId: authCode.clientId,
             tokens: authCode.tokens,
+            scopes: authCode.scopes,
             expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
             tableauClientId: authCode.tableauClientId,
           });
@@ -104,10 +112,29 @@ export function token(
             token_type: 'Bearer',
             expires_in: config.oauth.accessTokenTimeoutMs / 1000,
             refresh_token: refreshTokenId,
+            scope: formatScopes(authCode.scopes),
           });
           return;
         }
         case 'client_credentials': {
+          const { enforceScopes, advertiseApiScopes } = config.oauth;
+          const requestedScopes = parseScopes(result.data.scope);
+          const { valid: validScopes, invalid: invalidScopes } = validateScopes(
+            requestedScopes,
+            getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
+          );
+
+          if (invalidScopes.length > 0) {
+            res.status(400).json({
+              error: 'invalid_scope',
+              error_description: `Unsupported scopes: ${invalidScopes.join(', ')}`,
+            });
+            return;
+          }
+
+          const scopesToGrant =
+            validScopes.length > 0 ? validScopes : enforceScopes ? DEFAULT_REQUIRED_SCOPES : [];
+
           // Generate access token for client credentials grant type.
           // Refresh token is not supported for client credentials grant type.
           // https://www.rfc-editor.org/rfc/rfc6749#section-4.4.3
@@ -116,6 +143,7 @@ export function token(
               clientId: clientCredentialsResult.value.clientId,
               server: config.server,
             },
+            scopesToGrant,
             publicKey,
           );
 
@@ -123,6 +151,7 @@ export function token(
             access_token: accessToken,
             token_type: 'Bearer',
             expires_in: config.oauth.accessTokenTimeoutMs / 1000,
+            scope: formatScopes(scopesToGrant),
           });
           return;
         }
@@ -158,6 +187,7 @@ export function token(
                 clientId: tokenData.clientId,
                 server: tokenData.server,
                 tokens: tokenData.tokens,
+                scopes: tokenData.scopes,
               },
               publicKey,
             );
@@ -178,6 +208,7 @@ export function token(
                   refreshToken: newTableauRefreshToken,
                   expiresInSeconds,
                 },
+                scopes: tokenData.scopes,
               },
               publicKey,
             );
@@ -192,6 +223,7 @@ export function token(
             server: tokenData.server,
             clientId: tokenData.clientId,
             tokens: tokenData.tokens,
+            scopes: tokenData.scopes,
             expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
             tableauClientId: tokenData.tableauClientId,
           });
@@ -201,6 +233,7 @@ export function token(
             token_type: 'Bearer',
             expires_in: config.oauth.accessTokenTimeoutMs / 1000,
             refresh_token: refreshTokenId,
+            scope: formatScopes(tokenData.scopes),
           });
           return;
         }
@@ -235,6 +268,7 @@ async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject)
     exp: Math.floor((Date.now() + config.oauth.accessTokenTimeoutMs) / 1000),
     aud: AUDIENCE,
     iss: config.oauth.issuer,
+    scope: formatScopes(tokenData.scopes),
     ...(config.auth === 'oauth'
       ? {
           tableauAccessToken: tokenData.tokens.accessToken,
@@ -254,6 +288,7 @@ async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject)
 
 async function createClientCredentialsAccessToken(
   clientCredentials: ClientCredentials,
+  scopes: string[],
   publicKey: KeyObject,
 ): Promise<string> {
   const config = getConfig();
@@ -265,6 +300,7 @@ async function createClientCredentialsAccessToken(
     exp: Math.floor((Date.now() + config.oauth.accessTokenTimeoutMs) / 1000),
     aud: AUDIENCE,
     iss: config.oauth.issuer,
+    scope: formatScopes(scopes),
   });
 
   const jwe = await new CompactEncrypt(new TextEncoder().encode(payload))

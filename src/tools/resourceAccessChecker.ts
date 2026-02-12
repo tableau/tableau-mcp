@@ -6,6 +6,7 @@ import { DataSource } from '../sdks/tableau/types/dataSource.js';
 import { View } from '../sdks/tableau/types/view.js';
 import { Workbook } from '../sdks/tableau/types/workbook.js';
 import { Server } from '../server.js';
+import { getRequiredApiScopesForTool } from '../server/oauth/scopes.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
 type AllowedResult<T = unknown> =
@@ -173,7 +174,7 @@ class ResourceAccessChecker {
         config,
         requestId,
         server,
-        jwtScopes: ['tableau:content:read'],
+        jwtScopes: getRequiredApiScopesForTool('list-datasources'),
         signal,
         callback: async (restApi) =>
           await restApi.datasourcesMethods.queryDatasource({
@@ -264,7 +265,7 @@ class ResourceAccessChecker {
         config,
         requestId,
         server,
-        jwtScopes: ['tableau:content:read'],
+        jwtScopes: getRequiredApiScopesForTool('get-workbook'),
         signal,
         callback: async (restApi) =>
           await restApi.workbooksMethods.getWorkbook({
@@ -345,7 +346,7 @@ class ResourceAccessChecker {
         config,
         requestId,
         server,
-        jwtScopes: ['tableau:content:read'],
+        jwtScopes: getRequiredApiScopesForTool('list-views'),
         signal,
         callback: async (restApi) => {
           return await restApi.viewsMethods.getView({

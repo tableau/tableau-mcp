@@ -10,6 +10,7 @@ import {
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
+import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
 import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
 import { pulsePaginate } from '../../../utils/paginate.js';
 import { Tool } from '../../tool.js';
@@ -73,7 +74,7 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
             config,
             requestId,
             server,
-            jwtScopes: ['tableau:insight_definitions_metrics:read'],
+            jwtScopes: getRequiredApiScopesForTool('list-all-pulse-metric-definitions'),
             signal,
             authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {

@@ -81,6 +81,8 @@ export class Config {
     refreshTokenTimeoutMs: number;
     clientIdSecretPairs: Record<string, string> | null;
     dnsServers: string[];
+    enforceScopes: boolean;
+    advertiseApiScopes: boolean;
   };
   telemetry: TelemetryConfig;
   productTelemetryEndpoint: string;
@@ -144,9 +146,11 @@ export class Config {
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
       OAUTH_CIMD_DNS_SERVERS: dnsServers,
+      ADVERTISE_API_SCOPES: advertiseApiScopes,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
+      OAUTH_DISABLE_SCOPES: oauthDisableScopes,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
       PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
@@ -217,6 +221,9 @@ export class Config {
     );
 
     const disableOauthOverride = disableOauth === 'true';
+    const disableScopes = oauthDisableScopes === 'true';
+    const enforceScopes = !disableScopes;
+
     this.oauth = {
       enabled: disableOauthOverride ? false : !!oauthIssuer,
       issuer: oauthIssuer ?? '',
@@ -252,6 +259,8 @@ export class Config {
             return acc;
           }, {})
         : null,
+      enforceScopes,
+      advertiseApiScopes: advertiseApiScopes === 'true',
     };
 
     const parsedProvider = isTelemetryProvider(telemetryProvider) ? telemetryProvider : 'noop';

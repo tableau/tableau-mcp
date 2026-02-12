@@ -93,8 +93,16 @@ describe('OAuth', () => {
       response_types_supported: ['code'],
       grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
       code_challenge_methods_supported: ['S256'],
-      scopes_supported: [],
-      token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
+      scopes_supported: [
+        'tableau:mcp:datasource:read',
+        'tableau:mcp:workbook:read',
+        'tableau:mcp:view:read',
+        'tableau:mcp:view:download',
+        'tableau:mcp:pulse:read',
+        'tableau:mcp:insight:create',
+        'tableau:mcp:content:read',
+      ],
+      token_endpoint_auth_methods_supported: ['none', 'client_secret_basic', 'client_secret_post'],
       subject_types_supported: ['public'],
       client_id_metadata_document_supported: true,
     });
