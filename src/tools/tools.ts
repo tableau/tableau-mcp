@@ -13,6 +13,8 @@ import { getGetViewDataTool } from './views/getViewData.js';
 import { getGetViewImageTool } from './views/getViewImage.js';
 import { getListViewsTool } from './views/listViews.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
+import { getGenerateWorkbookXmlTool } from './workbooks/generateWorkbookXml.js';
+import { getInjectVizIntoWorkbookXmlTool } from './workbooks/injectVizIntoWorkbookXml.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 
 export const toolFactories = [
@@ -27,6 +29,8 @@ export const toolFactories = [
   getGeneratePulseMetricValueInsightBundleTool,
   getGeneratePulseInsightBriefTool,
   getGetWorkbookTool,
+  getGenerateWorkbookXmlTool,
+  getInjectVizIntoWorkbookXmlTool,
   getGetViewDataTool,
   getGetViewImageTool,
   getListWorkbooksTool,
