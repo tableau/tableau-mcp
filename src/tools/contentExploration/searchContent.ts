@@ -10,7 +10,7 @@ import {
 } from '../../sdks/tableau/types/contentExploration.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
-import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
+import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { Tool } from '../tool.js';
 import {
@@ -109,18 +109,9 @@ This tool searches across all supported content types for objects relevant to th
             }),
           );
         },
-        constrainSuccessResult: async (items) => {
-          return constrainSearchContent({
-            items,
-            boundedContext: configWithOverrides.boundedContext,
-          });
-        },
-        productTelemetryBase: {
-          endpoint: config.productTelemetryEndpoint,
-          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
-          podName: config.server,
-          enabled: config.productTelemetryEnabled,
-        },
+        constrainSuccessResult: (items) =>
+          constrainSearchContent({ items, boundedContext: configWithOverrides.boundedContext }),
+        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });

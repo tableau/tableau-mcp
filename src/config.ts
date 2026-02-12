@@ -71,6 +71,7 @@ export class Config {
   telemetry: TelemetryConfig;
   productTelemetryEndpoint: string;
   productTelemetryEnabled: boolean;
+  isHyperforce: boolean;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -124,6 +125,7 @@ export class Config {
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
       PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
+      IS_HYPERFORCE: isHyperforce,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -223,6 +225,7 @@ export class Config {
     this.productTelemetryEndpoint =
       productTelemetryEndpoint || 'https://prod.telemetry.tableausoftware.com';
     this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
+    this.isHyperforce = isHyperforce === 'true';
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';

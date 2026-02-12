@@ -14,7 +14,7 @@ import {
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from '../../server/oauth/schemas.js';
-import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
+import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { Provider } from '../../utils/provider.js';
@@ -231,12 +231,7 @@ export const getQueryDatasourceTool = (
               });
           }
         },
-        productTelemetryBase: {
-          endpoint: config.productTelemetryEndpoint,
-          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
-          podName: config.server,
-          enabled: config.productTelemetryEnabled,
-        },
+        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });

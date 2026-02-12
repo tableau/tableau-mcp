@@ -8,7 +8,7 @@ import { useRestApi } from '../../restApiInstance.js';
 import { View } from '../../sdks/tableau/types/view.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
-import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
+import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
@@ -128,12 +128,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
         },
         constrainSuccessResult: (views) =>
           constrainViews({ views, boundedContext: configWithOverrides.boundedContext }),
-        productTelemetryBase: {
-          endpoint: config.productTelemetryEndpoint,
-          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
-          podName: config.server,
-          enabled: config.productTelemetryEnabled,
-        },
+        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });
