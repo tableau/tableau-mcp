@@ -6,7 +6,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error';
 
 import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
-import { axios, AxiosResponse, getStringResponseHeader } from '../../utils/axios.js';
+import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
 import { parseUrl } from '../../utils/parseUrl.js';
 import { retry } from '../../utils/retry.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
@@ -229,16 +229,31 @@ async function getClientFromMetadataDoc(
   let response: AxiosResponse;
   try {
     const client = axios.create();
-    response = await retry(() =>
-      client.get(clientMetadataUrl.toString(), {
-        timeout: 5000,
-        maxContentLength: 5 * 1024, // 5 KB
-        maxRedirects: 3,
-        headers: {
-          Accept: 'application/json',
-          Host: originalHostname,
+    response = await retry(
+      () =>
+        client.get(clientMetadataUrl.toString(), {
+          timeout: 5000,
+          maxContentLength: 5 * 1024, // 5 KB
+          maxRedirects: 3,
+          headers: {
+            Accept: 'application/json',
+            Host: originalHostname,
+          },
+        }),
+      {
+        retryIf: (error) => {
+          if (!isAxiosError(error)) {
+            return true;
+          }
+
+          const status = error.response?.status;
+          if (status) {
+            return status >= 500 && status < 600;
+          }
+
+          return true;
         },
-      }),
+      },
     );
   } catch {
     return Err({

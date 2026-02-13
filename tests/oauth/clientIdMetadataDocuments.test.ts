@@ -45,6 +45,10 @@ const mocks = vi.hoisted(() => ({
   dnsResolver: vi.fn(),
 }));
 
+vi.mock('../../src/utils/retry.js', () => ({
+  retry: vi.fn(async (fn: () => any) => fn()),
+}));
+
 vi.mock('axios', () => {
   return {
     default: {
