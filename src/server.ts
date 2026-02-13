@@ -62,6 +62,8 @@ export class Server extends McpServer {
   }
 
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
+    const config = getConfig();
+
     for (const {
       name,
       description,
@@ -73,7 +75,6 @@ export class Server extends McpServer {
         args: typeof paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
       ) => {
-        const config = getConfig();
         const tableauToolCallback = await Provider.from(callback);
         const tableauRequestHandlerExtra: TableauRequestHandlerExtra = {
           ...extra,
