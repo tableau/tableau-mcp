@@ -1,4 +1,3 @@
-import axiosRetry from 'axios-retry';
 import { randomBytes, randomInt, randomUUID } from 'crypto';
 import express from 'express';
 import { isIP } from 'net';
@@ -7,7 +6,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error';
 
 import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
-import { axios, AxiosResponse, getStringResponseHeader } from '../../utils/axios.js';
+import { axios, AxiosResponse, axiosRetry, getStringResponseHeader } from '../../utils/axios.js';
 import { parseUrl } from '../../utils/parseUrl.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { clientMetadataCache } from './clientMetadataCache.js';
@@ -229,17 +228,17 @@ async function getClientFromMetadataDoc(
   let response: AxiosResponse;
   try {
     const client = axios.create();
-    axiosRetry(client, { retries: 3, retryDelay: axiosRetry.exponentialDelay });
-
-    response = await client.get(clientMetadataUrl.toString(), {
-      timeout: 5000,
-      maxContentLength: 5 * 1024, // 5 KB
-      maxRedirects: 3,
-      headers: {
-        Accept: 'application/json',
-        Host: originalHostname,
-      },
-    });
+    response = await axiosRetry(() =>
+      client.get(clientMetadataUrl.toString(), {
+        timeout: 5000,
+        maxContentLength: 5 * 1024, // 5 KB
+        maxRedirects: 3,
+        headers: {
+          Accept: 'application/json',
+          Host: originalHostname,
+        },
+      }),
+    );
   } catch {
     return Err({
       error: 'invalid_request',
