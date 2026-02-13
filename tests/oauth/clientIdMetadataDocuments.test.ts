@@ -45,10 +45,6 @@ const mocks = vi.hoisted(() => ({
   dnsResolver: vi.fn(),
 }));
 
-vi.mock('../../src/utils/retry.js', () => ({
-  retry: vi.fn(async (fn: () => any) => fn()),
-}));
-
 vi.mock('axios', () => {
   return {
     default: {
@@ -57,6 +53,10 @@ vi.mock('axios', () => {
     },
   };
 });
+
+vi.mock('../../src/utils/retry.js', () => ({
+  retry: vi.fn(async (fn: () => any) => fn()),
+}));
 
 const mockAxios = {
   get: axios.get as MockedFunction<typeof axios.get>,
