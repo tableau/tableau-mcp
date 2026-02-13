@@ -7,7 +7,7 @@ import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.
 import { Server } from '../../../server.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../../testContext.mock.js';
+import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import {
   constrainPulseMetricSubscriptions,

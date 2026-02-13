@@ -4,7 +4,7 @@ import { Server } from '../../server.js';
 import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../testContext.mock.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { constrainWorkbooks, getListWorkbooksTool } from './listWorkbooks.js';
 import { mockWorkbook, mockWorkbook2 } from './mockWorkbook.js';
 

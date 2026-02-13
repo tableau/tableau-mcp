@@ -3,7 +3,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Server } from '../../server.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../testContext.mock.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getSearchContentTool } from './searchContent.js';
 
 export const mockSearchContentResponse = {

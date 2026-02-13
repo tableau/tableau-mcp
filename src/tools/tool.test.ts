@@ -5,8 +5,8 @@ import { z } from 'zod';
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
 import invariant from '../utils/invariant.js';
-import { getMockRequestHandlerExtra } from './testContext.mock.js';
 import { Tool } from './tool.js';
+import { getMockRequestHandlerExtra } from './toolContext.mock.js';
 
 // Mock for product telemetry - tracks calls to send()
 const mockTelemetrySend = vi.hoisted(() => vi.fn());

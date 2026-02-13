@@ -7,7 +7,7 @@ import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
-import { getMockRequestHandlerExtra } from '../testContext.mock.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;

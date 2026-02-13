@@ -5,7 +5,7 @@ import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.j
 import { Server } from '../../../server.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../../testContext.mock.js';
+import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import { getListAllPulseMetricDefinitionsTool } from './listAllPulseMetricDefinitions.js';
 
