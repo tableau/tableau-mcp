@@ -7,10 +7,10 @@ import {
   ServerRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { Config } from '../config';
-import { OverridableConfig } from '../overridableConfig';
-import { Server } from '../server';
-import { TableauAuthInfo } from '../server/oauth/schemas';
+import { Config } from '../config.js';
+import { OverridableConfig } from '../overridableConfig.js';
+import { Server } from '../server.js';
+import { TableauAuthInfo } from '../server/oauth/schemas.js';
 
 // Additional context  available to all tool callbacks
 export type TableauToolContext = {
