@@ -14,7 +14,7 @@ async function getMcpSiteSettings({
 }: {
   restApiArgs: RestApiArgs;
 }): Promise<McpSiteSettings | undefined> {
-  const { config, authInfo } = restApiArgs;
+  const { config, tableauAuthInfo } = restApiArgs;
   if (!config.enableMcpSiteSettings) {
     return;
   }
@@ -25,7 +25,7 @@ async function getMcpSiteSettings({
     });
   }
 
-  const cacheKey = config.siteName || getSiteLuidFromAccessToken(authInfo?.accessToken);
+  const cacheKey = config.siteName || getSiteLuidFromAccessToken(tableauAuthInfo?.accessToken);
   if (!cacheKey) {
     throw new Error('Could not determine site ID/name');
   }

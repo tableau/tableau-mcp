@@ -5,6 +5,7 @@ import { stubDefaultEnvVars } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockView } from '../views/mockView.js';
 import { filterWorkbookViews, getGetWorkbookTool } from './getWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
@@ -141,10 +142,5 @@ describe('getWorkbookTool', () => {
 async function getToolResult(params: { workbookId: string }): Promise<CallToolResult> {
   const getWorkbookTool = getGetWorkbookTool(new Server());
   const callback = await Provider.from(getWorkbookTool.callback);
-  return await callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  return await callback(params, getMockRequestHandlerExtra());
 }

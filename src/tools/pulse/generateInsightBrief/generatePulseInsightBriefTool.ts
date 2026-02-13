@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err } from 'ts-results-es';
 
-import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import {
@@ -9,9 +8,6 @@ import {
   PulseInsightBriefResponse,
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
-import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
-import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -194,27 +190,14 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { briefRequest },
-      { requestId, sessionId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
-      const restApiArgs = {
-        config,
-        requestId,
-        server,
-        signal,
-        authInfo: getTableauAuthInfo(authInfo),
-      };
-      const configWithOverrides = await getConfigWithOverrides({ restApiArgs });
+    callback: async ({ briefRequest }, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
 
       return await generatePulseInsightBriefTool.logAndExecute<
         PulseInsightBriefResponse,
         GeneratePulseInsightBriefError
       >({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: { briefRequest },
         callback: async () => {
           // Filter out metrics that are not in the allowed datasource set
@@ -242,7 +225,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
           }
 
           const result = await useRestApi({
-            ...restApiArgs,
+            ...extra,
             jwtScopes: ['tableau:insight_brief:create'],
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseInsightBrief(briefRequest),
@@ -271,7 +254,6 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
               return error.message;
           }
         },
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });

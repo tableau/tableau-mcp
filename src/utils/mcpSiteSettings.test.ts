@@ -31,6 +31,7 @@ describe('mcpSiteSettings', () => {
     const config = await getConfigWithOverrides({
       restApiArgs: {
         server: new Server(),
+        tableauAuthInfo: undefined,
         disableLogging: true,
       },
     });
@@ -67,6 +68,7 @@ describe('mcpSiteSettings', () => {
     let config = await getConfigWithOverrides({
       restApiArgs: {
         server: new Server(),
+        tableauAuthInfo: undefined,
         disableLogging: true,
       },
     });
@@ -90,6 +92,7 @@ describe('mcpSiteSettings', () => {
     config = await getConfigWithOverrides({
       restApiArgs: {
         server: new Server(),
+        tableauAuthInfo: undefined,
         disableLogging: true,
       },
     });

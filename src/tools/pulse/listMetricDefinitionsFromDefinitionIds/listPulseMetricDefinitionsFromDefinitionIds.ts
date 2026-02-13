@@ -1,13 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
-import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
-import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -59,27 +55,13 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { view, metricDefinitionIds },
-      { requestId, sessionId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
-      const restApiArgs = {
-        config,
-        requestId,
-        server,
-        signal,
-        authInfo: getTableauAuthInfo(authInfo),
-      };
-
+    callback: async ({ view, metricDefinitionIds }, extra): Promise<CallToolResult> => {
       return await listPulseMetricDefinitionsFromDefinitionIdsTool.logAndExecute({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: { metricDefinitionIds, view },
         callback: async () => {
           return await useRestApi({
-            ...restApiArgs,
+            ...extra,
             jwtScopes: ['tableau:insight_definitions_metrics:read'],
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricDefinitionsFromMetricDefinitionIds(
@@ -90,9 +72,7 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
           });
         },
         constrainSuccessResult: async (definitions) => {
-          const configWithOverrides = await getConfigWithOverrides({
-            restApiArgs,
-          });
+          const configWithOverrides = await extra.getConfigWithOverrides();
 
           return constrainPulseDefinitions({
             definitions,
@@ -100,7 +80,6 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
           });
         },
         getErrorText: getPulseDisabledError,
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });
