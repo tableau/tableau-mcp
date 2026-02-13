@@ -52,7 +52,7 @@
     "docs:start": "npm run start --prefix docs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@zodios/core": "^10.9.6",
     "axios-retry": "^4.5.0",
     "cors": "^2.8.5",
