@@ -70,6 +70,7 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
  * @typeParam Args - The schema of the tool's parameters
  */
 type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined> = {
+  // The extra data provided to request handlers
   extra: TableauRequestHandlerExtra;
 
   // The arguments of the tool call

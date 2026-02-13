@@ -12,17 +12,19 @@ import { OverridableConfig } from '../overridableConfig';
 import { Server } from '../server';
 import { TableauAuthInfo } from '../server/oauth/schemas';
 
+// Additional context  available to all tool callbacks
 export type TableauToolContext = {
   config: Config;
   server: Server;
   tableauAuthInfo: TableauAuthInfo | undefined;
+  getConfigWithOverrides: () => Promise<OverridableConfig>;
 };
 
+// An extension of the RequestHandlerExtra type that includes the TableauToolContext
 export type TableauRequestHandlerExtra = TableauToolContext &
-  RequestHandlerExtra<ServerRequest, ServerNotification> & {
-    getConfigWithOverrides: () => Promise<OverridableConfig>;
-  };
+  RequestHandlerExtra<ServerRequest, ServerNotification>;
 
+// An extension of ToolCallback that includes additional context in the extra parameter
 export type TableauToolCallback<
   Args extends undefined | ZodRawShapeCompat | AnySchema = undefined,
 > = BaseToolCallback<CallToolResult, TableauRequestHandlerExtra, Args>;
