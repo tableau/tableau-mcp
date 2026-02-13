@@ -6,8 +6,9 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error';
 
 import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
-import { axios, AxiosResponse, axiosRetry, getStringResponseHeader } from '../../utils/axios.js';
+import { axios, AxiosResponse, getStringResponseHeader } from '../../utils/axios.js';
 import { parseUrl } from '../../utils/parseUrl.js';
+import { retry } from '../../utils/retry.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { clientMetadataCache } from './clientMetadataCache.js';
 import { getDnsResolver } from './dnsResolver.js';
@@ -228,7 +229,7 @@ async function getClientFromMetadataDoc(
   let response: AxiosResponse;
   try {
     const client = axios.create();
-    response = await axiosRetry(() =>
+    response = await retry(() =>
       client.get(clientMetadataUrl.toString(), {
         timeout: 5000,
         maxContentLength: 5 * 1024, // 5 KB
