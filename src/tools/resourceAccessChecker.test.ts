@@ -1,7 +1,7 @@
-import { getMockRequestHandlerExtra } from '../testShared.js';
 import { getCombinationsOfBoundedContextInputs } from '../utils/getCombinationsOfBoundedContextInputs.js';
 import { mockDatasources } from './listDatasources/mockDatasources.js';
 import { exportedForTesting } from './resourceAccessChecker.js';
+import { getMockRequestHandlerExtra } from './testContext.mock.js';
 import { mockView } from './views/mockView.js';
 import { mockWorkbook } from './workbooks/mockWorkbook.js';
 

@@ -5,9 +5,9 @@ import { getConfig } from '../../../config.js';
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { getMockRequestHandlerExtra } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../../testContext.mock.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import {
   constrainPulseMetricSubscriptions,

@@ -1,10 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
-import { getMockRequestHandlerExtra, stubDefaultEnvVars } from '../../testShared.js';
+import { stubDefaultEnvVars } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
+import { getMockRequestHandlerExtra } from '../testContext.mock.js';
 import { getGetViewImageTool } from './getViewImage.js';
 import { mockView } from './mockView.js';
 

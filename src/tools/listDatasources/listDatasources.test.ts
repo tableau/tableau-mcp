@@ -1,10 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
-import { getMockRequestHandlerExtra } from '../../testShared.js';
 import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../testContext.mock.js';
 import { constrainDatasources, getListDatasourcesTool } from './listDatasources.js';
 import { mockDatasources } from './mockDatasources.js';
 
