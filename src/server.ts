@@ -69,8 +69,8 @@ export class Server extends McpServer {
       annotations,
       callback,
     } of await this._getToolsToRegister(tableauAuthInfo)) {
-      const toolCallback: ToolCallback<any> = async (
-        args: any,
+      const toolCallback: ToolCallback<typeof paramsSchema> = async (
+        args: typeof paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
       ) => {
         const config = getConfig();
