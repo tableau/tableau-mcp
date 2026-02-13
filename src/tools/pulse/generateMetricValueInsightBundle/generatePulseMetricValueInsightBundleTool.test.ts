@@ -4,7 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { PulseInsightBundleType } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { stubDefaultEnvVars } from '../../../testShared.js';
+import { getMockRequestHandlerExtra, stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
@@ -236,14 +236,6 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   async function getToolResult(bundleType?: PulseInsightBundleType): Promise<CallToolResult> {
     const tool = getGeneratePulseMetricValueInsightBundleTool(new Server());
     const callback = await Provider.from(tool.callback);
-    return await callback(
-      { bundleRequest, bundleType },
-      {
-        signal: new AbortController().signal,
-        requestId: 'test-request-id',
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      },
-    );
+    return await callback({ bundleRequest, bundleType }, getMockRequestHandlerExtra());
   }
 });

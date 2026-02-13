@@ -3,6 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { Server } from '../../../server.js';
+import { getMockRequestHandlerExtra } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
@@ -111,10 +112,5 @@ describe('listPulseMetricsFromMetricIdsTool', () => {
 async function getToolResult(params: { metricIds: string[] }): Promise<CallToolResult> {
   const listPulseMetricsFromMetricIdsTool = getListPulseMetricsFromMetricIdsTool(new Server());
   const callback = await Provider.from(listPulseMetricsFromMetricIdsTool.callback);
-  return await callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  return await callback(params, getMockRequestHandlerExtra());
 }

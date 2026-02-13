@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
-import { stubDefaultEnvVars } from '../../testShared.js';
+import { getMockRequestHandlerExtra, stubDefaultEnvVars } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
@@ -105,11 +105,6 @@ async function getToolResult(params: { viewId: string }): Promise<CallToolResult
   const callback = await Provider.from(getViewImageTool.callback);
   return await callback(
     { viewId: params.viewId, width: undefined, height: undefined },
-    {
-      signal: new AbortController().signal,
-      requestId: 'test-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    },
+    getMockRequestHandlerExtra(),
   );
 }

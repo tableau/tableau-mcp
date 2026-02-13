@@ -3,7 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { Server } from '../../../server.js';
-import { stubDefaultEnvVars } from '../../../testShared.js';
+import { getMockRequestHandlerExtra, stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
@@ -335,12 +335,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
     const callback = await Provider.from(tool.callback);
     return await callback(
       { briefRequest: overrideBriefRequest ?? briefRequest },
-      {
-        signal: new AbortController().signal,
-        requestId: 'test-request-id',
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      },
+      getMockRequestHandlerExtra(),
     );
   }
 });

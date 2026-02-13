@@ -1,8 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { getConfig } from '../../config.js';
-import { OverridableConfig } from '../../overridableConfig.js';
 import { Server } from '../../server.js';
+import { getMockRequestHandlerExtra } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getSearchContentTool } from './searchContent.js';
@@ -349,14 +348,5 @@ describe('searchContentTool', () => {
 async function getToolResult(params: any): Promise<CallToolResult> {
   const searchContentTool = getSearchContentTool(new Server());
   const callback = await Provider.from(searchContentTool.callback);
-  return await callback(params, {
-    config: getConfig(),
-    server: new Server(),
-    tableauAuthInfo: undefined,
-    getConfigWithOverrides: vi.fn().mockResolvedValue(new OverridableConfig({})),
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  return await callback(params, getMockRequestHandlerExtra());
 }

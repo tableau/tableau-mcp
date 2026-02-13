@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import { getMockRequestHandlerExtra } from '../../testShared.js';
 import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
@@ -126,11 +127,6 @@ async function getToolResult(params: { filter: string }): Promise<CallToolResult
   const callback = await Provider.from(listDatasourcesTool.callback);
   return await callback(
     { filter: params.filter, pageSize: undefined, limit: undefined },
-    {
-      signal: new AbortController().signal,
-      requestId: 'test-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    },
+    getMockRequestHandlerExtra(),
   );
 }

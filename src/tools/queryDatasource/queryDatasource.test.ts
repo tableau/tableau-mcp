@@ -4,7 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { queryOutputSchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
-import { stubDefaultEnvVars } from '../../testShared.js';
+import { getMockRequestHandlerExtra, stubDefaultEnvVars } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
@@ -224,7 +224,7 @@ describe('queryDatasourceTool', () => {
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       JSON.stringify({
-        requestId: 'test-request-id',
+        requestId: 2,
         ...mockVdsResponses.error,
         condition: 'Validation failed',
         details: "The incoming request isn't valid per the validation rules.",
@@ -261,7 +261,7 @@ describe('queryDatasourceTool', () => {
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe('requestId: test-request-id, error: API Error');
+    expect(result.content[0].text).toBe('requestId: 2, error: API Error');
   });
 
   describe('Filter Validation', () => {
@@ -297,12 +297,7 @@ describe('queryDatasourceTool', () => {
           },
           limit: undefined,
         },
-        {
-          signal: new AbortController().signal,
-          requestId: 'test-request-id',
-          sendNotification: vi.fn(),
-          sendRequest: vi.fn(),
-        },
+        getMockRequestHandlerExtra(),
       );
 
       expect(result.isError).toBe(true);
@@ -349,12 +344,7 @@ describe('queryDatasourceTool', () => {
           },
           limit: undefined,
         },
-        {
-          signal: new AbortController().signal,
-          requestId: 'test-request-id',
-          sendNotification: vi.fn(),
-          sendRequest: vi.fn(),
-        },
+        getMockRequestHandlerExtra(),
       );
 
       expect(result.isError).toBe(true);
@@ -395,12 +385,7 @@ describe('queryDatasourceTool', () => {
           },
           limit: undefined,
         },
-        {
-          signal: new AbortController().signal,
-          requestId: 'test-request-id',
-          sendNotification: vi.fn(),
-          sendRequest: vi.fn(),
-        },
+        getMockRequestHandlerExtra(),
       );
 
       expect(result.isError).toBe(false);
@@ -439,12 +424,7 @@ describe('queryDatasourceTool', () => {
           },
           limit: undefined,
         },
-        {
-          signal: new AbortController().signal,
-          requestId: 'test-request-id',
-          sendNotification: vi.fn(),
-          sendRequest: vi.fn(),
-        },
+        getMockRequestHandlerExtra(),
       );
 
       expect(result.isError).toBe(false);
@@ -502,12 +482,7 @@ describe('queryDatasourceTool', () => {
           },
           limit: undefined,
         },
-        {
-          signal: new AbortController().signal,
-          requestId: 'test-request-id',
-          sendNotification: vi.fn(),
-          sendRequest: vi.fn(),
-        },
+        getMockRequestHandlerExtra(),
       );
 
       expect(result.isError).toBe(true);
@@ -563,11 +538,6 @@ async function getToolResult({ limit }: { limit?: number } = {}): Promise<CallTo
       },
       limit,
     },
-    {
-      signal: new AbortController().signal,
-      requestId: 'test-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    },
+    getMockRequestHandlerExtra(),
   );
 }
