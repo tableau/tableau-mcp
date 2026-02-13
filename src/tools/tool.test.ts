@@ -258,21 +258,19 @@ describe('Tool', () => {
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
 
-      expect(mockTelemetrySend).toHaveBeenCalledTimes(1);
-
-      // expect(mockTelemetrySend).toHaveBeenCalledWith(
-      //   'tool_call',
-      //   expect.objectContaining({
-      //     tool_name: 'get-datasource-metadata',
-      //     request_id: '2',
-      //     session_id: '',
-      //     site_luid: 'test-site-luid',
-      //     podname: 'https://test-server.example.com',
-      //     is_hyperforce: false,
-      //     success: true,
-      //     error_code: '',
-      //   }),
-      // );
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          tool_name: 'get-datasource-metadata',
+          request_id: '2',
+          session_id: '',
+          site_luid: '',
+          podname: 'https://my-tableau-server.com',
+          is_hyperforce: false,
+          success: true,
+          error_code: '',
+        }),
+      );
     });
 
     it('should send telemetry with success=false and error_code=400 on validation error', async () => {
