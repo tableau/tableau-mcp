@@ -1,5 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { getConfig } from '../../config.js';
+import { OverridableConfig } from '../../overridableConfig.js';
 import { Server } from '../../server.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
@@ -348,6 +350,10 @@ async function getToolResult(params: any): Promise<CallToolResult> {
   const searchContentTool = getSearchContentTool(new Server());
   const callback = await Provider.from(searchContentTool.callback);
   return await callback(params, {
+    config: getConfig(),
+    server: new Server(),
+    tableauAuthInfo: undefined,
+    getConfigWithOverrides: vi.fn().mockResolvedValue(new OverridableConfig({})),
     signal: new AbortController().signal,
     requestId: 'test-request-id',
     sendNotification: vi.fn(),

@@ -2,13 +2,9 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { Server } from '../../server.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
-import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
-import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -112,37 +108,21 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
       openWorldHint: false,
     },
     argsValidator: validateDatasourceLuid,
-    callback: async (
-      { datasourceLuid },
-      { requestId, sessionId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ datasourceLuid }, extra): Promise<CallToolResult> => {
       const query = getGraphqlQuery(datasourceLuid);
 
       return await getDatasourceMetadataTool.logAndExecute<
         FieldsResult,
         GetDatasourceMetadataError
       >({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: { datasourceLuid },
         callback: async () => {
-          const restApiArgs = {
-            config,
-            requestId,
-            server,
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
-          };
-
-          const configWithOverrides = await getConfigWithOverrides({
-            restApiArgs,
-          });
+          const configWithOverrides = await extra.getConfigWithOverrides();
 
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
-            restApiArgs,
+            extra,
           });
 
           if (!isDatasourceAllowedResult.allowed) {
@@ -153,7 +133,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
           }
 
           return await useRestApi({
-            ...restApiArgs,
+            ...extra,
             jwtScopes: ['tableau:content:read', 'tableau:viz_data_service:read'],
             callback: async (restApi) => {
               // Fetching metadata from VizQL Data Service API.
@@ -201,7 +181,6 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
               return error.message;
           }
         },
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });

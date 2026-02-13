@@ -1,12 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
-import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
-import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
-import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -40,27 +36,13 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { metricIds },
-      { requestId, sessionId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
-      const restApiArgs = {
-        config,
-        requestId,
-        server,
-        signal,
-        authInfo: getTableauAuthInfo(authInfo),
-      };
-
+    callback: async ({ metricIds }, extra): Promise<CallToolResult> => {
       return await listPulseMetricsFromMetricIdsTool.logAndExecute({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: { metricIds },
         callback: async () => {
           return await useRestApi({
-            ...restApiArgs,
+            ...extra,
             jwtScopes: ['tableau:insight_metrics:read'],
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricsFromMetricIds(metricIds);
@@ -68,9 +50,7 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
           });
         },
         constrainSuccessResult: async (metrics) => {
-          const configWithOverrides = await getConfigWithOverrides({
-            restApiArgs,
-          });
+          const configWithOverrides = await extra.getConfigWithOverrides();
 
           return constrainPulseMetrics({
             metrics,
@@ -78,7 +58,6 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
           });
         },
         getErrorText: getPulseDisabledError,
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });
