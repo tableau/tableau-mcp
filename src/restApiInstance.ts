@@ -136,7 +136,6 @@ const getNewRestApiInstanceAsync = async (
 
 export const useRestApi = async <T>(
   args: RestApiArgs & {
-    disableLogging?: boolean;
     jwtScopes: Array<JwtScopes>;
     callback: (restApi: RestApi) => Promise<T>;
   },
