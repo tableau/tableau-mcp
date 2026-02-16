@@ -40,6 +40,8 @@ export interface ProcessEnvEx {
   INCLUDE_WORKBOOK_IDS: string | undefined;
   INCLUDE_TAGS: string | undefined;
   TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: string | undefined;
+  MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: string | undefined;
+  ENABLE_MCP_SITE_SETTINGS: string | undefined;
   DANGEROUSLY_DISABLE_OAUTH: string | undefined;
   OAUTH_ISSUER: string | undefined;
   OAUTH_JWE_PRIVATE_KEY: string | undefined;
@@ -54,6 +56,7 @@ export interface ProcessEnvEx {
   OAUTH_REFRESH_TOKEN_TIMEOUT_MS: string | undefined;
   PRODUCT_TELEMETRY_ENABLED: string | undefined;
   PRODUCT_TELEMETRY_ENDPOINT: string | undefined;
+  IS_HYPERFORCE: string | undefined;
 }
 
 declare global {

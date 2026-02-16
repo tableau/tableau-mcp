@@ -5,7 +5,8 @@ import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
-import { getSiteLuidFromAccessToken } from '../../../utils/getSiteLuidFromAccessToken.js';
+import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -44,6 +45,14 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
       { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
+      const restApiArgs = {
+        config,
+        requestId,
+        server,
+        signal,
+        authInfo: getTableauAuthInfo(authInfo),
+      };
+
       return await listPulseMetricsFromMetricIdsTool.logAndExecute({
         requestId,
         sessionId,
@@ -51,26 +60,25 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
         args: { metricIds },
         callback: async () => {
           return await useRestApi({
-            config,
-            requestId,
-            server,
+            ...restApiArgs,
             jwtScopes: ['tableau:insight_metrics:read'],
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricsFromMetricIds(metricIds);
             },
           });
         },
-        constrainSuccessResult: (metrics) =>
-          constrainPulseMetrics({ metrics, boundedContext: config.boundedContext }),
-        getErrorText: getPulseDisabledError,
-        productTelemetryBase: {
-          endpoint: config.productTelemetryEndpoint,
-          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
-          podName: config.server,
-          enabled: config.productTelemetryEnabled,
+        constrainSuccessResult: async (metrics) => {
+          const configWithOverrides = await getConfigWithOverrides({
+            restApiArgs,
+          });
+
+          return constrainPulseMetrics({
+            metrics,
+            boundedContext: configWithOverrides.boundedContext,
+          });
         },
+        getErrorText: getPulseDisabledError,
+        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });

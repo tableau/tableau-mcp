@@ -1,13 +1,14 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { BoundedContext, getConfig } from '../../../config.js';
-import { useRestApi } from '../../../restApiInstance.js';
+import { getConfig } from '../../../config.js';
+import { BoundedContext } from '../../../overridableConfig.js';
+import { RestApiArgs, useRestApi } from '../../../restApiInstance.js';
 import { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
+import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { getSiteLuidFromAccessToken } from '../../../utils/getSiteLuidFromAccessToken.js';
-import { RestApiArgs } from '../../resourceAccessChecker.js';
+import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { ConstrainedResult, Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -37,6 +38,14 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
     },
     callback: async (_, { requestId, sessionId, authInfo, signal }): Promise<CallToolResult> => {
       const config = getConfig();
+      const restApiArgs = {
+        config,
+        requestId,
+        server,
+        signal,
+        authInfo: getTableauAuthInfo(authInfo),
+      };
+
       return await listPulseMetricSubscriptionsTool.logAndExecute({
         requestId,
         sessionId,
@@ -44,31 +53,26 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
         args: {},
         callback: async () => {
           return await useRestApi({
-            config,
-            requestId,
-            server,
+            ...restApiArgs,
             jwtScopes: ['tableau:metric_subscriptions:read'],
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
             },
           });
         },
         constrainSuccessResult: async (subscriptions) => {
+          const configWithOverrides = await getConfigWithOverrides({
+            restApiArgs,
+          });
+
           return await constrainPulseMetricSubscriptions({
             subscriptions,
-            boundedContext: config.boundedContext,
-            restApiArgs: { config, requestId, server, signal },
+            boundedContext: configWithOverrides.boundedContext,
+            restApiArgs,
           });
         },
         getErrorText: getPulseDisabledError,
-        productTelemetryBase: {
-          endpoint: config.productTelemetryEndpoint,
-          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
-          podName: config.server,
-          enabled: config.productTelemetryEnabled,
-        },
+        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });
@@ -103,14 +107,10 @@ export async function constrainPulseMetricSubscriptions({
     };
   }
 
-  const { config, requestId, server, signal } = restApiArgs;
   try {
     const metricsResult = await useRestApi({
-      config,
-      requestId,
-      server,
+      ...restApiArgs,
       jwtScopes: ['tableau:insight_metrics:read'],
-      signal,
       callback: async (restApi) => {
         return await restApi.pulseMethods.listPulseMetricsFromMetricIds(
           subscriptions.map((subscription) => subscription.metric_id),

@@ -10,7 +10,8 @@ import {
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
-import { getSiteLuidFromAccessToken } from '../../../utils/getSiteLuidFromAccessToken.js';
+import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -198,6 +199,15 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
       { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
+      const restApiArgs = {
+        config,
+        requestId,
+        server,
+        signal,
+        authInfo: getTableauAuthInfo(authInfo),
+      };
+      const configWithOverrides = await getConfigWithOverrides({ restApiArgs });
+
       return await generatePulseInsightBriefTool.logAndExecute<
         PulseInsightBriefResponse,
         GeneratePulseInsightBriefError
@@ -208,7 +218,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
         args: { briefRequest },
         callback: async () => {
           // Filter out metrics that are not in the allowed datasource set
-          const { datasourceIds } = config.boundedContext;
+          const { datasourceIds } = configWithOverrides.boundedContext;
           if (datasourceIds) {
             for (const message of briefRequest.messages) {
               if (message.metric_group_context) {
@@ -232,12 +242,8 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
           }
 
           const result = await useRestApi({
-            config,
-            requestId,
-            server,
+            ...restApiArgs,
             jwtScopes: ['tableau:insight_brief:create'],
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseInsightBrief(briefRequest),
           });
@@ -265,12 +271,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
               return error.message;
           }
         },
-        productTelemetryBase: {
-          endpoint: config.productTelemetryEndpoint,
-          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
-          podName: config.server,
-          enabled: config.productTelemetryEnabled,
-        },
+        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });

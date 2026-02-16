@@ -10,7 +10,8 @@ import {
 } from '../../sdks/tableau/types/contentExploration.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
-import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
+import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { Tool } from '../tool.js';
 import {
   buildFilterString,
@@ -67,6 +68,18 @@ This tool searches across all supported content types for objects relevant to th
       { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
+      const restApiArgs = {
+        config,
+        requestId,
+        server,
+        signal,
+        authInfo: getTableauAuthInfo(authInfo),
+      };
+
+      const configWithOverrides = await getConfigWithOverrides({
+        restApiArgs,
+      });
+
       const orderByString = orderBy ? buildOrderByString(orderBy) : undefined;
       const filterString = filter ? buildFilterString(filter) : undefined;
       return await searchContentTool.logAndExecute<Array<ReducedSearchContentResponse>>({
@@ -77,14 +90,13 @@ This tool searches across all supported content types for objects relevant to th
         callback: async () => {
           return new Ok(
             await useRestApi({
-              config,
-              requestId,
-              server,
+              ...restApiArgs,
               jwtScopes: ['tableau:content:read'],
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
-                const maxResultLimit = config.getMaxResultLimit(searchContentTool.name);
+                const maxResultLimit = configWithOverrides.getMaxResultLimit(
+                  searchContentTool.name,
+                );
+
                 const response = await restApi.contentExplorationMethods.searchContent({
                   terms,
                   page: 0,
@@ -98,13 +110,8 @@ This tool searches across all supported content types for objects relevant to th
           );
         },
         constrainSuccessResult: (items) =>
-          constrainSearchContent({ items, boundedContext: config.boundedContext }),
-        productTelemetryBase: {
-          endpoint: config.productTelemetryEndpoint,
-          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
-          podName: config.server,
-          enabled: config.productTelemetryEnabled,
-        },
+          constrainSearchContent({ items, boundedContext: configWithOverrides.boundedContext }),
+        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });

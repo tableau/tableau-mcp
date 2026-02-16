@@ -12,7 +12,8 @@ import {
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
-import { getSiteLuidFromAccessToken } from '../../../utils/getSiteLuidFromAccessToken.js';
+import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -165,7 +166,16 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
         authInfo,
         args: { bundleRequest, bundleType },
         callback: async () => {
-          const { datasourceIds } = config.boundedContext;
+          const restApiArgs = {
+            config,
+            requestId,
+            server,
+            signal,
+            authInfo: getTableauAuthInfo(authInfo),
+          };
+          const configWithOverrides = await getConfigWithOverrides({ restApiArgs });
+
+          const { datasourceIds } = configWithOverrides.boundedContext;
           if (datasourceIds) {
             const datasourceLuid =
               bundleRequest.bundle_request.input.metric.definition.datasource.id;
@@ -183,12 +193,8 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
           }
 
           const result = await useRestApi({
-            config,
-            requestId,
-            server,
+            ...restApiArgs,
             jwtScopes: ['tableau:insights:read'],
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
                 bundleRequest,
@@ -219,12 +225,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               return error.message;
           }
         },
-        productTelemetryBase: {
-          endpoint: config.productTelemetryEndpoint,
-          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
-          podName: config.server,
-          enabled: config.productTelemetryEnabled,
-        },
+        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });

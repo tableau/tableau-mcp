@@ -6,7 +6,7 @@ import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
-import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
+import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
@@ -36,6 +36,13 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
       { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
+      const restApiArgs = {
+        config,
+        requestId,
+        server,
+        signal,
+        authInfo: getTableauAuthInfo(authInfo),
+      };
 
       return await getViewDataTool.logAndExecute<string, GetViewDataError>({
         requestId,
@@ -45,7 +52,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
         callback: async () => {
           const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
             viewId,
-            restApiArgs: { config, requestId, server, signal },
+            restApiArgs,
           });
 
           if (!isViewAllowedResult.allowed) {
@@ -57,12 +64,8 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
 
           return new Ok(
             await useRestApi({
-              config,
-              requestId,
-              server,
+              ...restApiArgs,
               jwtScopes: ['tableau:views:download'],
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 return await restApi.viewsMethods.queryViewData({
                   viewId,
@@ -84,12 +87,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
               return error.message;
           }
         },
-        productTelemetryBase: {
-          endpoint: config.productTelemetryEndpoint,
-          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
-          podName: config.server,
-          enabled: config.productTelemetryEnabled,
-        },
+        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });

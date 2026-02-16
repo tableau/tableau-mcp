@@ -6,7 +6,8 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
-import { getSiteLuidFromAccessToken } from '../../../utils/getSiteLuidFromAccessToken.js';
+import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -63,6 +64,14 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
       { requestId, sessionId, authInfo, signal },
     ): Promise<CallToolResult> => {
       const config = getConfig();
+      const restApiArgs = {
+        config,
+        requestId,
+        server,
+        signal,
+        authInfo: getTableauAuthInfo(authInfo),
+      };
+
       return await listPulseMetricDefinitionsFromDefinitionIdsTool.logAndExecute({
         requestId,
         sessionId,
@@ -70,12 +79,8 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
         args: { metricDefinitionIds, view },
         callback: async () => {
           return await useRestApi({
-            config,
-            requestId,
-            server,
+            ...restApiArgs,
             jwtScopes: ['tableau:insight_definitions_metrics:read'],
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricDefinitionsFromMetricDefinitionIds(
                 metricDefinitionIds,
@@ -84,15 +89,18 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
             },
           });
         },
-        constrainSuccessResult: (definitions) =>
-          constrainPulseDefinitions({ definitions, boundedContext: config.boundedContext }),
-        getErrorText: getPulseDisabledError,
-        productTelemetryBase: {
-          endpoint: config.productTelemetryEndpoint,
-          siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
-          podName: config.server,
-          enabled: config.productTelemetryEnabled,
+        constrainSuccessResult: async (definitions) => {
+          const configWithOverrides = await getConfigWithOverrides({
+            restApiArgs,
+          });
+
+          return constrainPulseDefinitions({
+            definitions,
+            boundedContext: configWithOverrides.boundedContext,
+          });
         },
+        getErrorText: getPulseDisabledError,
+        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });
