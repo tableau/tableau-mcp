@@ -1,4 +1,5 @@
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { KeyObject } from 'crypto';
 import express, { RequestHandler } from 'express';
 import { compactDecrypt } from 'jose';
@@ -8,12 +9,18 @@ import { fromError } from 'zod-validation-error';
 import { getConfig } from '../../config.js';
 import { isToolName, ToolName } from '../../tools/toolName.js';
 import { AUDIENCE } from './provider.js';
-import { mcpAccessTokenSchema, mcpAccessTokenUserOnlySchema, TableauAuthInfo } from './schemas.js';
 import {
-  DEFAULT_REQUIRED_SCOPES,
+  mcpAccessTokenSchema,
+  mcpAccessTokenUserOnlySchema,
+  tableauAccessTokenSchema,
+  TableauAuthInfo,
+} from './schemas.js';
+import {
   formatScopes,
   getRequiredApiScopesForTool,
   getRequiredScopesForTool,
+  getSupportedApiScopes,
+  getSupportedMcpScopes,
   parseScopes,
 } from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
@@ -147,9 +154,13 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
 }
 
 function getRequiredMcpScopesForRequest(body: unknown): string[] {
+  if (isInitializeRequest(body)) {
+    return getSupportedMcpScopes();
+  }
+
   const toolNames = getToolNamesFromRequestBody(body);
   if (toolNames.length === 0) {
-    return DEFAULT_REQUIRED_SCOPES;
+    return getSupportedMcpScopes();
   }
 
   const scopes = new Set<string>();
@@ -166,6 +177,11 @@ function getRequiredApiScopesForRequest(body: unknown, includeApiScopes: boolean
   if (!includeApiScopes) {
     return [];
   }
+
+  if (isInitializeRequest(body)) {
+    return getSupportedApiScopes();
+  }
+
   const toolNames = getToolNamesFromRequestBody(body);
   if (toolNames.length === 0) {
     return [];
@@ -222,6 +238,46 @@ async function verifyAccessToken(
 ): Promise<Result<AuthInfo, string>> {
   const config = getConfig();
 
+  if (config.oauth.issuer === 'https://sso.online.dev.tabint.net') {
+    // decrypt jwt no private key
+    const [_header, payload, _signature] = token.split('.');
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
+
+    const tableauAccessToken = tableauAccessTokenSchema.safeParse(decoded);
+    if (!tableauAccessToken.success) {
+      return Err(`Invalid access token: ${fromError(tableauAccessToken.error).toString()}`);
+    }
+
+    const {
+      sub,
+      iss,
+      exp,
+      scope,
+      'https://tableau.com/siteId': siteId,
+      'https://tableau.com/targetUrl': targetUrl,
+    } = tableauAccessToken.data;
+
+    if (iss !== config.oauth.issuer || exp < Math.floor(Date.now() / 1000)) {
+      return new Err('Invalid or expired access token');
+    }
+
+    const tableauAuthInfo: TableauAuthInfo = {
+      type: 'tableau',
+      username: sub,
+      server: targetUrl,
+      siteId,
+      raw: token,
+    };
+
+    return Ok({
+      token,
+      clientId: iss,
+      scopes: parseScopes(scope),
+      expiresAt: exp,
+      extra: tableauAuthInfo,
+    });
+  }
+
   try {
     const { plaintext } = await compactDecrypt(token, jwePrivateKey);
     const payload = JSON.parse(new TextDecoder().decode(plaintext));
@@ -260,6 +316,7 @@ async function verifyAccessToken(
       }
 
       tableauAuthInfo = {
+        type: 'local',
         username: sub,
         userId: tableauUserId,
         server: tableauServer,
@@ -269,6 +326,7 @@ async function verifyAccessToken(
     } else {
       const { tableauUserId, tableauServer, sub } = mcpAccessToken.data;
       tableauAuthInfo = {
+        type: 'local',
         username: sub,
         server: tableauServer,
         ...(tableauUserId ? { userId: tableauUserId } : {}),

@@ -93,11 +93,15 @@ const getNewRestApiInstanceAsync = async (
       additionalPayload: getJwtAdditionalPayload(config, authInfo),
     });
   } else {
-    if (!authInfo?.accessToken || !authInfo?.userId) {
-      throw new Error('Auth info is required when not signing in first.');
-    }
+    if (authInfo?.type === 'local') {
+      if (!authInfo?.accessToken || !authInfo?.userId) {
+        throw new Error('Auth info is required when not signing in first.');
+      }
 
-    restApi.setCredentials(authInfo.accessToken, authInfo.userId);
+      restApi.setCredentials(authInfo.accessToken, authInfo.userId);
+    } else if (authInfo?.type === 'tableau') {
+      restApi.setBearerToken(authInfo.raw);
+    }
   }
 
   return restApi;

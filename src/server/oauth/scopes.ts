@@ -49,11 +49,6 @@ export const DEFAULT_SCOPES_SUPPORTED: McpScope[] = [
 ];
 
 /**
- * Minimal default scopes suggested when no specific tool is known.
- */
-export const DEFAULT_REQUIRED_SCOPES: McpScope[] = ['tableau:mcp:content:read'];
-
-/**
  * Validates that a scope string is a valid MCP scope
  */
 export function isValidScope(scope: string): scope is McpScope {

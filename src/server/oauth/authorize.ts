@@ -16,12 +16,7 @@ import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
-import {
-  DEFAULT_REQUIRED_SCOPES,
-  getSupportedScopes,
-  parseScopes,
-  validateScopes,
-} from './scopes.js';
+import { getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
 import { PendingAuthorization } from './types.js';
 
 /**
@@ -126,7 +121,11 @@ export function authorize(
     }
 
     const scopesToGrant =
-      validScopes.length > 0 ? validScopes : enforceScopes ? DEFAULT_REQUIRED_SCOPES : [];
+      validScopes.length > 0
+        ? validScopes
+        : enforceScopes
+          ? getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+          : [];
 
     // Generate Tableau state and store pending authorization
     const tableauState = randomBytes(32).toString('hex');

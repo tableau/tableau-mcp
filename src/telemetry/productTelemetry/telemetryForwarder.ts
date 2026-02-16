@@ -140,7 +140,7 @@ export function createProductTelemetryBase(
 ): ProductTelemetryBase {
   return {
     endpoint: config.productTelemetryEndpoint,
-    siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)?.accessToken),
+    siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)),
     podName: config.server,
     isHyperforce: config.isHyperforce,
     enabled: config.productTelemetryEnabled,
