@@ -34,7 +34,7 @@ import { AuthenticatedRequest } from './types.js';
  *
  * @returns Express middleware function
  */
-export function authMiddleware(privateKey: KeyObject): RequestHandler {
+export function authMiddleware(privateKey?: KeyObject): RequestHandler {
   return async (
     req: AuthenticatedRequest,
     res: express.Response,
@@ -229,7 +229,7 @@ function getToolNamesFromRequestBody(body: unknown): ToolName[] {
  */
 async function verifyAccessToken(
   token: string,
-  jwePrivateKey: KeyObject,
+  jwePrivateKey: KeyObject | undefined,
 ): Promise<Result<AuthInfo, string>> {
   const config = getConfig();
 
@@ -273,7 +273,7 @@ async function verifyAccessToken(
   }
 
   try {
-    const { plaintext } = await compactDecrypt(token, jwePrivateKey);
+    const { plaintext } = await compactDecrypt(token, jwePrivateKey!);
     const payload = JSON.parse(new TextDecoder().decode(plaintext));
 
     const mcpAccessToken = mcpAccessTokenUserOnlySchema.safeParse(payload);

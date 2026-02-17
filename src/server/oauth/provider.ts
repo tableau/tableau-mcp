@@ -29,12 +29,14 @@ export class OAuthProvider {
   private readonly authorizationCodes = new Map<string, AuthorizationCode>();
   private readonly refreshTokens = new Map<string, RefreshTokenData>();
 
-  private readonly privateKey: KeyObject;
-  private readonly publicKey: KeyObject;
+  private readonly privateKey: KeyObject | undefined;
+  private readonly publicKey: KeyObject | undefined;
 
   constructor() {
-    this.privateKey = this.getPrivateKey();
-    this.publicKey = createPublicKey(this.privateKey);
+    if (this.config.oauth.issuer !== 'https://sso.online.dev.tabint.net') {
+      this.privateKey = this.getPrivateKey();
+      this.publicKey = createPublicKey(this.privateKey);
+    }
   }
 
   get authMiddleware(): RequestHandler {
@@ -42,6 +44,15 @@ export class OAuthProvider {
   }
 
   setupRoutes(app: express.Application): void {
+    if (this.config.oauth.issuer === 'https://sso.online.dev.tabint.net') {
+      // .well-known/oauth-authorization-server
+      oauthAuthorizationServer(app);
+
+      // .well-known/oauth-protected-resource
+      oauthProtectedResource(app);
+      return;
+    }
+
     // .well-known/oauth-authorization-server
     oauthAuthorizationServer(app);
 
@@ -58,7 +69,7 @@ export class OAuthProvider {
     callback(app, this.pendingAuthorizations, this.authorizationCodes);
 
     // oauth2/token
-    token(app, this.authorizationCodes, this.refreshTokens, this.publicKey);
+    token(app, this.authorizationCodes, this.refreshTokens, this.publicKey!);
   }
 
   private getPrivateKey(): KeyObject {

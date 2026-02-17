@@ -311,28 +311,30 @@ export class Config {
     }
 
     if (this.oauth.enabled) {
-      invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
+      if (this.oauth.issuer !== 'https://sso.online.dev.tabint.net') {
+        invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
 
-      if (!this.oauth.jwePrivateKey && !this.oauth.jwePrivateKeyPath) {
-        throw new Error(
-          'One of the environment variables: OAUTH_JWE_PRIVATE_KEY_PATH or OAUTH_JWE_PRIVATE_KEY must be set',
-        );
-      }
+        if (!this.oauth.jwePrivateKey && !this.oauth.jwePrivateKeyPath) {
+          throw new Error(
+            'One of the environment variables: OAUTH_JWE_PRIVATE_KEY_PATH or OAUTH_JWE_PRIVATE_KEY must be set',
+          );
+        }
 
-      if (this.oauth.jwePrivateKey && this.oauth.jwePrivateKeyPath) {
-        throw new Error(
-          'Only one of the environment variables: OAUTH_JWE_PRIVATE_KEY or OAUTH_JWE_PRIVATE_KEY_PATH must be set',
-        );
-      }
+        if (this.oauth.jwePrivateKey && this.oauth.jwePrivateKeyPath) {
+          throw new Error(
+            'Only one of the environment variables: OAUTH_JWE_PRIVATE_KEY or OAUTH_JWE_PRIVATE_KEY_PATH must be set',
+          );
+        }
 
-      if (
-        this.oauth.jwePrivateKeyPath &&
-        process.env.TABLEAU_MCP_TEST !== 'true' &&
-        !existsSync(this.oauth.jwePrivateKeyPath)
-      ) {
-        throw new Error(
-          `OAuth JWE private key path does not exist: ${this.oauth.jwePrivateKeyPath}`,
-        );
+        if (
+          this.oauth.jwePrivateKeyPath &&
+          process.env.TABLEAU_MCP_TEST !== 'true' &&
+          !existsSync(this.oauth.jwePrivateKeyPath)
+        ) {
+          throw new Error(
+            `OAuth JWE private key path does not exist: ${this.oauth.jwePrivateKeyPath}`,
+          );
+        }
       }
 
       if (this.transport === 'stdio') {

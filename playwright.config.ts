@@ -1,7 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
-import dotenv from 'dotenv';
+import { existsSync } from 'fs';
 
-dotenv.config();
+if (existsSync('.env')) {
+  throw new Error(
+    'Please remove or rename the .env file at the base of the project before running the tests.',
+  );
+}
 
 export default defineConfig({
   testDir: './tests/oauth/tableau-authz/',
@@ -40,8 +44,13 @@ export default defineConfig({
 
   webServer: {
     command: 'npm run start:http',
-    url: 'http://127.0.0.1:3927',
     reuseExistingServer: !process.env.CI,
-    env: {},
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: {
+      SERVER: 'https://dataplane1.tableau.sfdc-3vx9f4.svc.sfdcfc.net',
+      OAUTH_ISSUER: 'https://sso.online.dev.tabint.net',
+      ADVERTISE_API_SCOPES: 'true',
+    },
   },
 });
