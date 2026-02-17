@@ -261,7 +261,7 @@ async function verifyAccessToken(
     }
 
     const tableauAuthInfo: TableauAuthInfo = {
-      type: 'tableau',
+      type: 'Bearer',
       username: sub,
       server: targetUrl,
       siteId,
@@ -315,7 +315,7 @@ async function verifyAccessToken(
       }
 
       tableauAuthInfo = {
-        type: 'local',
+        type: 'X-Tableau-Auth',
         username: sub,
         userId: tableauUserId,
         server: tableauServer,
@@ -325,7 +325,7 @@ async function verifyAccessToken(
     } else {
       const { tableauUserId, tableauServer, sub } = mcpAccessToken.data;
       tableauAuthInfo = {
-        type: 'local',
+        type: 'X-Tableau-Auth',
         username: sub,
         server: tableauServer,
         ...(tableauUserId ? { userId: tableauUserId } : {}),

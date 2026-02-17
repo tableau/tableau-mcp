@@ -22,7 +22,7 @@ export function getSiteLuidFromAccessToken(
   }
 
   const authInfo = accessTokenOrTableauAuthInfo;
-  if (authInfo.type === 'local') {
+  if (authInfo.type === 'X-Tableau-Auth') {
     return getSiteLuidFromWgSessionId(authInfo.accessToken ?? '');
   }
 

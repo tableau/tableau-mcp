@@ -120,7 +120,7 @@ export type McpAccessTokenSubOnly = z.infer<typeof mcpAccessTokenUserOnlySchema>
 
 export const tableauAuthInfoSchema = z.discriminatedUnion('type', [
   z.object({
-    type: z.literal('local'),
+    type: z.literal('X-Tableau-Auth'),
     username: z.string(),
     userId: z.string().optional(),
     server: z.string(),
@@ -128,7 +128,7 @@ export const tableauAuthInfoSchema = z.discriminatedUnion('type', [
     refreshToken: z.string().optional(),
   }),
   z.object({
-    type: z.literal('tableau'),
+    type: z.literal('Bearer'),
     username: z.string(),
     server: z.string(),
     siteId: z.string(),

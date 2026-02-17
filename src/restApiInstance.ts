@@ -93,13 +93,13 @@ const getNewRestApiInstanceAsync = async (
       additionalPayload: getJwtAdditionalPayload(config, authInfo),
     });
   } else {
-    if (authInfo?.type === 'local') {
+    if (authInfo?.type === 'X-Tableau-Auth') {
       if (!authInfo?.accessToken || !authInfo?.userId) {
         throw new Error('Auth info is required when not signing in first.');
       }
 
       restApi.setCredentials(authInfo.accessToken, authInfo.userId);
-    } else if (authInfo?.type === 'tableau') {
+    } else if (authInfo?.type === 'Bearer') {
       restApi.setBearerToken(authInfo.raw);
     }
   }
