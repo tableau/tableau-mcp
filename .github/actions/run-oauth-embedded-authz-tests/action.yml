@@ -1,0 +1,10 @@
+name: 'Run OAuth Embedded Authorization Tests'
+description: 'Runs OAuth tests with embedded authorization with required secrets'
+runs:
+  using: 'composite'
+  steps:
+    - name: OAuth Embedded Authorization Tests
+      shell: bash
+      run: npm run test:oauth:embedded
+      env:
+        OAUTH_ISSUER: http://127.0.0.1:3927

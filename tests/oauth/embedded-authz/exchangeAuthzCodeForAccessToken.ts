@@ -1,7 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 
-import { generateCodeChallenge } from '../../src/server/oauth/generateCodeChallenge.js';
+import { generateCodeChallenge } from '../../../src/server/oauth/generateCodeChallenge.js';
 
 export async function exchangeAuthzCodeForAccessToken(app: express.Application): Promise<{
   access_token: string;
