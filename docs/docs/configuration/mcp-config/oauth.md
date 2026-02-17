@@ -129,7 +129,7 @@ The base URL used in the `resource` field of the OAuth protected resource metada
 clients may require the `resource` field to match exactly with the URL used to access the MCP
 server. This should be the base URL of your MCP server deployment.
 
-- Default: `http://localhost:3927`
+- Default: `http://127.0.0.1:3927`
 - Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for
   production)
 

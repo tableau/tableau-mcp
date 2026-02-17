@@ -229,7 +229,7 @@ export class Config {
     this.oauth = {
       enabled: disableOauthOverride ? false : !!oauthIssuer,
       issuer: oauthIssuer ?? '',
-      resourceUri: oauthResourceUri ?? `http://localhost:${this.httpPort}`,
+      resourceUri: oauthResourceUri ?? `http://127.0.0.1:${this.httpPort}`,
       redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
       lockSite: oauthLockSite !== 'false', // Site locking is enabled by default
       jwePrivateKey: oauthJwePrivateKey ?? '',
