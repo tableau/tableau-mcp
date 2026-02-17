@@ -1,5 +1,5 @@
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { KeyObject } from 'crypto';
 import express, { RequestHandler } from 'express';
 import { compactDecrypt } from 'jose';
@@ -202,18 +202,13 @@ function getToolNamesFromRequestBody(body: unknown): ToolName[] {
   const toolNames = new Set<ToolName>();
 
   for (const request of requests) {
-    if (!request || typeof request !== 'object') {
+    const callToolRequestResult = CallToolRequestSchema.safeParse(request);
+    if (!callToolRequestResult.success) {
       continue;
     }
-    const maybeRequest = request as {
-      method?: unknown;
-      params?: { name?: unknown };
-    };
-    if (maybeRequest.method !== 'tools/call') {
-      continue;
-    }
-    const name = maybeRequest.params?.name;
-    if (typeof name === 'string' && isToolName(name)) {
+
+    const { name } = callToolRequestResult.data.params;
+    if (isToolName(name)) {
       toolNames.add(name);
     }
   }
