@@ -117,7 +117,7 @@ describe('clientIdMetadataDocuments', () => {
     mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
     mockAxios.get.mockResolvedValue(mocks.MOCK_AXIOS_GET_RESPONSE);
 
-    const response = await request(app).get('/oauth/authorize').query({
+    const response = await request(app).get('/oauth2/authorize').query({
       response_type: 'code',
       client_id: constants.FAKE_CLIENT_METADATA_URL,
       redirect_uri: 'http://127.0.0.1:6274/oauth/callback/debug',
@@ -156,7 +156,7 @@ describe('clientIdMetadataDocuments', () => {
 
     mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
 
-    const response = await request(app).get('/oauth/authorize').query({
+    const response = await request(app).get('/oauth2/authorize').query({
       response_type: 'code',
       client_id: constants.FAKE_CLIENT_METADATA_URL,
       redirect_uri: 'http://127.0.0.1:6274/oauth/callback/debug',
@@ -183,7 +183,7 @@ describe('clientIdMetadataDocuments', () => {
     });
     mockAxios.get.mockResolvedValue(mocks.MOCK_AXIOS_GET_RESPONSE);
 
-    const response = await request(app).get('/oauth/authorize').query({
+    const response = await request(app).get('/oauth2/authorize').query({
       response_type: 'code',
       client_id: constants.FAKE_CLIENT_METADATA_URL,
       redirect_uri: 'http://127.0.0.1:6274/oauth/callback/debug',
@@ -213,7 +213,7 @@ describe('clientIdMetadataDocuments', () => {
 
     mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
 
-    const response = await request(app).get('/oauth/authorize').query({
+    const response = await request(app).get('/oauth2/authorize').query({
       response_type: 'code',
       client_id: constants.FAKE_CLIENT_METADATA_URL,
       redirect_uri: 'http://127.0.0.1:6274/oauth/callback/debug',
@@ -246,7 +246,7 @@ describe('clientIdMetadataDocuments', () => {
 
     mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
 
-    const response = await request(app).get('/oauth/authorize').query({
+    const response = await request(app).get('/oauth2/authorize').query({
       response_type: 'code',
       client_id: constants.FAKE_CLIENT_METADATA_URL,
       redirect_uri: 'http://127.0.0.1:6274/oauth/callback/debug',
@@ -268,7 +268,7 @@ describe('clientIdMetadataDocuments', () => {
     const { app } = await startServer();
 
     mocks.dnsResolver.mockReturnValue({ resolve4: () => [], resolve6: () => [] });
-    const response = await request(app).get('/oauth/authorize').query({
+    const response = await request(app).get('/oauth2/authorize').query({
       response_type: 'code',
       client_id: constants.FAKE_CLIENT_METADATA_URL,
       redirect_uri: 'http://127.0.0.1:6274/oauth/callback/debug',
@@ -293,7 +293,7 @@ describe('clientIdMetadataDocuments', () => {
 
     mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
 
-    const response = await request(app).get('/oauth/authorize').query({
+    const response = await request(app).get('/oauth2/authorize').query({
       response_type: 'code',
       client_id: metadataUrl.toString(),
       redirect_uri: 'http://127.0.0.1:6274/oauth/callback/debug',
@@ -323,7 +323,7 @@ describe('clientIdMetadataDocuments', () => {
 
     mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
 
-    const response = await request(app).get('/oauth/authorize').query({
+    const response = await request(app).get('/oauth2/authorize').query({
       response_type: 'code',
       client_id: constants.FAKE_CLIENT_METADATA_URL,
       redirect_uri: 'http://127.0.0.1:6274/oauth/callback/debug',
@@ -350,7 +350,7 @@ describe('clientIdMetadataDocuments', () => {
 
     mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
 
-    const response = await request(app).get('/oauth/authorize').query({
+    const response = await request(app).get('/oauth2/authorize').query({
       response_type: 'code',
       client_id: constants.FAKE_CLIENT_METADATA_URL,
       redirect_uri: 'http://127.0.0.1:6274/oauth/callback/debug',
@@ -379,7 +379,7 @@ describe('clientIdMetadataDocuments', () => {
 
     mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
 
-    const response = await request(app).get('/oauth/authorize').query({
+    const response = await request(app).get('/oauth2/authorize').query({
       response_type: 'code',
       client_id: constants.FAKE_CLIENT_METADATA_URL,
       redirect_uri: 'http://127.0.0.1:6274/oauth/callback/debug',
@@ -403,7 +403,7 @@ describe('clientIdMetadataDocuments', () => {
     mockAxios.get.mockRejectedValue(new Error('Failed to fetch client metadata'));
     mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
 
-    const response = await request(app).get('/oauth/authorize').query({
+    const response = await request(app).get('/oauth2/authorize').query({
       response_type: 'code',
       client_id: constants.FAKE_CLIENT_METADATA_URL,
       redirect_uri: 'http://127.0.0.1:6274/oauth/callback/debug',

@@ -48,16 +48,16 @@ export class OAuthProvider {
     // .well-known/oauth-protected-resource
     oauthProtectedResource(app);
 
-    // oauth/register
+    // oauth2/register
     register(app);
 
-    // oauth/authorize
+    // oauth2/authorize
     authorize(app, this.pendingAuthorizations);
 
     // /Callback
     callback(app, this.pendingAuthorizations, this.authorizationCodes);
 
-    // oauth/token
+    // oauth2/token
     token(app, this.authorizationCodes, this.refreshTokens, this.publicKey);
   }
 

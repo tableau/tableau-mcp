@@ -45,7 +45,7 @@ describe('authorization code flow', () => {
   it('should redirect to Tableau OAuth', async () => {
     const { app } = await startServer();
 
-    const response = await request(app).get('/oauth/authorize').query({
+    const response = await request(app).get('/oauth2/authorize').query({
       client_id: 'test-client-id',
       redirect_uri: 'http://localhost:3000',
       response_type: 'code',
@@ -77,7 +77,7 @@ describe('authorization code flow', () => {
     it('should reject invalid request with missing parameters', async () => {
       const { app } = await startServer();
 
-      const response = await request(app).get('/oauth/authorize');
+      const response = await request(app).get('/oauth2/authorize');
       expect(response.status).toBe(400);
       expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
       expect(response.body).toEqual({
@@ -90,7 +90,7 @@ describe('authorization code flow', () => {
     it('should reject for invalid response_type', async () => {
       const { app } = await startServer();
 
-      const response = await request(app).get('/oauth/authorize').query({
+      const response = await request(app).get('/oauth2/authorize').query({
         client_id: 'test-client-id',
         redirect_uri: 'https://example.com',
         response_type: 'token',
@@ -109,7 +109,7 @@ describe('authorization code flow', () => {
     it('should reject for invalid code_challenge_method', async () => {
       const { app } = await startServer();
 
-      const response = await request(app).get('/oauth/authorize').query({
+      const response = await request(app).get('/oauth2/authorize').query({
         client_id: 'test-client-id',
         redirect_uri: 'https://example.com',
         response_type: 'code',
@@ -129,7 +129,7 @@ describe('authorization code flow', () => {
       it('should reject redirect URIs that are not strings', async () => {
         const { app } = await startServer();
 
-        const response = await request(app).get('/oauth/authorize').query({
+        const response = await request(app).get('/oauth2/authorize').query({
           client_id: 'test-client-id',
           redirect_uri: 123,
           response_type: 'code',
@@ -148,7 +148,7 @@ describe('authorization code flow', () => {
       it('should reject redirect URIs with invalid format', async () => {
         const { app } = await startServer();
 
-        const response = await request(app).get('/oauth/authorize').query({
+        const response = await request(app).get('/oauth2/authorize').query({
           client_id: 'test-client-id',
           redirect_uri: '🍔',
           response_type: 'code',
@@ -167,7 +167,7 @@ describe('authorization code flow', () => {
       it('should reject redirect URIs that are http but not localhost', async () => {
         const { app } = await startServer();
 
-        const response = await request(app).get('/oauth/authorize').query({
+        const response = await request(app).get('/oauth2/authorize').query({
           client_id: 'test-client-id',
           redirect_uri: 'http://example.com',
           response_type: 'code',
@@ -186,7 +186,7 @@ describe('authorization code flow', () => {
       it('should reject redirect URIs that use an invalid protocol', async () => {
         const { app } = await startServer();
 
-        const response = await request(app).get('/oauth/authorize').query({
+        const response = await request(app).get('/oauth2/authorize').query({
           client_id: 'test-client-id',
           redirect_uri: '123http://example.com',
           response_type: 'code',

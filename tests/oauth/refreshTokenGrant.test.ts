@@ -53,7 +53,7 @@ describe('refresh token grant type', () => {
   it('should reject if the refresh token is invalid', async () => {
     const { app } = await startServer();
 
-    const tokenResponse = await request(app).post('/oauth/token').send({
+    const tokenResponse = await request(app).post('/oauth2/token').send({
       grant_type: 'refresh_token',
       refresh_token: 'invalid-refresh-token',
     });
@@ -80,7 +80,7 @@ describe('refresh token grant type', () => {
 
       const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
 
-      const tokenResponse = await request(app).post('/oauth/token').send({
+      const tokenResponse = await request(app).post('/oauth2/token').send({
         grant_type: 'refresh_token',
         refresh_token,
       });
@@ -108,7 +108,7 @@ describe('refresh token grant type', () => {
 
     const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
 
-    const tokenResponse = await request(app).post('/oauth/token').send({
+    const tokenResponse = await request(app).post('/oauth2/token').send({
       grant_type: 'refresh_token',
       refresh_token,
     });

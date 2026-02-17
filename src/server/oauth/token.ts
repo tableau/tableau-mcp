@@ -29,7 +29,7 @@ export function token(
 ): void {
   const config = getConfig();
 
-  app.post('/oauth/token', async (req, res) => {
+  app.post('/oauth2/token', async (req, res) => {
     const result = mcpTokenSchema.safeParse(req.body);
 
     if (!result.success) {
