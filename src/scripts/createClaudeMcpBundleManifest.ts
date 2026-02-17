@@ -437,6 +437,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  OAUTH_RESOURCE_URI: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth Resource URI',
+    description: 'The OAuth resource URI.',
+    required: false,
+    sensitive: false,
+  },
   OAUTH_LOCK_SITE: {
     includeInUserConfig: false,
     type: 'boolean',

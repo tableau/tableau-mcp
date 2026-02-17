@@ -13,9 +13,9 @@ import { getSupportedScopes } from '../scopes.js';
  */
 export function oauthProtectedResource(app: express.Application): void {
   app.get('/.well-known/oauth-protected-resource', (_req, res) => {
-    const { issuer, advertiseApiScopes } = getConfig().oauth;
+    const { issuer, advertiseApiScopes, resourceUri } = getConfig().oauth;
     res.json({
-      resource: `${issuer}/${serverName}`,
+      resource: `${resourceUri}/${serverName}`,
       authorization_servers: [issuer],
       bearer_methods_supported: ['header'],
       scopes_supported: getSupportedScopes({ includeApiScopes: advertiseApiScopes }),

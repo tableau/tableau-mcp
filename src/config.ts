@@ -72,6 +72,7 @@ export class Config {
     enabled: boolean;
     issuer: string;
     redirectUri: string;
+    resourceUri: string;
     lockSite: boolean;
     jwePrivateKey: string;
     jwePrivateKeyPath: string;
@@ -143,6 +144,7 @@ export class Config {
       OAUTH_JWE_PRIVATE_KEY: oauthJwePrivateKey,
       OAUTH_JWE_PRIVATE_KEY_PATH: oauthJwePrivateKeyPath,
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
+      OAUTH_RESOURCE_URI: oauthResourceUri,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
       OAUTH_CIMD_DNS_SERVERS: dnsServers,
@@ -227,6 +229,7 @@ export class Config {
     this.oauth = {
       enabled: disableOauthOverride ? false : !!oauthIssuer,
       issuer: oauthIssuer ?? '',
+      resourceUri: oauthResourceUri ?? `http://localhost:${this.httpPort}`,
       redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
       lockSite: oauthLockSite !== 'false', // Site locking is enabled by default
       jwePrivateKey: oauthJwePrivateKey ?? '',

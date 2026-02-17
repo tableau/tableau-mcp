@@ -20,8 +20,8 @@ resource server, capable of accepting and responding to protected resource reque
 access tokens.
 
 When OAuth is enabled:
-- MCP clients will be required to authenticate via Tableau OAuth before connecting to the MCP
-  server
+
+- MCP clients will be required to authenticate via Tableau OAuth before connecting to the MCP server
 - The [`TRANSPORT`](#transport) will default to `http` (required for OAuth)
 - The [`AUTH`](#auth) method will default to `oauth`
 
@@ -50,9 +50,11 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 ### `OAUTH_ISSUER`
 
-**Setting this environment variable enables OAuth.** This should be the origin of your MCP server (the issuer of access tokens).
+**Setting this environment variable enables OAuth.** This should be the origin of your MCP server
+(the issuer of access tokens).
 
-- Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for production)
+- Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for
+  production)
 - Required if `AUTH` is `oauth`
 - Required if `TRANSPORT` is `http` unless opted out with
   [`DANGEROUSLY_DISABLE_OAUTH`](#dangerously_disable_oauth)
@@ -118,6 +120,18 @@ tsm pending-changes apply
 ```
 
 :::
+
+<hr />
+
+### `OAUTH_RESOURCE_URI`
+
+The base URL used in the `resource` field of the OAuth protected resource metadata document. Some
+clients may require the `resource` field to match exactly with the URL used to access the MCP
+server. This should be the base URL of your MCP server deployment.
+
+- Default: `http://localhost:3927`
+- Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for
+  production)
 
 <hr />
 

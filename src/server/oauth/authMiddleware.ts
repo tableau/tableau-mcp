@@ -239,7 +239,6 @@ async function verifyAccessToken(
   const config = getConfig();
 
   if (config.oauth.issuer === 'https://sso.online.dev.tabint.net') {
-    // decrypt jwt no private key
     const [_header, payload, _signature] = token.split('.');
     const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
 
