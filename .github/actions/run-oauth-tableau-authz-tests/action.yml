@@ -1,0 +1,18 @@
+name: 'Run OAuth Tableau Authorization Tests'
+description: 'Runs OAuth tests with Tableau authorization with required secrets'
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Playwright Browsers
+      run: npx playwright install --with-deps
+    - name: OAuth Tableau Authorization Tests
+      shell: bash
+      run: npm run test:oauth:tableau
+    - uses: actions/upload-artifact@v4
+      if: ${{ !cancelled() }}
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30
+      env:
+        OAUTH_ISSUER: https://sso.online.dev.tabint.net

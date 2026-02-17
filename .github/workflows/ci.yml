@@ -59,12 +59,18 @@ jobs:
 
       - name: OAuth Tests
         if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
-        uses: ./.github/actions/run-oauth-tests
+        uses: ./.github/actions/run-oauth-embedded-authztests
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}
           SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
           OAUTH_JWE_PRIVATE_KEY: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY }}
           OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY_PASSPHRASE }}
+
+      - name: OAuth Tableau Authorization Tests
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+        uses: ./.github/actions/run-oauth-tableau-authz-tests
+        env:
+          SERVER: https://dataplane1.tableau-sfdc-3vx9f4.svc.sfdcfc.net/
 
       - name: Build Claude MCP Bundle
         run: |
