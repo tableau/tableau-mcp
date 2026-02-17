@@ -36,7 +36,7 @@ export type RestApiCredentials =
  * @class RestApi
  */
 export class RestApi {
-  private _creds?: RestApiCredentials | undefined;
+  private _creds?: RestApiCredentials;
   private readonly _host: string;
   private readonly _baseUrl: string;
   private readonly _baseUrlWithoutVersion: string;
