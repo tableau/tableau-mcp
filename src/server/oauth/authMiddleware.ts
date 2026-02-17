@@ -12,8 +12,8 @@ import { AUDIENCE } from './provider.js';
 import {
   mcpAccessTokenSchema,
   mcpAccessTokenUserOnlySchema,
-  tableauAccessTokenSchema,
   TableauAuthInfo,
+  tableauBearerTokenSchema,
 } from './schemas.js';
 import {
   formatScopes,
@@ -242,7 +242,7 @@ async function verifyAccessToken(
     const [_header, payload, _signature] = token.split('.');
     const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
 
-    const tableauAccessToken = tableauAccessTokenSchema.safeParse(decoded);
+    const tableauAccessToken = tableauBearerTokenSchema.safeParse(decoded);
     if (!tableauAccessToken.success) {
       return Err(`Invalid access token: ${fromError(tableauAccessToken.error).toString()}`);
     }

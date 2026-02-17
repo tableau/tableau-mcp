@@ -105,7 +105,7 @@ export const mcpAccessTokenSchema = mcpAccessTokenUserOnlySchema.extend({
   tableauUserId: requiredString('tableauUserId'),
 });
 
-export const tableauAccessTokenSchema = z.object({
+export const tableauBearerTokenSchema = z.object({
   iss: requiredString('iss'),
   aud: requiredString('aud'),
   exp: z.number().int().nonnegative(),
