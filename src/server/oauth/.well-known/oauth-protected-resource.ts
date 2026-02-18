@@ -13,12 +13,14 @@ import { getSupportedScopes } from '../scopes.js';
  */
 export function oauthProtectedResource(app: express.Application): void {
   app.get('/.well-known/oauth-protected-resource', (_req, res) => {
-    const { issuer, advertiseApiScopes, resourceUri } = getConfig().oauth;
+    const { issuer, advertiseApiScopes, resourceUri, enforceScopes } = getConfig().oauth;
     res.json({
       resource: `${resourceUri}/${serverName}`,
       authorization_servers: [issuer],
       bearer_methods_supported: ['header'],
-      scopes_supported: getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
+      scopes_supported: enforceScopes
+        ? getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+        : [],
     });
   });
 }
