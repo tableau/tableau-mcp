@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err } from 'ts-results-es';
 import z from 'zod';
 
-import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import {
@@ -11,9 +10,6 @@ import {
   pulseInsightBundleTypeEnum,
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
-import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
-import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -152,28 +148,15 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { bundleRequest, bundleType },
-      { requestId, sessionId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ bundleRequest, bundleType }, extra): Promise<CallToolResult> => {
       return await generatePulseMetricValueInsightBundleTool.logAndExecute<
         PulseBundleResponse,
         GeneratePulseMetricValueInsightBundleError
       >({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: { bundleRequest, bundleType },
         callback: async () => {
-          const restApiArgs = {
-            config,
-            requestId,
-            server,
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
-          };
-          const configWithOverrides = await getConfigWithOverrides({ restApiArgs });
+          const configWithOverrides = await extra.getConfigWithOverrides();
 
           const { datasourceIds } = configWithOverrides.boundedContext;
           if (datasourceIds) {
@@ -193,7 +176,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
           }
 
           const result = await useRestApi({
-            ...restApiArgs,
+            ...extra,
             jwtScopes: ['tableau:insights:read'],
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
@@ -225,7 +208,6 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               return error.message;
           }
         },
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });

@@ -4,6 +4,7 @@ import { Server } from '../../server.js';
 import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { constrainWorkbooks, getListWorkbooksTool } from './listWorkbooks.js';
 import { mockWorkbook, mockWorkbook2 } from './mockWorkbook.js';
 
@@ -137,11 +138,6 @@ async function getToolResult(params: { filter: string }): Promise<CallToolResult
   const callback = await Provider.from(listWorkbooksTool.callback);
   return await callback(
     { filter: params.filter, pageSize: undefined, limit: undefined },
-    {
-      signal: new AbortController().signal,
-      requestId: 'test-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    },
+    getMockRequestHandlerExtra(),
   );
 }

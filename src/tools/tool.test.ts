@@ -1,13 +1,12 @@
 import { AxiosError } from 'axios';
 import { Ok } from 'ts-results-es';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
-import { ProductTelemetryBase } from '../telemetry/productTelemetry/telemetryForwarder.js';
 import invariant from '../utils/invariant.js';
 import { Tool } from './tool.js';
+import { getMockRequestHandlerExtra } from './toolContext.mock.js';
 
 // Mock for product telemetry - tracks calls to send()
 const mockTelemetrySend = vi.hoisted(() => vi.fn());
@@ -18,13 +17,7 @@ vi.mock('../telemetry/productTelemetry/telemetryForwarder.js', () => ({
 }));
 
 describe('Tool', () => {
-  const mockProductTelemetryBase: ProductTelemetryBase = {
-    endpoint: 'https://test.telemetry.example.com',
-    siteLuid: 'test-site-luid',
-    podName: 'https://test-server.example.com',
-    isHyperforce: false,
-    enabled: true,
-  };
+  const mockExtra = getMockRequestHandlerExtra();
 
   const mockParams = {
     server: new Server(),
@@ -80,9 +73,7 @@ describe('Tool', () => {
 
     const spy = vi.spyOn(tool, 'logInvocation');
     const result = await tool.logAndExecute({
-      requestId: '2',
-      sessionId: '',
-      authInfo: undefined,
+      extra: mockExtra,
       args: { param1: 'test' },
       callback,
       constrainSuccessResult: (result) => {
@@ -91,7 +82,6 @@ describe('Tool', () => {
           result,
         };
       },
-      productTelemetryBase: mockProductTelemetryBase,
     });
 
     expect(result.isError).toBe(false);
@@ -99,7 +89,7 @@ describe('Tool', () => {
     expect(JSON.parse(result.content[0].text)).toEqual(successResult);
 
     expect(spy).toHaveBeenCalledExactlyOnceWith({
-      requestId: '2',
+      requestId: 2,
       args: {
         param1: 'test',
       },
@@ -114,9 +104,7 @@ describe('Tool', () => {
     });
 
     const result = await tool.logAndExecute({
-      requestId: '2',
-      sessionId: '',
-      authInfo: undefined,
+      extra: mockExtra,
       args: { param1: 'test' },
       callback,
       constrainSuccessResult: (result) => {
@@ -125,7 +113,6 @@ describe('Tool', () => {
           result,
         };
       },
-      productTelemetryBase: mockProductTelemetryBase,
     });
 
     expect(result.isError).toBe(true);
@@ -138,9 +125,7 @@ describe('Tool', () => {
     const args = { param1: 'test' };
 
     await tool.logAndExecute({
-      requestId: '2',
-      sessionId: '',
-      authInfo: undefined,
+      extra: mockExtra,
       args,
       callback: vi.fn(),
       constrainSuccessResult: (result) => {
@@ -149,7 +134,6 @@ describe('Tool', () => {
           result,
         };
       },
-      productTelemetryBase: mockProductTelemetryBase,
     });
 
     expect(mockParams.argsValidator).toHaveBeenCalledWith(args);
@@ -174,9 +158,7 @@ describe('Tool', () => {
     });
 
     const result = await tool.logAndExecute({
-      requestId: '2',
-      sessionId: '',
-      authInfo: undefined,
+      extra: mockExtra,
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok('test')),
       constrainSuccessResult: (result) => {
@@ -185,7 +167,6 @@ describe('Tool', () => {
           result,
         };
       },
-      productTelemetryBase: mockProductTelemetryBase,
     });
 
     expect(result.isError).toBe(true);
@@ -198,9 +179,7 @@ describe('Tool', () => {
     const successResult = { data: 'success' };
 
     const result = await tool.logAndExecute({
-      requestId: '2',
-      sessionId: '',
-      authInfo: undefined,
+      extra: mockExtra,
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok(successResult)),
       constrainSuccessResult: (result) => {
@@ -212,7 +191,6 @@ describe('Tool', () => {
           },
         };
       },
-      productTelemetryBase: mockProductTelemetryBase,
     });
 
     expect(result.isError).toBe(false);
@@ -228,9 +206,7 @@ describe('Tool', () => {
     const successResult = { data: 'success' };
 
     const result = await tool.logAndExecute({
-      requestId: '2',
-      sessionId: '',
-      authInfo: undefined,
+      extra: mockExtra,
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok(successResult)),
       constrainSuccessResult: (_result) => {
@@ -239,7 +215,6 @@ describe('Tool', () => {
           message: 'No data found',
         };
       },
-      productTelemetryBase: mockProductTelemetryBase,
     });
 
     expect(result.isError).toBe(false);
@@ -252,9 +227,7 @@ describe('Tool', () => {
     const successResult = { data: 'success' };
 
     const result = await tool.logAndExecute({
-      requestId: '2',
-      sessionId: '',
-      authInfo: undefined,
+      extra: mockExtra,
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok(successResult)),
       constrainSuccessResult: (_result) => {
@@ -263,7 +236,6 @@ describe('Tool', () => {
           message: 'An error occurred',
         };
       },
-      productTelemetryBase: mockProductTelemetryBase,
     });
 
     expect(result.isError).toBe(true);
@@ -280,23 +252,20 @@ describe('Tool', () => {
       const tool = new Tool(mockParams);
 
       await tool.logAndExecute({
-        requestId: '123',
-        sessionId: 'session-abc',
-        authInfo: undefined,
+        extra: mockExtra,
         args: { param1: 'test-value' },
         callback: () => Promise.resolve(Ok({ data: 'success' })),
         constrainSuccessResult: (result) => ({ type: 'success', result }),
-        productTelemetryBase: mockProductTelemetryBase,
       });
 
       expect(mockTelemetrySend).toHaveBeenCalledWith(
         'tool_call',
         expect.objectContaining({
           tool_name: 'get-datasource-metadata',
-          request_id: '123',
-          session_id: 'session-abc',
-          site_luid: 'test-site-luid',
-          podname: 'https://test-server.example.com',
+          request_id: '2',
+          session_id: '',
+          site_luid: '',
+          podname: 'https://my-tableau-server.com',
           is_hyperforce: false,
           success: true,
           error_code: '',
@@ -313,13 +282,10 @@ describe('Tool', () => {
       });
 
       await tool.logAndExecute({
-        requestId: '123',
-        sessionId: 'session-abc',
-        authInfo: undefined,
+        extra: mockExtra,
         args: { param1: 'test-value' },
         callback: () => Promise.resolve(Ok({ data: 'success' })),
         constrainSuccessResult: (result) => ({ type: 'success', result }),
-        productTelemetryBase: mockProductTelemetryBase,
       });
 
       expect(mockTelemetrySend).toHaveBeenCalledWith(
@@ -336,15 +302,12 @@ describe('Tool', () => {
       const tool = new Tool(mockParams);
 
       await tool.logAndExecute({
-        requestId: '123',
-        sessionId: 'session-abc',
-        authInfo: undefined,
+        extra: mockExtra,
         args: { param1: 'test-value' },
         callback: () => {
           throw new Error('Callback failed');
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
-        productTelemetryBase: mockProductTelemetryBase,
       });
 
       expect(mockTelemetrySend).toHaveBeenCalledWith(
@@ -363,15 +326,12 @@ describe('Tool', () => {
       axiosError.response = { status: 401 } as AxiosError['response'];
 
       await tool.logAndExecute({
-        requestId: '123',
-        sessionId: 'session-abc',
-        authInfo: undefined,
+        extra: mockExtra,
         args: { param1: 'test-value' },
         callback: () => {
           throw axiosError;
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
-        productTelemetryBase: mockProductTelemetryBase,
       });
 
       expect(mockTelemetrySend).toHaveBeenCalledWith(
@@ -388,13 +348,10 @@ describe('Tool', () => {
       const tool = new Tool(mockParams);
 
       await tool.logAndExecute({
-        requestId: '123',
-        sessionId: 'session-abc',
-        authInfo: undefined,
+        extra: mockExtra,
         args: { param1: 'test-value' },
         callback: () => Promise.resolve(Ok({ data: 'success' })),
         constrainSuccessResult: () => ({ type: 'error', message: 'Constrained error' }),
-        productTelemetryBase: mockProductTelemetryBase,
       });
 
       expect(mockTelemetrySend).toHaveBeenCalledWith(
@@ -411,13 +368,10 @@ describe('Tool', () => {
       const tool = new Tool(mockParams);
 
       await tool.logAndExecute({
-        requestId: '123',
-        sessionId: 'session-abc',
-        authInfo: undefined,
+        extra: mockExtra,
         args: { param1: 'test-value' },
         callback: () => Promise.resolve(Ok({ data: 'success' })),
         constrainSuccessResult: () => ({ type: 'empty', message: 'No data' }),
-        productTelemetryBase: mockProductTelemetryBase,
       });
 
       expect(mockTelemetrySend).toHaveBeenCalledWith(

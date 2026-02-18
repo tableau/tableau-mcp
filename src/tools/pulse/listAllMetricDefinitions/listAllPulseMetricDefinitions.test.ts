@@ -5,6 +5,7 @@ import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.j
 import { Server } from '../../../server.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import { getListAllPulseMetricDefinitionsTool } from './listAllPulseMetricDefinitions.js';
 
@@ -138,11 +139,6 @@ async function getToolResult(params: {
   const callback = await Provider.from(listAllPulseMetricDefinitionsTool.callback);
   return await callback(
     { view: params.view, limit: undefined, pageSize: undefined },
-    {
-      signal: new AbortController().signal,
-      requestId: 'test-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    },
+    getMockRequestHandlerExtra(),
   );
 }

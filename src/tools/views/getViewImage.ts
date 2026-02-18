@@ -2,11 +2,8 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
-import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { convertPngDataToToolResult } from '../convertPngDataToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -34,28 +31,14 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { viewId, width, height },
-      { requestId, sessionId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
-      const restApiArgs = {
-        config,
-        requestId,
-        server,
-        signal,
-        authInfo: getTableauAuthInfo(authInfo),
-      };
-
+    callback: async ({ viewId, width, height }, extra): Promise<CallToolResult> => {
       return await getViewImageTool.logAndExecute<string, GetViewImageError>({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: { viewId },
         callback: async () => {
           const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
             viewId,
-            restApiArgs,
+            extra,
           });
 
           if (!isViewAllowedResult.allowed) {
@@ -67,7 +50,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
 
           return new Ok(
             await useRestApi({
-              ...restApiArgs,
+              ...extra,
               jwtScopes: ['tableau:views:download'],
               callback: async (restApi) => {
                 return await restApi.viewsMethods.queryViewImage({
@@ -94,7 +77,6 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
               return error.message;
           }
         },
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });

@@ -1,14 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { getConfig } from '../../../config.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { RestApiArgs, useRestApi } from '../../../restApiInstance.js';
 import { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
-import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { getConfigWithOverrides } from '../../../utils/mcpSiteSettings.js';
 import { ConstrainedResult, Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -36,24 +32,13 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (_, { requestId, sessionId, authInfo, signal }): Promise<CallToolResult> => {
-      const config = getConfig();
-      const restApiArgs = {
-        config,
-        requestId,
-        server,
-        signal,
-        authInfo: getTableauAuthInfo(authInfo),
-      };
-
+    callback: async (_, extra): Promise<CallToolResult> => {
       return await listPulseMetricSubscriptionsTool.logAndExecute({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: {},
         callback: async () => {
           return await useRestApi({
-            ...restApiArgs,
+            ...extra,
             jwtScopes: ['tableau:metric_subscriptions:read'],
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
@@ -61,18 +46,15 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
           });
         },
         constrainSuccessResult: async (subscriptions) => {
-          const configWithOverrides = await getConfigWithOverrides({
-            restApiArgs,
-          });
+          const configWithOverrides = await extra.getConfigWithOverrides();
 
           return await constrainPulseMetricSubscriptions({
             subscriptions,
             boundedContext: configWithOverrides.boundedContext,
-            restApiArgs,
+            restApiArgs: extra,
           });
         },
         getErrorText: getPulseDisabledError,
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });
