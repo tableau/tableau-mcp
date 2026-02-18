@@ -1,8 +1,7 @@
-import { getConfig } from '../config.js';
-import { Server } from '../server.js';
 import { getCombinationsOfBoundedContextInputs } from '../utils/getCombinationsOfBoundedContextInputs.js';
 import { mockDatasources } from './listDatasources/mockDatasources.js';
 import { exportedForTesting } from './resourceAccessChecker.js';
+import { getMockRequestHandlerExtra } from './toolContext.mock.js';
 import { mockView } from './views/mockView.js';
 import { mockWorkbook } from './workbooks/mockWorkbook.js';
 
@@ -32,12 +31,7 @@ vi.mock('../restApiInstance.js', () => ({
 }));
 
 describe('ResourceAccessChecker', () => {
-  const restApiArgs = {
-    config: getConfig(),
-    requestId: 'request-id',
-    server: getServer(),
-    signal: new AbortController().signal,
-  };
+  const extra = getMockRequestHandlerExtra();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -71,7 +65,7 @@ describe('ResourceAccessChecker', () => {
           expect(
             await resourceAccessChecker.isDatasourceAllowed({
               datasourceLuid: mockDatasource.id,
-              restApiArgs,
+              extra,
             }),
           ).toEqual({ allowed: true });
 
@@ -79,7 +73,7 @@ describe('ResourceAccessChecker', () => {
           expect(
             await resourceAccessChecker.isDatasourceAllowed({
               datasourceLuid: mockDatasource.id,
-              restApiArgs,
+              extra,
             }),
           ).toEqual({ allowed: true });
 
@@ -135,7 +129,7 @@ describe('ResourceAccessChecker', () => {
           expect(
             await resourceAccessChecker.isDatasourceAllowed({
               datasourceLuid: mockDatasource.id,
-              restApiArgs,
+              extra,
             }),
           ).toEqual({
             allowed: false,
@@ -145,7 +139,7 @@ describe('ResourceAccessChecker', () => {
           expect(
             await resourceAccessChecker.isDatasourceAllowed({
               datasourceLuid: mockDatasource.id,
-              restApiArgs,
+              extra,
             }),
           ).toEqual({
             allowed: false,
@@ -186,7 +180,7 @@ describe('ResourceAccessChecker', () => {
           expect(
             await resourceAccessChecker.isWorkbookAllowed({
               workbookId: mockWorkbook.id,
-              restApiArgs,
+              extra,
             }),
           ).toEqual({ allowed: true, content: projectIds || tags ? mockWorkbook : undefined });
 
@@ -194,7 +188,7 @@ describe('ResourceAccessChecker', () => {
           expect(
             await resourceAccessChecker.isWorkbookAllowed({
               workbookId: mockWorkbook.id,
-              restApiArgs,
+              extra,
             }),
           ).toEqual({ allowed: true, content: projectIds || tags ? mockWorkbook : undefined });
 
@@ -248,7 +242,7 @@ describe('ResourceAccessChecker', () => {
           expect(
             await resourceAccessChecker.isWorkbookAllowed({
               workbookId: mockWorkbook.id,
-              restApiArgs,
+              extra,
             }),
           ).toEqual({
             allowed: false,
@@ -258,7 +252,7 @@ describe('ResourceAccessChecker', () => {
           expect(
             await resourceAccessChecker.isWorkbookAllowed({
               workbookId: mockWorkbook.id,
-              restApiArgs,
+              extra,
             }),
           ).toEqual({
             allowed: false,
@@ -299,7 +293,7 @@ describe('ResourceAccessChecker', () => {
           expect(
             await resourceAccessChecker.isViewAllowed({
               viewId: mockView.id,
-              restApiArgs,
+              extra,
             }),
           ).toEqual({ allowed: true });
 
@@ -307,7 +301,7 @@ describe('ResourceAccessChecker', () => {
           expect(
             await resourceAccessChecker.isViewAllowed({
               viewId: mockView.id,
-              restApiArgs,
+              extra,
             }),
           ).toEqual({ allowed: true });
 
@@ -370,7 +364,7 @@ describe('ResourceAccessChecker', () => {
           expect(
             await resourceAccessChecker.isViewAllowed({
               viewId: mockView.id,
-              restApiArgs,
+              extra,
             }),
           ).toEqual({
             allowed: false,
@@ -380,7 +374,7 @@ describe('ResourceAccessChecker', () => {
           expect(
             await resourceAccessChecker.isViewAllowed({
               viewId: mockView.id,
-              restApiArgs,
+              extra,
             }),
           ).toEqual({
             allowed: false,
@@ -402,9 +396,3 @@ describe('ResourceAccessChecker', () => {
     });
   });
 });
-
-function getServer(): InstanceType<typeof Server> {
-  const server = new Server();
-  server.tool = vi.fn();
-  return server;
-}
