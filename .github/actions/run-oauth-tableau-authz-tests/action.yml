@@ -4,6 +4,7 @@ runs:
   using: 'composite'
   steps:
     - name: Install Playwright Browsers
+      shell: bash
       run: npx playwright install --with-deps
     - name: OAuth Tableau Authorization Tests
       shell: bash
