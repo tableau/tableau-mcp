@@ -1,6 +1,6 @@
 import { Writable } from 'stream';
 
-import { Deferred } from './deferred.js';
+import { Deferred } from '../deferred.js';
 
 export class AwaitableWritableStream {
   private readonly _deferred = new Deferred<void>();
