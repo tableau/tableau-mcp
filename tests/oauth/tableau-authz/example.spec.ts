@@ -1,13 +1,16 @@
-import { test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
+import { toolNames } from '../../../src/tools/toolName';
 import invariant from '../../../src/utils/invariant';
 import { OAuthClient } from './oauthClient';
 
 test('create mcp client', async ({ page }) => {
-  const client = new OAuthClient(
-    'http://127.0.0.1:3927/tableau-mcp',
-    'https://client.dev/oauth/metadata.json', // Masquerade as client.dev
-  );
+  const client = new OAuthClient({
+    serverUrl: 'http://127.0.0.1:3927/tableau-mcp',
+    // Masquerade client as client.dev
+    clientMetadataUrl: 'https://client.dev/oauth/metadata.json',
+    oauthCallbackUrl: 'https://client.dev/oauth/callback',
+  });
 
   const { getAuthorizationUrl, oauthProvider } = client.getOAuthProvider();
   await client.attemptConnection(oauthProvider, async () => {
@@ -26,4 +29,9 @@ test('create mcp client', async ({ page }) => {
     invariant(code, 'Authz code not found in callback URL');
     return code;
   });
+
+  const { tools } = await client.listTools();
+  const names = tools.map((tool) => tool.name);
+  expect(names).toEqual(expect.arrayContaining([...toolNames]));
+  expect(names).toHaveLength(toolNames.length);
 });
