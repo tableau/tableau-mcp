@@ -2,19 +2,12 @@ import { expect, test } from '@playwright/test';
 
 import { toolNames } from '../../../src/tools/toolName';
 import invariant from '../../../src/utils/invariant';
-import { OAuthClient } from './oauthClient';
+import { getOauthClient } from './oauthClient';
 
 test('create mcp client', async ({ page }) => {
-  const client = new OAuthClient({
-    serverUrl: 'http://127.0.0.1:3927/tableau-mcp',
-    // Masquerade client as client.dev
-    clientMetadataUrl: 'https://client.dev/oauth/metadata.json',
-    oauthCallbackUrl: 'https://client.dev/oauth/callback',
-  });
+  const client = getOauthClient();
 
-  const { getAuthorizationUrl, oauthProvider } = client.getOAuthProvider();
-  await client.attemptConnection(oauthProvider, async () => {
-    const authorizationUrl = await getAuthorizationUrl.promise;
+  await client.attemptConnection(async (authorizationUrl) => {
     await page.goto(authorizationUrl);
     await page.locator('#email').fill(process.env.TEST_USER ?? '');
     await page.locator('#login-submit').click();

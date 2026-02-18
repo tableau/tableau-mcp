@@ -15,11 +15,14 @@ import {
 import invariant from '../../../src/utils/invariant';
 import { Deferred } from '../deferred';
 
-export class OAuthClient {
+class OAuthClient {
   private readonly client: Client;
   private readonly serverUrl: string;
   private readonly clientMetadataUrl: string;
   private readonly oauthCallbackUrl: string;
+
+  private oauthProvider: InMemoryOAuthClientProvider;
+  private authUrlPromise: Promise<string>;
 
   constructor({
     serverUrl,
@@ -41,57 +44,14 @@ export class OAuthClient {
     this.serverUrl = serverUrl;
     this.clientMetadataUrl = clientMetadataUrl;
     this.oauthCallbackUrl = oauthCallbackUrl;
-  }
-
-  async attemptConnection(
-    authProvider: InMemoryOAuthClientProvider,
-    triggerOAuthCallbackFn?: () => Promise<string>,
-  ): Promise<void> {
-    console.log('[OAuthClient] Creating transport with OAuth provider...');
-    const baseUrl = new URL(this.serverUrl);
-    const transport = new StreamableHTTPClientTransport(baseUrl, {
-      authProvider,
-    });
-    console.log('[OAuthClient] Transport created');
-
-    try {
-      console.log('[OAuthClient] Attempting connection (this will trigger OAuth redirect)...');
-      await this.client.connect(transport);
-
-      console.log('[OAuthClient] Connected successfully');
-    } catch (error) {
-      if (error instanceof UnauthorizedError) {
-        console.log('[OAuthClient] OAuth required - waiting for authorization...');
-
-        invariant(triggerOAuthCallbackFn, 'triggerOAuthCallbackFn is required');
-        const authCode = await triggerOAuthCallbackFn();
-        console.log('[OAuthClient] Authorization code received:', authCode.slice(0, 10) + '...');
-
-        await transport.finishAuth(authCode);
-
-        console.log('[OAuthClient] Reconnecting with authenticated transport...');
-        await this.attemptConnection(authProvider);
-      } else {
-        console.error('[OAuthClient] Connection failed with non-auth error:', error);
-        throw error;
-      }
-    }
-  }
-
-  getOAuthProvider(): {
-    getAuthorizationUrl: Deferred<string>;
-    oauthProvider: InMemoryOAuthClientProvider;
-  } {
-    console.log(`[OAuthClient] Attempting to connect to ${this.serverUrl}...`);
 
     // Minimal client metadata to satisfy the DCR specification (which we won't be using).
     const clientMetadata: OAuthClientMetadata = {
       redirect_uris: [this.oauthCallbackUrl],
     };
 
-    console.log('[OAuthClient] Creating OAuth provider...');
     const getAuthorizationUrl = new Deferred<string>();
-    const oauthProvider = new InMemoryOAuthClientProvider(
+    this.oauthProvider = new InMemoryOAuthClientProvider(
       this.oauthCallbackUrl,
       clientMetadata,
       (redirectUrl: URL) => {
@@ -99,17 +59,47 @@ export class OAuthClient {
       },
       this.clientMetadataUrl,
     );
-    console.log('[OAuthClient] OAuth provider created');
 
-    console.log('[OAuthClient] Creating MCP client...');
+    this.authUrlPromise = getAuthorizationUrl.promise;
+  }
 
-    console.log('[OAuthClient] Client created');
-    console.log('[OAuthClient] Starting OAuth flow...');
+  async attemptConnection(
+    getAuthZCodeFn?: (authorizationUrl: string) => Promise<string>,
+  ): Promise<void> {
+    console.log('[OAuthClient] Creating transport with OAuth provider');
+    const baseUrl = new URL(this.serverUrl);
+    const transport = new StreamableHTTPClientTransport(baseUrl, {
+      authProvider: this.oauthProvider,
+    });
+    console.log('[OAuthClient] Transport created');
 
-    return { getAuthorizationUrl, oauthProvider };
+    try {
+      console.log('[OAuthClient] Attempting connection');
+      await this.client.connect(transport);
+      console.log('[OAuthClient] Connected successfully');
+    } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        console.log('[OAuthClient] OAuth required - waiting for authorization');
+
+        invariant(getAuthZCodeFn, 'getAuthZCodeFn is required for authorization');
+        const authCode = await getAuthZCodeFn(await this.authUrlPromise);
+        invariant(authCode, 'Authorization code is empty');
+
+        console.log('[OAuthClient] Authorization code received:', authCode.slice(0, 10) + '...');
+        console.log('[OAuthClient] Exchanging authorization code for access token');
+        await transport.finishAuth(authCode);
+
+        console.log('[OAuthClient] Reconnecting with authenticated transport');
+        await this.attemptConnection();
+      } else {
+        console.error('[OAuthClient] Connection failed with non-auth error:', error);
+        throw error;
+      }
+    }
   }
 
   async listTools(): Promise<ListToolsResult> {
+    console.log('[OAuthClient] Listing tools');
     const request: ListToolsRequest = {
       method: 'tools/list',
       params: {},
@@ -119,6 +109,8 @@ export class OAuthClient {
   }
 
   async callTool(toolName: string, toolArgs: Record<string, unknown>): Promise<CallToolResult> {
+    console.log('[OAuthClient] Calling tool:', toolName);
+    console.log('[OAuthClient] Tool arguments:', toolArgs);
     const request: CallToolRequest = {
       method: 'tools/call',
       params: {
@@ -131,6 +123,18 @@ export class OAuthClient {
   }
 
   close(): void {
-    this.client?.close();
+    this.client.close();
   }
+}
+
+export function getOauthClient(): OAuthClient {
+  // We masquerade the client as client.dev because we need to provide a client metadata document URL that
+  // the authorization server can actually resolve.
+  // AuthZ codes will be issued to the masqueraded callback URL, but that's ok,
+  // we can intercept them with Playwright.
+  return new OAuthClient({
+    serverUrl: 'http://127.0.0.1:3927/tableau-mcp',
+    clientMetadataUrl: 'https://client.dev/oauth/metadata.json',
+    oauthCallbackUrl: 'https://client.dev/oauth/callback',
+  });
 }
