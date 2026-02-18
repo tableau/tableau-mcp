@@ -152,7 +152,7 @@ class OAuthClient {
   }
 }
 
-export function getOauthClient(): OAuthClient {
+export function getOAuthClient(): OAuthClient {
   // We masquerade the client as client.dev because we need to provide a client metadata document URL that
   // the authorization server can actually resolve.
   // AuthZ codes will be issued to the masqueraded callback URL, but that's ok,

@@ -1,11 +1,11 @@
 import { toolNames } from '../../../../src/tools/toolName';
 import { TableauCloudLoginFlow } from '../flows/tableauCloudLoginFlow';
-import { getOauthClient } from '../oauthClient';
+import { getOAuthClient } from '../oauthClient';
 import { expect, test } from './base';
 
 test.describe('oauth', () => {
   test('list tools', async ({ page, env }) => {
-    const client = getOauthClient();
+    const client = getOAuthClient();
 
     await client.attemptConnection(async ({ authorizationUrl, callbackUrl }) => {
       await page.goto(authorizationUrl);
