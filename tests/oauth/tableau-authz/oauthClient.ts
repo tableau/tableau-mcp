@@ -64,7 +64,13 @@ class OAuthClient {
   }
 
   async attemptConnection(
-    getAuthZCodeFn?: (authorizationUrl: string) => Promise<string>,
+    getAuthZCodeFn?: ({
+      authorizationUrl,
+      callbackUrl,
+    }: {
+      authorizationUrl: string;
+      callbackUrl: string;
+    }) => Promise<string>,
   ): Promise<void> {
     console.log('[OAuthClient] Creating transport with OAuth provider');
     const baseUrl = new URL(this.serverUrl);
@@ -82,7 +88,10 @@ class OAuthClient {
         console.log('[OAuthClient] OAuth required - waiting for authorization');
 
         invariant(getAuthZCodeFn, 'getAuthZCodeFn is required for authorization');
-        const authCode = await getAuthZCodeFn(await this.authUrlPromise);
+        const authCode = await getAuthZCodeFn({
+          authorizationUrl: await this.authUrlPromise,
+          callbackUrl: this.oauthCallbackUrl,
+        });
         invariant(authCode, 'Authorization code is empty');
 
         console.log('[OAuthClient] Authorization code received:', authCode.slice(0, 10) + '...');

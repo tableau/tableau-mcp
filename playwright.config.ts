@@ -9,6 +9,7 @@ if (existsSync('.env')) {
 
 export default defineConfig({
   testDir: './tests/oauth/tableau-authz/',
+  testMatch: '**/*.test.ts',
   timeout: 90_000,
   expect: {
     // Timeout for each expect()
