@@ -46,7 +46,6 @@
     "test:eval": "vitest --config ./vitest.config.eval.ts",
     "test:oauth:embedded": "vitest --config ./vitest.config.oauth.embedded.ts",
     "test:oauth:tableau": "npx playwright test",
-    "test:oauth:start:clientMetadataServer": "npx tsx tests/oauth/tableau-authz/clientMetadataServer.ts",
     "coverage": "vitest run --config ./vitest.config.ts --coverage",
     "version:major": "npm version major --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
