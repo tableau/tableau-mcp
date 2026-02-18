@@ -76,6 +76,22 @@ class OAuthClient {
     const baseUrl = new URL(this.serverUrl);
     const transport = new StreamableHTTPClientTransport(baseUrl, {
       authProvider: this.oauthProvider,
+      // Temporarily override fetch until the authorization server
+      // adds the client_id_metadata_document_supported flag
+      fetch: async (url: string | URL, init?: RequestInit) => {
+        if (!url.toString().includes('/.well-known/oauth-authorization-server')) {
+          return fetch(url, init);
+        }
+
+        const response = await fetch(url, init);
+        if (!response.ok) {
+          return response;
+        }
+
+        const json = await response.json();
+        json.client_id_metadata_document_supported = true;
+        return new Response(JSON.stringify(json), { status: 200 });
+      },
     });
     console.log('[OAuthClient] Transport created');
 
