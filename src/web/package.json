@@ -1,0 +1,50 @@
+{
+  "name": "@tableau/mcp-server-web",
+  "description": "Web components for Tableau MCP Server Apps",
+  "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tableau/tableau-mcp.git"
+  },
+  "homepage": "https://github.com/tableau/tableau-mcp",
+  "bugs": "https://github.com/tableau/tableau-mcp/issues",
+  "author": "Tableau",
+  "type": "module",
+  "license": "Apache-2.0",
+  "keywords": [
+    "tableau",
+    "mcp"
+  ],
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "bin": {
+    "mcp-server-basic-react": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --noEmit && cross-env INPUT=pulse-renderer.html vite build",
+    "watch": "cross-env INPUT=pulse-renderer.html vite build --watch",
+    "dev": "cross-env NODE_ENV=development npm run watch",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "cross-env": "^10.1.0",
+    "vite": "^6.0.0",
+    "vite-plugin-singlefile": "^2.3.0"
+  }
+}
