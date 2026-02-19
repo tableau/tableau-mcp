@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 
+import { spawnSync } from 'child_process';
 import { build } from 'esbuild';
 import { chmod, mkdir, rm } from 'fs/promises';
 
@@ -54,4 +55,18 @@ const dev = process.argv.includes('--dev');
   }
 
   await chmod('./build/index.js', '755');
+
+  console.log('🏗️ Building web...');
+  const webResult = spawnSync('npm', ['run', 'build'], {
+    stdio: 'inherit',
+    cwd: './src/web',
+    shell: true,
+  });
+
+  if (webResult.status !== 0) {
+    console.error('❌ Web build failed');
+    console.error(`   Exit code: ${webResult.status}`);
+    console.error(`   stderr: ${String(webResult.stderr).trim()}`);
+    process.exit(webResult.status ?? 1);
+  }
 })();

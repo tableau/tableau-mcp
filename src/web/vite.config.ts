@@ -19,7 +19,7 @@ export default defineConfig({
     rollupOptions: {
       input: INPUT,
     },
-    outDir: 'dist',
+    outDir: '../../build/web',
     emptyOutDir: false,
   },
 });
