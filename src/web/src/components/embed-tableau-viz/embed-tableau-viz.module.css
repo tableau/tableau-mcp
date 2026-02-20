@@ -1,0 +1,5 @@
+.embedTableauViz {
+  display: flex;
+  min-height: 800px;
+  width: 100%;
+}
