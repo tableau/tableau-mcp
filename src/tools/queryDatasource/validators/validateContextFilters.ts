@@ -1,6 +1,6 @@
 import { Filter, Query } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 
-export type ContextFilterWarning = {
+type ContextFilterWarning = {
   type: 'MISSING_CONTEXT_ON_DIMENSION_FILTER';
   severity: 'WARNING';
   message: string;
