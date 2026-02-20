@@ -78,13 +78,36 @@ type PulseRendererProps = {
 };
 
 function PulseRenderer({
-  app: _app,
+  app,
   toolResult,
   hostContext: _hostContext,
 }: PulseRendererProps): React.ReactNode {
+  const [bundle, setBundle] = useState<any>(null);
   const content = toolResult ? extractTextContent(toolResult) : '{}';
-  const { bundle, insightGroupType, insightType } = JSON.parse(content);
+  const { bundleRequest, bundleType, insightGroupType, insightType } = JSON.parse(content);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    console.info('Calling pulse-renderer tool...');
+    callPulseRendererTool();
+  }, []);
+
+  async function callPulseRendererTool(): Promise<void> {
+    console.info('Calling pulse-renderer tool...');
+    const result = await app.callServerTool({
+      name: 'pulse-renderer',
+      arguments: { bundleRequest, bundleType },
+    });
+
+    if (result.isError) {
+      console.error('Error calling pulse-renderer tool:', result.error);
+      return;
+    }
+
+    const content = toolResult ? extractTextContent(result) : '{}';
+    const bundle = JSON.parse(content);
+    setBundle(bundle);
+  }
 
   useEffect(() => {
     if (bundle?.insight_groups && containerRef.current) {
