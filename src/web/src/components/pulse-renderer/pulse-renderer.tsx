@@ -68,23 +68,25 @@ function PulseRendererApp(): React.ReactNode {
     return <div>Connecting...</div>;
   }
 
-  return <PulseRendererInner app={app} toolResult={toolResult} hostContext={hostContext} />;
+  return <PulseRenderer app={app} toolResult={toolResult} hostContext={hostContext} />;
 }
 
-type PulseRendererInnerProps = {
+type PulseRendererProps = {
   app: App;
   toolResult: CallToolResult | null;
   hostContext?: McpUiHostContext;
 };
 
-function PulseRendererInner({
+function PulseRenderer({
   app: _app,
   toolResult,
   hostContext: _hostContext,
-}: PulseRendererInnerProps): React.ReactNode {
+}: PulseRendererProps): React.ReactNode {
   const content = toolResult ? extractTextContent(toolResult) : '{}';
   const bundle = JSON.parse(content);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Add parameters to better target the desired insight
 
   useEffect(() => {
     if (bundle?.insight_groups && containerRef.current) {
