@@ -146,10 +146,7 @@ describe('validateContextFilters', () => {
       };
       const query: Query = {
         fields: baseFields,
-        filters: [
-          setFilter,
-          { ...topFilter, howMany: 3, direction: 'BOTTOM' as const },
-        ],
+        filters: [setFilter, { ...topFilter, howMany: 3, direction: 'BOTTOM' as const }],
       };
 
       const warnings = validateContextFilters(query);
@@ -279,9 +276,7 @@ describe('validateContextFilters', () => {
 
       const warnings = validateContextFilters(query);
       expect(warnings).toHaveLength(1);
-      expect(warnings[0].affectedFilters).toEqual([
-        'IF [Sales] > 100 THEN "High" ELSE "Low" END',
-      ]);
+      expect(warnings[0].affectedFilters).toEqual(['IF [Sales] > 100 THEN "High" ELSE "Low" END']);
     });
 
     it('should handle mixed filter types correctly', () => {
