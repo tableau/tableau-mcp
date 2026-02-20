@@ -104,11 +104,7 @@ function PulseRendererInner({
     }
   }, [bundle]);
 
-  return (
-    <div ref={containerRef} className={styles.pulseRenderer}>
-      <pre>{JSON.stringify(bundle, null, 2)}</pre>
-    </div>
-  );
+  return <div ref={containerRef} className={styles.pulseRenderer}></div>;
 }
 
 createRoot(document.getElementById('root')!).render(
