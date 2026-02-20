@@ -57,7 +57,7 @@ const dev = process.argv.includes('--dev');
   await chmod('./build/index.js', '755');
 
   console.log('🏗️ Building web...');
-  const webResult = spawnSync('npm', ['run', 'build'], {
+  const webResult = spawnSync('npm', ['run', dev ? 'dev' : 'build'], {
     stdio: 'inherit',
     cwd: './src/web',
     shell: true,

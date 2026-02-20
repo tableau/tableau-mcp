@@ -4,6 +4,7 @@ import {
   RESOURCE_MIME_TYPE,
 } from '@modelcontextprotocol/ext-apps/server';
 import { CallToolResult, ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 
 import { pulseInsightBundleSchema } from '../sdks/tableau/types/pulse.js';
 import { Server } from '../server.js';
@@ -23,11 +24,19 @@ export function registerPulseRendererApp(server: Server): void {
       title: 'Render Pulse Insight',
       description:
         'Render a Pulse insight given an insight bundle. Use this tool to render a Pulse insight in a chat window.',
-      inputSchema: { bundle: pulseInsightBundleSchema },
+      inputSchema: {
+        bundle: pulseInsightBundleSchema,
+        insightGroupType: z.string().describe('The type of the insight group to render'),
+        insightType: z.string().describe('The type of the insight to render'),
+      },
       _meta: { ui: { resourceUri } }, // Links this tool to its UI resource
     },
-    async ({ bundle }): Promise<CallToolResult> => {
-      return { content: [{ type: 'text', text: JSON.stringify(bundle) }] };
+    async ({ bundle, insightGroupType, insightType }): Promise<CallToolResult> => {
+      return {
+        content: [
+          { type: 'text', text: JSON.stringify({ bundle, insightGroupType, insightType }) },
+        ],
+      };
     },
   );
 

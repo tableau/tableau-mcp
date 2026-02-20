@@ -7,7 +7,7 @@ import { createRoot } from 'react-dom/client';
 
 import styles from './pulse-renderer.module.css';
 
-const DEFAULT_HEIGHT = 224;
+const DEFAULT_HEIGHT = 500;
 
 function extractTextContent(callToolResult: CallToolResult): string {
   const textContent = callToolResult.content?.find((c) => c.type === 'text');
@@ -83,20 +83,23 @@ function PulseRenderer({
   hostContext: _hostContext,
 }: PulseRendererProps): React.ReactNode {
   const content = toolResult ? extractTextContent(toolResult) : '{}';
-  const bundle = JSON.parse(content);
+  const { bundle, insightGroupType, insightType } = JSON.parse(content);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Add parameters to better target the desired insight
 
   useEffect(() => {
     if (bundle?.insight_groups && containerRef.current) {
-      const insight = bundle.insight_groups[0].insights[0];
+      const insightGroup =
+        bundle.insight_groups.find((group: any) => group.type === insightGroupType) ??
+        bundle.insight_groups[0];
+
+      const insight =
+        insightGroup.insights.find((insight: any) => insight.type === insightType) ??
+        insightGroup.insights[0];
 
       if (!insight) {
         return;
       }
 
-      const insightType = insight.insight_type;
       const viz = insight.result.viz;
       const width = containerRef.current.getBoundingClientRect().width ?? 0;
       const height = calculateChartHeight(insightType, viz, width, DEFAULT_HEIGHT);
