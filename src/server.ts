@@ -1,17 +1,24 @@
+import {
+  registerAppResource,
+  registerAppTool,
+  RESOURCE_MIME_TYPE,
+} from '@modelcontextprotocol/ext-apps/server';
 import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import {
   InitializeRequest,
+  ReadResourceResult,
   ServerNotification,
   ServerRequest,
   SetLevelRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import pkg from '../package.json';
+import { AppTool } from './apps/appTool';
+import { appToolFactories } from './apps/appTools';
 import { getConfig } from './config.js';
 import { setLogLevel } from './logging/log.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
-import { AppRegistrationFunction, appRegistrationFunctions } from './tools/apps';
 import { Tool } from './tools/tool.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
 import { toolNames } from './tools/toolName.js';
@@ -101,9 +108,70 @@ export class Server extends McpServer {
     }
   };
 
-  registerApps = async (): Promise<void> => {
-    for (const appRegistrationFunction of this._getAppsRegistrationFunctions()) {
-      appRegistrationFunction(this);
+  registerApps = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
+    const config = getConfig();
+
+    for (const {
+      name,
+      title,
+      description,
+      paramsSchema,
+      callback,
+      resourceUri,
+      html,
+    } of this._getAppToolsToRegister()) {
+      const toolCallback: ToolCallback<typeof paramsSchema> = async (
+        args: typeof paramsSchema,
+        extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+      ) => {
+        const tableauToolCallback = await Provider.from(callback);
+        const tableauRequestHandlerExtra: TableauRequestHandlerExtra = {
+          ...extra,
+          config,
+          server: this,
+          tableauAuthInfo,
+          getConfigWithOverrides: async () =>
+            getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra }),
+        };
+
+        return tableauToolCallback(args, tableauRequestHandlerExtra);
+      };
+
+      // Two-part registration: tool + resource, tied together by the resource URI.
+      // Register a tool with UI metadata. When the host calls this tool, it reads
+      // `_meta.ui.resourceUri` to know which resource to fetch and render as an
+      // interactive UI.
+      registerAppTool(
+        this,
+        name,
+        {
+          title: await Provider.from(title),
+          description: await Provider.from(description),
+          inputSchema: await Provider.from(paramsSchema),
+          _meta: { ui: { resourceUri } },
+        },
+        toolCallback,
+      );
+
+      // Register the resource, which returns the bundled HTML/JavaScript for the UI.
+      registerAppResource(
+        // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.
+        this,
+        resourceUri,
+        resourceUri,
+        { mimeType: RESOURCE_MIME_TYPE },
+        async (): Promise<ReadResourceResult> => {
+          return {
+            contents: [
+              {
+                uri: resourceUri,
+                mimeType: RESOURCE_MIME_TYPE,
+                text: html,
+              },
+            ],
+          };
+        },
+      );
     }
   };
 
@@ -152,8 +220,8 @@ export class Server extends McpServer {
     return toolsToRegister;
   };
 
-  private _getAppsRegistrationFunctions = (): ReadonlyArray<AppRegistrationFunction> => {
-    return appRegistrationFunctions;
+  private _getAppToolsToRegister = (): Array<AppTool<any>> => {
+    return appToolFactories.map((appToolFactory) => appToolFactory(this));
   };
 }
 

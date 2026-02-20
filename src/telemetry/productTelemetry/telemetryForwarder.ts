@@ -5,7 +5,7 @@ type PropertiesType = { [key: string]: ValidPropertyValueType };
 const DEFAULT_HOST_NAME = 'External';
 const SERVICE_NAME = 'tableau-mcp';
 
-export type TelemetryEventType = 'tool_call';
+export type TelemetryEventType = 'tool_call' | 'app_call';
 
 export type ProductTelemetryBase = {
   endpoint: string;

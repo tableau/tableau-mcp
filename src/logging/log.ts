@@ -1,5 +1,6 @@
 import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
+import { AppToolName } from '../apps/appTool.js';
 import { Server } from '../server.js';
 import { ToolName } from '../tools/toolName.js';
 import { ServerLogger } from './serverLogger.js';
@@ -88,7 +89,7 @@ export const getToolLogMessage = ({
   username,
 }: {
   requestId: RequestId;
-  toolName: ToolName;
+  toolName: ToolName | AppToolName;
   args: unknown;
   username?: string;
 }): LogMessage => {
