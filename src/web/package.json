@@ -21,6 +21,7 @@
     "dev": "tsx src/scripts/build.ts --dev"
   },
   "dependencies": {
+    "@tableau/ntbue-visualization-renderer": "file:modules/@tableau/ntbue-visualization-renderer/ntbue-visualization-renderer-0.71.0.tgz",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

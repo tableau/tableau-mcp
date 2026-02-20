@@ -448,6 +448,12 @@ export const popcBanInsightGroupSchema = z.object({
   ),
 });
 
+export const pulseInsightBundleSchema = z.object({
+  insight_groups: z.array(popcBanInsightGroupSchema),
+  has_errors: z.boolean(),
+  characterization: z.string(),
+});
+
 export const pulseBundleResponseSchema = z.object({
   bundle_response: z.object({
     result: z.object({

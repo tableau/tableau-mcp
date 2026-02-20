@@ -1,32 +1,34 @@
-/**
- * @file App that demonstrates a few features using MCP Apps SDK + React.
- */
 import type { App, McpUiHostContext } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { StrictMode, useCallback, useEffect, useState } from 'react';
+import { calculateChartHeight, renderVisualization } from '@tableau/ntbue-visualization-renderer';
+import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+
 import styles from './pulse-renderer.module.css';
 
-function extractTime(callToolResult: CallToolResult): string {
+const DEFAULT_HEIGHT = 224;
+
+function extractTextContent(callToolResult: CallToolResult): string {
   const textContent = callToolResult.content?.find((c) => c.type === 'text');
   return textContent?.text ?? '';
 }
 
-function GetTimeApp() {
+function PulseRendererApp(): React.ReactNode {
   const [toolResult, setToolResult] = useState<CallToolResult | null>(null);
   const [hostContext, setHostContext] = useState<McpUiHostContext | undefined>();
 
   // `useApp` (1) creates an `App` instance, (2) calls `onAppCreated` to
   // register handlers, and (3) calls `connect()` on the `App` instance.
-  const { app, error } = useApp({
-    appInfo: { name: 'Get Time App', version: '1.0.0' },
+  const { app, isConnected, error } = useApp({
+    appInfo: { name: 'Pulse Renderer App', version: '1.0.0' },
     capabilities: {},
     onAppCreated: (app) => {
       app.onteardown = async () => {
         console.info('App is being torn down');
         return {};
       };
+
       app.ontoolinput = async (input) => {
         console.info('Received tool call input:', input);
       };
@@ -54,110 +56,63 @@ function GetTimeApp() {
     }
   }, [app]);
 
-  if (error)
+  if (error) {
     return (
       <div>
         <strong>ERROR:</strong> {error.message}
       </div>
     );
-  if (!app) return <div>Connecting...</div>;
+  }
 
-  return <GetTimeAppInner app={app} toolResult={toolResult} hostContext={hostContext} />;
+  if (!app || !isConnected) {
+    return <div>Connecting...</div>;
+  }
+
+  return <PulseRendererInner app={app} toolResult={toolResult} hostContext={hostContext} />;
 }
 
-interface GetTimeAppInnerProps {
+type PulseRendererInnerProps = {
   app: App;
   toolResult: CallToolResult | null;
   hostContext?: McpUiHostContext;
-}
-function GetTimeAppInner({ app, toolResult, hostContext }: GetTimeAppInnerProps) {
-  const [serverTime, setServerTime] = useState('Loading...');
-  const [messageText, setMessageText] = useState('This is message text.');
-  const [logText, setLogText] = useState('This is log text.');
-  const [linkUrl, setLinkUrl] = useState('https://modelcontextprotocol.io/');
+};
+
+function PulseRendererInner({
+  app: _app,
+  toolResult,
+  hostContext: _hostContext,
+}: PulseRendererInnerProps): React.ReactNode {
+  const content = toolResult ? extractTextContent(toolResult) : '{}';
+  const bundle = JSON.parse(content);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (toolResult) {
-      setServerTime(extractTime(toolResult));
+    if (bundle?.insight_groups && containerRef.current) {
+      const insight = bundle.insight_groups[0].insights[0];
+
+      if (!insight) {
+        return;
+      }
+
+      const insightType = insight.insight_type;
+      const viz = insight.result.viz;
+      const width = containerRef.current.getBoundingClientRect().width ?? 0;
+      const height = calculateChartHeight(insightType, viz, width, DEFAULT_HEIGHT);
+      renderVisualization(insightType, viz, width, height, containerRef.current, {
+        showTooltip: true,
+      });
     }
-  }, [toolResult]);
-
-  const handleGetTime = useCallback(async () => {
-    try {
-      console.info('Calling get-time tool...');
-      const result = await app.callServerTool({ name: 'get-time', arguments: {} });
-      console.info('get-time result:', result);
-      setServerTime(extractTime(result));
-    } catch (e) {
-      console.error(e);
-      setServerTime('[ERROR]');
-    }
-  }, [app]);
-
-  const handleSendMessage = useCallback(async () => {
-    const signal = AbortSignal.timeout(5000);
-    try {
-      console.info('Sending message text to Host:', messageText);
-      const { isError } = await app.sendMessage(
-        { role: 'user', content: [{ type: 'text', text: messageText }] },
-        { signal },
-      );
-      console.info('Message', isError ? 'rejected' : 'accepted');
-    } catch (e) {
-      console.error('Message send error:', signal.aborted ? 'timed out' : e);
-    }
-  }, [app, messageText]);
-
-  const handleSendLog = useCallback(async () => {
-    console.info('Sending log text to Host:', logText);
-    await app.sendLog({ level: 'info', data: logText });
-  }, [app, logText]);
-
-  const handleOpenLink = useCallback(async () => {
-    console.info('Sending open link request to Host:', linkUrl);
-    const { isError } = await app.openLink({ url: linkUrl });
-    console.info('Open link request', isError ? 'rejected' : 'accepted');
-  }, [app, linkUrl]);
+  }, [bundle]);
 
   return (
-    <main
-      className={styles.main}
-      style={{
-        paddingTop: hostContext?.safeAreaInsets?.top,
-        paddingRight: hostContext?.safeAreaInsets?.right,
-        paddingBottom: hostContext?.safeAreaInsets?.bottom,
-        paddingLeft: hostContext?.safeAreaInsets?.left,
-      }}
-    >
-      <p className={styles.notice}>Watch activity in the DevTools console!</p>
-
-      <div className={styles.action}>
-        <p>
-          <strong>Server Time:</strong> <code className={styles.serverTime}>{serverTime}</code>
-        </p>
-        <button onClick={handleGetTime}>Get Server Time</button>
-      </div>
-
-      <div className={styles.action}>
-        <textarea value={messageText} onChange={(e) => setMessageText(e.target.value)} />
-        <button onClick={handleSendMessage}>Send Message</button>
-      </div>
-
-      <div className={styles.action}>
-        <input type="text" value={logText} onChange={(e) => setLogText(e.target.value)} />
-        <button onClick={handleSendLog}>Send Log</button>
-      </div>
-
-      <div className={styles.action}>
-        <input type="url" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} />
-        <button onClick={handleOpenLink}>Open Link</button>
-      </div>
-    </main>
+    <div ref={containerRef} className={styles.pulseRenderer}>
+      <pre>{JSON.stringify(bundle, null, 2)}</pre>
+    </div>
   );
 }
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <GetTimeApp />
+    <PulseRendererApp />
   </StrictMode>,
 );

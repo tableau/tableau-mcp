@@ -19,6 +19,7 @@ import { join } from 'path';
 
 import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
+import { pulseInsightBundleSchema } from '../sdks/tableau/types/pulse.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
 import { getDirname } from '../utils/getDirname.js';
@@ -194,16 +195,16 @@ async function connect(
   // interactive UI.
   registerAppTool(
     server,
-    'get-time',
+    'pulse-renderer',
     {
       title: 'Render Pulse Insight',
-      description: 'Renders a Pulse insight in a new tab.',
-      inputSchema: {},
+      description:
+        'Render a Pulse insight given an insight bundle. Use this tool to render a Pulse insight in a chat window.',
+      inputSchema: { bundle: pulseInsightBundleSchema },
       _meta: { ui: { resourceUri } }, // Links this tool to its UI resource
     },
-    async (): Promise<CallToolResult> => {
-      const time = new Date().toISOString();
-      return { content: [{ type: 'text', text: time }] };
+    async ({ bundle }): Promise<CallToolResult> => {
+      return { content: [{ type: 'text', text: JSON.stringify(bundle) }] };
     },
   );
 
@@ -217,7 +218,13 @@ async function connect(
     async (): Promise<ReadResourceResult> => {
       const html = readFileSync(join(DIST_DIR, 'pulse-renderer.html'), 'utf-8');
       return {
-        contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }],
+        contents: [
+          {
+            uri: resourceUri,
+            mimeType: RESOURCE_MIME_TYPE,
+            text: html,
+          },
+        ],
       };
     },
   );
