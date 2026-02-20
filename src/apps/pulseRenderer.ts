@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 import z from 'zod';
 
 import { useRestApi } from '../restApiInstance';
@@ -16,6 +16,8 @@ import { AppTool } from './appTool';
 const paramsSchema = {
   bundleRequest: pulseBundleRequestSchema,
   bundleType: z.optional(z.enum(pulseInsightBundleTypeEnum)),
+  insightGroupType: z.optional(z.string()),
+  insightType: z.optional(z.string()),
 };
 
 export const getPulseRendererAppTool = (server: Server): AppTool<typeof paramsSchema> => {
@@ -26,13 +28,20 @@ export const getPulseRendererAppTool = (server: Server): AppTool<typeof paramsSc
     description:
       'Render a Pulse insight given an insight bundle. Use this tool to render a Pulse insight in a chat window.',
     paramsSchema,
-    callback: async ({ bundleRequest, bundleType }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { bundleRequest, bundleType, insightGroupType, insightType },
+      extra,
+    ): Promise<CallToolResult> => {
       return await pulseRendererAppTool.logAndExecute<
-        PulseBundleResponse,
+        {
+          bundle: PulseBundleResponse;
+          insightGroupType: string | undefined;
+          insightType: string | undefined;
+        },
         GeneratePulseMetricValueInsightBundleError
       >({
         extra,
-        args: { bundleRequest, bundleType },
+        args: { bundleRequest, bundleType, insightGroupType, insightType },
         callback: async () => {
           const configWithOverrides = await extra.getConfigWithOverrides();
 
@@ -70,7 +79,11 @@ export const getPulseRendererAppTool = (server: Server): AppTool<typeof paramsSc
             });
           }
 
-          return result;
+          return new Ok({
+            bundle: result.value,
+            insightGroupType,
+            insightType,
+          });
         },
         getErrorText: (error) => {
           switch (error.type) {
