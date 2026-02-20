@@ -11,6 +11,7 @@ import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { setLogLevel } from './logging/log.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { AppRegistrationFunction, appRegistrationFunctions } from './tools/apps';
 import { Tool } from './tools/tool.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
 import { toolNames } from './tools/toolName.js';
@@ -100,6 +101,12 @@ export class Server extends McpServer {
     }
   };
 
+  registerApps = async (): Promise<void> => {
+    for (const appRegistrationFunction of this._getAppsRegistrationFunctions()) {
+      appRegistrationFunction(this);
+    }
+  };
+
   registerRequestHandlers = (): void => {
     this.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
       setLogLevel(this, request.params.level);
@@ -143,6 +150,10 @@ export class Server extends McpServer {
     }
 
     return toolsToRegister;
+  };
+
+  private _getAppsRegistrationFunctions = (): ReadonlyArray<AppRegistrationFunction> => {
+    return appRegistrationFunctions;
   };
 }
 

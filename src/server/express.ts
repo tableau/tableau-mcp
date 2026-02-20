@@ -1,28 +1,15 @@
-import {
-  registerAppResource,
-  registerAppTool,
-  RESOURCE_MIME_TYPE,
-} from '@modelcontextprotocol/ext-apps/server';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {
-  CallToolResult,
-  isInitializeRequest,
-  LoggingLevel,
-  ReadResourceResult,
-} from '@modelcontextprotocol/sdk/types.js';
+import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import cors from 'cors';
 import express, { Request, RequestHandler, Response } from 'express';
-import fs, { existsSync, readFileSync } from 'fs';
+import fs, { existsSync } from 'fs';
 import http from 'http';
 import https from 'https';
-import { join } from 'path';
 
 import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
-import { pulseInsightBundleSchema } from '../sdks/tableau/types/pulse.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
-import { getDirname } from '../utils/getDirname.js';
 import { handlePingRequest, validateProtocolVersion } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
@@ -30,8 +17,6 @@ import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
-
-const DIST_DIR = join(getDirname(), 'web');
 
 export async function startExpressServer({
   basePath,
@@ -186,49 +171,7 @@ async function connect(
   authInfo: TableauAuthInfo | undefined,
 ): Promise<void> {
   await server.registerTools(authInfo);
-
-  // Two-part registration: tool + resource, tied together by the resource URI.
-  const resourceUri = 'ui://tableau-mcp/pulse-renderer.html';
-
-  // Register a tool with UI metadata. When the host calls this tool, it reads
-  // `_meta.ui.resourceUri` to know which resource to fetch and render as an
-  // interactive UI.
-  registerAppTool(
-    server,
-    'pulse-renderer',
-    {
-      title: 'Render Pulse Insight',
-      description:
-        'Render a Pulse insight given an insight bundle. Use this tool to render a Pulse insight in a chat window.',
-      inputSchema: { bundle: pulseInsightBundleSchema },
-      _meta: { ui: { resourceUri } }, // Links this tool to its UI resource
-    },
-    async ({ bundle }): Promise<CallToolResult> => {
-      return { content: [{ type: 'text', text: JSON.stringify(bundle) }] };
-    },
-  );
-
-  // Register the resource, which returns the bundled HTML/JavaScript for the UI.
-  registerAppResource(
-    // @ts-expect-error -- extension of McpServer is confusing this
-    server,
-    resourceUri,
-    resourceUri,
-    { mimeType: RESOURCE_MIME_TYPE },
-    async (): Promise<ReadResourceResult> => {
-      const html = readFileSync(join(DIST_DIR, 'pulse-renderer.html'), 'utf-8');
-      return {
-        contents: [
-          {
-            uri: resourceUri,
-            mimeType: RESOURCE_MIME_TYPE,
-            text: html,
-          },
-        ],
-      };
-    },
-  );
-
+  server.registerApps();
   server.registerRequestHandlers();
 
   await server.connect(transport);
