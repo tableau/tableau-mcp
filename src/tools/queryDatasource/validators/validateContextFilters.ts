@@ -7,13 +7,42 @@ export type ContextFilterWarning = {
   affectedFilters: string[];
 };
 
-const DIMENSION_FILTER_TYPES: ReadonlySet<Filter['filterType']> = new Set([
+const DIMENSION_ONLY_FILTER_TYPES: ReadonlySet<Filter['filterType']> = new Set([
   'SET',
   'DATE',
-  'QUANTITATIVE_DATE',
-  'QUANTITATIVE_NUMERICAL',
   'MATCH',
 ]);
+
+const QUANTITATIVE_FILTER_TYPES: ReadonlySet<Filter['filterType']> = new Set([
+  'QUANTITATIVE_NUMERICAL',
+  'QUANTITATIVE_DATE',
+]);
+
+/**
+ * Returns true if the filter is a dimension filter missing `context: true`.
+ *
+ * In Tableau's Order of Operations, dimension filters execute before TOP/BOTTOM,
+ * so they need `context: true` to establish the correct subset. Aggregated measure
+ * filters (QUANTITATIVE with a `function` on the field) execute after TOP, so
+ * context doesn't apply to them.
+ */
+function isDimensionFilterMissingContext(f: Filter): boolean {
+  if (f.context === true || f.filterType === 'TOP') {
+    return false;
+  }
+
+  if (QUANTITATIVE_FILTER_TYPES.has(f.filterType)) {
+    return !('function' in f.field);
+  }
+
+  return DIMENSION_ONLY_FILTER_TYPES.has(f.filterType);
+}
+
+function getFilterName(f: Filter): string {
+  if ('fieldCaption' in f.field) return f.field.fieldCaption;
+  if ('calculation' in f.field) return f.field.calculation;
+  return 'unknown';
+}
 
 /**
  * Detects when a query has TOP/BOTTOM filters combined with dimension filters
@@ -33,20 +62,12 @@ export function validateContextFilters(query: Query): ContextFilterWarning[] {
     return [];
   }
 
-  const affectedFilters = query.filters
-    .filter((f) => DIMENSION_FILTER_TYPES.has(f.filterType) && f.context !== true)
-    .map((f) =>
-      'fieldCaption' in f.field
-        ? f.field.fieldCaption
-        : 'calculation' in f.field
-          ? f.field.calculation
-          : null,
-    )
-    .filter((name): name is string => name !== null);
-
-  if (affectedFilters.length === 0) {
+  const filtersNeedingContext = query.filters.filter(isDimensionFilterMissingContext);
+  if (filtersNeedingContext.length === 0) {
     return [];
   }
+
+  const affectedFilters = filtersNeedingContext.map(getFilterName);
 
   return [
     {

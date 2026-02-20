@@ -167,6 +167,8 @@ export const getQueryDatasourceTool = (
                 }
               }
 
+              const contextWarnings = validateContextFilters(query);
+
               const result = await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
               if (result.isErr()) {
                 return new Err(
@@ -185,7 +187,6 @@ export const getQueryDatasourceTool = (
                 result.value.data.length = rowLimit;
               }
 
-              const contextWarnings = validateContextFilters(query);
               if (contextWarnings.length > 0) {
                 return new Ok({
                   ...result.value,
