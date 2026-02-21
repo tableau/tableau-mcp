@@ -78,7 +78,7 @@ const parameterSchema = z.discriminatedUnion('parameterType', [
   parameterBaseSchema
     .extend({
       parameterType: z.literal('LIST'),
-      members: z.array(parameterValueSchema),
+      members: z.array(z.object({ value: parameterValueSchema })),
     })
     .strict(),
   parameterBaseSchema

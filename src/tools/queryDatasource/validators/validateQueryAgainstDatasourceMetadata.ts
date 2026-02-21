@@ -219,10 +219,10 @@ export function validateParametersAgainstDatasourceMetadata(
         }
         continue;
       case 'LIST':
-        if (!matchingParameter.members.includes(parameter.value)) {
+        if (!matchingParameter.members.some((m) => m.value === parameter.value)) {
           validationErrors.push({
             parameter: parameter.parameterCaption,
-            message: `Parameter '${parameter.parameterCaption}' has a value that is not in the list of allowed values for the parameter. The list of allowed values is [${matchingParameter.members.join(', ')}].`,
+            message: `Parameter '${parameter.parameterCaption}' has a value that is not in the list of allowed values for the parameter. The list of allowed values is [${matchingParameter.members.map((m) => m.value).join(', ')}].`,
           });
         }
         continue;
