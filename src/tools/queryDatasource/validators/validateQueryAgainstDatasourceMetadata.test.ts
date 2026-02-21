@@ -280,7 +280,7 @@ const sampleMetadataResponse: MetadataResponse = {
         parameterCaption: 'Test Boolean',
         dataType: 'BOOLEAN',
         value: false,
-        members: [true, false],
+        members: [{ value: true }, { value: false }],
       },
       {
         parameterType: 'QUANTITATIVE_RANGE',
@@ -298,7 +298,7 @@ const sampleMetadataResponse: MetadataResponse = {
         parameterCaption: 'Test Int',
         dataType: 'INTEGER',
         value: 1,
-        members: [1, 2, 3],
+        members: [{ value: 1 }, { value: 2 }, { value: 3 }],
       },
       {
         parameterType: 'QUANTITATIVE_RANGE',
