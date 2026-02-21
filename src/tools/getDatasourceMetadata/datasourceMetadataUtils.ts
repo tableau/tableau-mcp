@@ -93,7 +93,7 @@ export function simplifyReadMetadataResult(readMetadataResult: MetadataResponse)
       };
 
       if (parameter.parameterType === 'LIST' && parameter.members) {
-        toPush.members = parameter.members;
+        toPush.members = parameter.members.map((m) => m.value);
       } else if (parameter.parameterType === 'QUANTITATIVE_DATE') {
         toPush.minDate = parameter.minDate;
         toPush.maxDate = parameter.maxDate;
@@ -174,7 +174,7 @@ export function combineFields(
       };
 
       if (parameter.parameterType === 'LIST' && parameter.members) {
-        toPush.members = parameter.members;
+        toPush.members = parameter.members.map((m) => m.value);
       } else if (parameter.parameterType === 'QUANTITATIVE_DATE') {
         toPush.minDate = parameter.minDate;
         toPush.maxDate = parameter.maxDate;

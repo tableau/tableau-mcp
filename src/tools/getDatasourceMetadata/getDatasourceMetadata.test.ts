@@ -70,7 +70,7 @@ const mockReadMetadataResponses = vi.hoisted(() => ({
           parameterCaption: 'Test Int',
           dataType: 'INTEGER',
           value: 1,
-          members: [1, 2, 3],
+          members: [{ value: 1 }, { value: 2 }, { value: 3 }],
         },
         {
           parameterType: 'ANY_VALUE',
