@@ -117,6 +117,7 @@ export class Server extends McpServer {
       description,
       paramsSchema,
       callback,
+      sandboxCapabilities,
       resourceUri,
       html,
     } of this._getAppToolsToRegister()) {
@@ -148,7 +149,11 @@ export class Server extends McpServer {
           title: await Provider.from(title),
           description: await Provider.from(description),
           inputSchema: await Provider.from(paramsSchema),
-          _meta: { ui: { resourceUri } },
+          _meta: {
+            ui: {
+              resourceUri,
+            },
+          },
         },
         toolCallback,
       );
@@ -167,6 +172,7 @@ export class Server extends McpServer {
                 uri: resourceUri,
                 mimeType: RESOURCE_MIME_TYPE,
                 text: html,
+                _meta: { ui: { ...sandboxCapabilities } },
               },
             ],
           };

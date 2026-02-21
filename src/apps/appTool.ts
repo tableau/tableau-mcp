@@ -17,7 +17,35 @@ import { getHttpStatus } from '../utils/getHttpStatus';
 import { getSiteLuidFromAccessToken } from '../utils/getSiteLuidFromAccessToken';
 import { TypeOrProvider } from '../utils/provider';
 
-export type AppToolName = 'pulse-renderer';
+export type AppToolName = 'pulse-renderer' | 'embed-tableau-viz';
+
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+type EmptyObject = {};
+
+type HostSandboxCapabilities = Partial<{
+  /** Permissions granted by the host (camera, microphone, geolocation, clipboard-write). */
+  permissions: Partial<{
+    camera: EmptyObject;
+    microphone: EmptyObject;
+    geolocation: EmptyObject;
+    clipboardWrite: EmptyObject;
+  }>;
+
+  /** CSP domains approved by the host. */
+  csp: Partial<{
+    /** Approved origins for network requests (fetch/XHR/WebSocket). */
+    connectDomains: Array<string>;
+
+    /** Approved origins for static resources (scripts, images, styles, fonts). */
+    resourceDomains: Array<string>;
+
+    /** Approved origins for nested iframes (frame-src directive). */
+    frameDomains: Array<string>;
+
+    /** Approved base URIs for the document (base-uri directive). */
+    baseUriDomains: Array<string>;
+  }>;
+}>;
 
 export type AppToolParams<Args extends ZodRawShape | undefined = undefined> = {
   // The MCP server instance
@@ -37,6 +65,9 @@ export type AppToolParams<Args extends ZodRawShape | undefined = undefined> = {
 
   // The implementation of the tool itself
   callback: TypeOrProvider<TableauToolCallback<Args>>;
+
+  // Sandbox capabilities approved by the host.
+  sandboxCapabilities?: HostSandboxCapabilities;
 };
 
 /**
@@ -73,14 +104,24 @@ export class AppTool<Args extends ZodRawShape | undefined = undefined> {
   description: TypeOrProvider<string>;
   paramsSchema: TypeOrProvider<Args>;
   callback: TypeOrProvider<TableauToolCallback<Args>>;
+  sandboxCapabilities?: HostSandboxCapabilities;
 
-  constructor({ server, name, title, description, paramsSchema, callback }: AppToolParams<Args>) {
+  constructor({
+    server,
+    name,
+    title,
+    description,
+    paramsSchema,
+    callback,
+    sandboxCapabilities,
+  }: AppToolParams<Args>) {
     this.server = server;
     this.name = name;
     this.title = title;
     this.description = description;
     this.paramsSchema = paramsSchema;
     this.callback = callback;
+    this.sandboxCapabilities = sandboxCapabilities;
   }
 
   get resourceUri(): `ui://tableau-mcp/${AppToolName}.html` {

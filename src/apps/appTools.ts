@@ -1,3 +1,4 @@
+import { getEmbedTableauVizTool } from './embedTableauViz';
 import { getPulseRendererAppTool } from './pulseRenderer';
 
-export const appToolFactories = [getPulseRendererAppTool];
+export const appToolFactories = [getPulseRendererAppTool, getEmbedTableauVizTool];
