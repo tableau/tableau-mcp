@@ -27,7 +27,7 @@ import { AuthenticatedRequest } from './types.js';
  *
  * @returns Express middleware function
  */
-export function authMiddleware(privateKey: KeyObject): RequestHandler {
+export function authMiddleware(privateKey: KeyObject | null): RequestHandler {
   return async (
     req: AuthenticatedRequest,
     res: express.Response,
@@ -73,6 +73,13 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
     }
 
     const token = authHeader.slice(7);
+    if (!privateKey) {
+      res.status(501).json({
+        error: 'not_implemented',
+        error_description: 'Token validation for external OAuth issuer is not yet implemented.',
+      });
+      return;
+    }
     const result = await verifyAccessToken(token, privateKey);
 
     if (result.isErr()) {

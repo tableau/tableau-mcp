@@ -256,13 +256,23 @@ References:
 
 <hr />
 
+### `OAUTH_EMBEDDED_AUTHZ_SERVER`
+
+When `true` (default), the MCP server runs the embedded OAuth authorization server (authorize, token,
+callback, register routes). When `false`, the issuer is an external authorization server (e.g. Tableau);
+only `.well-known` endpoints are exposed and JWE key/redirect URI constraints are skipped.
+
+- Default: `true`
+
+<hr />
+
 ### `ADVERTISE_API_SCOPES`
 
 Include Tableau API scopes in OAuth metadata and scope challenges.
 
-- Default: `false` (self-hosted)
-- When `true` (Falcon), `scopes_supported` includes MCP + API scopes and scope challenges may
-  include API scopes for step-up.
+- Default: `false`
+- When `true`, `scopes_supported` includes MCP + API scopes and scope challenges may include API
+  scopes for step-up.
 
 <hr />
 
