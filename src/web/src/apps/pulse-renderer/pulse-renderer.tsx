@@ -1,13 +1,12 @@
 import type { App, McpUiHostContext } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { calculateChartHeight, renderVisualization } from '@tableau/ntbue-visualization-renderer';
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { ChartWrapper } from '../../components/pulse-renderer/chart-wrapper';
+import { InsightGroupType } from '../../components/pulse-renderer/enums';
 import styles from './pulse-renderer.module.css';
-
-const DEFAULT_HEIGHT = 500;
 
 function extractTextContent(callToolResult: CallToolResult): string {
   const textContent = callToolResult.content?.find((c) => c.type === 'text');
@@ -85,34 +84,64 @@ function PulseRenderer({
   const content = toolResult ? extractTextContent(toolResult) : '{}';
   const response = JSON.parse(content);
   const bundle = response.bundle?.bundle_response?.result;
-  const insightGroupType = response.insightGroupType;
-  const insightType = response.insightType;
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (bundle?.insight_groups && containerRef.current) {
-      const insightGroup =
-        bundle.insight_groups.find((group: any) => group.type === insightGroupType) ??
-        bundle.insight_groups[0];
+  const allInsights =
+    bundle?.insight_groups.find((group: any) => group.type === InsightGroupType.Followup)
+      ?.insights ?? [];
 
-      const insight =
-        insightGroup.insights.find((insight: any) => insight.type === insightType) ??
-        insightGroup.insights[0];
+  const insightsWithCards = allInsights.filter((insight: any) => insight.type !== 'unusualchange');
+  const [topInsight, ...otherInsights] = insightsWithCards;
 
-      if (!insight) {
-        return;
-      }
+  // useEffect(() => {
+  //   if (bundle?.insight_groups && containerRef.current) {
+  //     const insightGroup =
+  //       bundle.insight_groups.find((group: any) => group.type === insightGroupType) ??
+  //       bundle.insight_groups[0];
 
-      const viz = insight.result.viz;
-      const width = containerRef.current.getBoundingClientRect().width ?? 0;
-      const height = calculateChartHeight(insightType, viz, width, DEFAULT_HEIGHT);
-      renderVisualization(insightType, viz, width, height, containerRef.current, {
-        showTooltip: true,
-      });
-    }
-  }, [bundle]);
+  //     const insight =
+  //       insightGroup.insights.find((insight: any) => insight.type === insightType) ??
+  //       insightGroup.insights[0];
 
-  return <div ref={containerRef} className={styles.pulseRenderer}></div>;
+  //     if (!insight) {
+  //       return;
+  //     }
+
+  //     const viz = insight.result.viz;
+  //     const width = containerRef.current.getBoundingClientRect().width ?? 0;
+  //     const height = calculateChartHeight(insightType, viz, width, DEFAULT_HEIGHT);
+  //     renderVisualization(insightType, viz, width, height, containerRef.current, {
+  //       showTooltip: true,
+  //     });
+  //   }
+  // }, [bundle]);
+
+  return (
+    <div ref={containerRef} className={styles.pulseRenderer}>
+      <div className={styles.insightContent}>
+        <div className={styles.topInsight}>
+          <div className={styles.topInsightTitle}>{topInsight.result.question}</div>
+          <div
+            className={styles.topInsightContent}
+            dangerouslySetInnerHTML={{ __html: topInsight.result.markup }}
+          />
+          <ChartWrapper insight={topInsight} />
+        </div>
+        <div className={styles.otherInsights}>
+          {otherInsights.map((insight: any) => (
+            <div key={insight.id} className={styles.otherInsight}>
+              <div className={styles.otherInsightTitle}>{insight.result.question}</div>
+              <div
+                className={styles.otherInsightContent}
+                dangerouslySetInnerHTML={{ __html: insight.result.markup }}
+              />
+              <ChartWrapper insight={insight} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 createRoot(document.getElementById('root')!).render(

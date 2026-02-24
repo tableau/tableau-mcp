@@ -1,0 +1,18 @@
+.pulseRenderer {
+  display: flex;
+  width: 100%;
+
+  .insightContent {
+    color: #1e1f27;
+    word-break: break-word;
+
+    [data-type] {
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    [data-type='value'] {
+      font-weight: unset;
+    }
+  }
+}

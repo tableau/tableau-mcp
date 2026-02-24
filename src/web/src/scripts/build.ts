@@ -78,7 +78,7 @@ function buildConfig(htmlEntryPath: string, componentName: string): InlineConfig
 }
 
 async function main(): Promise<void> {
-  const srcDir = resolve(__dirname, '../components');
+  const srcDir = resolve(__dirname, '../apps');
   const components = discoverComponents(srcDir);
 
   if (components.length === 0) {
