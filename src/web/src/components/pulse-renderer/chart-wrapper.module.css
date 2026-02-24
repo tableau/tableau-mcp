@@ -1,6 +1,7 @@
 .chartWrapper {
   display: flex;
   width: 100%;
+  margin: 1rem 2rem 0;
 }
 
 :global(#vg-tooltip-element) {
