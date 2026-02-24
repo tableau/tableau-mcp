@@ -1,19 +1,8 @@
 .pulseRenderer {
   display: flex;
+  flex-direction: column;
+  gap: 1rem;
   width: 100%;
+  padding: 1rem;
   background-color: #f9fbfe;
-
-  .insightContent {
-    color: #1e1f27;
-    word-break: break-word;
-
-    [data-type] {
-      font-weight: 700;
-      overflow-wrap: anywhere;
-    }
-
-    [data-type='value'] {
-      font-weight: unset;
-    }
-  }
 }

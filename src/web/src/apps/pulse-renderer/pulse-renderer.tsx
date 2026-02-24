@@ -6,8 +6,8 @@ import { createRoot } from 'react-dom/client';
 import z from 'zod';
 
 import { pulseBundleResponseSchema } from '../../../../sdks/tableau/types/pulse';
-import { ChartWrapper } from '../../components/pulse-renderer/chart-wrapper';
 import { InsightGroupType } from '../../components/pulse-renderer/enums';
+import { InsightCard } from '../../components/pulse-renderer/insight-card';
 import { useToolResult } from '../../hooks/useToolResult';
 import styles from './pulse-renderer.module.css';
 
@@ -110,28 +110,12 @@ function PulseRenderer({
 
   return (
     <div ref={containerRef} className={styles.pulseRenderer}>
-      <div className={styles.insightContent}>
-        <div className={styles.topInsight}>
-          <div className={styles.topInsightTitle}>{topInsight.result.question}</div>
-          <div
-            className={styles.topInsightContent}
-            dangerouslySetInnerHTML={{ __html: topInsight.result.markup ?? '' }}
-          />
-          <ChartWrapper insightType={topInsight.insight_type} spec={topInsight.result.viz} />
+      <InsightCard insight={topInsight.result} />
+      {otherInsights.map((insight, index) => (
+        <div key={`${insight.insight_type}-${index}`} className={styles.otherInsight}>
+          <InsightCard insight={insight.result} />
         </div>
-        <div className={styles.otherInsights}>
-          {otherInsights.map((insight, index) => (
-            <div key={`${insight.insight_type}-${index}`} className={styles.otherInsight}>
-              <div className={styles.otherInsightTitle}>{insight.result.question}</div>
-              <div
-                className={styles.otherInsightContent}
-                dangerouslySetInnerHTML={{ __html: insight.result.markup ?? '' }}
-              />
-              <ChartWrapper insightType={insight.insight_type} spec={insight.result.viz} />
-            </div>
-          ))}
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
