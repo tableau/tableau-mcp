@@ -1,0 +1,14 @@
+.insightCard {
+  background-color: #fff;
+  border: 0.063rem solid #e9f2fe;
+  border-radius: 1.5rem;
+  width: 100%;
+
+  .inner {
+    margin: 1.5rem 2rem;
+
+    .vizContent {
+      margin: 1rem 2rem 0;
+    }
+  }
+}

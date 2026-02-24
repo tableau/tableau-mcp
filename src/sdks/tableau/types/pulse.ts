@@ -494,3 +494,4 @@ export type PulseMetricDefinitionView = (typeof pulseMetricDefinitionViewEnum)[n
 export type PulseMetricDefinition = z.infer<typeof pulseMetricDefinitionSchema>;
 export type PulseMetric = z.infer<typeof pulseMetricSchema>;
 export type PulseMetricSubscription = z.infer<typeof pulseMetricSubscriptionSchema>;
+export type PulseInsight = z.infer<typeof insightSchema>;

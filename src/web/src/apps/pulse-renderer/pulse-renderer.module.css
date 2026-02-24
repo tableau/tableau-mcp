@@ -1,6 +1,7 @@
 .pulseRenderer {
   display: flex;
   width: 100%;
+  background-color: #f9fbfe;
 
   .insightContent {
     color: #1e1f27;

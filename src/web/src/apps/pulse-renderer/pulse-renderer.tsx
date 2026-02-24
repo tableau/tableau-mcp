@@ -3,15 +3,13 @@ import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import z from 'zod';
 
+import { pulseBundleResponseSchema } from '../../../../sdks/tableau/types/pulse';
 import { ChartWrapper } from '../../components/pulse-renderer/chart-wrapper';
 import { InsightGroupType } from '../../components/pulse-renderer/enums';
+import { useToolResult } from '../../hooks/useToolResult';
 import styles from './pulse-renderer.module.css';
-
-function extractTextContent(callToolResult: CallToolResult): string {
-  const textContent = callToolResult.content?.find((c) => c.type === 'text');
-  return textContent?.text ?? '';
-}
 
 function PulseRendererApp(): React.ReactNode {
   const [toolResult, setToolResult] = useState<CallToolResult | null>(null);
@@ -81,40 +79,34 @@ function PulseRenderer({
   toolResult,
   hostContext: _hostContext,
 }: PulseRendererProps): React.ReactNode {
-  const content = toolResult ? extractTextContent(toolResult) : '{}';
-  const response = JSON.parse(content);
-  const bundle = response.bundle?.bundle_response?.result;
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const result = useToolResult(toolResult, z.object({ bundle: pulseBundleResponseSchema }));
+  const bundle = result.success ? result.data.bundle.bundle_response.result : undefined;
   const allInsights =
-    bundle?.insight_groups.find((group: any) => group.type === InsightGroupType.Followup)
-      ?.insights ?? [];
+    bundle?.insight_groups.find((group) => group.type === InsightGroupType.Followup)?.insights ??
+    [];
 
-  const insightsWithCards = allInsights.filter((insight: any) => insight.type !== 'unusualchange');
+  const insightsWithCards = allInsights.filter(
+    (insight) => insight.insight_type !== 'unusualchange',
+  );
   const [topInsight, ...otherInsights] = insightsWithCards;
 
-  // useEffect(() => {
-  //   if (bundle?.insight_groups && containerRef.current) {
-  //     const insightGroup =
-  //       bundle.insight_groups.find((group: any) => group.type === insightGroupType) ??
-  //       bundle.insight_groups[0];
+  if (!result.success) {
+    return (
+      <div ref={containerRef} className={styles.pulseRenderer}>
+        <div>Failed to parse Pulse bundle response.</div>
+      </div>
+    );
+  }
 
-  //     const insight =
-  //       insightGroup.insights.find((insight: any) => insight.type === insightType) ??
-  //       insightGroup.insights[0];
-
-  //     if (!insight) {
-  //       return;
-  //     }
-
-  //     const viz = insight.result.viz;
-  //     const width = containerRef.current.getBoundingClientRect().width ?? 0;
-  //     const height = calculateChartHeight(insightType, viz, width, DEFAULT_HEIGHT);
-  //     renderVisualization(insightType, viz, width, height, containerRef.current, {
-  //       showTooltip: true,
-  //     });
-  //   }
-  // }, [bundle]);
+  if (!topInsight) {
+    return (
+      <div ref={containerRef} className={styles.pulseRenderer}>
+        <div>No insights to display.</div>
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className={styles.pulseRenderer}>
@@ -123,19 +115,19 @@ function PulseRenderer({
           <div className={styles.topInsightTitle}>{topInsight.result.question}</div>
           <div
             className={styles.topInsightContent}
-            dangerouslySetInnerHTML={{ __html: topInsight.result.markup }}
+            dangerouslySetInnerHTML={{ __html: topInsight.result.markup ?? '' }}
           />
-          <ChartWrapper insight={topInsight} />
+          <ChartWrapper insightType={topInsight.insight_type} spec={topInsight.result.viz} />
         </div>
         <div className={styles.otherInsights}>
-          {otherInsights.map((insight: any) => (
-            <div key={insight.id} className={styles.otherInsight}>
+          {otherInsights.map((insight, index) => (
+            <div key={`${insight.insight_type}-${index}`} className={styles.otherInsight}>
               <div className={styles.otherInsightTitle}>{insight.result.question}</div>
               <div
                 className={styles.otherInsightContent}
-                dangerouslySetInnerHTML={{ __html: insight.result.markup }}
+                dangerouslySetInnerHTML={{ __html: insight.result.markup ?? '' }}
               />
-              <ChartWrapper insight={insight} />
+              <ChartWrapper insightType={insight.insight_type} spec={insight.result.viz} />
             </div>
           ))}
         </div>
