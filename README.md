@@ -11,6 +11,11 @@
 Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will
 make it easier for developers to build AI applications that integrate with Tableau.
 
+TMCP now uses a server-side Code Mode interface and exposes three MCP tools:
+- `search`: explore the Tableau capability catalog using JavaScript over a read-only `spec` object.
+- `execute`: run JavaScript in a sandbox and call Tableau operations through `tableau.operations.<operationId>(args)`.
+- `query-datasource`: directly query a datasource with the VizQL Data Service query payload.
+
 ## Official Documentation
 
 https://tableau.github.io/tableau-mcp/

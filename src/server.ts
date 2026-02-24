@@ -13,8 +13,8 @@ import { setLogLevel } from './logging/log.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { Tool } from './tools/tool.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
-import { toolNames } from './tools/toolName.js';
-import { toolFactories } from './tools/tools.js';
+import { exposedToolNames, toolNames } from './tools/toolName.js';
+import { codeModeToolFactories } from './tools/tools.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings';
 import { Provider } from './utils/provider.js';
 
@@ -118,25 +118,14 @@ export class Server extends McpServer {
       },
     });
 
-    const { includeTools, excludeTools } = config;
+    // include/exclude filters are intentionally ignored in server-side Code Mode
 
-    const tools = toolFactories.map((toolFactory) => toolFactory(this, tableauAuthInfo));
-    const toolsToRegister = tools.filter((tool) => {
-      if (includeTools.length > 0) {
-        return includeTools.includes(tool.name);
-      }
-
-      if (excludeTools.length > 0) {
-        return !excludeTools.includes(tool.name);
-      }
-
-      return true;
-    });
+    const toolsToRegister = codeModeToolFactories.map((toolFactory) => toolFactory(this, tableauAuthInfo));
 
     if (toolsToRegister.length === 0) {
       throw new Error(`
           No tools to register.
-          Tools available = [${toolNames.join(', ')}].
+          Tools available = [${exposedToolNames.join(', ')}]. Legacy tool catalog size = [${toolNames.length}].
           EXCLUDE_TOOLS = [${excludeTools.join(', ')}].
           INCLUDE_TOOLS = [${includeTools.join(', ')}]
         `);

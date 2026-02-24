@@ -508,6 +508,10 @@ describe('searchContentUtils', () => {
       expect(result.message).toBe(
         'No search results were found. Either none exist or you do not have permission to view them.',
       );
+      expect(result.metadata).toEqual({
+        reason: 'no_results',
+        counts: { beforeFiltering: 0, afterFiltering: 0 },
+      });
     });
 
     it('should return empty result when all items were filtered out by the bounded context', () => {
@@ -530,6 +534,10 @@ describe('searchContentUtils', () => {
           'While search results were found, they were all filtered out by the server configuration.',
         ].join(' '),
       );
+      expect(result.metadata).toEqual({
+        reason: 'filtered_by_bounded_context',
+        counts: { beforeFiltering: items.length, afterFiltering: 0 },
+      });
     });
 
     it('should return success result when no items were filtered out by the bounded context', () => {

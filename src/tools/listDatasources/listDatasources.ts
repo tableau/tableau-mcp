@@ -23,6 +23,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
     name: 'list-datasources',
     description: `
   Retrieves a list of published data sources from a specified Tableau site using the Tableau REST API. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Views) for precise and flexible data source discovery. Use this tool when a user requests to list, search, or filter Tableau data sources on a site.
+  If content search is about workbooks or views (for example "Superstore workbook"), prefer search-content first, then query workbook/view resources directly.
 
   **Supported Filter Fields and Operators**
   | Field                  | Operators                                 |
@@ -134,11 +135,16 @@ export function constrainDatasources({
   datasources: Array<DataSource>;
   boundedContext: BoundedContext;
 }): ConstrainedResult<Array<DataSource>> {
+  const initialCount = datasources.length;
   if (datasources.length === 0) {
     return {
       type: 'empty',
       message:
         'No datasources were found. Either none exist or you do not have permission to view them.',
+      metadata: {
+        reason: 'no_results',
+        counts: { beforeFiltering: 0, afterFiltering: 0 },
+      },
     };
   }
 
@@ -164,6 +170,10 @@ export function constrainDatasources({
         'The set of allowed data sources that can be queried is limited by the server configuration.',
         'While data sources were found, they were all filtered out by the server configuration.',
       ].join(' '),
+      metadata: {
+        reason: 'filtered_by_bounded_context',
+        counts: { beforeFiltering: initialCount, afterFiltering: 0 },
+      },
     };
   }
 

@@ -9,7 +9,7 @@ import { z } from 'zod';
 
 import packageJson from '../../package.json';
 import { ProcessEnvEx } from '../../types/process-env.js';
-import { toolNames } from '../tools/toolName.js';
+import { exposedToolNames } from '../tools/toolName.js';
 
 // @ts-expect-error - import.meta is not allowed in CommonJS output, but this file is built using esbuild as ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -270,6 +270,38 @@ const envVars = {
     type: 'number',
     title: 'Max Request Timeout (ms)',
     description: 'The maximum timeout for requests to the Tableau Server REST API.',
+    required: false,
+    sensitive: false,
+  },
+  CODE_MODE_MAX_EXECUTION_TIME_MS: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'Code Mode Max Execution Time (ms)',
+    description: 'Maximum wall-clock runtime for code executed by the execute/search tools.',
+    required: false,
+    sensitive: false,
+  },
+  CODE_MODE_MAX_OUTPUT_BYTES: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'Code Mode Max Output Bytes',
+    description: 'Maximum size of serialized output from code-mode sandbox execution.',
+    required: false,
+    sensitive: false,
+  },
+  CODE_MODE_MAX_API_CALLS: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'Code Mode Max API Calls',
+    description: 'Maximum number of Tableau API wrapper invocations allowed per execute/search call.',
+    required: false,
+    sensitive: false,
+  },
+  CODE_MODE_SANDBOX_MEMORY_MB: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'Code Mode Sandbox Memory (MB)',
+    description: 'Memory ceiling in MB for each code-mode worker sandbox.',
     required: false,
     sensitive: false,
   },
@@ -558,7 +590,7 @@ const manifest = {
       env: manifestEnvObject,
     },
   },
-  tools: toolNames.map((name) => ({ name })),
+  tools: exposedToolNames.map((name) => ({ name })),
   user_config: userConfig,
 } satisfies McpbManifest;
 

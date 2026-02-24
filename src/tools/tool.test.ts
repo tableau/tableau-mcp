@@ -222,6 +222,38 @@ describe('Tool', () => {
     expect(result.content[0].text).toBe('No data found');
   });
 
+  it('should return structured empty payload when metadata is present', async () => {
+    const tool = new Tool(mockParams);
+    const successResult = { data: 'success' };
+
+    const result = await tool.logAndExecute({
+      extra: mockExtra,
+      args: { param1: 'test' },
+      callback: () => Promise.resolve(Ok(successResult)),
+      constrainSuccessResult: (_result) => {
+        return {
+          type: 'empty',
+          message: 'No data found',
+          metadata: {
+            reason: 'no_results',
+            counts: { beforeFiltering: 0, afterFiltering: 0 },
+          },
+        };
+      },
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      type: 'empty',
+      message: 'No data found',
+      metadata: {
+        reason: 'no_results',
+        counts: { beforeFiltering: 0, afterFiltering: 0 },
+      },
+    });
+  });
+
   it('should return error result when the constrained result is error', async () => {
     const tool = new Tool(mockParams);
     const successResult = { data: 'success' };

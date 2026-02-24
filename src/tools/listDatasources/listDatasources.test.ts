@@ -69,6 +69,10 @@ describe('listDatasourcesTool', () => {
       expect(result.message).toBe(
         'No datasources were found. Either none exist or you do not have permission to view them.',
       );
+      expect(result.metadata).toEqual({
+        reason: 'no_results',
+        counts: { beforeFiltering: 0, afterFiltering: 0 },
+      });
     });
 
     it('should return empty results when all datasources were filtered out by the bounded context', () => {
@@ -89,6 +93,10 @@ describe('listDatasourcesTool', () => {
           'While data sources were found, they were all filtered out by the server configuration.',
         ].join(' '),
       );
+      expect(result.metadata).toEqual({
+        reason: 'filtered_by_bounded_context',
+        counts: { beforeFiltering: mockDatasources.datasources.length, afterFiltering: 0 },
+      });
     });
 
     test.each(

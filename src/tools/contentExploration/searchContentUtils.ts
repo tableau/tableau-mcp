@@ -261,11 +261,16 @@ export function constrainSearchContent({
   items: Array<ReducedSearchContentResponse>;
   boundedContext: BoundedContext;
 }): ConstrainedResult<Array<ReducedSearchContentResponse>> {
+  const initialCount = items.length;
   if (items.length === 0) {
     return {
       type: 'empty',
       message:
         'No search results were found. Either none exist or you do not have permission to view them.',
+      metadata: {
+        reason: 'no_results',
+        counts: { beforeFiltering: 0, afterFiltering: 0 },
+      },
     };
   }
 
@@ -332,6 +337,10 @@ export function constrainSearchContent({
         'The set of allowed content that can be queried is limited by the server configuration.',
         'While search results were found, they were all filtered out by the server configuration.',
       ].join(' '),
+      metadata: {
+        reason: 'filtered_by_bounded_context',
+        counts: { beforeFiltering: initialCount, afterFiltering: 0 },
+      },
     };
   }
 

@@ -1,4 +1,6 @@
 import { getSearchContentTool } from './contentExploration/searchContent.js';
+import { getCodeModeExecuteTool } from './codeMode/execute.js';
+import { getCodeModeSearchTool } from './codeMode/search.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
@@ -15,7 +17,7 @@ import { getListViewsTool } from './views/listViews.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 
-export const toolFactories = [
+export const legacyToolFactories = [
   getGetDatasourceMetadataTool,
   getListDatasourcesTool,
   getQueryDatasourceTool,
@@ -32,4 +34,10 @@ export const toolFactories = [
   getListWorkbooksTool,
   getListViewsTool,
   getSearchContentTool,
+];
+
+export const codeModeToolFactories = [
+  getCodeModeSearchTool,
+  getCodeModeExecuteTool,
+  getQueryDatasourceTool,
 ];

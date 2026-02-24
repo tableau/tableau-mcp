@@ -48,6 +48,10 @@ export class Config {
   defaultLogLevel: string;
   disableLogMasking: boolean;
   maxRequestTimeoutMs: number;
+  codeModeMaxExecutionTimeMs: number;
+  codeModeMaxOutputBytes: number;
+  codeModeMaxApiCalls: number;
+  codeModeSandboxMemoryMb: number;
   disableSessionManagement: boolean;
   enableServerLogging: boolean;
   serverLogDirectory: string;
@@ -103,6 +107,10 @@ export class Config {
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
+      CODE_MODE_MAX_EXECUTION_TIME_MS: codeModeMaxExecutionTimeMs,
+      CODE_MODE_MAX_OUTPUT_BYTES: codeModeMaxOutputBytes,
+      CODE_MODE_MAX_API_CALLS: codeModeMaxApiCalls,
+      CODE_MODE_SANDBOX_MEMORY_MB: codeModeSandboxMemoryMb,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
       ENABLE_SERVER_LOGGING: enableServerLogging,
       SERVER_LOG_DIRECTORY: serverLogDirectory,
@@ -283,6 +291,26 @@ export class Config {
       defaultValue: TEN_MINUTES_IN_MS,
       minValue: 5000,
       maxValue: ONE_HOUR_IN_MS,
+    });
+    this.codeModeMaxExecutionTimeMs = parseNumber(codeModeMaxExecutionTimeMs, {
+      defaultValue: 30_000,
+      minValue: 1_000,
+      maxValue: ONE_HOUR_IN_MS,
+    });
+    this.codeModeMaxOutputBytes = parseNumber(codeModeMaxOutputBytes, {
+      defaultValue: 512_000,
+      minValue: 1_024,
+      maxValue: 10_485_760,
+    });
+    this.codeModeMaxApiCalls = parseNumber(codeModeMaxApiCalls, {
+      defaultValue: 25,
+      minValue: 1,
+      maxValue: 500,
+    });
+    this.codeModeSandboxMemoryMb = parseNumber(codeModeSandboxMemoryMb, {
+      defaultValue: 128,
+      minValue: 32,
+      maxValue: 1024,
     });
 
     if (this.auth === 'pat') {

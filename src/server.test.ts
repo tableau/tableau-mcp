@@ -1,7 +1,7 @@
 import { exportedForTesting as serverExportedForTesting } from './server.js';
+import { getCodeModeExecuteTool } from './tools/codeMode/execute.js';
+import { getCodeModeSearchTool } from './tools/codeMode/search.js';
 import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
-import { toolNames } from './tools/toolName.js';
-import { toolFactories } from './tools/tools.js';
 import { Provider } from './utils/provider.js';
 
 const { Server } = serverExportedForTesting;
@@ -25,7 +25,11 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools();
 
-    const tools = toolFactories.map((toolFactory) => toolFactory(server));
+    const tools = [
+      getCodeModeSearchTool(server),
+      getCodeModeExecuteTool(server),
+      getQueryDatasourceTool(server),
+    ];
     for (const tool of tools) {
       expect(server.registerTool).toHaveBeenCalledWith(
         tool.name,
@@ -39,69 +43,20 @@ describe('server', () => {
     }
   });
 
-  it('should register tools filtered by includeTools', async () => {
+  it('should ignore includeTools filter', async () => {
     process.env.INCLUDE_TOOLS = 'query-datasource';
     const server = getServer();
     await server.registerTools();
 
-    const tool = getQueryDatasourceTool(server);
-    expect(server.registerTool).toHaveBeenCalledWith(
-      tool.name,
-      {
-        description: await Provider.from(tool.description),
-        inputSchema: await Provider.from(tool.paramsSchema),
-        annotations: await Provider.from(tool.annotations),
-      },
-      expect.any(Function),
-    );
+    expect(server.registerTool).toHaveBeenCalledTimes(3);
   });
 
-  it('should register tools filtered by excludeTools', async () => {
+  it('should ignore excludeTools filter', async () => {
     process.env.EXCLUDE_TOOLS = 'query-datasource';
     const server = getServer();
     await server.registerTools();
 
-    const tools = toolFactories.map((toolFactory) => toolFactory(server));
-    for (const tool of tools) {
-      if (tool.name === 'query-datasource') {
-        expect(server.registerTool).not.toHaveBeenCalledWith(
-          tool.name,
-          {
-            description: await Provider.from(tool.description),
-            inputSchema: await Provider.from(tool.paramsSchema),
-            annotations: await Provider.from(tool.annotations),
-          },
-          expect.any(Function),
-        );
-      } else {
-        expect(server.registerTool).toHaveBeenCalledWith(
-          tool.name,
-          {
-            description: await Provider.from(tool.description),
-            inputSchema: await Provider.from(tool.paramsSchema),
-            annotations: await Provider.from(tool.annotations),
-          },
-          expect.any(Function),
-        );
-      }
-    }
-  });
-
-  it('should throw error when no tools are registered', async () => {
-    const sortedToolNames = [...toolNames].sort((a, b) => a.localeCompare(b)).join(', ');
-    process.env.EXCLUDE_TOOLS = sortedToolNames;
-    const server = getServer();
-
-    const sentences = [
-      'No tools to register',
-      `Tools available = [${toolNames.join(', ')}]`,
-      `EXCLUDE_TOOLS = [${sortedToolNames}]`,
-      'INCLUDE_TOOLS = []',
-    ];
-
-    for (const sentence of sentences) {
-      await expect(server.registerTools).rejects.toThrow(sentence);
-    }
+    expect(server.registerTool).toHaveBeenCalledTimes(3);
   });
 
   it('should register request handlers', async () => {

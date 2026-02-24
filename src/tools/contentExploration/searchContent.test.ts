@@ -338,10 +338,18 @@ describe('searchContentTool', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    const responseData = result.content[0].text;
-    expect(responseData).toEqual(
-      'No search results were found. Either none exist or you do not have permission to view them.',
-    );
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData).toEqual({
+      type: 'empty',
+      message: 'No search results were found. Either none exist or you do not have permission to view them.',
+      metadata: {
+        reason: 'no_results',
+        counts: {
+          beforeFiltering: 0,
+          afterFiltering: 0,
+        },
+      },
+    });
   });
 });
 

@@ -28,6 +28,10 @@ export interface ProcessEnvEx {
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;
   MAX_REQUEST_TIMEOUT_MS: string | undefined;
+  CODE_MODE_MAX_EXECUTION_TIME_MS: string | undefined;
+  CODE_MODE_MAX_OUTPUT_BYTES: string | undefined;
+  CODE_MODE_MAX_API_CALLS: string | undefined;
+  CODE_MODE_SANDBOX_MEMORY_MB: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
   MAX_RESULT_LIMITS: string | undefined;
   DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: string | undefined;

@@ -1,4 +1,6 @@
 export const toolNames = [
+  'search',
+  'execute',
   'list-datasources',
   'list-workbooks',
   'list-views',
@@ -17,8 +19,14 @@ export const toolNames = [
   'search-content',
 ] as const;
 export type ToolName = (typeof toolNames)[number];
+export const codeModeToolNames = ['search', 'execute'] as const satisfies Array<ToolName>;
+export const exposedToolNames = [
+  ...codeModeToolNames,
+  'query-datasource',
+] as const satisfies Array<ToolName>;
 
 export const toolGroupNames = [
+  'code-mode',
   'datasource',
   'workbook',
   'view',
@@ -28,6 +36,7 @@ export const toolGroupNames = [
 export type ToolGroupName = (typeof toolGroupNames)[number];
 
 export const toolGroups = {
+  'code-mode': ['search', 'execute'],
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
   workbook: ['list-workbooks', 'get-workbook'],
   view: ['list-views', 'get-view-data', 'get-view-image'],

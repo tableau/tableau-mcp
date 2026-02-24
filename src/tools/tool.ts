@@ -27,11 +27,13 @@ export type ConstrainedResult<T> =
   | {
       type: 'empty';
       message: string;
+      metadata?: Record<string, unknown>;
     }
   | {
       type: 'error';
       message: string;
       error?: Error;
+      metadata?: Record<string, unknown>;
     };
 
 /**
@@ -210,9 +212,16 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
           success = !isError;
           errorCode =
             isError && constrainedResult.error ? getHttpStatus(constrainedResult.error) : '';
+          const responseText = constrainedResult.metadata
+            ? JSON.stringify({
+                type: constrainedResult.type,
+                message: constrainedResult.message,
+                metadata: constrainedResult.metadata,
+              })
+            : constrainedResult.message;
           toolResult = {
             isError,
-            content: [{ type: 'text', text: constrainedResult.message }],
+            content: [{ type: 'text', text: responseText }],
           };
           return toolResult;
         }
