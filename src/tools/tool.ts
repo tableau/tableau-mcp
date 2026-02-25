@@ -1,13 +1,18 @@
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 import { fromError, isZodErrorLike } from 'zod-validation-error';
 
+import { AppName } from '../apps/appName.js';
+import { HostSandboxCapabilities } from '../apps/types.js';
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
 import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder.js';
+import { getDirname } from '../utils/getDirname.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../utils/getHttpStatus.js';
 import { getSiteLuidFromAccessToken } from '../utils/getSiteLuidFromAccessToken.js';
@@ -18,6 +23,11 @@ import { ToolName } from './toolName.js';
 type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args extends ZodRawShape
   ? (args: z.objectOutputType<Args, ZodTypeAny>) => void
   : never;
+
+type AppDetails = {
+  name: AppName;
+  sandboxCapabilities?: HostSandboxCapabilities;
+};
 
 export type ConstrainedResult<T> =
   | {
@@ -54,6 +64,9 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
 
   // The annotations of the tool
   annotations: TypeOrProvider<ToolAnnotations>;
+
+  // Details of the app that the tool can optionally retur
+  app?: AppDetails;
 
   // A function that validates the tool's arguments provided by the client
   argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
@@ -103,6 +116,10 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   annotations: TypeOrProvider<ToolAnnotations>;
   argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
   callback: TypeOrProvider<TableauToolCallback<Args>>;
+  app?: AppDetails & {
+    resourceUri: `ui://tableau-mcp/${AppName}.html`;
+    html: string;
+  };
 
   constructor({
     server,
@@ -110,6 +127,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     description,
     paramsSchema,
     annotations,
+    app,
     argsValidator,
     callback,
   }: ToolParams<Args>) {
@@ -120,6 +138,14 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.annotations = annotations;
     this.argsValidator = argsValidator;
     this.callback = callback;
+
+    if (app) {
+      this.app = {
+        ...app,
+        resourceUri: `ui://tableau-mcp/${app.name}.html`,
+        html: readFileSync(join(getDirname(), 'web', `${app.name}.html`), 'utf-8'),
+      };
+    }
   }
 
   logInvocation({

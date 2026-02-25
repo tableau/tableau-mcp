@@ -14,15 +14,13 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import pkg from '../package.json';
-import { AppTool } from './apps/appTool';
-import { appToolFactories } from './apps/appTools';
 import { getConfig } from './config.js';
 import { setLogLevel } from './logging/log.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { Tool } from './tools/tool.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
 import { toolNames } from './tools/toolName.js';
-import { toolFactories } from './tools/tools.js';
+import { appToolFactories, toolFactories } from './tools/tools.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings';
 import { Provider } from './utils/provider.js';
 
@@ -78,7 +76,7 @@ export class Server extends McpServer {
       paramsSchema,
       annotations,
       callback,
-    } of await this._getToolsToRegister(tableauAuthInfo)) {
+    } of await this._getToolsToRegister({ type: 'standard', tableauAuthInfo })) {
       const toolCallback: ToolCallback<typeof paramsSchema> = async (
         args: typeof paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
@@ -117,10 +115,13 @@ export class Server extends McpServer {
       paramsSchema,
       annotations,
       callback,
-      sandboxCapabilities,
-      resourceUri,
-      html,
-    } of this._getAppToolsToRegister()) {
+      app,
+    } of await this._getToolsToRegister({ type: 'app', tableauAuthInfo })) {
+      if (!app) {
+        throw new Error(`No app details provided for tool: ${name}`);
+      }
+
+      const { resourceUri, html, sandboxCapabilities } = app;
       const toolCallback: ToolCallback<typeof paramsSchema> = async (
         args: typeof paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
@@ -188,9 +189,22 @@ export class Server extends McpServer {
     });
   };
 
-  private _getToolsToRegister = async (
-    tableauAuthInfo?: TableauAuthInfo,
-  ): Promise<Array<Tool<any>>> => {
+  /**
+   * Gets the tools to register
+   *
+   * @param type - The type of tools to register.
+   *             - 'standard' - Conventional MCP tools
+   *             - 'app' - MCP App tools that are registered as tools but are actually apps
+   * @param tableauAuthInfo - The Tableau auth info
+   * @returns The tools to register
+   */
+  private _getToolsToRegister = async ({
+    type,
+    tableauAuthInfo,
+  }: {
+    type: 'standard' | 'app';
+    tableauAuthInfo?: TableauAuthInfo;
+  }): Promise<Array<Tool<any>>> => {
     const config = await getConfigWithOverrides({
       restApiArgs: {
         server: this,
@@ -201,7 +215,8 @@ export class Server extends McpServer {
 
     const { includeTools, excludeTools } = config;
 
-    const tools = toolFactories.map((toolFactory) => toolFactory(this, tableauAuthInfo));
+    const factories = type === 'standard' ? toolFactories : appToolFactories;
+    const tools = factories.map((toolFactory) => toolFactory(this, tableauAuthInfo));
     const toolsToRegister = tools.filter((tool) => {
       if (includeTools.length > 0) {
         return includeTools.includes(tool.name);
@@ -224,10 +239,6 @@ export class Server extends McpServer {
     }
 
     return toolsToRegister;
-  };
-
-  private _getAppToolsToRegister = (): Array<AppTool<any>> => {
-    return appToolFactories.map((appToolFactory) => appToolFactory(this));
   };
 }
 

@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import z from 'zod';
 
-import { AppTool } from '../../../apps/appTool.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import {
@@ -12,6 +11,7 @@ import {
   pulseInsightBundleTypeEnum,
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
@@ -31,11 +31,13 @@ export type GeneratePulseMetricValueInsightBundleError =
 
 export const getGeneratePulseMetricValueInsightBundleTool = (
   server: Server,
-): AppTool<typeof paramsSchema> => {
-  const generatePulseMetricValueInsightBundleTool = new AppTool<typeof paramsSchema>({
+): Tool<typeof paramsSchema> => {
+  const generatePulseMetricValueInsightBundleTool = new Tool<typeof paramsSchema>({
     server,
     name: 'generate-pulse-metric-value-insight-bundle',
-    appName: 'pulse-renderer',
+    app: {
+      name: 'pulse-renderer',
+    },
     description: `
 Generate an insight bundle for the current aggregated value for Pulse Metric using Tableau REST API.  You need the full information of the Pulse Metric and Pulse Metric Definition to use this tool.
 
