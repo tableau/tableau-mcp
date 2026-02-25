@@ -23,6 +23,7 @@
     "./tracing": "./build/telemetry/tracing.js"
   },
   "scripts": {
+    "postinstall": "npm install --prefix src/web",
     "build": "tsx src/scripts/build.ts",
     "build:dev": "tsx src/scripts/build.ts --dev",
     "build:docker": "docker build -t tableau-mcp .",
