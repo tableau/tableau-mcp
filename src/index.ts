@@ -21,7 +21,6 @@ async function startServer(): Promise<void> {
   switch (config.transport) {
     case 'stdio': {
       const server = new Server();
-      server.registerApps();
       await server.registerTools();
       server.registerRequestHandlers();
 

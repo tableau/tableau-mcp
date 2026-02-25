@@ -24,6 +24,7 @@ export const toolFactories = [
   getListPulseMetricsFromMetricDefinitionIdTool,
   getListPulseMetricsFromMetricIdsTool,
   getListPulseMetricSubscriptionsTool,
+  getGeneratePulseMetricValueInsightBundleTool,
   getGeneratePulseInsightBriefTool,
   getGetWorkbookTool,
   getGetViewDataTool,
@@ -32,5 +33,3 @@ export const toolFactories = [
   getListViewsTool,
   getSearchContentTool,
 ];
-
-export const appToolFactories = [getGeneratePulseMetricValueInsightBundleTool];

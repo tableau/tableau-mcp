@@ -170,7 +170,6 @@ async function connect(
   logLevel: LoggingLevel,
   authInfo: TableauAuthInfo | undefined,
 ): Promise<void> {
-  server.registerApps();
   await server.registerTools(authInfo);
   server.registerRequestHandlers();
 
