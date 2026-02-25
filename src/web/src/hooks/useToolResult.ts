@@ -6,8 +6,12 @@ function extractTextContent(callToolResult: CallToolResult): string {
   const textContent = callToolResult.content?.find((c) => c.type === 'text');
 
   // In ChatGPT, there's an extra text property, unwrap it.
-  const result = z.object({ text: z.string() }).safeParse(textContent?.text);
-  return result.success ? result.data.text : (textContent?.text ?? '');
+  try {
+    const result = z.object({ text: z.string() }).safeParse(JSON.parse(textContent?.text ?? '{}'));
+    return result.success ? result.data.text : (textContent?.text ?? '');
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
 }
 
 export type UseToolResultSuccess<T> = { success: true; data: T };

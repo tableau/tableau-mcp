@@ -85,6 +85,14 @@ function PulseRenderer({
 }: PulseRendererProps): React.ReactNode {
   const containerRef = useRef<HTMLDivElement>(null);
 
+  if (!toolResult) {
+    return (
+      <div ref={containerRef} className={styles.pulseRenderer}>
+        <div>Loading Pulse insights...</div>
+      </div>
+    );
+  }
+
   const result = useToolResult(
     toolResult,
     z.object({ bundle: pulseBundleResponseSchema, bundleType: z.enum(pulseInsightBundleTypeEnum) }),
