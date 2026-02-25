@@ -1,10 +1,13 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { useMemo } from 'react';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 function extractTextContent(callToolResult: CallToolResult): string {
   const textContent = callToolResult.content?.find((c) => c.type === 'text');
-  return textContent?.text ?? '';
+
+  // In ChatGPT, there's an extra text property, unwrap it.
+  const result = z.object({ text: z.string() }).safeParse(textContent?.text);
+  return result.success ? result.data.text : (textContent?.text ?? '');
 }
 
 export type UseToolResultSuccess<T> = { success: true; data: T };
