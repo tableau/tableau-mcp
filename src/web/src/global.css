@@ -1,5 +1,17 @@
 :root {
   color-scheme: light dark;
+  font-family:
+    'SF Pro Text',
+    'SF Pro Display',
+    system-ui,
+    -apple-system,
+    blinkmacsystemfont,
+    'Segoe UI',
+    roboto,
+    ubuntu,
+    'Fire Sans',
+    'Helvetica Neue',
+    sans-serif;
 
   /*
    * Fallbacks for host style variables used by this app.
@@ -51,6 +63,7 @@
 
 * {
   box-sizing: border-box;
+  font-family: inherit;
 }
 
 html,

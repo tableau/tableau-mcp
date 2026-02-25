@@ -1,0 +1,35 @@
+.questionChip {
+  background-color: #fff;
+  border: none;
+  border-radius: 1.25rem;
+  box-shadow: inset 0 0 0 0.063rem #d1e6ff;
+  color: #0056d0;
+  cursor: pointer;
+  height: fit-content;
+  padding: 0.5rem 1rem;
+
+  &:hover,
+  &:focus {
+    background-color: #e9f2fe;
+    box-shadow: inset 0 0 0 0.063rem #2871d7;
+  }
+
+  &:focus-visible {
+    outline: 0.188rem solid #2871d7;
+    outline-offset: 0.188rem;
+  }
+
+  &:active {
+    background-color: #d1e6ff;
+    box-shadow: inset 0 0 0 0.063rem #2871d7;
+  }
+}
+
+.questionChipContent {
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+  font-weight: 500;
+  font-size: 1rem;
+  line-height: 1.5rem;
+}

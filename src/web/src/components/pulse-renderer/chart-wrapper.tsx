@@ -10,24 +10,31 @@ import styles from './chart-wrapper.module.css';
 type ChartWrapperProps = {
   insightType: string;
   spec: InsightViz;
+  heightMultiplier?: number;
 };
 
 const DEFAULT_HEIGHT_LINE_CHART = 224;
 const DEFAULT_HEIGHT_BAR_CHART = 130;
 
-export function ChartWrapper({ insightType, spec }: ChartWrapperProps): React.ReactNode {
+export function ChartWrapper({
+  insightType,
+  spec,
+  heightMultiplier = 1,
+}: ChartWrapperProps): React.ReactNode {
   const containerRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState<number>(0);
 
   useEffect(() => {
     if (containerRef.current) {
       const width = containerRef.current.getBoundingClientRect().width ?? 0;
-      const h = calculateChartHeight(
-        insightType,
-        spec,
-        width,
-        insightType === 'currenttrend' ? DEFAULT_HEIGHT_LINE_CHART : DEFAULT_HEIGHT_BAR_CHART,
-      );
+      const h =
+        heightMultiplier *
+        calculateChartHeight(
+          insightType,
+          spec,
+          width,
+          insightType === 'currenttrend' ? DEFAULT_HEIGHT_LINE_CHART : DEFAULT_HEIGHT_BAR_CHART,
+        );
       setHeight(h);
     }
   }, [insightType, spec, containerRef]);
