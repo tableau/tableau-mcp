@@ -49,6 +49,7 @@ export interface ProcessEnvEx {
   OAUTH_CIMD_DNS_SERVERS: string | undefined;
   ADVERTISE_API_SCOPES: string | undefined;
   OAUTH_REDIRECT_URI: string | undefined;
+  OAUTH_RESOURCE_URI: string | undefined;
   OAUTH_LOCK_SITE: string | undefined;
   OAUTH_CLIENT_ID_SECRET_PAIRS: string | undefined;
   OAUTH_DISABLE_SCOPES: string | undefined;

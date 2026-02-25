@@ -53,19 +53,17 @@ export class OAuthProvider {
     // .well-known/oauth-protected-resource
     oauthProtectedResource(app);
 
-    if (this.config.oauth.embeddedAuthzServer) {
-      // oauth2/register
-      register(app);
+    // oauth2/register
+    register(app);
 
-      // oauth2/authorize
-      authorize(app, this.pendingAuthorizations);
+    // oauth2/authorize
+    authorize(app, this.pendingAuthorizations);
 
       // /Callback
       callback(app, this.pendingAuthorizations, this.authorizationCodes);
 
-      // oauth2/token
-      token(app, this.authorizationCodes, this.refreshTokens, this.publicKey!);
-    }
+    // oauth2/token
+    token(app, this.authorizationCodes, this.refreshTokens, this.publicKey);
   }
 
   private getPrivateKey(): KeyObject {

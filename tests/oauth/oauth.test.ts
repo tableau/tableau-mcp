@@ -76,6 +76,15 @@ describe('OAuth', () => {
       resource: `http://127.0.0.1:3927/${serverName}`,
       authorization_servers: ['http://127.0.0.1:3927'],
       bearer_methods_supported: ['header'],
+      scopes_supported: [
+        'tableau:mcp:datasource:read',
+        'tableau:mcp:workbook:read',
+        'tableau:mcp:view:read',
+        'tableau:mcp:view:download',
+        'tableau:mcp:pulse:read',
+        'tableau:mcp:insight:create',
+        'tableau:mcp:content:read',
+      ],
     });
   });
 

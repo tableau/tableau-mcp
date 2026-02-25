@@ -11,13 +11,7 @@ import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { AUDIENCE } from './provider.js';
 import { mcpTokenSchema } from './schemas.js';
-import {
-  DEFAULT_REQUIRED_SCOPES,
-  formatScopes,
-  getSupportedScopes,
-  parseScopes,
-  validateScopes,
-} from './scopes.js';
+import { formatScopes, getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
 import { AuthorizationCode, ClientCredentials, RefreshTokenData, UserAndTokens } from './types.js';
 
 /**
@@ -133,7 +127,11 @@ export function token(
           }
 
           const scopesToGrant =
-            validScopes.length > 0 ? validScopes : enforceScopes ? DEFAULT_REQUIRED_SCOPES : [];
+            validScopes.length > 0
+              ? validScopes
+              : enforceScopes
+                ? getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+                : [];
 
           // Generate access token for client credentials grant type.
           // Refresh token is not supported for client credentials grant type.

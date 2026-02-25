@@ -20,8 +20,8 @@ resource server, capable of accepting and responding to protected resource reque
 access tokens.
 
 When OAuth is enabled:
-- MCP clients will be required to authenticate via Tableau OAuth before connecting to the MCP
-  server
+
+- MCP clients will be required to authenticate via Tableau OAuth before connecting to the MCP server
 - The [`TRANSPORT`](#transport) will default to `http` (required for OAuth)
 - The [`AUTH`](#auth) method will default to `oauth`
 
@@ -50,9 +50,11 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 ### `OAUTH_ISSUER`
 
-**Setting this environment variable enables OAuth.** This should be the origin of your MCP server (the issuer of access tokens).
+**Setting this environment variable enables OAuth.** This should be the origin of your MCP server
+(the issuer of access tokens).
 
-- Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for production)
+- Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for
+  production)
 - Required if `AUTH` is `oauth`
 - Required if `TRANSPORT` is `http` unless opted out with
   [`DANGEROUSLY_DISABLE_OAUTH`](#dangerously_disable_oauth)
@@ -121,6 +123,18 @@ tsm pending-changes apply
 
 <hr />
 
+### `OAUTH_RESOURCE_URI`
+
+The base URL used in the `resource` field of the OAuth protected resource metadata document. Some
+clients may require the `resource` field to match exactly with the URL used to access the MCP
+server. This should be the base URL of your MCP server deployment.
+
+- Default: `http://127.0.0.1:3927`
+- Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for
+  production)
+
+<hr />
+
 ### `TRUST_PROXY_CONFIG`
 
 :::warning
@@ -143,7 +157,7 @@ use of the client credentials grant type.
 - Optional.
 - Example: `client1:secret1,client2:secret2`
 - Client IDs and secrets must be unique and cannot contain colons or commas.
-- The `/oauth/token` endpoint accepts client credentials in the request body or the authorization
+- The `/oauth2/token` endpoint accepts client credentials in the request body or the authorization
   header. If both are provided, the request body takes precedence.
 - When an access token is requested with the client credentials grant type:
   - No refresh token is issued to the client.
@@ -152,7 +166,7 @@ use of the client credentials grant type.
     [Personal Access Token](authentication/pat) or from the value of the
     [`JWT_SUB_CLAIM`](authentication/direct-trust#jwt_sub_claim) environment variable.
 
-Example `/oauth/token` request body:
+Example `/oauth2/token` request body:
 
 ```json
 {
@@ -162,7 +176,7 @@ Example `/oauth/token` request body:
 }
 ```
 
-Example `/oauth/token` request header:
+Example `/oauth2/token` request header:
 
 ```
 Authorization: Basic Y2xpZW50SWQ6c2VjcmV0
@@ -360,7 +374,7 @@ sequenceDiagram
     MCP->>Client: 6. Authorization server metadata<br/>{issuer, authorization_endpoint, token_endpoint,<br/>registration_endpoint, response_types_supported, etc.}
 
     %% Step 4: Dynamic Client Registration (Optional)
-    Client->>MCP: 7. POST /oauth/register<br/>{redirect_uris}
+    Client->>MCP: 7. POST /oauth2/register<br/>{redirect_uris}
     MCP->>Client: 8. Client registration response<br/>{client_id, redirect_uris,<br/>grant_types, response_types, token_endpoint_auth_method}
 
     %% Choose Authentication Flow
@@ -373,7 +387,7 @@ sequenceDiagram
 
             %% Step 5: Authorization Request with PKCE
             Note over Client:Generate code_verifier and code_challenge (S256)
-            Client->>MCP: 9. GET /oauth/authorize?<br/>client_id=...<br />&redirect_uri=...<br />&response_type=code<br/>&code_challenge=...<br/>&code_challenge_method=S256<br/>&state=...
+            Client->>MCP: 9. GET /oauth2/authorize?<br/>client_id=...<br />&redirect_uri=...<br />&response_type=code<br/>&code_challenge=...<br/>&code_challenge_method=S256<br/>&state=...
 
             Note over MCP: Generate tableauState, authKey<br/>Store pending authorization<br/>Generate tableauClientId
             MCP->>Tableau: 10. Redirect to Tableau OAuth<br/>GET /oauth2/v1/auth?<br/>client_id=...<br/>&code_challenge=...<br/>&response_type=code<br/>&redirect_uri=/Callback<br/>&state=...<br/>&device_id=...<br/>&target_site=...<br/>&device_name=...<br/>&client_type=tableau-mcp
@@ -395,7 +409,7 @@ sequenceDiagram
             MCP->>Client: 17. Redirect to client callback<br/>?code=mcpAuthCode<br/>&state=originalState
 
             %% Step 7: Token Exchange with PKCE Verification
-            Client->>MCP: 18. POST /oauth/token<br/>{grant_type: "authorization_code",<br/>code: mcpAuthCode,<br/>redirect_uri: ...,<br/>code_verifier: originalCodeVerifier,<br/>client_id: ...}
+            Client->>MCP: 18. POST /oauth2/token<br/>{grant_type: "authorization_code",<br/>code: mcpAuthCode,<br/>redirect_uri: ...,<br/>code_verifier: originalCodeVerifier,<br/>client_id: ...}
 
             Note over MCP: Verify PKCE code_verifier<br/>Generate JWE access token<br/>Store refresh token
             MCP->>Client: 19. Token response<br/>{access_token: JWE,<br />token_type: "Bearer",<br/>expires_in: ...,<br />refresh_token: ...,<br/>scope: "read"}
@@ -405,13 +419,13 @@ sequenceDiagram
             Note over Client, MCP: Client Credentials Flow (No User Authentication Required)
 
             %% Direct Token Request
-            Client->>MCP: 9. POST /oauth/token<br/>{grant_type: "client_credentials",<br/>client_id: "clientId",<br/>client_secret: "secret"}
+            Client->>MCP: 9. POST /oauth2/token<br/>{grant_type: "client_credentials",<br/>client_id: "clientId",<br/>client_secret: "secret"}
 
             Note over MCP: Verify client credentials<br/>Generate JWE access token<br/>(No refresh token issued)
             MCP->>Client: 10. Token response<br/>{access_token: JWE,<br/>token_type: "Bearer",<br/>expires_in: ...,<br/>scope: "read"}
 
             Note over Client, MCP: Alternative: Authorization Header
-            Client->>MCP: 11. POST /oauth/token<br/>{grant_type: "client_credentials"}<br/>Authorization: Basic Y2xpZW50SWQ6c2VjcmV0
+            Client->>MCP: 11. POST /oauth2/token<br/>{grant_type: "client_credentials"}<br/>Authorization: Basic Y2xpZW50SWQ6c2VjcmV0
             MCP->>Client: 12. Token response<br/>{access_token: JWE,<br/>token_type: "Bearer",<br/>expires_in: ...,<br/>scope: "read"}
         end
     end
@@ -428,7 +442,7 @@ sequenceDiagram
     alt Token Refresh (Authorization Code Grant Only)
         rect rgb(248, 255, 248)
             Note over Client, MCP: Token Refresh Flow
-            Client->>MCP: 24. POST /oauth/token<br/>{grant_type: "refresh_token",<br/>refresh_token: refreshTokenId}
+            Client->>MCP: 24. POST /oauth2/token<br/>{grant_type: "refresh_token",<br/>refresh_token: refreshTokenId}
             Note over MCP: Validate refresh token<br/>Try to refresh Tableau tokens<br/>Generate new JWE access token
             MCP->>Tableau: 25. POST /oauth2/v1/token<br/>{grant_type: "refresh_token",<br/>refresh_token: ...,<br/>client_id: ...}
             Tableau->>MCP: 26. New token response (or error)
@@ -445,7 +459,7 @@ sequenceDiagram
     end
 
     alt Invalid Client Credentials
-        Client->>MCP: POST /oauth/token with invalid credentials
+        Client->>MCP: POST /oauth2/token with invalid credentials
         MCP->>Client: 401 Unauthorized<br/>{error: "invalid_client"}
         Note over Client: Client should check credentials
     end
@@ -502,7 +516,7 @@ The MCP server supports three OAuth 2.1 grant types:
 
 - `/.well-known/oauth-protected-resource`: Resource metadata discovery
 - `/.well-known/oauth-authorization-server`: Authorization server metadata
-- `/oauth/register`: Dynamic client registration
-- `/oauth/authorize`: Authorization endpoint with PKCE (authorization code only)
+- `/oauth2/register`: Dynamic client registration
+- `/oauth2/authorize`: Authorization endpoint with PKCE (authorization code only)
 - `/Callback`: OAuth callback handler (authorization code only)
-- `/oauth/token`: Token exchange and refresh (all grant types)
+- `/oauth2/token`: Token exchange and refresh (all grant types)
