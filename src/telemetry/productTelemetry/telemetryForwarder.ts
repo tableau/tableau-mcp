@@ -1,9 +1,4 @@
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import os from 'os';
-
-import { Config } from '../../config.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
-import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 
 type ValidPropertyValueType = string | number | boolean;
 type PropertiesType = { [key: string]: ValidPropertyValueType };
@@ -123,28 +118,6 @@ export function getProductTelemetry(
     productTelemetryInstance = new DirectTelemetryForwarder(endpoint, enabled, podName);
   }
   return productTelemetryInstance;
-}
-
-/**
- * Creates a ProductTelemetryBase object from config and authInfo.
- * This helper function standardizes the creation of product telemetry configuration
- * across all tools.
- *
- * @param config - Configuration object containing telemetry settings
- * @param authInfo - Authentication info from the MCP request (optional)
- * @returns ProductTelemetryBase object for use in tool configuration
- */
-export function createProductTelemetryBase(
-  config: Config,
-  authInfo: AuthInfo | undefined,
-): ProductTelemetryBase {
-  return {
-    endpoint: config.productTelemetryEndpoint,
-    siteLuid: getSiteLuidFromAccessToken(getTableauAuthInfo(authInfo)),
-    podName: config.server,
-    isHyperforce: config.isHyperforce,
-    enabled: config.productTelemetryEnabled,
-  };
 }
 
 export const exportedForTesting = {

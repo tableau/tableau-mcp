@@ -2,13 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { BoundedContext, getConfig } from '../../config.js';
+import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { Server } from '../../server.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
-import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
-import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, Tool } from '../tool.js';
@@ -80,27 +77,21 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { filter, pageSize, limit },
-      { requestId, authInfo, sessionId, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: { filter, pageSize, limit },
         callback: async () => {
           const datasources = await useRestApi({
-            config,
-            requestId,
-            server,
-            jwtScopes: getRequiredApiScopesForTool('list-datasources'),
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
+            ...extra,
+            jwtScopes: ['tableau:content:read'],
             callback: async (restApi) => {
-              const maxResultLimit = config.getMaxResultLimit(listDatasourcesTool.name);
+              const maxResultLimit = configWithOverrides.getMaxResultLimit(
+                listDatasourcesTool.name,
+              );
+
               const datasources = await paginate({
                 pageConfig: {
                   pageSize,
@@ -128,8 +119,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
           return new Ok(datasources);
         },
         constrainSuccessResult: (datasources) =>
-          constrainDatasources({ datasources, boundedContext: config.boundedContext }),
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
+          constrainDatasources({ datasources, boundedContext: configWithOverrides.boundedContext }),
       });
     },
   });

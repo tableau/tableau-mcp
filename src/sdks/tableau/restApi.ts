@@ -24,6 +24,7 @@ import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
 import WorkbooksMethods from './methods/workbooksMethods.js';
 import { bearerTokenSchema } from './types/bearerToken.js';
 import { Credentials } from './types/credentials.js';
+import { McpSiteSettings } from './types/mcpSiteSettings.js';
 
 export type RestApiCredentials =
   | ({ type: 'X-Tableau-Auth' } & Credentials)
@@ -202,6 +203,19 @@ export class RestApi {
     }
 
     return this._serverMethods;
+  }
+
+  get siteMethods(): { getMcpSettings: () => Promise<McpSiteSettings> } {
+    return {
+      getMcpSettings: async (): Promise<McpSiteSettings> => {
+        // When the "Get MCP Site Settings" REST API is available:
+        //   1. Remove this comment.
+        //   2. Default enableMcpSiteSettings to enabled.
+        //   3. Add documentation for ENABLE_MCP_SITE_SETTINGS.
+        //   4. Add documentation for MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES.
+        return {};
+      },
+    };
   }
 
   get vizqlDataServiceMethods(): VizqlDataServiceMethods {

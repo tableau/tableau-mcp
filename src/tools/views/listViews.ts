@@ -2,13 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { BoundedContext, getConfig } from '../../config.js';
+import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { View } from '../../sdks/tableau/types/view.js';
 import { Server } from '../../server.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
-import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
-import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, Tool } from '../tool.js';
@@ -68,29 +65,20 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { filter, pageSize, limit },
-      { requestId, sessionId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateViewsFilterString(filter) : undefined;
 
       return await listViewsTool.logAndExecute({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: {},
         callback: async () => {
           return new Ok(
             await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: getRequiredApiScopesForTool('list-views'),
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
+              ...extra,
+              jwtScopes: ['tableau:content:read'],
               callback: async (restApi) => {
-                const maxResultLimit = config.getMaxResultLimit(listViewsTool.name);
+                const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
                 const views = await paginate({
                   pageConfig: {
                     pageSize,
@@ -118,8 +106,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
           );
         },
         constrainSuccessResult: (views) =>
-          constrainViews({ views, boundedContext: config.boundedContext }),
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
+          constrainViews({ views, boundedContext: configWithOverrides.boundedContext }),
       });
     },
   });

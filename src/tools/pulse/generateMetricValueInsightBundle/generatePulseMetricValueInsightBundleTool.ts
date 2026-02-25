@@ -2,7 +2,6 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err } from 'ts-results-es';
 import z from 'zod';
 
-import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import {
@@ -11,9 +10,6 @@ import {
   pulseInsightBundleTypeEnum,
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
-import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
-import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
 import { Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -152,21 +148,17 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { bundleRequest, bundleType },
-      { requestId, sessionId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ bundleRequest, bundleType }, extra): Promise<CallToolResult> => {
       return await generatePulseMetricValueInsightBundleTool.logAndExecute<
         PulseBundleResponse,
         GeneratePulseMetricValueInsightBundleError
       >({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: { bundleRequest, bundleType },
         callback: async () => {
-          const { datasourceIds } = config.boundedContext;
+          const configWithOverrides = await extra.getConfigWithOverrides();
+
+          const { datasourceIds } = configWithOverrides.boundedContext;
           if (datasourceIds) {
             const datasourceLuid =
               bundleRequest.bundle_request.input.metric.definition.datasource.id;
@@ -184,12 +176,8 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
           }
 
           const result = await useRestApi({
-            config,
-            requestId,
-            server,
-            jwtScopes: getRequiredApiScopesForTool('generate-pulse-metric-value-insight-bundle'),
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
+            ...extra,
+            jwtScopes: ['tableau:insights:read'],
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
                 bundleRequest,
@@ -220,7 +208,6 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               return error.message;
           }
         },
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });

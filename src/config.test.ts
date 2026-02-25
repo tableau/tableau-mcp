@@ -1,5 +1,3 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { exportedForTesting, ONE_HOUR_IN_MS, TEN_MINUTES_IN_MS } from './config.js';
 import { stubDefaultEnvVars } from './testShared.js';
 
@@ -128,30 +126,6 @@ describe('Config', () => {
     expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
   });
 
-  it('should set disableQueryDatasourceValidationRequests to false by default', () => {
-    const config = new Config();
-    expect(config.disableQueryDatasourceValidationRequests).toBe(false);
-  });
-
-  it('should set disableQueryDatasourceValidationRequests to true when specified', () => {
-    vi.stubEnv('DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS', 'true');
-
-    const config = new Config();
-    expect(config.disableQueryDatasourceValidationRequests).toBe(true);
-  });
-
-  it('should set disableMetadataApiRequests to false by default', () => {
-    const config = new Config();
-    expect(config.disableMetadataApiRequests).toBe(false);
-  });
-
-  it('should set disableMetadataApiRequests to true when specified', () => {
-    vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
-
-    const config = new Config();
-    expect(config.disableMetadataApiRequests).toBe(true);
-  });
-
   it('should set disableSessionManagement to false by default', () => {
     const config = new Config();
     expect(config.disableSessionManagement).toBe(false);
@@ -189,68 +163,28 @@ describe('Config', () => {
     expect(config.tableauServerVersionCheckIntervalInHours).toBe(2);
   });
 
-  describe('Tool filtering', () => {
-    it('should set empty arrays for includeTools and excludeTools when not specified', () => {
-      const config = new Config();
-      expect(config.includeTools).toEqual([]);
-      expect(config.excludeTools).toEqual([]);
-    });
+  it('should set mcpSiteSettingsCheckIntervalInMinutes to default when not specified', () => {
+    const config = new Config();
+    expect(config.mcpSiteSettingsCheckIntervalInMinutes).toBe(10);
+  });
 
-    it('should parse INCLUDE_TOOLS into an array of valid tool names', () => {
-      vi.stubEnv('INCLUDE_TOOLS', 'query-datasource,get-datasource-metadata');
+  it('should set mcpSiteSettingsCheckIntervalInMinutes to the specified value when specified', () => {
+    vi.stubEnv('MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES', '2');
 
-      const config = new Config();
-      expect(config.includeTools).toEqual(['query-datasource', 'get-datasource-metadata']);
-    });
+    const config = new Config();
+    expect(config.mcpSiteSettingsCheckIntervalInMinutes).toBe(2);
+  });
 
-    it('should parse INCLUDE_TOOLS into an array of valid tool names when tool group names are used', () => {
-      vi.stubEnv('INCLUDE_TOOLS', 'query-datasource,workbook');
+  it('should set enableMcpSiteSettings to false by default', () => {
+    const config = new Config();
+    expect(config.enableMcpSiteSettings).toBe(false);
+  });
 
-      const config = new Config();
-      expect(config.includeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
-    });
+  it('should set enableMcpSiteSettings to true when specified', () => {
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'true');
 
-    it('should parse EXCLUDE_TOOLS into an array of valid tool names', () => {
-      vi.stubEnv('EXCLUDE_TOOLS', 'query-datasource');
-
-      const config = new Config();
-      expect(config.excludeTools).toEqual(['query-datasource']);
-    });
-
-    it('should parse EXCLUDE_TOOLS into an array of valid tool names when tool group names are used', () => {
-      vi.stubEnv('EXCLUDE_TOOLS', 'query-datasource,workbook');
-
-      const config = new Config();
-      expect(config.excludeTools).toEqual(['query-datasource', 'list-workbooks', 'get-workbook']);
-    });
-
-    it('should filter out invalid tool names from INCLUDE_TOOLS', () => {
-      vi.stubEnv('INCLUDE_TOOLS', 'query-datasource,order-hamburgers');
-
-      const config = new Config();
-      expect(config.includeTools).toEqual(['query-datasource']);
-    });
-
-    it('should filter out invalid tool names from EXCLUDE_TOOLS', () => {
-      vi.stubEnv('EXCLUDE_TOOLS', 'query-datasource,order-hamburgers');
-
-      const config = new Config();
-      expect(config.excludeTools).toEqual(['query-datasource']);
-    });
-
-    it('should throw error when both INCLUDE_TOOLS and EXCLUDE_TOOLS are specified', () => {
-      vi.stubEnv('INCLUDE_TOOLS', 'query-datasource');
-      vi.stubEnv('EXCLUDE_TOOLS', 'get-datasource-metadata');
-
-      expect(() => new Config()).toThrow('Cannot include and exclude tools simultaneously');
-    });
-
-    it('should throw error when both INCLUDE_TOOLS and EXCLUDE_TOOLS are specified with tool group names', () => {
-      vi.stubEnv('INCLUDE_TOOLS', 'datasource');
-      vi.stubEnv('EXCLUDE_TOOLS', 'workbook');
-
-      expect(() => new Config()).toThrow('Cannot include and exclude tools simultaneously');
-    });
+    const config = new Config();
+    expect(config.enableMcpSiteSettings).toBe(true);
   });
 
   describe('HTTP server config parsing', () => {
@@ -577,65 +511,6 @@ describe('Config', () => {
 
       expect(() => new Config()).toThrow(
         'Only one of the environment variables: UAT_PRIVATE_KEY or UAT_PRIVATE_KEY_PATH must be set',
-      );
-    });
-  });
-
-  describe('Bounded context parsing', () => {
-    it('should set boundedContext to null sets when no project, datasource, or workbook IDs are provided', () => {
-      const config = new Config();
-      expect(config.boundedContext).toEqual({
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-        tags: null,
-      });
-    });
-
-    it('should set boundedContext to the specified tags and project, datasource, and workbook IDs when provided', () => {
-      vi.stubEnv('INCLUDE_PROJECT_IDS', ' 123, 456, 123   '); // spacing is intentional here to test trimming
-      vi.stubEnv('INCLUDE_DATASOURCE_IDS', '789,101');
-      vi.stubEnv('INCLUDE_WORKBOOK_IDS', '112,113');
-      vi.stubEnv('INCLUDE_TAGS', 'tag1,tag2');
-
-      const config = new Config();
-      expect(config.boundedContext).toEqual({
-        projectIds: new Set(['123', '456']),
-        datasourceIds: new Set(['789', '101']),
-        workbookIds: new Set(['112', '113']),
-        tags: new Set(['tag1', 'tag2']),
-      });
-    });
-
-    it('should throw error when INCLUDE_PROJECT_IDS is set to an empty string', () => {
-      vi.stubEnv('INCLUDE_PROJECT_IDS', '');
-
-      expect(() => new Config()).toThrow(
-        'When set, the environment variable INCLUDE_PROJECT_IDS must have at least one value',
-      );
-    });
-
-    it('should throw error when INCLUDE_DATASOURCE_IDS is set to an empty string', () => {
-      vi.stubEnv('INCLUDE_DATASOURCE_IDS', '');
-
-      expect(() => new Config()).toThrow(
-        'When set, the environment variable INCLUDE_DATASOURCE_IDS must have at least one value',
-      );
-    });
-
-    it('should throw error when INCLUDE_WORKBOOK_IDS is set to an empty string', () => {
-      vi.stubEnv('INCLUDE_WORKBOOK_IDS', '');
-
-      expect(() => new Config()).toThrow(
-        'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
-      );
-    });
-
-    it('should throw error when INCLUDE_TAGS is set to an empty string', () => {
-      vi.stubEnv('INCLUDE_TAGS', '');
-
-      expect(() => new Config()).toThrow(
-        'When set, the environment variable INCLUDE_TAGS must have at least one value',
       );
     });
   });
@@ -977,67 +852,6 @@ describe('Config', () => {
     it('should return defaultValue for negative numbers when minValue is 0', () => {
       const result = parseNumber('-5', { defaultValue: 42, minValue: 0 });
       expect(result).toBe(42);
-    });
-  });
-
-  describe('Max results limit parsing', () => {
-    it('should return null when MAX_RESULT_LIMIT and MAX_RESULT_LIMITS are not set', () => {
-      expect(new Config().getMaxResultLimit('query-datasource')).toBeNull();
-    });
-
-    it('should return the max result limit when MAX_RESULT_LIMITS has a single tool', () => {
-      vi.stubEnv('MAX_RESULT_LIMITS', 'query-datasource:100');
-
-      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(100);
-    });
-
-    it('should return the max result limit when MAX_RESULT_LIMITS has a single tool group', () => {
-      vi.stubEnv('MAX_RESULT_LIMITS', 'datasource:200');
-
-      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(200);
-    });
-
-    it('should return the max result limit for the tool when a tool and a tool group are both specified', () => {
-      vi.stubEnv('MAX_RESULT_LIMITS', 'query-datasource:100,datasource:200');
-
-      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(100);
-      expect(new Config().getMaxResultLimit('list-datasources')).toEqual(200);
-    });
-
-    it('should fallback to MAX_RESULT_LIMIT when a tool-specific max result limit is not set', () => {
-      vi.stubEnv('MAX_RESULT_LIMITS', 'query-datasource:100');
-      vi.stubEnv('MAX_RESULT_LIMIT', '300');
-
-      expect(new Config().getMaxResultLimit('query-datasource')).toEqual(100);
-      expect(new Config().getMaxResultLimit('list-datasources')).toEqual(300);
-    });
-
-    it('should return null when MAX_RESULT_LIMITS has a non-number', () => {
-      vi.stubEnv('MAX_RESULT_LIMITS', 'query-datasource:abc');
-
-      const config = new Config();
-      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
-    });
-
-    it('should return null when MAX_RESULT_LIMIT is specified as a non-number', () => {
-      vi.stubEnv('MAX_RESULT_LIMIT', 'abc');
-
-      const config = new Config();
-      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
-    });
-
-    it('should return null when MAX_RESULT_LIMITS has a negative number', () => {
-      vi.stubEnv('MAX_RESULT_LIMITS', 'query-datasource:-100');
-
-      const config = new Config();
-      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
-    });
-
-    it('should return null when MAX_RESULT_LIMIT is specified as a negative number', () => {
-      vi.stubEnv('MAX_RESULT_LIMIT', '-100');
-
-      const config = new Config();
-      expect(config.getMaxResultLimit('query-datasource')).toBe(null);
     });
   });
 });

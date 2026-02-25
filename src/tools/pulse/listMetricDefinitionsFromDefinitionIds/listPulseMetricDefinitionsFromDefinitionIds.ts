@@ -1,13 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
-import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
-import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -59,26 +55,14 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { view, metricDefinitionIds },
-      { requestId, sessionId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ view, metricDefinitionIds }, extra): Promise<CallToolResult> => {
       return await listPulseMetricDefinitionsFromDefinitionIdsTool.logAndExecute({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: { metricDefinitionIds, view },
         callback: async () => {
           return await useRestApi({
-            config,
-            requestId,
-            server,
-            jwtScopes: getRequiredApiScopesForTool(
-              'list-pulse-metric-definitions-from-definition-ids',
-            ),
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
+            ...extra,
+            jwtScopes: ['tableau:insight_definitions_metrics:read'],
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricDefinitionsFromMetricDefinitionIds(
                 metricDefinitionIds,
@@ -87,10 +71,15 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
             },
           });
         },
-        constrainSuccessResult: (definitions) =>
-          constrainPulseDefinitions({ definitions, boundedContext: config.boundedContext }),
+        constrainSuccessResult: async (definitions) => {
+          const configWithOverrides = await extra.getConfigWithOverrides();
+
+          return constrainPulseDefinitions({
+            definitions,
+            boundedContext: configWithOverrides.boundedContext,
+          });
+        },
         getErrorText: getPulseDisabledError,
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });

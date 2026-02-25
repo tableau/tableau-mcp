@@ -1,30 +1,23 @@
-import { RequestId } from '@modelcontextprotocol/sdk/types.js';
-
-import { BoundedContext, Config, getConfig } from '../config.js';
+import { BoundedContext } from '../overridableConfig.js';
 import { useRestApi } from '../restApiInstance.js';
 import { DataSource } from '../sdks/tableau/types/dataSource.js';
 import { View } from '../sdks/tableau/types/view.js';
 import { Workbook } from '../sdks/tableau/types/workbook.js';
-import { Server } from '../server.js';
-import { getRequiredApiScopesForTool } from '../server/oauth/scopes.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
+import { getConfigWithOverrides } from '../utils/mcpSiteSettings.js';
+import { TableauRequestHandlerExtra } from './toolContext.js';
 
 type AllowedResult<T = unknown> =
   | { allowed: true; content?: T }
   | { allowed: false; message: string };
 
-export type RestApiArgs = {
-  config: Config;
-  requestId: RequestId;
-  server: Server;
-  signal: AbortSignal;
-};
-
 class ResourceAccessChecker {
-  private _allowedProjectIds: Set<string> | null | undefined;
-  private _allowedDatasourceIds: Set<string> | null | undefined;
-  private _allowedWorkbookIds: Set<string> | null | undefined;
-  private _allowedTags: Set<string> | null | undefined;
+  private _testOverrides: {
+    projectIds: Set<string> | null | undefined;
+    datasourceIds: Set<string> | null | undefined;
+    workbookIds: Set<string> | null | undefined;
+    tags: Set<string> | null | undefined;
+  };
 
   private readonly _cachedDatasourceIds: Map<string, AllowedResult>;
   private readonly _cachedWorkbookIds: Map<string, AllowedResult<Workbook>>;
@@ -39,63 +32,95 @@ class ResourceAccessChecker {
   }
 
   // Optional bounded context to use for testing.
-  private constructor(boundedContext?: BoundedContext) {
+  private constructor(testOverrides?: BoundedContext) {
     // The methods assume these sets are non-empty.
-    this._allowedProjectIds = boundedContext?.projectIds;
-    this._allowedDatasourceIds = boundedContext?.datasourceIds;
-    this._allowedWorkbookIds = boundedContext?.workbookIds;
-    this._allowedTags = boundedContext?.tags;
+    this._testOverrides = {
+      projectIds: testOverrides?.projectIds,
+      datasourceIds: testOverrides?.datasourceIds,
+      workbookIds: testOverrides?.workbookIds,
+      tags: testOverrides?.tags,
+    };
 
     this._cachedDatasourceIds = new Map();
     this._cachedWorkbookIds = new Map();
     this._cachedViewIds = new Map();
   }
 
-  private get allowedProjectIds(): Set<string> | null {
-    if (this._allowedProjectIds === undefined) {
-      this._allowedProjectIds = getConfig().boundedContext.projectIds;
-    }
-
-    return this._allowedProjectIds;
+  private async getAllowedProjectIds({
+    extra,
+  }: {
+    extra: TableauRequestHandlerExtra;
+  }): Promise<Set<string> | null> {
+    return (
+      this._testOverrides.projectIds ??
+      (
+        await getConfigWithOverrides({
+          restApiArgs: { ...extra },
+        })
+      ).boundedContext.projectIds
+    );
   }
 
-  private get allowedDatasourceIds(): Set<string> | null {
-    if (this._allowedDatasourceIds === undefined) {
-      this._allowedDatasourceIds = getConfig().boundedContext.datasourceIds;
-    }
-
-    return this._allowedDatasourceIds;
+  private async getAllowedDatasourceIds({
+    extra,
+  }: {
+    extra: TableauRequestHandlerExtra;
+  }): Promise<Set<string> | null> {
+    return (
+      this._testOverrides.datasourceIds ??
+      (
+        await getConfigWithOverrides({
+          restApiArgs: { ...extra },
+        })
+      ).boundedContext.datasourceIds
+    );
   }
 
-  private get allowedWorkbookIds(): Set<string> | null {
-    if (this._allowedWorkbookIds === undefined) {
-      this._allowedWorkbookIds = getConfig().boundedContext.workbookIds;
-    }
-
-    return this._allowedWorkbookIds;
+  private async getAllowedWorkbookIds({
+    extra,
+  }: {
+    extra: TableauRequestHandlerExtra;
+  }): Promise<Set<string> | null> {
+    return (
+      this._testOverrides.workbookIds ??
+      (
+        await getConfigWithOverrides({
+          restApiArgs: { ...extra },
+        })
+      ).boundedContext.workbookIds
+    );
   }
 
-  private get allowedTags(): Set<string> | null {
-    if (this._allowedTags === undefined) {
-      this._allowedTags = getConfig().boundedContext.tags;
-    }
-
-    return this._allowedTags;
+  private async getAllowedTags({
+    extra,
+  }: {
+    extra: TableauRequestHandlerExtra;
+  }): Promise<Set<string> | null> {
+    return (
+      this._testOverrides.tags ??
+      (
+        await getConfigWithOverrides({
+          restApiArgs: { ...extra },
+        })
+      ).boundedContext.tags
+    );
   }
 
   async isDatasourceAllowed({
     datasourceLuid,
-    restApiArgs,
+    extra,
   }: {
     datasourceLuid: string;
-    restApiArgs: RestApiArgs;
+    extra: TableauRequestHandlerExtra;
   }): Promise<AllowedResult> {
     const result = await this._isDatasourceAllowed({
       datasourceLuid,
-      restApiArgs,
+      extra,
     });
 
-    if (!this.allowedProjectIds && !this.allowedTags) {
+    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
+    const allowedTags = await this.getAllowedTags({ extra });
+    if (!allowedProjectIds && !allowedTags) {
       // If project filtering is enabled, we cannot cache the result since the datasource may be moved between projects.
       // If tag filtering is enabled, we cannot cache the result since the datasource tags can change over time.
       this._cachedDatasourceIds.set(datasourceLuid, result);
@@ -106,17 +131,19 @@ class ResourceAccessChecker {
 
   async isWorkbookAllowed({
     workbookId,
-    restApiArgs,
+    extra,
   }: {
     workbookId: string;
-    restApiArgs: RestApiArgs;
+    extra: TableauRequestHandlerExtra;
   }): Promise<AllowedResult<Workbook>> {
     const result = await this._isWorkbookAllowed({
       workbookId,
-      restApiArgs,
+      extra,
     });
 
-    if (!this.allowedProjectIds && !this.allowedTags) {
+    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
+    const allowedTags = await this.getAllowedTags({ extra });
+    if (!allowedProjectIds && !allowedTags) {
       // If project filtering is enabled, we cannot cache the result since the workbook may be moved between projects.
       // If tag filtering is enabled, we cannot cache the result since the workbook tags can change over time.
       this._cachedWorkbookIds.set(workbookId, result);
@@ -127,17 +154,19 @@ class ResourceAccessChecker {
 
   async isViewAllowed({
     viewId,
-    restApiArgs,
+    extra,
   }: {
     viewId: string;
-    restApiArgs: RestApiArgs;
+    extra: TableauRequestHandlerExtra;
   }): Promise<AllowedResult> {
     const result = await this._isViewAllowed({
       viewId,
-      restApiArgs,
+      extra,
     });
 
-    if (!this.allowedProjectIds && !this.allowedTags) {
+    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
+    const allowedTags = await this.getAllowedTags({ extra });
+    if (!allowedProjectIds && !allowedTags) {
       // If project filtering is enabled, we cannot cache the result since the workbook containing the view may be moved between projects.
       // If tag filtering is enabled, we cannot cache the result since the view tags can change over time.
       this._cachedViewIds.set(viewId, result);
@@ -148,17 +177,18 @@ class ResourceAccessChecker {
 
   private async _isDatasourceAllowed({
     datasourceLuid,
-    restApiArgs: { config, requestId, server, signal },
+    extra,
   }: {
     datasourceLuid: string;
-    restApiArgs: RestApiArgs;
+    extra: TableauRequestHandlerExtra;
   }): Promise<AllowedResult> {
     const cachedResult = this._cachedDatasourceIds.get(datasourceLuid);
     if (cachedResult) {
       return cachedResult;
     }
 
-    if (this.allowedDatasourceIds && !this.allowedDatasourceIds.has(datasourceLuid)) {
+    const allowedDatasourceIds = await this.getAllowedDatasourceIds({ extra });
+    if (allowedDatasourceIds && !allowedDatasourceIds.has(datasourceLuid)) {
       return {
         allowed: false,
         message: [
@@ -171,11 +201,8 @@ class ResourceAccessChecker {
     let datasource: DataSource | undefined;
     async function getDatasource(): Promise<DataSource> {
       return await useRestApi({
-        config,
-        requestId,
-        server,
-        jwtScopes: getRequiredApiScopesForTool('list-datasources'),
-        signal,
+        ...extra,
+        jwtScopes: ['tableau:content:read'],
         callback: async (restApi) =>
           await restApi.datasourcesMethods.queryDatasource({
             siteId: restApi.siteId,
@@ -184,11 +211,12 @@ class ResourceAccessChecker {
       });
     }
 
-    if (this.allowedProjectIds) {
+    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
+    if (allowedProjectIds) {
       try {
         datasource = await getDatasource();
 
-        if (!this.allowedProjectIds.has(datasource.project.id)) {
+        if (!allowedProjectIds.has(datasource.project.id)) {
           return {
             allowed: false,
             message: [
@@ -209,11 +237,12 @@ class ResourceAccessChecker {
       }
     }
 
-    if (this.allowedTags) {
+    const allowedTags = await this.getAllowedTags({ extra });
+    if (allowedTags) {
       try {
         datasource = datasource ?? (await getDatasource());
 
-        if (!datasource.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+        if (!datasource.tags?.tag?.some((tag) => allowedTags.has(tag.label))) {
           return {
             allowed: false,
             message: [
@@ -239,17 +268,18 @@ class ResourceAccessChecker {
 
   private async _isWorkbookAllowed({
     workbookId,
-    restApiArgs: { config, requestId, server, signal },
+    extra,
   }: {
     workbookId: string;
-    restApiArgs: RestApiArgs;
+    extra: TableauRequestHandlerExtra;
   }): Promise<AllowedResult<Workbook>> {
     const cachedResult = this._cachedWorkbookIds.get(workbookId);
     if (cachedResult) {
       return cachedResult;
     }
 
-    if (this.allowedWorkbookIds && !this.allowedWorkbookIds.has(workbookId)) {
+    const allowedWorkbookIds = await this.getAllowedWorkbookIds({ extra });
+    if (allowedWorkbookIds && !allowedWorkbookIds.has(workbookId)) {
       return {
         allowed: false,
         message: [
@@ -262,11 +292,8 @@ class ResourceAccessChecker {
     let workbook: Workbook | undefined;
     async function getWorkbook(): Promise<Workbook> {
       return await useRestApi({
-        config,
-        requestId,
-        server,
-        jwtScopes: getRequiredApiScopesForTool('get-workbook'),
-        signal,
+        ...extra,
+        jwtScopes: ['tableau:content:read'],
         callback: async (restApi) =>
           await restApi.workbooksMethods.getWorkbook({
             siteId: restApi.siteId,
@@ -275,11 +302,12 @@ class ResourceAccessChecker {
       });
     }
 
-    if (this.allowedProjectIds) {
+    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
+    if (allowedProjectIds) {
       try {
         workbook = await getWorkbook();
 
-        if (!this.allowedProjectIds.has(workbook.project?.id ?? '')) {
+        if (!allowedProjectIds.has(workbook.project?.id ?? '')) {
           return {
             allowed: false,
             message: [
@@ -300,11 +328,12 @@ class ResourceAccessChecker {
       }
     }
 
-    if (this.allowedTags) {
+    const allowedTags = await this.getAllowedTags({ extra });
+    if (allowedTags) {
       try {
         workbook = workbook ?? (await getWorkbook());
 
-        if (!workbook.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+        if (!workbook.tags?.tag?.some((tag) => allowedTags.has(tag.label))) {
           return {
             allowed: false,
             message: [
@@ -330,10 +359,10 @@ class ResourceAccessChecker {
 
   private async _isViewAllowed({
     viewId,
-    restApiArgs: { config, requestId, server, signal },
+    extra,
   }: {
     viewId: string;
-    restApiArgs: RestApiArgs;
+    extra: TableauRequestHandlerExtra;
   }): Promise<AllowedResult> {
     const cachedResult = this._cachedViewIds.get(viewId);
     if (cachedResult) {
@@ -343,11 +372,8 @@ class ResourceAccessChecker {
     let view: View | undefined;
     async function getView(): Promise<View> {
       return await useRestApi({
-        config,
-        requestId,
-        server,
-        jwtScopes: getRequiredApiScopesForTool('list-views'),
-        signal,
+        ...extra,
+        jwtScopes: ['tableau:content:read'],
         callback: async (restApi) => {
           return await restApi.viewsMethods.getView({
             siteId: restApi.siteId,
@@ -357,11 +383,12 @@ class ResourceAccessChecker {
       });
     }
 
-    if (this.allowedWorkbookIds) {
+    const allowedWorkbookIds = await this.getAllowedWorkbookIds({ extra });
+    if (allowedWorkbookIds) {
       try {
         view = await getView();
 
-        if (!this.allowedWorkbookIds.has(view.workbook?.id ?? '')) {
+        if (!allowedWorkbookIds.has(view.workbook?.id ?? '')) {
           return {
             allowed: false,
             message: [
@@ -382,11 +409,12 @@ class ResourceAccessChecker {
       }
     }
 
-    if (this.allowedProjectIds) {
+    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
+    if (allowedProjectIds) {
       try {
         view = view ?? (await getView());
 
-        if (!this.allowedProjectIds.has(view.project?.id ?? '')) {
+        if (!allowedProjectIds.has(view.project?.id ?? '')) {
           return {
             allowed: false,
             message: [
@@ -407,11 +435,12 @@ class ResourceAccessChecker {
       }
     }
 
-    if (this.allowedTags) {
+    const allowedTags = await this.getAllowedTags({ extra });
+    if (allowedTags) {
       try {
         view = view ?? (await getView());
 
-        if (!view.tags?.tag?.some((tag) => this.allowedTags?.has(tag.label))) {
+        if (!view.tags?.tag?.some((tag) => allowedTags.has(tag.label))) {
           return {
             allowed: false,
             message: [

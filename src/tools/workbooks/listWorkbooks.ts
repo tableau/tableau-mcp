@@ -2,13 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { BoundedContext, getConfig } from '../../config.js';
+import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
-import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
-import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, Tool } from '../tool.js';
@@ -65,29 +62,23 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { filter, pageSize, limit },
-      { requestId, sessionId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateWorkbooksFilterString(filter) : undefined;
 
       return await listWorkbooksTool.logAndExecute({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: {},
         callback: async () => {
           return new Ok(
             await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: getRequiredApiScopesForTool('list-workbooks'),
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
+              ...extra,
+              jwtScopes: ['tableau:content:read'],
               callback: async (restApi) => {
-                const maxResultLimit = config.getMaxResultLimit(listWorkbooksTool.name);
+                const maxResultLimit = configWithOverrides.getMaxResultLimit(
+                  listWorkbooksTool.name,
+                );
+
                 const workbooks = await paginate({
                   pageConfig: {
                     pageSize,
@@ -114,8 +105,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
           );
         },
         constrainSuccessResult: (workbooks) =>
-          constrainWorkbooks({ workbooks, boundedContext: config.boundedContext }),
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
+          constrainWorkbooks({ workbooks, boundedContext: configWithOverrides.boundedContext }),
       });
     },
   });

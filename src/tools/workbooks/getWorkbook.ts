@@ -2,13 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { BoundedContext, getConfig } from '../../config.js';
+import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
-import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
-import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ConstrainedResult, Tool } from '../tool.js';
 
@@ -33,21 +30,16 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { workbookId },
-      { requestId, sessionId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ workbookId }, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
 
       return await getWorkbookTool.logAndExecute<Workbook, GetWorkbookError>({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: { workbookId },
         callback: async () => {
           const isWorkbookAllowedResult = await resourceAccessChecker.isWorkbookAllowed({
             workbookId,
-            restApiArgs: { config, requestId, server, signal },
+            extra,
           });
 
           if (!isWorkbookAllowedResult.allowed) {
@@ -59,12 +51,8 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
 
           return new Ok(
             await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: getRequiredApiScopesForTool('get-workbook'),
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
+              ...extra,
+              jwtScopes: ['tableau:content:read'],
               callback: async (restApi) => {
                 // Notice that we already have the workbook if it had been allowed by a project scope.
                 const workbook =
@@ -92,14 +80,13 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
           );
         },
         constrainSuccessResult: (workbook) =>
-          filterWorkbookViews({ workbook, boundedContext: config.boundedContext }),
+          filterWorkbookViews({ workbook, boundedContext: configWithOverrides.boundedContext }),
         getErrorText: (error: GetWorkbookError) => {
           switch (error.type) {
             case 'workbook-not-allowed':
               return error.message;
           }
         },
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });

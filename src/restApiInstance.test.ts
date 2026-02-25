@@ -42,6 +42,7 @@ describe('restApiInstance', () => {
         config: mockConfig,
         requestId: mockRequestId,
         server: new Server(),
+        tableauAuthInfo: undefined,
         jwtScopes: [],
         signal: new AbortController().signal,
         callback: (restApi) => Promise.resolve(restApi),

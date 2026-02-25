@@ -7,6 +7,7 @@ import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
+import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getGeneratePulseInsightBriefTool } from './generatePulseInsightBriefTool.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
@@ -335,12 +336,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
     const callback = await Provider.from(tool.callback);
     return await callback(
       { briefRequest: overrideBriefRequest ?? briefRequest },
-      {
-        signal: new AbortController().signal,
-        requestId: 'test-request-id',
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      },
+      getMockRequestHandlerExtra(),
     );
   }
 });

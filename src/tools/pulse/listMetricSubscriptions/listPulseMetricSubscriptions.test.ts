@@ -7,6 +7,7 @@ import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.
 import { Server } from '../../../server.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import {
   constrainPulseMetricSubscriptions,
@@ -98,6 +99,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
       config: getConfig(),
       requestId: 'request-id',
       server: getServer(),
+      tableauAuthInfo: undefined,
       signal: new AbortController().signal,
     };
 
@@ -179,15 +181,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
 async function getToolResult(): Promise<CallToolResult> {
   const listPulseMetricSubscriptionsTool = getListPulseMetricSubscriptionsTool(new Server());
   const callback = await Provider.from(listPulseMetricSubscriptionsTool.callback);
-  return await callback(
-    {},
-    {
-      signal: new AbortController().signal,
-      requestId: 'test-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    },
-  );
+  return await callback({}, getMockRequestHandlerExtra());
 }
 
 function getServer(): InstanceType<typeof Server> {

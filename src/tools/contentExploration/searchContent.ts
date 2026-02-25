@@ -2,16 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import {
   orderBySchema,
   searchContentFilterSchema,
 } from '../../sdks/tableau/types/contentExploration.js';
 import { Server } from '../../server.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
-import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
-import { createProductTelemetryBase } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { Tool } from '../tool.js';
 import {
   buildFilterString,
@@ -63,29 +59,23 @@ This tool searches across all supported content types for objects relevant to th
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { terms, limit, orderBy, filter },
-      { requestId, sessionId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ terms, limit, orderBy, filter }, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
       const orderByString = orderBy ? buildOrderByString(orderBy) : undefined;
       const filterString = filter ? buildFilterString(filter) : undefined;
       return await searchContentTool.logAndExecute<Array<ReducedSearchContentResponse>>({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: {},
         callback: async () => {
           return new Ok(
             await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: getRequiredApiScopesForTool('search-content'),
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
+              ...extra,
+              jwtScopes: ['tableau:content:read'],
               callback: async (restApi) => {
-                const maxResultLimit = config.getMaxResultLimit(searchContentTool.name);
+                const maxResultLimit = configWithOverrides.getMaxResultLimit(
+                  searchContentTool.name,
+                );
+
                 const response = await restApi.contentExplorationMethods.searchContent({
                   terms,
                   page: 0,
@@ -99,8 +89,7 @@ This tool searches across all supported content types for objects relevant to th
           );
         },
         constrainSuccessResult: (items) =>
-          constrainSearchContent({ items, boundedContext: config.boundedContext }),
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
+          constrainSearchContent({ items, boundedContext: configWithOverrides.boundedContext }),
       });
     },
   });

@@ -2,16 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
   PulseMetricDefinition,
   pulseMetricDefinitionViewEnum,
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { getTableauAuthInfo } from '../../../server/oauth/getTableauAuthInfo.js';
-import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
-import { createProductTelemetryBase } from '../../../telemetry/productTelemetry/telemetryForwarder.js';
 import { pulsePaginate } from '../../../utils/paginate.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
@@ -59,28 +55,21 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { view, limit, pageSize },
-      { requestId, sessionId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ view, limit, pageSize }, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
+
       return await listAllPulseMetricDefinitionsTool.logAndExecute({
-        requestId,
-        sessionId,
-        authInfo,
+        extra,
         args: { view, limit, pageSize },
         callback: async () => {
           return await useRestApi({
-            config,
-            requestId,
-            server,
-            jwtScopes: getRequiredApiScopesForTool('list-all-pulse-metric-definitions'),
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
+            ...extra,
+            jwtScopes: ['tableau:insight_definitions_metrics:read'],
             callback: async (restApi) => {
-              const maxResultLimit = config.getMaxResultLimit(
+              const maxResultLimit = configWithOverrides.getMaxResultLimit(
                 listAllPulseMetricDefinitionsTool.name,
               );
+
               const definitions = await pulsePaginate({
                 config: {
                   limit: maxResultLimit
@@ -109,10 +98,13 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
             },
           });
         },
-        constrainSuccessResult: (definitions: Array<PulseMetricDefinition>) =>
-          constrainPulseDefinitions({ definitions, boundedContext: config.boundedContext }),
+        constrainSuccessResult: async (definitions: Array<PulseMetricDefinition>) => {
+          return constrainPulseDefinitions({
+            definitions,
+            boundedContext: configWithOverrides.boundedContext,
+          });
+        },
         getErrorText: getPulseDisabledError,
-        productTelemetryBase: createProductTelemetryBase(config, authInfo),
       });
     },
   });
