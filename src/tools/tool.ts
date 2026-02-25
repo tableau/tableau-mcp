@@ -65,7 +65,7 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   // The annotations of the tool
   annotations: TypeOrProvider<ToolAnnotations>;
 
-  // Details of the app that the tool can optionally retur
+  // Details of the app that the tool can optionally return
   app?: AppDetails;
 
   // A function that validates the tool's arguments provided by the client

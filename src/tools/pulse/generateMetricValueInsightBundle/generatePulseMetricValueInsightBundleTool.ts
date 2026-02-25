@@ -32,7 +32,7 @@ export type GeneratePulseMetricValueInsightBundleError =
 export const getGeneratePulseMetricValueInsightBundleTool = (
   server: Server,
 ): Tool<typeof paramsSchema> => {
-  const generatePulseMetricValueInsightBundleTool = new Tool<typeof paramsSchema>({
+  const generatePulseMetricValueInsightBundleTool = new Tool({
     server,
     name: 'generate-pulse-metric-value-insight-bundle',
     app: {
