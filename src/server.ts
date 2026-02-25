@@ -175,6 +175,7 @@ export class Server extends McpServer {
         title: (await Provider.from(annotations)).title,
         description: await Provider.from(description),
         inputSchema: await Provider.from(paramsSchema),
+        annotations: await Provider.from(annotations),
         _meta: {
           ui: {
             resourceUri,
