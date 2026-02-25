@@ -397,6 +397,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  OAUTH_EMBEDDED_AUTHZ_SERVER: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'OAuth Embedded Authz Server',
+    description:
+      'When true (default), the MCP server runs the embedded OAuth authz server (authorize, token, callback). When false, the issuer is an external authz server (e.g. Tableau).',
+    required: false,
+    sensitive: false,
+  },
   OAUTH_ISSUER: {
     includeInUserConfig: false,
     type: 'string',
@@ -475,8 +484,7 @@ const envVars = {
     includeInUserConfig: false,
     type: 'boolean',
     title: 'Advertise API Scopes',
-    description:
-      'Include Tableau API scopes in scopes_supported and scope challenges for Falcon hosting.',
+    description: 'Include Tableau API scopes in scopes_supported and scope challenges.',
     required: false,
     sensitive: false,
   },

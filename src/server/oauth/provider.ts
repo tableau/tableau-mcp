@@ -29,12 +29,17 @@ export class OAuthProvider {
   private readonly authorizationCodes = new Map<string, AuthorizationCode>();
   private readonly refreshTokens = new Map<string, RefreshTokenData>();
 
-  private readonly privateKey: KeyObject;
-  private readonly publicKey: KeyObject;
+  private readonly privateKey: KeyObject | null;
+  private readonly publicKey: KeyObject | null;
 
   constructor() {
-    this.privateKey = this.getPrivateKey();
-    this.publicKey = createPublicKey(this.privateKey);
+    if (this.config.oauth.embeddedAuthzServer) {
+      this.privateKey = this.getPrivateKey();
+      this.publicKey = createPublicKey(this.privateKey);
+    } else {
+      this.privateKey = null;
+      this.publicKey = null;
+    }
   }
 
   get authMiddleware(): RequestHandler {
@@ -54,8 +59,8 @@ export class OAuthProvider {
     // oauth2/authorize
     authorize(app, this.pendingAuthorizations);
 
-    // /Callback
-    callback(app, this.pendingAuthorizations, this.authorizationCodes);
+      // /Callback
+      callback(app, this.pendingAuthorizations, this.authorizationCodes);
 
     // oauth2/token
     token(app, this.authorizationCodes, this.refreshTokens, this.publicKey);

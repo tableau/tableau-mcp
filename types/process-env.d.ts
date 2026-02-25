@@ -41,6 +41,7 @@ export interface ProcessEnvEx {
   INCLUDE_TAGS: string | undefined;
   TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: string | undefined;
   DANGEROUSLY_DISABLE_OAUTH: string | undefined;
+  OAUTH_EMBEDDED_AUTHZ_SERVER: string | undefined;
   OAUTH_ISSUER: string | undefined;
   OAUTH_JWE_PRIVATE_KEY: string | undefined;
   OAUTH_JWE_PRIVATE_KEY_PATH: string | undefined;

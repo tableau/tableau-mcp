@@ -655,6 +655,7 @@ describe('Config', () => {
 
     const defaultOAuthConfig = {
       enabled: true,
+      embeddedAuthzServer: true,
       clientIdSecretPairs: null,
       issuer: 'https://example.com',
       redirectUri: 'https://example.com/Callback',
@@ -673,6 +674,7 @@ describe('Config', () => {
       const config = new Config();
       expect(config.oauth).toEqual({
         enabled: false,
+        embeddedAuthzServer: true,
         issuer: '',
         clientIdSecretPairs: null,
         redirectUri: '',

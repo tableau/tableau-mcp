@@ -70,6 +70,7 @@ export class Config {
   tableauServerVersionCheckIntervalInHours: number;
   oauth: {
     enabled: boolean;
+    embeddedAuthzServer: boolean;
     issuer: string;
     redirectUri: string;
     resourceUri: string;
@@ -139,6 +140,7 @@ export class Config {
       INCLUDE_TAGS: includeTags,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
+      OAUTH_EMBEDDED_AUTHZ_SERVER: oauthEmbeddedAuthzServer,
       OAUTH_ISSUER: oauthIssuer,
       OAUTH_LOCK_SITE: oauthLockSite,
       OAUTH_JWE_PRIVATE_KEY: oauthJwePrivateKey,
@@ -225,9 +227,11 @@ export class Config {
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';
     const enforceScopes = !disableScopes;
+    const embeddedAuthzServer = oauthEmbeddedAuthzServer !== 'false';
 
     this.oauth = {
       enabled: disableOauthOverride ? false : !!oauthIssuer,
+      embeddedAuthzServer,
       issuer: oauthIssuer ?? '',
       resourceUri: oauthResourceUri ?? `http://127.0.0.1:${this.httpPort}`,
       redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
@@ -311,28 +315,30 @@ export class Config {
     }
 
     if (this.oauth.enabled) {
-      invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
+      if (this.oauth.embeddedAuthzServer) {
+        invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
 
-      if (!this.oauth.jwePrivateKey && !this.oauth.jwePrivateKeyPath) {
-        throw new Error(
-          'One of the environment variables: OAUTH_JWE_PRIVATE_KEY_PATH or OAUTH_JWE_PRIVATE_KEY must be set',
-        );
-      }
+        if (!this.oauth.jwePrivateKey && !this.oauth.jwePrivateKeyPath) {
+          throw new Error(
+            'One of the environment variables: OAUTH_JWE_PRIVATE_KEY_PATH or OAUTH_JWE_PRIVATE_KEY must be set',
+          );
+        }
 
-      if (this.oauth.jwePrivateKey && this.oauth.jwePrivateKeyPath) {
-        throw new Error(
-          'Only one of the environment variables: OAUTH_JWE_PRIVATE_KEY or OAUTH_JWE_PRIVATE_KEY_PATH must be set',
-        );
-      }
+        if (this.oauth.jwePrivateKey && this.oauth.jwePrivateKeyPath) {
+          throw new Error(
+            'Only one of the environment variables: OAUTH_JWE_PRIVATE_KEY or OAUTH_JWE_PRIVATE_KEY_PATH must be set',
+          );
+        }
 
-      if (
-        this.oauth.jwePrivateKeyPath &&
-        process.env.TABLEAU_MCP_TEST !== 'true' &&
-        !existsSync(this.oauth.jwePrivateKeyPath)
-      ) {
-        throw new Error(
-          `OAuth JWE private key path does not exist: ${this.oauth.jwePrivateKeyPath}`,
-        );
+        if (
+          this.oauth.jwePrivateKeyPath &&
+          process.env.TABLEAU_MCP_TEST !== 'true' &&
+          !existsSync(this.oauth.jwePrivateKeyPath)
+        ) {
+          throw new Error(
+            `OAuth JWE private key path does not exist: ${this.oauth.jwePrivateKeyPath}`,
+          );
+        }
       }
 
       if (this.transport === 'stdio') {
