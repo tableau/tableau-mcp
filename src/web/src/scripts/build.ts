@@ -1,5 +1,3 @@
-/* eslint-disable no-console */
-
 import react from '@vitejs/plugin-react';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { basename, dirname, resolve } from 'path';
@@ -9,7 +7,6 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = process.argv.includes('--dev');
-const watch = process.argv.includes('--watch');
 const outDir = resolve(__dirname, '../../../../build/web');
 
 function discoverComponents(srcDir: string): { name: string; tsxPath: string }[] {
@@ -62,14 +59,6 @@ function buildConfig(htmlEntryPath: string, componentName: string): InlineConfig
       emptyOutDir: false,
       sourcemap: isDev ? 'inline' : false,
       minify: isDev ? false : 'esbuild',
-      watch: watch
-        ? {
-            include: ['../**/*.tsx', '../**/*.css'],
-            exclude: ['node_modules', 'dist'],
-            buildDelay: 1000,
-            clearScreen: false,
-          }
-        : undefined,
       rollupOptions: {
         input: { [componentName]: htmlEntryPath },
       },
@@ -93,15 +82,6 @@ async function main(): Promise<void> {
   const tempDir = resolve(__dirname, '../temp');
   rmSync(tempDir, { recursive: true, force: true });
   mkdirSync(tempDir, { recursive: true });
-
-  if (watch) {
-    process.on('SIGINT', () => {
-      // Clean up temp HTML stubs
-      if (existsSync(tempDir)) {
-        rmSync(tempDir, { recursive: true, force: true });
-      }
-    });
-  }
 
   console.log(
     `Building ${components.length} component(s) -> ${outDir}`,
@@ -137,7 +117,7 @@ async function main(): Promise<void> {
     }
   } finally {
     // Clean up temp HTML stubs
-    if (!watch && existsSync(tempDir)) {
+    if (existsSync(tempDir)) {
       rmSync(tempDir, { recursive: true, force: true });
     }
   }

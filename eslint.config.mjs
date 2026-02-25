@@ -34,7 +34,7 @@ export default [
     },
   },
   {
-    files: ['tests/**/*.ts', 'src/web/**/*.tsx'],
+    files: ['tests/**/*.ts', 'src/web/**/*.{ts,tsx}'],
     rules: {
       'no-console': 'off',
     },
