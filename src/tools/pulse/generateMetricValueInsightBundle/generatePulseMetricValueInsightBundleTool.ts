@@ -1,16 +1,17 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 import z from 'zod';
 
+import { AppTool } from '../../../apps/appTool.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
+  PulseInsightBundleType,
   pulseInsightBundleTypeEnum,
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
@@ -30,10 +31,11 @@ export type GeneratePulseMetricValueInsightBundleError =
 
 export const getGeneratePulseMetricValueInsightBundleTool = (
   server: Server,
-): Tool<typeof paramsSchema> => {
-  const generatePulseMetricValueInsightBundleTool = new Tool({
+): AppTool<typeof paramsSchema> => {
+  const generatePulseMetricValueInsightBundleTool = new AppTool<typeof paramsSchema>({
     server,
     name: 'generate-pulse-metric-value-insight-bundle',
+    appName: 'pulse-renderer',
     description: `
 Generate an insight bundle for the current aggregated value for Pulse Metric using Tableau REST API.  You need the full information of the Pulse Metric and Pulse Metric Definition to use this tool.
 
@@ -150,7 +152,10 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
     },
     callback: async ({ bundleRequest, bundleType }, extra): Promise<CallToolResult> => {
       return await generatePulseMetricValueInsightBundleTool.logAndExecute<
-        PulseBundleResponse,
+        {
+          bundle: PulseBundleResponse;
+          bundleType: PulseInsightBundleType;
+        },
         GeneratePulseMetricValueInsightBundleError
       >({
         extra,
@@ -192,7 +197,10 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
             });
           }
 
-          return result;
+          return new Ok({
+            bundle: result.value,
+            bundleType: bundleType ?? 'ban',
+          });
         },
         constrainSuccessResult: (insightBundle) => {
           return {

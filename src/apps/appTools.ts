@@ -1,4 +1,3 @@
-import { getEmbedTableauVizTool } from './embedTableauViz';
-import { getPulseRendererAppTool } from './pulseRenderer';
+import { getGeneratePulseMetricValueInsightBundleTool } from '../tools/pulse/generateMetricValueInsightBundle/generatePulseMetricValueInsightBundleTool';
 
-export const appToolFactories = [getPulseRendererAppTool, getEmbedTableauVizTool];
+export const appToolFactories = [getGeneratePulseMetricValueInsightBundleTool];

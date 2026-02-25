@@ -113,9 +113,9 @@ export class Server extends McpServer {
 
     for (const {
       name,
-      title,
       description,
       paramsSchema,
+      annotations,
       callback,
       sandboxCapabilities,
       resourceUri,
@@ -146,7 +146,7 @@ export class Server extends McpServer {
         this,
         name,
         {
-          title: await Provider.from(title),
+          title: (await Provider.from(annotations)).title,
           description: await Provider.from(description),
           inputSchema: await Provider.from(paramsSchema),
           _meta: {

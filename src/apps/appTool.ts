@@ -1,4 +1,4 @@
-import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -10,14 +10,16 @@ import { getToolLogMessage, log } from '../logging/log';
 import { Server } from '../server';
 import { getTelemetryProvider } from '../telemetry/init';
 import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder';
+import { ConstrainedResult } from '../tools/tool';
 import { TableauRequestHandlerExtra, TableauToolCallback } from '../tools/toolContext';
+import { ToolName } from '../tools/toolName';
 import { getDirname } from '../utils/getDirname';
 import { getExceptionMessage } from '../utils/getExceptionMessage';
 import { getHttpStatus } from '../utils/getHttpStatus';
 import { getSiteLuidFromAccessToken } from '../utils/getSiteLuidFromAccessToken';
 import { TypeOrProvider } from '../utils/provider';
 
-export type AppToolName = 'pulse-renderer' | 'embed-tableau-viz';
+type AppName = 'pulse-renderer';
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type EmptyObject = {};
@@ -52,16 +54,18 @@ export type AppToolParams<Args extends ZodRawShape | undefined = undefined> = {
   server: Server;
 
   // The name of the tool
-  name: AppToolName;
+  name: ToolName;
 
-  // The title of the tool
-  title: TypeOrProvider<string>;
+  appName: AppName;
 
   // The description of the tool
   description: TypeOrProvider<string>;
 
   // The schema of the tool's parameters
   paramsSchema: TypeOrProvider<Args>;
+
+  // The annotations of the tool
+  annotations: TypeOrProvider<ToolAnnotations>;
 
   // The implementation of the tool itself
   callback: TypeOrProvider<TableauToolCallback<Args>>;
@@ -90,6 +94,9 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
   // A function that can transform an error result of the callback into a string.
   // Required if the callback can return an error result.
   getErrorText?: (error: E) => string;
+
+  // A function that constrains the success result of the tool
+  constrainSuccessResult: (result: T) => ConstrainedResult<T> | Promise<ConstrainedResult<T>>;
 };
 
 /**
@@ -99,37 +106,40 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
  */
 export class AppTool<Args extends ZodRawShape | undefined = undefined> {
   server: Server;
-  name: AppToolName;
-  title: TypeOrProvider<string>;
+  name: ToolName;
+  appName: AppName;
   description: TypeOrProvider<string>;
   paramsSchema: TypeOrProvider<Args>;
+  annotations: TypeOrProvider<ToolAnnotations>;
   callback: TypeOrProvider<TableauToolCallback<Args>>;
   sandboxCapabilities?: HostSandboxCapabilities;
 
   constructor({
     server,
     name,
-    title,
+    appName,
     description,
     paramsSchema,
+    annotations,
     callback,
     sandboxCapabilities,
   }: AppToolParams<Args>) {
     this.server = server;
     this.name = name;
-    this.title = title;
+    this.appName = appName;
     this.description = description;
     this.paramsSchema = paramsSchema;
+    this.annotations = annotations;
     this.callback = callback;
     this.sandboxCapabilities = sandboxCapabilities;
   }
 
-  get resourceUri(): `ui://tableau-mcp/${AppToolName}.html` {
-    return `ui://tableau-mcp/${this.name}.html`;
+  get resourceUri(): `ui://tableau-mcp/${AppName}.html` {
+    return `ui://tableau-mcp/${this.appName}.html`;
   }
 
   get html(): string {
-    return readFileSync(join(getDirname(), 'web', `${this.name}.html`), 'utf-8');
+    return readFileSync(join(getDirname(), 'web', `${this.appName}.html`), 'utf-8');
   }
 
   logInvocation({
@@ -173,6 +183,7 @@ export class AppTool<Args extends ZodRawShape | undefined = undefined> {
     args,
     callback,
     getErrorText,
+    constrainSuccessResult,
   }: LogAndExecuteParams<T, E, Args>): Promise<CallToolResult> {
     const { config, requestId, sessionId, tableauAuthInfo } = extra;
     const username = tableauAuthInfo?.username;
@@ -200,6 +211,21 @@ export class AppTool<Args extends ZodRawShape | undefined = undefined> {
       const result = await callback();
 
       if (result.isOk()) {
+        const constrainedResult = await constrainSuccessResult(result.value);
+
+        if (constrainedResult.type !== 'success') {
+          // Constrained result is either 'empty' or 'error'
+          const isError = constrainedResult.type === 'error';
+          success = !isError;
+          errorCode =
+            isError && constrainedResult.error ? getHttpStatus(constrainedResult.error) : '';
+          toolResult = {
+            isError,
+            content: [{ type: 'text', text: constrainedResult.message }],
+          };
+          return toolResult;
+        }
+
         success = true;
         toolResult = {
           isError: false,
