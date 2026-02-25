@@ -5,9 +5,13 @@ import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import z from 'zod';
 
-import { pulseBundleResponseSchema } from '../../../../sdks/tableau/types/pulse';
+import {
+  pulseBundleResponseSchema,
+  type PulseInsightBundleType,
+  pulseInsightBundleTypeEnum,
+} from '../../../../sdks/tableau/types/pulse';
 import { InsightGroupType } from '../../components/pulse-renderer/enums';
-import { InsightCard } from '../../components/pulse-renderer/insight-card';
+import { InsightBundleRenderer } from '../../components/pulse-renderer/insight-bundle-renderer';
 import { useToolResult } from '../../hooks/useToolResult';
 import styles from './pulse-renderer.module.css';
 
@@ -81,16 +85,10 @@ function PulseRenderer({
 }: PulseRendererProps): React.ReactNode {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const result = useToolResult(toolResult, z.object({ bundle: pulseBundleResponseSchema }));
-  const bundle = result.success ? result.data.bundle.bundle_response.result : undefined;
-  const allInsights =
-    bundle?.insight_groups.find((group) => group.type === InsightGroupType.Followup)?.insights ??
-    [];
-
-  const insightsWithCards = allInsights.filter(
-    (insight) => insight.insight_type !== 'unusualchange',
+  const result = useToolResult(
+    toolResult,
+    z.object({ bundle: pulseBundleResponseSchema, bundleType: z.enum(pulseInsightBundleTypeEnum) }),
   );
-  const [topInsight, ...otherInsights] = insightsWithCards;
 
   if (!result.success) {
     return (
@@ -100,23 +98,11 @@ function PulseRenderer({
     );
   }
 
-  if (!topInsight) {
-    return (
-      <div ref={containerRef} className={styles.pulseRenderer}>
-        <div>No insights to display.</div>
-      </div>
-    );
-  }
+  const bundle = result.data.bundle.bundle_response.result;
+  const bundleType = result.data.bundleType;
 
   return (
-    <div ref={containerRef} className={styles.pulseRenderer}>
-      <InsightCard insight={topInsight.result} />
-      {otherInsights.map((insight, index) => (
-        <div key={`${insight.insight_type}-${index}`} className={styles.otherInsight}>
-          <InsightCard insight={insight.result} />
-        </div>
-      ))}
-    </div>
+    <InsightBundleRenderer bundle={bundle} insightGroupType={getInsightGroupType(bundleType)} />
   );
 }
 
@@ -125,3 +111,20 @@ createRoot(document.getElementById('root')!).render(
     <PulseRendererApp />
   </StrictMode>,
 );
+
+function getInsightGroupType(bundleType: PulseInsightBundleType): InsightGroupType {
+  switch (bundleType) {
+    case 'ban':
+      return InsightGroupType.BAN;
+    case 'springboard':
+      return InsightGroupType.Top;
+    case 'basic':
+      return InsightGroupType.Top;
+    case 'detail':
+      return InsightGroupType.Followup;
+    case 'exploration':
+      return InsightGroupType.Anchor;
+    case 'breakdown':
+      return InsightGroupType.Breakdown;
+  }
+}

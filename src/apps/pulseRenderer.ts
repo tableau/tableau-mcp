@@ -74,6 +74,7 @@ export const getPulseRendererAppTool = (server: Server): AppTool<typeof paramsSc
 
           return new Ok({
             bundle: result.value,
+            bundleType: bundleType ?? 'ban',
           });
         },
         getErrorText: (error) => {

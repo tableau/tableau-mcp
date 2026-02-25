@@ -1,21 +1,32 @@
-import type { PulseInsight } from '../../../../sdks/tableau/types/pulse';
+import type { InsightViz } from '@tableau/ntbue-visualization-renderer';
+
 import { ChartWrapper } from './chart-wrapper';
 import styles from './insight-card.module.css';
 
 export type InsightCardProps = {
-  insight: PulseInsight;
+  insightType: string;
+  viz: InsightViz;
+  question?: string;
+  markup?: string;
 };
 
-export function InsightCard({ insight }: InsightCardProps): React.ReactNode {
+export function InsightCard({
+  insightType,
+  viz,
+  question,
+  markup,
+}: InsightCardProps): React.ReactNode {
   return (
     <div className={styles.insightCardContainer}>
-      <div className={styles.questionContainer}>
-        <span className={styles.question}>{insight.question}</span>
-      </div>
+      {question && (
+        <div className={styles.questionContainer}>
+          <span className={styles.question}>{question}</span>
+        </div>
+      )}
       <div className={styles.insightCard}>
         <div className={styles.inner}>
-          <div className={styles.body} dangerouslySetInnerHTML={{ __html: insight.markup ?? '' }} />
-          <ChartWrapper insightType={insight.type} spec={insight.viz} />
+          {markup && <div className={styles.body} dangerouslySetInnerHTML={{ __html: markup }} />}
+          <ChartWrapper insightType={insightType} spec={viz} />
         </div>
       </div>
     </div>
