@@ -4,7 +4,7 @@ import { spawnSync } from 'child_process';
 import { build } from 'esbuild';
 import { chmod, mkdir, rm } from 'fs/promises';
 
-const dev = process.argv.includes('--dev');
+const dev = true;
 
 (async () => {
   await rm('./build', { recursive: true, force: true });
