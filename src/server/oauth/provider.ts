@@ -59,8 +59,8 @@ export class OAuthProvider {
     // oauth2/authorize
     authorize(app, this.pendingAuthorizations);
 
-      // /Callback
-      callback(app, this.pendingAuthorizations, this.authorizationCodes);
+    // /Callback
+    callback(app, this.pendingAuthorizations, this.authorizationCodes);
 
     // oauth2/token
     token(app, this.authorizationCodes, this.refreshTokens, this.publicKey);

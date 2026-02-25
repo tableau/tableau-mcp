@@ -50,7 +50,7 @@ export async function exchangeAuthzCodeForAccessToken(app: express.Application):
     refresh_token: expect.any(String),
     token_type: 'Bearer',
     expires_in: 3600,
-    scope: '',
+    scope: expect.stringMatching(/tableau:mcp:/),
   });
 
   return tokenResponse.body;

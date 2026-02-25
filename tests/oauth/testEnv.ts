@@ -10,6 +10,7 @@ export function setEnv(): void {
     process.env.OAUTH_JWE_PRIVATE_KEY_PATH ?? 'tests/oauth/fixtures/jwe-private-key.key';
   process.env.TABLEAU_MCP_TEST = process.env.TABLEAU_MCP_TEST ?? 'true';
   process.env.OAUTH_CLIENT_ID_SECRET_PAIRS = 'test-client-id:test-client-secret';
+  process.env.OAUTH_DISABLE_SCOPES = 'false';
 }
 
 export function resetEnv(): void {
