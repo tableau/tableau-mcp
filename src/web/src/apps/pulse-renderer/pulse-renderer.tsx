@@ -94,6 +94,7 @@ function PulseRenderer({
     return (
       <div ref={containerRef} className={styles.pulseRenderer}>
         <div>Failed to parse Pulse bundle response.</div>
+        <div>{result.error.message}</div>
       </div>
     );
   }
