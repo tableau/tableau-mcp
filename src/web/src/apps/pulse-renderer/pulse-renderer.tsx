@@ -100,9 +100,13 @@ function PulseRenderer({
 
   const bundle = result.data.bundle.bundle_response.result;
   const bundleType = result.data.bundleType;
+  const topInsightGroupType = getInsightGroupType(bundleType);
 
   return (
-    <InsightBundleRenderer bundle={bundle} insightGroupType={getInsightGroupType(bundleType)} />
+    <InsightBundleRenderer
+      bundle={bundle}
+      insightGroupTypes={new Set([topInsightGroupType, InsightGroupType.Followup])}
+    />
   );
 }
 

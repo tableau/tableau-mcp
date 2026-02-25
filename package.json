@@ -41,6 +41,7 @@
     "build:inspect": "run-s build inspect",
     "build:inspect:docker": "run-s build:docker inspect:docker",
     "build:inspect:docker:http": "run-s build:docker inspect:docker:http",
+    "mcpjam": "npx @mcpjam/inspector@latest",
     "test": "vitest --config ./vitest.config.ts",
     "test:e2e": "vitest --config ./vitest.config.e2e.ts",
     "test:eval": "vitest --config ./vitest.config.eval.ts",
