@@ -1,7 +1,7 @@
 import type { App, McpUiHostContext } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { StrictMode, useEffect, useRef, useState } from 'react';
+import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import z from 'zod';
 
@@ -83,24 +83,23 @@ function PulseRenderer({
   toolResult,
   hostContext: _hostContext,
 }: PulseRendererProps): React.ReactNode {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  if (!toolResult) {
-    return (
-      <div ref={containerRef} className={styles.pulseRenderer}>
-        <div>Loading Pulse insights...</div>
-      </div>
-    );
-  }
-
+  // Call hooks unconditionally (before any early returns) to satisfy Rules of Hooks
   const result = useToolResult(
     toolResult,
     z.object({ bundle: pulseBundleResponseSchema, bundleType: z.enum(pulseInsightBundleTypeEnum) }),
   );
 
+  if (!toolResult) {
+    return (
+      <div className={styles.pulseRenderer}>
+        <div>Loading Pulse insights...</div>
+      </div>
+    );
+  }
+
   if (!result.success) {
     return (
-      <div ref={containerRef} className={styles.pulseRenderer}>
+      <div className={styles.pulseRenderer}>
         <div>Failed to parse Pulse bundle response.</div>
         <div>{result.error.message}</div>
       </div>
