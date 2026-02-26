@@ -272,7 +272,7 @@ References:
 
 ### `OAUTH_EMBEDDED_AUTHZ_SERVER`
 
-When `true` (default), the MCP server runs the embedded OAuth authorization server (authorize, token,
+A hint that `OAUTH_ISSUER` points at the embedded OAuth authorization server (authorize, token,
 callback, register routes). When `false`, the issuer is an external authorization server (e.g. Tableau);
 only `.well-known` endpoints are exposed and JWE key/redirect URI constraints are skipped.
 
