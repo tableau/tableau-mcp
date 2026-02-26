@@ -97,6 +97,9 @@ export class Server extends McpServer {
     }
   };
 
+  registerAppTool = registerAppTool;
+  registerAppResource = registerAppResource;
+
   registerRequestHandlers = (): void => {
     this.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
       setLogLevel(this, request.params.level);
@@ -168,7 +171,7 @@ export class Server extends McpServer {
     // `_meta.ui.resourceUri` to know which resource to fetch and render as an
     // interactive UI.
     const { resourceUri, html, sandboxCapabilities } = app;
-    registerAppTool(
+    this.registerAppTool(
       this,
       name,
       {
@@ -186,7 +189,7 @@ export class Server extends McpServer {
     );
 
     // Register the resource, which returns the bundled HTML/JavaScript for the UI.
-    registerAppResource(
+    this.registerAppResource(
       // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.
       this,
       resourceUri,

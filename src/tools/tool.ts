@@ -143,7 +143,9 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       this.app = {
         ...app,
         resourceUri: `ui://tableau-mcp/${app.name}.html`,
-        html: readFileSync(join(getDirname(), 'web', `${app.name}.html`), 'utf-8'),
+        html: process.env.TABLEAU_MCP_TEST
+          ? `<html><body><p>${app.name}</p></body></html>`
+          : readFileSync(join(getDirname(), 'web', `${app.name}.html`), 'utf-8'),
       };
     }
   }

@@ -133,7 +133,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsedValue = JSON.parse(result.content[0].text);
-    expect(parsedValue).toEqual(mockBundleRequestResponse);
+    expect(parsedValue).toEqual({ bundle: mockBundleRequestResponse, bundleType: 'ban' });
   });
 
   it('should call generatePulseMetricValueInsightBundle with bundleType and return Ok result', async () => {
@@ -148,7 +148,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsedValue = JSON.parse(result.content[0].text);
-    expect(parsedValue).toEqual(mockBundleRequestResponse);
+    expect(parsedValue).toEqual({ bundle: mockBundleRequestResponse, bundleType: 'springboard' });
   });
 
   it.each(['ban', 'springboard', 'basic', 'detail'] as const)(
@@ -165,7 +165,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       const parsedValue = JSON.parse(result.content[0].text);
-      expect(parsedValue).toEqual(mockBundleRequestResponse);
+      expect(parsedValue).toEqual({ bundle: mockBundleRequestResponse, bundleType });
     },
   );
 

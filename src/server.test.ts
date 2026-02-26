@@ -1,5 +1,6 @@
 import { exportedForTesting as serverExportedForTesting } from './server.js';
 import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
+import { Tool } from './tools/tool.js';
 import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
 import { Provider } from './utils/provider.js';
@@ -27,15 +28,7 @@ describe('server', () => {
 
     const tools = toolFactories.map((toolFactory) => toolFactory(server));
     for (const tool of tools) {
-      expect(server.registerTool).toHaveBeenCalledWith(
-        tool.name,
-        {
-          description: await Provider.from(tool.description),
-          inputSchema: await Provider.from(tool.paramsSchema),
-          annotations: await Provider.from(tool.annotations),
-        },
-        expect.any(Function),
-      );
+      await verifyToolRegistration(server, tool);
     }
   });
 
@@ -74,15 +67,7 @@ describe('server', () => {
           expect.any(Function),
         );
       } else {
-        expect(server.registerTool).toHaveBeenCalledWith(
-          tool.name,
-          {
-            description: await Provider.from(tool.description),
-            inputSchema: await Provider.from(tool.paramsSchema),
-            annotations: await Provider.from(tool.annotations),
-          },
-          expect.any(Function),
-        );
+        await verifyToolRegistration(server, tool);
       }
     }
   });
@@ -116,5 +101,48 @@ describe('server', () => {
 function getServer(): InstanceType<typeof Server> {
   const server = new Server();
   server.registerTool = vi.fn();
+  server.registerAppTool = vi.fn();
+  server.registerAppResource = vi.fn();
   return server;
+}
+
+async function verifyToolRegistration(
+  server: InstanceType<typeof Server>,
+  tool: Tool<any>,
+): Promise<void> {
+  if (tool.app) {
+    expect(server.registerAppTool).toHaveBeenCalledWith(
+      server,
+      tool.name,
+      {
+        title: (await Provider.from(tool.annotations)).title,
+        description: await Provider.from(tool.description),
+        inputSchema: await Provider.from(tool.paramsSchema),
+        annotations: await Provider.from(tool.annotations),
+        _meta: {
+          ui: {
+            resourceUri: tool.app.resourceUri,
+          },
+        },
+      },
+      expect.any(Function),
+    );
+    expect(server.registerAppResource).toHaveBeenCalledWith(
+      server,
+      tool.app.resourceUri,
+      tool.app.resourceUri,
+      { mimeType: 'text/html;profile=mcp-app' },
+      expect.any(Function),
+    );
+  } else {
+    expect(server.registerTool).toHaveBeenCalledWith(
+      tool.name,
+      {
+        description: await Provider.from(tool.description),
+        inputSchema: await Provider.from(tool.paramsSchema),
+        annotations: await Provider.from(tool.annotations),
+      },
+      expect.any(Function),
+    );
+  }
 }
