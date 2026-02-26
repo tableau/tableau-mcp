@@ -1,6 +1,6 @@
 {
   "name": "@tableau/mcp-server",
-  "description": "An MCP server for Tableau, providing a suite of tools that will make it easier for developers to build AI applications that integrate with Tableau.",
+  "description": "Helping agents see and understand data.",
   "version": "1.15.3",
   "repository": {
     "type": "git",
