@@ -1,6 +1,6 @@
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
@@ -140,12 +140,24 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.callback = callback;
 
     if (app) {
+      const htmlPaths = [
+        join(getDirname(), 'web', `${app.name}.html`),
+
+        // When creating the server as part of the E2E/OAuth tests, getDirname() will return "src/utils"
+        join(process.cwd(), 'build', 'web', `${app.name}.html`),
+      ];
+
+      const htmlPath = htmlPaths.find((path) => existsSync(path));
+      if (!htmlPath) {
+        throw new Error(`HTML file not found. Checked: ${htmlPaths.join(', ')}`);
+      }
+
       this.app = {
         ...app,
         resourceUri: `ui://tableau-mcp/${app.name}.html`,
         html: process.env.TABLEAU_MCP_TEST
           ? `<html><body><p>${app.name}</p></body></html>`
-          : readFileSync(join(getDirname(), 'web', `${app.name}.html`), 'utf-8'),
+          : readFileSync(htmlPath, 'utf-8'),
       };
     }
   }
