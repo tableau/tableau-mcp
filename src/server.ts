@@ -1,7 +1,13 @@
+import {
+  registerAppResource,
+  registerAppTool,
+  RESOURCE_MIME_TYPE,
+} from '@modelcontextprotocol/ext-apps/server';
 import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import {
   InitializeRequest,
+  ReadResourceResult,
   ServerNotification,
   ServerRequest,
   SetLevelRequestSchema,
@@ -15,6 +21,7 @@ import { Tool } from './tools/tool.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
 import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
+import invariant from './utils/invariant';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings';
 import { Provider } from './utils/provider.js';
 
@@ -64,18 +71,12 @@ export class Server extends McpServer {
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
     const config = getConfig();
 
-    for (const {
-      name,
-      description,
-      paramsSchema,
-      annotations,
-      callback,
-    } of await this._getToolsToRegister(tableauAuthInfo)) {
-      const toolCallback: ToolCallback<typeof paramsSchema> = async (
-        args: typeof paramsSchema,
+    for (const tool of await this._getToolsToRegister(tableauAuthInfo)) {
+      const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
+        args: typeof tool.paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
       ) => {
-        const tableauToolCallback = await Provider.from(callback);
+        const tableauToolCallback = await Provider.from(tool.callback);
         const tableauRequestHandlerExtra: TableauRequestHandlerExtra = {
           ...extra,
           config,
@@ -88,17 +89,16 @@ export class Server extends McpServer {
         return tableauToolCallback(args, tableauRequestHandlerExtra);
       };
 
-      this.registerTool(
-        name,
-        {
-          description: await Provider.from(description),
-          inputSchema: await Provider.from(paramsSchema),
-          annotations: await Provider.from(annotations),
-        },
-        toolCallback,
-      );
+      if (tool.app) {
+        await this._registerAppTool(tool, toolCallback);
+      } else {
+        await this._registerTool(tool, toolCallback);
+      }
     }
   };
+
+  registerAppTool = registerAppTool;
+  registerAppResource = registerAppResource;
 
   registerRequestHandlers = (): void => {
     this.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
@@ -143,6 +143,71 @@ export class Server extends McpServer {
     }
 
     return toolsToRegister;
+  };
+
+  private _registerTool = async (
+    { name, description, paramsSchema, annotations }: Tool<any>,
+    toolCallback: ToolCallback<typeof paramsSchema>,
+  ): Promise<void> => {
+    this.registerTool(
+      name,
+      {
+        description: await Provider.from(description),
+        inputSchema: await Provider.from(paramsSchema),
+        annotations: await Provider.from(annotations),
+      },
+      toolCallback,
+    );
+  };
+
+  private _registerAppTool = async (
+    { name, description, paramsSchema, annotations, app }: Tool<any>,
+    toolCallback: ToolCallback<typeof paramsSchema>,
+  ): Promise<void> => {
+    invariant(app, `Tool ${name} is an app but no app details were provided`);
+
+    // Two-part registration: tool + resource, tied together by the resource URI.
+    // Register a tool with UI metadata. When the host calls this tool, it reads
+    // `_meta.ui.resourceUri` to know which resource to fetch and render as an
+    // interactive UI.
+    const { resourceUri, html, sandboxCapabilities } = app;
+    this.registerAppTool(
+      this,
+      name,
+      {
+        title: (await Provider.from(annotations)).title,
+        description: await Provider.from(description),
+        inputSchema: await Provider.from(paramsSchema),
+        annotations: await Provider.from(annotations),
+        _meta: {
+          ui: {
+            resourceUri,
+          },
+        },
+      },
+      toolCallback,
+    );
+
+    // Register the resource, which returns the bundled HTML/JavaScript for the UI.
+    this.registerAppResource(
+      // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.
+      this,
+      resourceUri,
+      resourceUri,
+      { mimeType: RESOURCE_MIME_TYPE },
+      async (): Promise<ReadResourceResult> => {
+        return {
+          contents: [
+            {
+              uri: resourceUri,
+              mimeType: RESOURCE_MIME_TYPE,
+              text: html,
+              _meta: { ui: { ...sandboxCapabilities } },
+            },
+          ],
+        };
+      },
+    );
   };
 }
 

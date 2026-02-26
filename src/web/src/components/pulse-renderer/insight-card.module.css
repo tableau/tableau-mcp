@@ -1,0 +1,53 @@
+.insightCardContainer {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.75rem;
+
+  .questionContainer {
+    display: flex;
+    margin-bottom: 0.5rem;
+
+    .question {
+      background-color: #eff4f9;
+      border-radius: 1.25rem;
+      color: #1e1f27;
+      font-size: 1.125rem;
+      font-weight: 500;
+      line-height: 1.75rem;
+      padding: 0.5rem 1.125rem;
+
+      .questionPrefix {
+        color: #6b7280;
+      }
+    }
+  }
+
+  .insightCard {
+    background-color: #fff;
+    border: 0.063rem solid #e9f2fe;
+    border-radius: 1.5rem;
+    width: 100%;
+
+    .inner {
+      margin: 1.5rem 2rem;
+
+      .body {
+        font-size: 1rem;
+        line-height: 1.5rem;
+        font-weight: 400;
+
+        color: #1e1f27;
+        word-break: break-word;
+
+        [data-type] {
+          font-weight: 700;
+          overflow-wrap: anywhere;
+        }
+
+        [data-type='value'] {
+          font-weight: unset;
+        }
+      }
+    }
+  }
+}

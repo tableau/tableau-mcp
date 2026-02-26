@@ -23,6 +23,7 @@
     "./tracing": "./build/telemetry/tracing.js"
   },
   "scripts": {
+    "postinstall": "npm install --include=dev --prefix src/web",
     "build": "tsx src/scripts/build.ts",
     "build:dev": "tsx src/scripts/build.ts --dev",
     "build:docker": "docker build -t tableau-mcp .",
@@ -41,6 +42,7 @@
     "build:inspect": "run-s build inspect",
     "build:inspect:docker": "run-s build:docker inspect:docker",
     "build:inspect:docker:http": "run-s build:docker inspect:docker:http",
+    "mcpjam": "npx @mcpjam/inspector@latest",
     "test": "vitest --config ./vitest.config.ts",
     "test:e2e": "vitest --config ./vitest.config.e2e.ts",
     "test:eval": "vitest --config ./vitest.config.eval.ts",
@@ -52,6 +54,7 @@
     "docs:start": "npm run start --prefix docs"
   },
   "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.0.1",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@zodios/core": "^10.9.6",
     "cors": "^2.8.5",

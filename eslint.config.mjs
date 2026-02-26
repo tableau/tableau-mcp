@@ -12,7 +12,7 @@ export default [
   eslintConfigPrettier,
   eslintPluginPrettierRecommended,
   {
-    files: ['**/*.{js,mjs,cjs,ts}'],
+    files: ['**/*.{js,mjs,cjs,ts,tsx}'],
     rules: {
       'no-console': ['error', { allow: ['warn', 'error'] }],
       'no-duplicate-imports': ['error', { includeExports: true }],
@@ -34,7 +34,7 @@ export default [
     },
   },
   {
-    files: ['tests/**/*.ts'],
+    files: ['tests/**/*.ts', 'src/web/**/*.{ts,tsx}'],
     rules: {
       'no-console': 'off',
     },
