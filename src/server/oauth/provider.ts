@@ -62,8 +62,10 @@ export class OAuthProvider {
     // /Callback
     callback(app, this.pendingAuthorizations, this.authorizationCodes);
 
-    // oauth2/token
-    token(app, this.authorizationCodes, this.refreshTokens, this.publicKey);
+    // oauth2/token (only when embedded authz server - we need publicKey for JWE)
+    if (this.publicKey) {
+      token(app, this.authorizationCodes, this.refreshTokens, this.publicKey);
+    }
   }
 
   private getPrivateKey(): KeyObject {
