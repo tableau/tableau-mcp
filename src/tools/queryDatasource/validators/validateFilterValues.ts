@@ -40,7 +40,8 @@ export async function validateFilterValues(
     (filter) =>
       (filter.filterType === 'SET' || filter.filterType === 'MATCH') &&
       'fieldCaption' in filter.field &&
-      filter.field.fieldCaption,
+      filter.field.fieldCaption &&
+      !('function' in filter.field), // only dimension filter fields can be validated
   ) as Array<MatchFilter | SetFilter>;
 
   if (filtersToValidate.length === 0) {
@@ -49,6 +50,10 @@ export async function validateFilterValues(
 
   // Validate each filter
   for (const filter of filtersToValidate) {
+    if ('calculation' in filter.field || 'function' in filter.field) {
+      continue;
+    }
+
     const fieldCaption = filter.field.fieldCaption;
 
     try {
@@ -83,6 +88,10 @@ async function validateSetFilter(
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: Datasource,
 ): Promise<Result<void, FilterValidationError>> {
+  if ('calculation' in filter.field || 'function' in filter.field) {
+    return Ok.EMPTY;
+  }
+
   const fieldCaption = filter.field.fieldCaption;
   const filterValues = filter.values.map((v) => String(v));
 
@@ -158,6 +167,10 @@ async function validateMatchFilter(
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: Datasource,
 ): Promise<Result<void, FilterValidationError>> {
+  if ('calculation' in filter.field) {
+    return Ok.EMPTY;
+  }
+
   const fieldCaption = filter.field.fieldCaption;
 
   // Query to get a sample of values from the field
