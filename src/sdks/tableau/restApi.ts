@@ -1,3 +1,5 @@
+import { fromError } from 'zod-validation-error';
+
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { AuthConfig } from './authConfig.js';
 import {
@@ -20,8 +22,13 @@ import { AuthenticatedServerMethods, ServerMethods } from './methods/serverMetho
 import ViewsMethods from './methods/viewsMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
 import WorkbooksMethods from './methods/workbooksMethods.js';
+import { bearerTokenSchema } from './types/bearerToken.js';
 import { Credentials } from './types/credentials.js';
 import { McpSiteSettings } from './types/mcpSiteSettings.js';
+
+export type RestApiCredentials =
+  | ({ type: 'X-Tableau-Auth' } & Credentials)
+  | { type: 'Bearer'; token: string };
 
 /**
  * Interface for the Tableau REST APIs
@@ -30,7 +37,7 @@ import { McpSiteSettings } from './types/mcpSiteSettings.js';
  * @class RestApi
  */
 export class RestApi {
-  private _creds?: Credentials;
+  private _creds?: RestApiCredentials;
   private readonly _host: string;
   private readonly _baseUrl: string;
   private readonly _baseUrlWithoutVersion: string;
@@ -70,7 +77,7 @@ export class RestApi {
     this._responseInterceptor = options.responseInterceptor;
   }
 
-  private get creds(): Credentials {
+  private get creds(): RestApiCredentials {
     if (!this._creds) {
       throw new Error('No credentials found. Authenticate by calling signIn() first.');
     }
@@ -79,7 +86,18 @@ export class RestApi {
   }
 
   get siteId(): string {
-    return this.creds.site.id;
+    if (this.creds.type === 'X-Tableau-Auth') {
+      return this.creds.site.id;
+    }
+
+    const [_header, payload, _signature] = this.creds.token.split('.');
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    const bearerToken = bearerTokenSchema.safeParse(decoded);
+    if (!bearerToken.success) {
+      throw new Error(`Invalid bearer token: ${fromError(bearerToken.error).toString()}`);
+    }
+
+    return bearerToken.data['https://tableau.com/siteId'];
   }
 
   private get authenticationMethods(): AuthenticationMethods {
@@ -238,12 +256,22 @@ export class RestApi {
   }
 
   signIn = async (authConfig: AuthConfig): Promise<void> => {
-    this._creds = await this.authenticationMethods.signIn(authConfig);
+    this._creds = {
+      type: 'X-Tableau-Auth',
+      ...(await this.authenticationMethods.signIn(authConfig)),
+    };
   };
 
   signOut = async (): Promise<void> => {
     await this.authenticatedAuthenticationMethods.signOut();
     this._creds = undefined;
+  };
+
+  setBearerToken = (token: string): void => {
+    this._creds = {
+      type: 'Bearer',
+      token,
+    };
   };
 
   setCredentials = (accessToken: string, userId: string): void => {
@@ -253,6 +281,7 @@ export class RestApi {
     }
 
     this._creds = {
+      type: 'X-Tableau-Auth',
       site: {
         id: siteId,
       },

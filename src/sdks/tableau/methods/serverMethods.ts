@@ -4,7 +4,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { serverApis, Session } from '../apis/serverApi.js';
-import { Credentials } from '../types/credentials.js';
+import { RestApiCredentials } from '../restApi.js';
 import { ServerInfo } from '../types/serverInfo.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 import Methods from './methods.js';
@@ -41,7 +41,7 @@ export class ServerMethods extends Methods<typeof serverApis> {
  * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_server.htm
  */
 export class AuthenticatedServerMethods extends AuthenticatedMethods<typeof serverApis> {
-  constructor(baseUrl: string, creds: Credentials, axiosConfig: AxiosRequestConfig) {
+  constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
     super(new Zodios(baseUrl, serverApis, { axiosConfig }), creds);
   }
 
