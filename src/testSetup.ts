@@ -17,6 +17,7 @@ vi.mock('./sdks/tableau/restApi.js', async (importOriginal) => ({
   RestApi: vi.fn().mockImplementation(() => ({
     signIn: vi.fn().mockResolvedValue(undefined),
     signOut: vi.fn().mockResolvedValue(undefined),
+    setCredentials: vi.fn(),
     serverMethods: {
       getServerInfo: vi.fn().mockResolvedValue({
         productVersion: testProductVersion,

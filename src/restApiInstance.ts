@@ -92,7 +92,17 @@ const getNewRestApiInstanceAsync = async (
         ],
   });
 
-  if (config.auth === 'pat') {
+  if (
+    tableauAuthInfo?.type === 'X-Tableau-Auth' &&
+    tableauAuthInfo.accessToken &&
+    tableauAuthInfo.userId
+  ) {
+    // Pre-authenticated credentials from passthrough or OAuth
+    restApi.setCredentials(tableauAuthInfo.accessToken, tableauAuthInfo.userId);
+  } else if (tableauAuthInfo?.type === 'Bearer') {
+    // Bearer token from OAuth scope-based auth
+    restApi.setBearerToken(tableauAuthInfo.raw);
+  } else if (config.auth === 'pat') {
     await restApi.signIn({
       type: 'pat',
       patName: config.patName,
@@ -124,17 +134,7 @@ const getNewRestApiInstanceAsync = async (
       additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
     });
   } else {
-    if (tableauAuthInfo?.type === 'Bearer') {
-      restApi.setBearerToken(tableauAuthInfo.raw);
-    } else if (tableauAuthInfo?.type === 'X-Tableau-Auth') {
-      if (!tableauAuthInfo?.accessToken || !tableauAuthInfo?.userId) {
-        throw new Error('Auth info is required when not signing in first.');
-      }
-
-      restApi.setCredentials(tableauAuthInfo.accessToken, tableauAuthInfo.userId);
-    } else {
-      throw new Error('Auth info is required when not signing in first.');
-    }
+    throw new Error('Auth info is required when not signing in first.');
   }
 
   return restApi;
@@ -155,9 +155,9 @@ export const useRestApi = async <T>(
   try {
     return await callback(restApi);
   } finally {
-    if (config.auth !== 'oauth') {
+    if (config.auth !== 'oauth' && config.auth !== 'passthrough') {
       // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.
-      // Sessions for 'oauth' are not. Signing out would invalidate the session,
+      // Sessions for 'oauth' and 'passthrough' are not. Signing out would invalidate the session,
       // preventing the access token from being reused for subsequent requests.
       await restApi.signOut();
     }

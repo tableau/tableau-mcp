@@ -10,13 +10,36 @@ import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
-import { handlePingRequest, validateProtocolVersion } from './middleware.js';
+import { handlePingRequest, validatePassthroughHeaders, validateProtocolVersion } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
+
+function getPassthroughAuthInfo(req: Request, config: Config): TableauAuthInfo | undefined {
+  if (config.auth !== 'passthrough') {
+    return undefined;
+  }
+
+  const authHeader = req.headers['authorization'];
+  const userId = req.headers['x-tableau-user-id'] as string | undefined;
+
+  if (!authHeader || !userId) {
+    return undefined;
+  }
+
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+
+  return {
+    type: 'X-Tableau-Auth' as const,
+    accessToken: token,
+    userId: userId,
+    username: '',
+    server: config.server,
+  };
+}
 
 export async function startExpressServer({
   basePath,
@@ -42,6 +65,7 @@ export async function startExpressServer({
         'Cache-Control',
         'Accept',
         'MCP-Protocol-Version',
+        'X-Tableau-User-Id',
       ],
       exposedHeaders: [SESSION_ID_HEADER, 'x-session-id'],
     }),
@@ -57,6 +81,9 @@ export async function startExpressServer({
     const oauthProvider = new OAuthProvider();
     oauthProvider.setupRoutes(app);
     middleware.push(oauthProvider.authMiddleware);
+    middleware.push(validateProtocolVersion);
+  } else if (config.auth === 'passthrough') {
+    middleware.push(validatePassthroughHeaders);
     middleware.push(validateProtocolVersion);
   }
 
@@ -120,7 +147,8 @@ export async function startExpressServer({
           server.close();
         });
 
-        await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
+        const authInfo = getTableauAuthInfo(req.auth) ?? getPassthroughAuthInfo(req, config);
+        await connect(server, transport, logLevel, authInfo);
       } else {
         const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
 
@@ -132,7 +160,8 @@ export async function startExpressServer({
           transport = createSession({ clientInfo });
 
           const server = new Server({ clientInfo });
-          await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
+          const authInfo = getTableauAuthInfo(req.auth) ?? getPassthroughAuthInfo(req, config);
+          await connect(server, transport, logLevel, authInfo);
         } else {
           // Invalid request
           res.status(400).json({
