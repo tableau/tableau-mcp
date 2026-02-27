@@ -263,6 +263,16 @@ Filter by specific values:
 }
 \`\`\`
 
+### MATCH Filters
+Filter strings using patterns:
+\`\`\`json
+{
+  "field": {"fieldCaption": "City"},
+  "filterType": "MATCH",
+  "startsWith": "San"
+}
+\`\`\`
+
 ### TOP Filters
 Get top/bottom N records by a measure:
 \`\`\`json
@@ -298,6 +308,8 @@ Filter relative date periods:
   "dateRangeType": "LAST"
 }
 \`\`\`
+
+Note: SET, MATCH, and DATE filters can't have functions or calculations.
 
 ## Example Queries
 
