@@ -1,4 +1,5 @@
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
+import { CallToolRequestSchema, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { KeyObject } from 'crypto';
 import express, { RequestHandler } from 'express';
 import { compactDecrypt } from 'jose';
@@ -6,8 +7,22 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error';
 
 import { getConfig } from '../../config.js';
+import { isToolName, ToolName } from '../../tools/toolName.js';
 import { AUDIENCE } from './provider.js';
-import { mcpAccessTokenSchema, mcpAccessTokenUserOnlySchema, TableauAuthInfo } from './schemas.js';
+import {
+  mcpAccessTokenSchema,
+  mcpAccessTokenUserOnlySchema,
+  TableauAuthInfo,
+  tableauBearerTokenSchema,
+} from './schemas.js';
+import {
+  formatScopes,
+  getRequiredApiScopesForTool,
+  getRequiredScopesForTool,
+  getSupportedApiScopes,
+  getSupportedMcpScopes,
+  parseScopes,
+} from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
 
 /**
@@ -19,7 +34,7 @@ import { AuthenticatedRequest } from './types.js';
  *
  * @returns Express middleware function
  */
-export function authMiddleware(privateKey: KeyObject): RequestHandler {
+export function authMiddleware(privateKey: KeyObject | null): RequestHandler {
   return async (
     req: AuthenticatedRequest,
     res: express.Response,
@@ -44,11 +59,18 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
       }
 
       const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const { enforceScopes, advertiseApiScopes } = getConfig().oauth;
+      const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
+      const requiredApiScopes = getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
+      const scopeParam =
+        enforceScopes && requiredMcpScopes.length > 0
+          ? `, scope="${formatScopes([...requiredMcpScopes, ...requiredApiScopes])}"`
+          : '';
       res
         .status(401)
         .header(
           'WWW-Authenticate',
-          `Bearer realm="MCP", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
+          `Bearer realm="MCP", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"${scopeParam}`,
         )
         .json({
           error: 'unauthorized',
@@ -58,7 +80,11 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
     }
 
     const token = authHeader.slice(7);
-    const result = await verifyAccessToken(token, privateKey);
+    const config = getConfig();
+    const result =
+      config.oauth.embeddedAuthzServer && privateKey
+        ? await verifyEmbeddedAccessToken(token, privateKey)
+        : verifyExternalAccessToken(token);
 
     if (result.isErr()) {
       // For SSE requests (GET), provide proper SSE error response
@@ -80,23 +106,181 @@ export function authMiddleware(privateKey: KeyObject): RequestHandler {
       });
       return;
     }
-    req.auth = result.value;
+    const authInfo = result.value;
+    const { enforceScopes, advertiseApiScopes } = getConfig().oauth;
+    if (enforceScopes) {
+      const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
+      const requiredApiScopes = getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
+      const missingMcpScopes = requiredMcpScopes.filter(
+        (scope) => !authInfo.scopes.includes(scope),
+      );
+      const shouldCheckApiScopes = advertiseApiScopes;
+      const missingApiScopes = shouldCheckApiScopes
+        ? requiredApiScopes.filter((scope) => !authInfo.scopes.includes(scope))
+        : [];
+      const missingScopes = [...missingMcpScopes, ...missingApiScopes];
+
+      if (missingScopes.length > 0) {
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const requiredScopesForChallenge = [
+          ...requiredMcpScopes,
+          ...(shouldCheckApiScopes ? requiredApiScopes : []),
+        ];
+        const scopeParam = `scope="${formatScopes(requiredScopesForChallenge)}"`;
+        const wwwAuthenticate = `Bearer realm="MCP", error="insufficient_scope", error_description="Missing required scopes", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource", ${scopeParam}`;
+
+        if (req.method === 'GET' && req.headers.accept?.includes('text/event-stream')) {
+          res.writeHead(403, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'WWW-Authenticate': wwwAuthenticate,
+          });
+          res.write('event: error\n');
+          res.write(
+            'data: {"error": "insufficient_scope", "error_description": "Missing required scopes"}\n\n',
+          );
+          res.end();
+          return;
+        }
+
+        res.status(403).header('WWW-Authenticate', wwwAuthenticate).json({
+          error: 'insufficient_scope',
+          error_description: 'Missing required scopes',
+        });
+        return;
+      }
+    }
+
+    req.auth = authInfo;
     next();
   };
 }
 
+function getRequiredMcpScopesForRequest(body: unknown): string[] {
+  if (isInitializeRequest(body)) {
+    return getSupportedMcpScopes();
+  }
+
+  const toolNames = getToolNamesFromRequestBody(body);
+  if (toolNames.length === 0) {
+    return getSupportedMcpScopes();
+  }
+
+  const scopes = new Set<string>();
+  for (const toolName of toolNames) {
+    for (const scope of getRequiredScopesForTool(toolName)) {
+      scopes.add(scope);
+    }
+  }
+
+  return Array.from(scopes);
+}
+
+function getRequiredApiScopesForRequest(body: unknown, includeApiScopes: boolean): string[] {
+  if (!includeApiScopes) {
+    return [];
+  }
+
+  if (isInitializeRequest(body)) {
+    return getSupportedApiScopes();
+  }
+
+  const toolNames = getToolNamesFromRequestBody(body);
+  if (toolNames.length === 0) {
+    return [];
+  }
+
+  const scopes = new Set<string>();
+  for (const toolName of toolNames) {
+    for (const scope of getRequiredApiScopesForTool(toolName)) {
+      scopes.add(scope);
+    }
+  }
+
+  return Array.from(scopes);
+}
+
+function getToolNamesFromRequestBody(body: unknown): ToolName[] {
+  const requests = Array.isArray(body) ? body : [body];
+  const toolNames = new Set<ToolName>();
+
+  for (const request of requests) {
+    const callToolRequestResult = CallToolRequestSchema.safeParse(request);
+    if (!callToolRequestResult.success) {
+      continue;
+    }
+
+    const { name } = callToolRequestResult.data.params;
+    if (isToolName(name)) {
+      toolNames.add(name);
+    }
+  }
+
+  return Array.from(toolNames);
+}
+
 /**
- * Verifies JWE access token and extracts credentials
+ * Verifies JWT access token from external OAuth issuer (e.g. Tableau/George's auth server)
+ *
+ * Decodes JWT and validates issuer and expiration.
+ * Reuses raw token for REST API Bearer authorization.
+ */
+function verifyExternalAccessToken(token: string): Result<AuthInfo, string> {
+  const config = getConfig();
+
+  try {
+    const [_header, payload, _signature] = token.split('.');
+    if (!payload) {
+      return new Err('Invalid or expired access token');
+    }
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
+
+    const parsed = tableauBearerTokenSchema.safeParse(decoded);
+    if (!parsed.success) {
+      return Err(`Invalid access token: ${fromError(parsed.error).toString()}`);
+    }
+
+    const {
+      sub,
+      iss,
+      exp,
+      scope,
+      'https://tableau.com/siteId': siteId,
+      'https://tableau.com/targetUrl': targetUrl,
+    } = parsed.data;
+
+    if (iss !== config.oauth.issuer || exp < Math.floor(Date.now() / 1000)) {
+      return new Err('Invalid or expired access token');
+    }
+
+    const tableauAuthInfo: TableauAuthInfo = {
+      type: 'Bearer',
+      username: sub,
+      server: targetUrl,
+      siteId,
+      raw: token,
+    };
+
+    return Ok({
+      token,
+      clientId: iss,
+      scopes: parseScopes(scope),
+      expiresAt: exp,
+      extra: tableauAuthInfo,
+    });
+  } catch {
+    return new Err('Invalid or expired access token');
+  }
+}
+
+/**
+ * Verifies JWE access token from embedded OAuth server
  *
  * Decrypts and validates JWE signature and expiration.
  * Extracts access/refresh tokens for API calls.
- *
- * @param token - JWT access token from Authorization header
- * @param jwePrivateKey - Private key for decrypting the token
- *
- * @returns AuthInfo with user details and tokens
  */
-async function verifyAccessToken(
+async function verifyEmbeddedAccessToken(
   token: string,
   jwePrivateKey: KeyObject,
 ): Promise<Result<AuthInfo, string>> {
@@ -118,6 +302,7 @@ async function verifyAccessToken(
       return new Err('Invalid or expired access token');
     }
 
+    const tokenScopes = parseScopes(mcpAccessToken.data.scope);
     let tableauAuthInfo: TableauAuthInfo;
     if (config.auth === 'oauth') {
       const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
@@ -139,6 +324,7 @@ async function verifyAccessToken(
       }
 
       tableauAuthInfo = {
+        type: 'X-Tableau-Auth',
         username: sub,
         userId: tableauUserId,
         server: tableauServer,
@@ -148,6 +334,7 @@ async function verifyAccessToken(
     } else {
       const { tableauUserId, tableauServer, sub } = mcpAccessToken.data;
       tableauAuthInfo = {
+        type: 'X-Tableau-Auth',
         username: sub,
         server: tableauServer,
         ...(tableauUserId ? { userId: tableauUserId } : {}),
@@ -157,7 +344,7 @@ async function verifyAccessToken(
     return Ok({
       token,
       clientId,
-      scopes: [],
+      scopes: tokenScopes,
       expiresAt: payload.exp,
       extra: tableauAuthInfo,
     });

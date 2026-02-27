@@ -25,7 +25,7 @@ async function getMcpSiteSettings({
     });
   }
 
-  const cacheKey = config.siteName || getSiteLuidFromAccessToken(tableauAuthInfo?.accessToken);
+  const cacheKey = config.siteName || getSiteLuidFromAccessToken(tableauAuthInfo);
   if (!cacheKey) {
     throw new Error('Could not determine site ID/name');
   }

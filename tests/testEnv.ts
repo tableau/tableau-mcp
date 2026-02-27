@@ -14,6 +14,9 @@ export function setEnv(): void {
   }
 
   dotenv.config({ path: 'tests/.env', override: true });
+  if (!process.env.OAUTH_DISABLE_SCOPES) {
+    process.env.OAUTH_DISABLE_SCOPES = 'true';
+  }
 }
 
 export function resetEnv(): void {

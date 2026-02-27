@@ -76,6 +76,15 @@ describe('OAuth', () => {
       resource: `http://127.0.0.1:3927/${serverName}`,
       authorization_servers: ['http://127.0.0.1:3927'],
       bearer_methods_supported: ['header'],
+      scopes_supported: [
+        'tableau:mcp:datasource:read',
+        'tableau:mcp:workbook:read',
+        'tableau:mcp:view:read',
+        'tableau:mcp:view:download',
+        'tableau:mcp:pulse:read',
+        'tableau:mcp:insight:create',
+        'tableau:mcp:content:read',
+      ],
     });
   });
 
@@ -87,14 +96,22 @@ describe('OAuth', () => {
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
       issuer: 'http://127.0.0.1:3927',
-      authorization_endpoint: 'http://127.0.0.1:3927/oauth/authorize',
-      token_endpoint: 'http://127.0.0.1:3927/oauth/token',
-      registration_endpoint: 'http://127.0.0.1:3927/oauth/register',
+      authorization_endpoint: 'http://127.0.0.1:3927/oauth2/authorize',
+      token_endpoint: 'http://127.0.0.1:3927/oauth2/token',
+      registration_endpoint: 'http://127.0.0.1:3927/oauth2/register',
       response_types_supported: ['code'],
       grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
       code_challenge_methods_supported: ['S256'],
-      scopes_supported: [],
-      token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
+      scopes_supported: [
+        'tableau:mcp:datasource:read',
+        'tableau:mcp:workbook:read',
+        'tableau:mcp:view:read',
+        'tableau:mcp:view:download',
+        'tableau:mcp:pulse:read',
+        'tableau:mcp:insight:create',
+        'tableau:mcp:content:read',
+      ],
+      token_endpoint_auth_methods_supported: ['none', 'client_secret_basic', 'client_secret_post'],
       subject_types_supported: ['public'],
       client_id_metadata_document_supported: true,
     });

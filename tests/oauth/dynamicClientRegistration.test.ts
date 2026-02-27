@@ -45,7 +45,7 @@ describe('dynamic client registration', () => {
     const { app } = await startServer();
 
     const response = await request(app)
-      .post('/oauth/register')
+      .post('/oauth2/register')
       .send({
         redirect_uris: ['https://example.com'],
       });
@@ -66,7 +66,7 @@ describe('dynamic client registration', () => {
     const { app } = await startServer();
 
     const response = await request(app)
-      .post('/oauth/register')
+      .post('/oauth2/register')
       .send({
         redirect_uris: ['http://localhost:3000'],
       });
@@ -87,7 +87,7 @@ describe('dynamic client registration', () => {
     const { app } = await startServer();
 
     const response = await request(app)
-      .post('/oauth/register')
+      .post('/oauth2/register')
       .send({
         redirect_uris: ['http://127.0.0.1:3000'],
       });
@@ -108,7 +108,7 @@ describe('dynamic client registration', () => {
     const { app } = await startServer();
 
     const response = await request(app)
-      .post('/oauth/register')
+      .post('/oauth2/register')
       .send({
         redirect_uris: ['vscode://oauth/callback'],
       });
@@ -129,7 +129,7 @@ describe('dynamic client registration', () => {
     const { app } = await startServer();
 
     const response = await request(app)
-      .post('/oauth/register')
+      .post('/oauth2/register')
       .send({
         redirect_uris: [123],
       });
@@ -146,7 +146,7 @@ describe('dynamic client registration', () => {
     const { app } = await startServer();
 
     const response = await request(app)
-      .post('/oauth/register')
+      .post('/oauth2/register')
       .send({
         redirect_uris: ['🍔'],
       });
@@ -163,7 +163,7 @@ describe('dynamic client registration', () => {
     const { app } = await startServer();
 
     const response = await request(app)
-      .post('/oauth/register')
+      .post('/oauth2/register')
       .send({
         redirect_uris: ['http://example.com'],
       });
@@ -180,7 +180,7 @@ describe('dynamic client registration', () => {
     const { app } = await startServer();
 
     const response = await request(app)
-      .post('/oauth/register')
+      .post('/oauth2/register')
       .send({
         redirect_uris: ['123abc://example.com'],
       });
