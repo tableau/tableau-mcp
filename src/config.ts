@@ -56,8 +56,10 @@ export class Config {
   enableMcpSiteSettings: boolean;
   oauth: {
     enabled: boolean;
+    embeddedAuthzServer: boolean;
     issuer: string;
     redirectUri: string;
+    resourceUri: string;
     lockSite: boolean;
     jwePrivateKey: string;
     jwePrivateKeyPath: string;
@@ -67,6 +69,8 @@ export class Config {
     refreshTokenTimeoutMs: number;
     clientIdSecretPairs: Record<string, string> | null;
     dnsServers: string[];
+    enforceScopes: boolean;
+    advertiseApiScopes: boolean;
   };
   telemetry: TelemetryConfig;
   productTelemetryEndpoint: string;
@@ -110,17 +114,21 @@ export class Config {
       MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: mcpSiteSettingsCheckIntervalInMinutes,
       ENABLE_MCP_SITE_SETTINGS: enableMcpSiteSettings,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
+      OAUTH_EMBEDDED_AUTHZ_SERVER: oauthEmbeddedAuthzServer,
       OAUTH_ISSUER: oauthIssuer,
       OAUTH_LOCK_SITE: oauthLockSite,
       OAUTH_JWE_PRIVATE_KEY: oauthJwePrivateKey,
       OAUTH_JWE_PRIVATE_KEY_PATH: oauthJwePrivateKeyPath,
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
+      OAUTH_RESOURCE_URI: oauthResourceUri,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
       OAUTH_CIMD_DNS_SERVERS: dnsServers,
+      ADVERTISE_API_SCOPES: advertiseApiScopes,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
+      OAUTH_DISABLE_SCOPES: oauthDisableScopes,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
       PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
@@ -168,9 +176,15 @@ export class Config {
 
     this.enableMcpSiteSettings = enableMcpSiteSettings === 'true';
     const disableOauthOverride = disableOauth === 'true';
+    const disableScopes = oauthDisableScopes === 'true';
+    const enforceScopes = !disableScopes;
+    const embeddedAuthzServer = oauthEmbeddedAuthzServer !== 'false';
+
     this.oauth = {
       enabled: disableOauthOverride ? false : !!oauthIssuer,
+      embeddedAuthzServer,
       issuer: oauthIssuer ?? '',
+      resourceUri: oauthResourceUri ?? `http://127.0.0.1:${this.httpPort}`,
       redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
       lockSite: oauthLockSite !== 'false', // Site locking is enabled by default
       jwePrivateKey: oauthJwePrivateKey ?? '',
@@ -203,6 +217,8 @@ export class Config {
             return acc;
           }, {})
         : null,
+      enforceScopes,
+      advertiseApiScopes: advertiseApiScopes === 'true',
     };
 
     const parsedProvider = isTelemetryProvider(telemetryProvider) ? telemetryProvider : 'noop';
@@ -250,28 +266,30 @@ export class Config {
     }
 
     if (this.oauth.enabled) {
-      invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
+      if (this.oauth.embeddedAuthzServer) {
+        invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
 
-      if (!this.oauth.jwePrivateKey && !this.oauth.jwePrivateKeyPath) {
-        throw new Error(
-          'One of the environment variables: OAUTH_JWE_PRIVATE_KEY_PATH or OAUTH_JWE_PRIVATE_KEY must be set',
-        );
-      }
+        if (!this.oauth.jwePrivateKey && !this.oauth.jwePrivateKeyPath) {
+          throw new Error(
+            'One of the environment variables: OAUTH_JWE_PRIVATE_KEY_PATH or OAUTH_JWE_PRIVATE_KEY must be set',
+          );
+        }
 
-      if (this.oauth.jwePrivateKey && this.oauth.jwePrivateKeyPath) {
-        throw new Error(
-          'Only one of the environment variables: OAUTH_JWE_PRIVATE_KEY or OAUTH_JWE_PRIVATE_KEY_PATH must be set',
-        );
-      }
+        if (this.oauth.jwePrivateKey && this.oauth.jwePrivateKeyPath) {
+          throw new Error(
+            'Only one of the environment variables: OAUTH_JWE_PRIVATE_KEY or OAUTH_JWE_PRIVATE_KEY_PATH must be set',
+          );
+        }
 
-      if (
-        this.oauth.jwePrivateKeyPath &&
-        process.env.TABLEAU_MCP_TEST !== 'true' &&
-        !existsSync(this.oauth.jwePrivateKeyPath)
-      ) {
-        throw new Error(
-          `OAuth JWE private key path does not exist: ${this.oauth.jwePrivateKeyPath}`,
-        );
+        if (
+          this.oauth.jwePrivateKeyPath &&
+          process.env.TABLEAU_MCP_TEST !== 'true' &&
+          !existsSync(this.oauth.jwePrivateKeyPath)
+        ) {
+          throw new Error(
+            `OAuth JWE private key path does not exist: ${this.oauth.jwePrivateKeyPath}`,
+          );
+        }
       }
 
       if (this.transport === 'stdio') {

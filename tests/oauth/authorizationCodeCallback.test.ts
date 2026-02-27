@@ -100,7 +100,7 @@ describe('authorization code callback', () => {
   it('should reject if the Tableau access token is not successfully retrieved', async () => {
     const { app } = await startServer();
 
-    const authzResponse = await request(app).get('/oauth/authorize').query({
+    const authzResponse = await request(app).get('/oauth2/authorize').query({
       client_id: 'test-client-id',
       redirect_uri: 'http://localhost:3000',
       response_type: 'code',
@@ -134,7 +134,7 @@ describe('authorization code callback', () => {
   it('should reject if the originHost returned by Tableau does not match the expected server', async () => {
     const { app } = await startServer();
 
-    const authzResponse = await request(app).get('/oauth/authorize').query({
+    const authzResponse = await request(app).get('/oauth2/authorize').query({
       client_id: 'test-client-id',
       redirect_uri: 'http://localhost:3000',
       response_type: 'code',
@@ -174,7 +174,7 @@ describe('authorization code callback', () => {
 
     const { app } = await startServer();
 
-    const authzResponse = await request(app).get('/oauth/authorize').query({
+    const authzResponse = await request(app).get('/oauth2/authorize').query({
       client_id: 'test-client-id',
       redirect_uri: 'http://localhost:3000',
       response_type: 'code',
@@ -215,7 +215,7 @@ describe('authorization code callback', () => {
 
     const { app } = await startServer();
 
-    const authzResponse = await request(app).get('/oauth/authorize').query({
+    const authzResponse = await request(app).get('/oauth2/authorize').query({
       client_id: 'test-client-id',
       redirect_uri: 'http://localhost:3000',
       response_type: 'code',
@@ -260,7 +260,7 @@ describe('authorization code callback', () => {
   it('should issue an authorization code when the Tableau access token is successfully retrieved when site locking is enabled', async () => {
     const { app } = await startServer();
 
-    const authzResponse = await request(app).get('/oauth/authorize').query({
+    const authzResponse = await request(app).get('/oauth2/authorize').query({
       client_id: 'test-client-id',
       redirect_uri: 'http://localhost:3000',
       response_type: 'code',

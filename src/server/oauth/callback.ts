@@ -150,6 +150,7 @@ export function callback(
         user: sessionResult.value.user,
         server,
         tableauClientId: pendingAuth.tableauClientId,
+        scopes: pendingAuth.scopes,
         tokens: {
           accessToken,
           refreshToken,
