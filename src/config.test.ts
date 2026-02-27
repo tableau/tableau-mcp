@@ -758,6 +758,67 @@ describe('Config', () => {
     });
   });
 
+  describe('Passthrough configuration', () => {
+    function stubDefaultPassthroughEnvVars(): void {
+      vi.stubEnv('AUTH', 'passthrough');
+      vi.stubEnv('TRANSPORT', 'http');
+    }
+
+    beforeEach(() => {
+      stubDefaultPassthroughEnvVars();
+    });
+
+    it('should configure passthrough authentication', () => {
+      const config = new Config();
+      expect(config.auth).toBe('passthrough');
+      expect(config.transport).toBe('http');
+      expect(config.server).toBe('https://my-tableau-server.com');
+    });
+
+    it('should default transport to http when AUTH is passthrough', () => {
+      vi.stubEnv('TRANSPORT', undefined);
+
+      const config = new Config();
+      expect(config.transport).toBe('http');
+    });
+
+    it('should throw error when TRANSPORT is stdio for passthrough auth', () => {
+      vi.stubEnv('TRANSPORT', 'stdio');
+
+      expect(() => new Config()).toThrow('TRANSPORT must be "http" when AUTH is "passthrough"');
+    });
+
+    it('should not require OAUTH_ISSUER when AUTH is passthrough', () => {
+      vi.stubEnv('OAUTH_ISSUER', undefined);
+
+      const config = new Config();
+      expect(config.auth).toBe('passthrough');
+    });
+
+    it('should not require DANGEROUSLY_DISABLE_OAUTH when AUTH is passthrough', () => {
+      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', undefined);
+      vi.stubEnv('OAUTH_ISSUER', undefined);
+
+      const config = new Config();
+      expect(config.auth).toBe('passthrough');
+    });
+
+    it('should not require PAT_NAME and PAT_VALUE when AUTH is passthrough', () => {
+      vi.stubEnv('PAT_NAME', undefined);
+      vi.stubEnv('PAT_VALUE', undefined);
+
+      const config = new Config();
+      expect(config.patName).toBe('');
+      expect(config.patValue).toBe('');
+    });
+
+    it('should require SERVER when AUTH is passthrough', () => {
+      vi.stubEnv('SERVER', undefined);
+
+      expect(() => new Config()).toThrow('The environment variable SERVER is not set');
+    });
+  });
+
   describe('parseNumber', () => {
     it('should return defaultValue when value is undefined', () => {
       const result = parseNumber(undefined, { defaultValue: 42 });

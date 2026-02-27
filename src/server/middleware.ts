@@ -31,6 +31,30 @@ export function validateProtocolVersion(req: Request, res: Response, next: NextF
   next();
 }
 
+/**
+ * Validate required headers for passthrough auth mode.
+ * Returns 401 if Authorization or X-Tableau-User-Id headers are missing.
+ */
+export function validatePassthroughHeaders(req: Request, res: Response, next: NextFunction): void {
+  const authHeader = req.headers['authorization'];
+  const userId = req.headers['x-tableau-user-id'];
+
+  if (!authHeader || !userId) {
+    res.status(401).json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32001,
+        message:
+          'Unauthorized: Authorization and X-Tableau-User-Id headers are required for passthrough auth',
+      },
+      id: null,
+    });
+    return;
+  }
+
+  next();
+}
+
 // https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/ping
 export function handlePingRequest(req: Request, res: Response, next: NextFunction): void {
   const pingRequest = PingRequestSchema.safeParse(req.body);
