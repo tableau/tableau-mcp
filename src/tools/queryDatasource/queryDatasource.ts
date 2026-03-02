@@ -190,7 +190,9 @@ export const getQueryDatasourceTool = (
               if (contextWarnings.length > 0) {
                 return new Ok({
                   ...result.value,
-                  warnings: contextWarnings,
+                  mcp: {
+                    warnings: contextWarnings,
+                  },
                 });
               }
 
