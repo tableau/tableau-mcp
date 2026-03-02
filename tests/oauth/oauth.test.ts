@@ -117,6 +117,37 @@ describe('OAuth', () => {
     });
   });
 
+  it('should provide a authorization server metadata endpoint for the OAuth 2.1 flow without client credentials', async () => {
+    vi.stubEnv('OAUTH_CLIENT_ID_SECRET_PAIRS', '');
+
+    const { app } = await startServer();
+
+    const response = await request(app).get('/.well-known/oauth-authorization-server');
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
+    expect(response.body).toEqual({
+      issuer: 'http://127.0.0.1:3927',
+      authorization_endpoint: 'http://127.0.0.1:3927/oauth2/authorize',
+      token_endpoint: 'http://127.0.0.1:3927/oauth2/token',
+      registration_endpoint: 'http://127.0.0.1:3927/oauth2/register',
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code', 'refresh_token'],
+      code_challenge_methods_supported: ['S256'],
+      scopes_supported: [
+        'tableau:mcp:datasource:read',
+        'tableau:mcp:workbook:read',
+        'tableau:mcp:view:read',
+        'tableau:mcp:view:download',
+        'tableau:mcp:pulse:read',
+        'tableau:mcp:insight:create',
+        'tableau:mcp:content:read',
+      ],
+      token_endpoint_auth_methods_supported: ['none'],
+      subject_types_supported: ['public'],
+      client_id_metadata_document_supported: true,
+    });
+  });
+
   it('should allow authenticated requests', async () => {
     const { app } = await startServer();
 

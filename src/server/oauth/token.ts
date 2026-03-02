@@ -358,6 +358,10 @@ function verifyClientCredentials({
       return Err('Invalid authorization type');
     }
 
+    if (!credentials) {
+      return Err('Invalid client credentials');
+    }
+
     [clientId, clientSecret] = Buffer.from(credentials, 'base64').toString().split(':');
     if (!clientId || !clientSecret) {
       return Err('Invalid client credentials');
