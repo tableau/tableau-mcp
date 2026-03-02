@@ -73,7 +73,7 @@ export function validateContextFilters(query: Query): ContextFilterWarning[] {
     {
       type: 'MISSING_CONTEXT_ON_DIMENSION_FILTER',
       severity: 'WARNING',
-      message: `Query contains a TOP/BOTTOM filter combined with dimension filters that are missing 'context: true'. Without context, the TOP filter may operate on the full dataset instead of the filtered subset, which can produce unexpected results (e.g., null values). Add 'context: true' to these dimension filters: ${affectedFilters.join(', ')}.`,
+      message: `This query combines a TOP/BOTTOM filter with dimension filters that are not set as context filters. In Tableau’s query order, TOP filters are evaluated before regular dimension filters. This means the TOP filter selects values from the full dataset first, and the dimension filters are applied afterward. This can produce fewer results than expected (for example, showing only 8 rows when requesting Top 10), because some of the top-ranked values may not exist in the filtered subset. If your intent is to find the Top values *within* the filtered subset, add 'context: true' to one or more of these dimension filters: ${affectedFilters.join(', ')}. If your intent is to find the Top values globally and then filter them, your current query is correct.`,
       affectedFilters,
     },
   ];

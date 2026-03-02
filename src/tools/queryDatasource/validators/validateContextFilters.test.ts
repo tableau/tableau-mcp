@@ -135,7 +135,7 @@ describe('validateContextFilters', () => {
       expect(warnings[0].type).toBe('MISSING_CONTEXT_ON_DIMENSION_FILTER');
       expect(warnings[0].severity).toBe('WARNING');
       expect(warnings[0].affectedFilters).toEqual(['State']);
-      expect(warnings[0].message).toContain("missing 'context: true'");
+      expect(warnings[0].message).toContain("add 'context: true'");
     });
 
     it('should warn when BOTTOM direction is used with dimension filter missing context', () => {
