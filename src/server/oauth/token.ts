@@ -40,20 +40,24 @@ export function token(
       return;
     }
 
-    const clientCredentialsResult = verifyClientCredentials({
-      required: result.data.grantType === 'client_credentials',
-      clientId: result.data.clientId,
-      clientSecret: result.data.clientSecret,
-      clientIdSecretPairs: getConfig().oauth.clientIdSecretPairs,
-      authorizationHeader: req.headers.authorization,
-    });
-
-    if (clientCredentialsResult.isErr()) {
-      res.status(401).json({
-        error: 'invalid_client',
-        error_description: clientCredentialsResult.error,
+    let clientCredentialClientId = '';
+    if (config.oauth.clientIdSecretPairs) {
+      const clientCredentialsResult = verifyClientCredentials({
+        clientId: result.data.clientId,
+        clientSecret: result.data.clientSecret,
+        clientIdSecretPairs: config.oauth.clientIdSecretPairs,
+        authorizationHeader: req.headers.authorization,
       });
-      return;
+
+      if (clientCredentialsResult.isErr()) {
+        res.status(401).json({
+          error: 'invalid_client',
+          error_description: clientCredentialsResult.error,
+        });
+        return;
+      }
+
+      clientCredentialClientId = clientCredentialsResult.value.clientId;
     }
 
     try {
@@ -138,7 +142,7 @@ export function token(
           // https://www.rfc-editor.org/rfc/rfc6749#section-4.4.3
           const accessToken = await createClientCredentialsAccessToken(
             {
-              clientId: clientCredentialsResult.value.clientId,
+              clientId: clientCredentialClientId,
               server: config.server,
             },
             scopesToGrant,
@@ -334,38 +338,34 @@ async function exchangeRefreshToken(
 }
 
 function verifyClientCredentials({
-  required,
   clientId,
   clientSecret,
   clientIdSecretPairs,
   authorizationHeader,
 }: {
-  required: boolean;
   clientId: string | undefined;
   clientSecret: string | undefined;
   clientIdSecretPairs: Record<string, string> | null;
   authorizationHeader: string | undefined;
 }): Result<{ clientId: string }, string> {
   if (!clientId && !clientSecret) {
-    if (required) {
-      if (!authorizationHeader) {
-        return Err('Authorization header is required');
-      }
-
-      const [type, credentials] = authorizationHeader.split(' ');
-      if (type !== 'Basic') {
-        return Err('Invalid authorization type');
-      }
-
-      [clientId, clientSecret] = Buffer.from(credentials, 'base64').toString().split(':');
-      if (!clientId || !clientSecret) {
-        return Err('Invalid client credentials');
-      }
+    if (!authorizationHeader) {
+      return Err('Authorization header is required');
     }
-  }
 
-  if (!required) {
-    return Ok({ clientId: '' });
+    const [type, credentials] = authorizationHeader.split(' ');
+    if (type !== 'Basic') {
+      return Err('Invalid authorization type');
+    }
+
+    if (!credentials) {
+      return Err('Invalid client credentials');
+    }
+
+    [clientId, clientSecret] = Buffer.from(credentials, 'base64').toString().split(':');
+    if (!clientId || !clientSecret) {
+      return Err('Invalid client credentials');
+    }
   }
 
   if (!clientId) {

@@ -750,6 +750,14 @@ describe('Config', () => {
       });
     });
 
+    it('should throw when OAUTH_CLIENT_ID_SECRET_PAIRS is in an invalid format', () => {
+      vi.stubEnv('OAUTH_CLIENT_ID_SECRET_PAIRS', 'client1-client2');
+
+      expect(() => new Config()).toThrow(
+        'OAUTH_CLIENT_ID_SECRET_PAIRS is in an invalid format: client1-client2. Should be in the format: clientId:secret',
+      );
+    });
+
     it('should set dnsServers to the specified value when OAUTH_CIMD_DNS_SERVERS is set', () => {
       vi.stubEnv('OAUTH_CIMD_DNS_SERVERS', '8.8.8.8,8.8.4.4');
 
