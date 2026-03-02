@@ -25,6 +25,7 @@ describe('OAuth', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
     _server = undefined;
   });
 
