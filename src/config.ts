@@ -221,6 +221,15 @@ export class Config {
       advertiseApiScopes: advertiseApiScopes === 'true',
     };
 
+    if (
+      this.oauth.clientIdSecretPairs &&
+      Object.keys(this.oauth.clientIdSecretPairs).length === 0
+    ) {
+      throw new Error(
+        `OAUTH_CLIENT_ID_SECRET_PAIRS is in an invalid format: ${oauthClientIdSecretPairs}. Should be in the format: clientId:secret`,
+      );
+    }
+
     const parsedProvider = isTelemetryProvider(telemetryProvider) ? telemetryProvider : 'noop';
     if (parsedProvider === 'custom') {
       if (!telemetryProviderConfig) {

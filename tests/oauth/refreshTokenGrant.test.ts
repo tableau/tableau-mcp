@@ -56,6 +56,8 @@ describe('refresh token grant type', () => {
     const tokenResponse = await request(app).post('/oauth2/token').send({
       grant_type: 'refresh_token',
       refresh_token: 'invalid-refresh-token',
+      client_id: 'test-client-id',
+      client_secret: 'test-client-secret',
     });
 
     expect(tokenResponse.status).toBe(400);
@@ -83,6 +85,8 @@ describe('refresh token grant type', () => {
       const tokenResponse = await request(app).post('/oauth2/token').send({
         grant_type: 'refresh_token',
         refresh_token,
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
       });
 
       expect(tokenResponse.status).toBe(400);
@@ -111,6 +115,8 @@ describe('refresh token grant type', () => {
     const tokenResponse = await request(app).post('/oauth2/token').send({
       grant_type: 'refresh_token',
       refresh_token,
+      client_id: 'test-client-id',
+      client_secret: 'test-client-secret',
     });
 
     expect(tokenResponse.status).toBe(200);
