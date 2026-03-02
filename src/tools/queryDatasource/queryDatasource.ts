@@ -23,7 +23,10 @@ import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { validateQuery } from './queryDatasourceValidator.js';
 import { queryDatasourceToolDescription20253 } from './queryDescription.2025.3.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
-import { validateContextFilters } from './validators/validateContextFilters.js';
+import {
+  ContextFilterWarning,
+  validateContextFilters,
+} from './validators/validateContextFilters.js';
 import { validateFilterValues } from './validators/validateFilterValues.js';
 import { validateQueryAgainstDatasourceMetadata } from './validators/validateQueryAgainstDatasourceMetadata.js';
 
@@ -31,6 +34,12 @@ const paramsSchema = {
   datasourceLuid: z.string().nonempty(),
   query: querySchema,
   limit: z.number().int().min(1).optional(),
+};
+
+type QueryDatasourceResult = QueryOutput & {
+  mcp?: {
+    warnings: ContextFilterWarning[];
+  };
 };
 
 export type QueryDatasourceError =
@@ -77,7 +86,7 @@ export const getQueryDatasourceTool = (
     argsValidator: validateQuery,
     callback: async ({ datasourceLuid, query, limit }, extra): Promise<CallToolResult> => {
       const { config, requestId, tableauAuthInfo, getConfigWithOverrides } = extra;
-      return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
+      return await queryDatasourceTool.logAndExecute<QueryDatasourceResult, QueryDatasourceError>({
         extra,
         args: { datasourceLuid, query },
         callback: async () => {
