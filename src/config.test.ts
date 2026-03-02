@@ -530,14 +530,18 @@ describe('Config', () => {
 
     const defaultOAuthConfig = {
       enabled: true,
+      embeddedAuthzServer: true,
       clientIdSecretPairs: null,
       issuer: 'https://example.com',
       redirectUri: 'https://example.com/Callback',
+      resourceUri: 'http://127.0.0.1:3927',
       lockSite: true,
       jwePrivateKey: '',
       jwePrivateKeyPath: 'path/to/private.pem',
       jwePrivateKeyPassphrase: undefined,
       dnsServers: ['1.1.1.1', '1.0.0.1'],
+      enforceScopes: true,
+      advertiseApiScopes: false,
       ...defaultOAuthTimeoutMs,
     } as const;
 
@@ -545,14 +549,18 @@ describe('Config', () => {
       const config = new Config();
       expect(config.oauth).toEqual({
         enabled: false,
+        embeddedAuthzServer: true,
         issuer: '',
         clientIdSecretPairs: null,
         redirectUri: '',
+        resourceUri: 'http://127.0.0.1:3927',
         lockSite: true,
         jwePrivateKey: '',
         jwePrivateKeyPath: '',
         jwePrivateKeyPassphrase: undefined,
         dnsServers: ['1.1.1.1', '1.0.0.1'],
+        enforceScopes: true,
+        advertiseApiScopes: false,
         ...defaultOAuthTimeoutMs,
       });
     });

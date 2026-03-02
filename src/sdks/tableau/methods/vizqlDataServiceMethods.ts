@@ -10,7 +10,7 @@ import {
   TableauError,
   vizqlDataServiceApis,
 } from '../apis/vizqlDataServiceApi.js';
-import { Credentials } from '../types/credentials.js';
+import { RestApiCredentials } from '../restApi.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
 /**
@@ -24,7 +24,7 @@ import AuthenticatedMethods from './authenticatedMethods.js';
 export default class VizqlDataServiceMethods extends AuthenticatedMethods<
   typeof vizqlDataServiceApis
 > {
-  constructor(baseUrl: string, creds: Credentials, axiosConfig: AxiosRequestConfig) {
+  constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
     super(new Zodios(baseUrl, vizqlDataServiceApis, { axiosConfig }), creds);
   }
 

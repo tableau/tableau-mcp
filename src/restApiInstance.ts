@@ -124,11 +124,17 @@ const getNewRestApiInstanceAsync = async (
       additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
     });
   } else {
-    if (!tableauAuthInfo?.accessToken || !tableauAuthInfo?.userId) {
+    if (tableauAuthInfo?.type === 'Bearer') {
+      restApi.setBearerToken(tableauAuthInfo.raw);
+    } else if (tableauAuthInfo?.type === 'X-Tableau-Auth') {
+      if (!tableauAuthInfo?.accessToken || !tableauAuthInfo?.userId) {
+        throw new Error('Auth info is required when not signing in first.');
+      }
+
+      restApi.setCredentials(tableauAuthInfo.accessToken, tableauAuthInfo.userId);
+    } else {
       throw new Error('Auth info is required when not signing in first.');
     }
-
-    restApi.setCredentials(tableauAuthInfo.accessToken, tableauAuthInfo.userId);
   }
 
   return restApi;
