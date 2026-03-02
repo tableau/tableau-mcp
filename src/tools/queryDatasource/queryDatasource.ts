@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
-import { Err } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../config.js';
@@ -23,6 +23,10 @@ import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { validateQuery } from './queryDatasourceValidator.js';
 import { queryDatasourceToolDescription20253 } from './queryDescription.2025.3.js';
 import { queryDatasourceToolDescription } from './queryDescription.js';
+import {
+  ContextFilterWarning,
+  validateContextFilters,
+} from './validators/validateContextFilters.js';
 import { validateFilterValues } from './validators/validateFilterValues.js';
 import { validateQueryAgainstDatasourceMetadata } from './validators/validateQueryAgainstDatasourceMetadata.js';
 
@@ -30,6 +34,12 @@ const paramsSchema = {
   datasourceLuid: z.string().nonempty(),
   query: querySchema,
   limit: z.number().int().min(1).optional(),
+};
+
+type QueryDatasourceResult = QueryOutput & {
+  mcp?: {
+    warnings: ContextFilterWarning[];
+  };
 };
 
 export type QueryDatasourceError =
@@ -76,7 +86,7 @@ export const getQueryDatasourceTool = (
     argsValidator: validateQuery,
     callback: async ({ datasourceLuid, query, limit }, extra): Promise<CallToolResult> => {
       const { config, requestId, tableauAuthInfo, getConfigWithOverrides } = extra;
-      return await queryDatasourceTool.logAndExecute<QueryOutput, QueryDatasourceError>({
+      return await queryDatasourceTool.logAndExecute<QueryDatasourceResult, QueryDatasourceError>({
         extra,
         args: { datasourceLuid, query },
         callback: async () => {
@@ -166,6 +176,8 @@ export const getQueryDatasourceTool = (
                 }
               }
 
+              const contextWarnings = validateContextFilters(query);
+
               const result = await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
               if (result.isErr()) {
                 return new Err(
@@ -182,6 +194,15 @@ export const getQueryDatasourceTool = (
 
               if (rowLimit && result.value.data && result.value.data.length > rowLimit) {
                 result.value.data.length = rowLimit;
+              }
+
+              if (contextWarnings.length > 0) {
+                return new Ok({
+                  ...result.value,
+                  mcp: {
+                    warnings: contextWarnings,
+                  },
+                });
               }
 
               return result;
