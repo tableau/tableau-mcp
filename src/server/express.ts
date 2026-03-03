@@ -15,7 +15,7 @@ import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
-import { passthroughMiddleware } from './passthroughMiddleware.js';
+import { passthroughMiddleware, X_TABLEAU_AUTH_HEADER } from './passthroughMiddleware.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
 
@@ -44,7 +44,7 @@ export async function startExpressServer({
         'Accept',
         'MCP-Protocol-Version',
       ],
-      exposedHeaders: [SESSION_ID_HEADER, 'x-session-id'],
+      exposedHeaders: [SESSION_ID_HEADER, 'x-session-id', X_TABLEAU_AUTH_HEADER],
     }),
   );
 
