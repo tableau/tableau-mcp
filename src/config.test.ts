@@ -187,6 +187,18 @@ describe('Config', () => {
     expect(config.enableMcpSiteSettings).toBe(true);
   });
 
+  it('should set enablePassthroughAuth to false by default', () => {
+    const config = new Config();
+    expect(config.enablePassthroughAuth).toBe(false);
+  });
+
+  it('should set enablePassthroughAuth to true when specified', () => {
+    vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+
+    const config = new Config();
+    expect(config.enablePassthroughAuth).toBe(true);
+  });
+
   describe('HTTP server config parsing', () => {
     it('should set sslKey to default when SSL_KEY is not set', () => {
       const config = new Config();

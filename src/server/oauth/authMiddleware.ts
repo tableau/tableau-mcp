@@ -1,7 +1,7 @@
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { CallToolRequestSchema, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { KeyObject } from 'crypto';
-import express, { RequestHandler } from 'express';
+import { NextFunction, RequestHandler, Response } from 'express';
 import { compactDecrypt } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error';
@@ -35,11 +35,13 @@ import { AuthenticatedRequest } from './types.js';
  * @returns Express middleware function
  */
 export function authMiddleware(privateKey: KeyObject | null): RequestHandler {
-  return async (
-    req: AuthenticatedRequest,
-    res: express.Response,
-    next: express.NextFunction,
-  ): Promise<void> => {
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    if (req.auth) {
+      // Auth already defined by previous middleware
+      next();
+      return;
+    }
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {

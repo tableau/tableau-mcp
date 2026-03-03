@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { requiredString } from '../../utils/requiredString.js';
+import { passthroughAuthInfoSchema } from '../passthroughMiddleware.js';
 
 export const mcpAuthorizeSchema = z.object({
   client_id: requiredString('client_id'),
@@ -134,6 +135,7 @@ export const tableauAuthInfoSchema = z.discriminatedUnion('type', [
     siteId: z.string(),
     raw: z.string(),
   }),
+  passthroughAuthInfoSchema,
 ]);
 
 export const cimdMetadataSchema = z.object({
