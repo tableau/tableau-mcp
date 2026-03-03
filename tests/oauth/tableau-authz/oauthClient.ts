@@ -5,17 +5,20 @@ import { InMemoryOAuthClientProvider } from '@modelcontextprotocol/sdk/examples/
 import { OAuthClientMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
 import {
   CallToolRequest,
-  CallToolResult,
   CallToolResultSchema,
   ListToolsRequest,
   ListToolsResult,
   ListToolsResultSchema,
+  LoggingMessageNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import z from 'zod';
 
+import { ToolName } from '../../../src/tools/toolName';
 import invariant from '../../../src/utils/invariant';
 import { Deferred } from '../deferred';
+import { expect } from './tests/base';
 
-class OAuthClient {
+export class OAuthClient {
   private readonly client: Client;
   private readonly serverUrl: string;
   private readonly clientMetadataUrl: string;
@@ -35,7 +38,7 @@ class OAuthClient {
   }) {
     this.client = new Client(
       {
-        name: 'basic-oauth-client',
+        name: 'tmcp-test-oauth-client',
         version: '1.0.0',
       },
       { capabilities: {} },
@@ -61,6 +64,22 @@ class OAuthClient {
     );
 
     this.authUrlPromise = getAuthorizationUrl.promise;
+  }
+
+  setNotificationHandler(): void {
+    this.client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) => {
+      console.debug('[OAuthClient] Notification received:');
+      try {
+        if (typeof notification.params.data === 'string') {
+          const data = JSON.stringify(JSON.parse(notification.params.data), null, 2);
+          console.debug(data);
+        } else {
+          console.debug(notification.params.data);
+        }
+      } catch {
+        console.debug(notification.params.data);
+      }
+    });
   }
 
   async attemptConnection(
@@ -133,9 +152,23 @@ class OAuthClient {
     return await this.client.request(request, ListToolsResultSchema);
   }
 
-  async callTool(toolName: string, toolArgs: Record<string, unknown>): Promise<CallToolResult> {
+  async callTool<Z extends z.ZodTypeAny = z.ZodNever>(
+    toolName: ToolName,
+    {
+      schema,
+      contentType,
+      toolArgs,
+    }: {
+      schema: Z;
+      contentType?: 'text' | 'image';
+      toolArgs?: Record<string, unknown>;
+    },
+  ): Promise<z.infer<Z>> {
     console.log('[OAuthClient] Calling tool:', toolName);
     console.log('[OAuthClient] Tool arguments:', toolArgs);
+    contentType = contentType ?? 'text';
+    toolArgs = toolArgs ?? {};
+
     const request: CallToolRequest = {
       method: 'tools/call',
       params: {
@@ -144,7 +177,38 @@ class OAuthClient {
       },
     };
 
-    return await this.client.request(request, CallToolResultSchema);
+    const result = await this.client.request(request, CallToolResultSchema);
+    if (!Array.isArray(result.content)) {
+      console.error(result.content);
+      throw new Error('result.content must be an array');
+    }
+
+    expect(result.content).toHaveLength(1);
+    const content = result.content[0];
+    expect(content.type).toBe(contentType);
+
+    if (result.isError) {
+      const errorContent =
+        content.type === 'text'
+          ? content.text
+          : content.type === 'image'
+            ? content.data
+            : 'unknown error';
+      console.error(errorContent);
+      throw new Error(errorContent);
+    }
+
+    if (content.type === 'text') {
+      const text = content.text;
+      invariant(typeof text === 'string');
+      const response = schema.parse(JSON.parse(text));
+      return response;
+    } else if (content.type === 'image') {
+      const data = content.data;
+      invariant(typeof data === 'string');
+      const response = schema.parse(data);
+      return response;
+    }
   }
 
   close(): void {
@@ -157,9 +221,12 @@ export function getOAuthClient(): OAuthClient {
   // the authorization server can actually resolve.
   // AuthZ codes will be issued to the masqueraded callback URL, but that's ok,
   // we can intercept them with Playwright.
-  return new OAuthClient({
+  const client = new OAuthClient({
     serverUrl: 'http://127.0.0.1:3927/tableau-mcp',
     clientMetadataUrl: 'https://client.dev/oauth/metadata.json',
     oauthCallbackUrl: 'https://client.dev/oauth/callback',
   });
+
+  client.setNotificationHandler();
+  return client;
 }
