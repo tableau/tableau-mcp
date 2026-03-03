@@ -52,7 +52,7 @@ describe('client credentials grant type', () => {
   it('should issue an access token when the client credentials are valid', async () => {
     const { app } = await startServer();
 
-    const response = await request(app).post('/oauth/token').send({
+    const response = await request(app).post('/oauth2/token').send({
       grant_type: 'client_credentials',
       client_id: 'test-client-id',
       client_secret: 'test-client-secret',
@@ -62,9 +62,9 @@ describe('client credentials grant type', () => {
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
       access_token: expect.any(String),
-      refresh_token: undefined,
       token_type: 'Bearer',
       expires_in: 3600,
+      scope: expect.stringMatching(/tableau:mcp:/),
     });
   });
 
@@ -72,7 +72,7 @@ describe('client credentials grant type', () => {
     const { app } = await startServer();
 
     const response = await request(app)
-      .post('/oauth/token')
+      .post('/oauth2/token')
       .set(
         'Authorization',
         `Basic ${Buffer.from('test-client-id:test-client-secret').toString('base64')}`,
@@ -85,9 +85,9 @@ describe('client credentials grant type', () => {
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
       access_token: expect.any(String),
-      refresh_token: undefined,
       token_type: 'Bearer',
       expires_in: 3600,
+      scope: expect.stringMatching(/tableau:mcp:/),
     });
   });
 
@@ -95,7 +95,7 @@ describe('client credentials grant type', () => {
     const { app } = await startServer();
 
     const response = await request(app)
-      .post('/oauth/token')
+      .post('/oauth2/token')
       .set('Authorization', 'Bearer test-client-id:test-client-secret')
       .send({
         grant_type: 'client_credentials',
@@ -112,7 +112,7 @@ describe('client credentials grant type', () => {
   it('should reject invalid client credentials of the same length', async () => {
     const { app } = await startServer();
 
-    const response = await request(app).post('/oauth/token').send({
+    const response = await request(app).post('/oauth2/token').send({
       grant_type: 'client_credentials',
       client_id: 'test-client-id',
       client_secret: 'test-cl1ent-secret',
@@ -129,7 +129,7 @@ describe('client credentials grant type', () => {
   it('should reject invalid client credentials of different lengths', async () => {
     const { app } = await startServer();
 
-    const response = await request(app).post('/oauth/token').send({
+    const response = await request(app).post('/oauth2/token').send({
       grant_type: 'client_credentials',
       client_id: 'test-client-id',
       client_secret: 'test-client-secret-123',

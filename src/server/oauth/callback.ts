@@ -39,10 +39,19 @@ export function callback(
     const { error, code, state } = result.data;
 
     if (error) {
-      res.status(400).json({
-        error: 'access_denied',
-        error_description: 'User denied authorization',
-      });
+      if (error === 'invalid_request') {
+        res.status(400).json({
+          error: 'invalid_request',
+          error_description:
+            'Invalid request. Did you sign in to the wrong site? From your browser, please sign out of your site and reconnect your agent to Tableau MCP.',
+        });
+      } else {
+        res.status(400).json({
+          error: 'access_denied',
+          error_description: 'User denied authorization',
+        });
+      }
+
       return;
     }
 
@@ -114,6 +123,30 @@ export function callback(
         return;
       }
 
+      if (config.oauth.lockSite) {
+        const { name: siteName, contentUrl: siteContentUrl } = sessionResult.value.site;
+        const expected = config.siteName || 'Default';
+        const siteMatches =
+          siteName === config.siteName ||
+          siteContentUrl === config.siteName ||
+          (siteName === 'Default' && !config.siteName);
+
+        if (!siteMatches) {
+          const signedIntoSite = siteContentUrl || siteName || 'Default';
+          const sentences = [
+            `User signed in to site: ${signedIntoSite}.`,
+            `Expected site: ${expected}.`,
+            `Please reconnect your client and choose the [${expected}] site in the site picker if prompted.`,
+          ];
+
+          res.status(400).json({
+            error: 'invalid_request',
+            error_description: sentences.join(' '),
+          });
+          return;
+        }
+      }
+
       // Generate authorization code
       const authorizationCode = randomBytes(32).toString('hex');
       authorizationCodes.set(authorizationCode, {
@@ -123,6 +156,7 @@ export function callback(
         user: sessionResult.value.user,
         server,
         tableauClientId: pendingAuth.tableauClientId,
+        scopes: pendingAuth.scopes,
         tokens: {
           accessToken,
           refreshToken,

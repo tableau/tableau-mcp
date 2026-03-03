@@ -1,7 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getSearchContentTool } from './searchContent.js';
 
 export const mockSearchContentResponse = {
@@ -125,7 +127,8 @@ describe('searchContentTool', () => {
       filter: undefined,
     });
 
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
     expect(responseData).toHaveLength(2);
     expect(responseData[0]).toMatchObject({
       type: 'workbook',
@@ -163,7 +166,7 @@ describe('searchContentTool', () => {
       terms: 'dashboard',
       page: 0,
       limit: 100,
-      orderBy: 'hitsTotal:desc',
+      order_by: 'hitsTotal:desc',
       filter: undefined,
     });
   });
@@ -183,7 +186,7 @@ describe('searchContentTool', () => {
       terms: 'dashboard',
       page: 0,
       limit: 100,
-      orderBy: 'hitsTotal:desc,hitsSmallSpanTotal:asc',
+      order_by: 'hitsTotal:desc,hitsSmallSpanTotal:asc',
       filter: undefined,
     });
   });
@@ -199,7 +202,7 @@ describe('searchContentTool', () => {
       terms: undefined,
       page: 0,
       limit: 100,
-      orderBy: undefined,
+      order_by: undefined,
       filter: 'type:in:[workbook,datasource]',
     });
   });
@@ -292,7 +295,7 @@ describe('searchContentTool', () => {
       terms: undefined,
       page: 0,
       limit: 100,
-      orderBy: 'downstreamWorkbookCount:desc',
+      order_by: 'downstreamWorkbookCount:desc',
       filter: 'type:eq:table',
     });
   });
@@ -309,7 +312,7 @@ describe('searchContentTool', () => {
       terms: undefined,
       page: 0,
       limit: 100,
-      orderBy: 'downstreamWorkbookCount:desc',
+      order_by: 'downstreamWorkbookCount:desc',
       filter: 'type:eq:database',
     });
   });
@@ -320,6 +323,7 @@ describe('searchContentTool', () => {
     const result = await getToolResult({ terms: 'test' });
 
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -333,7 +337,8 @@ describe('searchContentTool', () => {
     const result = await getToolResult({ terms: 'nonexistent' });
 
     expect(result.isError).toBe(false);
-    const responseData = result.content[0].text as string;
+    invariant(result.content[0].type === 'text');
+    const responseData = result.content[0].text;
     expect(responseData).toEqual(
       'No search results were found. Either none exist or you do not have permission to view them.',
     );
@@ -343,10 +348,5 @@ describe('searchContentTool', () => {
 async function getToolResult(params: any): Promise<CallToolResult> {
   const searchContentTool = getSearchContentTool(new Server());
   const callback = await Provider.from(searchContentTool.callback);
-  return await callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  return await callback(params, getMockRequestHandlerExtra());
 }

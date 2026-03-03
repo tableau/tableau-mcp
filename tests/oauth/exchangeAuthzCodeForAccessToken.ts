@@ -12,7 +12,7 @@ export async function exchangeAuthzCodeForAccessToken(app: express.Application):
 }> {
   const codeChallenge = 'test-code-challenge';
   const authzResponse = await request(app)
-    .get('/oauth/authorize')
+    .get('/oauth2/authorize')
     .query({
       client_id: 'test-client-id',
       redirect_uri: 'http://localhost:3000',
@@ -36,11 +36,13 @@ export async function exchangeAuthzCodeForAccessToken(app: express.Application):
   const location = new URL(response.headers['location']);
   const code = location.searchParams.get('code');
 
-  const tokenResponse = await request(app).post('/oauth/token').send({
+  const tokenResponse = await request(app).post('/oauth2/token').send({
     grant_type: 'authorization_code',
     code,
     code_verifier: codeChallenge,
     redirect_uri: 'http://localhost:3000',
+    client_id: 'test-client-id',
+    client_secret: 'test-client-secret',
   });
 
   expect(tokenResponse.status).toBe(200);
@@ -50,6 +52,7 @@ export async function exchangeAuthzCodeForAccessToken(app: express.Application):
     refresh_token: expect.any(String),
     token_type: 'Bearer',
     expires_in: 3600,
+    scope: expect.stringMatching(/tableau:mcp:/),
   });
 
   return tokenResponse.body;

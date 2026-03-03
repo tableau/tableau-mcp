@@ -8,3 +8,5 @@ runs:
       run: npm run test:oauth
       env:
         OAUTH_ISSUER: http://127.0.0.1:3927
+        OAUTH_CLIENT_ID_SECRET_PAIRS: test-client-id:test-client-secret
+        OAUTH_DISABLE_SCOPES: "false"

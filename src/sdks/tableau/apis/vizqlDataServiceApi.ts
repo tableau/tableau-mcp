@@ -78,7 +78,9 @@ const parameterSchema = z.discriminatedUnion('parameterType', [
   parameterBaseSchema
     .extend({
       parameterType: z.literal('LIST'),
-      members: z.array(parameterValueSchema),
+      members: z.array(
+        parameterValueSchema.or(z.object({ value: parameterValueSchema, alias: z.string() })),
+      ),
     })
     .strict(),
   parameterBaseSchema
@@ -353,6 +355,7 @@ const queryDatasourceOptionsSchema = queryOptionsSchema.and(
   z
     .object({
       disaggregate: z.boolean(),
+      rowLimit: z.number().int().min(1).optional(),
     })
     .partial()
     .passthrough(),

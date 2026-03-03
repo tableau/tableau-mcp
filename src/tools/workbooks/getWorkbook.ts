@@ -2,13 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getConfig } from '../../config.js';
+import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { Tool } from '../tool.js';
+import { ConstrainedResult, Tool } from '../tool.js';
 
 const paramsSchema = {
   workbookId: z.string(),
@@ -31,17 +30,16 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ workbookId }, { requestId, authInfo, signal }): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ workbookId }, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
 
       return await getWorkbookTool.logAndExecute<Workbook, GetWorkbookError>({
-        requestId,
-        authInfo,
+        extra,
         args: { workbookId },
         callback: async () => {
           const isWorkbookAllowedResult = await resourceAccessChecker.isWorkbookAllowed({
             workbookId,
-            restApiArgs: { config, requestId, server, signal },
+            extra,
           });
 
           if (!isWorkbookAllowedResult.allowed) {
@@ -53,12 +51,8 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
 
           return new Ok(
             await useRestApi({
-              config,
-              requestId,
-              server,
+              ...extra,
               jwtScopes: ['tableau:content:read'],
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
                 // Notice that we already have the workbook if it had been allowed by a project scope.
                 const workbook =
@@ -85,12 +79,8 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
             }),
           );
         },
-        constrainSuccessResult: (workbook) => {
-          return {
-            type: 'success',
-            result: workbook,
-          };
-        },
+        constrainSuccessResult: (workbook) =>
+          filterWorkbookViews({ workbook, boundedContext: configWithOverrides.boundedContext }),
         getErrorText: (error: GetWorkbookError) => {
           switch (error.type) {
             case 'workbook-not-allowed':
@@ -103,3 +93,32 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
 
   return getWorkbookTool;
 };
+
+export function filterWorkbookViews({
+  workbook,
+  boundedContext,
+}: {
+  workbook: Workbook;
+  boundedContext: BoundedContext;
+}): ConstrainedResult<Workbook> {
+  const { tags } = boundedContext;
+
+  // We don't need to check the tags on the workbook since we already
+  // did that before getting the detailed workbook information.
+  // We only need to check the tags on the workbook's views.
+  if (!workbook.views || !tags) {
+    return {
+      type: 'success',
+      result: workbook,
+    };
+  }
+
+  workbook.views.view = workbook.views.view.filter((view) =>
+    view.tags?.tag?.some((tag) => tags.has(tag.label)),
+  );
+
+  return {
+    type: 'success',
+    result: workbook,
+  };
+}

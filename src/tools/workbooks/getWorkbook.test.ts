@@ -1,10 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import { stubDefaultEnvVars } from '../../testShared.js';
+import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockView } from '../views/mockView.js';
-import { getGetWorkbookTool } from './getWorkbook.js';
+import { filterWorkbookViews, getGetWorkbookTool } from './getWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
@@ -12,7 +15,6 @@ const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedFor
 const mocks = vi.hoisted(() => ({
   mockGetWorkbook: vi.fn(),
   mockQueryViewsForWorkbook: vi.fn(),
-  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -29,21 +31,16 @@ vi.mock('../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
-}));
-
 describe('getWorkbookTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-      },
-    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -60,6 +57,7 @@ describe('getWorkbookTool', () => {
     mocks.mockQueryViewsForWorkbook.mockResolvedValue([mockView]);
     const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
     expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Superstore');
     expect(mocks.mockGetWorkbook).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -72,21 +70,17 @@ describe('getWorkbookTool', () => {
     mocks.mockGetWorkbook.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
   it('should return workbook not allowed error when workbook is not allowed', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: new Set(['some-other-workbook-id']),
-      },
-    });
+    vi.stubEnv('INCLUDE_WORKBOOK_IDS', 'some-other-workbook-id');
     mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
 
     const result = await getToolResult({ workbookId: mockWorkbook.id });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       [
         'The set of allowed workbooks that can be queried is limited by the server configuration.',
@@ -97,15 +91,56 @@ describe('getWorkbookTool', () => {
     expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
     expect(mocks.mockQueryViewsForWorkbook).not.toHaveBeenCalled();
   });
+
+  describe('filterWorkbookViews', () => {
+    it('should return the workbook when no filtering occurs', () => {
+      const result = filterWorkbookViews({
+        workbook: mockWorkbook,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          tags: null,
+        },
+      });
+      invariant(result.type === 'success');
+      expect(result.result).toEqual(mockWorkbook);
+    });
+
+    it('should return the views that match the tags in the bounded context', () => {
+      const result = filterWorkbookViews({
+        workbook: mockWorkbook,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          tags: new Set(['tag-1']),
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual(mockWorkbook);
+    });
+
+    it('should remove views from the workbook when all views were filtered out by the tags in the bounded context', () => {
+      const result = filterWorkbookViews({
+        workbook: mockWorkbook,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          tags: new Set(['some-other-tag']),
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual({ ...mockWorkbook, views: { view: [] } });
+    });
+  });
 });
 
 async function getToolResult(params: { workbookId: string }): Promise<CallToolResult> {
   const getWorkbookTool = getGetWorkbookTool(new Server());
   const callback = await Provider.from(getWorkbookTool.callback);
-  return await callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  return await callback(params, getMockRequestHandlerExtra());
 }

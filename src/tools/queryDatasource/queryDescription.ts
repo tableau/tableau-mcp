@@ -29,8 +29,25 @@ Before using this tool, you should:
 
 ### Field Usage Guidelines
 - **Prefer existing fields** - Use fields already modeled in the data source rather than creating custom calculations
-- **Use calculations sparingly** - Only create calculated fields when absolutely necessary and the calculation cannot be achieved through existing fields and aggregations
 - **Validate field availability** - Always check field metadata before constructing queries
+
+### Calculation Usage Guidelines
+
+**Create calculations when you need to:**
+- Segment data in ways not captured by existing fields
+- Convert data types (e.g., string to date)
+- Aggregate data with custom logic beyond standard functions
+- Filter results based on computed conditions (only available with QUANTITATIVE and TOP filters)
+- Calculate ratios or derived metrics
+- Perform analysis and the required data is not present in any existing field
+- Transform values during visualization
+- Quickly categorize data into custom groups
+
+**Avoid calculations if you can achieve the same result by:**
+- Applying standard aggregation functions (SUM, AVG, COUNT, etc.) to existing fields
+- Combining existing fields and filters together
+
+Note: Calculated Fields created as part of a query cannot be referenced in other calculations or filters.
 
 ### Query Construction
 - **Group by meaningful dimensions** - Ensure grouping supports the business question being asked
@@ -118,7 +135,7 @@ Filter by specific values:
 }
 \`\`\`
 
-### TOP Filters  
+### TOP Filters
 Get top/bottom N records by a measure:
 \`\`\`json
 {
@@ -153,6 +170,9 @@ Filter relative date periods:
   "dateRangeType": "LAST"
 }
 \`\`\`
+
+## Limitations
+- **QUANTITATIVE_NUMERICAL min/max operators are inclusive** - For strictly greater-than or less-than logic, use a small offset (for example, min: 10.01 for > 10, or max: 9.99 for < 10).
 
 ## Example Queries
 
@@ -248,7 +268,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 2: Top N Dimension Query (Using TOP Filter and context property)
+### Example 3: Top N Dimension Query (Using TOP Filter and context property)
 **Question:** "What is the top selling product in California?"
 \`\`\`json
 {
@@ -286,7 +306,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 3: Time Series with Aggregation
+### Example 4: Time Series with Aggregation
 **Question:** "What are our monthly sales trends?"
 
 \`\`\`json
@@ -316,7 +336,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 4: Filtered Category Analysis
+### Example 5: Filtered Category Analysis
 **Question:** "What's the performance by product category for high-value orders?"
 
 \`\`\`json

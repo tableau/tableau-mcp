@@ -1,5 +1,4 @@
-import axiosRetry from 'axios-retry';
-import { randomBytes, randomUUID } from 'crypto';
+import { randomBytes, randomInt, randomUUID } from 'crypto';
 import express from 'express';
 import { isIP } from 'net';
 import { isSSRFSafeURL } from 'ssrfcheck';
@@ -7,8 +6,9 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error';
 
 import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
-import { axios, AxiosResponse, getStringResponseHeader } from '../../utils/axios.js';
+import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
 import { parseUrl } from '../../utils/parseUrl.js';
+import { retry } from '../../utils/retry.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { clientMetadataCache } from './clientMetadataCache.js';
 import { getDnsResolver } from './dnsResolver.js';
@@ -16,6 +16,7 @@ import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
+import { getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
 import { PendingAuthorization } from './types.js';
 
 /**
@@ -31,7 +32,7 @@ export function authorize(
 ): void {
   const config = getConfig();
 
-  app.get('/oauth/authorize', async (req, res) => {
+  app.get('/oauth2/authorize', async (req, res) => {
     const result = mcpAuthorizeSchema.safeParse(req.query);
 
     if (!result.success) {
@@ -42,8 +43,15 @@ export function authorize(
       return;
     }
 
-    const { client_id, redirect_uri, response_type, code_challenge, code_challenge_method, state } =
-      result.data;
+    const {
+      client_id,
+      redirect_uri,
+      response_type,
+      code_challenge,
+      code_challenge_method,
+      state,
+      scope,
+    } = result.data;
 
     const clientIdUrl = parseUrl(client_id);
     if (clientIdUrl) {
@@ -97,13 +105,35 @@ export function authorize(
       return;
     }
 
+    const { enforceScopes, advertiseApiScopes } = config.oauth;
+    const requestedScopes = parseScopes(scope);
+    const { valid: validScopes, invalid: invalidScopes } = validateScopes(
+      requestedScopes,
+      getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
+    );
+
+    if (invalidScopes.length > 0) {
+      res.status(400).json({
+        error: 'invalid_scope',
+        error_description: `Unsupported scopes: ${invalidScopes.join(', ')}`,
+      });
+      return;
+    }
+
+    const scopesToGrant =
+      validScopes.length > 0
+        ? validScopes
+        : enforceScopes
+          ? getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+          : [];
+
     // Generate Tableau state and store pending authorization
     const tableauState = randomBytes(32).toString('hex');
     const authKey = randomBytes(32).toString('hex');
 
     const tableauClientId = randomUUID();
     // 22-64 bytes (44-128 chars) is the recommended length for code verifiers
-    const numCodeVerifierBytes = Math.floor(Math.random() * (64 - 22 + 1)) + 22;
+    const numCodeVerifierBytes = randomInt(22, 65);
     const tableauCodeVerifier = randomBytes(numCodeVerifierBytes).toString('hex');
     const tableauCodeChallenge = generateCodeChallenge(tableauCodeVerifier);
     pendingAuthorizations.set(authKey, {
@@ -114,6 +144,7 @@ export function authorize(
       tableauState,
       tableauClientId,
       tableauCodeVerifier,
+      scopes: scopesToGrant,
     });
 
     // Clean up expired authorizations
@@ -133,8 +164,48 @@ export function authorize(
     oauthUrl.searchParams.set('device_name', getDeviceName(redirect_uri, state ?? ''));
     oauthUrl.searchParams.set('client_type', 'tableau-mcp');
 
-    res.redirect(oauthUrl.toString());
+    if (config.oauth.lockSite) {
+      // The "redirected" parameter is used by Tableau's OAuth controller to determine whether the user will be shown the site picker.
+      // When provided, the user will not be shown the site picker.
+      oauthUrl.searchParams.set('redirected', 'true');
+    }
+
+    const redirectUrl = await getOAuthRedirectUrl(oauthUrl, { lockSite: config.oauth.lockSite });
+    res.redirect(redirectUrl.toString());
   });
+}
+
+async function getOAuthRedirectUrl(
+  initialOAuthUrl: URL,
+  { lockSite }: { lockSite: boolean },
+): Promise<URL> {
+  if (lockSite) {
+    // When the site is locked, Tableau does the right thing and never shows the site picker,
+    // regardless of whether the user already has an active Tableau session in their browser.
+    return initialOAuthUrl;
+  }
+
+  // When the site is not locked, Tableau does the right thing and shows the site picker, but only on Cloud.
+  // On Server, if the user does not have an active Tableau session in their browser,
+  // Tableau does not show the site picker.
+  // We can force it to by changing the path from #/signin to #/site.
+
+  try {
+    const response = await fetch(initialOAuthUrl, { redirect: 'manual' });
+    if (response.status === 302) {
+      // The response is a redirect to the Tableau OAuth login page.
+      // Force it to ultimately show the site picker by changing the path from #/signin to #/site.
+      const location = response.headers.get('location');
+      if (location?.startsWith('#/signin') || location?.startsWith('/#/signin')) {
+        const locationUrl = new URL(location.replace('#/signin', '#/site'), initialOAuthUrl.origin);
+        return locationUrl;
+      }
+    }
+  } catch {
+    return initialOAuthUrl;
+  }
+
+  return initialOAuthUrl;
 }
 
 // https://client.dev/servers
@@ -189,17 +260,32 @@ async function getClientFromMetadataDoc(
   let response: AxiosResponse;
   try {
     const client = axios.create();
-    axiosRetry(client, { retries: 3, retryDelay: axiosRetry.exponentialDelay });
+    response = await retry(
+      () =>
+        client.get(clientMetadataUrl.toString(), {
+          timeout: 5000,
+          maxContentLength: 5 * 1024, // 5 KB
+          maxRedirects: 3,
+          headers: {
+            Accept: 'application/json',
+            Host: originalHostname,
+          },
+        }),
+      {
+        retryIf: (error) => {
+          if (!isAxiosError(error)) {
+            return true;
+          }
 
-    response = await client.get(clientMetadataUrl.toString(), {
-      timeout: 5000,
-      maxContentLength: 5 * 1024, // 5 KB
-      maxRedirects: 3,
-      headers: {
-        Accept: 'application/json',
-        Host: originalHostname,
+          const status = error.response?.status;
+          if (status) {
+            return status >= 500 && status < 600;
+          }
+
+          return true;
+        },
       },
-    });
+    );
   } catch {
     return Err({
       error: 'invalid_request',

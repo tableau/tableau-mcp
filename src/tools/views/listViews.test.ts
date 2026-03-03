@@ -1,8 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
+import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { constrainViews, getListViewsTool } from './listViews.js';
 import { mockView } from './mockView.js';
 
@@ -48,6 +50,7 @@ describe('listViewsTool', () => {
     mocks.mockQueryViewsForSiteData.mockResolvedValue(mockViews);
     const result = await getToolResult({ filter: 'name:eq:Overview' });
     expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
     expect(JSON.parse(`${result.content[0].text}`)).toMatchObject(mockViews.views);
     expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -63,6 +66,7 @@ describe('listViewsTool', () => {
     mocks.mockQueryViewsForSiteData.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ filter: 'name:eq:Overview' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -70,7 +74,7 @@ describe('listViewsTool', () => {
     it('should return empty result when no views are found', () => {
       const result = constrainViews({
         views: [],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
       });
 
       invariant(result.type === 'empty');
@@ -86,6 +90,7 @@ describe('listViewsTool', () => {
           projectIds: new Set(['123']),
           datasourceIds: null,
           workbookIds: null,
+          tags: null,
         },
       });
 
@@ -98,43 +103,42 @@ describe('listViewsTool', () => {
       );
     });
 
-    it('should return success result when no views were filtered out by the bounded context', () => {
-      const result = constrainViews({
-        views: mockViews.views,
-        boundedContext: {
-          projectIds: null,
-          datasourceIds: null,
-          workbookIds: null,
-        },
-      });
+    test.each(
+      getCombinationsOfBoundedContextInputs({
+        projectIds: [null, new Set([mockViews.views[0].project.id])],
+        datasourceIds: [null], // n/a for views
+        workbookIds: [null, new Set([mockViews.views[0].workbook.id])],
+        tags: [null, new Set([mockViews.views[0].tags.tag[0].label])],
+      }),
+    )(
+      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
+      async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+        const result = constrainViews({
+          views: mockViews.views,
+          boundedContext: {
+            projectIds,
+            datasourceIds,
+            workbookIds,
+            tags,
+          },
+        });
 
-      invariant(result.type === 'success');
-      expect(result.result).toBe(mockViews.views);
-    });
-
-    it('should return success result when some views were filtered out by the bounded context', () => {
-      const result = constrainViews({
-        views: mockViews.views,
-        boundedContext: {
-          projectIds: new Set([mockViews.views[0].project.id]),
-          datasourceIds: null,
-          workbookIds: new Set([mockViews.views[0].workbook.id]),
-        },
-      });
-
-      invariant(result.type === 'success');
-      expect(result.result).toEqual([mockViews.views[0]]);
-    });
+        invariant(result.type === 'success');
+        if (!projectIds && !workbookIds && !tags) {
+          expect(result.result).toEqual(mockViews.views);
+        } else {
+          expect(result.result).toEqual([mockViews.views[0]]);
+        }
+      },
+    );
   });
 });
 
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
   const listViewsTool = getListViewsTool(new Server());
   const callback = await Provider.from(listViewsTool.callback);
-  return await callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  return await callback(
+    { filter: params.filter, pageSize: undefined, limit: undefined },
+    getMockRequestHandlerExtra(),
+  );
 }

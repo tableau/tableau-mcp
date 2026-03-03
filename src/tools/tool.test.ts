@@ -1,12 +1,24 @@
+import { AxiosError } from 'axios';
 import { Ok } from 'ts-results-es';
-import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
+import invariant from '../utils/invariant.js';
 import { Tool } from './tool.js';
+import { getMockRequestHandlerExtra } from './toolContext.mock.js';
+
+// Mock for product telemetry - tracks calls to send()
+const mockTelemetrySend = vi.hoisted(() => vi.fn());
+vi.mock('../telemetry/productTelemetry/telemetryForwarder.js', () => ({
+  getProductTelemetry: vi.fn().mockReturnValue({
+    send: mockTelemetrySend,
+  }),
+}));
 
 describe('Tool', () => {
+  const mockExtra = getMockRequestHandlerExtra();
+
   const mockParams = {
     server: new Server(),
     name: 'get-datasource-metadata',
@@ -61,8 +73,7 @@ describe('Tool', () => {
 
     const spy = vi.spyOn(tool, 'logInvocation');
     const result = await tool.logAndExecute({
-      requestId: '2',
-      authInfo: undefined,
+      extra: mockExtra,
       args: { param1: 'test' },
       callback,
       constrainSuccessResult: (result) => {
@@ -74,11 +85,11 @@ describe('Tool', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(result.content[0].type).toBe('text');
-    expect(JSON.parse(result.content[0].text as string)).toEqual(successResult);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual(successResult);
 
     expect(spy).toHaveBeenCalledExactlyOnceWith({
-      requestId: '2',
+      requestId: 2,
       args: {
         param1: 'test',
       },
@@ -93,8 +104,7 @@ describe('Tool', () => {
     });
 
     const result = await tool.logAndExecute({
-      requestId: '2',
-      authInfo: undefined,
+      extra: mockExtra,
       args: { param1: 'test' },
       callback,
       constrainSuccessResult: (result) => {
@@ -106,7 +116,7 @@ describe('Tool', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].type).toBe('text');
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('requestId: 2, error: Test error');
   });
 
@@ -115,8 +125,7 @@ describe('Tool', () => {
     const args = { param1: 'test' };
 
     await tool.logAndExecute({
-      requestId: '2',
-      authInfo: undefined,
+      extra: mockExtra,
       args,
       callback: vi.fn(),
       constrainSuccessResult: (result) => {
@@ -149,8 +158,7 @@ describe('Tool', () => {
     });
 
     const result = await tool.logAndExecute({
-      requestId: '2',
-      authInfo: undefined,
+      extra: mockExtra,
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok('test')),
       constrainSuccessResult: (result) => {
@@ -162,7 +170,7 @@ describe('Tool', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].type).toBe('text');
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('requestId: 2, error: Test error');
   });
 
@@ -171,8 +179,7 @@ describe('Tool', () => {
     const successResult = { data: 'success' };
 
     const result = await tool.logAndExecute({
-      requestId: '2',
-      authInfo: undefined,
+      extra: mockExtra,
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok(successResult)),
       constrainSuccessResult: (result) => {
@@ -187,8 +194,8 @@ describe('Tool', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(result.content[0].type).toBe('text');
-    expect(JSON.parse(result.content[0].text as string)).toEqual({
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual({
       ...successResult,
       additionalField: 'extra',
     });
@@ -199,8 +206,7 @@ describe('Tool', () => {
     const successResult = { data: 'success' };
 
     const result = await tool.logAndExecute({
-      requestId: '2',
-      authInfo: undefined,
+      extra: mockExtra,
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok(successResult)),
       constrainSuccessResult: (_result) => {
@@ -212,7 +218,7 @@ describe('Tool', () => {
     });
 
     expect(result.isError).toBe(false);
-    expect(result.content[0].type).toBe('text');
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('No data found');
   });
 
@@ -221,8 +227,7 @@ describe('Tool', () => {
     const successResult = { data: 'success' };
 
     const result = await tool.logAndExecute({
-      requestId: '2',
-      authInfo: undefined,
+      extra: mockExtra,
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok(successResult)),
       constrainSuccessResult: (_result) => {
@@ -234,7 +239,149 @@ describe('Tool', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].type).toBe('text');
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('An error occurred');
+  });
+
+  describe('product telemetry', () => {
+    beforeEach(() => {
+      mockTelemetrySend.mockClear();
+    });
+
+    it('should send telemetry with success=true and empty error_code on success', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          tool_name: 'get-datasource-metadata',
+          request_id: '2',
+          session_id: '',
+          site_luid: '',
+          podname: 'https://my-tableau-server.com',
+          is_hyperforce: false,
+          success: true,
+          error_code: '',
+        }),
+      );
+    });
+
+    it('should send telemetry with success=false and error_code=400 on validation error', async () => {
+      const tool = new Tool({
+        ...mockParams,
+        argsValidator: () => {
+          throw new Error('Validation failed');
+        },
+      });
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          is_hyperforce: false,
+          success: false,
+          error_code: '400',
+        }),
+      );
+    });
+
+    it('should send telemetry with success=false on callback error', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => {
+          throw new Error('Callback failed');
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          is_hyperforce: false,
+          success: false,
+          error_code: '', // No HTTP status for generic errors
+        }),
+      );
+    });
+
+    it('should send telemetry with actual HTTP status code on API error', async () => {
+      const tool = new Tool(mockParams);
+      const axiosError = new AxiosError('Unauthorized');
+      axiosError.response = { status: 401 } as AxiosError['response'];
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => {
+          throw axiosError;
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          is_hyperforce: false,
+          success: false,
+          error_code: '401',
+        }),
+      );
+    });
+
+    it('should send telemetry with success=false and empty error_code on constrained error', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: () => ({ type: 'error', message: 'Constrained error' }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          is_hyperforce: false,
+          success: false,
+          error_code: '',
+        }),
+      );
+    });
+
+    it('should send telemetry with success=true on constrained empty result', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: () => ({ type: 'empty', message: 'No data' }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          is_hyperforce: false,
+          success: true,
+          error_code: '',
+        }),
+      );
+    });
   });
 });

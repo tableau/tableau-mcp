@@ -2,9 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { Server } from '../../server.js';
+import { stubDefaultEnvVars } from '../../testShared.js';
+import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
@@ -189,7 +192,6 @@ const mockListFieldsResponses = vi.hoisted(() => ({
 const mocks = vi.hoisted(() => ({
   mockReadMetadata: vi.fn(),
   mockGraphql: vi.fn(),
-  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -205,23 +207,16 @@ vi.mock('../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
-}));
-
 describe('getDatasourceMetadataTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Set default config for existing tests
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      disableMetadataApiRequests: false,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-      },
-    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -245,7 +240,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
 
     expect(responseData).toMatchObject({
       fields: [
@@ -335,7 +331,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
     expect(responseData).toEqual({
       fields: [],
       parameters: [],
@@ -349,7 +346,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
     expect(responseData).toEqual({
       fields: [
         {
@@ -407,7 +405,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
 
     // Should have basic fields from readMetadata without enrichment
     expect(responseData).toMatchObject({
@@ -477,7 +476,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
 
     // Should have basic fields from readMetadata without enrichment
     expect(responseData.fields).toHaveLength(3);
@@ -526,7 +526,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
 
     expect(responseData.fields).toHaveLength(2);
 
@@ -565,7 +566,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
 
     expect(responseData.fields[0]).toMatchObject({
       name: 'Binned Field',
@@ -581,9 +583,8 @@ describe('getDatasourceMetadataTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toBe(
-      'requestId: test-request-id, error: ReadMetadata API Error',
-    );
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe('requestId: 2, error: ReadMetadata API Error');
   });
 
   it('should handle listFields API errors gracefully', async () => {
@@ -593,7 +594,8 @@ describe('getDatasourceMetadataTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
     expect(responseData).toMatchObject({
       fields: [
         {
@@ -624,21 +626,12 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     // Should fail with the first error (readMetadata is called first)
-    expect(result.content[0].text).toBe(
-      'requestId: test-request-id, error: ReadMetadata API Error',
-    );
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe('requestId: 2, error: ReadMetadata API Error');
   });
 
   it('should return only readMetadata result when disableMetadataApiRequests is true and readMetadata succeeds', async () => {
-    // Configure to disable metadata API requests
-    mocks.mockGetConfig.mockReturnValue({
-      disableMetadataApiRequests: true,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-      },
-    });
+    vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
 
     mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
     mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
@@ -646,7 +639,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    const responseData = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
 
     // Should only have basic fields from readMetadata without enrichment
     expect(responseData).toMatchObject({
@@ -683,15 +677,7 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should return error when disableMetadataApiRequests is true and readMetadata fails', async () => {
-    // Configure to disable metadata API requests
-    mocks.mockGetConfig.mockReturnValue({
-      disableMetadataApiRequests: true,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-      },
-    });
+    vi.stubEnv('DISABLE_METADATA_API_REQUESTS', 'true');
 
     const errorMessage = 'ReadMetadata API Error';
     mocks.mockReadMetadata.mockRejectedValue(new Error(errorMessage));
@@ -700,9 +686,8 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toBe(
-      'requestId: test-request-id, error: ReadMetadata API Error',
-    );
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe('requestId: 2, error: ReadMetadata API Error');
 
     // Verify readMetadata was called but graphql was not
     expect(mocks.mockReadMetadata).toHaveBeenCalledWith({
@@ -718,21 +703,17 @@ describe('getDatasourceMetadataTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
 
   it('should return data source not allowed error when datasource is not allowed', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: new Set(['some-other-datasource-luid']),
-        workbookIds: null,
-      },
-    });
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       [
         'The set of allowed data sources that can be queried is limited by the server configuration.',
@@ -748,13 +729,5 @@ describe('getDatasourceMetadataTool', () => {
 async function getToolResult(): Promise<CallToolResult> {
   const getDatasourceMetadataTool = getGetDatasourceMetadataTool(new Server());
   const callback = await Provider.from(getDatasourceMetadataTool.callback);
-  return await callback(
-    { datasourceLuid: 'test-luid' },
-    {
-      signal: new AbortController().signal,
-      requestId: 'test-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    },
-  );
+  return await callback({ datasourceLuid: 'test-luid' }, getMockRequestHandlerExtra());
 }

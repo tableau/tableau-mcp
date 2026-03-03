@@ -7,7 +7,7 @@ describe('constrainPulseDefinitions', () => {
   it('should return empty result when no definitions are found', () => {
     const result = constrainPulseDefinitions({
       definitions: [],
-      boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+      boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
     });
 
     invariant(result.type === 'empty');
@@ -19,7 +19,12 @@ describe('constrainPulseDefinitions', () => {
   it('should return empty results when all definitions were filtered out by the bounded context', () => {
     const result = constrainPulseDefinitions({
       definitions: mockPulseMetricDefinitions,
-      boundedContext: { projectIds: null, datasourceIds: new Set(['123']), workbookIds: null },
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: new Set(['123']),
+        workbookIds: null,
+        tags: null,
+      },
     });
 
     invariant(result.type === 'empty');
@@ -34,7 +39,7 @@ describe('constrainPulseDefinitions', () => {
   it('should return success result when no definitions were filtered out by the bounded context', () => {
     const result = constrainPulseDefinitions({
       definitions: mockPulseMetricDefinitions,
-      boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null },
+      boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
     });
 
     invariant(result.type === 'success');
@@ -48,6 +53,7 @@ describe('constrainPulseDefinitions', () => {
         projectIds: null,
         datasourceIds: new Set([mockDatasources.datasources[0].id]),
         workbookIds: null,
+        tags: null,
       },
     });
 

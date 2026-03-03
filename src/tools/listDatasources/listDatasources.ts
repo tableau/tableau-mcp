@@ -2,11 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { BoundedContext, getConfig } from '../../config.js';
+import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { Server } from '../../server.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, Tool } from '../tool.js';
@@ -78,30 +77,26 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { filter, pageSize, limit },
-      { requestId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateDatasourcesFilterString(filter) : undefined;
       return await listDatasourcesTool.logAndExecute({
-        requestId,
-        authInfo,
+        extra,
         args: { filter, pageSize, limit },
         callback: async () => {
           const datasources = await useRestApi({
-            config,
-            requestId,
-            server,
+            ...extra,
             jwtScopes: ['tableau:content:read'],
-            signal,
-            authInfo: getTableauAuthInfo(authInfo),
             callback: async (restApi) => {
+              const maxResultLimit = configWithOverrides.getMaxResultLimit(
+                listDatasourcesTool.name,
+              );
+
               const datasources = await paginate({
                 pageConfig: {
                   pageSize,
-                  limit: config.maxResultLimit
-                    ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                  limit: maxResultLimit
+                    ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
                     : limit,
                 },
                 getDataFn: async (pageConfig) => {
@@ -124,7 +119,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
           return new Ok(datasources);
         },
         constrainSuccessResult: (datasources) =>
-          constrainDatasources({ datasources, boundedContext: config.boundedContext }),
+          constrainDatasources({ datasources, boundedContext: configWithOverrides.boundedContext }),
       });
     },
   });
@@ -147,13 +142,19 @@ export function constrainDatasources({
     };
   }
 
-  const { projectIds, datasourceIds } = boundedContext;
+  const { projectIds, datasourceIds, tags } = boundedContext;
   if (projectIds) {
     datasources = datasources.filter((datasource) => projectIds.has(datasource.project.id));
   }
 
   if (datasourceIds) {
     datasources = datasources.filter((datasource) => datasourceIds.has(datasource.id));
+  }
+
+  if (tags) {
+    datasources = datasources.filter((datasource) =>
+      datasource.tags.tag?.some((tag) => tags.has(tag.label)),
+    );
   }
 
   if (datasources.length === 0) {

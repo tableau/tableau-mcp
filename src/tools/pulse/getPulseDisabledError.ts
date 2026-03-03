@@ -1,7 +1,7 @@
 import { PulseDisabledError } from '../../sdks/tableau/methods/pulseMethods.js';
 
-export function getPulseDisabledError(reason: PulseDisabledError): string {
-  switch (reason) {
+export function getPulseDisabledError(error: PulseDisabledError): string {
+  switch (error.type) {
     case 'tableau-server':
       return [
         'Pulse is not available on Tableau Server.',

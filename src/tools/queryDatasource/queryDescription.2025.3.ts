@@ -30,7 +30,6 @@ Before using this tool, you should:
 
 ### Field Usage Guidelines
 - **Prefer existing fields** - Use fields already modeled in the data source rather than creating custom calculations
-- **Use calculations sparingly** - Only create calculated fields when absolutely necessary and the calculation cannot be achieved through existing fields and aggregations
 - **Use bins for distribution analysis** - Create bins to group continuous data into discrete ranges (e.g., age groups, price ranges)
 - **Validate field availability** - Always check field metadata before constructing queries
 
@@ -221,6 +220,37 @@ If a bin field already exists in the datasource (e.g., "Profit (bin)"), query it
 To control existing bin field behavior, use parameters if available (e.g., "Profit Bin Size").
 
 ## Filter Types and Usage
+### Filter Context Property
+All filters support an optional \`context\` property (boolean) that controls how filters are applied:
+- **\`context: true\`** - Filter applies to the overall query context (dimension/scope filters)
+- **\`context: false\`** - Filter applies after context is established (ranking/limiting filters)
+
+**When to use:**
+- Set \`context: true\` on dimension filters (SET, DATE, QUANTITATIVE) that define the scope of analysis
+- Set \`context: false\` on TOP filters to rank/limit results within the established context
+- Omit \`context\` property for simple queries with single filters
+
+**Example: Finding top products within a region:**
+\`\`\`json
+{
+  "filters": [
+    {
+      "field": { "fieldCaption": "State" },
+      "filterType": "SET",
+      "values": ["California"],
+      "context": true  // Establish California as the context
+    },
+    {
+      "field": { "fieldCaption": "Product Name" },
+      "filterType": "TOP",
+      "howMany": 1,
+      "direction": "TOP",
+      "context": false,  // Find top product within California
+      "fieldToMeasure": { "fieldCaption": "Sales", "function": "SUM" }
+    }
+  ]
+}
+\`\`\`
 
 ### SET Filters
 Filter by specific values:
@@ -233,7 +263,7 @@ Filter by specific values:
 }
 \`\`\`
 
-### TOP Filters  
+### TOP Filters
 Get top/bottom N records by a measure:
 \`\`\`json
 {
@@ -266,6 +296,32 @@ Filter relative date periods:
   "filterType": "DATE",
   "periodType": "MONTHS",
   "dateRangeType": "LAST"
+}
+\`\`\`
+
+## Limitations
+- **QUANTITATIVE_NUMERICAL min/max operators are inclusive** - For strictly greater-than or less-than logic, use a small offset (for example, min: 10.01 for > 10, or max: 9.99 for < 10).
+- **SET, MATCH, and relative date filters cannot use ad hoc calculations** - SET, MATCH, and relative date filters must reference a field name, not field.calculation. This means boolean/string calculations used directly in a SET filter will fail. Workarounds: leverage a numeric calc that evaluates to 0 or 1 for boolean logic and filter with QUANTITATIVE_NUMERICAL. For example:
+\`\`\`json
+{
+  "query": {
+    "fields": [
+      {
+        "fieldCaption": "Order ID",
+        "fieldAlias": "Order"
+      }
+    ],
+    "filters": [
+      {
+        "field": {
+          "calculation": "IF [Order Date] > #2021-05-05# AND [Order Date] < #2023-07-07# THEN 1 ELSE 0 END"
+        },
+        "filterType": "QUANTITATIVE_NUMERICAL",
+        "quantitativeFilterType": "MIN",
+        "min": 1
+      }
+    ]
+  }
 }
 \`\`\`
 
@@ -363,7 +419,45 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 3: Time Series with Aggregation
+### Example 3: Top N Dimension Query (Using TOP Filter and context property)
+**Question:** "What is the top selling product in California?"
+\`\`\`json
+{
+  "datasourceLuid": "abc123",
+    "query": {
+    "fields": [
+      {
+        "fieldCaption": "Product Name"
+      },
+      {
+        "fieldCaption": "Sales",
+        "function": "SUM",
+        "fieldAlias": "Total Sales",
+        "sortDirection": "DESC",
+        "sortPriority": 1
+      }
+    ],
+      "filters": [
+        {
+          "field": { "fieldCaption": "State" },
+          "filterType": "SET",
+          "values": ["California"],
+          "context": true
+        },
+        {
+          "field": { "fieldCaption": "Product Name" },
+          "filterType": "TOP",
+          "howMany": 1,
+          "direction": "TOP",
+          "context": false,
+          "fieldToMeasure": { "fieldCaption": "Sales", "function": "SUM" }
+        }
+      ]
+  }
+}
+\`\`\`
+
+### Example 4: Time Series with Aggregation
 **Question:** "What are our monthly sales trends?"
 
 \`\`\`json
@@ -393,7 +487,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 4: Filtered Category Analysis
+### Example 5: Filtered Category Analysis
 **Question:** "What's the performance by product category for high-value orders?"
 
 \`\`\`json
@@ -433,7 +527,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 5: Distribution Analysis Using Bins
+### Example 6: Distribution Analysis Using Bins
 **Question:** "How are our sales distributed across different price ranges?"
 
 \`\`\`json
@@ -463,7 +557,7 @@ Filter relative date periods:
 }
 \`\`\`
 
-### Example 6: Using Parameters for Dynamic Analysis
+### Example 7: Using Parameters for Dynamic Analysis
 **Question:** "Show me sales for the selected region and year"
 
 \`\`\`json
@@ -495,6 +589,24 @@ Filter relative date periods:
   }
 }
 \`\`\`
+
+## Calculations
+
+**Create calculations when you need to:**
+- Segment data in ways not captured by existing fields
+- Convert data types (e.g., string to date)
+- Aggregate data with custom logic beyond standard functions
+- Filter results based on computed conditions (only available with QUANTITATIVE and TOP filters)
+- Calculate ratios or derived metrics
+- Perform analysis and the required data is not present in any existing field
+- Transform values during visualization
+- Quickly categorize data into custom groups
+
+**Avoid calculations if you can achieve the same result by:**
+- Applying standard aggregation functions (SUM, AVG, COUNT, etc.) to existing fields
+- Combining existing fields and filters together
+
+Note: Calculated Fields created as part of a query cannot be referenced in other calculations or filters.
 
 ## Error Prevention and Data Management
 

@@ -2,11 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { BoundedContext, getConfig } from '../../config.js';
+import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { View } from '../../sdks/tableau/types/view.js';
 import { Server } from '../../server.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, Tool } from '../tool.js';
@@ -66,32 +65,25 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { filter, pageSize, limit },
-      { requestId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateViewsFilterString(filter) : undefined;
 
       return await listViewsTool.logAndExecute({
-        requestId,
-        authInfo,
+        extra,
         args: {},
         callback: async () => {
           return new Ok(
             await useRestApi({
-              config,
-              requestId,
-              server,
+              ...extra,
               jwtScopes: ['tableau:content:read'],
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
+                const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
                 const views = await paginate({
                   pageConfig: {
                     pageSize,
-                    limit: config.maxResultLimit
-                      ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                    limit: maxResultLimit
+                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
                       : limit,
                   },
                   getDataFn: async (pageConfig) => {
@@ -114,7 +106,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
           );
         },
         constrainSuccessResult: (views) =>
-          constrainViews({ views, boundedContext: config.boundedContext }),
+          constrainViews({ views, boundedContext: configWithOverrides.boundedContext }),
       });
     },
   });
@@ -136,13 +128,17 @@ export function constrainViews({
     };
   }
 
-  const { projectIds, workbookIds } = boundedContext;
+  const { projectIds, workbookIds, tags } = boundedContext;
   if (projectIds) {
     views = views.filter((view) => (view.project?.id ? projectIds.has(view.project.id) : false));
   }
 
   if (workbookIds) {
     views = views.filter((view) => (view.workbook?.id ? workbookIds.has(view.workbook.id) : false));
+  }
+
+  if (tags) {
+    views = views.filter((view) => view.tags?.tag?.some((tag) => tags.has(tag.label)));
   }
 
   if (views.length === 0) {

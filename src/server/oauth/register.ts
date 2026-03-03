@@ -10,7 +10,7 @@ import { isValidRedirectUri } from './isValidRedirectUri.js';
  * secret is required - security comes from PKCE.
  */
 export function register(app: express.Application): void {
-  app.post('/oauth/register', express.json(), (req, res) => {
+  app.post('/oauth2/register', express.json(), (req, res) => {
     const { redirect_uris } = req.body;
 
     const validatedRedirectUris = [];

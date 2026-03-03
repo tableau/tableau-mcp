@@ -68,7 +68,6 @@ jobs:
 
       - name: Build Claude MCP Bundle
         run: |
-          npm run build:manifest:script
           npm run build:manifest
           npm ci --omit=dev
           npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb

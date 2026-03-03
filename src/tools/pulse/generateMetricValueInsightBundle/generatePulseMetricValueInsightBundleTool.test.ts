@@ -1,16 +1,19 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
+import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { PulseInsightBundleType } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { stubDefaultEnvVars } from '../../../testShared.js';
+import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
+import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './generatePulseMetricValueInsightBundleTool.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
 const mocks = vi.hoisted(() => ({
   mockGeneratePulseMetricValueInsightBundle: vi.fn(),
-  mockGetConfig: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -21,10 +24,6 @@ vi.mock('../../../restApiInstance.js', () => ({
       },
     }),
   ),
-}));
-
-vi.mock('../../../config.js', () => ({
-  getConfig: mocks.mockGetConfig,
 }));
 
 describe('getGeneratePulseMetricValueInsightBundleTool', () => {
@@ -113,16 +112,13 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Set default config for existing tests
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
-    mocks.mockGetConfig.mockReturnValue({
-      disableMetadataApiRequests: false,
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: null,
-        workbookIds: null,
-      },
-    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should call generatePulseMetricValueInsightBundle without bundleType and return Ok result', async () => {
@@ -135,7 +131,8 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
       'ban',
     );
     expect(result.isError).toBe(false);
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockBundleRequestResponse);
   });
 
@@ -149,7 +146,8 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
       'springboard',
     );
     expect(result.isError).toBe(false);
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockBundleRequestResponse);
   });
 
@@ -165,7 +163,8 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
         bundleType,
       );
       expect(result.isError).toBe(false);
-      const parsedValue = JSON.parse(result.content[0].text as string);
+      invariant(result.content[0].type === 'text');
+      const parsedValue = JSON.parse(result.content[0].text);
       expect(parsedValue).toEqual(mockBundleRequestResponse);
     },
   );
@@ -184,6 +183,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -193,34 +193,36 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('bundleRequest');
   });
 
   it('should return an error when executing the tool against Tableau Server', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(new Err('tableau-server'));
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Err(new PulseDisabledError('tableau-server', 404)),
+    );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
   });
 
   it('should return an error when Pulse is disabled', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(new Err('pulse-disabled'));
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Err(new PulseDisabledError('pulse-disabled', 400)),
+    );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
   });
 
   it('should return data source not allowed error when datasource is not allowed', async () => {
-    mocks.mockGetConfig.mockReturnValue({
-      boundedContext: {
-        projectIds: null,
-        datasourceIds: new Set(['some-other-datasource-luid']),
-        workbookIds: null,
-      },
-    });
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       [
         'The set of allowed metric insights that can be queried is limited by the server configuration.',
@@ -235,11 +237,6 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   async function getToolResult(bundleType?: PulseInsightBundleType): Promise<CallToolResult> {
     const tool = getGeneratePulseMetricValueInsightBundleTool(new Server());
     const callback = await Provider.from(tool.callback);
-    return await callback(bundleType ? { bundleRequest, bundleType } : { bundleRequest }, {
-      signal: new AbortController().signal,
-      requestId: 'test-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    });
+    return await callback({ bundleRequest, bundleType }, getMockRequestHandlerExtra());
   }
 });

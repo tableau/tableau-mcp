@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { projectSchema } from './project.js';
+import { tagsSchema } from './tags.js';
 import { viewSchema } from './view.js';
 
 export const workbookSchema = z.object({
@@ -12,7 +13,7 @@ export const workbookSchema = z.object({
   project: projectSchema.optional(),
   showTabs: z.coerce.boolean(),
   defaultViewId: z.string().optional(),
-  tags: z.object({ tag: z.array(z.object({ label: z.string() })).optional() }),
+  tags: tagsSchema,
   views: z.optional(
     z.object({
       view: z.array(viewSchema),

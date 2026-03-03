@@ -2,11 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { BoundedContext, getConfig } from '../../config.js';
+import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
-import { getTableauAuthInfo } from '../../server/oauth/getTableauAuthInfo.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, Tool } from '../tool.js';
@@ -63,32 +62,28 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async (
-      { filter, pageSize, limit },
-      { requestId, authInfo, signal },
-    ): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateWorkbooksFilterString(filter) : undefined;
 
       return await listWorkbooksTool.logAndExecute({
-        requestId,
-        authInfo,
+        extra,
         args: {},
         callback: async () => {
           return new Ok(
             await useRestApi({
-              config,
-              requestId,
-              server,
+              ...extra,
               jwtScopes: ['tableau:content:read'],
-              signal,
-              authInfo: getTableauAuthInfo(authInfo),
               callback: async (restApi) => {
+                const maxResultLimit = configWithOverrides.getMaxResultLimit(
+                  listWorkbooksTool.name,
+                );
+
                 const workbooks = await paginate({
                   pageConfig: {
                     pageSize,
-                    limit: config.maxResultLimit
-                      ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                    limit: maxResultLimit
+                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
                       : limit,
                   },
                   getDataFn: async (pageConfig) => {
@@ -110,7 +105,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
           );
         },
         constrainSuccessResult: (workbooks) =>
-          constrainWorkbooks({ workbooks, boundedContext: config.boundedContext }),
+          constrainWorkbooks({ workbooks, boundedContext: configWithOverrides.boundedContext }),
       });
     },
   });
@@ -133,7 +128,7 @@ export function constrainWorkbooks({
     };
   }
 
-  const { projectIds, workbookIds } = boundedContext;
+  const { projectIds, workbookIds, tags } = boundedContext;
   if (projectIds) {
     workbooks = workbooks.filter((workbook) =>
       workbook.project?.id ? projectIds.has(workbook.project.id) : false,
@@ -142,6 +137,12 @@ export function constrainWorkbooks({
 
   if (workbookIds) {
     workbooks = workbooks.filter((workbook) => workbookIds.has(workbook.id));
+  }
+
+  if (tags) {
+    workbooks = workbooks.filter((workbook) =>
+      workbook.tags?.tag?.some((tag) => tags.has(tag.label)),
+    );
   }
 
   if (workbooks.length === 0) {
