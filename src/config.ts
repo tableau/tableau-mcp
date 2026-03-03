@@ -300,10 +300,10 @@ export class Config {
           );
         }
       }
-    }
 
-    if (this.transport === 'stdio') {
-      throw new Error('TRANSPORT must be "http" when OAUTH_ISSUER is set');
+      if (this.transport === 'stdio') {
+        throw new Error('TRANSPORT must be "http" when OAUTH_ISSUER is set');
+      }
     }
 
     this.maxRequestTimeoutMs = parseNumber(maxRequestTimeoutMs, {
