@@ -1,13 +1,13 @@
 import { NextFunction, RequestHandler, Response } from 'express';
 import { z } from 'zod';
 
-import { getConfig } from '../config';
+import { getConfig, TEN_MINUTES_IN_MS } from '../config';
 import { RestApi } from '../sdks/tableau/restApi';
+import { ExpiringMap } from '../utils/expiringMap';
 import { getSupportedMcpScopes } from './oauth/scopes';
 import { AuthenticatedRequest } from './oauth/types';
 
 export const X_TABLEAU_AUTH_HEADER = 'x-tableau-auth';
-export const X_TABLEAU_USER_ID_HEADER = 'x-tableau-user-id';
 
 export const passthroughAuthInfoSchema = z.object({
   type: z.literal('Passthrough'),
@@ -20,6 +20,10 @@ export const passthroughAuthInfoSchema = z.object({
 
 export type PassthroughAuthInfo = z.infer<typeof passthroughAuthInfoSchema>;
 
+const passthroughAuthInfoCache = new ExpiringMap<string, PassthroughAuthInfo>({
+  defaultExpirationTimeMs: TEN_MINUTES_IN_MS,
+});
+
 export function passthroughMiddleware(): RequestHandler {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     const tableauAccessToken: string =
@@ -30,39 +34,41 @@ export function passthroughMiddleware(): RequestHandler {
       return;
     }
 
-    const {
-      server,
-      maxRequestTimeoutMs,
-      oauth: { enforceScopes },
-    } = getConfig();
+    const config = getConfig();
+    let passthroughAuthInfo = passthroughAuthInfoCache.get(tableauAccessToken);
+    if (!passthroughAuthInfo) {
+      const { server, maxRequestTimeoutMs } = config;
 
-    const restApi = new RestApi(getConfig().server, {
-      maxRequestTimeoutMs,
-    });
-
-    restApi.setCredentials(tableauAccessToken, 'unknown user id');
-    const sessionResult = await restApi.authenticatedServerMethods.getCurrentServerSession();
-    if (!sessionResult.isOk()) {
-      res.status(401).json({
-        error: 'invalid_token',
-        error_description: sessionResult.error,
+      const restApi = new RestApi(server, {
+        maxRequestTimeoutMs,
       });
-      return;
-    }
 
-    const passthroughAuthInfo: PassthroughAuthInfo = {
-      type: 'Passthrough',
-      username: sessionResult.value.user.name,
-      userId: sessionResult.value.user.id,
-      server,
-      siteId: sessionResult.value.site.id,
-      raw: tableauAccessToken,
-    };
+      restApi.setCredentials(tableauAccessToken, 'unknown user id');
+      const sessionResult = await restApi.authenticatedServerMethods.getCurrentServerSession();
+      if (!sessionResult.isOk()) {
+        res.status(401).json({
+          error: 'invalid_token',
+          error_description: sessionResult.error,
+        });
+        return;
+      }
+
+      passthroughAuthInfo = {
+        type: 'Passthrough',
+        username: sessionResult.value.user.name,
+        userId: sessionResult.value.user.id,
+        server,
+        siteId: sessionResult.value.site.id,
+        raw: tableauAccessToken,
+      };
+
+      passthroughAuthInfoCache.set(tableauAccessToken, passthroughAuthInfo);
+    }
 
     req.auth = {
       token: 'passthrough',
       clientId: 'passthrough',
-      scopes: enforceScopes ? getSupportedMcpScopes() : [],
+      scopes: config.oauth.enforceScopes ? getSupportedMcpScopes() : [],
       extra: passthroughAuthInfo,
     };
     next();
