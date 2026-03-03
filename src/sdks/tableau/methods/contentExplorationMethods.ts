@@ -44,10 +44,7 @@ export default class ContentExplorationMethods extends AuthenticatedMethods<
         delete queries[key as keyof typeof queries];
       }
     });
-    const response = await this._apiClient.searchContent({
-      queries,
-      ...this.authHeader,
-    });
+    const response = await this._apiClient.searchContent({ queries, ...this.authHeader });
     return response.hits;
   };
 }
