@@ -82,6 +82,12 @@ The MCP transport type to use for the server.
 The target Tableau site for OAuth. The user must sign in to this site unless
 [`OAUTH_LOCK_SITE`](#oauth_lock_site) is `false`.
 
+- Use the site's **Content URL** (not the display name). You can find this in the site URL or in the
+  Tableau Server/Cloud admin settings.
+- The Content URL may differ from the display name (e.g., Content URL `Internal` vs display name
+  `[INTERNAL] My Company`). Either value will be accepted when verifying the site, but Content URL
+  is recommended since it is used in Tableau's OAuth flow.
+
 <hr />
 
 ### `OAUTH_LOCK_SITE`

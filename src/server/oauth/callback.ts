@@ -123,22 +123,28 @@ export function callback(
         return;
       }
 
-      if (
-        config.oauth.lockSite &&
-        sessionResult.value.site.name !== config.siteName &&
-        !(sessionResult.value.site.name === 'Default' && !config.siteName)
-      ) {
-        const sentences = [
-          `User signed in to site: ${sessionResult.value.site.name || 'Default'}.`,
-          `Expected site: ${config.siteName || 'Default'}.`,
-          `Please reconnect your client and choose the [${config.siteName || 'Default'}] site in the site picker if prompted.`,
-        ];
+      if (config.oauth.lockSite) {
+        const { name: siteName, contentUrl: siteContentUrl } = sessionResult.value.site;
+        const expected = config.siteName || 'Default';
+        const siteMatches =
+          siteName === config.siteName ||
+          siteContentUrl === config.siteName ||
+          (siteName === 'Default' && !config.siteName);
 
-        res.status(400).json({
-          error: 'invalid_request',
-          error_description: sentences.join(' '),
-        });
-        return;
+        if (!siteMatches) {
+          const signedIntoSite = siteContentUrl || siteName || 'Default';
+          const sentences = [
+            `User signed in to site: ${signedIntoSite}.`,
+            `Expected site: ${expected}.`,
+            `Please reconnect your client and choose the [${expected}] site in the site picker if prompted.`,
+          ];
+
+          res.status(400).json({
+            error: 'invalid_request',
+            error_description: sentences.join(' '),
+          });
+          return;
+        }
       }
 
       // Generate authorization code
