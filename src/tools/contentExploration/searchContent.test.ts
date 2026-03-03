@@ -166,7 +166,7 @@ describe('searchContentTool', () => {
       terms: 'dashboard',
       page: 0,
       limit: 100,
-      orderBy: 'hitsTotal:desc',
+      order_by: 'hitsTotal:desc',
       filter: undefined,
     });
   });
@@ -186,7 +186,7 @@ describe('searchContentTool', () => {
       terms: 'dashboard',
       page: 0,
       limit: 100,
-      orderBy: 'hitsTotal:desc,hitsSmallSpanTotal:asc',
+      order_by: 'hitsTotal:desc,hitsSmallSpanTotal:asc',
       filter: undefined,
     });
   });
@@ -202,7 +202,7 @@ describe('searchContentTool', () => {
       terms: undefined,
       page: 0,
       limit: 100,
-      orderBy: undefined,
+      order_by: undefined,
       filter: 'type:in:[workbook,datasource]',
     });
   });
@@ -295,7 +295,7 @@ describe('searchContentTool', () => {
       terms: undefined,
       page: 0,
       limit: 100,
-      orderBy: 'downstreamWorkbookCount:desc',
+      order_by: 'downstreamWorkbookCount:desc',
       filter: 'type:eq:table',
     });
   });
@@ -312,7 +312,7 @@ describe('searchContentTool', () => {
       terms: undefined,
       page: 0,
       limit: 100,
-      orderBy: 'downstreamWorkbookCount:desc',
+      order_by: 'downstreamWorkbookCount:desc',
       filter: 'type:eq:database',
     });
   });

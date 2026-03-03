@@ -36,7 +36,7 @@ export default class ContentExplorationMethods extends AuthenticatedMethods<
     terms?: string;
     page?: number;
     limit?: number;
-    orderBy?: string;
+    order_by?: string;
     filter?: string;
   }): Promise<SearchContentResponse> => {
     Object.entries(queries).forEach(([key, value]) => {
