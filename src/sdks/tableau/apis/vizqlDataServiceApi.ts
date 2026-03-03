@@ -64,13 +64,7 @@ const fieldMetadataSchema = z
   .passthrough();
 
 // Parameter schemas
-const parameterValueSchema = z.union([
-  z.number(),
-  z.string(),
-  z.boolean(),
-  z.null(),
-  z.record(z.unknown()),
-]);
+const parameterValueSchema = z.union([z.number(), z.string(), z.boolean(), z.null()]);
 
 const parameterBaseSchema = z.object({
   parameterCaption: z.string(),
@@ -84,7 +78,9 @@ const parameterSchema = z.discriminatedUnion('parameterType', [
   parameterBaseSchema
     .extend({
       parameterType: z.literal('LIST'),
-      members: z.array(parameterValueSchema),
+      members: z.array(
+        parameterValueSchema.or(z.object({ value: parameterValueSchema, alias: z.string() })),
+      ),
     })
     .strict(),
   parameterBaseSchema
