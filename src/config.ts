@@ -54,6 +54,7 @@ export class Config {
   tableauServerVersionCheckIntervalInHours: number;
   mcpSiteSettingsCheckIntervalInMinutes: number;
   enableMcpSiteSettings: boolean;
+  enablePassthroughAuth: boolean;
   oauth: {
     enabled: boolean;
     embeddedAuthzServer: boolean;
@@ -113,6 +114,7 @@ export class Config {
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: mcpSiteSettingsCheckIntervalInMinutes,
       ENABLE_MCP_SITE_SETTINGS: enableMcpSiteSettings,
+      ENABLE_PASSTHROUGH_AUTH: enablePassthroughAuth,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_EMBEDDED_AUTHZ_SERVER: oauthEmbeddedAuthzServer,
       OAUTH_ISSUER: oauthIssuer,
@@ -175,6 +177,7 @@ export class Config {
     );
 
     this.enableMcpSiteSettings = enableMcpSiteSettings === 'true';
+    this.enablePassthroughAuth = enablePassthroughAuth === 'true';
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';
     const enforceScopes = !disableScopes;

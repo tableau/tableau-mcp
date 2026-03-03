@@ -405,6 +405,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  ENABLE_PASSTHROUGH_AUTH: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable Passthrough Auth',
+    description: 'Enable passthrough auth.',
+    required: false,
+    sensitive: false,
+  },
   DANGEROUSLY_DISABLE_OAUTH: {
     includeInUserConfig: false,
     type: 'boolean',

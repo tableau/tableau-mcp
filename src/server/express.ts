@@ -15,6 +15,7 @@ import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
+import { passthroughMiddleware } from './passthroughMiddleware.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
 
@@ -52,12 +53,15 @@ export async function startExpressServer({
     app.set('trust proxy', config.trustProxyConfig);
   }
 
-  const middleware: Array<RequestHandler> = [handlePingRequest];
+  const middleware: Array<RequestHandler> = [handlePingRequest, validateProtocolVersion];
+  if (config.enablePassthroughAuth) {
+    middleware.push(passthroughMiddleware());
+  }
+
   if (config.oauth.enabled) {
     const oauthProvider = new OAuthProvider();
     oauthProvider.setupRoutes(app);
     middleware.push(oauthProvider.authMiddleware);
-    middleware.push(validateProtocolVersion);
   }
 
   const path = `/${basePath}`;
