@@ -37,14 +37,25 @@ export default class ContentExplorationMethods extends AuthenticatedMethods<
     page?: number;
     limit?: number;
     orderBy?: string;
+    order_by?: string;
     filter?: string;
   }): Promise<SearchContentResponse> => {
-    Object.entries(queries).forEach(([key, value]) => {
+    const apiQueries = {
+      ...queries,
+      // Tableau Search expects snake_case query key on the wire.
+      order_by: queries.order_by ?? queries.orderBy,
+    };
+    delete apiQueries.orderBy;
+
+    Object.entries(apiQueries).forEach(([key, value]) => {
       if (value === undefined) {
-        delete queries[key as keyof typeof queries];
+        delete apiQueries[key as keyof typeof apiQueries];
       }
     });
-    const response = await this._apiClient.searchContent({ queries, ...this.authHeader });
+    const response = await this._apiClient.searchContent({
+      queries: apiQueries,
+      ...this.authHeader,
+    });
     return response.hits;
   };
 }
