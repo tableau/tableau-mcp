@@ -309,6 +309,10 @@ Filter relative date periods:
 }
 \`\`\`
 
+## Limitations
+- **QUANTITATIVE_NUMERICAL min/max operators are inclusive** - For strictly greater-than or less-than logic, use a small offset (for example, min: 10.01 for > 10, or max: 9.99 for < 10).
+- **MATCH filters cannot apply functions to a field** - Unlike all other filters, which can filter on fields with functions applied to them, MATCH filters can only filter by field name or ad hoc calculations.
+
 ## Example Queries
 
 ### Example 1: Data Profiling Before Large Query
