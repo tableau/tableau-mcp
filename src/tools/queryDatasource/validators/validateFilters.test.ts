@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { MatchFilter } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { validateFilters } from './validateFilters.js';
 
 describe('validateFilters', () => {
@@ -91,7 +90,6 @@ describe('validateFilters', () => {
     const field = { function: 'SUM', calculation: 'SUM(Sales)' } as const;
     expect(() =>
       validateFilters([
-        // @ts-expect-error - This is a test for the type validator
         {
           field,
           filterType: 'SET',
@@ -173,15 +171,14 @@ describe('validateFilters', () => {
     );
   });
 
-  it('should throw if a Set Filter has a calculation', () => {
-    const field = { calculation: 'SUM(Sales)' } as const;
+  it('should not throw if a Set Filter has a calculation', () => {
+    const field = { calculation: 'QUARTER([Order Date])' } as const;
     expect(() =>
       validateFilters([
-        // @ts-expect-error - This is a test for the type validator
         {
           field,
           filterType: 'SET',
-          values: ['A', 'B'],
+          values: ['Q3', 'Q4'],
           context: false,
           exclude: false,
         },
