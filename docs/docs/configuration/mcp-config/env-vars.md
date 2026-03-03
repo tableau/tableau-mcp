@@ -18,9 +18,10 @@ The URL of the Tableau server.
 
 ## `SITE_NAME`
 
-The name of the Tableau site to use.
+The Content URL of the Tableau site to use. This may differ from the site's display name (e.g.,
+Content URL `Internal` vs display name `[INTERNAL] My Company`).
 
-- For Tableau Cloud, specify your site name.
+- For Tableau Cloud, specify your site's Content URL.
 - For Tableau Server, you may leave this value blank to use the default site.
 - Required unless [`AUTH`](#auth) is `oauth`.
 
