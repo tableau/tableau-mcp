@@ -5,6 +5,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -44,7 +45,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
         callback: async () => {
           return await useRestApi({
             ...extra,
-            jwtScopes: ['tableau:insight_definitions_metrics:read'],
+            jwtScopes: getRequiredApiScopesForTool(listPulseMetricsFromMetricDefinitionIdTool.name),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricsFromMetricDefinitionId(
                 pulseMetricDefinitionID,

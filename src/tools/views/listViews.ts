@@ -6,6 +6,7 @@ import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { View } from '../../sdks/tableau/types/view.js';
 import { Server } from '../../server.js';
+import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, Tool } from '../tool.js';
@@ -76,7 +77,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
           return new Ok(
             await useRestApi({
               ...extra,
-              jwtScopes: ['tableau:content:read'],
+              jwtScopes: getRequiredApiScopesForTool(listViewsTool.name),
               callback: async (restApi) => {
                 const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
                 const views = await paginate({

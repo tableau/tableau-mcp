@@ -4,6 +4,7 @@ import { BoundedContext } from '../../../overridableConfig.js';
 import { RestApiArgs, useRestApi } from '../../../restApiInstance.js';
 import { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { ConstrainedResult, Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -39,7 +40,7 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
         callback: async () => {
           return await useRestApi({
             ...extra,
-            jwtScopes: ['tableau:metric_subscriptions:read'],
+            jwtScopes: getRequiredApiScopesForTool(listPulseMetricSubscriptionsTool.name),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
             },
@@ -92,7 +93,7 @@ export async function constrainPulseMetricSubscriptions({
   try {
     const metricsResult = await useRestApi({
       ...restApiArgs,
-      jwtScopes: ['tableau:insight_metrics:read'],
+      jwtScopes: getRequiredApiScopesForTool('list-pulse-metric-subscriptions'),
       callback: async (restApi) => {
         return await restApi.pulseMethods.listPulseMetricsFromMetricIds(
           subscriptions.map((subscription) => subscription.metric_id),

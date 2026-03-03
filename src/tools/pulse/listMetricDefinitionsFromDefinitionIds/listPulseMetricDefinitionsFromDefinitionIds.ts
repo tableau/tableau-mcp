@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { useRestApi } from '../../../restApiInstance.js';
 import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -62,7 +63,9 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
         callback: async () => {
           return await useRestApi({
             ...extra,
-            jwtScopes: ['tableau:insight_definitions_metrics:read'],
+            jwtScopes: getRequiredApiScopesForTool(
+              listPulseMetricDefinitionsFromDefinitionIdsTool.name,
+            ),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricDefinitionsFromMetricDefinitionIds(
                 metricDefinitionIds,

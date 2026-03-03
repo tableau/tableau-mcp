@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
+import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
@@ -43,7 +44,7 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
         callback: async () => {
           return await useRestApi({
             ...extra,
-            jwtScopes: ['tableau:insight_metrics:read'],
+            jwtScopes: getRequiredApiScopesForTool(listPulseMetricsFromMetricIdsTool.name),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricsFromMetricIds(metricIds);
             },

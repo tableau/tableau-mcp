@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { useRestApi } from '../../restApiInstance.js';
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { Server } from '../../server.js';
+import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -134,7 +135,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
 
           return await useRestApi({
             ...extra,
-            jwtScopes: ['tableau:content:read', 'tableau:viz_data_service:read'],
+            jwtScopes: getRequiredApiScopesForTool(getDatasourceMetadataTool.name),
             callback: async (restApi) => {
               // Fetching metadata from VizQL Data Service API.
               const readMetadataResult = await restApi.vizqlDataServiceMethods.readMetadata({

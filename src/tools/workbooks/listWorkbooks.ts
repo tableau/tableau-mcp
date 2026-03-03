@@ -6,6 +6,7 @@ import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
+import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, Tool } from '../tool.js';
@@ -73,7 +74,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
           return new Ok(
             await useRestApi({
               ...extra,
-              jwtScopes: ['tableau:content:read'],
+              jwtScopes: getRequiredApiScopesForTool(listWorkbooksTool.name),
               callback: async (restApi) => {
                 const maxResultLimit = configWithOverrides.getMaxResultLimit(
                   listWorkbooksTool.name,
