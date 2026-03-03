@@ -82,6 +82,12 @@ The MCP transport type to use for the server.
 The target Tableau site for OAuth. The user must sign in to this site unless
 [`OAUTH_LOCK_SITE`](#oauth_lock_site) is `false`.
 
+- Use the site's **Content URL** (not the display name). You can find this in the site URL or in the
+  Tableau Server/Cloud admin settings.
+- The Content URL may differ from the display name (e.g., Content URL `Internal` vs display name
+  `[INTERNAL] My Company`). Either value will be accepted when verifying the site, but Content URL
+  is recommended since it is used in Tableau's OAuth flow.
+
 <hr />
 
 ### `OAUTH_LOCK_SITE`
@@ -151,20 +157,18 @@ See [TRUST_PROXY_CONFIG](http-server#trust_proxy_config) for details.
 
 ### `OAUTH_CLIENT_ID_SECRET_PAIRS`
 
-A comma-separated list of client ID and secret pairs to be used for OAuth clients that require the
-use of the client credentials grant type.
+A comma-separated list of client ID and secret pairs to be used for confidential OAuth clients that
+provide client credentials during token requests.
 
 - Optional.
 - Example: `client1:secret1,client2:secret2`
 - Client IDs and secrets must be unique and cannot contain colons or commas.
 - The `/oauth2/token` endpoint accepts client credentials in the request body or the authorization
   header. If both are provided, the request body takes precedence.
-- When an access token is requested with the client credentials grant type:
-  - No refresh token is issued to the client.
-  - `AUTH` must not be set to `oauth` since there is no Tableau user associated with the access
-    token. The user context must come from the user who owns the
-    [Personal Access Token](authentication/pat) or from the value of the
-    [`JWT_SUB_CLAIM`](authentication/direct-trust#jwt_sub_claim) environment variable.
+- When unspecified, in the authorization server metadata:
+  - The `grant_types_supported` field will not include `client_credentials`.
+  - The `token_endpoint_auth_methods_supported` field will not include `client_secret_basic` or
+    `client_secret_post`.
 
 Example `/oauth2/token` request body:
 
@@ -270,13 +274,23 @@ References:
 
 <hr />
 
+### `OAUTH_EMBEDDED_AUTHZ_SERVER`
+
+A hint that `OAUTH_ISSUER` points at the embedded OAuth authorization server (authorize, token,
+callback, register routes). When `false`, the issuer is an external authorization server (e.g.
+Tableau); only `.well-known` endpoints are exposed and JWE key/redirect URI constraints are skipped.
+
+- Default: `true`
+
+<hr />
+
 ### `ADVERTISE_API_SCOPES`
 
 Include Tableau API scopes in OAuth metadata and scope challenges.
 
-- Default: `false` (self-hosted)
-- When `true` (Falcon), `scopes_supported` includes MCP + API scopes and scope challenges may
-  include API scopes for step-up.
+- Default: `false`
+- When `true`, `scopes_supported` includes MCP + API scopes and scope challenges may include API
+  scopes for step-up.
 
 <hr />
 

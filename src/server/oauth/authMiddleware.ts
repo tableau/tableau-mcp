@@ -34,7 +34,7 @@ import { AuthenticatedRequest } from './types.js';
  *
  * @returns Express middleware function
  */
-export function authMiddleware(privateKey?: KeyObject): RequestHandler {
+export function authMiddleware(privateKey: KeyObject | null): RequestHandler {
   return async (
     req: AuthenticatedRequest,
     res: express.Response,
@@ -80,7 +80,11 @@ export function authMiddleware(privateKey?: KeyObject): RequestHandler {
     }
 
     const token = authHeader.slice(7);
-    const result = await verifyAccessToken(token, privateKey);
+    const config = getConfig();
+    const result =
+      config.oauth.embeddedAuthzServer && privateKey
+        ? await verifyEmbeddedAccessToken(token, privateKey)
+        : verifyExternalAccessToken(token);
 
     if (result.isErr()) {
       // For SSE requests (GET), provide proper SSE error response
@@ -217,29 +221,24 @@ function getToolNamesFromRequestBody(body: unknown): ToolName[] {
 }
 
 /**
- * Verifies JWE access token and extracts credentials
+ * Verifies JWT access token from external OAuth issuer (e.g. Tableau/George's auth server)
  *
- * Decrypts and validates JWE signature and expiration.
- * Extracts access/refresh tokens for API calls.
- *
- * @param token - JWT access token from Authorization header
- * @param jwePrivateKey - Private key for decrypting the token
- *
- * @returns AuthInfo with user details and tokens
+ * Decodes JWT and validates issuer and expiration.
+ * Reuses raw token for REST API Bearer authorization.
  */
-async function verifyAccessToken(
-  token: string,
-  jwePrivateKey: KeyObject | undefined,
-): Promise<Result<AuthInfo, string>> {
+function verifyExternalAccessToken(token: string): Result<AuthInfo, string> {
   const config = getConfig();
 
-  if (config.oauth.issuer === 'https://sso.online.dev.tabint.net') {
+  try {
     const [_header, payload, _signature] = token.split('.');
+    if (!payload) {
+      return new Err('Invalid or expired access token');
+    }
     const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
 
-    const tableauAccessToken = tableauBearerTokenSchema.safeParse(decoded);
-    if (!tableauAccessToken.success) {
-      return Err(`Invalid access token: ${fromError(tableauAccessToken.error).toString()}`);
+    const parsed = tableauBearerTokenSchema.safeParse(decoded);
+    if (!parsed.success) {
+      return Err(`Invalid access token: ${fromError(parsed.error).toString()}`);
     }
 
     const {
@@ -249,7 +248,7 @@ async function verifyAccessToken(
       scope,
       'https://tableau.com/siteId': siteId,
       'https://tableau.com/targetUrl': targetUrl,
-    } = tableauAccessToken.data;
+    } = parsed.data;
 
     if (iss !== config.oauth.issuer || exp < Math.floor(Date.now() / 1000)) {
       return new Err('Invalid or expired access token');
@@ -270,10 +269,25 @@ async function verifyAccessToken(
       expiresAt: exp,
       extra: tableauAuthInfo,
     });
+  } catch {
+    return new Err('Invalid or expired access token');
   }
+}
+
+/**
+ * Verifies JWE access token from embedded OAuth server
+ *
+ * Decrypts and validates JWE signature and expiration.
+ * Extracts access/refresh tokens for API calls.
+ */
+async function verifyEmbeddedAccessToken(
+  token: string,
+  jwePrivateKey: KeyObject,
+): Promise<Result<AuthInfo, string>> {
+  const config = getConfig();
 
   try {
-    const { plaintext } = await compactDecrypt(token, jwePrivateKey!);
+    const { plaintext } = await compactDecrypt(token, jwePrivateKey);
     const payload = JSON.parse(new TextDecoder().decode(plaintext));
 
     const mcpAccessToken = mcpAccessTokenUserOnlySchema.safeParse(payload);

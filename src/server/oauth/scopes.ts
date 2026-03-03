@@ -141,10 +141,6 @@ export function getSupportedScopes({ includeApiScopes }: { includeApiScopes: boo
   return includeApiScopes ? [...supportedMcpScopes, ...supportedApiScopes] : supportedMcpScopes;
 }
 
-export function isTableauApiScope(scope: string): scope is TableauApiScope {
-  return supportedApiScopes.some((supported) => supported === scope);
-}
-
 /**
  * Parses a space-separated scope string into an array of scopes
  *

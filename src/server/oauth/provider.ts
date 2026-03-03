@@ -29,13 +29,16 @@ export class OAuthProvider {
   private readonly authorizationCodes = new Map<string, AuthorizationCode>();
   private readonly refreshTokens = new Map<string, RefreshTokenData>();
 
-  private readonly privateKey: KeyObject | undefined;
-  private readonly publicKey: KeyObject | undefined;
+  private readonly privateKey: KeyObject | null;
+  private readonly publicKey: KeyObject | null;
 
   constructor() {
-    if (this.config.oauth.issuer !== 'https://sso.online.dev.tabint.net') {
+    if (this.config.oauth.embeddedAuthzServer) {
       this.privateKey = this.getPrivateKey();
       this.publicKey = createPublicKey(this.privateKey);
+    } else {
+      this.privateKey = null;
+      this.publicKey = null;
     }
   }
 
@@ -44,15 +47,6 @@ export class OAuthProvider {
   }
 
   setupRoutes(app: express.Application): void {
-    if (this.config.oauth.issuer === 'https://sso.online.dev.tabint.net') {
-      // .well-known/oauth-authorization-server
-      oauthAuthorizationServer(app);
-
-      // .well-known/oauth-protected-resource
-      oauthProtectedResource(app);
-      return;
-    }
-
     // .well-known/oauth-authorization-server
     oauthAuthorizationServer(app);
 
@@ -68,8 +62,10 @@ export class OAuthProvider {
     // /Callback
     callback(app, this.pendingAuthorizations, this.authorizationCodes);
 
-    // oauth2/token
-    token(app, this.authorizationCodes, this.refreshTokens, this.publicKey!);
+    // oauth2/token (only when embedded authz server - we need publicKey for JWE)
+    if (this.publicKey) {
+      token(app, this.authorizationCodes, this.refreshTokens, this.publicKey);
+    }
   }
 
   private getPrivateKey(): KeyObject {

@@ -41,6 +41,8 @@ export async function exchangeAuthzCodeForAccessToken(app: express.Application):
     code,
     code_verifier: codeChallenge,
     redirect_uri: 'http://localhost:3000',
+    client_id: 'test-client-id',
+    client_secret: 'test-client-secret',
   });
 
   expect(tokenResponse.status).toBe(200);
@@ -50,7 +52,7 @@ export async function exchangeAuthzCodeForAccessToken(app: express.Application):
     refresh_token: expect.any(String),
     token_type: 'Bearer',
     expires_in: 3600,
-    scope: '',
+    scope: expect.stringMatching(/tableau:mcp:/),
   });
 
   return tokenResponse.body;

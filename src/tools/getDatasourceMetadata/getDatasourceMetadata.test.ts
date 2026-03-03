@@ -7,6 +7,7 @@ import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
@@ -583,9 +584,7 @@ describe('getDatasourceMetadataTool', () => {
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(
-      'requestId: test-request-id, error: ReadMetadata API Error',
-    );
+    expect(result.content[0].text).toBe('requestId: 2, error: ReadMetadata API Error');
   });
 
   it('should handle listFields API errors gracefully', async () => {
@@ -628,9 +627,7 @@ describe('getDatasourceMetadataTool', () => {
     expect(result.isError).toBe(true);
     // Should fail with the first error (readMetadata is called first)
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(
-      'requestId: test-request-id, error: ReadMetadata API Error',
-    );
+    expect(result.content[0].text).toBe('requestId: 2, error: ReadMetadata API Error');
   });
 
   it('should return only readMetadata result when disableMetadataApiRequests is true and readMetadata succeeds', async () => {
@@ -690,9 +687,7 @@ describe('getDatasourceMetadataTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(
-      'requestId: test-request-id, error: ReadMetadata API Error',
-    );
+    expect(result.content[0].text).toBe('requestId: 2, error: ReadMetadata API Error');
 
     // Verify readMetadata was called but graphql was not
     expect(mocks.mockReadMetadata).toHaveBeenCalledWith({
@@ -734,13 +729,5 @@ describe('getDatasourceMetadataTool', () => {
 async function getToolResult(): Promise<CallToolResult> {
   const getDatasourceMetadataTool = getGetDatasourceMetadataTool(new Server());
   const callback = await Provider.from(getDatasourceMetadataTool.callback);
-  return await callback(
-    { datasourceLuid: 'test-luid' },
-    {
-      signal: new AbortController().signal,
-      requestId: 'test-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    },
-  );
+  return await callback({ datasourceLuid: 'test-luid' }, getMockRequestHandlerExtra());
 }

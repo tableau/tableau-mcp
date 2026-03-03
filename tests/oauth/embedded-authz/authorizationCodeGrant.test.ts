@@ -60,6 +60,8 @@ describe('authorization code grant type', () => {
         code: 'invalid-code',
         code_verifier: 'test-code-challenge',
         redirect_uri: 'http://localhost:3000',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
       });
 
       expect(tokenResponse.status).toBe(400);
@@ -111,6 +113,8 @@ describe('authorization code grant type', () => {
         code,
         code_verifier: 'invalid-code-verifier',
         redirect_uri: 'http://localhost:3000',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
       });
 
       expect(tokenResponse.status).toBe(400);

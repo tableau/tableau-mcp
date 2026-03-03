@@ -5,6 +5,7 @@ import { stubDefaultEnvVars } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getGetViewImageTool } from './getViewImage.js';
 import { mockView } from './mockView.js';
 
@@ -105,11 +106,6 @@ async function getToolResult(params: { viewId: string }): Promise<CallToolResult
   const callback = await Provider.from(getViewImageTool.callback);
   return await callback(
     { viewId: params.viewId, width: undefined, height: undefined },
-    {
-      signal: new AbortController().signal,
-      requestId: 'test-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    },
+    getMockRequestHandlerExtra(),
   );
 }
