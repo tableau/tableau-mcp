@@ -64,7 +64,13 @@ const fieldMetadataSchema = z
   .passthrough();
 
 // Parameter schemas
-const parameterValueSchema = z.union([z.number(), z.string(), z.boolean(), z.null()]);
+const parameterValueSchema = z.union([
+  z.number(),
+  z.string(),
+  z.boolean(),
+  z.null(),
+  z.record(z.unknown()),
+]);
 
 const parameterBaseSchema = z.object({
   parameterCaption: z.string(),
