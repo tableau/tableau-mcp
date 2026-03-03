@@ -1,4 +1,8 @@
-import axios, { AxiosRequestConfig, AxiosResponse, isAxiosError } from 'axios';
+import axios, {
+  AxiosRequestConfig,
+  AxiosResponse,
+  isAxiosError,
+} from '../../node_modules/axios/index.js';
 
 export function getStringResponseHeader(
   headers: AxiosResponse['headers'],
