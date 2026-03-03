@@ -64,6 +64,7 @@ export default defineConfig({
         SERVER: 'https://dataplane1.tableau.sfdc-3vx9f4.svc.sfdcfc.net',
         OAUTH_ISSUER: 'https://sso.online.dev.tabint.net',
         ADVERTISE_API_SCOPES: 'true',
+        OAUTH_EMBEDDED_AUTHZ_SERVER: 'false',
       },
     },
   ],
