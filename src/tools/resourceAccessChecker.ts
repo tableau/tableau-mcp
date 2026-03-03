@@ -3,7 +3,6 @@ import { useRestApi } from '../restApiInstance.js';
 import { DataSource } from '../sdks/tableau/types/dataSource.js';
 import { View } from '../sdks/tableau/types/view.js';
 import { Workbook } from '../sdks/tableau/types/workbook.js';
-import { getRequiredApiScopesForTool } from '../server/oauth/scopes.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getConfigWithOverrides } from '../utils/mcpSiteSettings.js';
 import { TableauRequestHandlerExtra } from './toolContext.js';
