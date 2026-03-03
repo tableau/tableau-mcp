@@ -216,10 +216,6 @@ function getQueryDatasourceRules(tableauServerVersion: ProductVersion): ToolRule
     productVersion: tableauServerVersion,
     mappings: {
       '2026.1.0': {},
-      '2025.3.0': {
-        dontSpecifyRowLimits: true,
-        restrictFunctionsAndCalculationsInFilters: true,
-      },
       default: {
         dontSpecifyRowLimits: true,
         restrictFunctionsAndCalculationsInFilters: true,
