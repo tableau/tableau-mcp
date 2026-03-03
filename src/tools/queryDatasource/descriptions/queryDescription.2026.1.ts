@@ -263,6 +263,16 @@ Filter by specific values:
 }
 \`\`\`
 
+### MATCH Filters
+Filter strings using patterns:
+\`\`\`json
+{
+  "field": {"fieldCaption": "City"},
+  "filterType": "MATCH",
+  "startsWith": "San"
+}
+\`\`\`
+
 ### TOP Filters
 Get top/bottom N records by a measure:
 \`\`\`json

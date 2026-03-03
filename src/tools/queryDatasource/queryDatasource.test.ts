@@ -3,8 +3,13 @@ import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
 import { queryOutputSchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
-import { stubDefaultEnvVars, testProductVersion } from '../../testShared.js';
+import {
+  stubDefaultEnvVars,
+  testProductVersion,
+  testProductVersion2025_3,
+} from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
@@ -117,6 +122,39 @@ describe('queryDatasourceTool', () => {
     mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
 
     const result = await getToolResult({ limit: 100 });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual(mockVdsResponses.success);
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
+      datasource: {
+        datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+      },
+      options: {
+        debug: true,
+        disaggregate: false,
+        returnFormat: 'OBJECTS',
+        rowLimit: 100,
+      },
+      query: {
+        fields: [
+          {
+            fieldCaption: 'Category',
+          },
+          {
+            fieldCaption: 'Profit',
+            function: 'SUM',
+            sortDirection: 'DESC',
+          },
+        ],
+      },
+    });
+  });
+
+  it('should not query the datasource with a limit on 2025.3 or earlier', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+
+    const result = await getToolResult({ limit: 100, productVersion: testProductVersion2025_3 });
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -525,8 +563,17 @@ describe('queryDatasourceTool', () => {
   });
 });
 
-async function getToolResult({ limit }: { limit?: number } = {}): Promise<CallToolResult> {
-  const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+async function getToolResult({
+  limit,
+  productVersion,
+}: {
+  limit?: number;
+  productVersion?: ProductVersion;
+} = {}): Promise<CallToolResult> {
+  const queryDatasourceTool = getQueryDatasourceTool(
+    new Server(),
+    productVersion ?? testProductVersion,
+  );
   const callback = await Provider.from(queryDatasourceTool.callback);
   return await callback(
     {
