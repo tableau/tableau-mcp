@@ -9,6 +9,7 @@ export const mcpAuthorizeSchema = z.object({
   code_challenge: requiredString('code_challenge'),
   code_challenge_method: requiredString('code_challenge_method'),
   state: z.string().optional(),
+  scope: z.string().optional(),
 });
 
 export const mcpTokenSchema = z
@@ -43,13 +44,15 @@ export const mcpTokenSchema = z
       // Optional because client/secret pair may be provided in the request body instead of the query string
       client_id: z.string().optional(),
       client_secret: z.string().optional(),
+      scope: z.string().optional(),
     }),
   )
   .transform((data) => {
-    const { client_id, client_secret } = data;
+    const { client_id, client_secret, scope } = data;
     const clientIdSecretPair = {
       clientId: client_id,
       clientSecret: client_secret,
+      scope,
     };
 
     if (data.grant_type === 'authorization_code') {
@@ -91,6 +94,7 @@ export const mcpAccessTokenUserOnlySchema = z.object({
   tableauServer: requiredString('tableauServer'),
   // Optional because there may not be a user associated with the access token, e.g. for client credentials grant type
   tableauUserId: z.string().optional(),
+  scope: z.string().optional(),
 });
 
 export const mcpAccessTokenSchema = mcpAccessTokenUserOnlySchema.extend({
@@ -101,18 +105,36 @@ export const mcpAccessTokenSchema = mcpAccessTokenUserOnlySchema.extend({
   tableauUserId: requiredString('tableauUserId'),
 });
 
+export const tableauBearerTokenSchema = z.object({
+  iss: requiredString('iss'),
+  aud: requiredString('aud'),
+  exp: z.number().int().nonnegative(),
+  sub: requiredString('sub'),
+  scope: requiredString('scope'),
+  'https://tableau.com/siteId': requiredString('https://tableau.com/siteId'),
+  'https://tableau.com/targetUrl': requiredString('https://tableau.com/targetUrl'),
+});
+
 export type McpAccessToken = z.infer<typeof mcpAccessTokenSchema>;
 export type McpAccessTokenSubOnly = z.infer<typeof mcpAccessTokenUserOnlySchema>;
 
-export const tableauAuthInfoSchema = z
-  .object({
+export const tableauAuthInfoSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('X-Tableau-Auth'),
     username: z.string(),
-    userId: z.string(),
+    userId: z.string().optional(),
     server: z.string(),
-    accessToken: z.string(),
-    refreshToken: z.string(),
-  })
-  .partial();
+    accessToken: z.string().optional(),
+    refreshToken: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('Bearer'),
+    username: z.string(),
+    server: z.string(),
+    siteId: z.string(),
+    raw: z.string(),
+  }),
+]);
 
 export const cimdMetadataSchema = z.object({
   client_id: z.string(),

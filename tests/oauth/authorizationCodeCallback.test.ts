@@ -1,10 +1,13 @@
 import express from 'express';
 import http from 'http';
 import request from 'supertest';
+import { Ok } from 'ts-results-es';
 
 import { getConfig } from '../../src/config.js';
+import { RestApi } from '../../src/sdks/tableau/restApi.js';
 import { serverName } from '../../src/server.js';
 import { startExpressServer } from '../../src/server/express.js';
+import { testProductVersion } from '../../src/testShared.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
 const mocks = vi.hoisted(() => ({
@@ -100,7 +103,7 @@ describe('authorization code callback', () => {
   it('should reject if the Tableau access token is not successfully retrieved', async () => {
     const { app } = await startServer();
 
-    const authzResponse = await request(app).get('/oauth/authorize').query({
+    const authzResponse = await request(app).get('/oauth2/authorize').query({
       client_id: 'test-client-id',
       redirect_uri: 'http://localhost:3000',
       response_type: 'code',
@@ -134,7 +137,7 @@ describe('authorization code callback', () => {
   it('should reject if the originHost returned by Tableau does not match the expected server', async () => {
     const { app } = await startServer();
 
-    const authzResponse = await request(app).get('/oauth/authorize').query({
+    const authzResponse = await request(app).get('/oauth2/authorize').query({
       client_id: 'test-client-id',
       redirect_uri: 'http://localhost:3000',
       response_type: 'code',
@@ -174,7 +177,7 @@ describe('authorization code callback', () => {
 
     const { app } = await startServer();
 
-    const authzResponse = await request(app).get('/oauth/authorize').query({
+    const authzResponse = await request(app).get('/oauth2/authorize').query({
       client_id: 'test-client-id',
       redirect_uri: 'http://localhost:3000',
       response_type: 'code',
@@ -209,13 +212,80 @@ describe('authorization code callback', () => {
     });
   });
 
+  it('should match site by contentUrl when contentUrl differs from display name', async () => {
+    vi.stubEnv('SITE_NAME', 'Internal');
+
+    vi.mocked(RestApi).mockImplementationOnce(
+      () =>
+        ({
+          signIn: vi.fn().mockResolvedValue(undefined),
+          signOut: vi.fn().mockResolvedValue(undefined),
+          setCredentials: vi.fn().mockResolvedValue(undefined),
+          authenticatedServerMethods: {
+            getCurrentServerSession: vi.fn().mockResolvedValue(
+              Ok({
+                site: {
+                  id: 'site_id',
+                  name: '[INTERNAL] My Company',
+                  contentUrl: 'Internal',
+                },
+                user: {
+                  id: 'user_id',
+                  name: 'test-user',
+                },
+              }),
+            ),
+          },
+          serverMethods: {
+            getServerInfo: vi.fn().mockResolvedValue({
+              productVersion: testProductVersion,
+            }),
+          },
+        }) as unknown as RestApi,
+    );
+
+    const { app } = await startServer();
+
+    const authzResponse = await request(app).get('/oauth2/authorize').query({
+      client_id: 'test-client-id',
+      redirect_uri: 'http://localhost:3000',
+      response_type: 'code',
+      code_challenge: 'test-code-challenge',
+      code_challenge_method: 'S256',
+      state: 'test-state',
+    });
+
+    const authzLocation = new URL(authzResponse.headers['location']);
+    const [authKey, tableauState] = authzLocation.searchParams.get('state')?.split(':') ?? [];
+
+    mocks.mockGetTokenResult.mockResolvedValue({
+      accessToken: 'test-access-token',
+      refreshToken: 'test-refresh-token',
+      expiresInSeconds: 3600,
+      originHost: '10ax.online.tableau.com',
+    });
+
+    const response = await request(app)
+      .get('/Callback')
+      .query({
+        code: 'test-code',
+        state: `${authKey}:${tableauState}`,
+      });
+
+    expect(response.status).toBe(302);
+    const location = new URL(response.headers['location']);
+    expect(location.origin).toBe('http://localhost:3000');
+    expect(location.searchParams.get('code')).not.toBeNull();
+    expect(location.searchParams.get('state')).toBe('test-state');
+  });
+
   it('should issue an authorization code when the Tableau access token is successfully retrieved when site locking is disabled', async () => {
     vi.stubEnv('SITE_NAME', 'other-site');
     vi.stubEnv('OAUTH_LOCK_SITE', 'false');
 
     const { app } = await startServer();
 
-    const authzResponse = await request(app).get('/oauth/authorize').query({
+    const authzResponse = await request(app).get('/oauth2/authorize').query({
       client_id: 'test-client-id',
       redirect_uri: 'http://localhost:3000',
       response_type: 'code',
@@ -260,7 +330,7 @@ describe('authorization code callback', () => {
   it('should issue an authorization code when the Tableau access token is successfully retrieved when site locking is enabled', async () => {
     const { app } = await startServer();
 
-    const authzResponse = await request(app).get('/oauth/authorize').query({
+    const authzResponse = await request(app).get('/oauth2/authorize').query({
       client_id: 'test-client-id',
       redirect_uri: 'http://localhost:3000',
       response_type: 'code',

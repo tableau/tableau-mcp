@@ -55,11 +55,13 @@ describe('authorization code grant type', () => {
     it('should reject if the authorization code is invalid or expired', async () => {
       const { app } = await startServer();
 
-      const tokenResponse = await request(app).post('/oauth/token').send({
+      const tokenResponse = await request(app).post('/oauth2/token').send({
         grant_type: 'authorization_code',
         code: 'invalid-code',
         code_verifier: 'test-code-challenge',
         redirect_uri: 'http://localhost:3000',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
       });
 
       expect(tokenResponse.status).toBe(400);
@@ -75,7 +77,7 @@ describe('authorization code grant type', () => {
 
       const codeChallenge = 'test-code-challenge';
       const authzResponse = await request(app)
-        .get('/oauth/authorize')
+        .get('/oauth2/authorize')
         .query({
           client_id: 'test-client-id',
           redirect_uri: 'http://localhost:3000',
@@ -106,11 +108,13 @@ describe('authorization code grant type', () => {
       const location = new URL(response.headers['location']);
       const code = location.searchParams.get('code');
 
-      const tokenResponse = await request(app).post('/oauth/token').send({
+      const tokenResponse = await request(app).post('/oauth2/token').send({
         grant_type: 'authorization_code',
         code,
         code_verifier: 'invalid-code-verifier',
         redirect_uri: 'http://localhost:3000',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
       });
 
       expect(tokenResponse.status).toBe(400);

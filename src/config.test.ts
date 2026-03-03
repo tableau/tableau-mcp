@@ -530,14 +530,18 @@ describe('Config', () => {
 
     const defaultOAuthConfig = {
       enabled: true,
+      embeddedAuthzServer: true,
       clientIdSecretPairs: null,
       issuer: 'https://example.com',
       redirectUri: 'https://example.com/Callback',
+      resourceUri: 'http://127.0.0.1:3927',
       lockSite: true,
       jwePrivateKey: '',
       jwePrivateKeyPath: 'path/to/private.pem',
       jwePrivateKeyPassphrase: undefined,
       dnsServers: ['1.1.1.1', '1.0.0.1'],
+      enforceScopes: true,
+      advertiseApiScopes: false,
       ...defaultOAuthTimeoutMs,
     } as const;
 
@@ -545,14 +549,18 @@ describe('Config', () => {
       const config = new Config();
       expect(config.oauth).toEqual({
         enabled: false,
+        embeddedAuthzServer: true,
         issuer: '',
         clientIdSecretPairs: null,
         redirectUri: '',
+        resourceUri: 'http://127.0.0.1:3927',
         lockSite: true,
         jwePrivateKey: '',
         jwePrivateKeyPath: '',
         jwePrivateKeyPassphrase: undefined,
         dnsServers: ['1.1.1.1', '1.0.0.1'],
+        enforceScopes: true,
+        advertiseApiScopes: false,
         ...defaultOAuthTimeoutMs,
       });
     });
@@ -740,6 +748,14 @@ describe('Config', () => {
         client1: 'secret1',
         client2: 'secret2',
       });
+    });
+
+    it('should throw when OAUTH_CLIENT_ID_SECRET_PAIRS is in an invalid format', () => {
+      vi.stubEnv('OAUTH_CLIENT_ID_SECRET_PAIRS', 'client1-client2');
+
+      expect(() => new Config()).toThrow(
+        'OAUTH_CLIENT_ID_SECRET_PAIRS is in an invalid format: client1-client2. Should be in the format: clientId:secret',
+      );
     });
 
     it('should set dnsServers to the specified value when OAUTH_CIMD_DNS_SERVERS is set', () => {

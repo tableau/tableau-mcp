@@ -183,6 +183,9 @@ Filter relative date periods:
 
 Note: SET, MATCH, and DATE filters can't have functions or calculations.
 
+## Limitations
+- **QUANTITATIVE_NUMERICAL min/max operators are inclusive** - For strictly greater-than or less-than logic, use a small offset (for example, min: 10.01 for > 10, or max: 9.99 for < 10).
+
 ## Example Queries
 
 ### Example 1: Data Profiling Before Large Query
