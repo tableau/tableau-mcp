@@ -71,7 +71,7 @@ This tool searches across all supported content types for objects relevant to th
           return new Ok(
             await useRestApi({
               ...extra,
-              jwtScopes: getRequiredApiScopesForTool('search-content'),
+              jwtScopes: getRequiredApiScopesForTool(searchContentTool.name),
               callback: async (restApi) => {
                 const maxResultLimit = configWithOverrides.getMaxResultLimit(
                   searchContentTool.name,

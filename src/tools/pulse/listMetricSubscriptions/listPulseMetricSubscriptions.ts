@@ -40,7 +40,7 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
         callback: async () => {
           return await useRestApi({
             ...extra,
-            jwtScopes: getRequiredApiScopesForTool('list-pulse-metric-subscriptions'),
+            jwtScopes: getRequiredApiScopesForTool(listPulseMetricSubscriptionsTool.name),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
             },
@@ -93,7 +93,7 @@ export async function constrainPulseMetricSubscriptions({
   try {
     const metricsResult = await useRestApi({
       ...restApiArgs,
-      jwtScopes: getRequiredApiScopesForTool('list-pulse-metrics-from-metric-ids'),
+      jwtScopes: getRequiredApiScopesForTool('list-pulse-metric-subscriptions'),
       callback: async (restApi) => {
         return await restApi.pulseMethods.listPulseMetricsFromMetricIds(
           subscriptions.map((subscription) => subscription.metric_id),

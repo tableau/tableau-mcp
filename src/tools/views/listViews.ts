@@ -77,7 +77,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
           return new Ok(
             await useRestApi({
               ...extra,
-              jwtScopes: getRequiredApiScopesForTool('list-views'),
+              jwtScopes: getRequiredApiScopesForTool(listViewsTool.name),
               callback: async (restApi) => {
                 const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
                 const views = await paginate({

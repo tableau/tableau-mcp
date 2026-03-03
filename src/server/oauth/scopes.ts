@@ -106,7 +106,7 @@ const toolScopeMap: Record<ToolName, { mcp: McpScope[]; api: TableauApiScope[] }
   },
   'list-pulse-metric-subscriptions': {
     mcp: ['tableau:mcp:pulse:read'],
-    api: ['tableau:metric_subscriptions:read'],
+    api: ['tableau:metric_subscriptions:read', 'tableau:insight_metrics:read'],
   },
   'generate-pulse-metric-value-insight-bundle': {
     mcp: ['tableau:mcp:insight:create'],

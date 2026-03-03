@@ -140,7 +140,7 @@ export const getQueryDatasourceTool = (
 
           return await useRestApi({
             ...extra,
-            jwtScopes: getRequiredApiScopesForTool('query-datasource'),
+            jwtScopes: getRequiredApiScopesForTool(queryDatasourceTool.name),
             callback: async (restApi) => {
               if (!configWithOverrides.disableQueryDatasourceValidationRequests) {
                 // Validate query against metadata

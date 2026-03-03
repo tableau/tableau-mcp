@@ -135,7 +135,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
 
           return await useRestApi({
             ...extra,
-            jwtScopes: getRequiredApiScopesForTool('get-datasource-metadata'),
+            jwtScopes: getRequiredApiScopesForTool(getDatasourceMetadataTool.name),
             callback: async (restApi) => {
               // Fetching metadata from VizQL Data Service API.
               const readMetadataResult = await restApi.vizqlDataServiceMethods.readMetadata({

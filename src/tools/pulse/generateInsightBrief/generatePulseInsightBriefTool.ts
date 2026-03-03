@@ -227,7 +227,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
 
           const result = await useRestApi({
             ...extra,
-            jwtScopes: getRequiredApiScopesForTool('generate-pulse-insight-brief'),
+            jwtScopes: getRequiredApiScopesForTool(generatePulseInsightBriefTool.name),
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseInsightBrief(briefRequest),
           });

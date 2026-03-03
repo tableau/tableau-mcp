@@ -45,7 +45,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
         callback: async () => {
           return await useRestApi({
             ...extra,
-            jwtScopes: getRequiredApiScopesForTool('list-pulse-metrics-from-metric-definition-id'),
+            jwtScopes: getRequiredApiScopesForTool(listPulseMetricsFromMetricDefinitionIdTool.name),
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricsFromMetricDefinitionId(
                 pulseMetricDefinitionID,

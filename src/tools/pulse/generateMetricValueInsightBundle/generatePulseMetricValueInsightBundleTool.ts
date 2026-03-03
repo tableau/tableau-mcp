@@ -178,7 +178,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
 
           const result = await useRestApi({
             ...extra,
-            jwtScopes: getRequiredApiScopesForTool('generate-pulse-metric-value-insight-bundle'),
+            jwtScopes: getRequiredApiScopesForTool(generatePulseMetricValueInsightBundleTool.name),
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
                 bundleRequest,

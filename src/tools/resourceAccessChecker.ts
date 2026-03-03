@@ -203,7 +203,7 @@ class ResourceAccessChecker {
     async function getDatasource(): Promise<DataSource> {
       return await useRestApi({
         ...extra,
-        jwtScopes: getRequiredApiScopesForTool('list-datasources'),
+        jwtScopes: ['tableau:content:read'],
         callback: async (restApi) =>
           await restApi.datasourcesMethods.queryDatasource({
             siteId: restApi.siteId,
@@ -294,7 +294,7 @@ class ResourceAccessChecker {
     async function getWorkbook(): Promise<Workbook> {
       return await useRestApi({
         ...extra,
-        jwtScopes: getRequiredApiScopesForTool('get-workbook'),
+        jwtScopes: ['tableau:content:read'],
         callback: async (restApi) =>
           await restApi.workbooksMethods.getWorkbook({
             siteId: restApi.siteId,
@@ -374,7 +374,7 @@ class ResourceAccessChecker {
     async function getView(): Promise<View> {
       return await useRestApi({
         ...extra,
-        jwtScopes: getRequiredApiScopesForTool('list-views'),
+        jwtScopes: ['tableau:content:read'],
         callback: async (restApi) => {
           return await restApi.viewsMethods.getView({
             siteId: restApi.siteId,

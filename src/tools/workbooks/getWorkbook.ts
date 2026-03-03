@@ -53,7 +53,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
           return new Ok(
             await useRestApi({
               ...extra,
-              jwtScopes: getRequiredApiScopesForTool('get-workbook'),
+              jwtScopes: getRequiredApiScopesForTool(getWorkbookTool.name),
               callback: async (restApi) => {
                 // Notice that we already have the workbook if it had been allowed by a project scope.
                 const workbook =
