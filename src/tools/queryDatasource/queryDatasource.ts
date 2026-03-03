@@ -104,7 +104,7 @@ export const getQueryDatasourceTool = (
             returnFormat: 'OBJECTS',
             debug: true,
             disaggregate: false,
-            ...(rules.dontSpecifyRowLimit ? {} : { rowLimit }),
+            ...(rules.dontSpecifyRowLimits ? {} : { rowLimit }),
           };
 
           const credentials = getDatasourceCredentials(datasourceLuid);

@@ -4,7 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { queryOutputSchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { Server } from '../../server.js';
-import { stubDefaultEnvVars } from '../../testShared.js';
+import { stubDefaultEnvVars, testProductVersion } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
@@ -75,7 +75,7 @@ describe('queryDatasourceTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const queryDatasourceTool = getQueryDatasourceTool(new Server());
+    const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
     expect(queryDatasourceTool.name).toBe('query-datasource');
     expect(queryDatasourceTool.description).toBeInstanceOf(Provider);
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
@@ -281,7 +281,7 @@ describe('queryDatasourceTool', () => {
             ],
           }),
         );
-      const queryDatasourceTool = getQueryDatasourceTool(new Server());
+      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
       const callback = await Provider.from(queryDatasourceTool.callback);
       const result = await callback(
         {
@@ -328,7 +328,7 @@ describe('queryDatasourceTool', () => {
             ],
           }),
         );
-      const queryDatasourceTool = getQueryDatasourceTool(new Server());
+      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
       const callback = await Provider.from(queryDatasourceTool.callback);
       const result = await callback(
         {
@@ -368,7 +368,7 @@ describe('queryDatasourceTool', () => {
       // Mock main query only
       mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
 
-      const queryDatasourceTool = getQueryDatasourceTool(new Server());
+      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
       const callback = await Provider.from(queryDatasourceTool.callback);
       const result = await callback(
         {
@@ -407,7 +407,7 @@ describe('queryDatasourceTool', () => {
       // Mock main query only
       mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
 
-      const queryDatasourceTool = getQueryDatasourceTool(new Server());
+      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
       const callback = await Provider.from(queryDatasourceTool.callback);
       const result = await callback(
         {
@@ -461,7 +461,7 @@ describe('queryDatasourceTool', () => {
           }),
         );
 
-      const queryDatasourceTool = getQueryDatasourceTool(new Server());
+      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
       const callback = await Provider.from(queryDatasourceTool.callback);
       const result = await callback(
         {
@@ -526,7 +526,7 @@ describe('queryDatasourceTool', () => {
 });
 
 async function getToolResult({ limit }: { limit?: number } = {}): Promise<CallToolResult> {
-  const queryDatasourceTool = getQueryDatasourceTool(new Server());
+  const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
   const callback = await Provider.from(queryDatasourceTool.callback);
   return await callback(
     {
