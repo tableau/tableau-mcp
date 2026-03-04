@@ -6,10 +6,10 @@ export default mergeConfig(
   defineConfig(configShared),
   defineConfig({
     test: {
-      dir: 'tests/oauth',
-      setupFiles: './tests/oauth/testSetup.ts',
+      dir: 'tests/oauth/embedded-authz',
+      setupFiles: './tests/oauth/embedded-authz/testSetup.ts',
       fileParallelism: false,
-      outputFile: 'junit/oauth.xml',
+      outputFile: 'junit/oauth-embedded.xml',
     },
   }),
 );

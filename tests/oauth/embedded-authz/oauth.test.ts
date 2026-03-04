@@ -2,9 +2,9 @@ import express from 'express';
 import http from 'http';
 import request from 'supertest';
 
-import { getConfig } from '../../src/config.js';
-import { serverName } from '../../src/server.js';
-import { startExpressServer } from '../../src/server/express.js';
+import { getConfig } from '../../../src/config.js';
+import { serverName } from '../../../src/server.js';
+import { startExpressServer } from '../../../src/server/express.js';
 import { AwaitableWritableStream } from './awaitableWritableStream.js';
 import { exchangeAuthzCodeForAccessToken } from './exchangeAuthzCodeForAccessToken.js';
 import { resetEnv, setEnv } from './testEnv.js';
@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
 }));
 
-vi.mock('../../src/sdks/tableau-oauth/methods.js', () => ({
+vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
   getTokenResult: mocks.mockGetTokenResult,
 }));
 
