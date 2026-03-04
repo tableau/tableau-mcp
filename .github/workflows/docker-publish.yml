@@ -3,12 +3,6 @@ name: Docker Publish
 on:
   release:
     types: [published]
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to build (e.g., v1.0.0)'
-        required: false
-        default: 'latest'
 
 env:
   REGISTRY: ghcr.io
@@ -45,7 +39,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
