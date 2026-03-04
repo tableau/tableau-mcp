@@ -1,4 +1,5 @@
 import { exportedForTesting as serverExportedForTesting } from './server.js';
+import { testProductVersion } from './testShared.js';
 import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
 import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
@@ -25,7 +26,7 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools();
 
-    const tools = toolFactories.map((toolFactory) => toolFactory(server));
+    const tools = toolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
     for (const tool of tools) {
       expect(server.registerTool).toHaveBeenCalledWith(
         tool.name,
@@ -44,7 +45,7 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools();
 
-    const tool = getQueryDatasourceTool(server);
+    const tool = getQueryDatasourceTool(server, testProductVersion);
     expect(server.registerTool).toHaveBeenCalledWith(
       tool.name,
       {
@@ -61,7 +62,7 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools();
 
-    const tools = toolFactories.map((toolFactory) => toolFactory(server));
+    const tools = toolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
     for (const tool of tools) {
       if (tool.name === 'query-datasource') {
         expect(server.registerTool).not.toHaveBeenCalledWith(

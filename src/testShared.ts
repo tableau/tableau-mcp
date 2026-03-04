@@ -1,6 +1,11 @@
 import { ProductVersion } from './sdks/tableau/types/serverInfo.js';
 
 export const testProductVersion = {
+  value: '2026.1.0',
+  build: '20261.26.0211.1127',
+} satisfies ProductVersion;
+
+export const testProductVersion2025_3 = {
   value: '2025.3.0',
   build: '20253.25.0903.0012',
 } satisfies ProductVersion;

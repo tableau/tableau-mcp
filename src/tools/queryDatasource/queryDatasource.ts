@@ -3,26 +3,27 @@ import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getConfig } from '../../config.js';
 import { useRestApi } from '../../restApiInstance.js';
 import {
   Datasource,
   QueryOutput,
+  QueryRequest,
   querySchema,
   TableauError,
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
-import { TableauAuthInfo } from '../../server/oauth/schemas.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { Tool } from '../tool.js';
+import { Tool, ToolRules } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
+import { queryDatasourceToolDescription20253 } from './descriptions/queryDescription.2025.3.js';
+import { queryDatasourceToolDescription20261 } from './descriptions/queryDescription.2026.1.js';
+import { queryDatasourceToolDescription } from './descriptions/queryDescription.js';
 import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
-import { validateQuery } from './queryDatasourceValidator.js';
-import { queryDatasourceToolDescription20253 } from './queryDescription.2025.3.js';
-import { queryDatasourceToolDescription } from './queryDescription.js';
+import { validateQueryWithRules } from './queryDatasourceValidator.js';
 import {
   ContextFilterWarning,
   validateContextFilters,
@@ -61,21 +62,21 @@ export type QueryDatasourceError =
 
 export const getQueryDatasourceTool = (
   server: Server,
-  authInfo?: TableauAuthInfo,
+  tableauServerVersion: ProductVersion,
 ): Tool<typeof paramsSchema> => {
-  const config = getConfig();
+  const rules = getQueryDatasourceRules(tableauServerVersion);
   const queryDatasourceTool = new Tool({
     server,
     name: 'query-datasource',
-    description: new Provider(
-      async () =>
-        await getResultForTableauVersion({
-          server: config.server || authInfo?.server,
-          mappings: {
-            '2025.3.0': queryDatasourceToolDescription20253,
-            default: queryDatasourceToolDescription,
-          },
-        }),
+    description: new Provider(() =>
+      getResultForTableauVersion({
+        productVersion: tableauServerVersion,
+        mappings: {
+          '2026.1.0': queryDatasourceToolDescription20261,
+          '2025.3.0': queryDatasourceToolDescription20253,
+          default: queryDatasourceToolDescription,
+        },
+      }),
     ),
     paramsSchema,
     annotations: {
@@ -83,9 +84,9 @@ export const getQueryDatasourceTool = (
       readOnlyHint: true,
       openWorldHint: false,
     },
-    argsValidator: validateQuery,
+    argsValidator: validateQueryWithRules(rules),
     callback: async ({ datasourceLuid, query, limit }, extra): Promise<CallToolResult> => {
-      const { config, requestId, tableauAuthInfo, getConfigWithOverrides } = extra;
+      const { requestId, getConfigWithOverrides } = extra;
       return await queryDatasourceTool.logAndExecute<QueryDatasourceResult, QueryDatasourceError>({
         extra,
         args: { datasourceLuid, query },
@@ -109,22 +110,12 @@ export const getQueryDatasourceTool = (
             ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
             : limit;
 
-          const options = await getResultForTableauVersion({
-            server: config.server || tableauAuthInfo?.server,
-            mappings: {
-              '2026.1.0': {
-                returnFormat: 'OBJECTS',
-                debug: true,
-                disaggregate: false,
-                rowLimit, // rowLimit can only be provided in 2026.1.0 and later
-              } as const,
-              default: {
-                returnFormat: 'OBJECTS',
-                debug: true,
-                disaggregate: false,
-              } as const,
-            },
-          });
+          const options: QueryRequest['options'] = {
+            returnFormat: 'OBJECTS',
+            debug: true,
+            disaggregate: false,
+            ...(rules.dontSpecifyRowLimits ? {} : { rowLimit }),
+          };
 
           const credentials = getDatasourceCredentials(datasourceLuid);
           if (credentials) {
@@ -240,3 +231,16 @@ export const getQueryDatasourceTool = (
 
   return queryDatasourceTool;
 };
+
+function getQueryDatasourceRules(tableauServerVersion: ProductVersion): ToolRules {
+  return getResultForTableauVersion({
+    productVersion: tableauServerVersion,
+    mappings: {
+      '2026.1.0': {},
+      default: {
+        dontSpecifyRowLimits: true,
+        restrictFunctionsAndCalculationsInFilters: true,
+      },
+    },
+  });
+}
