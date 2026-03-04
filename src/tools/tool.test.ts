@@ -1,7 +1,7 @@
 import { ZodiosError } from '@zodios/core';
 import { AxiosError } from 'axios';
 import { Err, Ok } from 'ts-results-es';
-import { z, ZodError, ZodIssue } from 'zod';
+import { z, ZodError } from 'zod';
 
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
@@ -421,24 +421,26 @@ describe('Tool', () => {
       expect(parsed.warning).toContain('Expected string, received object');
     });
 
-    it('should return isError: false with fallback warning when fromError crashes', async () => {
+    it('should return isError: false with validation warning for discriminatedUnion schema errors', async () => {
       const tool = new Tool(mockParams);
-      const rawApiData = { fields: [], parameters: [{ unexpected: 'data' }] };
+      const rawApiData = {
+        parameters: [{ parameterType: 'LIST', members: [{ value: '5', alias: 'Top 5' }] }],
+      };
 
-      // Construct a ZodError with a malformed issue that will cause fromError() to crash.
-      // This simulates the discriminatedUnion bug where issue.errors is undefined.
-      const brokenIssue = {
-        code: 'invalid_union',
-        unionErrors: [],
-        path: ['parameters', 0],
-        message: 'Invalid union',
-      } as unknown as ZodIssue;
-      const zodError = new ZodError([brokenIssue]);
+      const schema = z.discriminatedUnion('parameterType', [
+        z.object({ parameterType: z.literal('LIST'), members: z.array(z.string()) }).strict(),
+        z.object({ parameterType: z.literal('RANGE'), min: z.number(), max: z.number() }).strict(),
+      ]);
+
+      const parseResult = schema.safeParse(rawApiData.parameters[0]);
+      expect(parseResult.success).toBe(false);
+      if (parseResult.success) return;
+
       const zodiosError = new ZodiosError(
         'Zodios: Invalid Response',
         undefined,
         rawApiData,
-        zodError,
+        parseResult.error,
       );
 
       const result = await tool.logAndExecute({
@@ -453,9 +455,7 @@ describe('Tool', () => {
       invariant(result.content[0].type === 'text');
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.data).toEqual(rawApiData);
-      expect(parsed.warning).toBe(
-        'Response did not match expected schema. The raw response data is included above.',
-      );
+      expect(parsed.warning).toContain('Validation error');
     });
 
     it('should return isError: false with data when ZodiosError is thrown (not returned)', async () => {

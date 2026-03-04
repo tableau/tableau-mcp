@@ -2,7 +2,7 @@ import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotoco
 import { ZodiosError } from '@zodios/core';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
-import { fromError, isZodErrorLike } from 'zod-validation-error';
+import { fromError, isZodErrorLike } from 'zod-validation-error/v3';
 
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
@@ -273,12 +273,7 @@ function getErrorResult(requestId: RequestId, error: unknown): CallToolResult {
     // This should make it so users don't get "stuck" when our schemas are too strict or wrong.
     // The only con is that the full response from the API might be larger than normal
     // since a successful schema validation "trims" the response down to the shape of the schema.
-    let warning: string;
-    try {
-      warning = fromError(error.cause).toString();
-    } catch {
-      warning = 'Response did not match expected schema. The raw response data is included above.';
-    }
+    const validationError = fromError(error.cause);
     return {
       isError: false,
       content: [
@@ -286,7 +281,7 @@ function getErrorResult(requestId: RequestId, error: unknown): CallToolResult {
           type: 'text',
           text: JSON.stringify({
             data: error.data,
-            warning,
+            warning: validationError.toString(),
           }),
         },
       ],
