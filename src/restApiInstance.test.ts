@@ -53,6 +53,38 @@ describe('restApiInstance', () => {
     });
   });
 
+  describe('useRestApi with passthrough auth', () => {
+    it('should use setCredentials when tableauAuthInfo has accessToken and userId', async () => {
+      const passthroughConfig = {
+        ...mockConfig,
+        auth: 'passthrough' as const,
+      };
+
+      const restApi = await useRestApi({
+        config: passthroughConfig,
+        requestId: mockRequestId,
+        server: new Server(),
+        tableauAuthInfo: {
+          type: 'X-Tableau-Auth',
+          accessToken: 'abc123|xyz789|site-luid',
+          userId: 'user-luid-123',
+          username: '',
+          server: 'https://my-tableau-server.com',
+        },
+        jwtScopes: [],
+        signal: new AbortController().signal,
+        callback: (restApi: RestApi) => Promise.resolve(restApi),
+      });
+
+      expect(restApi.setCredentials).toHaveBeenCalledWith(
+        'abc123|xyz789|site-luid',
+        'user-luid-123',
+      );
+      expect(restApi.signIn).not.toHaveBeenCalled();
+      expect(restApi.signOut).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Request Interceptor', () => {
     it('should add User-Agent header and log request', () => {
       const server = new Server();
