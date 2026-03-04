@@ -354,7 +354,7 @@ async function getClientFromMetadataDoc(
   return Ok(clientMetadataResult.data);
 }
 
-export function getDeviceName(redirectUri: string, state: string, clientName?: string): string {
+function getDeviceName(redirectUri: string, state: string, clientName?: string): string {
   if (clientName) {
     return `tableau-mcp (${clientName})`;
   }
@@ -365,6 +365,8 @@ export function getDeviceName(redirectUri: string, state: string, clientName?: s
     const url = new URL(redirectUri);
     if (url.protocol === 'https:' || url.protocol === 'http:') {
       if (redirectUri === 'https://vscode.dev/redirect' && new URL(state).protocol === 'vscode:') {
+        // VS Code normally authenticates in a way that doesn't give any clues about who it is.
+        // It has a backup authentication method they call "URL Handler" that does though.
         return 'tableau-mcp (VS Code)';
       }
 
@@ -378,3 +380,5 @@ export function getDeviceName(redirectUri: string, state: string, clientName?: s
     return defaultDeviceName;
   }
 }
+
+export const exportedForTesting = { getDeviceName };

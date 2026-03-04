@@ -142,7 +142,7 @@ describe('clientIdMetadataDocuments', () => {
     expect(location.searchParams.get('state')).toEqual(expect.any(String));
     expect(location.searchParams.get('device_id')).toEqual(expect.any(String));
     expect(location.searchParams.get('target_site')).toBe('mcp-test');
-    expect(location.searchParams.get('device_name')).toBe('tableau-mcp (Unknown agent)');
+    expect(location.searchParams.get('device_name')).toBe('tableau-mcp (Fake MCP Client)');
     expect(location.searchParams.get('client_type')).toBe('tableau-mcp');
   });
 

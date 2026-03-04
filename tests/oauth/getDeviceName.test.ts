@@ -1,4 +1,6 @@
-import { getDeviceName } from '../../src/server/oauth/authorize.js';
+import { exportedForTesting } from '../../src/server/oauth/authorize.js';
+
+const { getDeviceName } = exportedForTesting;
 
 describe('getDeviceName', () => {
   it('should use client_name from CIMD when provided', () => {
