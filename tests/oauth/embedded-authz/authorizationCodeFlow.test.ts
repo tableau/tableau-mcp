@@ -2,10 +2,10 @@ import express from 'express';
 import http from 'http';
 import request from 'supertest';
 
-import { getConfig } from '../../src/config.js';
-import { serverName } from '../../src/server.js';
-import { startExpressServer } from '../../src/server/express.js';
-import { generateCodeChallenge } from '../../src/server/oauth/generateCodeChallenge.js';
+import { getConfig } from '../../../src/config.js';
+import { serverName } from '../../../src/server.js';
+import { startExpressServer } from '../../../src/server/express.js';
+import { generateCodeChallenge } from '../../../src/server/oauth/generateCodeChallenge.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
 describe('authorization code flow', () => {
