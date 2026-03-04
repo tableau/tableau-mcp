@@ -3,18 +3,18 @@ import http from 'http';
 import request from 'supertest';
 import { Ok } from 'ts-results-es';
 
-import { getConfig } from '../../src/config.js';
-import { RestApi } from '../../src/sdks/tableau/restApi.js';
-import { serverName } from '../../src/server.js';
-import { startExpressServer } from '../../src/server/express.js';
-import { testProductVersion } from '../../src/testShared.js';
+import { getConfig } from '../../../src/config.js';
+import { RestApi } from '../../../src/sdks/tableau/restApi.js';
+import { serverName } from '../../../src/server.js';
+import { startExpressServer } from '../../../src/server/express.js';
+import { testProductVersion } from '../../../src/testShared.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
 }));
 
-vi.mock('../../src/sdks/tableau-oauth/methods.js', () => ({
+vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
   getTokenResult: mocks.mockGetTokenResult,
 }));
 
