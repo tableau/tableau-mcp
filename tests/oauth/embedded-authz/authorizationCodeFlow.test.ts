@@ -83,7 +83,7 @@ describe('authorization code flow', () => {
       expect(response.body).toEqual({
         error: 'invalid_request',
         error_description:
-          'Validation error: Client_id is required at "client_id"; Redirect_uri is required at "redirect_uri"; Response_type is required at "response_type"; Code_challenge is required at "code_challenge"; Code_challenge_method is required at "code_challenge_method"',
+          'Validation error: client_id is required at "client_id"; redirect_uri is required at "redirect_uri"; response_type is required at "response_type"; code_challenge is required at "code_challenge"; code_challenge_method is required at "code_challenge_method"',
       });
     });
 
