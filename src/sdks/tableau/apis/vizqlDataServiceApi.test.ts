@@ -52,22 +52,22 @@ describe('SET Filter schema', () => {
     expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
-  it('rejects a SET filter with a function', () => {
+  it('accepts a SET filter with a function', () => {
     const data = {
       filterType: 'SET',
-      field: { fieldCaption: 'Category', function: 'SUM' },
-      values: ['Technology', 'Furniture'],
+      field: { fieldCaption: 'Order Date', function: 'MONTH' },
+      values: ['January', 'February'],
     };
-    expect(() => filterSchema.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
-  it('rejects a SET filter with a calculation', () => {
+  it('accepts a SET filter with a calculation', () => {
     const data = {
       filterType: 'SET',
-      field: { fieldCaption: 'Category', calculation: 'SUM([Sales])' },
-      values: ['Technology', 'Furniture'],
+      field: { calculation: 'QUARTER([Order Date])' },
+      values: ['Q3', 'Q4'],
     };
-    expect(() => filterSchema.parse(data)).toThrow();
+    expect(() => filterSchema.parse(data)).not.toThrow();
   });
 
   it('rejects a SET filter with no values', () => {

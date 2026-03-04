@@ -19,6 +19,8 @@ type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args exte
   ? (args: z.objectOutputType<Args, ZodTypeAny>) => void
   : never;
 
+export type ToolRules = Record<string, boolean | undefined>;
+
 export type ConstrainedResult<T> =
   | {
       type: 'success';
