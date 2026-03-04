@@ -53,6 +53,7 @@ export function authorize(
       scope,
     } = result.data;
 
+    let clientName: string | undefined;
     const clientIdUrl = parseUrl(client_id);
     if (clientIdUrl) {
       // Client ID is a URL, so we need to attempt to fetch the client metadata from the URL
@@ -62,7 +63,8 @@ export function authorize(
         return;
       }
 
-      const { redirect_uris, response_types } = clientResult.value;
+      const { redirect_uris, response_types, client_name } = clientResult.value;
+      clientName = client_name;
 
       if (response_types && !response_types.find((type) => type === response_type)) {
         res.status(400).json({
@@ -161,7 +163,7 @@ export function authorize(
     oauthUrl.searchParams.set('state', `${authKey}:${tableauState}`);
     oauthUrl.searchParams.set('device_id', randomUUID());
     oauthUrl.searchParams.set('target_site', config.siteName);
-    oauthUrl.searchParams.set('device_name', getDeviceName(redirect_uri, state ?? ''));
+    oauthUrl.searchParams.set('device_name', getDeviceName(redirect_uri, state ?? '', clientName));
     oauthUrl.searchParams.set('client_type', 'tableau-mcp');
 
     if (config.oauth.lockSite) {
@@ -352,15 +354,17 @@ async function getClientFromMetadataDoc(
   return Ok(clientMetadataResult.data);
 }
 
-function getDeviceName(redirectUri: string, state: string): string {
+export function getDeviceName(redirectUri: string, state: string, clientName?: string): string {
+  if (clientName) {
+    return `tableau-mcp (${clientName})`;
+  }
+
   const defaultDeviceName = 'tableau-mcp (Unknown agent)';
 
   try {
     const url = new URL(redirectUri);
     if (url.protocol === 'https:' || url.protocol === 'http:') {
       if (redirectUri === 'https://vscode.dev/redirect' && new URL(state).protocol === 'vscode:') {
-        // VS Code normally authenticates in a way that doesn't give any clues about who it is.
-        // It has a backup authentication method they call "URL Handler" that does though.
         return 'tableau-mcp (VS Code)';
       }
 
