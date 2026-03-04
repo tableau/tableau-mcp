@@ -1,6 +1,7 @@
+import { ZodiosError } from '@zodios/core';
 import { AxiosError } from 'axios';
-import { Ok } from 'ts-results-es';
-import { z } from 'zod';
+import { Err, Ok } from 'ts-results-es';
+import { z, ZodError } from 'zod';
 
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
@@ -382,6 +383,114 @@ describe('Tool', () => {
           error_code: '',
         }),
       );
+    });
+  });
+
+  describe('ZodiosError handling', () => {
+    it('should return isError: false with data and validation warning for ZodiosError with valid ZodError cause', async () => {
+      const tool = new Tool(mockParams);
+      const rawApiData = { fields: [], parameters: [{ unexpected: 'data' }] };
+      const zodError = new ZodError([
+        {
+          code: 'invalid_type',
+          expected: 'string',
+          received: 'object',
+          path: ['parameters', 0, 'members', 0],
+          message: 'Expected string, received object',
+        },
+      ]);
+      const zodiosError = new ZodiosError(
+        'Zodios: Invalid Response',
+        undefined,
+        rawApiData,
+        zodError,
+      );
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => Promise.resolve(Err(zodiosError)),
+        getErrorText: () => 'unused',
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.data).toEqual(rawApiData);
+      expect(parsed.warning).toContain('Expected string, received object');
+    });
+
+    it('should return isError: false with validation warning for discriminatedUnion schema errors', async () => {
+      const tool = new Tool(mockParams);
+      const rawApiData = {
+        parameters: [{ parameterType: 'LIST', members: [{ value: '5', alias: 'Top 5' }] }],
+      };
+
+      const schema = z.discriminatedUnion('parameterType', [
+        z.object({ parameterType: z.literal('LIST'), members: z.array(z.string()) }).strict(),
+        z.object({ parameterType: z.literal('RANGE'), min: z.number(), max: z.number() }).strict(),
+      ]);
+
+      const parseResult = schema.safeParse(rawApiData.parameters[0]);
+      expect(parseResult.success).toBe(false);
+      if (parseResult.success) return;
+
+      const zodiosError = new ZodiosError(
+        'Zodios: Invalid Response',
+        undefined,
+        rawApiData,
+        parseResult.error,
+      );
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => Promise.resolve(Err(zodiosError)),
+        getErrorText: () => 'unused',
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.data).toEqual(rawApiData);
+      expect(parsed.warning).toContain('Validation error');
+    });
+
+    it('should return isError: false with data when ZodiosError is thrown (not returned)', async () => {
+      const tool = new Tool(mockParams);
+      const rawApiData = { fields: [], parameters: [] };
+      const zodError = new ZodError([
+        {
+          code: 'invalid_type',
+          expected: 'string',
+          received: 'number',
+          path: ['value'],
+          message: 'Expected string, received number',
+        },
+      ]);
+      const zodiosError = new ZodiosError(
+        'Zodios: Invalid Response',
+        undefined,
+        rawApiData,
+        zodError,
+      );
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => {
+          throw zodiosError;
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.data).toEqual(rawApiData);
+      expect(parsed.warning).toBeDefined();
     });
   });
 });
