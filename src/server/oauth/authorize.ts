@@ -3,7 +3,7 @@ import express from 'express';
 import { isIP } from 'net';
 import { isSSRFSafeURL } from 'ssrfcheck';
 import { Err, Ok, Result } from 'ts-results-es';
-import { fromError } from 'zod-validation-error';
+import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
 import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
@@ -354,7 +354,7 @@ async function getClientFromMetadataDoc(
   return Ok(clientMetadataResult.data);
 }
 
-function getDeviceName(redirectUri: string, state: string, clientName?: string): string {
+function getDeviceName(redirectUri: string, state: string, clientName: string | undefined): string {
   if (clientName) {
     return `tableau-mcp (${clientName})`;
   }

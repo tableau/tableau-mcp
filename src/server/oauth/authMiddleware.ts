@@ -4,7 +4,7 @@ import { KeyObject } from 'crypto';
 import express, { RequestHandler } from 'express';
 import { compactDecrypt } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
-import { fromError } from 'zod-validation-error';
+import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
 import { isToolName, ToolName } from '../../tools/toolName.js';

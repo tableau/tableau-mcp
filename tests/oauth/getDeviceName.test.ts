@@ -16,7 +16,7 @@ describe('getDeviceName', () => {
   });
 
   it('should detect Cursor from redirect_uri protocol when no client_name', () => {
-    expect(getDeviceName('cursor://anysdk.cursor.sh/auth/callback', '')).toBe(
+    expect(getDeviceName('cursor://anysdk.cursor.sh/auth/callback', '', undefined)).toBe(
       'tableau-mcp (Cursor)',
     );
   });
@@ -26,19 +26,22 @@ describe('getDeviceName', () => {
       getDeviceName(
         'https://vscode.dev/redirect',
         'vscode://vscode.github-authentication/did-authenticate',
+        undefined,
       ),
     ).toBe('tableau-mcp (VS Code)');
   });
 
   it('should use protocol name for other custom protocols', () => {
-    expect(getDeviceName('windsurf://auth/callback', '')).toBe('tableau-mcp (windsurf)');
+    expect(getDeviceName('windsurf://auth/callback', '', undefined)).toBe('tableau-mcp (windsurf)');
   });
 
   it('should return Unknown agent for http/https without matching heuristics', () => {
-    expect(getDeviceName('http://127.0.0.1:33418/', '')).toBe('tableau-mcp (Unknown agent)');
+    expect(getDeviceName('http://127.0.0.1:33418/', '', undefined)).toBe(
+      'tableau-mcp (Unknown agent)',
+    );
   });
 
   it('should return Unknown agent for invalid redirect_uri', () => {
-    expect(getDeviceName('not-a-url', '')).toBe('tableau-mcp (Unknown agent)');
+    expect(getDeviceName('not-a-url', '', undefined)).toBe('tableau-mcp (Unknown agent)');
   });
 });
