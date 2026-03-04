@@ -1,4 +1,4 @@
-import { exportedForTesting } from '../../src/server/oauth/authorize.js';
+import { exportedForTesting } from '../../../src/server/oauth/authorize.js';
 
 const { getDeviceName } = exportedForTesting;
 

@@ -44,7 +44,7 @@
     "test": "vitest --config ./vitest.config.ts",
     "test:e2e": "vitest --config ./vitest.config.e2e.ts",
     "test:eval": "vitest --config ./vitest.config.eval.ts",
-    "test:oauth": "vitest --config ./vitest.config.oauth.ts",
+    "test:oauth:embedded": "vitest --config ./vitest.config.oauth.embedded.ts",
     "coverage": "vitest run --config ./vitest.config.ts --coverage",
     "version:major": "npm version major --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",

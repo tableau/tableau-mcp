@@ -3,11 +3,11 @@ import http from 'http';
 import request from 'supertest';
 import { MockedFunction, vi } from 'vitest';
 
-import { getConfig, ONE_DAY_IN_MS } from '../../src/config.js';
-import { serverName } from '../../src/server.js';
-import { startExpressServer } from '../../src/server/express.js';
-import { clientMetadataCache } from '../../src/server/oauth/clientMetadataCache.js';
-import { axios } from '../../src/utils/axios.js';
+import { getConfig, ONE_DAY_IN_MS } from '../../../src/config.js';
+import { serverName } from '../../../src/server.js';
+import { startExpressServer } from '../../../src/server/express.js';
+import { clientMetadataCache } from '../../../src/server/oauth/clientMetadataCache.js';
+import { axios } from '../../../src/utils/axios.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
 const constants = vi.hoisted(() => ({
@@ -54,7 +54,7 @@ vi.mock('axios', () => {
   };
 });
 
-vi.mock('../../src/utils/retry.js', () => ({
+vi.mock('../../../src/utils/retry.js', () => ({
   retry: vi.fn(async (fn: () => any) => fn()),
 }));
 
@@ -62,7 +62,7 @@ const mockAxios = {
   get: axios.get as MockedFunction<typeof axios.get>,
 };
 
-vi.mock('../../src/server/oauth/dnsResolver.js', () => ({
+vi.mock('../../../src/server/oauth/dnsResolver.js', () => ({
   getDnsResolver: mocks.dnsResolver,
 }));
 
