@@ -354,7 +354,7 @@ async function getClientFromMetadataDoc(
   return Ok(clientMetadataResult.data);
 }
 
-function getDeviceName(redirectUri: string, state: string, clientName?: string): string {
+function getDeviceName(redirectUri: string, state: string, clientName: string | undefined): string {
   if (clientName) {
     return `tableau-mcp (${clientName})`;
   }
