@@ -32,7 +32,14 @@ export const parameterSchema = z
     parameterType: z.string(),
     dataType: z.string().nullable(),
     value: z.union([z.number(), z.string(), z.boolean(), z.null()]),
-    members: z.array(z.union([z.number(), z.string(), z.boolean(), z.null()])),
+    members: z.array(
+      z.union([z.number(), z.string(), z.boolean(), z.null()]).or(
+        z.object({
+          value: z.union([z.number(), z.string(), z.boolean(), z.null()]),
+          alias: z.string(),
+        }),
+      ),
+    ),
     min: z.number().nullable(),
     max: z.number().nullable(),
     step: z.number().nullable(),
