@@ -162,6 +162,7 @@ export function callback(
           refreshToken,
           expiresInSeconds,
         },
+        siteContentUrl: sessionResult.value.site.contentUrl ?? '',
         expiresAt: Math.floor((Date.now() + config.oauth.authzCodeTimeoutMs) / 1000),
       });
 
