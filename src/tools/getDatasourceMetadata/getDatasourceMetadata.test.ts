@@ -244,6 +244,7 @@ describe('getDatasourceMetadataTool', () => {
     const responseData = JSON.parse(result.content[0].text);
 
     expect(responseData).toMatchObject({
+      datasourceDescription: 'Test Description',
       fields: [
         {
           name: 'Profit Ratio',
@@ -334,6 +335,7 @@ describe('getDatasourceMetadataTool', () => {
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
     expect(responseData).toEqual({
+      datasourceDescription: 'Test Description',
       fields: [],
       parameters: [],
     });
@@ -349,6 +351,7 @@ describe('getDatasourceMetadataTool', () => {
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
     expect(responseData).toEqual({
+      datasourceDescription: 'Test Description',
       fields: [
         {
           dataCategory: 'QUANTITATIVE',
