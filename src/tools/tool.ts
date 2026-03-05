@@ -255,7 +255,8 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
         tool_name: this.name,
         request_id: requestId.toString(),
         session_id: sessionId ?? '',
-        site_luid: getSiteLuidFromAccessToken(tableauAuthInfo),
+        site_luid: getSiteLuidFromAccessToken(tableauAuthInfo), // will only be present for oauth connections
+        site_name: config.siteName ?? '', // will be present for non oauth connections
         podname: config.server,
         is_hyperforce: config.isHyperforce,
         success,
