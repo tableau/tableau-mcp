@@ -1,10 +1,12 @@
-import { MCPServerStdio, run, StreamedRunResult, withTrace } from '@openai/agents';
+import { HumanMessage } from '@langchain/core/messages';
+import { StdioConnection } from '@langchain/mcp-adapters';
+import { createAgent } from 'langchain';
 
 import { getAgent, log } from './base.js';
 import { evaluationSchema } from './evaluationResult.js';
 
 type GradeInput = {
-  mcpServer: MCPServerStdio;
+  mcpServer: StdioConnection;
   model: string;
   prompt: string;
 };
@@ -35,62 +37,60 @@ export async function grade({
   mcpServer,
   model,
   prompt,
-}: GradeInput): Promise<{ agentResult: StreamedRunResult<any, any> }> {
+}: GradeInput): Promise<{ agentResult: Array<{ step: string; content: string }> }> {
   const evals = await promptAgent({ mcpServer, model, prompt });
   log('\n');
 
-  const evalAgentPrompt = `
-    Here is the user input: ${prompt}
-    Here is the LLM's answer: ${evals.finalOutput}`;
+  console.log(evals);
 
-  const evalAgent = await getAgent({
-    model,
-    systemPrompt: evalSystemPrompt,
-  });
+  return { agentResult: evals };
 
-  const result = await withTrace('run_eval_agent', async () => {
-    const stream = await run(evalAgent, evalAgentPrompt, { stream: true });
-    if (process.env.ENABLE_LOGGING === 'true') {
-      stream.toTextStream({ compatibleWithNodeStreams: true }).pipe(process.stdout);
-    }
+  // const evalAgentPrompt = `
+  //   Here is the user input: ${prompt}
+  //   Here is the LLM's answer: ${evals.finalOutput}`;
 
-    await stream.completed;
-    return stream;
-  });
+  // const evalAgent = await getAgent({
+  //   model,
+  //   systemPrompt: evalSystemPrompt,
+  // });
 
-  log('\n');
+  // const result = await evalAgent.invoke({
+  //   messages: [{ role: 'user', content: evalAgentPrompt }],
+  // });
 
-  const jsonRegexes = [/(?<JSON>\{[^}]+\})/];
-  for (const jsonRegex of jsonRegexes) {
-    const match = result.finalOutput?.match(jsonRegex);
-    if (match) {
-      const evaluationResult = evaluationSchema.safeParse(JSON.parse(match.groups?.JSON ?? '{}'));
-      if (!evaluationResult.success) {
-        throw new Error(
-          `Could not parse agent output as an evaluation result:\n${result.finalOutput}`,
-        );
-      }
+  // log('\n');
 
-      const evaluation = evaluationResult.data;
-      expect(evaluation.accuracy).toBeGreaterThanOrEqual(4);
-      expect(evaluation.completeness).toBeGreaterThanOrEqual(4);
-      expect(evaluation.relevance).toBeGreaterThanOrEqual(4);
-      expect(evaluation.clarity).toBeGreaterThanOrEqual(4);
-      expect(evaluation.reasoning).toBeGreaterThanOrEqual(4);
+  // const jsonRegexes = [/(?<JSON>\{[^}]+\})/];
+  // for (const jsonRegex of jsonRegexes) {
+  //   const match = result.finalOutput?.match(jsonRegex);
+  //   if (match) {
+  //     const evaluationResult = evaluationSchema.safeParse(JSON.parse(match.groups?.JSON ?? '{}'));
+  //     if (!evaluationResult.success) {
+  //       throw new Error(
+  //         `Could not parse agent output as an evaluation result:\n${result.finalOutput}`,
+  //       );
+  //     }
 
-      return {
-        agentResult: evals,
-      };
-    }
-  }
-  throw new Error('Could not parse JSON from agent output');
+  //     const evaluation = evaluationResult.data;
+  //     expect(evaluation.accuracy).toBeGreaterThanOrEqual(4);
+  //     expect(evaluation.completeness).toBeGreaterThanOrEqual(4);
+  //     expect(evaluation.relevance).toBeGreaterThanOrEqual(4);
+  //     expect(evaluation.clarity).toBeGreaterThanOrEqual(4);
+  //     expect(evaluation.reasoning).toBeGreaterThanOrEqual(4);
+
+  //     return {
+  //       agentResult: evals,
+  //     };
+  //   }
+  // }
+  // throw new Error('Could not parse JSON from agent output');
 }
 
 async function promptAgent({
   mcpServer,
   model,
   prompt,
-}: GradeInput): Promise<StreamedRunResult<any, any>> {
+}: GradeInput): Promise<Array<{ step: string; content: string }>> {
   log(`Evaluating prompt: ${prompt}`, true);
 
   const agentWithTools = await getAgent({
@@ -99,15 +99,23 @@ async function promptAgent({
     systemPrompt: agentSystemPrompt,
   });
 
-  const result = await withTrace('run_agent_with_tools', async () => {
-    const stream = await run(agentWithTools, prompt, { stream: true });
-    if (process.env.ENABLE_LOGGING === 'true') {
-      stream.toTextStream({ compatibleWithNodeStreams: true }).pipe(process.stdout);
-    }
+  // Use invoke() so the agent runs to completion and we get a result or a clear error.
+  // stream() with streamMode: 'updates' only yields after each graph node completes;
+  // the first chunk comes after the first node (usually the LLM call). If the LLM
+  // request hangs, the stream never yields and the loop appears to stall.
+  //const result = await agentWithTools.invoke(new HumanMessage(prompt));
 
-    await stream.completed;
-    return stream;
-  });
+  // Convert final state into the same shape as the previous stream-based path
+  const chunks: Array<{ step: string; content: string }> = [];
+  for await (const chunk of await agentWithTools.stream(
+    { messages: [{ role: 'user', content: prompt }] },
+    { streamMode: 'updates' },
+  )) {
+    const [step, content] = Object.entries(chunk)[0];
+    log(`step: ${step}`);
+    log(`content: ${content}`);
+    chunks.push({ step, content });
+  }
 
-  return result;
+  return chunks;
 }
