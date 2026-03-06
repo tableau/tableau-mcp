@@ -68,7 +68,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
     }
 
     const token = authHeader.slice(7);
-    const result = await accessTokenValidator.verifyAccessToken(token);
+    const result = await accessTokenValidator.validate(token);
 
     if (result.isErr()) {
       // For SSE requests (GET), provide proper SSE error response

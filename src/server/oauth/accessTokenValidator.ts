@@ -19,7 +19,7 @@ type AccessTokenValidatorResult = Result<AuthInfo, string>;
 export abstract class AccessTokenValidator {
   protected readonly config = getConfig();
 
-  abstract verifyAccessToken(token: string): Promise<AccessTokenValidatorResult>;
+  abstract validate(token: string): Promise<AccessTokenValidatorResult>;
 }
 
 export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
@@ -31,7 +31,7 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
     this.privateKey = privateKey;
   }
 
-  async verifyAccessToken(token: string): Promise<AccessTokenValidatorResult> {
+  async validate(token: string): Promise<AccessTokenValidatorResult> {
     try {
       const { plaintext } = await compactDecrypt(token, this.privateKey);
       const payload = JSON.parse(new TextDecoder().decode(plaintext));
@@ -105,7 +105,7 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
 }
 
 export class TableauAccessTokenValidator extends AccessTokenValidator {
-  async verifyAccessToken(token: string): Promise<AccessTokenValidatorResult> {
+  async validate(token: string): Promise<AccessTokenValidatorResult> {
     try {
       const [_header, payload, _signature] = token.split('.');
       if (!payload) {
