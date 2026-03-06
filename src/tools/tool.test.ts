@@ -446,7 +446,7 @@ describe('Tool', () => {
       expect(mockTelemetrySend).toHaveBeenCalledWith(
         'tool_call',
         expect.objectContaining({
-          site_luid: 'site-luid', // From tableauAuthInfo.siteId
+          site_luid: 'site-luid',
           user_luid: '', // Bearer tokens don't have userId
           success: true,
           error_code: '',
@@ -472,8 +472,8 @@ describe('Tool', () => {
       expect(mockTelemetrySend).toHaveBeenCalledWith(
         'tool_call',
         expect.objectContaining({
-          site_luid: 'site-luid', // From serviceAuthInfo cache
-          user_luid: 'user-luid', // From serviceAuthInfo cache
+          site_luid: 'site-luid',
+          user_luid: 'user-luid',
           success: true,
           error_code: '',
         }),
