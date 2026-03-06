@@ -224,7 +224,8 @@ export function combineFields(
 }
 
 function populateFieldWithAdditionalProperties(sourceField: Field, targetField: Field): void {
-  targetField.sourceTable = getSourceTableFromGraphqlField(sourceField) ?? targetField.sourceTable ?? null;
+  targetField.sourceTable =
+    getSourceTableFromGraphqlField(sourceField) ?? targetField.sourceTable ?? null;
   if (sourceField.description) {
     targetField.description = sourceField.description;
   }
