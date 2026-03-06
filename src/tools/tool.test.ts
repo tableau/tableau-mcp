@@ -458,7 +458,7 @@ describe('Tool', () => {
       const tool = new Tool(mockParams);
       // Simulate cache being populated after signIn (for PAT/direct-trust/UAT)
       setServiceAuthInfoInCache(mockExtra.requestId, {
-        userId: 'user-luid ',
+        userId: 'user-luid',
         siteLuid: 'site-luid',
       });
 
