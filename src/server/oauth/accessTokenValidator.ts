@@ -4,15 +4,15 @@ import { compactDecrypt } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
-import { getConfig } from '../../config';
+import { getConfig } from '../../config.js';
 import {
   mcpAccessTokenSchema,
   mcpAccessTokenUserOnlySchema,
   TableauAuthInfo,
   tableauBearerTokenSchema,
 } from './schemas';
-import { parseScopes } from './scopes';
-import { AUDIENCE } from './token';
+import { parseScopes } from './scopes.js';
+import { AUDIENCE } from './token.js';
 
 type AccessTokenValidatorResult = Result<AuthInfo, string>;
 
