@@ -35,6 +35,7 @@ export type UserAndTokens = {
   server: string;
   tokens: Tokens;
   scopes: string[];
+  siteContentUrl: string;
 };
 
 export type AuthorizationCode = UserAndTokens & {

@@ -94,6 +94,7 @@ export function token(
             clientId: authCode.clientId,
             tokens: authCode.tokens,
             scopes: authCode.scopes,
+            siteContentUrl: authCode.siteContentUrl,
             expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
             tableauClientId: authCode.tableauClientId,
           });
@@ -172,12 +173,14 @@ export function token(
           }
 
           let accessToken: string;
+          let tokensToStore = tokenData.tokens;
           const { refreshToken: tableauRefreshToken } = tokenData.tokens;
 
           const tokensResult = await exchangeRefreshToken(
             tokenData.server,
             tableauRefreshToken,
             tokenData.tableauClientId,
+            tokenData.siteContentUrl,
           );
 
           if (tokensResult.isErr()) {
@@ -190,6 +193,7 @@ export function token(
                 server: tokenData.server,
                 tokens: tokenData.tokens,
                 scopes: tokenData.scopes,
+                siteContentUrl: tokenData.siteContentUrl,
               },
               publicKey,
             );
@@ -200,17 +204,20 @@ export function token(
               expiresInSeconds,
             } = tokensResult.value;
 
+            tokensToStore = {
+              accessToken: newTableauAccessToken,
+              refreshToken: newTableauRefreshToken,
+              expiresInSeconds,
+            };
+
             accessToken = await createAccessToken(
               {
                 user: tokenData.user,
                 clientId: tokenData.clientId,
                 server: tokenData.server,
-                tokens: {
-                  accessToken: newTableauAccessToken,
-                  refreshToken: newTableauRefreshToken,
-                  expiresInSeconds,
-                },
+                tokens: tokensToStore,
                 scopes: tokenData.scopes,
+                siteContentUrl: tokenData.siteContentUrl,
               },
               publicKey,
             );
@@ -224,8 +231,9 @@ export function token(
             user: tokenData.user,
             server: tokenData.server,
             clientId: tokenData.clientId,
-            tokens: tokenData.tokens,
+            tokens: tokensToStore,
             scopes: tokenData.scopes,
+            siteContentUrl: tokenData.siteContentUrl,
             expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
             tableauClientId: tokenData.tableauClientId,
           });
@@ -316,6 +324,7 @@ async function exchangeRefreshToken(
   server: string,
   refreshToken: string,
   clientId: string,
+  siteContentUrl: string,
 ): Promise<Result<TableauAccessToken, string>> {
   try {
     const result = await getTokenResult(
@@ -324,7 +333,7 @@ async function exchangeRefreshToken(
         grant_type: 'refresh_token',
         refresh_token: refreshToken,
         client_id: clientId,
-        site_namespace: '',
+        site_namespace: siteContentUrl,
       },
       {
         timeout: getConfig().maxRequestTimeoutMs,

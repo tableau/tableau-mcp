@@ -32,6 +32,14 @@ This standard config works in most MCP clients:
 
 <hr />
 
+## Docker Container
+
+See
+[Tableau MCP Docker Container](https://github.com/tableau/tableau-mcp/pkgs/container/tableau-mcp)
+for installation instructions.
+
+<hr />
+
 ## Node.js Single Executable Applications
 
 Node.js [Single Executable Applications](https://nodejs.org/api/single-executable-applications.html)
