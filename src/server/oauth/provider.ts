@@ -19,7 +19,11 @@ import { AuthorizationCode, PendingAuthorization, RefreshTokenData } from './typ
 
 export const TABLEAU_CLOUD_SERVER_URL = 'https://online.tableau.com';
 
-export abstract class OAuthProvider {
+/**
+ * Abstract OAuth provider
+ *
+ */
+abstract class OAuthProvider {
   protected readonly config = getConfig();
 
   protected abstract get accessTokenValidator(): AccessTokenValidator;
@@ -38,7 +42,7 @@ export abstract class OAuthProvider {
 }
 
 /**
- * OAuth 2.1 Provider
+ * Embedded OAuth 2.1 Provider
  *
  * Implements the complete MCP OAuth 2.1 flow with PKCE
  * @see https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
@@ -64,6 +68,7 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
   }
 
   setupRoutes(app: express.Application): void {
+    // .well-known endpoints
     super.setupRoutes(app);
 
     // oauth2/register
@@ -101,6 +106,10 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
   }
 }
 
+/**
+ * OAuth provider for the Tableau authorization server
+ *
+ */
 export class TableauOAuthProvider extends OAuthProvider {
   get accessTokenValidator(): AccessTokenValidator {
     return new TableauAccessTokenValidator();
