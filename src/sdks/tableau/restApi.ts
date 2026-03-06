@@ -100,6 +100,14 @@ export class RestApi {
     return bearerToken.data['https://tableau.com/siteId'];
   }
 
+  get userId(): string {
+    if (this.creds.type === 'X-Tableau-Auth') {
+      return this.creds.user.id;
+    }
+
+    return '';
+  }
+
   private get authenticationMethods(): AuthenticationMethods {
     if (!this._authenticationMethods) {
       this._authenticationMethods = new AuthenticationMethods(this._baseUrl, {

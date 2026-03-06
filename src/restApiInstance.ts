@@ -16,6 +16,7 @@ import {
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { setServiceAuthInfoInCache } from './server/service-auth/serviceAuthInfoCache.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
@@ -99,6 +100,12 @@ const getNewRestApiInstanceAsync = async (
       patValue: config.patValue,
       siteName: config.siteName,
     });
+    if (!disableLogging) {
+      setServiceAuthInfoInCache(args.requestId, {
+        userId: restApi.userId,
+        siteLuid: restApi.siteId,
+      });
+    }
   } else if (config.auth === 'direct-trust') {
     await restApi.signIn({
       type: 'direct-trust',
@@ -110,6 +117,12 @@ const getNewRestApiInstanceAsync = async (
       scopes: jwtScopes,
       additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
     });
+    if (!disableLogging) {
+      setServiceAuthInfoInCache(args.requestId, {
+        userId: restApi.userId,
+        siteLuid: restApi.siteId,
+      });
+    }
   } else if (config.auth === 'uat') {
     await restApi.signIn({
       type: 'uat',
@@ -123,6 +136,12 @@ const getNewRestApiInstanceAsync = async (
       scopes: jwtScopes,
       additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
     });
+    if (!disableLogging) {
+      setServiceAuthInfoInCache(args.requestId, {
+        userId: restApi.userId,
+        siteLuid: restApi.siteId,
+      });
+    }
   } else {
     if (tableauAuthInfo?.type === 'Bearer') {
       restApi.setBearerToken(tableauAuthInfo.raw);
