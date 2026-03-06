@@ -7,6 +7,7 @@ export const fieldSchema = z
   .object({
     name: z.string(),
     columnClass: z.string(),
+    sourceTable: z.string().nullable(),
     dataType: z.string().nullable(),
     defaultAggregation: z.string().nullable(),
     description: z.string().nullable(),
@@ -78,6 +79,7 @@ export function simplifyReadMetadataResult(readMetadataResult: MetadataResponse)
       name: field.fieldCaption,
       dataType: field.dataType,
       columnClass: field.columnClass,
+      sourceTable: getSourceTableFromLogicalTableId(field.logicalTableId),
     };
 
     if (field.defaultAggregation) {
@@ -138,7 +140,10 @@ export function combineFields(
     if (listFieldsResult.data.publishedDatasources[0]?.fields.length) {
       // fallback to returning listFields results if we don't have any fields from readMetadata.
       for (const field of listFieldsResult.data.publishedDatasources[0].fields) {
-        const toPush: Field = { name: field.name };
+        const toPush: Field = {
+          name: field.name,
+          sourceTable: getSourceTableFromGraphqlField(field),
+        };
         if (field.dataType) {
           toPush.dataType = field.dataType;
         }
@@ -160,6 +165,7 @@ export function combineFields(
       name: field.fieldCaption,
       dataType: field.dataType,
       columnClass: field.columnClass,
+      sourceTable: getSourceTableFromLogicalTableId(field.logicalTableId),
     };
 
     if (field.defaultAggregation) {
@@ -218,6 +224,8 @@ export function combineFields(
 }
 
 function populateFieldWithAdditionalProperties(sourceField: Field, targetField: Field): void {
+  targetField.sourceTable =
+    getSourceTableFromGraphqlField(sourceField) ?? targetField.sourceTable ?? null;
   if (sourceField.description) {
     targetField.description = sourceField.description;
   }
@@ -248,4 +256,36 @@ function populateFieldWithAdditionalProperties(sourceField: Field, targetField: 
   if (sourceField.binSize != undefined) {
     targetField.binSize = sourceField.binSize;
   }
+}
+
+function getSourceTableFromGraphqlField(field: Field): string | null {
+  if (!('upstreamTables' in field) || !Array.isArray(field.upstreamTables)) {
+    return null;
+  }
+
+  for (const table of field.upstreamTables) {
+    if (table?.name) {
+      return table.name;
+    }
+  }
+
+  return null;
+}
+
+function getSourceTableFromLogicalTableId(logicalTableId?: string): string | null {
+  if (!logicalTableId) {
+    return null;
+  }
+
+  const trimmedTableId = logicalTableId.trim();
+  if (!trimmedTableId) {
+    return null;
+  }
+
+  const firstUnderscoreIndex = trimmedTableId.indexOf('_');
+  if (firstUnderscoreIndex > 0) {
+    return trimmedTableId.slice(0, firstUnderscoreIndex);
+  }
+
+  return trimmedTableId;
 }
