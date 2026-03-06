@@ -1,27 +1,15 @@
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { CallToolRequestSchema, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
-import { KeyObject } from 'crypto';
 import express, { RequestHandler } from 'express';
-import { compactDecrypt } from 'jose';
-import { Err, Ok, Result } from 'ts-results-es';
-import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
 import { isToolName, ToolName } from '../../tools/toolName.js';
-import { AUDIENCE } from './provider.js';
-import {
-  mcpAccessTokenSchema,
-  mcpAccessTokenUserOnlySchema,
-  TableauAuthInfo,
-  tableauBearerTokenSchema,
-} from './schemas.js';
+import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
   formatScopes,
   getRequiredApiScopesForTool,
   getRequiredScopesForTool,
   getSupportedApiScopes,
   getSupportedMcpScopes,
-  parseScopes,
 } from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
 
@@ -34,7 +22,7 @@ import { AuthenticatedRequest } from './types.js';
  *
  * @returns Express middleware function
  */
-export function authMiddleware(privateKey: KeyObject | null): RequestHandler {
+export function authMiddleware(accessTokenValidator: AccessTokenValidator): RequestHandler {
   return async (
     req: AuthenticatedRequest,
     res: express.Response,
@@ -80,11 +68,7 @@ export function authMiddleware(privateKey: KeyObject | null): RequestHandler {
     }
 
     const token = authHeader.slice(7);
-    const config = getConfig();
-    const result =
-      config.oauth.embeddedAuthzServer && privateKey
-        ? await verifyEmbeddedAccessToken(token, privateKey)
-        : verifyExternalAccessToken(token);
+    const result = await accessTokenValidator.verifyAccessToken(token);
 
     if (result.isErr()) {
       // For SSE requests (GET), provide proper SSE error response
@@ -218,137 +202,4 @@ function getToolNamesFromRequestBody(body: unknown): ToolName[] {
   }
 
   return Array.from(toolNames);
-}
-
-/**
- * Verifies JWT access token from external OAuth issuer (e.g. Tableau/George's auth server)
- *
- * Decodes JWT and validates issuer and expiration.
- * Reuses raw token for REST API Bearer authorization.
- */
-function verifyExternalAccessToken(token: string): Result<AuthInfo, string> {
-  const config = getConfig();
-
-  try {
-    const [_header, payload, _signature] = token.split('.');
-    if (!payload) {
-      return new Err('Invalid or expired access token');
-    }
-    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
-
-    const parsed = tableauBearerTokenSchema.safeParse(decoded);
-    if (!parsed.success) {
-      return Err(`Invalid access token: ${fromError(parsed.error).toString()}`);
-    }
-
-    const {
-      sub,
-      iss,
-      exp,
-      scope,
-      'https://tableau.com/siteId': siteId,
-      'https://tableau.com/targetUrl': targetUrl,
-    } = parsed.data;
-
-    if (iss !== config.oauth.issuer || exp < Math.floor(Date.now() / 1000)) {
-      return new Err('Invalid or expired access token');
-    }
-
-    const tableauAuthInfo: TableauAuthInfo = {
-      type: 'Bearer',
-      username: sub,
-      server: targetUrl,
-      siteId,
-      raw: token,
-    };
-
-    return Ok({
-      token,
-      clientId: iss,
-      scopes: parseScopes(scope),
-      expiresAt: exp,
-      extra: tableauAuthInfo,
-    });
-  } catch {
-    return new Err('Invalid or expired access token');
-  }
-}
-
-/**
- * Verifies JWE access token from embedded OAuth server
- *
- * Decrypts and validates JWE signature and expiration.
- * Extracts access/refresh tokens for API calls.
- */
-async function verifyEmbeddedAccessToken(
-  token: string,
-  jwePrivateKey: KeyObject,
-): Promise<Result<AuthInfo, string>> {
-  const config = getConfig();
-
-  try {
-    const { plaintext } = await compactDecrypt(token, jwePrivateKey);
-    const payload = JSON.parse(new TextDecoder().decode(plaintext));
-
-    const mcpAccessToken = mcpAccessTokenUserOnlySchema.safeParse(payload);
-    if (!mcpAccessToken.success) {
-      return Err(`Invalid access token: ${fromError(mcpAccessToken.error).toString()}`);
-    }
-
-    const { iss, aud, exp, clientId } = mcpAccessToken.data;
-    if (iss !== config.oauth.issuer || aud !== AUDIENCE || exp < Math.floor(Date.now() / 1000)) {
-      // https://github.com/modelcontextprotocol/inspector/issues/608
-      // MCP Inspector Not Using Refresh Token for Token Validation
-      return new Err('Invalid or expired access token');
-    }
-
-    const tokenScopes = parseScopes(mcpAccessToken.data.scope);
-    let tableauAuthInfo: TableauAuthInfo;
-    if (config.auth === 'oauth') {
-      const mcpAccessToken = mcpAccessTokenSchema.safeParse(payload);
-      if (!mcpAccessToken.success) {
-        return Err(`Invalid access token: ${fromError(mcpAccessToken.error).toString()}`);
-      }
-
-      const {
-        tableauAccessToken,
-        tableauRefreshToken,
-        tableauExpiresAt,
-        tableauUserId,
-        tableauServer,
-        sub,
-      } = mcpAccessToken.data;
-
-      if (tableauExpiresAt < Math.floor(Date.now() / 1000)) {
-        return new Err('Invalid or expired access token');
-      }
-
-      tableauAuthInfo = {
-        type: 'X-Tableau-Auth',
-        username: sub,
-        userId: tableauUserId,
-        server: tableauServer,
-        accessToken: tableauAccessToken,
-        refreshToken: tableauRefreshToken,
-      };
-    } else {
-      const { tableauUserId, tableauServer, sub } = mcpAccessToken.data;
-      tableauAuthInfo = {
-        type: 'X-Tableau-Auth',
-        username: sub,
-        server: tableauServer,
-        ...(tableauUserId ? { userId: tableauUserId } : {}),
-      };
-    }
-
-    return Ok({
-      token,
-      clientId,
-      scopes: tokenScopes,
-      expiresAt: payload.exp,
-      extra: tableauAuthInfo,
-    });
-  } catch {
-    return new Err('Invalid or expired access token');
-  }
 }
