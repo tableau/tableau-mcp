@@ -5,6 +5,10 @@ import { z, ZodError } from 'zod';
 
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
+import {
+  clearServiceAuthInfoFromCache,
+  setServiceAuthInfoInCache,
+} from '../server/service-auth/serviceAuthInfoCache.js';
 import invariant from '../utils/invariant.js';
 import { Tool } from './tool.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
@@ -247,6 +251,8 @@ describe('Tool', () => {
   describe('product telemetry', () => {
     beforeEach(() => {
       mockTelemetrySend.mockClear();
+      // Clear cache to ensure tests don't interfere with each other
+      clearServiceAuthInfoFromCache(mockExtra.requestId);
     });
 
     it('should send telemetry with success=true and empty error_code on success', async () => {
@@ -265,7 +271,8 @@ describe('Tool', () => {
           tool_name: 'get-datasource-metadata',
           request_id: '2',
           session_id: '',
-          site_luid: '',
+          site_luid: '', // Falls back to config.siteName when no auth info
+          user_luid: '',
           podname: 'https://my-tableau-server.com',
           is_hyperforce: false,
           success: true,
@@ -379,6 +386,94 @@ describe('Tool', () => {
         'tool_call',
         expect.objectContaining({
           is_hyperforce: false,
+          success: true,
+          error_code: '',
+        }),
+      );
+    });
+
+    it('should send telemetry with site_luid and user_luid from OAuth X-Tableau-Auth', async () => {
+      const tool = new Tool(mockParams);
+      const extraWithOAuth = {
+        ...mockExtra,
+        tableauAuthInfo: {
+          type: 'X-Tableau-Auth' as const,
+          username: 'test-user',
+          userId: 'user-luid',
+          server: 'https://my-tableau-server.com',
+          accessToken: 'part0|part1|site-luid|part3',
+        },
+      };
+
+      await tool.logAndExecute({
+        extra: extraWithOAuth,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          site_luid: 'site-luid', // Extracted from accessToken (3rd part)
+          user_luid: 'user-luid', // From tableauAuthInfo.userId
+          success: true,
+          error_code: '',
+        }),
+      );
+    });
+
+    it('should send telemetry with site_luid and user_luid from OAuth Bearer token', async () => {
+      const tool = new Tool(mockParams);
+      const extraWithBearer = {
+        ...mockExtra,
+        tableauAuthInfo: {
+          type: 'Bearer' as const,
+          username: 'test-user',
+          server: 'https://my-tableau-server.com',
+          siteId: 'site-luid',
+          raw: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...',
+        },
+      };
+
+      await tool.logAndExecute({
+        extra: extraWithBearer,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          site_luid: 'site-luid', // From tableauAuthInfo.siteId
+          user_luid: '', // Bearer tokens don't have userId
+          success: true,
+          error_code: '',
+        }),
+      );
+    });
+
+    it('should send telemetry with site_luid and user_luid from service auth cache (PAT/direct-trust/UAT)', async () => {
+      const tool = new Tool(mockParams);
+      // Simulate cache being populated after signIn (for PAT/direct-trust/UAT)
+      setServiceAuthInfoInCache(mockExtra.requestId, {
+        userId: 'user-luid ',
+        siteLuid: 'site-luid',
+      });
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          site_luid: 'site-luid', // From serviceAuthInfo cache
+          user_luid: 'user-luid', // From serviceAuthInfo cache
           success: true,
           error_code: '',
         }),
