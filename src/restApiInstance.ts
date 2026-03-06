@@ -101,7 +101,10 @@ const getNewRestApiInstanceAsync = async (
       siteName: config.siteName,
     });
     if (!disableLogging) {
-      setServiceAuthInfoInCache(args.requestId, { userId: restApi.userId, siteLuid: restApi.siteId });
+      setServiceAuthInfoInCache(args.requestId, {
+        userId: restApi.userId,
+        siteLuid: restApi.siteId,
+      });
     }
   } else if (config.auth === 'direct-trust') {
     await restApi.signIn({
@@ -115,7 +118,10 @@ const getNewRestApiInstanceAsync = async (
       additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
     });
     if (!disableLogging) {
-      setServiceAuthInfoInCache(args.requestId, { userId: restApi.userId, siteLuid: restApi.siteId });
+      setServiceAuthInfoInCache(args.requestId, {
+        userId: restApi.userId,
+        siteLuid: restApi.siteId,
+      });
     }
   } else if (config.auth === 'uat') {
     await restApi.signIn({
@@ -131,7 +137,10 @@ const getNewRestApiInstanceAsync = async (
       additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
     });
     if (!disableLogging) {
-      setServiceAuthInfoInCache(args.requestId, { userId: restApi.userId, siteLuid: restApi.siteId });
+      setServiceAuthInfoInCache(args.requestId, {
+        userId: restApi.userId,
+        siteLuid: restApi.siteId,
+      });
     }
   } else {
     if (tableauAuthInfo?.type === 'Bearer') {

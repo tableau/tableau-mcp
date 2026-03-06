@@ -6,6 +6,10 @@ import { fromError, isZodErrorLike } from 'zod-validation-error/v3';
 
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
+import {
+  clearServiceAuthInfoFromCache,
+  getServiceAuthInfoFromCache,
+} from '../server/service-auth/serviceAuthInfoCache.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
 import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
@@ -13,10 +17,6 @@ import { getHttpStatus } from '../utils/getHttpStatus.js';
 import { getSiteLuidFromAccessToken } from '../utils/getSiteLuidFromAccessToken.js';
 import { getUserIdFromAccessToken } from '../utils/getUserIdFromAccessToken.js';
 import { Provider, TypeOrProvider } from '../utils/provider.js';
-import {
-  clearServiceAuthInfoFromCache,
-  getServiceAuthInfoFromCache,
-} from '../server/service-auth/serviceAuthInfoCache.js';
 import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
 import { ToolName } from './toolName.js';
 
@@ -261,7 +261,10 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
         tool_name: this.name,
         request_id: requestId.toString(),
         session_id: sessionId ?? '',
-        site_luid: getSiteLuidFromAccessToken(tableauAuthInfo) || serviceAuthInfo?.siteLuid || config.siteName,
+        site_luid:
+          getSiteLuidFromAccessToken(tableauAuthInfo) ||
+          serviceAuthInfo?.siteLuid ||
+          config.siteName,
         user_luid: getUserIdFromAccessToken(tableauAuthInfo) || serviceAuthInfo?.userId || '',
         podname: config.server,
         is_hyperforce: config.isHyperforce,

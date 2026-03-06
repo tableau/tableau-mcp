@@ -6,9 +6,7 @@ import { TableauAuthInfo } from '../server/oauth/schemas.js';
  * @param tableauAuthInfo - Tableau authentication info
  * @returns The user LUID, or empty string if it cannot be extracted
  */
-export function getUserIdFromAccessToken(
-  tableauAuthInfo: TableauAuthInfo | undefined,
-): string {
+export function getUserIdFromAccessToken(tableauAuthInfo: TableauAuthInfo | undefined): string {
   if (!tableauAuthInfo) {
     return '';
   }
