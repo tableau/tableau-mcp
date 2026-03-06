@@ -12,8 +12,7 @@ import {
   tableauBearerTokenSchema,
 } from './schemas';
 import { parseScopes } from './scopes';
-
-export const AUDIENCE = 'tableau-mcp-server';
+import { AUDIENCE } from './token';
 
 type AccessTokenValidatorResult = Result<AuthInfo, string>;
 

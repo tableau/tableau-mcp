@@ -18,7 +18,6 @@ import { token } from './token.js';
 import { AuthorizationCode, PendingAuthorization, RefreshTokenData } from './types.js';
 
 export const TABLEAU_CLOUD_SERVER_URL = 'https://online.tableau.com';
-export const AUDIENCE = 'tableau-mcp-server';
 
 export abstract class OAuthProvider {
   protected readonly config = getConfig();
