@@ -365,14 +365,6 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  TRUST_PROXY_CONFIG: {
-    includeInUserConfig: false,
-    type: 'string',
-    title: 'Trust Proxy Config',
-    description: 'The trust proxy config.',
-    required: false,
-    sensitive: false,
-  },
   DISABLE_LOG_MASKING: {
     includeInUserConfig: false,
     type: 'boolean',

@@ -30,7 +30,6 @@ export class Config {
   sslCert: string;
   httpPort: number;
   corsOriginConfig: CorsOptions['origin'];
-  trustProxyConfig: boolean | number | string | null;
   siteName: string;
   patName: string;
   patValue: string;
@@ -88,7 +87,6 @@ export class Config {
       SSL_CERT: sslCert,
       HTTP_PORT_ENV_VAR_NAME: httpPortEnvVarName,
       CORS_ORIGIN_CONFIG: corsOriginConfig,
-      TRUST_PROXY_CONFIG: trustProxyConfig,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
       JWT_SUB_CLAIM: jwtSubClaim,
@@ -148,7 +146,6 @@ export class Config {
       maxValue: 65535,
     });
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
-    this.trustProxyConfig = getTrustProxyConfig(trustProxyConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
@@ -420,22 +417,6 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
       `The environment variable CORS_ORIGIN_CONFIG is not a valid URL: ${corsOriginConfig}`,
     );
   }
-}
-
-function getTrustProxyConfig(trustProxyConfig: string): boolean | number | string | null {
-  if (!trustProxyConfig) {
-    return null;
-  }
-
-  if (trustProxyConfig.match(/^true|false$/i)) {
-    return trustProxyConfig.toLowerCase() === 'true';
-  }
-
-  if (trustProxyConfig.match(/^\d+$/)) {
-    return parseInt(trustProxyConfig, 10);
-  }
-
-  return trustProxyConfig;
 }
 
 // When the user does not provide a site name in the Claude MCP Bundle configuration,
