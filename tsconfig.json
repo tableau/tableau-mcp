@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "esnext",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "outDir": "./build",
