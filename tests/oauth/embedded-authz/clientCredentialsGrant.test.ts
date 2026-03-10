@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
 }));
 
-vi.mock('../../src/sdks/tableau-oauth/methods.js', () => ({
+vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
   getTokenResult: mocks.mockGetTokenResult,
 }));
 

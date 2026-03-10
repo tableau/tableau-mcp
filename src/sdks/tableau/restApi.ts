@@ -1,4 +1,4 @@
-import { fromError } from 'zod-validation-error';
+import { fromError } from 'zod-validation-error/v3';
 
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { AuthConfig } from './authConfig.js';

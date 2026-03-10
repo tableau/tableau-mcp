@@ -1,9 +1,10 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { Filter, FilterField } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { ToolRules } from '../../tool.js';
 import { hasFieldCaptionAndCalculation, hasFunctionAndCalculation } from './validateFields.js';
 
-export function validateFilters(filters: Filter[] | undefined): void {
+export function validateFilters(filters: Filter[] | undefined, rules: ToolRules): void {
   if (!filters) {
     return;
   }
@@ -60,7 +61,7 @@ export function validateFilters(filters: Filter[] | undefined): void {
     }
   }
 
-  {
+  if (rules.restrictFunctionsAndCalculationsInFilters) {
     // Set, Match, and Relative Date filters can't have functions or calculations.
     const setFiltersWithFunctionsOrCalculations = filters.filter((filter) => {
       return (
@@ -171,9 +172,15 @@ export function validateFilters(filters: Filter[] | undefined): void {
         }
 
         if (!filter.startsWith && !filter.endsWith && !filter.contains) {
-          acc.push(
-            `The match filter for field "${filter.field.fieldCaption}" must include at least one of the following properties: startsWith, endsWith, or contains`,
-          );
+          if ('fieldCaption' in filter.field) {
+            acc.push(
+              `The match filter for field "${filter.field.fieldCaption}" must include at least one of the following properties: startsWith, endsWith, or contains`,
+            );
+          } else {
+            acc.push(
+              `The match filter with calculation "${filter.field.calculation}" must include at least one of the following properties: startsWith, endsWith, or contains`,
+            );
+          }
         }
 
         return acc;

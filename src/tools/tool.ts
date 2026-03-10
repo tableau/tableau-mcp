@@ -2,7 +2,7 @@ import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotoco
 import { ZodiosError } from '@zodios/core';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
-import { fromError, isZodErrorLike } from 'zod-validation-error';
+import { fromError, isZodErrorLike } from 'zod-validation-error/v3';
 
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
@@ -18,6 +18,8 @@ import { ToolName } from './toolName.js';
 type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args extends ZodRawShape
   ? (args: z.objectOutputType<Args, ZodTypeAny>) => void
   : never;
+
+export type ToolRules = Record<string, boolean | undefined>;
 
 export type ConstrainedResult<T> =
   | {

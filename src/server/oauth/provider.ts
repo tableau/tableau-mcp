@@ -5,6 +5,11 @@ import { readFileSync } from 'fs';
 import { getConfig } from '../../config.js';
 import { oauthAuthorizationServer } from './.well-known/oauth-authorization-server.js';
 import { oauthProtectedResource } from './.well-known/oauth-protected-resource.js';
+import {
+  AccessTokenValidator,
+  EmbeddedAccessTokenValidator,
+  TableauAccessTokenValidator,
+} from './accessTokenValidator.js';
 import { authMiddleware } from './authMiddleware.js';
 import { authorize } from './authorize.js';
 import { callback } from './callback.js';
@@ -13,37 +18,18 @@ import { token } from './token.js';
 import { AuthorizationCode, PendingAuthorization, RefreshTokenData } from './types.js';
 
 export const TABLEAU_CLOUD_SERVER_URL = 'https://online.tableau.com';
-export const AUDIENCE = 'tableau-mcp-server';
 
 /**
- * OAuth 2.1 Provider
- *
- * Implements the complete MCP OAuth 2.1 flow with PKCE
- * @see https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
+ * Abstract OAuth provider
  *
  */
-export class OAuthProvider {
-  private readonly config = getConfig();
+abstract class OAuthProvider {
+  protected readonly config = getConfig();
 
-  private readonly pendingAuthorizations = new Map<string, PendingAuthorization>();
-  private readonly authorizationCodes = new Map<string, AuthorizationCode>();
-  private readonly refreshTokens = new Map<string, RefreshTokenData>();
-
-  private readonly privateKey: KeyObject | null;
-  private readonly publicKey: KeyObject | null;
-
-  constructor() {
-    if (this.config.oauth.embeddedAuthzServer) {
-      this.privateKey = this.getPrivateKey();
-      this.publicKey = createPublicKey(this.privateKey);
-    } else {
-      this.privateKey = null;
-      this.publicKey = null;
-    }
-  }
+  protected abstract get accessTokenValidator(): AccessTokenValidator;
 
   get authMiddleware(): RequestHandler {
-    return authMiddleware(this.privateKey);
+    return authMiddleware(this.accessTokenValidator);
   }
 
   setupRoutes(app: express.Application): void {
@@ -52,6 +38,38 @@ export class OAuthProvider {
 
     // .well-known/oauth-protected-resource
     oauthProtectedResource(app);
+  }
+}
+
+/**
+ * Embedded OAuth 2.1 Provider
+ *
+ * Implements the complete MCP OAuth 2.1 flow with PKCE
+ * @see https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
+ *
+ */
+export class EmbeddedOAuthProvider extends OAuthProvider {
+  private readonly pendingAuthorizations = new Map<string, PendingAuthorization>();
+  private readonly authorizationCodes = new Map<string, AuthorizationCode>();
+  private readonly refreshTokens = new Map<string, RefreshTokenData>();
+
+  private readonly privateKey: KeyObject;
+  private readonly publicKey: KeyObject;
+
+  constructor() {
+    super();
+
+    this.privateKey = this.getPrivateKey();
+    this.publicKey = createPublicKey(this.privateKey);
+  }
+
+  get accessTokenValidator(): AccessTokenValidator {
+    return new EmbeddedAccessTokenValidator(this.privateKey);
+  }
+
+  setupRoutes(app: express.Application): void {
+    // .well-known endpoints
+    super.setupRoutes(app);
 
     // oauth2/register
     register(app);
@@ -62,10 +80,8 @@ export class OAuthProvider {
     // /Callback
     callback(app, this.pendingAuthorizations, this.authorizationCodes);
 
-    // oauth2/token (only when embedded authz server - we need publicKey for JWE)
-    if (this.publicKey) {
-      token(app, this.authorizationCodes, this.refreshTokens, this.publicKey);
-    }
+    // oauth2/token
+    token(app, this.authorizationCodes, this.refreshTokens, this.publicKey);
   }
 
   private getPrivateKey(): KeyObject {
@@ -87,5 +103,15 @@ export class OAuthProvider {
     } catch {
       throw new Error('Failed to create private key');
     }
+  }
+}
+
+/**
+ * OAuth provider for the Tableau authorization server
+ *
+ */
+export class TableauOAuthProvider extends OAuthProvider {
+  get accessTokenValidator(): AccessTokenValidator {
+    return new TableauAccessTokenValidator();
   }
 }

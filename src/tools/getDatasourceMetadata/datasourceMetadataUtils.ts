@@ -32,7 +32,14 @@ export const parameterSchema = z
     parameterType: z.string(),
     dataType: z.string().nullable(),
     value: z.union([z.number(), z.string(), z.boolean(), z.null()]),
-    members: z.array(z.union([z.number(), z.string(), z.boolean(), z.null()])),
+    members: z.array(
+      z.union([z.number(), z.string(), z.boolean(), z.null()]).or(
+        z.object({
+          value: z.union([z.number(), z.string(), z.boolean(), z.null()]),
+          alias: z.string(),
+        }),
+      ),
+    ),
     min: z.number().nullable(),
     max: z.number().nullable(),
     step: z.number().nullable(),
@@ -44,6 +51,7 @@ export const parameterSchema = z
   .partial();
 
 export const fieldsResultSchema = z.object({
+  datasourceDescription: z.string(),
   fields: z.array(fieldSchema),
   parameters: z.array(parameterSchema),
 });
@@ -54,6 +62,7 @@ export type FieldsResult = z.infer<typeof fieldsResultSchema>;
 
 export function simplifyReadMetadataResult(readMetadataResult: MetadataResponse): FieldsResult {
   const simplifiedResponse: FieldsResult = {
+    datasourceDescription: '',
     fields: [],
     parameters: [],
   };
@@ -120,6 +129,7 @@ export function combineFields(
   // readMetadata (VizQL Data Service API) and listFields (GraphQL Metadata API) results
   // to optimize for LLM accuracy and reduce tokens in response.
   const combinedFields: FieldsResult = {
+    datasourceDescription: listFieldsResult.data.publishedDatasources[0]?.description ?? '',
     fields: [],
     parameters: [],
   };

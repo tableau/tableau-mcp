@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto';
 import express from 'express';
 import { Err, Ok, Result } from 'ts-results-es';
-import { fromError } from 'zod-validation-error';
+import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
@@ -162,6 +162,7 @@ export function callback(
           refreshToken,
           expiresInSeconds,
         },
+        siteContentUrl: sessionResult.value.site.contentUrl ?? '',
         expiresAt: Math.floor((Date.now() + config.oauth.authzCodeTimeoutMs) / 1000),
       });
 

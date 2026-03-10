@@ -78,7 +78,9 @@ const parameterSchema = z.discriminatedUnion('parameterType', [
   parameterBaseSchema
     .extend({
       parameterType: z.literal('LIST'),
-      members: z.array(parameterValueSchema),
+      members: z.array(
+        parameterValueSchema.or(z.object({ value: parameterValueSchema, alias: z.string() })),
+      ),
     })
     .strict(),
   parameterBaseSchema
@@ -144,17 +146,17 @@ const filterBaseSchema = z.object({
 });
 
 const simpleFilterBaseSchema = z.object({
-  field: z.object({ fieldCaption: z.string() }).strict(),
+  field: z.union([dimensionFilterFieldSchema, calculatedFilterFieldSchema]),
   context: z.boolean().optional(),
 });
 
-export const setFilterSchema = simpleFilterBaseSchema.extend({
+export const setFilterSchema = filterBaseSchema.extend({
   filterType: z.literal('SET'),
   values: z.union([z.array(z.string()), z.array(z.number()), z.array(z.boolean())]),
   exclude: z.boolean().optional(),
 });
 
-const relativeDateFilterBaseSchema = simpleFilterBaseSchema.extend({
+const relativeDateFilterBaseSchema = filterBaseSchema.extend({
   filterType: z.literal('DATE'),
   periodType: periodTypeSchema,
   anchorDate: z.string().optional(),

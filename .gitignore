@@ -1,6 +1,7 @@
 *.local
 .env
 .env.*
+.vscode/
 build/
 node_modules/
 junit/

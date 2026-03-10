@@ -81,7 +81,7 @@ This tool searches across all supported content types for objects relevant to th
                   terms,
                   page: 0,
                   limit: maxResultLimit ? Math.min(maxResultLimit, limit ?? 100) : (limit ?? 100),
-                  orderBy: orderByString,
+                  order_by: orderByString,
                   filter: filterString,
                 });
                 return reduceSearchContentResponse(response);

@@ -13,10 +13,10 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import z from 'zod';
 
-import { ToolName } from '../../../src/tools/toolName';
-import invariant from '../../../src/utils/invariant';
-import { Deferred } from '../deferred';
-import { expect } from './tests/base';
+import { ToolName } from '../../../src/tools/toolName.js';
+import invariant from '../../../src/utils/invariant.js';
+import { Deferred } from '../embedded-authz/deferred.js';
+import { expect } from './tests/base.js';
 
 export class OAuthClient {
   private readonly client: Client;
