@@ -1,7 +1,8 @@
 import { Client } from 'langsmith';
 import { ExampleCreate } from 'langsmith/schemas';
 
-import { exampleIds, getExample } from './examples';
+import { evalInputSchema, evalReferenceSchema } from './evaluators';
+import { EvalExample, examples } from './examples';
 
 export async function ensureDatasetExists({
   client,
@@ -29,25 +30,77 @@ export async function ensureDatasetExists({
   }
 
   console.log('Getting current examples...');
-  const datasetExampleIds = new Set(
-    (await toArray(client.listExamples({ datasetId: dataset.id }))).map((e) => e.id),
-  );
+  const datasetExamples = await toArray(client.listExamples({ datasetId: dataset.id }));
 
-  console.log(`Found ${datasetExampleIds.size} examples in dataset`);
+  const datasetExamplesStr = datasetExamples.length === 1 ? 'example' : 'examples';
+  console.log(`Found ${datasetExamples.length} ${datasetExamplesStr} in dataset`);
 
-  const missingExampleIds = exampleIds.difference(datasetExampleIds);
-  if (missingExampleIds.size > 0) {
-    const missingExamples = [...missingExampleIds].map(getExample);
-    const uploads: Array<ExampleCreate> = missingExamples.map((example) => ({
+  const missingExamples: Array<EvalExample> = examples.filter((example) => {
+    return !datasetExamples.some((e) => e.inputs.question === example.inputs.question);
+  });
+
+  const mismatchedExamples: Array<EvalExample> = [];
+  for (const datasetExample of datasetExamples) {
+    const inputResult = evalInputSchema.safeParse(datasetExample.inputs);
+    if (!inputResult.success) {
+      console.log("Dataset example inputs don't match expected schema");
+      console.log(`Deleting example: ${datasetExample.id}...`);
+      await client.deleteExample(datasetExample.id);
+      continue;
+    }
+
+    const datasetInputs = inputResult.data;
+    const example = examples.find((e) => e.inputs.question === datasetInputs.question);
+    if (!example) {
+      console.log(`Dataset example not found: ${datasetInputs.question}`);
+      console.log(`Deleting example: ${datasetExample.id}...`);
+      await client.deleteExample(datasetExample.id);
+      continue;
+    }
+
+    const outputResult = evalReferenceSchema.safeParse(datasetExample.outputs);
+    if (!outputResult.success) {
+      console.log(`Example outputs don't match expected schema: ${datasetExample.inputs.question}`);
+      console.log(`Deleting example: ${datasetExample.id}...`);
+      await client.deleteExample(datasetExample.id);
+      mismatchedExamples.push(example);
+      continue;
+    }
+
+    const datasetOutputs = outputResult.data;
+    if (
+      datasetOutputs.rubric !== example.outputs.rubric ||
+      datasetOutputs.mustContain.length !== example.outputs.mustContain.length ||
+      !datasetOutputs.mustContain.every((mustContain) =>
+        example.outputs.mustContain.includes(mustContain),
+      ) ||
+      datasetOutputs.expectedTools.length !== example.outputs.expectedTools.length ||
+      !datasetOutputs.expectedTools.every((tool) => example.outputs.expectedTools.includes(tool))
+    ) {
+      console.log(`Example mismatch: ${datasetExample.inputs.question}`);
+      console.log('Deleting example...');
+      await client.deleteExample(datasetExample.id);
+      mismatchedExamples.push(example);
+    }
+  }
+
+  const uploads: Array<ExampleCreate> = [...missingExamples, ...mismatchedExamples].map(
+    (example) => ({
       inputs: example.inputs,
       outputs: example.outputs,
       dataset_id: dataset.id,
-    }));
+    }),
+  );
 
-    console.log(`Creating ${uploads.length} missing examples...`);
-    await client.createExamples(uploads);
-    console.log(`Created ${uploads.length} missing examples`);
+  if (uploads.length === 0) {
+    console.log('Dataset examples are up to date');
+    return;
   }
+
+  const examplesStr = uploads.length === 1 ? 'example' : 'examples';
+  console.log(`Creating ${uploads.length} ${examplesStr}...`);
+  await client.createExamples(uploads);
+  console.log(`Created ${uploads.length} ${examplesStr}`);
 }
 
 async function first<T>(iter: AsyncIterable<T>): Promise<T | undefined> {

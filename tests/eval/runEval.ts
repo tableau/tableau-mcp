@@ -12,7 +12,7 @@ import {
 } from './evaluators';
 import { target } from './target';
 
-export async function runEval(): Promise<void> {
+async function runEval(): Promise<void> {
   setEnv();
   dotenv.config({ path: 'tests/eval/.env' });
 
@@ -34,10 +34,10 @@ export async function runEval(): Promise<void> {
     maxConcurrency: 2,
   };
 
-  const results = await evaluate(target, options);
+  const { results } = await evaluate(target, options);
 
   // Print summary
-  console.log('\n📊 Results Summary\n' + '─'.repeat(50));
+  console.log('\n📊 Results Summary\n' + '-'.repeat(50));
 
   const scores: Record<string, number[]> = {};
 

@@ -1,3 +1,4 @@
+import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from 'langchain';
 import { EvaluationResult, EvaluatorT } from 'langsmith/evaluation';
 import { KVMap } from 'langsmith/schemas';
 import z from 'zod';
@@ -9,8 +10,12 @@ export const evalInputSchema = z.object({
 });
 
 export const evalOutputSchema = z.object({
-  output: z.string(),
-  toolsUsed: z.array(z.string()),
+  toolsUsed: z.array(
+    z.object({
+      name: z.string(),
+      content: z.string(),
+    }),
+  ),
 });
 
 export const evalReferenceSchema = z.object({
@@ -38,13 +43,16 @@ export const toolSelectionGrader: EvaluatorT = async ({
     return { key: 'tool_selection', score: 1 };
   }
 
-  const hits = expectedTools.filter((t) => toolsUsed.includes(t));
+  const hits = expectedTools.filter((expectedTool) =>
+    toolsUsed.some((actualTool) => actualTool.name === expectedTool),
+  );
+
   const score = hits.length / expectedTools.length;
 
   return {
     key: 'tool_selection',
     score,
-    comment: `Expected [${expectedTools.join(', ')}] — got [${outputs.toolsUsed.join(', ')}]`,
+    comment: `Expected [${expectedTools.join(', ')}] - got [${toolsUsed.map((tool) => tool.name).join(', ')}]`,
   };
 };
 
@@ -64,7 +72,7 @@ export const contentPresenceGrader: EvaluatorT = async ({
   }
 
   const hits = toolsUsed.filter((tool) =>
-    mustContain.some((s) => tool.toLowerCase().includes(s.toLowerCase())),
+    mustContain.some((s) => tool.content.toLowerCase().includes(s.toLowerCase())),
   );
   const score = hits.length / mustContain.length;
 
@@ -86,7 +94,7 @@ export const rubricGrader: EvaluatorT = async ({
   referenceOutputs?: KVMap;
 }): Promise<EvaluationResult> => {
   const { question } = evalInputSchema.parse(inputs);
-  const { output, toolsUsed } = evalOutputSchema.parse(outputs);
+  const { toolsUsed } = evalOutputSchema.parse(outputs);
   const { rubric } = evalReferenceSchema.parse(referenceOutputs ?? { rubric: '' });
 
   if (!rubric) {
@@ -96,21 +104,25 @@ export const rubricGrader: EvaluatorT = async ({
   const judgePrompt = `You are evaluating an AI agent's response to a user question.
 
 Question: ${question}
-Agent Response: ${output}
-Tools Used: ${toolsUsed.join(', ') || 'none'}
+Agent Response: ${toolsUsed.map((tool) => tool.content).join('\n') || 'none'}
+Tools Used: ${toolsUsed.map((tool) => tool.name).join(', ') || 'none'}
 
 Rubric: ${rubric}
 
 Score the response from 0.0 to 1.0.
 Respond ONLY with JSON: {"score": <number>, "comment": "<brief reason>"}`;
 
-  const agent = await getAgent({
+  const { agent } = await getAgent({
     model: getModel(),
   });
 
-  const response = await agent.invoke(judgePrompt);
+  console.log('Invoking judge agent...');
+  const { messages } = (await agent.invoke({
+    messages: [{ role: 'user', content: judgePrompt }],
+  })) as { messages: Array<AIMessage | HumanMessage | SystemMessage | ToolMessage> };
+
   const text =
-    typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+    messages.find<AIMessage>((message) => AIMessage.isInstance(message))?.content?.toString() ?? '';
 
   try {
     const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());

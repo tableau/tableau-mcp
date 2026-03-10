@@ -34,11 +34,10 @@ export async function getAgent({
 }: {
   model: string;
   mcpServer?: StdioConnection;
-}): Promise<ReturnType<typeof createAgent>> {
+}): Promise<{ agent: ReturnType<typeof createAgent>; client?: MultiServerMCPClient }> {
   const agentOptions = {
     name: 'Assistant with Tableau MCP tools',
     model: new ChatOpenAI({
-      apiKey: getApiKey(),
       model,
       configuration: {
         apiKey: getApiKey(),
@@ -48,9 +47,7 @@ export async function getAgent({
   };
 
   if (!mcpServer) {
-    return createAgent({
-      ...agentOptions,
-    });
+    return { agent: createAgent({ ...agentOptions }) };
   }
 
   const client = new MultiServerMCPClient({
@@ -58,10 +55,10 @@ export async function getAgent({
   });
 
   const tools = await client.getTools();
-  return createAgent({
-    ...agentOptions,
-    tools,
-  });
+  return {
+    agent: createAgent({ ...agentOptions, tools }),
+    client,
+  };
 }
 
 export function log(message?: any, force?: boolean): void {
