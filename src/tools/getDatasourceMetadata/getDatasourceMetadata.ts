@@ -132,40 +132,43 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
             });
           }
 
-          return await useRestApi({
-            ...extra,
-            jwtScopes: ['tableau:content:read', 'tableau:viz_data_service:read'],
-            callback: async (restApi) => {
-              // Fetching metadata from VizQL Data Service API.
-              const readMetadataResult = await restApi.vizqlDataServiceMethods.readMetadata({
-                datasource: {
-                  datasourceLuid,
-                },
-              });
+          return await useRestApi(
+            {
+              ...extra,
+              jwtScopes: ['tableau:content:read', 'tableau:viz_data_service:read'],
+              callback: async (restApi) => {
+                // Fetching metadata from VizQL Data Service API.
+                const readMetadataResult = await restApi.vizqlDataServiceMethods.readMetadata({
+                  datasource: {
+                    datasourceLuid,
+                  },
+                });
 
-              if (readMetadataResult.isErr()) {
-                return Err({ type: 'feature-disabled' });
-              }
+                if (readMetadataResult.isErr()) {
+                  return Err({ type: 'feature-disabled' });
+                }
 
-              if (configWithOverrides.disableMetadataApiRequests) {
-                // Exit early since requests to the Tableau Metadata API are disabled.
-                return Ok(simplifyReadMetadataResult(readMetadataResult.value));
-              }
+                if (configWithOverrides.disableMetadataApiRequests) {
+                  // Exit early since requests to the Tableau Metadata API are disabled.
+                  return Ok(simplifyReadMetadataResult(readMetadataResult.value));
+                }
 
-              let listFieldsResult: GraphQLResponse;
+                let listFieldsResult: GraphQLResponse;
 
-              try {
-                // Fetching metadata from Tableau Metadata API.
-                // Using try-catch here since requests could fail if the service is not enabled.
-                listFieldsResult = await restApi.metadataMethods.graphql(query);
-              } catch {
-                return Ok(simplifyReadMetadataResult(readMetadataResult.value));
-              }
+                try {
+                  // Fetching metadata from Tableau Metadata API.
+                  // Using try-catch here since requests could fail if the service is not enabled.
+                  listFieldsResult = await restApi.metadataMethods.graphql(query);
+                } catch {
+                  return Ok(simplifyReadMetadataResult(readMetadataResult.value));
+                }
 
-              // Combine the results from the VizQL Data Service API and the Tableau Metadata API.
-              return Ok(combineFields(readMetadataResult.value, listFieldsResult));
+                // Combine the results from the VizQL Data Service API and the Tableau Metadata API.
+                return Ok(combineFields(readMetadataResult.value, listFieldsResult));
+              },
             },
-          });
+            extra,
+          );
         },
         constrainSuccessResult: (fields) => {
           return {

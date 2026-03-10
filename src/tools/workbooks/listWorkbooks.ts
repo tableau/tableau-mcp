@@ -71,37 +71,40 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
         args: {},
         callback: async () => {
           return new Ok(
-            await useRestApi({
-              ...extra,
-              jwtScopes: ['tableau:content:read'],
-              callback: async (restApi) => {
-                const maxResultLimit = configWithOverrides.getMaxResultLimit(
-                  listWorkbooksTool.name,
-                );
+            await useRestApi(
+              {
+                ...extra,
+                jwtScopes: ['tableau:content:read'],
+                callback: async (restApi) => {
+                  const maxResultLimit = configWithOverrides.getMaxResultLimit(
+                    listWorkbooksTool.name,
+                  );
 
-                const workbooks = await paginate({
-                  pageConfig: {
-                    pageSize,
-                    limit: maxResultLimit
-                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
-                      : limit,
-                  },
-                  getDataFn: async (pageConfig) => {
-                    const { pagination, workbooks: data } =
-                      await restApi.workbooksMethods.queryWorkbooksForSite({
-                        siteId: restApi.siteId,
-                        filter: validatedFilter ?? '',
-                        pageSize: pageConfig.pageSize,
-                        pageNumber: pageConfig.pageNumber,
-                      });
+                  const workbooks = await paginate({
+                    pageConfig: {
+                      pageSize,
+                      limit: maxResultLimit
+                        ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                        : limit,
+                    },
+                    getDataFn: async (pageConfig) => {
+                      const { pagination, workbooks: data } =
+                        await restApi.workbooksMethods.queryWorkbooksForSite({
+                          siteId: restApi.siteId,
+                          filter: validatedFilter ?? '',
+                          pageSize: pageConfig.pageSize,
+                          pageNumber: pageConfig.pageNumber,
+                        });
 
-                    return { pagination, data };
-                  },
-                });
+                      return { pagination, data };
+                    },
+                  });
 
-                return workbooks;
+                  return workbooks;
+                },
               },
-            }),
+              extra,
+            ),
           );
         },
         constrainSuccessResult: (workbooks) =>

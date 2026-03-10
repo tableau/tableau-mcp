@@ -8,6 +8,8 @@ export function getMockRequestHandlerExtra(): TableauRequestHandlerExtra {
     config: getConfig(),
     server: new Server(),
     tableauAuthInfo: undefined,
+    userLuid: undefined,
+    siteLuid: undefined,
     getConfigWithOverrides: vi.fn().mockResolvedValue(new OverridableConfig({})),
     signal: new AbortController().signal,
     requestId: 2,

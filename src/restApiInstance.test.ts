@@ -12,6 +12,7 @@ import {
 import { AuthConfig } from './sdks/tableau/authConfig.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
+import { getMockRequestHandlerExtra } from './tools/toolContext.mock.js';
 
 vi.mock('./logging/log.js', () => ({
   log: {
@@ -38,15 +39,19 @@ describe('restApiInstance', () => {
 
   describe('useRestApi', () => {
     it('should create a new RestApi instance and sign in', async () => {
-      const restApi = await useRestApi({
-        config: mockConfig,
-        requestId: mockRequestId,
-        server: new Server(),
-        tableauAuthInfo: undefined,
-        jwtScopes: [],
-        signal: new AbortController().signal,
-        callback: (restApi) => Promise.resolve(restApi),
-      });
+      const mockExtra = getMockRequestHandlerExtra();
+      const restApi = await useRestApi(
+        {
+          config: mockConfig,
+          requestId: mockRequestId,
+          server: new Server(),
+          tableauAuthInfo: undefined,
+          jwtScopes: [],
+          signal: new AbortController().signal,
+          callback: (restApi) => Promise.resolve(restApi),
+        },
+        mockExtra,
+      );
 
       expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
       expect(restApi.signIn).toHaveBeenCalledWith(mockAuthConfig);

@@ -84,37 +84,40 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
         extra,
         args: { filter, pageSize, limit },
         callback: async () => {
-          const datasources = await useRestApi({
-            ...extra,
-            jwtScopes: ['tableau:content:read'],
-            callback: async (restApi) => {
-              const maxResultLimit = configWithOverrides.getMaxResultLimit(
-                listDatasourcesTool.name,
-              );
+          const datasources = await useRestApi(
+            {
+              ...extra,
+              jwtScopes: ['tableau:content:read'],
+              callback: async (restApi) => {
+                const maxResultLimit = configWithOverrides.getMaxResultLimit(
+                  listDatasourcesTool.name,
+                );
 
-              const datasources = await paginate({
-                pageConfig: {
-                  pageSize,
-                  limit: maxResultLimit
-                    ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
-                    : limit,
-                },
-                getDataFn: async (pageConfig) => {
-                  const { pagination, datasources: data } =
-                    await restApi.datasourcesMethods.listDatasources({
-                      siteId: restApi.siteId,
-                      filter: validatedFilter ?? '',
-                      pageSize: pageConfig.pageSize,
-                      pageNumber: pageConfig.pageNumber,
-                    });
+                const datasources = await paginate({
+                  pageConfig: {
+                    pageSize,
+                    limit: maxResultLimit
+                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                      : limit,
+                  },
+                  getDataFn: async (pageConfig) => {
+                    const { pagination, datasources: data } =
+                      await restApi.datasourcesMethods.listDatasources({
+                        siteId: restApi.siteId,
+                        filter: validatedFilter ?? '',
+                        pageSize: pageConfig.pageSize,
+                        pageNumber: pageConfig.pageNumber,
+                      });
 
-                  return { pagination, data };
-                },
-              });
+                    return { pagination, data };
+                  },
+                });
 
-              return datasources;
+                return datasources;
+              },
             },
-          });
+            extra,
+          );
 
           return new Ok(datasources);
         },

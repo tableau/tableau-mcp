@@ -82,6 +82,8 @@ export class Server extends McpServer {
           config,
           server: this,
           tableauAuthInfo,
+          userLuid: undefined,
+          siteLuid: undefined,
           getConfigWithOverrides: async () =>
             getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra }),
         };

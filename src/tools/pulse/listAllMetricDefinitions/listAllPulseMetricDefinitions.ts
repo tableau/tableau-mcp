@@ -62,41 +62,44 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
         extra,
         args: { view, limit, pageSize },
         callback: async () => {
-          return await useRestApi({
-            ...extra,
-            jwtScopes: ['tableau:insight_definitions_metrics:read'],
-            callback: async (restApi) => {
-              const maxResultLimit = configWithOverrides.getMaxResultLimit(
-                listAllPulseMetricDefinitionsTool.name,
-              );
+          return await useRestApi(
+            {
+              ...extra,
+              jwtScopes: ['tableau:insight_definitions_metrics:read'],
+              callback: async (restApi) => {
+                const maxResultLimit = configWithOverrides.getMaxResultLimit(
+                  listAllPulseMetricDefinitionsTool.name,
+                );
 
-              const definitions = await pulsePaginate({
-                config: {
-                  limit: maxResultLimit
-                    ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
-                    : limit,
-                  pageSize,
-                },
-                getDataFn: async (pageToken, pageSize) => {
-                  const apiResult = await restApi.pulseMethods.listAllPulseMetricDefinitions(
-                    view,
-                    pageToken,
+                const definitions = await pulsePaginate({
+                  config: {
+                    limit: maxResultLimit
+                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                      : limit,
                     pageSize,
-                  );
+                  },
+                  getDataFn: async (pageToken, pageSize) => {
+                    const apiResult = await restApi.pulseMethods.listAllPulseMetricDefinitions(
+                      view,
+                      pageToken,
+                      pageSize,
+                    );
 
-                  if (apiResult.isOk()) {
-                    return new Ok({
-                      pagination: apiResult.value.pagination,
-                      data: apiResult.value.definitions,
-                    });
-                  }
+                    if (apiResult.isOk()) {
+                      return new Ok({
+                        pagination: apiResult.value.pagination,
+                        data: apiResult.value.definitions,
+                      });
+                    }
 
-                  return apiResult;
-                },
-              });
-              return definitions;
+                    return apiResult;
+                  },
+                });
+                return definitions;
+              },
             },
-          });
+            extra,
+          );
         },
         constrainSuccessResult: async (definitions: Array<PulseMetricDefinition>) => {
           return constrainPulseDefinitions({

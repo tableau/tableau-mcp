@@ -200,15 +200,18 @@ class ResourceAccessChecker {
 
     let datasource: DataSource | undefined;
     async function getDatasource(): Promise<DataSource> {
-      return await useRestApi({
-        ...extra,
-        jwtScopes: ['tableau:content:read'],
-        callback: async (restApi) =>
-          await restApi.datasourcesMethods.queryDatasource({
-            siteId: restApi.siteId,
-            datasourceId: datasourceLuid,
-          }),
-      });
+      return await useRestApi(
+        {
+          ...extra,
+          jwtScopes: ['tableau:content:read'],
+          callback: async (restApi) =>
+            await restApi.datasourcesMethods.queryDatasource({
+              siteId: restApi.siteId,
+              datasourceId: datasourceLuid,
+            }),
+        },
+        extra,
+      );
     }
 
     const allowedProjectIds = await this.getAllowedProjectIds({ extra });
@@ -291,15 +294,18 @@ class ResourceAccessChecker {
 
     let workbook: Workbook | undefined;
     async function getWorkbook(): Promise<Workbook> {
-      return await useRestApi({
-        ...extra,
-        jwtScopes: ['tableau:content:read'],
-        callback: async (restApi) =>
-          await restApi.workbooksMethods.getWorkbook({
-            siteId: restApi.siteId,
-            workbookId,
-          }),
-      });
+      return await useRestApi(
+        {
+          ...extra,
+          jwtScopes: ['tableau:content:read'],
+          callback: async (restApi) =>
+            await restApi.workbooksMethods.getWorkbook({
+              siteId: restApi.siteId,
+              workbookId,
+            }),
+        },
+        extra,
+      );
     }
 
     const allowedProjectIds = await this.getAllowedProjectIds({ extra });
@@ -371,16 +377,19 @@ class ResourceAccessChecker {
 
     let view: View | undefined;
     async function getView(): Promise<View> {
-      return await useRestApi({
-        ...extra,
-        jwtScopes: ['tableau:content:read'],
-        callback: async (restApi) => {
-          return await restApi.viewsMethods.getView({
-            siteId: restApi.siteId,
-            viewId,
-          });
+      return await useRestApi(
+        {
+          ...extra,
+          jwtScopes: ['tableau:content:read'],
+          callback: async (restApi) => {
+            return await restApi.viewsMethods.getView({
+              siteId: restApi.siteId,
+              viewId,
+            });
+          },
         },
-      });
+        extra,
+      );
     }
 
     const allowedWorkbookIds = await this.getAllowedWorkbookIds({ extra });

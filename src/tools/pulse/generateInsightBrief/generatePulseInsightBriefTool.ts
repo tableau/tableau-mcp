@@ -224,12 +224,15 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
             }
           }
 
-          const result = await useRestApi({
-            ...extra,
-            jwtScopes: ['tableau:insight_brief:create'],
-            callback: async (restApi) =>
-              await restApi.pulseMethods.generatePulseInsightBrief(briefRequest),
-          });
+          const result = await useRestApi(
+            {
+              ...extra,
+              jwtScopes: ['tableau:insight_brief:create'],
+              callback: async (restApi) =>
+                await restApi.pulseMethods.generatePulseInsightBrief(briefRequest),
+            },
+            extra,
+          );
 
           if (result.isErr()) {
             return new Err({

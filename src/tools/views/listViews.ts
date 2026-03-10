@@ -74,35 +74,38 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
         args: {},
         callback: async () => {
           return new Ok(
-            await useRestApi({
-              ...extra,
-              jwtScopes: ['tableau:content:read'],
-              callback: async (restApi) => {
-                const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
-                const views = await paginate({
-                  pageConfig: {
-                    pageSize,
-                    limit: maxResultLimit
-                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
-                      : limit,
-                  },
-                  getDataFn: async (pageConfig) => {
-                    const { pagination, views: data } =
-                      await restApi.viewsMethods.queryViewsForSite({
-                        siteId: restApi.siteId,
-                        filter: validatedFilter ?? '',
-                        includeUsageStatistics: true,
-                        pageSize: pageConfig.pageSize,
-                        pageNumber: pageConfig.pageNumber,
-                      });
+            await useRestApi(
+              {
+                ...extra,
+                jwtScopes: ['tableau:content:read'],
+                callback: async (restApi) => {
+                  const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
+                  const views = await paginate({
+                    pageConfig: {
+                      pageSize,
+                      limit: maxResultLimit
+                        ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                        : limit,
+                    },
+                    getDataFn: async (pageConfig) => {
+                      const { pagination, views: data } =
+                        await restApi.viewsMethods.queryViewsForSite({
+                          siteId: restApi.siteId,
+                          filter: validatedFilter ?? '',
+                          includeUsageStatistics: true,
+                          pageSize: pageConfig.pageSize,
+                          pageNumber: pageConfig.pageNumber,
+                        });
 
-                    return { pagination, data };
-                  },
-                });
+                      return { pagination, data };
+                    },
+                  });
 
-                return views;
+                  return views;
+                },
               },
-            }),
+              extra,
+            ),
           );
         },
         constrainSuccessResult: (views) =>

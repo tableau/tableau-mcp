@@ -113,6 +113,7 @@ export const tableauBearerTokenSchema = z.object({
   scope: requiredString('scope'),
   'https://tableau.com/siteId': requiredString('https://tableau.com/siteId'),
   'https://tableau.com/targetUrl': requiredString('https://tableau.com/targetUrl'),
+  'https://tableau.com/userId': requiredString('https://tableau.com/userId'),
 });
 
 export type McpAccessToken = z.infer<typeof mcpAccessTokenSchema>;

@@ -46,16 +46,19 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
           }
 
           return new Ok(
-            await useRestApi({
-              ...extra,
-              jwtScopes: ['tableau:views:download'],
-              callback: async (restApi) => {
-                return await restApi.viewsMethods.queryViewData({
-                  viewId,
-                  siteId: restApi.siteId,
-                });
+            await useRestApi(
+              {
+                ...extra,
+                jwtScopes: ['tableau:views:download'],
+                callback: async (restApi) => {
+                  return await restApi.viewsMethods.queryViewData({
+                    viewId,
+                    siteId: restApi.siteId,
+                  });
+                },
               },
-            }),
+              extra,
+            ),
           );
         },
         constrainSuccessResult: (viewData) => {

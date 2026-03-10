@@ -50,33 +50,36 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
           }
 
           return new Ok(
-            await useRestApi({
-              ...extra,
-              jwtScopes: ['tableau:content:read'],
-              callback: async (restApi) => {
-                // Notice that we already have the workbook if it had been allowed by a project scope.
-                const workbook =
-                  isWorkbookAllowedResult.content ??
-                  (await restApi.workbooksMethods.getWorkbook({
-                    workbookId,
-                    siteId: restApi.siteId,
-                  }));
+            await useRestApi(
+              {
+                ...extra,
+                jwtScopes: ['tableau:content:read'],
+                callback: async (restApi) => {
+                  // Notice that we already have the workbook if it had been allowed by a project scope.
+                  const workbook =
+                    isWorkbookAllowedResult.content ??
+                    (await restApi.workbooksMethods.getWorkbook({
+                      workbookId,
+                      siteId: restApi.siteId,
+                    }));
 
-                // The views returned by the getWorkbook API do not include usage statistics.
-                // Query the views for the workbook to get each view's usage statistics.
-                if (workbook.views) {
-                  const views = await restApi.viewsMethods.queryViewsForWorkbook({
-                    workbookId,
-                    siteId: restApi.siteId,
-                    includeUsageStatistics: true,
-                  });
+                  // The views returned by the getWorkbook API do not include usage statistics.
+                  // Query the views for the workbook to get each view's usage statistics.
+                  if (workbook.views) {
+                    const views = await restApi.viewsMethods.queryViewsForWorkbook({
+                      workbookId,
+                      siteId: restApi.siteId,
+                      includeUsageStatistics: true,
+                    });
 
-                  workbook.views.view = views;
-                }
+                    workbook.views.view = views;
+                  }
 
-                return workbook;
+                  return workbook;
+                },
               },
-            }),
+              extra,
+            ),
           );
         },
         constrainSuccessResult: (workbook) =>

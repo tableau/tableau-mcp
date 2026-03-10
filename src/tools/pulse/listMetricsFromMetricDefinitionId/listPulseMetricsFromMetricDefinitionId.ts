@@ -42,15 +42,18 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
         extra,
         args: { pulseMetricDefinitionID },
         callback: async () => {
-          return await useRestApi({
-            ...extra,
-            jwtScopes: ['tableau:insight_definitions_metrics:read'],
-            callback: async (restApi) => {
-              return await restApi.pulseMethods.listPulseMetricsFromMetricDefinitionId(
-                pulseMetricDefinitionID,
-              );
+          return await useRestApi(
+            {
+              ...extra,
+              jwtScopes: ['tableau:insight_definitions_metrics:read'],
+              callback: async (restApi) => {
+                return await restApi.pulseMethods.listPulseMetricsFromMetricDefinitionId(
+                  pulseMetricDefinitionID,
+                );
+              },
             },
-          });
+            extra,
+          );
         },
         constrainSuccessResult: async (metrics) => {
           const configWithOverrides = await extra.getConfigWithOverrides();

@@ -68,24 +68,27 @@ This tool searches across all supported content types for objects relevant to th
         args: {},
         callback: async () => {
           return new Ok(
-            await useRestApi({
-              ...extra,
-              jwtScopes: ['tableau:content:read'],
-              callback: async (restApi) => {
-                const maxResultLimit = configWithOverrides.getMaxResultLimit(
-                  searchContentTool.name,
-                );
+            await useRestApi(
+              {
+                ...extra,
+                jwtScopes: ['tableau:content:read'],
+                callback: async (restApi) => {
+                  const maxResultLimit = configWithOverrides.getMaxResultLimit(
+                    searchContentTool.name,
+                  );
 
-                const response = await restApi.contentExplorationMethods.searchContent({
-                  terms,
-                  page: 0,
-                  limit: maxResultLimit ? Math.min(maxResultLimit, limit ?? 100) : (limit ?? 100),
-                  order_by: orderByString,
-                  filter: filterString,
-                });
-                return reduceSearchContentResponse(response);
+                  const response = await restApi.contentExplorationMethods.searchContent({
+                    terms,
+                    page: 0,
+                    limit: maxResultLimit ? Math.min(maxResultLimit, limit ?? 100) : (limit ?? 100),
+                    order_by: orderByString,
+                    filter: filterString,
+                  });
+                  return reduceSearchContentResponse(response);
+                },
               },
-            }),
+              extra,
+            ),
           );
         },
         constrainSuccessResult: (items) =>

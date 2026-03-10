@@ -41,13 +41,16 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
         extra,
         args: { metricIds },
         callback: async () => {
-          return await useRestApi({
-            ...extra,
-            jwtScopes: ['tableau:insight_metrics:read'],
-            callback: async (restApi) => {
-              return await restApi.pulseMethods.listPulseMetricsFromMetricIds(metricIds);
+          return await useRestApi(
+            {
+              ...extra,
+              jwtScopes: ['tableau:insight_metrics:read'],
+              callback: async (restApi) => {
+                return await restApi.pulseMethods.listPulseMetricsFromMetricIds(metricIds);
+              },
             },
-          });
+            extra,
+          );
         },
         constrainSuccessResult: async (metrics) => {
           const configWithOverrides = await extra.getConfigWithOverrides();

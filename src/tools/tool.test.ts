@@ -5,10 +5,6 @@ import { z, ZodError } from 'zod';
 
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
-import {
-  clearServiceAuthInfoFromCache,
-  setServiceAuthInfoInCache,
-} from '../server/service-auth/serviceAuthInfoCache.js';
 import invariant from '../utils/invariant.js';
 import { Tool } from './tool.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
@@ -251,8 +247,6 @@ describe('Tool', () => {
   describe('product telemetry', () => {
     beforeEach(() => {
       mockTelemetrySend.mockClear();
-      // Clear cache to ensure tests don't interfere with each other
-      clearServiceAuthInfoFromCache(mockExtra.requestId);
     });
 
     it('should send telemetry with success=true and empty error_code on success', async () => {
@@ -271,7 +265,7 @@ describe('Tool', () => {
           tool_name: 'get-datasource-metadata',
           request_id: '2',
           session_id: '',
-          site_luid: '', // Falls back to config.siteName when no auth info
+          site_luid: 'tc25', // Falls back to config.siteName when no auth info
           user_luid: '',
           podname: 'https://my-tableau-server.com',
           is_hyperforce: false,
@@ -403,6 +397,8 @@ describe('Tool', () => {
           server: 'https://my-tableau-server.com',
           accessToken: 'part0|part1|site-luid|part3',
         },
+        userLuid: 'user-luid',
+        siteLuid: 'site-luid',
       };
 
       await tool.logAndExecute({
@@ -434,6 +430,8 @@ describe('Tool', () => {
           siteId: 'site-luid',
           raw: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...',
         },
+        siteLuid: 'site-luid',
+        userLuid: undefined,
       };
 
       await tool.logAndExecute({
@@ -454,16 +452,17 @@ describe('Tool', () => {
       );
     });
 
-    it('should send telemetry with site_luid and user_luid from service auth cache (PAT/direct-trust/UAT)', async () => {
+    it('should send telemetry with site_luid and user_luid from extra (PAT/direct-trust/UAT)', async () => {
       const tool = new Tool(mockParams);
-      // Simulate cache being populated after signIn (for PAT/direct-trust/UAT)
-      setServiceAuthInfoInCache(mockExtra.requestId, {
-        userId: 'user-luid',
+      // Simulate extra being populated after signIn (for PAT/direct-trust/UAT)
+      const extraWithServiceAuth = {
+        ...mockExtra,
+        userLuid: 'user-luid',
         siteLuid: 'site-luid',
-      });
+      };
 
       await tool.logAndExecute({
-        extra: mockExtra,
+        extra: extraWithServiceAuth,
         args: { param1: 'test-value' },
         callback: () => Promise.resolve(Ok({ data: 'success' })),
         constrainSuccessResult: (result) => ({ type: 'success', result }),

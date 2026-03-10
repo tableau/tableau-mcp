@@ -16,10 +16,10 @@ import {
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
-import { setServiceAuthInfoInCache } from './server/service-auth/serviceAuthInfoCache.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
+import { getSiteLuidFromAccessToken } from './utils/getSiteLuidFromAccessToken.js';
 import invariant from './utils/invariant.js';
 
 type JwtScopes =
@@ -51,6 +51,7 @@ const getNewRestApiInstanceAsync = async (
   args: RestApiArgs & {
     jwtScopes: Set<JwtScopes>;
   },
+  extra: TableauRequestHandlerExtra,
 ): Promise<RestApi> => {
   const { config, server, jwtScopes, signal, tableauAuthInfo, disableLogging } = args;
 
@@ -100,12 +101,8 @@ const getNewRestApiInstanceAsync = async (
       patValue: config.patValue,
       siteName: config.siteName,
     });
-    if (!disableLogging) {
-      setServiceAuthInfoInCache(args.requestId, {
-        userId: restApi.userId,
-        siteLuid: restApi.siteId,
-      });
-    }
+    extra.userLuid = restApi.userId;
+    extra.siteLuid = restApi.siteId;
   } else if (config.auth === 'direct-trust') {
     await restApi.signIn({
       type: 'direct-trust',
@@ -117,12 +114,8 @@ const getNewRestApiInstanceAsync = async (
       scopes: jwtScopes,
       additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
     });
-    if (!disableLogging) {
-      setServiceAuthInfoInCache(args.requestId, {
-        userId: restApi.userId,
-        siteLuid: restApi.siteId,
-      });
-    }
+    extra.userLuid = restApi.userId;
+    extra.siteLuid = restApi.siteId;
   } else if (config.auth === 'uat') {
     await restApi.signIn({
       type: 'uat',
@@ -136,21 +129,21 @@ const getNewRestApiInstanceAsync = async (
       scopes: jwtScopes,
       additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
     });
-    if (!disableLogging) {
-      setServiceAuthInfoInCache(args.requestId, {
-        userId: restApi.userId,
-        siteLuid: restApi.siteId,
-      });
-    }
+    extra.userLuid = restApi.userId;
+    extra.siteLuid = restApi.siteId;
   } else {
     if (tableauAuthInfo?.type === 'Bearer') {
       restApi.setBearerToken(tableauAuthInfo.raw);
+      extra.siteLuid = tableauAuthInfo.siteId;
+      // Bearer tokens don't have userId
     } else if (tableauAuthInfo?.type === 'X-Tableau-Auth') {
       if (!tableauAuthInfo?.accessToken || !tableauAuthInfo?.userId) {
         throw new Error('Auth info is required when not signing in first.');
       }
 
       restApi.setCredentials(tableauAuthInfo.accessToken, tableauAuthInfo.userId);
+      extra.userLuid = tableauAuthInfo.userId;
+      extra.siteLuid = getSiteLuidFromAccessToken(tableauAuthInfo);
     } else {
       throw new Error('Auth info is required when not signing in first.');
     }
@@ -164,13 +157,17 @@ export const useRestApi = async <T>(
     jwtScopes: Array<JwtScopes>;
     callback: (restApi: RestApi) => Promise<T>;
   },
+  extra: TableauRequestHandlerExtra,
 ): Promise<T> => {
   const { callback, ...remaining } = args;
   const { config } = remaining;
-  const restApi = await getNewRestApiInstanceAsync({
-    ...remaining,
-    jwtScopes: new Set(args.jwtScopes),
-  });
+  const restApi = await getNewRestApiInstanceAsync(
+    {
+      ...remaining,
+      jwtScopes: new Set(args.jwtScopes),
+    },
+    extra,
+  );
   try {
     return await callback(restApi);
   } finally {

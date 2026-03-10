@@ -60,16 +60,19 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
         extra,
         args: { metricDefinitionIds, view },
         callback: async () => {
-          return await useRestApi({
-            ...extra,
-            jwtScopes: ['tableau:insight_definitions_metrics:read'],
-            callback: async (restApi) => {
-              return await restApi.pulseMethods.listPulseMetricDefinitionsFromMetricDefinitionIds(
-                metricDefinitionIds,
-                view,
-              );
+          return await useRestApi(
+            {
+              ...extra,
+              jwtScopes: ['tableau:insight_definitions_metrics:read'],
+              callback: async (restApi) => {
+                return await restApi.pulseMethods.listPulseMetricDefinitionsFromMetricDefinitionIds(
+                  metricDefinitionIds,
+                  view,
+                );
+              },
             },
-          });
+            extra,
+          );
         },
         constrainSuccessResult: async (definitions) => {
           const configWithOverrides = await extra.getConfigWithOverrides();

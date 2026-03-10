@@ -49,19 +49,22 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
           }
 
           return new Ok(
-            await useRestApi({
-              ...extra,
-              jwtScopes: ['tableau:views:download'],
-              callback: async (restApi) => {
-                return await restApi.viewsMethods.queryViewImage({
-                  viewId,
-                  siteId: restApi.siteId,
-                  width,
-                  height,
-                  resolution: 'high',
-                });
+            await useRestApi(
+              {
+                ...extra,
+                jwtScopes: ['tableau:views:download'],
+                callback: async (restApi) => {
+                  return await restApi.viewsMethods.queryViewImage({
+                    viewId,
+                    siteId: restApi.siteId,
+                    width,
+                    height,
+                    resolution: 'high',
+                  });
+                },
               },
-            }),
+              extra,
+            ),
           );
         },
         constrainSuccessResult: (viewImage) => {

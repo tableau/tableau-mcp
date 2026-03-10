@@ -37,13 +37,16 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
         extra,
         args: {},
         callback: async () => {
-          return await useRestApi({
-            ...extra,
-            jwtScopes: ['tableau:metric_subscriptions:read'],
-            callback: async (restApi) => {
-              return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
+          return await useRestApi(
+            {
+              ...extra,
+              jwtScopes: ['tableau:metric_subscriptions:read'],
+              callback: async (restApi) => {
+                return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
+              },
             },
-          });
+            extra,
+          );
         },
         constrainSuccessResult: async (subscriptions) => {
           const configWithOverrides = await extra.getConfigWithOverrides();
@@ -90,15 +93,18 @@ export async function constrainPulseMetricSubscriptions({
   }
 
   try {
-    const metricsResult = await useRestApi({
-      ...restApiArgs,
-      jwtScopes: ['tableau:insight_metrics:read'],
-      callback: async (restApi) => {
-        return await restApi.pulseMethods.listPulseMetricsFromMetricIds(
-          subscriptions.map((subscription) => subscription.metric_id),
-        );
+    const metricsResult = await useRestApi(
+      {
+        ...restApiArgs,
+        jwtScopes: ['tableau:insight_metrics:read'],
+        callback: async (restApi) => {
+          return await restApi.pulseMethods.listPulseMetricsFromMetricIds(
+            subscriptions.map((subscription) => subscription.metric_id),
+          );
+        },
       },
-    });
+      restApiArgs,
+    );
 
     if (metricsResult.isErr()) {
       return {

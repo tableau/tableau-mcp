@@ -128,77 +128,80 @@ export const getQueryDatasourceTool = (
             options,
           };
 
-          return await useRestApi({
-            ...extra,
-            jwtScopes: ['tableau:viz_data_service:read'],
-            callback: async (restApi) => {
-              if (!configWithOverrides.disableQueryDatasourceValidationRequests) {
-                // Validate query against metadata
-                const metadataValidationResult = await validateQueryAgainstDatasourceMetadata(
-                  query,
-                  restApi.vizqlDataServiceMethods,
-                  datasource,
-                );
+          return await useRestApi(
+            {
+              ...extra,
+              jwtScopes: ['tableau:viz_data_service:read'],
+              callback: async (restApi) => {
+                if (!configWithOverrides.disableQueryDatasourceValidationRequests) {
+                  // Validate query against metadata
+                  const metadataValidationResult = await validateQueryAgainstDatasourceMetadata(
+                    query,
+                    restApi.vizqlDataServiceMethods,
+                    datasource,
+                  );
 
-                if (metadataValidationResult.isErr()) {
-                  const errors = metadataValidationResult.error;
-                  const errorMessage = errors.map((error) => error.message).join('\n\n');
-                  return new Err({
-                    type: 'query-validation',
-                    message: errorMessage,
+                  if (metadataValidationResult.isErr()) {
+                    const errors = metadataValidationResult.error;
+                    const errorMessage = errors.map((error) => error.message).join('\n\n');
+                    return new Err({
+                      type: 'query-validation',
+                      message: errorMessage,
+                    });
+                  }
+
+                  // Validate filters values for SET and MATCH filters
+                  const filterValidationResult = await validateFilterValues(
+                    server,
+                    query,
+                    restApi.vizqlDataServiceMethods,
+                    datasource,
+                  );
+
+                  if (filterValidationResult.isErr()) {
+                    const errors = filterValidationResult.error;
+                    const errorMessage = errors.map((error) => error.message).join(', ');
+                    return new Err({
+                      type: 'query-validation',
+                      message: errorMessage,
+                    });
+                  }
+                }
+
+                const contextWarnings = validateContextFilters(query);
+
+                const result = await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
+                if (result.isErr()) {
+                  return new Err(
+                    result.error instanceof ZodiosError
+                      ? result.error
+                      : result.error === 'feature-disabled'
+                        ? { type: 'feature-disabled' }
+                        : {
+                            type: 'tableau-error',
+                            error: result.error,
+                          },
+                  );
+                }
+
+                if (rowLimit && result.value.data && result.value.data.length > rowLimit) {
+                  result.value.data.length = rowLimit;
+                }
+
+                if (contextWarnings.length > 0) {
+                  return new Ok({
+                    ...result.value,
+                    mcp: {
+                      warnings: contextWarnings,
+                    },
                   });
                 }
 
-                // Validate filters values for SET and MATCH filters
-                const filterValidationResult = await validateFilterValues(
-                  server,
-                  query,
-                  restApi.vizqlDataServiceMethods,
-                  datasource,
-                );
-
-                if (filterValidationResult.isErr()) {
-                  const errors = filterValidationResult.error;
-                  const errorMessage = errors.map((error) => error.message).join(', ');
-                  return new Err({
-                    type: 'query-validation',
-                    message: errorMessage,
-                  });
-                }
-              }
-
-              const contextWarnings = validateContextFilters(query);
-
-              const result = await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
-              if (result.isErr()) {
-                return new Err(
-                  result.error instanceof ZodiosError
-                    ? result.error
-                    : result.error === 'feature-disabled'
-                      ? { type: 'feature-disabled' }
-                      : {
-                          type: 'tableau-error',
-                          error: result.error,
-                        },
-                );
-              }
-
-              if (rowLimit && result.value.data && result.value.data.length > rowLimit) {
-                result.value.data.length = rowLimit;
-              }
-
-              if (contextWarnings.length > 0) {
-                return new Ok({
-                  ...result.value,
-                  mcp: {
-                    warnings: contextWarnings,
-                  },
-                });
-              }
-
-              return result;
+                return result;
+              },
             },
-          });
+            extra,
+          );
         },
         constrainSuccessResult: (queryOutput) => {
           return {

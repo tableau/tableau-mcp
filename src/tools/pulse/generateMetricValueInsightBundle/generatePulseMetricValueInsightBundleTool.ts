@@ -175,15 +175,18 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
             }
           }
 
-          const result = await useRestApi({
-            ...extra,
-            jwtScopes: ['tableau:insights:read'],
-            callback: async (restApi) =>
-              await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
-                bundleRequest,
-                bundleType ?? 'ban',
-              ),
-          });
+          const result = await useRestApi(
+            {
+              ...extra,
+              jwtScopes: ['tableau:insights:read'],
+              callback: async (restApi) =>
+                await restApi.pulseMethods.generatePulseMetricValueInsightBundle(
+                  bundleRequest,
+                  bundleType ?? 'ban',
+                ),
+            },
+            extra,
+          );
 
           if (result.isErr()) {
             return new Err({
