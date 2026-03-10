@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { getConfig } from '../../../config.js';
 import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
@@ -95,19 +94,13 @@ describe('listPulseMetricSubscriptionsTool', () => {
   });
 
   describe('constrainPulseMetricSubscriptions', () => {
-    const restApiArgs = {
-      config: getConfig(),
-      requestId: 'request-id',
-      server: getServer(),
-      tableauAuthInfo: undefined,
-      signal: new AbortController().signal,
-    };
+    const extra = getMockRequestHandlerExtra();
 
     it('should return empty result when no subscriptions are found', async () => {
       const result = await constrainPulseMetricSubscriptions({
         subscriptions: [],
         boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
-        restApiArgs,
+        extra,
       });
 
       invariant(result.type === 'empty');
@@ -129,7 +122,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
           workbookIds: null,
           tags: null,
         },
-        restApiArgs,
+        extra,
       });
 
       invariant(result.type === 'empty');
@@ -149,7 +142,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
       const result = await constrainPulseMetricSubscriptions({
         subscriptions: mockPulseMetricSubscriptions,
         boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
-        restApiArgs,
+        extra,
       });
 
       invariant(result.type === 'success');
@@ -169,7 +162,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
           workbookIds: null,
           tags: null,
         },
-        restApiArgs,
+        extra,
       });
 
       invariant(result.type === 'success');
@@ -182,10 +175,4 @@ async function getToolResult(): Promise<CallToolResult> {
   const listPulseMetricSubscriptionsTool = getListPulseMetricSubscriptionsTool(new Server());
   const callback = await Provider.from(listPulseMetricSubscriptionsTool.callback);
   return await callback({}, getMockRequestHandlerExtra());
-}
-
-function getServer(): InstanceType<typeof Server> {
-  const server = new Server();
-  server.tool = vi.fn();
-  return server;
 }

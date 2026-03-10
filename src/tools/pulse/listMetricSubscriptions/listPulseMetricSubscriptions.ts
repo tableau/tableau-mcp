@@ -2,11 +2,11 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { TableauRequestHandlerExtra } from '../../toolContext.js';
 import { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { ConstrainedResult, Tool } from '../../tool.js';
+import { TableauRequestHandlerExtra } from '../../toolContext.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {};
@@ -55,7 +55,7 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
           return await constrainPulseMetricSubscriptions({
             subscriptions,
             boundedContext: configWithOverrides.boundedContext,
-            restApiArgs: extra,
+            extra,
           });
         },
         getErrorText: getPulseDisabledError,
@@ -69,11 +69,11 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
 export async function constrainPulseMetricSubscriptions({
   subscriptions,
   boundedContext,
-  restApiArgs,
+  extra,
 }: {
   subscriptions: Array<PulseMetricSubscription>;
   boundedContext: BoundedContext;
-  restApiArgs: TableauRequestHandlerExtra;
+  extra: TableauRequestHandlerExtra;
 }): Promise<ConstrainedResult<Array<PulseMetricSubscription>>> {
   if (subscriptions.length === 0) {
     return {
@@ -96,7 +96,7 @@ export async function constrainPulseMetricSubscriptions({
   try {
     const metricsResult = await useRestApi(
       {
-        ...restApiArgs,
+        ...extra,
         jwtScopes: ['tableau:insight_metrics:read'],
         callback: async (restApi) => {
           return await restApi.pulseMethods.listPulseMetricsFromMetricIds(
@@ -104,7 +104,7 @@ export async function constrainPulseMetricSubscriptions({
           );
         },
       },
-      restApiArgs,
+      extra,
     );
 
     if (metricsResult.isErr()) {
