@@ -5,8 +5,18 @@ import { getOAuthClient } from '../oauthClient';
 import { connectOAuthClient, expect, test } from './base';
 
 test.describe('listDatasources', () => {
+  const client = getOAuthClient();
+
+  test.afterEach(async () => {
+    await client.close();
+  });
+
+  test.afterAll(async () => {
+    await client.resetConsent();
+    await client.revokeToken();
+  });
+
   test('list datasources', async ({ page, env }) => {
-    const client = getOAuthClient();
     await connectOAuthClient({ client, page, env });
 
     const datasources = await client.callTool('list-datasources', {
