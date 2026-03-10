@@ -1,7 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { BoundedContext } from '../../../overridableConfig.js';
-import { RestApiArgs, useRestApi } from '../../../restApiInstance.js';
+import { useRestApi } from '../../../restApiInstance.js';
+import { TableauRequestHandlerExtra } from '../../toolContext.js';
 import { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -72,7 +73,7 @@ export async function constrainPulseMetricSubscriptions({
 }: {
   subscriptions: Array<PulseMetricSubscription>;
   boundedContext: BoundedContext;
-  restApiArgs: RestApiArgs;
+  restApiArgs: TableauRequestHandlerExtra;
 }): Promise<ConstrainedResult<Array<PulseMetricSubscription>>> {
   if (subscriptions.length === 0) {
     return {

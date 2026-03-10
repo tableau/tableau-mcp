@@ -265,8 +265,8 @@ describe('Tool', () => {
           tool_name: 'get-datasource-metadata',
           request_id: '2',
           session_id: '',
-          site_luid: 'tc25', // Falls back to config.siteName when no auth info
-          user_luid: '',
+          site_luid: 'siteLuid',
+          user_luid: 'userLuid',
           podname: 'https://my-tableau-server.com',
           is_hyperforce: false,
           success: true,
@@ -380,99 +380,6 @@ describe('Tool', () => {
         'tool_call',
         expect.objectContaining({
           is_hyperforce: false,
-          success: true,
-          error_code: '',
-        }),
-      );
-    });
-
-    it('should send telemetry with site_luid and user_luid from OAuth X-Tableau-Auth', async () => {
-      const tool = new Tool(mockParams);
-      const extraWithOAuth = {
-        ...mockExtra,
-        tableauAuthInfo: {
-          type: 'X-Tableau-Auth' as const,
-          username: 'test-user',
-          userId: 'user-luid',
-          server: 'https://my-tableau-server.com',
-          accessToken: 'part0|part1|site-luid|part3',
-        },
-        userLuid: 'user-luid',
-        siteLuid: 'site-luid',
-      };
-
-      await tool.logAndExecute({
-        extra: extraWithOAuth,
-        args: { param1: 'test-value' },
-        callback: () => Promise.resolve(Ok({ data: 'success' })),
-        constrainSuccessResult: (result) => ({ type: 'success', result }),
-      });
-
-      expect(mockTelemetrySend).toHaveBeenCalledWith(
-        'tool_call',
-        expect.objectContaining({
-          site_luid: 'site-luid', // Extracted from accessToken (3rd part)
-          user_luid: 'user-luid', // From tableauAuthInfo.userId
-          success: true,
-          error_code: '',
-        }),
-      );
-    });
-
-    it('should send telemetry with site_luid and user_luid from OAuth Bearer token', async () => {
-      const tool = new Tool(mockParams);
-      const extraWithBearer = {
-        ...mockExtra,
-        tableauAuthInfo: {
-          type: 'Bearer' as const,
-          username: 'test-user',
-          server: 'https://my-tableau-server.com',
-          siteId: 'site-luid',
-          raw: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...',
-        },
-        siteLuid: 'site-luid',
-        userLuid: undefined,
-      };
-
-      await tool.logAndExecute({
-        extra: extraWithBearer,
-        args: { param1: 'test-value' },
-        callback: () => Promise.resolve(Ok({ data: 'success' })),
-        constrainSuccessResult: (result) => ({ type: 'success', result }),
-      });
-
-      expect(mockTelemetrySend).toHaveBeenCalledWith(
-        'tool_call',
-        expect.objectContaining({
-          site_luid: 'site-luid',
-          user_luid: '', // Bearer tokens don't have userId
-          success: true,
-          error_code: '',
-        }),
-      );
-    });
-
-    it('should send telemetry with site_luid and user_luid from extra (PAT/direct-trust/UAT)', async () => {
-      const tool = new Tool(mockParams);
-      // Simulate extra being populated after signIn (for PAT/direct-trust/UAT)
-      const extraWithServiceAuth = {
-        ...mockExtra,
-        userLuid: 'user-luid',
-        siteLuid: 'site-luid',
-      };
-
-      await tool.logAndExecute({
-        extra: extraWithServiceAuth,
-        args: { param1: 'test-value' },
-        callback: () => Promise.resolve(Ok({ data: 'success' })),
-        constrainSuccessResult: (result) => ({ type: 'success', result }),
-      });
-
-      expect(mockTelemetrySend).toHaveBeenCalledWith(
-        'tool_call',
-        expect.objectContaining({
-          site_luid: 'site-luid',
-          user_luid: 'user-luid',
           success: true,
           error_code: '',
         }),
