@@ -1,9 +1,9 @@
-import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from 'langchain';
+import { AIMessage } from 'langchain';
 import { EvaluationResult, EvaluatorT } from 'langsmith/evaluation';
 import { KVMap } from 'langsmith/schemas';
 import z from 'zod';
 
-import { getAgent, getModel } from './base';
+import { getAgent, getModel, prompt } from './base';
 
 export const evalInputSchema = z.object({
   question: z.string(),
@@ -116,10 +116,7 @@ Respond ONLY with JSON: {"score": <number>, "comment": "<brief reason>"}`;
     model: getModel(),
   });
 
-  console.log('Invoking judge agent...');
-  const { messages } = (await agent.invoke({
-    messages: [{ role: 'user', content: judgePrompt }],
-  })) as { messages: Array<AIMessage | HumanMessage | SystemMessage | ToolMessage> };
+  const messages = await prompt(agent, judgePrompt);
 
   const text =
     messages.find<AIMessage>((message) => AIMessage.isInstance(message))?.content?.toString() ?? '';

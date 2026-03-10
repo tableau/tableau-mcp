@@ -1,8 +1,11 @@
 import { MultiServerMCPClient, StdioConnection } from '@langchain/mcp-adapters';
 import { ChatOpenAI } from '@langchain/openai';
-import { createAgent } from 'langchain';
+import { AIMessage, createAgent, HumanMessage, SystemMessage, ToolMessage } from 'langchain';
 
 const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
+
+type Message = AIMessage | HumanMessage | SystemMessage | ToolMessage;
+type Agent = ReturnType<typeof createAgent>;
 
 export function getApiKey(): string {
   const { OPENAI_API_KEY } = process.env;
@@ -34,7 +37,7 @@ export async function getAgent({
 }: {
   model: string;
   mcpServer?: StdioConnection;
-}): Promise<{ agent: ReturnType<typeof createAgent>; client?: MultiServerMCPClient }> {
+}): Promise<{ agent: Agent; client?: MultiServerMCPClient }> {
   const agentOptions = {
     name: 'Assistant with Tableau MCP tools',
     model: new ChatOpenAI({
@@ -59,6 +62,23 @@ export async function getAgent({
     agent: createAgent({ ...agentOptions, tools }),
     client,
   };
+}
+
+export async function prompt(agent: Agent, content: string): Promise<Array<Message>> {
+  console.log(`Invoking agent with input: ${content}...`);
+
+  const start = performance.now();
+
+  const { messages } = (await agent.invoke({
+    messages: [{ role: 'user', content }],
+  })) as { messages: Array<Message> };
+
+  const end = performance.now();
+
+  const duration = Math.round(end - start);
+  console.log(`Agent response received after ${duration}ms`);
+
+  return messages;
 }
 
 export function log(message?: any, force?: boolean): void {
