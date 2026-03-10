@@ -239,8 +239,8 @@ export class OAuthClient {
     }
   }
 
-  close(): void {
-    this.client.close();
+  async close(): Promise<void> {
+    await this.client.close();
   }
 }
 
