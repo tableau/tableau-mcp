@@ -125,6 +125,7 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
         scope,
         'https://tableau.com/siteId': siteId,
         'https://tableau.com/targetUrl': targetUrl,
+        'https://tableau.com/userId': userId,
       } = parsed.data;
 
       if (iss !== this.config.oauth.issuer || exp < Math.floor(Date.now() / 1000)) {
@@ -136,6 +137,7 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
         username: sub,
         server: targetUrl,
         siteId,
+        userId,
         raw: token,
       };
 

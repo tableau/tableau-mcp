@@ -133,6 +133,7 @@ export const tableauAuthInfoSchema = z.discriminatedUnion('type', [
     username: z.string(),
     server: z.string(),
     siteId: z.string(),
+    userId: z.string(),
     raw: z.string(),
   }),
 ]);
