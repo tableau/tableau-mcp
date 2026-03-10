@@ -5,6 +5,10 @@ import { connectOAuthClient, expect, test } from './base';
 test.describe('oauth', () => {
   const client = getOAuthClient();
 
+  test.afterEach(async () => {
+    client.close();
+  });
+
   test.afterAll(async () => {
     await client.resetConsent();
     await client.revokeToken();
