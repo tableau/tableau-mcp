@@ -95,22 +95,6 @@ export class OAuthClient {
     const baseUrl = new URL(this.serverUrl);
     const transport = new StreamableHTTPClientTransport(baseUrl, {
       authProvider: this.oauthProvider,
-      // Temporarily override fetch until the authorization server
-      // adds the client_id_metadata_document_supported flag
-      fetch: async (url: string | URL, init?: RequestInit) => {
-        if (!url.toString().includes('/.well-known/oauth-authorization-server')) {
-          return fetch(url, init);
-        }
-
-        const response = await fetch(url, init);
-        if (!response.ok) {
-          return response;
-        }
-
-        const json = await response.json();
-        json.client_id_metadata_document_supported = true;
-        return new Response(JSON.stringify(json), { status: 200 });
-      },
     });
     console.log('[OAuthClient] Transport created');
 
@@ -139,6 +123,50 @@ export class OAuthClient {
         console.error('[OAuthClient] Connection failed with non-auth error:', error);
         throw error;
       }
+    }
+  }
+
+  async resetConsent(): Promise<void> {
+    const tokens = this.oauthProvider.tokens();
+    if (!tokens) {
+      return;
+    }
+
+    const authorizationUrl = await this.authUrlPromise;
+    const resetConsentUrl = new URL(authorizationUrl.split('?')[0]);
+    resetConsentUrl.pathname = '/oauth2/resetConsent';
+
+    console.log('[OAuthClient] Resetting consent');
+    const response = await fetch(resetConsentUrl, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+
+    if (!response.ok) {
+      console.warn(`Failed to reset consent: ${response.statusText} ${await response.text()}`);
+    }
+  }
+
+  async revokeToken(): Promise<void> {
+    const tokens = this.oauthProvider.tokens();
+    if (!tokens) {
+      return;
+    }
+
+    const authorizationUrl = await this.authUrlPromise;
+    const resetConsentUrl = new URL(authorizationUrl.split('?')[0]);
+    resetConsentUrl.pathname = '/oauth2/revoke';
+
+    console.log('[OAuthClient] Revoking token');
+    const response = await fetch(resetConsentUrl, {
+      method: 'POST',
+      body: JSON.stringify({
+        token: tokens.access_token,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn(`Failed to revoke token: ${response.statusText} ${await response.text()}`);
     }
   }
 

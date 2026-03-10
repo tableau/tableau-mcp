@@ -61,8 +61,8 @@ export default defineConfig({
       stdout: 'pipe',
       stderr: 'pipe',
       env: {
-        SERVER: 'https://dataplane1.tableau.sfdc-3vx9f4.svc.sfdcfc.net',
-        OAUTH_ISSUER: 'https://sso.online.dev.tabint.net',
+        SERVER: 'https://test-dataplane7.tableau.sfdc-ckzqgc.svc.sfdcfc.net',
+        OAUTH_ISSUER: 'https://sso.online.vnext.tabint.net',
         ADVERTISE_API_SCOPES: 'true',
         OAUTH_EMBEDDED_AUTHZ_SERVER: 'false',
       },

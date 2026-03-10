@@ -3,8 +3,14 @@ import { getOAuthClient } from '../oauthClient';
 import { connectOAuthClient, expect, test } from './base';
 
 test.describe('oauth', () => {
+  const client = getOAuthClient();
+
+  test.afterAll(async () => {
+    await client.resetConsent();
+    await client.revokeToken();
+  });
+
   test('list tools', async ({ page, env }) => {
-    const client = getOAuthClient();
     await connectOAuthClient({ client, page, env });
 
     const { tools } = await client.listTools();
