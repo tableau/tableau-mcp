@@ -1,11 +1,27 @@
 import { defineConfig, devices } from '@playwright/test';
-import { existsSync } from 'fs';
+import dotenv from 'dotenv';
+import { z } from 'zod';
+import { fromError } from 'zod-validation-error/v3';
 
-if (existsSync('.env')) {
+dotenv.config();
+
+const envSchema = z.object({
+  SERVER: z.string(),
+  OAUTH_ISSUER: z.string(),
+  ADVERTISE_API_SCOPES: z
+    .enum(['true', 'false'])
+    .transform((value) => (value === 'true').toString()),
+  OAUTH_EMBEDDED_AUTHZ_SERVER: z.literal('false'),
+});
+
+const envParseResult = envSchema.safeParse(process.env);
+if (!envParseResult.success) {
   throw new Error(
-    'Please remove or rename the .env file at the base of the project before running the tests.',
+    fromError(envParseResult.error, { prefix: 'Invalid environment variables' }).toString(),
   );
 }
+
+const env = envParseResult.data;
 
 export default defineConfig({
   testDir: './tests/oauth/tableau-authz/',
@@ -18,13 +34,13 @@ export default defineConfig({
   },
   /* Maximum time the whole test suite can run before timing out. Only enabled in CI */
   globalTimeout: process.env.CI ? 60 * 60 * 1000 : undefined,
-  /* Run tests in files in parallel */
-  fullyParallel: true,
+  /* Run tests in files sequentially */
+  fullyParallel: false,
+  workers: 1,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  workers: 1,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -41,16 +57,6 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-
-    // {
-    //   name: 'firefox',
-    //   use: { ...devices['Desktop Firefox'] },
-    // },
-
-    // {
-    //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
-    // },
   ],
 
   webServer: [
@@ -59,12 +65,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       stdout: 'pipe',
       stderr: 'pipe',
-      env: {
-        SERVER: 'https://test-dataplane7.tableau.sfdc-ckzqgc.svc.sfdcfc.net',
-        OAUTH_ISSUER: 'https://sso.online.vnext.tabint.net',
-        ADVERTISE_API_SCOPES: 'true',
-        OAUTH_EMBEDDED_AUTHZ_SERVER: 'false',
-      },
+      env,
     },
   ],
 });

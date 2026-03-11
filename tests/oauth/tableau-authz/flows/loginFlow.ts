@@ -2,7 +2,7 @@ import { Locator } from '@playwright/test';
 
 import { Flow } from './flow';
 
-export class TableauCloudLoginFlow extends Flow {
+export class LoginFlow extends Flow {
   get usernameTextbox(): Locator {
     return this.page.locator('#email');
   }

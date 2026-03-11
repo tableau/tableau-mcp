@@ -4,7 +4,8 @@ import { dataSourceSchema } from '../../../../src/sdks/tableau/types/dataSource'
 import { getOAuthClient } from '../oauthClient';
 import { connectOAuthClient, expect, test } from './base';
 
-test.describe('listDatasources', () => {
+// Skip until Content Exploration issues are resolved
+test.describe.skip('listDatasources', () => {
   const client = getOAuthClient();
 
   test.afterEach(async () => {

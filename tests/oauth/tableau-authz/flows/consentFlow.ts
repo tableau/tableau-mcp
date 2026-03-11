@@ -1,6 +1,6 @@
 import { Flow } from './flow';
 
-export class TableauCloudConsentFlow extends Flow {
+export class ConsentFlow extends Flow {
   grantConsentIfNecessary = async (): Promise<void> => {
     if (await this.needsConsent()) {
       await this.fill();
@@ -18,9 +18,9 @@ export class TableauCloudConsentFlow extends Flow {
   };
 
   private fill = async (): Promise<void> => {
-    const checkboxes = await this.page.locator('input[name="scope"]').all();
-    for (const checkbox of checkboxes) {
-      await checkbox.click();
+    const scopeCheckboxes = await this.page.locator('input[name="scope"]').all();
+    for (const scopeCheckbox of scopeCheckboxes) {
+      await scopeCheckbox.click();
     }
 
     await this.page.locator('button[type="submit"]').click();

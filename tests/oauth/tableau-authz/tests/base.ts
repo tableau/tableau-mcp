@@ -1,9 +1,9 @@
 import { expect, Page, test as base } from '@playwright/test';
 
 import { getEnvFixture } from '../fixtures/env';
-import { TableauCloudConsentFlow } from '../flows/consentFlow';
-import { TableauCloudLoginFlow } from '../flows/tableauCloudLoginFlow';
-import { OAuthClient } from '../oauthClient';
+import { ConsentFlow } from '../flows/consentFlow';
+import { LoginFlow } from '../flows/loginFlow';
+import { GetAuthZCodeFn, OAuthClient } from '../oauthClient';
 import { Env } from '../testEnv';
 
 type TestFixtures = {
@@ -23,15 +23,15 @@ export async function connectOAuthClient({
   page: Page;
   env: Env;
 }): Promise<void> {
-  await client.attemptConnection(async ({ authorizationUrl, callbackUrl }) => {
+  const getAuthZCodeFn: GetAuthZCodeFn = async ({ authorizationUrl, callbackUrl }) => {
     await page.goto(authorizationUrl);
 
-    const flow = new TableauCloudLoginFlow(page);
-    const consentFlow = new TableauCloudConsentFlow(page);
+    const loginFlow = new LoginFlow(page);
+    const consentFlow = new ConsentFlow(page);
 
     const codeCallbackPromise = page.waitForRequest(`${callbackUrl}*`);
 
-    await flow.fill({
+    await loginFlow.fill({
       username: env.TEST_USER,
       password: env.TEST_PASSWORD,
       siteName: env.TEST_SITE_NAME,
@@ -46,7 +46,9 @@ export async function connectOAuthClient({
     await page.close();
 
     return code;
-  });
+  };
+
+  await client.attemptConnection(getAuthZCodeFn);
 }
 
 export { expect };

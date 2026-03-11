@@ -18,6 +18,14 @@ import invariant from '../../../src/utils/invariant.js';
 import { Deferred } from '../embedded-authz/deferred.js';
 import { expect } from './tests/base.js';
 
+export type GetAuthZCodeFn = ({
+  authorizationUrl,
+  callbackUrl,
+}: {
+  authorizationUrl: string;
+  callbackUrl: string;
+}) => Promise<string>;
+
 export class OAuthClient {
   private readonly client: Client;
   private readonly serverUrl: string;
@@ -82,15 +90,7 @@ export class OAuthClient {
     });
   }
 
-  async attemptConnection(
-    getAuthZCodeFn?: ({
-      authorizationUrl,
-      callbackUrl,
-    }: {
-      authorizationUrl: string;
-      callbackUrl: string;
-    }) => Promise<string>,
-  ): Promise<void> {
+  async attemptConnection(getAuthZCodeFn?: GetAuthZCodeFn): Promise<void> {
     console.log('[OAuthClient] Creating transport with OAuth provider');
     const baseUrl = new URL(this.serverUrl);
     const transport = new StreamableHTTPClientTransport(baseUrl, {
@@ -222,6 +222,7 @@ export class OAuthClient {
           : content.type === 'image'
             ? content.data
             : 'unknown error';
+
       console.error(errorContent);
       throw new Error(errorContent);
     }

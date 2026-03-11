@@ -4,7 +4,8 @@ import { viewSchema } from '../../../../src/sdks/tableau/types/view';
 import { getOAuthClient } from '../oauthClient';
 import { connectOAuthClient, expect, test } from './base';
 
-test.describe('getViewData', () => {
+// Skip until Content Exploration issues are resolved
+test.describe.skip('getViewData', () => {
   const client = getOAuthClient();
 
   test.afterEach(async () => {
