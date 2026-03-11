@@ -85,7 +85,7 @@ export class Server extends McpServer {
           userLuid: undefined,
           siteLuid: undefined,
           getConfigWithOverrides: async () =>
-            getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra }),
+            getConfigWithOverrides(tableauRequestHandlerExtra as TableauRequestHandlerExtra),
         };
 
         return tableauToolCallback(args, tableauRequestHandlerExtra);
@@ -114,13 +114,20 @@ export class Server extends McpServer {
     tableauAuthInfo?: TableauAuthInfo,
   ): Promise<Array<Tool<any>>> => {
     const config = getConfig();
-    const configOverrides = await getConfigWithOverrides({
-      restApiArgs: {
-        server: this,
-        tableauAuthInfo,
-        disableLogging: true, // MCP server is not connected yet so we can't send logging notifications
-      },
-    });
+    const extra: TableauRequestHandlerExtra = {
+      config,
+      server: this,
+      tableauAuthInfo,
+      userLuid: undefined,
+      siteLuid: undefined,
+      signal: AbortSignal.timeout(config.maxRequestTimeoutMs),
+      requestId: 0 as const,
+      // MCP server is not connected yet so logging/notifications are no-ops
+      sendNotification: async () => {},
+      sendRequest: async () => ({}) as never,
+      getConfigWithOverrides: async () => getConfigWithOverrides(extra),
+    };
+    const configOverrides = await getConfigWithOverrides(extra);
 
     const tableauServerVersion = await getTableauServerVersion(
       config.server || tableauAuthInfo?.server,

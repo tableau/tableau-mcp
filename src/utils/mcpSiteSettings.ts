@@ -1,20 +1,17 @@
-import { Config, getConfig } from '../config.js';
 import { getOverridableConfig, OverridableConfig } from '../overridableConfig.js';
-import { RestApiArgs, useRestApi } from '../restApiInstance.js';
+import { useRestApi } from '../restApiInstance.js';
 import { McpSiteSettings } from '../sdks/tableau/types/mcpSiteSettings.js';
+import { TableauRequestHandlerExtra } from '../tools/toolContext.js';
 import { ExpiringMap } from './expiringMap.js';
 import { getSiteLuidFromAccessToken } from './getSiteLuidFromAccessToken.js';
-import { DistributiveOmit } from './types.js';
 
 type SiteNameOrSiteId = string;
 let mcpSiteSettingsCache: ExpiringMap<SiteNameOrSiteId, McpSiteSettings>;
 
-async function getMcpSiteSettings({
-  restApiArgs,
-}: {
-  restApiArgs: RestApiArgs;
-}): Promise<McpSiteSettings | undefined> {
-  const { config, tableauAuthInfo } = restApiArgs;
+async function getMcpSiteSettings(
+  extra: TableauRequestHandlerExtra,
+): Promise<McpSiteSettings | undefined> {
+  const { config, tableauAuthInfo } = extra;
   if (!config.enableMcpSiteSettings) {
     return;
   }
@@ -35,31 +32,22 @@ async function getMcpSiteSettings({
     return cachedSettings;
   }
 
-  const settings = await useRestApi({
-    ...restApiArgs,
-    jwtScopes: ['tableau:mcp_site_settings:read'],
-    callback: async (restApi) => await restApi.siteMethods.getMcpSettings(),
-  });
+  const settings = await useRestApi(
+    {
+      ...extra,
+      jwtScopes: ['tableau:mcp_site_settings:read'],
+      callback: async (restApi) => await restApi.siteMethods.getMcpSettings(),
+    },
+    extra,
+  );
 
   mcpSiteSettingsCache.set(cacheKey, settings);
   return settings;
 }
 
-// Make "config" and "signal" optional
-type GetConfigWithOverridesArgs = DistributiveOmit<RestApiArgs, 'config' | 'signal'> &
-  Partial<{ config: Config; signal: AbortSignal }>;
-
-export async function getConfigWithOverrides({
-  restApiArgs,
-}: {
-  restApiArgs: GetConfigWithOverridesArgs;
-}): Promise<OverridableConfig> {
-  const config = restApiArgs.config ?? getConfig();
-  const signal = restApiArgs.signal ?? AbortSignal.timeout(config.maxRequestTimeoutMs);
-
-  const overrides = await getMcpSiteSettings({
-    restApiArgs: { ...restApiArgs, config, signal },
-  });
-
+export async function getConfigWithOverrides(
+  extra: TableauRequestHandlerExtra,
+): Promise<OverridableConfig> {
+  const overrides = await getMcpSiteSettings(extra);
   return getOverridableConfig(overrides);
 }

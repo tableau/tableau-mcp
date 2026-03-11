@@ -53,11 +53,7 @@ class ResourceAccessChecker {
   }): Promise<Set<string> | null> {
     return (
       this._testOverrides.projectIds ??
-      (
-        await getConfigWithOverrides({
-          restApiArgs: { ...extra },
-        })
-      ).boundedContext.projectIds
+      (await getConfigWithOverrides(extra)).boundedContext.projectIds
     );
   }
 
@@ -68,11 +64,7 @@ class ResourceAccessChecker {
   }): Promise<Set<string> | null> {
     return (
       this._testOverrides.datasourceIds ??
-      (
-        await getConfigWithOverrides({
-          restApiArgs: { ...extra },
-        })
-      ).boundedContext.datasourceIds
+      (await getConfigWithOverrides(extra)).boundedContext.datasourceIds
     );
   }
 
@@ -83,11 +75,7 @@ class ResourceAccessChecker {
   }): Promise<Set<string> | null> {
     return (
       this._testOverrides.workbookIds ??
-      (
-        await getConfigWithOverrides({
-          restApiArgs: { ...extra },
-        })
-      ).boundedContext.workbookIds
+      (await getConfigWithOverrides(extra)).boundedContext.workbookIds
     );
   }
 
@@ -96,14 +84,7 @@ class ResourceAccessChecker {
   }: {
     extra: TableauRequestHandlerExtra;
   }): Promise<Set<string> | null> {
-    return (
-      this._testOverrides.tags ??
-      (
-        await getConfigWithOverrides({
-          restApiArgs: { ...extra },
-        })
-      ).boundedContext.tags
-    );
+    return this._testOverrides.tags ?? (await getConfigWithOverrides(extra)).boundedContext.tags;
   }
 
   async isDatasourceAllowed({
