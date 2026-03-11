@@ -34,6 +34,11 @@ export class TableauCloudLoginFlow extends Flow {
 
   fillSiteName = async (siteName: string): Promise<void> => {
     await this.siteNameTextbox.fill(siteName);
+
+    // Sometimes clicking the button doesn't seem to do anything,
+    // as if it needs a moment before it can be clicked after entering the site name.
+    await this.submitSiteNameButton.waitFor({ state: 'visible' });
+
     await this.submitSiteNameButton.click();
   };
 
