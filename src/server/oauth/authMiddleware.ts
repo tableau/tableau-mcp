@@ -47,7 +47,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       }
 
       const { enforceScopes, advertiseApiScopes, resourceUri } = getConfig().oauth;
-      const baseUrl = resourceUri.replace(/\/$/, '');
+      const baseUrl = new URL(resourceUri).origin;
       const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
       const requiredApiScopes = getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
       const scopeParam =
@@ -106,7 +106,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
 
       if (missingScopes.length > 0) {
         const { resourceUri } = getConfig().oauth;
-        const baseUrl = resourceUri.replace(/\/$/, '');
+        const baseUrl = new URL(resourceUri).origin;
         const requiredScopesForChallenge = [
           ...requiredMcpScopes,
           ...(shouldCheckApiScopes ? requiredApiScopes : []),

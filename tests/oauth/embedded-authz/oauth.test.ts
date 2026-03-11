@@ -79,6 +79,18 @@ describe('OAuth', () => {
     );
   });
 
+  it('should strip path from OAUTH_RESOURCE_URI in 401 resource_metadata', async () => {
+    vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com/tableau-mcp');
+
+    const { app } = await startServer();
+
+    const response = await request(app).post(`/${serverName}`);
+    expect(response.status).toBe(401);
+    expect(response.headers['www-authenticate']).toContain(
+      'resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource"',
+    );
+  });
+
   it('should provide a protected resource metadata endpoint for the OAuth 2.1 flow', async () => {
     const { app } = await startServer();
 
