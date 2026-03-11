@@ -23,8 +23,8 @@ export type TableauToolContext = {
   getConfigWithOverrides: () => Promise<OverridableConfig>;
   get siteLuid(): string;
   get userLuid(): string;
-  setSiteLuid: (siteLuid: string) => void;
-  setUserLuid: (userLuid: string) => void;
+  setSiteLuid?: (siteLuid: string) => void;
+  setUserLuid?: (userLuid: string) => void;
 };
 
 // An extension of the RequestHandlerExtra type that includes the TableauToolContext

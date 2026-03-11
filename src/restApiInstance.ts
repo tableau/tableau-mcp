@@ -34,7 +34,7 @@ type JwtScopes =
 
 export type RestApiArgs = Pick<
   TableauRequestHandlerExtra,
-  'config' | 'server' | 'signal' | 'tableauAuthInfo'
+  'config' | 'server' | 'signal' | 'tableauAuthInfo' | 'setSiteLuid' | 'setUserLuid'
 > &
   (
     | {
@@ -49,8 +49,6 @@ export type RestApiArgs = Pick<
 const getNewRestApiInstanceAsync = async (
   args: RestApiArgs & {
     jwtScopes: Set<JwtScopes>;
-    setSiteLuid?: (siteLuid: string) => void;
-    setUserLuid?: (userLuid: string) => void;
   },
 ): Promise<RestApi> => {
   const {
@@ -161,8 +159,6 @@ export const useRestApi = async <T>(
   args: RestApiArgs & {
     jwtScopes: Array<JwtScopes>;
     callback: (restApi: RestApi) => Promise<T>;
-    setSiteLuid?: (siteLuid: string) => void;
-    setUserLuid?: (userLuid: string) => void;
   },
 ): Promise<T> => {
   const { callback, ...remaining } = args;
