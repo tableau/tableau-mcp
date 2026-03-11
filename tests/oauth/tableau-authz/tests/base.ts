@@ -42,6 +42,9 @@ export async function connectOAuthClient({
     const request = await codeCallbackPromise;
     const url = new URL(request.url());
     const code = url.searchParams.get('code') ?? '';
+
+    await page.close();
+
     return code;
   });
 }
