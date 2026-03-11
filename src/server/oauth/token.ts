@@ -9,10 +9,11 @@ import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
-import { AUDIENCE } from './provider.js';
 import { mcpTokenSchema } from './schemas.js';
 import { formatScopes, getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
 import { AuthorizationCode, ClientCredentials, RefreshTokenData, UserAndTokens } from './types.js';
+
+export const AUDIENCE = 'tableau-mcp-server';
 
 /**
  * OAuth 2.1 Token Endpoint
