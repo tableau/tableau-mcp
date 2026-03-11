@@ -5,6 +5,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import {
   mcpAccessTokenSchema,
   mcpAccessTokenUserOnlySchema,
@@ -77,17 +78,19 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
           type: 'X-Tableau-Auth',
           username: sub,
           userId: tableauUserId,
+          siteId: getSiteLuidFromAccessToken(tableauAccessToken),
           server: tableauServer,
           accessToken: tableauAccessToken,
           refreshToken: tableauRefreshToken,
         };
       } else {
-        const { tableauUserId, tableauServer, sub } = mcpAccessToken.data;
+        const { tableauUserId, tableauSiteId, tableauServer, sub } = mcpAccessToken.data;
         tableauAuthInfo = {
           type: 'X-Tableau-Auth',
           username: sub,
           server: tableauServer,
           ...(tableauUserId ? { userId: tableauUserId } : {}),
+          ...(tableauSiteId ? { siteId: tableauSiteId } : {}),
         };
       }
 

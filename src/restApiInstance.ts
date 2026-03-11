@@ -49,9 +49,20 @@ export type RestApiArgs = Pick<
 const getNewRestApiInstanceAsync = async (
   args: RestApiArgs & {
     jwtScopes: Set<JwtScopes>;
+    setSiteLuid?: (siteLuid: string) => void;
+    setUserLuid?: (userLuid: string) => void;
   },
 ): Promise<RestApi> => {
-  const { config, server, jwtScopes, signal, tableauAuthInfo, disableLogging } = args;
+  const {
+    config,
+    server,
+    jwtScopes,
+    signal,
+    tableauAuthInfo,
+    disableLogging,
+    setSiteLuid,
+    setUserLuid,
+  } = args;
 
   if (!disableLogging) {
     const { requestId } = args;
@@ -99,6 +110,8 @@ const getNewRestApiInstanceAsync = async (
       patValue: config.patValue,
       siteName: config.siteName,
     });
+    setSiteLuid?.(restApi.siteId);
+    setUserLuid?.(restApi.userId);
   } else if (config.auth === 'direct-trust') {
     await restApi.signIn({
       type: 'direct-trust',
@@ -110,6 +123,8 @@ const getNewRestApiInstanceAsync = async (
       scopes: jwtScopes,
       additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
     });
+    setSiteLuid?.(restApi.siteId);
+    setUserLuid?.(restApi.userId);
   } else if (config.auth === 'uat') {
     await restApi.signIn({
       type: 'uat',
@@ -123,6 +138,8 @@ const getNewRestApiInstanceAsync = async (
       scopes: jwtScopes,
       additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
     });
+    setSiteLuid?.(restApi.siteId);
+    setUserLuid?.(restApi.userId);
   } else {
     if (tableauAuthInfo?.type === 'Bearer') {
       restApi.setBearerToken(tableauAuthInfo.raw);
@@ -144,6 +161,8 @@ export const useRestApi = async <T>(
   args: RestApiArgs & {
     jwtScopes: Array<JwtScopes>;
     callback: (restApi: RestApi) => Promise<T>;
+    setSiteLuid?: (siteLuid: string) => void;
+    setUserLuid?: (userLuid: string) => void;
   },
 ): Promise<T> => {
   const { callback, ...remaining } = args;

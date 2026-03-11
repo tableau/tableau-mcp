@@ -14,10 +14,17 @@ import { TableauAuthInfo } from '../server/oauth/schemas.js';
 
 // Additional context  available to all tool callbacks
 export type TableauToolContext = {
+  _userLuid?: string;
+  _siteLuid?: string;
+
   config: Config;
   server: Server;
   tableauAuthInfo: TableauAuthInfo | undefined;
   getConfigWithOverrides: () => Promise<OverridableConfig>;
+  get siteLuid(): string;
+  get userLuid(): string;
+  setSiteLuid: (siteLuid: string) => void;
+  setUserLuid: (userLuid: string) => void;
 };
 
 // An extension of the RequestHandlerExtra type that includes the TableauToolContext
