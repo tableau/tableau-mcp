@@ -19,7 +19,7 @@ describe('get-datasource-metadata', () => {
       },
     });
 
-    invariant(fields, 'data is undefined');
+    invariant(fields, 'fields is undefined');
     expect(fields.length).toBeGreaterThan(0);
 
     const fieldNames = fields.map((field) => field.name);

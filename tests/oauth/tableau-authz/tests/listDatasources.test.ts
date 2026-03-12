@@ -5,7 +5,7 @@ import { getOAuthClient } from '../oauthClient';
 import { connectOAuthClient, expect, test } from './base';
 
 // Skip until Content Exploration issues are resolved
-test.describe.skip('listDatasources', () => {
+test.describe.skip('list-datasources', () => {
   const client = getOAuthClient();
 
   test.afterEach(async () => {
