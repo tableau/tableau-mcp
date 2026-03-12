@@ -1,57 +1,30 @@
+import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { EventEmitter } from 'events';
 
 import { TelemetryProvider } from '../telemetry/types.js';
 import { latencyMiddleware } from './latencyMiddleware.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 
-function createMockProvider(): TelemetryProvider {
-  return {
+describe('latencyMiddleware', () => {
+  const metricName = 'apm_http_server_request_duration';
+  const provider: TelemetryProvider = {
     initialize: vi.fn(),
     recordMetric: vi.fn(),
     recordHistogram: vi.fn(),
   };
-}
 
-function createMockReqRes(overrides: {
-  method?: string;
-  path?: string;
-  body?: unknown;
-  auth?: AuthenticatedRequest['auth'];
-  statusCode?: number;
-}): {
-  req: AuthenticatedRequest;
-  res: EventEmitter & { statusCode: number; route?: { path: string } };
-} {
-  const req = {
-    method: overrides.method ?? 'POST',
-    path: overrides.path ?? '/tableau-mcp',
-    body: overrides.body,
-    auth: overrides.auth,
-  } as AuthenticatedRequest;
-
-  const res = Object.assign(new EventEmitter(), {
-    statusCode: overrides.statusCode ?? 200,
-  });
-
-  return { req, res };
-}
-
-describe('latencyMiddleware', () => {
-  const metricName = 'apm_http_server_request_duration';
   it('should record duration on response finish', () => {
-    const provider = createMockProvider();
     const middleware = latencyMiddleware(() => provider);
-
-    const { req, res } = createMockReqRes({ method: 'POST', statusCode: 200 });
+    const req = { method: 'POST', path: '/tableau-mcp' };
+    const res = Object.assign(new EventEmitter(), { statusCode: 200 });
     const next = vi.fn();
 
-    middleware(req, res as any, next);
-    expect(next).toHaveBeenCalled();
-
+    middleware(req as AuthenticatedRequest, res as any, next);
     res.emit('finish');
 
+    expect(next).toHaveBeenCalled();
     expect(provider.recordHistogram).toHaveBeenCalledWith(
-      'apm_http_server_request_duration',
+      metricName,
       expect.any(Number),
       expect.objectContaining({
         'http.request.method': 'POST',
@@ -61,20 +34,21 @@ describe('latencyMiddleware', () => {
   });
 
   it('should include tool_name when request body contains a tool call', () => {
-    const provider = createMockProvider();
     const middleware = latencyMiddleware(() => provider);
-
-    const { req, res } = createMockReqRes({
+    const req = {
+      method: 'POST',
+      path: '/tableau-mcp',
       body: {
         jsonrpc: '2.0',
         id: 1,
         method: 'tools/call',
         params: { name: 'get-datasource-metadata', arguments: {} },
       },
-    });
+    };
+    const res = Object.assign(new EventEmitter(), { statusCode: 200 });
     const next = vi.fn();
 
-    middleware(req, res as any, next);
+    middleware(req as AuthenticatedRequest, res as any, next);
     res.emit('finish');
 
     expect(provider.recordHistogram).toHaveBeenCalledWith(
@@ -87,23 +61,21 @@ describe('latencyMiddleware', () => {
   });
 
   it('should include auth attributes when req.auth is present', () => {
-    const provider = createMockProvider();
     const middleware = latencyMiddleware(() => provider);
-
-    const { req, res } = createMockReqRes({
-      auth: {
-        token: 'test',
-        clientId: 'test',
-        scopes: [],
-        extra: {
-          server: 'https://my-server.com',
-          siteId: 'site-123',
-        },
+    const auth: AuthInfo = {
+      token: 'test',
+      clientId: 'test',
+      scopes: [],
+      extra: {
+        server: 'https://my-server.com',
+        siteId: 'site-123',
       },
-    });
+    };
+    const req = { method: 'POST', path: '/tableau-mcp', auth };
+    const res = Object.assign(new EventEmitter(), { statusCode: 200 });
     const next = vi.fn();
 
-    middleware(req, res as any, next);
+    middleware(req as AuthenticatedRequest, res as any, next);
     res.emit('finish');
 
     expect(provider.recordHistogram).toHaveBeenCalledWith(
@@ -117,13 +89,12 @@ describe('latencyMiddleware', () => {
   });
 
   it('should record a non-negative duration', () => {
-    const provider = createMockProvider();
     const middleware = latencyMiddleware(() => provider);
-
-    const { req, res } = createMockReqRes({});
+    const req = { method: 'GET', path: '/tableau-mcp' };
+    const res = Object.assign(new EventEmitter(), { statusCode: 200 });
     const next = vi.fn();
 
-    middleware(req, res as any, next);
+    middleware(req as any, res as any, next);
     res.emit('finish');
 
     const durationMs = (provider.recordHistogram as ReturnType<typeof vi.fn>).mock.calls[0][1];
