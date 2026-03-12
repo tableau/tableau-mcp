@@ -93,9 +93,10 @@ describe('get-datasource-metadata', () => {
     );
 
     const { fields } = getCallToolResult(getDatasourceMetadataToolExecution, fieldsResultSchema);
-    expect(fields.length).toBeGreaterThan(0);
+    const flatFields = fields.flatMap((group) => group.columns ?? []);
+    expect(flatFields.length).toBeGreaterThan(0);
 
-    const fieldNames = fields.map((field) => field.name);
+    const fieldNames = flatFields.map((field) => field.name);
     expect(fieldNames).toContain('Postal Code');
     expect(fieldNames).toContain('Product Name');
   });
