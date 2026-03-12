@@ -66,7 +66,12 @@ const environmentData: EnvironmentData = {
             },
           },
           pulse: {
-            definitions: {},
+            definitions: {
+              'Tableau MCP': {
+                id: 'f353e870-26c4-40bb-9c65-70b2855364c8',
+                metrics: [{ id: 'b2b1a35e-d065-4692-87b8-5d6f8acddab1' }],
+              },
+            },
           },
         },
       },

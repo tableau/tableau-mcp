@@ -1,11 +1,12 @@
 import z from 'zod';
 
+import { workbookSchema } from '../../../../src/sdks/tableau/types/workbook';
 import { getOAuthClient } from '../oauthClient';
 import { connectOAuthClient, expect, test } from './base';
 import { getSuperstoreWorkbook } from './testEnv';
 
 // Skip until Content Exploration issues are resolved
-test.describe.skip('get-view-data', () => {
+test.describe.skip('list-workbooks', () => {
   const client = getOAuthClient();
 
   test.afterEach(async () => {
@@ -17,18 +18,19 @@ test.describe.skip('get-view-data', () => {
     await client.revokeToken();
   });
 
-  test('get view data', async ({ page, env }) => {
+  test('list workbooks', async ({ page, env }) => {
     await connectOAuthClient({ client, page, env });
 
     const superstore = getSuperstoreWorkbook();
 
-    const viewData = await client.callTool('get-view-data', {
-      schema: z.string(),
-      toolArgs: {
-        viewId: superstore.defaultViewId,
-      },
+    const workbooks = await client.callTool('list-workbooks', {
+      schema: z.array(workbookSchema),
+      toolArgs: {},
     });
 
-    expect(viewData).toBeDefined();
+    expect(workbooks.length).toBeGreaterThan(0);
+    const workbook = workbooks.find((workbook) => workbook.name === 'Superstore');
+
+    expect(workbook).toMatchObject(superstore);
   });
 });
