@@ -24,7 +24,7 @@ export function latencyMiddleware(getProvider: () => TelemetryProvider): express
         | { server?: string; siteId?: string; userId?: string }
         | undefined;
 
-      getProvider().recordHistogram('apm_nodejs_http_server_request_duration', durationMs, {
+      getProvider().recordHistogram('apm_http_server_request_duration', durationMs, {
         'http.request.method': req.method,
         'http.route': req.route?.path ?? req.path,
         'http.response.status_code': res.statusCode,
