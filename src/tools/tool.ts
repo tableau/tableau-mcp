@@ -251,13 +251,6 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     } finally {
-      const durationMs = performance.now() - startTime;
-      telemetry.recordHistogram('mcp.tool.duration', durationMs, {
-        tool_name: this.name,
-        success,
-        error_code: errorCode,
-      });
-
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
         request_id: requestId.toString(),

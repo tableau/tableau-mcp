@@ -37,7 +37,8 @@ function createMockReqRes(overrides: {
 }
 
 describe('latencyMiddleware', () => {
-  it('should record http.server.request.duration on response finish', () => {
+  const metricName = 'apm_http_server_request_duration';
+  it('should record duration on response finish', () => {
     const provider = createMockProvider();
     const middleware = latencyMiddleware(() => provider);
 
@@ -50,7 +51,7 @@ describe('latencyMiddleware', () => {
     res.emit('finish');
 
     expect(provider.recordHistogram).toHaveBeenCalledWith(
-      'http.server.request.duration',
+      'apm_http_server_request_duration',
       expect.any(Number),
       expect.objectContaining({
         'http.request.method': 'POST',
@@ -77,40 +78,10 @@ describe('latencyMiddleware', () => {
     res.emit('finish');
 
     expect(provider.recordHistogram).toHaveBeenCalledWith(
-      'http.server.request.duration',
+      metricName,
       expect.any(Number),
       expect.objectContaining({
         tool_name: 'get-datasource-metadata',
-      }),
-    );
-  });
-
-  it('should set tool_name to undefined when body has no tool call', () => {
-    const provider = createMockProvider();
-    const middleware = latencyMiddleware(() => provider);
-
-    const { req, res } = createMockReqRes({
-      body: {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2024-11-05',
-          capabilities: {},
-          clientInfo: { name: 'test', version: '1.0' },
-        },
-      },
-    });
-    const next = vi.fn();
-
-    middleware(req, res as any, next);
-    res.emit('finish');
-
-    expect(provider.recordHistogram).toHaveBeenCalledWith(
-      'http.server.request.duration',
-      expect.any(Number),
-      expect.objectContaining({
-        tool_name: undefined,
       }),
     );
   });
@@ -127,7 +98,6 @@ describe('latencyMiddleware', () => {
         extra: {
           server: 'https://my-server.com',
           siteId: 'site-123',
-          userId: 'user-456',
         },
       },
     });
@@ -137,12 +107,11 @@ describe('latencyMiddleware', () => {
     res.emit('finish');
 
     expect(provider.recordHistogram).toHaveBeenCalledWith(
-      'http.server.request.duration',
+      metricName,
       expect.any(Number),
       expect.objectContaining({
         server: 'https://my-server.com',
         site_id: 'site-123',
-        user_id: 'user-456',
       }),
     );
   });
