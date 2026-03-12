@@ -249,7 +249,6 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     } finally {
-      // Single telemetry call - always executed
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
         request_id: requestId.toString(),
