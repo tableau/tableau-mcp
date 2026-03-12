@@ -7,7 +7,7 @@
 
 import { getConfig } from '../../config.js';
 import { resourceAccessCheckerRequiredApiScopes } from '../../tools/resourceAccessChecker.js';
-import { ToolName } from '../../tools/toolName.js';
+import type { ToolName } from '../../tools/toolName.js';
 
 /**
  * MCP Scopes supported by the Tableau MCP server
