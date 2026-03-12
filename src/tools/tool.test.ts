@@ -17,16 +17,6 @@ vi.mock('../telemetry/productTelemetry/telemetryForwarder.js', () => ({
   }),
 }));
 
-// Mock for telemetry provider - tracks calls to recordMetric and recordHistogram
-const mockRecordMetric = vi.hoisted(() => vi.fn());
-const mockRecordHistogram = vi.hoisted(() => vi.fn());
-vi.mock('../telemetry/init.js', () => ({
-  getTelemetryProvider: vi.fn().mockReturnValue({
-    recordMetric: mockRecordMetric,
-    recordHistogram: mockRecordHistogram,
-  }),
-}));
-
 describe('Tool', () => {
   const mockExtra = getMockRequestHandlerExtra();
 
