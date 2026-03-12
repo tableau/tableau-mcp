@@ -54,22 +54,18 @@ describe('restApiInstance', () => {
   });
 
   describe('useRestApi with passthrough auth', () => {
-    it('should use setCredentials when tableauAuthInfo has accessToken and userId', async () => {
-      const passthroughConfig = {
-        ...mockConfig,
-        auth: 'passthrough' as const,
-      };
-
+    it('should use setCredentials when tableauAuthInfo type is Passthrough', async () => {
       const restApi = await useRestApi({
-        config: passthroughConfig,
+        config: mockConfig,
         requestId: mockRequestId,
         server: new Server(),
         tableauAuthInfo: {
-          type: 'X-Tableau-Auth',
-          accessToken: 'abc123|xyz789|site-luid',
+          type: 'Passthrough',
+          raw: 'abc123|xyz789|site-luid',
           userId: 'user-luid-123',
-          username: '',
+          username: 'testuser',
           server: 'https://my-tableau-server.com',
+          siteId: 'site-id-123',
         },
         jwtScopes: [],
         signal: new AbortController().signal,

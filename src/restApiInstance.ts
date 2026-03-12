@@ -92,12 +92,15 @@ const getNewRestApiInstanceAsync = async (
         ],
   });
 
-  if (
+  if (tableauAuthInfo?.type === 'Passthrough') {
+    // Pre-authenticated credentials from passthrough middleware
+    restApi.setCredentials(tableauAuthInfo.raw, tableauAuthInfo.userId);
+  } else if (
     tableauAuthInfo?.type === 'X-Tableau-Auth' &&
     tableauAuthInfo.accessToken &&
     tableauAuthInfo.userId
   ) {
-    // Pre-authenticated credentials from passthrough or OAuth
+    // Pre-authenticated credentials from OAuth
     restApi.setCredentials(tableauAuthInfo.accessToken, tableauAuthInfo.userId);
   } else if (tableauAuthInfo?.type === 'Bearer') {
     // Bearer token from OAuth scope-based auth
@@ -147,7 +150,7 @@ export const useRestApi = async <T>(
   },
 ): Promise<T> => {
   const { callback, ...remaining } = args;
-  const { config } = remaining;
+  const { config, tableauAuthInfo } = remaining;
   const restApi = await getNewRestApiInstanceAsync({
     ...remaining,
     jwtScopes: new Set(args.jwtScopes),
@@ -155,7 +158,7 @@ export const useRestApi = async <T>(
   try {
     return await callback(restApi);
   } finally {
-    if (config.auth !== 'oauth' && config.auth !== 'passthrough') {
+    if (config.auth !== 'oauth' && tableauAuthInfo?.type !== 'Passthrough') {
       // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.
       // Sessions for 'oauth' and 'passthrough' are not. Signing out would invalidate the session,
       // preventing the access token from being reused for subsequent requests.

@@ -134,6 +134,14 @@ export const tableauAuthInfoSchema = z.discriminatedUnion('type', [
     siteId: z.string(),
     raw: z.string(),
   }),
+  z.object({
+    type: z.literal('Passthrough'),
+    username: z.string(),
+    userId: z.string(),
+    server: z.string(),
+    siteId: z.string(),
+    raw: z.string(),
+  }),
 ]);
 
 export const cimdMetadataSchema = z.object({

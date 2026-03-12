@@ -15,7 +15,7 @@ export const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
 export const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
 export const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
-const authTypes = ['pat', 'uat', 'direct-trust', 'oauth', 'passthrough'] as const;
+const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
 
 function isAuthType(auth: unknown): auth is AuthType {
@@ -54,6 +54,7 @@ export class Config {
   tableauServerVersionCheckIntervalInHours: number;
   mcpSiteSettingsCheckIntervalInMinutes: number;
   enableMcpSiteSettings: boolean;
+  enablePassthroughAuth: boolean;
   oauth: {
     enabled: boolean;
     embeddedAuthzServer: boolean;
@@ -113,6 +114,7 @@ export class Config {
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: mcpSiteSettingsCheckIntervalInMinutes,
       ENABLE_MCP_SITE_SETTINGS: enableMcpSiteSettings,
+      ENABLE_PASSTHROUGH_AUTH: enablePassthroughAuth,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_EMBEDDED_AUTHZ_SERVER: oauthEmbeddedAuthzServer,
       OAUTH_ISSUER: oauthIssuer,
@@ -175,6 +177,7 @@ export class Config {
     );
 
     this.enableMcpSiteSettings = enableMcpSiteSettings === 'true';
+    this.enablePassthroughAuth = enablePassthroughAuth === 'true';
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';
     const enforceScopes = !disableScopes;
@@ -246,18 +249,17 @@ export class Config {
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport)
       ? transport
-      : this.oauth.enabled || this.auth === 'passthrough'
+      : this.oauth.enabled
         ? 'http'
         : 'stdio';
 
     if (
       this.transport === 'http' &&
       !disableOauthOverride &&
-      !this.oauth.issuer &&
-      this.auth !== 'passthrough'
+      !this.oauth.issuer
     ) {
       throw new Error(
-        'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true" or AUTH is "passthrough"',
+        'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true"',
       );
     }
 
@@ -312,11 +314,7 @@ export class Config {
       maxValue: ONE_HOUR_IN_MS,
     });
 
-    if (this.auth === 'passthrough') {
-      if (this.transport !== 'http') {
-        throw new Error('TRANSPORT must be "http" when AUTH is "passthrough"');
-      }
-    } else if (this.auth === 'pat') {
+    if (this.auth === 'pat') {
       invariant(patName, 'The environment variable PAT_NAME is not set');
       invariant(patValue, 'The environment variable PAT_VALUE is not set');
     } else if (this.auth === 'direct-trust') {

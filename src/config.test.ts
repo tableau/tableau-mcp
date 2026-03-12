@@ -664,6 +664,16 @@ describe('Config', () => {
       );
     });
 
+    it('should not throw error when TRANSPORT is "http" and ENABLE_PASSTHROUGH_AUTH is "true" and DANGEROUSLY_DISABLE_OAUTH is "true"', () => {
+      vi.stubEnv('TRANSPORT', 'http');
+      vi.stubEnv('OAUTH_ISSUER', undefined);
+      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
+      vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+
+      const config = new Config();
+      expect(config.enablePassthroughAuth).toBe(true);
+    });
+
     it('should throw error when OAUTH_JWE_PRIVATE_KEY and OAUTH_JWE_PRIVATE_KEY_PATH is not set', () => {
       stubDefaultOAuthEnvVars();
       vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', '');
@@ -759,63 +769,16 @@ describe('Config', () => {
   });
 
   describe('Passthrough configuration', () => {
-    function stubDefaultPassthroughEnvVars(): void {
-      vi.stubEnv('AUTH', 'passthrough');
-      vi.stubEnv('TRANSPORT', 'http');
-    }
-
-    beforeEach(() => {
-      stubDefaultPassthroughEnvVars();
-    });
-
-    it('should configure passthrough authentication', () => {
+    it('should set enablePassthroughAuth to false by default', () => {
       const config = new Config();
-      expect(config.auth).toBe('passthrough');
-      expect(config.transport).toBe('http');
-      expect(config.server).toBe('https://my-tableau-server.com');
+      expect(config.enablePassthroughAuth).toBe(false);
     });
 
-    it('should default transport to http when AUTH is passthrough', () => {
-      vi.stubEnv('TRANSPORT', undefined);
+    it('should set enablePassthroughAuth to true when ENABLE_PASSTHROUGH_AUTH is "true"', () => {
+      vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
 
       const config = new Config();
-      expect(config.transport).toBe('http');
-    });
-
-    it('should throw error when TRANSPORT is stdio for passthrough auth', () => {
-      vi.stubEnv('TRANSPORT', 'stdio');
-
-      expect(() => new Config()).toThrow('TRANSPORT must be "http" when AUTH is "passthrough"');
-    });
-
-    it('should not require OAUTH_ISSUER when AUTH is passthrough', () => {
-      vi.stubEnv('OAUTH_ISSUER', undefined);
-
-      const config = new Config();
-      expect(config.auth).toBe('passthrough');
-    });
-
-    it('should not require DANGEROUSLY_DISABLE_OAUTH when AUTH is passthrough', () => {
-      vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', undefined);
-      vi.stubEnv('OAUTH_ISSUER', undefined);
-
-      const config = new Config();
-      expect(config.auth).toBe('passthrough');
-    });
-
-    it('should not require PAT_NAME and PAT_VALUE when AUTH is passthrough', () => {
-      vi.stubEnv('PAT_NAME', undefined);
-      vi.stubEnv('PAT_VALUE', undefined);
-
-      const config = new Config();
-      expect(config.patName).toBe('');
-      expect(config.patValue).toBe('');
-    });
-
-    it('should require SERVER when AUTH is passthrough', () => {
-      vi.stubEnv('SERVER', undefined);
-
-      expect(() => new Config()).toThrow('The environment variable SERVER is not set');
+      expect(config.enablePassthroughAuth).toBe(true);
     });
   });
 
