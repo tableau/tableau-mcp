@@ -70,7 +70,7 @@ This tool searches across all supported content types for objects relevant to th
           return new Ok(
             await useRestApi({
               ...extra,
-              jwtScopes: ['tableau:content:read'],
+              jwtScopes: searchContentTool.requiredApiScopes,
               callback: async (restApi) => {
                 const maxResultLimit = configWithOverrides.getMaxResultLimit(
                   searchContentTool.name,

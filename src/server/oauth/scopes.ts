@@ -6,6 +6,7 @@
  */
 
 import { getConfig } from '../../config.js';
+import { resourceAccessCheckerRequiredApiScopes } from '../../tools/resourceAccessChecker.js';
 import { ToolName } from '../../tools/toolName.js';
 
 /**
@@ -55,70 +56,75 @@ export function isValidScope(scope: string): scope is McpScope {
   return supportedMcpScopes.some((supported) => supported === scope);
 }
 
-const toolScopeMap: Record<ToolName, { mcp: McpScope[]; api: TableauApiScope[] }> = {
+const toolScopeMap: Record<
+  ToolName,
+  { mcp: ReadonlyArray<McpScope>; api: ReadonlySet<TableauApiScope> }
+> = {
   'list-datasources': {
     mcp: ['tableau:mcp:datasource:read'],
-    api: ['tableau:content:read'],
+    api: new Set(['tableau:content:read']),
   },
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],
-    api: ['tableau:content:read'],
+    api: new Set(['tableau:content:read']),
   },
   'list-views': {
     mcp: ['tableau:mcp:view:read'],
-    api: ['tableau:content:read'],
+    api: new Set(['tableau:content:read']),
   },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
-    api: ['tableau:viz_data_service:read'],
+    api: new Set(['tableau:viz_data_service:read', ...resourceAccessCheckerRequiredApiScopes]),
   },
   'get-datasource-metadata': {
     mcp: ['tableau:mcp:datasource:read'],
-    api: ['tableau:content:read', 'tableau:viz_data_service:read'],
+    api: new Set(['tableau:viz_data_service:read', ...resourceAccessCheckerRequiredApiScopes]),
   },
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
-    api: ['tableau:content:read'],
+    api: new Set(['tableau:content:read', ...resourceAccessCheckerRequiredApiScopes]),
   },
   'get-view-data': {
     mcp: ['tableau:mcp:view:download'],
-    api: ['tableau:views:download'],
+    api: new Set(['tableau:views:download', ...resourceAccessCheckerRequiredApiScopes]),
   },
   'get-view-image': {
     mcp: ['tableau:mcp:view:download'],
-    api: ['tableau:views:download'],
+    api: new Set(['tableau:views:download', ...resourceAccessCheckerRequiredApiScopes]),
   },
   'list-all-pulse-metric-definitions': {
     mcp: ['tableau:mcp:pulse:read'],
-    api: ['tableau:insight_definitions_metrics:read'],
+    api: new Set(['tableau:insight_definitions_metrics:read']),
   },
   'list-pulse-metric-definitions-from-definition-ids': {
     mcp: ['tableau:mcp:pulse:read'],
-    api: ['tableau:insight_definitions_metrics:read'],
+    api: new Set(['tableau:insight_definitions_metrics:read']),
   },
   'list-pulse-metrics-from-metric-definition-id': {
     mcp: ['tableau:mcp:pulse:read'],
-    api: ['tableau:insight_definitions_metrics:read'],
+    api: new Set(['tableau:insight_definitions_metrics:read']),
   },
   'list-pulse-metrics-from-metric-ids': {
     mcp: ['tableau:mcp:pulse:read'],
-    api: ['tableau:insight_metrics:read'],
+    api: new Set(['tableau:insight_metrics:read']),
   },
   'list-pulse-metric-subscriptions': {
     mcp: ['tableau:mcp:pulse:read'],
-    api: ['tableau:metric_subscriptions:read'],
+    // 'tableau:insight_metrics:read' is only required if datasource scoping is enabled.
+    // Since we don't have an easy way to determine if datasource scoping is enabled, we include it in all cases.
+    api: new Set(['tableau:metric_subscriptions:read', 'tableau:insight_metrics:read']),
   },
   'generate-pulse-metric-value-insight-bundle': {
     mcp: ['tableau:mcp:insight:create'],
-    api: ['tableau:insights:read'],
+    api: new Set(['tableau:insights:read']),
   },
   'generate-pulse-insight-brief': {
     mcp: ['tableau:mcp:insight:create'],
-    api: ['tableau:insight_brief:create'],
+    api: new Set(['tableau:insight_brief:create']),
   },
   'search-content': {
     mcp: ['tableau:mcp:content:read'],
-    api: ['tableau:content:read'],
+    api: new Set(['tableau:content:read']),
   },
 };
 
@@ -126,7 +132,7 @@ const supportedMcpScopes = Array.from(
   new Set(Object.values(toolScopeMap).flatMap((tool) => tool.mcp)),
 );
 const supportedApiScopes = Array.from(
-  new Set(Object.values(toolScopeMap).flatMap((tool) => tool.api)),
+  new Set(Object.values(toolScopeMap).flatMap((tool) => Array.from(tool.api))),
 );
 
 export function getSupportedMcpScopes(): McpScope[] {
@@ -193,7 +199,7 @@ export function validateScopes(
  * @param endpoint - The MCP endpoint or tool name
  * @returns Array of required scopes for the endpoint
  */
-export function getRequiredScopesForTool(toolName: ToolName): McpScope[] {
+export function getRequiredScopesForTool(toolName: ToolName): ReadonlyArray<McpScope> {
   const oauthConfig = getConfig().oauth;
   if (!oauthConfig || !oauthConfig.enforceScopes) {
     return [];
@@ -202,8 +208,8 @@ export function getRequiredScopesForTool(toolName: ToolName): McpScope[] {
   return toolScopeMap[toolName].mcp;
 }
 
-export function getRequiredApiScopesForTool(toolName: ToolName): TableauApiScope[] {
-  return toolScopeMap[toolName].api;
+export function getRequiredApiScopesForTool(toolName: ToolName): ReadonlyArray<TableauApiScope> {
+  return Array.from(toolScopeMap[toolName].api);
 }
 
 /**

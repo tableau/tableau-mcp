@@ -3,6 +3,7 @@ import { useRestApi } from '../restApiInstance.js';
 import { DataSource } from '../sdks/tableau/types/dataSource.js';
 import { View } from '../sdks/tableau/types/view.js';
 import { Workbook } from '../sdks/tableau/types/workbook.js';
+import { TableauApiScope } from '../server/oauth/scopes.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getConfigWithOverrides } from '../utils/mcpSiteSettings.js';
 import { TableauRequestHandlerExtra } from './toolContext.js';
@@ -10,6 +11,10 @@ import { TableauRequestHandlerExtra } from './toolContext.js';
 type AllowedResult<T = unknown> =
   | { allowed: true; content?: T }
   | { allowed: false; message: string };
+
+export const resourceAccessCheckerRequiredApiScopes: ReadonlyArray<TableauApiScope> = [
+  'tableau:content:read',
+];
 
 class ResourceAccessChecker {
   private _testOverrides: {
@@ -202,7 +207,7 @@ class ResourceAccessChecker {
     async function getDatasource(): Promise<DataSource> {
       return await useRestApi({
         ...extra,
-        jwtScopes: ['tableau:content:read'],
+        jwtScopes: resourceAccessCheckerRequiredApiScopes,
         callback: async (restApi) =>
           await restApi.datasourcesMethods.queryDatasource({
             siteId: restApi.siteId,
@@ -293,7 +298,7 @@ class ResourceAccessChecker {
     async function getWorkbook(): Promise<Workbook> {
       return await useRestApi({
         ...extra,
-        jwtScopes: ['tableau:content:read'],
+        jwtScopes: resourceAccessCheckerRequiredApiScopes,
         callback: async (restApi) =>
           await restApi.workbooksMethods.getWorkbook({
             siteId: restApi.siteId,
@@ -373,7 +378,7 @@ class ResourceAccessChecker {
     async function getView(): Promise<View> {
       return await useRestApi({
         ...extra,
-        jwtScopes: ['tableau:content:read'],
+        jwtScopes: resourceAccessCheckerRequiredApiScopes,
         callback: async (restApi) => {
           return await restApi.viewsMethods.getView({
             siteId: restApi.siteId,

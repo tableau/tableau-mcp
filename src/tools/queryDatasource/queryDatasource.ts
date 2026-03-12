@@ -130,7 +130,7 @@ export const getQueryDatasourceTool = (
 
           return await useRestApi({
             ...extra,
-            jwtScopes: ['tableau:viz_data_service:read'],
+            jwtScopes: queryDatasourceTool.requiredApiScopes,
             callback: async (restApi) => {
               if (!configWithOverrides.disableQueryDatasourceValidationRequests) {
                 // Validate query against metadata
