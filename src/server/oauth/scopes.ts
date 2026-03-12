@@ -78,7 +78,11 @@ const toolScopeMap: Record<
   },
   'get-datasource-metadata': {
     mcp: ['tableau:mcp:datasource:read'],
-    api: new Set(['tableau:viz_data_service:read', ...resourceAccessCheckerRequiredApiScopes]),
+    api: new Set([
+      'tableau:content:read',
+      'tableau:viz_data_service:read',
+      ...resourceAccessCheckerRequiredApiScopes,
+    ]),
   },
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
