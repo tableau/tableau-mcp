@@ -7,6 +7,7 @@ import { fromError } from 'zod-validation-error/v3';
 import { getConfig } from '../../config.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { mcpTokenSchema } from './schemas.js';
@@ -274,7 +275,6 @@ async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject)
     sub: tokenData.user.name,
     clientId: tokenData.clientId,
     tableauServer: tokenData.server,
-    tableauUserId: tokenData.user.id,
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor((Date.now() + config.oauth.accessTokenTimeoutMs) / 1000),
     aud: AUDIENCE,
@@ -286,6 +286,7 @@ async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject)
           tableauRefreshToken: tokenData.tokens.refreshToken,
           tableauExpiresAt: Math.floor(Date.now() / 1000) + tokenData.tokens.expiresInSeconds,
           tableauUserId: tokenData.user.id,
+          tableauSiteId: getSiteLuidFromAccessToken(tokenData.tokens.accessToken),
         }
       : {}),
   });
