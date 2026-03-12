@@ -189,7 +189,6 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     let success = false;
     let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls
     let toolResult: CallToolResult;
-    const startTime = performance.now();
 
     try {
       if (args) {
