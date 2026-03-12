@@ -21,8 +21,8 @@ export type TableauToolContext = {
   server: Server;
   tableauAuthInfo: TableauAuthInfo | undefined;
   getConfigWithOverrides: () => Promise<OverridableConfig>;
-  get siteLuid(): string;
-  get userLuid(): string;
+  getSiteLuid: () => string;
+  getUserLuid: () => string;
   setSiteLuid?: (siteLuid: string) => void;
   setUserLuid?: (userLuid: string) => void;
 };
