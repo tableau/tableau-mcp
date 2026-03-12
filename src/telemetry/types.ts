@@ -24,6 +24,23 @@ export interface TelemetryProvider {
    * ```
    */
   recordMetric(name: string, value: number, attributes: TelemetryAttributes): void;
+
+  /**
+   * Record a histogram observation (e.g., latency) with the given name and attributes.
+   *
+   * @param name - The metric name (e.g., 'http.server.request.duration')
+   * @param value - The observed value (e.g., duration in milliseconds)
+   * @param attributes - Dimensions/tags for the metric
+   *
+   * @example
+   * ```typescript
+   * telemetry.recordHistogram('mcp.tool.duration', 142.5, {
+   *   tool_name: 'get-datasource-metadata',
+   *   success: true,
+   * });
+   * ```
+   */
+  recordHistogram(name: string, value: number, attributes: TelemetryAttributes): void;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
+import { performance } from 'perf_hooks';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 import { fromError, isZodErrorLike } from 'zod-validation-error/v3';
@@ -188,6 +189,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     let success = false;
     let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls
     let toolResult: CallToolResult;
+    const startTime = performance.now();
 
     try {
       if (args) {
@@ -249,6 +251,13 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     } finally {
+      const durationMs = performance.now() - startTime;
+      telemetry.recordHistogram('mcp.tool.duration', durationMs, {
+        tool_name: this.name,
+        success,
+        error_code: errorCode,
+      });
+
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
         request_id: requestId.toString(),

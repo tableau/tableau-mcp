@@ -10,6 +10,8 @@ import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
+import { getTelemetryProvider } from '../telemetry/init.js';
+import { latencyMiddleware } from './latencyMiddleware.js';
 import { handlePingRequest, validateProtocolVersion } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { EmbeddedOAuthProvider, TableauOAuthProvider } from './oauth/provider.js';
@@ -31,6 +33,7 @@ export async function startExpressServer({
 
   app.use(express.json());
   app.use(express.urlencoded());
+  app.use(latencyMiddleware(() => getTelemetryProvider()));
 
   app.use(
     cors({

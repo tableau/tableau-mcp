@@ -17,6 +17,16 @@ vi.mock('../telemetry/productTelemetry/telemetryForwarder.js', () => ({
   }),
 }));
 
+// Mock for telemetry provider - tracks calls to recordMetric and recordHistogram
+const mockRecordMetric = vi.hoisted(() => vi.fn());
+const mockRecordHistogram = vi.hoisted(() => vi.fn());
+vi.mock('../telemetry/init.js', () => ({
+  getTelemetryProvider: vi.fn().mockReturnValue({
+    recordMetric: mockRecordMetric,
+    recordHistogram: mockRecordHistogram,
+  }),
+}));
+
 describe('Tool', () => {
   const mockExtra = getMockRequestHandlerExtra();
 
@@ -242,6 +252,69 @@ describe('Tool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('An error occurred');
+  });
+
+  describe('latency histogram', () => {
+    beforeEach(() => {
+      mockRecordHistogram.mockClear();
+    });
+
+    it('should record mcp.tool.duration histogram on success', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockRecordHistogram).toHaveBeenCalledWith(
+        'mcp.tool.duration',
+        expect.any(Number),
+        expect.objectContaining({
+          tool_name: 'get-datasource-metadata',
+          success: true,
+          error_code: '',
+        }),
+      );
+    });
+
+    it('should record mcp.tool.duration histogram on error', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => {
+          throw new Error('Callback failed');
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockRecordHistogram).toHaveBeenCalledWith(
+        'mcp.tool.duration',
+        expect.any(Number),
+        expect.objectContaining({
+          tool_name: 'get-datasource-metadata',
+          success: false,
+        }),
+      );
+    });
+
+    it('should record a non-negative duration value', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      const durationMs = mockRecordHistogram.mock.calls[0][1];
+      expect(durationMs).toBeGreaterThanOrEqual(0);
+    });
   });
 
   describe('product telemetry', () => {

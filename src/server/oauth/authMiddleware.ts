@@ -1,8 +1,8 @@
-import { CallToolRequestSchema, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import express, { RequestHandler } from 'express';
 
 import { getConfig } from '../../config.js';
-import { isToolName, ToolName } from '../../tools/toolName.js';
+import { getToolNamesFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
   formatScopes,
@@ -183,23 +183,4 @@ function getRequiredApiScopesForRequest(body: unknown, includeApiScopes: boolean
   }
 
   return Array.from(scopes);
-}
-
-function getToolNamesFromRequestBody(body: unknown): ToolName[] {
-  const requests = Array.isArray(body) ? body : [body];
-  const toolNames = new Set<ToolName>();
-
-  for (const request of requests) {
-    const callToolRequestResult = CallToolRequestSchema.safeParse(request);
-    if (!callToolRequestResult.success) {
-      continue;
-    }
-
-    const { name } = callToolRequestResult.data.params;
-    if (isToolName(name)) {
-      toolNames.add(name);
-    }
-  }
-
-  return Array.from(toolNames);
 }
