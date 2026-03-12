@@ -1,6 +1,5 @@
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
-import { performance } from 'perf_hooks';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 import { fromError, isZodErrorLike } from 'zod-validation-error/v3';
