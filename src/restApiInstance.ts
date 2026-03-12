@@ -141,6 +141,8 @@ const getNewRestApiInstanceAsync = async (
   } else {
     if (tableauAuthInfo?.type === 'Bearer') {
       restApi.setBearerToken(tableauAuthInfo.raw);
+      setSiteLuid?.(tableauAuthInfo.siteId);
+      setUserLuid?.(tableauAuthInfo.userId ?? '');
     } else if (tableauAuthInfo?.type === 'X-Tableau-Auth') {
       if (!tableauAuthInfo?.accessToken || !tableauAuthInfo?.userId) {
         throw new Error('Auth info is required when not signing in first.');

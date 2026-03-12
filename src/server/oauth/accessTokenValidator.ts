@@ -127,6 +127,7 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
         exp,
         scope,
         'https://tableau.com/siteId': siteId,
+        'https://tableau.com/userId': userId,
         'https://tableau.com/targetUrl': targetUrl,
       } = parsed.data;
 
@@ -139,6 +140,7 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
         username: sub,
         server: targetUrl,
         siteId,
+        userId,
         raw: token,
       };
 
