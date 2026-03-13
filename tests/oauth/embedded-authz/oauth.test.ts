@@ -214,6 +214,8 @@ describe('OAuth', () => {
   });
 
   it('should allow authenticated requests using the X-Tableau-Auth header', async () => {
+    vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+
     const { app } = await startServer();
 
     const awaitableWritableStream = new AwaitableWritableStream();
@@ -269,6 +271,8 @@ describe('OAuth', () => {
   });
 
   it('should allow authenticated requests using the workgroup_session_id cookie', async () => {
+    vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+
     const { app } = await startServer();
 
     const awaitableWritableStream = new AwaitableWritableStream();

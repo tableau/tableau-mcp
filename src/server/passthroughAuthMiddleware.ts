@@ -7,6 +7,7 @@ import { ExpiringMap } from '../utils/expiringMap';
 import { AuthenticatedRequest } from './oauth/types';
 
 export const X_TABLEAU_AUTH_HEADER = 'x-tableau-auth';
+const PASSTHROUGH_AUTH_CACHE_MAX_ENTRIES = 1000;
 
 export const passthroughAuthInfoSchema = z.object({
   type: z.literal('Passthrough'),
@@ -56,7 +57,7 @@ export async function passthroughAuthMiddleware(
     if (!sessionResult.isOk()) {
       res.status(401).json({
         error: 'invalid_token',
-        error_description: sessionResult.error,
+        error_description: sessionResult.error.message,
       });
       return;
     }
@@ -70,7 +71,12 @@ export async function passthroughAuthMiddleware(
       raw: tableauAccessToken,
     };
 
-    passthroughAuthInfoCache?.set(tableauAccessToken, passthroughAuthInfo);
+    if (
+      passthroughAuthInfoCache &&
+      passthroughAuthInfoCache.size < PASSTHROUGH_AUTH_CACHE_MAX_ENTRIES
+    ) {
+      passthroughAuthInfoCache.set(tableauAccessToken, passthroughAuthInfo);
+    }
   }
 
   req.auth = {

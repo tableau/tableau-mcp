@@ -7,7 +7,7 @@ sidebar_position: 5
 With passthrough authentication enabled, authentication to the MCP server acts similarly to the
 Tableau REST APIs. The same
 [`X-Tableau-Auth` header](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_auth.htm#using_auth_token)
-used to authenticate to the Tableau REST APIs can also used to authenticate to the MCP server.
+used to authenticate to the Tableau REST APIs can also be used to authenticate to the MCP server.
 
 When a request is made to the MCP server, the `X-Tableau-Auth` header is read.
 
