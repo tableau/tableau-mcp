@@ -28,7 +28,7 @@ export interface TelemetryProvider {
   /**
    * Record a histogram observation (e.g., latency) with the given name and attributes.
    *
-   * @param name - The metric name (e.g., 'apm_http_server_request_duration')
+   * @param name - The metric name (e.g., 'http_server_request_duration')
    * @param value - The observed value (e.g., duration in milliseconds)
    * @param attributes - Dimensions/tags for the metric
    *

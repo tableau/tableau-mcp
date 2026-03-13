@@ -11,6 +11,7 @@ import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
+import { NoOpTelemetryProvider } from '../telemetry/noop.js';
 import { latencyMiddleware } from './latencyMiddleware.js';
 import { handlePingRequest, validateProtocolVersion } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
@@ -34,7 +35,6 @@ export async function startExpressServer({
 
   app.use(express.json());
   app.use(express.urlencoded());
-  app.use(latencyMiddleware(telemetryProvider));
 
   app.use(
     cors({
@@ -65,6 +65,9 @@ export async function startExpressServer({
     oauthProvider.setupRoutes(app);
     middleware.push(oauthProvider.authMiddleware);
     middleware.push(validateProtocolVersion);
+  }
+  if (!(telemetryProvider instanceof NoOpTelemetryProvider)) {
+    middleware.push(latencyMiddleware(telemetryProvider));
   }
 
   const path = `/${basePath}`;
