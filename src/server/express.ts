@@ -1,5 +1,6 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Request, RequestHandler, Response } from 'express';
 import fs, { existsSync } from 'fs';
@@ -32,6 +33,9 @@ export async function startExpressServer({
 
   app.use(express.json());
   app.use(express.urlencoded());
+  if (config.enablePassthroughAuth) {
+    app.use(cookieParser());
+  }
 
   app.use(
     cors({

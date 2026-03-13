@@ -19,9 +19,7 @@ export const passthroughAuthInfoSchema = z.object({
 
 export type PassthroughAuthInfo = z.infer<typeof passthroughAuthInfoSchema>;
 
-const passthroughAuthInfoCache = new ExpiringMap<string, PassthroughAuthInfo>({
-  defaultExpirationTimeMs: getConfig().passthroughAuthUserSessionCheckIntervalInMinutes * 60 * 1000,
-});
+let passthroughAuthInfoCache: ExpiringMap<string, PassthroughAuthInfo> | undefined;
 
 export function passthroughAuthMiddleware(): RequestHandler {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -34,6 +32,14 @@ export function passthroughAuthMiddleware(): RequestHandler {
     }
 
     const config = getConfig();
+
+    if (!passthroughAuthInfoCache) {
+      passthroughAuthInfoCache = new ExpiringMap<string, PassthroughAuthInfo>({
+        defaultExpirationTimeMs:
+          config.passthroughAuthUserSessionCheckIntervalInMinutes * 60 * 1000,
+      });
+    }
+
     let passthroughAuthInfo = passthroughAuthInfoCache.get(tableauAccessToken);
     if (!passthroughAuthInfo) {
       const { server, maxRequestTimeoutMs } = config;
