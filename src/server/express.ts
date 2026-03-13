@@ -34,6 +34,7 @@ export async function startExpressServer({
   app.use(express.json());
   app.use(express.urlencoded());
   if (config.enablePassthroughAuth) {
+    // cookie-parser is used to parse the workgroup_session_id cookie for passthrough auth
     app.use(cookieParser());
   }
 
