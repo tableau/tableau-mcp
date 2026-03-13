@@ -12,6 +12,8 @@ import { getToolNamesFromRequestBody } from './requestUtils.js';
  * before the telemetry provider is fully initialized.
  */
 export function latencyMiddleware(getProvider: () => TelemetryProvider): express.RequestHandler {
+  const provider = getProvider();
+
   return (req: AuthenticatedRequest, res, next) => {
     const start = performance.now();
 
@@ -24,7 +26,7 @@ export function latencyMiddleware(getProvider: () => TelemetryProvider): express
         | { server?: string; siteId?: string; userId?: string }
         | undefined;
 
-      getProvider().recordHistogram('apm_http_server_request_duration', durationMs, {
+      provider.recordHistogram('apm_http_server_request_duration', durationMs, {
         'http.request.method': req.method,
         'http.route': req.route?.path ?? req.path,
         'http.response.status_code': res.statusCode,
