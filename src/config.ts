@@ -174,7 +174,7 @@ export class Config {
       passthroughAuthUserSessionCheckIntervalInMinutes,
       {
         defaultValue: 10,
-        minValue: 1,
+        minValue: 0,
         maxValue: 60 * 24, // 24 hours
       },
     );
