@@ -163,6 +163,18 @@ describe('Config', () => {
     expect(config.tableauServerVersionCheckIntervalInHours).toBe(2);
   });
 
+  it('should set passthroughAuthUserSessionCheckIntervalInMinutes to default when not specified', () => {
+    const config = new Config();
+    expect(config.passthroughAuthUserSessionCheckIntervalInMinutes).toBe(10);
+  });
+
+  it('should set passthroughAuthUserSessionCheckIntervalInMinutes to the specified value when specified', () => {
+    vi.stubEnv('PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES', '2');
+
+    const config = new Config();
+    expect(config.passthroughAuthUserSessionCheckIntervalInMinutes).toBe(2);
+  });
+
   it('should set mcpSiteSettingsCheckIntervalInMinutes to default when not specified', () => {
     const config = new Config();
     expect(config.mcpSiteSettingsCheckIntervalInMinutes).toBe(10);

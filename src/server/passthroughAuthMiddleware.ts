@@ -1,10 +1,9 @@
 import { NextFunction, RequestHandler, Response } from 'express';
 import { z } from 'zod';
 
-import { getConfig, TEN_MINUTES_IN_MS } from '../config';
+import { getConfig } from '../config';
 import { RestApi } from '../sdks/tableau/restApi';
 import { ExpiringMap } from '../utils/expiringMap';
-import { getSupportedMcpScopes } from './oauth/scopes';
 import { AuthenticatedRequest } from './oauth/types';
 
 export const X_TABLEAU_AUTH_HEADER = 'x-tableau-auth';
@@ -21,13 +20,13 @@ export const passthroughAuthInfoSchema = z.object({
 export type PassthroughAuthInfo = z.infer<typeof passthroughAuthInfoSchema>;
 
 const passthroughAuthInfoCache = new ExpiringMap<string, PassthroughAuthInfo>({
-  defaultExpirationTimeMs: TEN_MINUTES_IN_MS,
+  defaultExpirationTimeMs: getConfig().passthroughAuthUserSessionCheckIntervalInMinutes * 60 * 1000,
 });
 
-export function passthroughMiddleware(): RequestHandler {
+export function passthroughAuthMiddleware(): RequestHandler {
   return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     const tableauAccessToken: string =
-      getCookie(req, 'workgroup_session_id') || getHeader(req, X_TABLEAU_AUTH_HEADER);
+      getHeader(req, X_TABLEAU_AUTH_HEADER) || getCookie(req, 'workgroup_session_id');
 
     if (!tableauAccessToken) {
       next();
@@ -68,7 +67,7 @@ export function passthroughMiddleware(): RequestHandler {
     req.auth = {
       token: 'passthrough',
       clientId: 'passthrough',
-      scopes: config.oauth.enforceScopes ? getSupportedMcpScopes() : [],
+      scopes: [],
       extra: passthroughAuthInfo,
     };
     next();

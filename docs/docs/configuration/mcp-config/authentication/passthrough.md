@@ -35,7 +35,7 @@ even though it does not make any downstream Tableau REST API calls.
 
 :::danger
 
-Do not use a Personal Access Token (PAT) to generate the `X-Tableau-Auth` credential when when using
+Do not use a Personal Access Token (PAT) to generate the `X-Tableau-Auth` credential when using
 passthrough authentication since PATs cannot be used concurrently. Signing in multiple times with
 the same PAT at the same time will terminate any prior session and will result in an authentication
 error. See
@@ -49,3 +49,12 @@ for more details.
 - Default: `false`
 - When `true`, passthrough authentication is enabled.
 - Only applies when [`TRANSPORT`](../env-vars.md#transport) is `http`.
+
+## PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES
+
+- Default: `10` minutes
+- When a passthrough auth request is made, the provided access token is used to first check the user
+  session for validity. If the session is invalid, the request will be rejected with a 401 status
+  code.
+- This value is used to set how often this user session check is performed for a given access token.
+- Must be a positive number between `1` and `60 * 24` (24 hours).

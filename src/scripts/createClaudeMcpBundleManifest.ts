@@ -389,6 +389,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES: {
+    includeInUserConfig: false,
+    type: 'number',
+    title: 'Passthrough Auth Info Expiration Time in Minutes',
+    description: 'The expiration time in minutes for the passthrough auth info.',
+    required: false,
+    sensitive: false,
+  },
   MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: {
     includeInUserConfig: false,
     type: 'number',

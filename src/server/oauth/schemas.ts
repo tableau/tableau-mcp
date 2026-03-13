@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { requiredString } from '../../utils/requiredString.js';
-import { passthroughAuthInfoSchema } from '../passthroughMiddleware.js';
+import { passthroughAuthInfoSchema } from '../passthroughAuthMiddleware.js';
 
 export const mcpAuthorizeSchema = z.object({
   client_id: requiredString('client_id'),

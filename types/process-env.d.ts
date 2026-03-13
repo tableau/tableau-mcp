@@ -40,6 +40,7 @@ export interface ProcessEnvEx {
   INCLUDE_WORKBOOK_IDS: string | undefined;
   INCLUDE_TAGS: string | undefined;
   TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: string | undefined;
+  PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES: string | undefined;
   MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: string | undefined;
   ENABLE_MCP_SITE_SETTINGS: string | undefined;
   ENABLE_PASSTHROUGH_AUTH: string | undefined;

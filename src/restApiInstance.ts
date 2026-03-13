@@ -103,11 +103,11 @@ const getNewRestApiInstanceAsync = async (
 
   let signOutWhenCompleted = true;
   if (tableauAuthInfo?.type === 'Passthrough') {
-    signOutWhenCompleted = false;
     if (!tableauAuthInfo.raw || !tableauAuthInfo.userId) {
       throw new Error('Auth info is required when not signing in first.');
     }
 
+    signOutWhenCompleted = false;
     restApi.setCredentials(tableauAuthInfo.raw, tableauAuthInfo.userId);
   } else {
     if (config.auth === 'pat') {

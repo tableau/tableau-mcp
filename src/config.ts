@@ -52,6 +52,7 @@ export class Config {
   enableServerLogging: boolean;
   serverLogDirectory: string;
   tableauServerVersionCheckIntervalInHours: number;
+  passthroughAuthUserSessionCheckIntervalInMinutes: number;
   mcpSiteSettingsCheckIntervalInMinutes: number;
   enableMcpSiteSettings: boolean;
   enablePassthroughAuth: boolean;
@@ -112,6 +113,8 @@ export class Config {
       ENABLE_SERVER_LOGGING: enableServerLogging,
       SERVER_LOG_DIRECTORY: serverLogDirectory,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
+      PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES:
+        passthroughAuthUserSessionCheckIntervalInMinutes,
       MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: mcpSiteSettingsCheckIntervalInMinutes,
       ENABLE_MCP_SITE_SETTINGS: enableMcpSiteSettings,
       ENABLE_PASSTHROUGH_AUTH: enablePassthroughAuth,
@@ -164,6 +167,15 @@ export class Config {
         defaultValue: 1,
         minValue: 1,
         maxValue: 24 * 7, // 7 days
+      },
+    );
+
+    this.passthroughAuthUserSessionCheckIntervalInMinutes = parseNumber(
+      passthroughAuthUserSessionCheckIntervalInMinutes,
+      {
+        defaultValue: 10,
+        minValue: 1,
+        maxValue: 60 * 24, // 24 hours
       },
     );
 
