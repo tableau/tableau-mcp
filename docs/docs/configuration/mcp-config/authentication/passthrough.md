@@ -50,11 +50,12 @@ for more details.
 - When `true`, passthrough authentication is enabled.
 - Only applies when [`TRANSPORT`](../env-vars.md#transport) is `http`.
 
+<hr />
+
 ## PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES
 
 - Default: `10` minutes
-- When a passthrough auth request is made, the provided access token is used to first check the user
-  session for validity. If the session is invalid, the request will be rejected with a 401 status
-  code.
-- This value is used to set how often this user session check is performed for a given access token.
-- Must be a positive number between `1` and `60 * 24` (24 hours).
+- How often the server re-checks that a passthrough auth token is still valid. Between checks,
+  recently validated tokens are trusted without re-verification. Downstream requests to the Tableau
+  REST APIs could potentially fail if the token was invalidated during this interval.
+- Valid range: `0` to `1440` (24 hours). Use `0` to verify the token on every request.

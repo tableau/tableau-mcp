@@ -32,15 +32,16 @@ export function passthroughAuthMiddleware(): RequestHandler {
     }
 
     const config = getConfig();
+    const enableCaching = config.passthroughAuthUserSessionCheckIntervalInMinutes > 0;
 
-    if (!passthroughAuthInfoCache) {
+    if (enableCaching && !passthroughAuthInfoCache) {
       passthroughAuthInfoCache = new ExpiringMap<string, PassthroughAuthInfo>({
         defaultExpirationTimeMs:
           config.passthroughAuthUserSessionCheckIntervalInMinutes * 60 * 1000,
       });
     }
 
-    let passthroughAuthInfo = passthroughAuthInfoCache.get(tableauAccessToken);
+    let passthroughAuthInfo = passthroughAuthInfoCache?.get(tableauAccessToken);
     if (!passthroughAuthInfo) {
       const { server, maxRequestTimeoutMs } = config;
 
@@ -67,7 +68,7 @@ export function passthroughAuthMiddleware(): RequestHandler {
         raw: tableauAccessToken,
       };
 
-      passthroughAuthInfoCache.set(tableauAccessToken, passthroughAuthInfo);
+      passthroughAuthInfoCache?.set(tableauAccessToken, passthroughAuthInfo);
     }
 
     req.auth = {
