@@ -11,9 +11,7 @@ import { getToolNamesFromRequestBody } from './requestUtils.js';
  * Accepts a lazy provider getter so the middleware can be registered at startup
  * before the telemetry provider is fully initialized.
  */
-export function latencyMiddleware(getProvider: () => TelemetryProvider): express.RequestHandler {
-  const provider = getProvider();
-
+export function latencyMiddleware(provider: TelemetryProvider): express.RequestHandler {
   return (req: AuthenticatedRequest, res, next) => {
     const start = performance.now();
 

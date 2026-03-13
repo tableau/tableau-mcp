@@ -30,10 +30,11 @@ export async function startExpressServer({
   logLevel: LoggingLevel;
 }): Promise<{ url: string; app: express.Application; server: http.Server }> {
   const app = express();
+  const telemetryProvider = getTelemetryProvider();
 
   app.use(express.json());
   app.use(express.urlencoded());
-  app.use(latencyMiddleware(() => getTelemetryProvider()));
+  app.use(latencyMiddleware(telemetryProvider));
 
   app.use(
     cors({

@@ -14,7 +14,7 @@ describe('latencyMiddleware', () => {
   };
 
   it('should record duration on response finish', () => {
-    const middleware = latencyMiddleware(() => provider);
+    const middleware = latencyMiddleware(provider);
     const req = { method: 'POST', path: '/tableau-mcp' };
     const res = Object.assign(new EventEmitter(), { statusCode: 200 });
     const next = vi.fn();
@@ -34,7 +34,7 @@ describe('latencyMiddleware', () => {
   });
 
   it('should include tool_name when request body contains a tool call', () => {
-    const middleware = latencyMiddleware(() => provider);
+    const middleware = latencyMiddleware(provider);
     const req = {
       method: 'POST',
       path: '/tableau-mcp',
@@ -61,7 +61,7 @@ describe('latencyMiddleware', () => {
   });
 
   it('should include auth attributes when req.auth is present', () => {
-    const middleware = latencyMiddleware(() => provider);
+    const middleware = latencyMiddleware(provider);
     const auth: AuthInfo = {
       token: 'test',
       clientId: 'test',
@@ -89,7 +89,7 @@ describe('latencyMiddleware', () => {
   });
 
   it('should record a non-negative duration', () => {
-    const middleware = latencyMiddleware(() => provider);
+    const middleware = latencyMiddleware(provider);
     const req = { method: 'GET', path: '/tableau-mcp' };
     const res = Object.assign(new EventEmitter(), { statusCode: 200 });
     const next = vi.fn();
