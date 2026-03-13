@@ -36,7 +36,7 @@ jobs:
           CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
 
       - name: OAuth Tests
-        uses: ./.github/actions/run-oauth-tests
+        uses: ./.github/actions/run-oauth-embedded-authz-tests
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}
           SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}

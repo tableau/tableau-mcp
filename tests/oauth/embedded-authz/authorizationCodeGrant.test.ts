@@ -2,10 +2,10 @@ import express from 'express';
 import http from 'http';
 import request from 'supertest';
 
-import { getConfig } from '../../src/config.js';
-import { serverName } from '../../src/server.js';
-import { startExpressServer } from '../../src/server/express.js';
-import { generateCodeChallenge } from '../../src/server/oauth/generateCodeChallenge.js';
+import { getConfig } from '../../../src/config.js';
+import { serverName } from '../../../src/server.js';
+import { startExpressServer } from '../../../src/server/express.js';
+import { generateCodeChallenge } from '../../../src/server/oauth/generateCodeChallenge.js';
 import { exchangeAuthzCodeForAccessToken } from './exchangeAuthzCodeForAccessToken.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
 }));
 
-vi.mock('../../src/sdks/tableau-oauth/methods.js', () => ({
+vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
   getTokenResult: mocks.mockGetTokenResult,
 }));
 
@@ -60,6 +60,8 @@ describe('authorization code grant type', () => {
         code: 'invalid-code',
         code_verifier: 'test-code-challenge',
         redirect_uri: 'http://localhost:3000',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
       });
 
       expect(tokenResponse.status).toBe(400);
@@ -111,6 +113,8 @@ describe('authorization code grant type', () => {
         code,
         code_verifier: 'invalid-code-verifier',
         redirect_uri: 'http://localhost:3000',
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
       });
 
       expect(tokenResponse.status).toBe(400);

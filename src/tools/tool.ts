@@ -2,7 +2,7 @@ import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotoco
 import { ZodiosError } from '@zodios/core';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
-import { fromError, isZodErrorLike } from 'zod-validation-error';
+import { fromError, isZodErrorLike } from 'zod-validation-error/v3';
 
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
@@ -10,7 +10,6 @@ import { getTelemetryProvider } from '../telemetry/init.js';
 import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../utils/getHttpStatus.js';
-import { getSiteLuidFromAccessToken } from '../utils/getSiteLuidFromAccessToken.js';
 import { Provider, TypeOrProvider } from '../utils/provider.js';
 import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
 import { ToolName } from './toolName.js';
@@ -18,6 +17,8 @@ import { ToolName } from './toolName.js';
 type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args extends ZodRawShape
   ? (args: z.objectOutputType<Args, ZodTypeAny>) => void
   : never;
+
+export type ToolRules = Record<string, boolean | undefined>;
 
 export type ConstrainedResult<T> =
   | {
@@ -248,12 +249,12 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     } finally {
-      // Single telemetry call - always executed
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
         request_id: requestId.toString(),
         session_id: sessionId ?? '',
-        site_luid: getSiteLuidFromAccessToken(tableauAuthInfo),
+        site_luid: extra.getSiteLuid(),
+        user_luid: extra.getUserLuid(),
         podname: config.server,
         is_hyperforce: config.isHyperforce,
         success,

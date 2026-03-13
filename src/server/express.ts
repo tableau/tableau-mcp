@@ -12,7 +12,7 @@ import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
 import { handlePingRequest, validateProtocolVersion } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
-import { OAuthProvider } from './oauth/provider.js';
+import { EmbeddedOAuthProvider, TableauOAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 import { passthroughMiddleware, X_TABLEAU_AUTH_HEADER } from './passthroughMiddleware.js';
@@ -59,7 +59,10 @@ export async function startExpressServer({
   }
 
   if (config.oauth.enabled) {
-    const oauthProvider = new OAuthProvider();
+    const oauthProvider = config.oauth.embeddedAuthzServer
+      ? new EmbeddedOAuthProvider()
+      : new TableauOAuthProvider();
+
     oauthProvider.setupRoutes(app);
     middleware.push(oauthProvider.authMiddleware);
   }

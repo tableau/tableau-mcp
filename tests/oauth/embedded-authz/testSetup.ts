@@ -1,8 +1,8 @@
 import { Ok } from 'ts-results-es';
 
-import { testProductVersion } from '../../src/testShared.js';
+import { testProductVersion } from '../../../src/testShared.js';
 
-vi.mock('../../src/sdks/tableau/restApi.js', async (importOriginal) => ({
+vi.mock('../../../src/sdks/tableau/restApi.js', async (importOriginal) => ({
   ...(await importOriginal()),
   RestApi: vi.fn().mockImplementation(() => ({
     signIn: vi.fn().mockResolvedValue(undefined),
@@ -14,6 +14,7 @@ vi.mock('../../src/sdks/tableau/restApi.js', async (importOriginal) => ({
           site: {
             id: 'site_id',
             name: 'mcp-test',
+            contentUrl: 'mcp-test',
           },
           user: {
             id: 'user_id',

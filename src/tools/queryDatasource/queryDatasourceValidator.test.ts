@@ -22,7 +22,7 @@ describe('validateQuery', () => {
     } as const;
 
     // @ts-expect-error - This is a test for the type validator
-    expect(() => validateQuery({ datasourceLuid: '123', query })).toThrow(
+    expect(() => validateQuery({ datasourceLuid: '123', query, rules: {} })).toThrow(
       'The query does not match the expected schema.',
     );
   });

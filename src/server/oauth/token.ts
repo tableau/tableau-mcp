@@ -2,17 +2,19 @@ import { KeyObject, randomBytes, timingSafeEqual } from 'crypto';
 import express from 'express';
 import { CompactEncrypt } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
-import { fromError } from 'zod-validation-error';
+import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
+import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
-import { AUDIENCE } from './provider.js';
 import { mcpTokenSchema } from './schemas.js';
 import { formatScopes, getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
 import { AuthorizationCode, ClientCredentials, RefreshTokenData, UserAndTokens } from './types.js';
+
+export const AUDIENCE = 'tableau-mcp-server';
 
 /**
  * OAuth 2.1 Token Endpoint
@@ -40,20 +42,24 @@ export function token(
       return;
     }
 
-    const clientCredentialsResult = verifyClientCredentials({
-      required: result.data.grantType === 'client_credentials',
-      clientId: result.data.clientId,
-      clientSecret: result.data.clientSecret,
-      clientIdSecretPairs: getConfig().oauth.clientIdSecretPairs,
-      authorizationHeader: req.headers.authorization,
-    });
-
-    if (clientCredentialsResult.isErr()) {
-      res.status(401).json({
-        error: 'invalid_client',
-        error_description: clientCredentialsResult.error,
+    let clientCredentialClientId = '';
+    if (config.oauth.clientIdSecretPairs) {
+      const clientCredentialsResult = verifyClientCredentials({
+        clientId: result.data.clientId,
+        clientSecret: result.data.clientSecret,
+        clientIdSecretPairs: config.oauth.clientIdSecretPairs,
+        authorizationHeader: req.headers.authorization,
       });
-      return;
+
+      if (clientCredentialsResult.isErr()) {
+        res.status(401).json({
+          error: 'invalid_client',
+          error_description: clientCredentialsResult.error,
+        });
+        return;
+      }
+
+      clientCredentialClientId = clientCredentialsResult.value.clientId;
     }
 
     try {
@@ -90,6 +96,7 @@ export function token(
             clientId: authCode.clientId,
             tokens: authCode.tokens,
             scopes: authCode.scopes,
+            siteContentUrl: authCode.siteContentUrl,
             expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
             tableauClientId: authCode.tableauClientId,
           });
@@ -138,7 +145,7 @@ export function token(
           // https://www.rfc-editor.org/rfc/rfc6749#section-4.4.3
           const accessToken = await createClientCredentialsAccessToken(
             {
-              clientId: clientCredentialsResult.value.clientId,
+              clientId: clientCredentialClientId,
               server: config.server,
             },
             scopesToGrant,
@@ -168,12 +175,14 @@ export function token(
           }
 
           let accessToken: string;
+          let tokensToStore = tokenData.tokens;
           const { refreshToken: tableauRefreshToken } = tokenData.tokens;
 
           const tokensResult = await exchangeRefreshToken(
             tokenData.server,
             tableauRefreshToken,
             tokenData.tableauClientId,
+            tokenData.siteContentUrl,
           );
 
           if (tokensResult.isErr()) {
@@ -186,6 +195,7 @@ export function token(
                 server: tokenData.server,
                 tokens: tokenData.tokens,
                 scopes: tokenData.scopes,
+                siteContentUrl: tokenData.siteContentUrl,
               },
               publicKey,
             );
@@ -196,17 +206,20 @@ export function token(
               expiresInSeconds,
             } = tokensResult.value;
 
+            tokensToStore = {
+              accessToken: newTableauAccessToken,
+              refreshToken: newTableauRefreshToken,
+              expiresInSeconds,
+            };
+
             accessToken = await createAccessToken(
               {
                 user: tokenData.user,
                 clientId: tokenData.clientId,
                 server: tokenData.server,
-                tokens: {
-                  accessToken: newTableauAccessToken,
-                  refreshToken: newTableauRefreshToken,
-                  expiresInSeconds,
-                },
+                tokens: tokensToStore,
                 scopes: tokenData.scopes,
+                siteContentUrl: tokenData.siteContentUrl,
               },
               publicKey,
             );
@@ -220,8 +233,9 @@ export function token(
             user: tokenData.user,
             server: tokenData.server,
             clientId: tokenData.clientId,
-            tokens: tokenData.tokens,
+            tokens: tokensToStore,
             scopes: tokenData.scopes,
+            siteContentUrl: tokenData.siteContentUrl,
             expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
             tableauClientId: tokenData.tableauClientId,
           });
@@ -261,7 +275,6 @@ async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject)
     sub: tokenData.user.name,
     clientId: tokenData.clientId,
     tableauServer: tokenData.server,
-    tableauUserId: tokenData.user.id,
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor((Date.now() + config.oauth.accessTokenTimeoutMs) / 1000),
     aud: AUDIENCE,
@@ -273,6 +286,7 @@ async function createAccessToken(tokenData: UserAndTokens, publicKey: KeyObject)
           tableauRefreshToken: tokenData.tokens.refreshToken,
           tableauExpiresAt: Math.floor(Date.now() / 1000) + tokenData.tokens.expiresInSeconds,
           tableauUserId: tokenData.user.id,
+          tableauSiteId: getSiteLuidFromAccessToken(tokenData.tokens.accessToken),
         }
       : {}),
   });
@@ -312,6 +326,7 @@ async function exchangeRefreshToken(
   server: string,
   refreshToken: string,
   clientId: string,
+  siteContentUrl: string,
 ): Promise<Result<TableauAccessToken, string>> {
   try {
     const result = await getTokenResult(
@@ -320,7 +335,7 @@ async function exchangeRefreshToken(
         grant_type: 'refresh_token',
         refresh_token: refreshToken,
         client_id: clientId,
-        site_namespace: '',
+        site_namespace: siteContentUrl,
       },
       {
         timeout: getConfig().maxRequestTimeoutMs,
@@ -334,38 +349,34 @@ async function exchangeRefreshToken(
 }
 
 function verifyClientCredentials({
-  required,
   clientId,
   clientSecret,
   clientIdSecretPairs,
   authorizationHeader,
 }: {
-  required: boolean;
   clientId: string | undefined;
   clientSecret: string | undefined;
   clientIdSecretPairs: Record<string, string> | null;
   authorizationHeader: string | undefined;
 }): Result<{ clientId: string }, string> {
   if (!clientId && !clientSecret) {
-    if (required) {
-      if (!authorizationHeader) {
-        return Err('Authorization header is required');
-      }
-
-      const [type, credentials] = authorizationHeader.split(' ');
-      if (type !== 'Basic') {
-        return Err('Invalid authorization type');
-      }
-
-      [clientId, clientSecret] = Buffer.from(credentials, 'base64').toString().split(':');
-      if (!clientId || !clientSecret) {
-        return Err('Invalid client credentials');
-      }
+    if (!authorizationHeader) {
+      return Err('Authorization header is required');
     }
-  }
 
-  if (!required) {
-    return Ok({ clientId: '' });
+    const [type, credentials] = authorizationHeader.split(' ');
+    if (type !== 'Basic') {
+      return Err('Invalid authorization type');
+    }
+
+    if (!credentials) {
+      return Err('Invalid client credentials');
+    }
+
+    [clientId, clientSecret] = Buffer.from(credentials, 'base64').toString().split(':');
+    if (!clientId || !clientSecret) {
+      return Err('Invalid client credentials');
+    }
   }
 
   if (!clientId) {

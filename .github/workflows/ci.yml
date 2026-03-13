@@ -59,7 +59,7 @@ jobs:
 
       - name: OAuth Tests
         if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
-        uses: ./.github/actions/run-oauth-tests
+        uses: ./.github/actions/run-oauth-embedded-authz-tests
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}
           SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}

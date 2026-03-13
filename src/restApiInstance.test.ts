@@ -29,13 +29,13 @@ describe('restApiInstance', () => {
     vi.unstubAllEnvs();
     vi.stubEnv('SERVER', mockHost);
     vi.stubEnv('SITE_NAME', 'tc25');
+    vi.stubEnv('PAT_NAME', 'sponge');
+    vi.stubEnv('PAT_VALUE', 'bob');
   });
 
   describe('useRestApi', () => {
     it('should sign in with PAT when auth is PAT', async () => {
       vi.stubEnv('AUTH', 'pat');
-      vi.stubEnv('PAT_NAME', 'sponge');
-      vi.stubEnv('PAT_VALUE', 'bob');
 
       const restApi = await useRestApi({
         config: getConfig(),
@@ -183,8 +183,6 @@ describe('restApiInstance', () => {
 
     it('should set credentials when using Passthrough auth', async () => {
       vi.stubEnv('AUTH', 'pat');
-      vi.stubEnv('PAT_NAME', 'sponge');
-      vi.stubEnv('PAT_VALUE', 'bob');
 
       const restApi = await useRestApi({
         config: getConfig(),

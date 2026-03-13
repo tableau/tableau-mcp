@@ -263,6 +263,16 @@ Filter by specific values:
 }
 \`\`\`
 
+### MATCH Filters
+Filter strings using patterns:
+\`\`\`json
+{
+  "field": {"fieldCaption": "City"},
+  "filterType": "MATCH",
+  "startsWith": "San"
+}
+\`\`\`
+
 ### TOP Filters
 Get top/bottom N records by a measure:
 \`\`\`json
@@ -301,7 +311,8 @@ Filter relative date periods:
 
 ## Limitations
 - **QUANTITATIVE_NUMERICAL min/max operators are inclusive** - For strictly greater-than or less-than logic, use a small offset (for example, min: 10.01 for > 10, or max: 9.99 for < 10).
-- **SET, MATCH, and relative date filters cannot use ad hoc calculations** - SET, MATCH, and relative date filters must reference a field name, not field.calculation. This means boolean/string calculations used directly in a SET filter will fail. Workarounds: leverage a numeric calc that evaluates to 0 or 1 for boolean logic and filter with QUANTITATIVE_NUMERICAL. For example:
+- **SET, MATCH, and DATE filters cannot apply functions to a field** - SET, MATCH, and DATE filters must reference a field name, unlike TOP and QUANTITATIVE filters, these filters can not filter on fields with functions applied to them.
+- **SET, MATCH, and DATE filters cannot use ad hoc calculations** - SET, MATCH, and DATE filters must reference a field name, not field.calculation. This means boolean/string calculations used directly in a SET filter will fail. Workarounds: leverage a numeric calc that evaluates to 0 or 1 for boolean logic and filter with QUANTITATIVE_NUMERICAL. For example:
 \`\`\`json
 {
   "query": {

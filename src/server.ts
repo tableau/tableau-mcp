@@ -9,6 +9,7 @@ import {
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
+import { getTableauServerVersion } from './getTableauServerVersion';
 import { setLogLevel } from './logging/log.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { Tool } from './tools/tool.js';
@@ -81,6 +82,20 @@ export class Server extends McpServer {
           config,
           server: this,
           tableauAuthInfo,
+          _userLuid: tableauAuthInfo?.userId,
+          _siteLuid: tableauAuthInfo?.siteId,
+          getUserLuid() {
+            return tableauRequestHandlerExtra._userLuid ?? '';
+          },
+          setUserLuid(userLuid: string) {
+            tableauRequestHandlerExtra._userLuid = userLuid;
+          },
+          getSiteLuid() {
+            return tableauRequestHandlerExtra._siteLuid ?? '';
+          },
+          setSiteLuid(siteLuid: string) {
+            tableauRequestHandlerExtra._siteLuid = siteLuid;
+          },
           getConfigWithOverrides: async () =>
             getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra }),
         };
@@ -110,7 +125,8 @@ export class Server extends McpServer {
   private _getToolsToRegister = async (
     tableauAuthInfo?: TableauAuthInfo,
   ): Promise<Array<Tool<any>>> => {
-    const config = await getConfigWithOverrides({
+    const config = getConfig();
+    const configOverrides = await getConfigWithOverrides({
       restApiArgs: {
         server: this,
         tableauAuthInfo,
@@ -118,9 +134,13 @@ export class Server extends McpServer {
       },
     });
 
-    const { includeTools, excludeTools } = config;
+    const tableauServerVersion = await getTableauServerVersion(
+      config.server || tableauAuthInfo?.server,
+    );
 
-    const tools = toolFactories.map((toolFactory) => toolFactory(this, tableauAuthInfo));
+    const { includeTools, excludeTools } = configOverrides;
+
+    const tools = toolFactories.map((toolFactory) => toolFactory(this, tableauServerVersion));
     const toolsToRegister = tools.filter((tool) => {
       if (includeTools.length > 0) {
         return includeTools.includes(tool.name);

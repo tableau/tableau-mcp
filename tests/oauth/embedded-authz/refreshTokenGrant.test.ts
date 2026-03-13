@@ -2,9 +2,9 @@ import express from 'express';
 import http from 'http';
 import request from 'supertest';
 
-import { getConfig } from '../../src/config.js';
-import { serverName } from '../../src/server.js';
-import { startExpressServer } from '../../src/server/express.js';
+import { getConfig } from '../../../src/config.js';
+import { serverName } from '../../../src/server.js';
+import { startExpressServer } from '../../../src/server/express.js';
 import { exchangeAuthzCodeForAccessToken } from './exchangeAuthzCodeForAccessToken.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
 }));
 
-vi.mock('../../src/sdks/tableau-oauth/methods.js', () => ({
+vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
   getTokenResult: mocks.mockGetTokenResult,
 }));
 
@@ -56,6 +56,8 @@ describe('refresh token grant type', () => {
     const tokenResponse = await request(app).post('/oauth2/token').send({
       grant_type: 'refresh_token',
       refresh_token: 'invalid-refresh-token',
+      client_id: 'test-client-id',
+      client_secret: 'test-client-secret',
     });
 
     expect(tokenResponse.status).toBe(400);
@@ -83,6 +85,8 @@ describe('refresh token grant type', () => {
       const tokenResponse = await request(app).post('/oauth2/token').send({
         grant_type: 'refresh_token',
         refresh_token,
+        client_id: 'test-client-id',
+        client_secret: 'test-client-secret',
       });
 
       expect(tokenResponse.status).toBe(400);
@@ -111,6 +115,8 @@ describe('refresh token grant type', () => {
     const tokenResponse = await request(app).post('/oauth2/token').send({
       grant_type: 'refresh_token',
       refresh_token,
+      client_id: 'test-client-id',
+      client_secret: 'test-client-secret',
     });
 
     expect(tokenResponse.status).toBe(200);
@@ -125,5 +131,96 @@ describe('refresh token grant type', () => {
 
     // Verify that the refresh token is rotated
     expect(tokenResponse.body.refresh_token).not.toBe(refresh_token);
+  });
+
+  it('should pass the site contentUrl as site_namespace during refresh', async () => {
+    const { app } = await startServer();
+
+    mocks.mockGetTokenResult.mockResolvedValue({
+      accessToken: 'test-access-token',
+      refreshToken: 'test-refresh-token',
+      expiresInSeconds: 3600,
+      originHost: '10ax.online.tableau.com',
+    });
+
+    const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
+
+    mocks.mockGetTokenResult.mockResolvedValue({
+      accessToken: 'refreshed-access-token',
+      refreshToken: 'refreshed-refresh-token',
+      expiresInSeconds: 3600,
+      originHost: '10ax.online.tableau.com',
+    });
+
+    await request(app).post('/oauth2/token').send({
+      grant_type: 'refresh_token',
+      refresh_token,
+      client_id: 'test-client-id',
+      client_secret: 'test-client-secret',
+    });
+
+    const refreshCall = mocks.mockGetTokenResult.mock.calls.at(-1);
+    expect(refreshCall?.[1]).toEqual(
+      expect.objectContaining({
+        grant_type: 'refresh_token',
+        site_namespace: 'mcp-test',
+      }),
+    );
+  });
+
+  it('should store updated tokens after successful refresh for subsequent refreshes', async () => {
+    const { app } = await startServer();
+
+    mocks.mockGetTokenResult.mockResolvedValue({
+      accessToken: 'initial-access-token',
+      refreshToken: 'initial-refresh-token',
+      expiresInSeconds: 3600,
+      originHost: '10ax.online.tableau.com',
+    });
+
+    const { refresh_token: firstRefreshToken } = await exchangeAuthzCodeForAccessToken(app);
+
+    // First refresh: Tableau issues new tokens
+    mocks.mockGetTokenResult.mockResolvedValue({
+      accessToken: 'refreshed-access-token-1',
+      refreshToken: 'refreshed-refresh-token-1',
+      expiresInSeconds: 3600,
+      originHost: '10ax.online.tableau.com',
+    });
+
+    const firstRefreshResponse = await request(app).post('/oauth2/token').send({
+      grant_type: 'refresh_token',
+      refresh_token: firstRefreshToken,
+      client_id: 'test-client-id',
+      client_secret: 'test-client-secret',
+    });
+    expect(firstRefreshResponse.status).toBe(200);
+
+    // Second refresh: should use the NEW Tableau refresh token from the first refresh
+    mocks.mockGetTokenResult.mockResolvedValue({
+      accessToken: 'refreshed-access-token-2',
+      refreshToken: 'refreshed-refresh-token-2',
+      expiresInSeconds: 3600,
+      originHost: '10ax.online.tableau.com',
+    });
+
+    const secondRefreshResponse = await request(app).post('/oauth2/token').send({
+      grant_type: 'refresh_token',
+      refresh_token: firstRefreshResponse.body.refresh_token,
+      client_id: 'test-client-id',
+      client_secret: 'test-client-secret',
+    });
+    expect(secondRefreshResponse.status).toBe(200);
+
+    // The second refresh call should have used the tokens from the first refresh,
+    // not the original tokens
+    const secondRefreshCall = mocks.mockGetTokenResult.mock.calls.at(-1);
+    expect(secondRefreshCall?.[1]).toEqual(
+      expect.objectContaining({
+        grant_type: 'refresh_token',
+        refresh_token: 'refreshed-refresh-token-1',
+        site_namespace: 'mcp-test',
+      }),
+    );
   });
 });
