@@ -1,24 +1,10 @@
 import { fieldsResultSchema } from '../../../../src/tools/getDatasourceMetadata/datasourceMetadataUtils';
 import invariant from '../../../../src/utils/invariant';
-import { getOAuthClient } from '../oauthClient';
-import { connectOAuthClient, expect, test } from './base';
+import { expect, test } from './base';
 import { getSuperstoreDatasource } from './testEnv';
 
 test.describe('get-datasource-metadata', () => {
-  const client = getOAuthClient();
-
-  test.afterEach(async () => {
-    await client.close();
-  });
-
-  test.afterAll(async () => {
-    await client.resetConsent();
-    await client.revokeToken();
-  });
-
-  test('get datasource metadata', async ({ page, env }) => {
-    await connectOAuthClient({ client, page, env });
-
+  test('get datasource metadata', async ({ client }) => {
     const superstore = getSuperstoreDatasource();
 
     const { fields } = await client.callTool('get-datasource-metadata', {

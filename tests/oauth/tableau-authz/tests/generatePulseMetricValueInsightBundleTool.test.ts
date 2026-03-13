@@ -1,23 +1,9 @@
 import { pulseBundleResponseSchema } from '../../../../src/sdks/tableau/types/pulse';
-import { getOAuthClient } from '../oauthClient';
-import { connectOAuthClient, expect, test } from './base';
+import { expect, test } from './base';
 import { getSuperstoreDatasource, getTableauMcpPulseDefinition } from './testEnv';
 
 test.describe('generate-pulse-metric-value-insight-bundle', () => {
-  const client = getOAuthClient();
-
-  test.afterEach(async () => {
-    await client.close();
-  });
-
-  test.afterAll(async () => {
-    await client.resetConsent();
-    await client.revokeToken();
-  });
-
-  test('generate pulse metric value insight bundle', async ({ page, env }) => {
-    await connectOAuthClient({ client, page, env });
-
+  test('generate pulse metric value insight bundle', async ({ client }) => {
     const superstore = getSuperstoreDatasource();
     const definition = getTableauMcpPulseDefinition();
 

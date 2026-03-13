@@ -1,25 +1,11 @@
 import z from 'zod';
 
-import { getOAuthClient } from '../oauthClient';
-import { connectOAuthClient, expect, test } from './base';
+import { expect, test } from './base';
 import { getSuperstoreWorkbook } from './testEnv';
 
 // Skip until Content Exploration issues are resolved
 test.describe.skip('get-view-data', () => {
-  const client = getOAuthClient();
-
-  test.afterEach(async () => {
-    await client.close();
-  });
-
-  test.afterAll(async () => {
-    await client.resetConsent();
-    await client.revokeToken();
-  });
-
-  test('get view data', async ({ page, env }) => {
-    await connectOAuthClient({ client, page, env });
-
+  test('get view data', async ({ client }) => {
     const superstore = getSuperstoreWorkbook();
 
     const viewData = await client.callTool('get-view-data', {

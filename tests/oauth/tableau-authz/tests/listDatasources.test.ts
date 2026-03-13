@@ -1,25 +1,11 @@
 import z from 'zod';
 
 import { dataSourceSchema } from '../../../../src/sdks/tableau/types/dataSource';
-import { getOAuthClient } from '../oauthClient';
-import { connectOAuthClient, expect, test } from './base';
+import { expect, test } from './base';
 
 // Skip until Content Exploration issues are resolved
 test.describe.skip('list-datasources', () => {
-  const client = getOAuthClient();
-
-  test.afterEach(async () => {
-    await client.close();
-  });
-
-  test.afterAll(async () => {
-    await client.resetConsent();
-    await client.revokeToken();
-  });
-
-  test('list datasources', async ({ page, env }) => {
-    await connectOAuthClient({ client, page, env });
-
+  test('list datasources', async ({ client }) => {
     const datasources = await client.callTool('list-datasources', {
       schema: z.array(dataSourceSchema),
     });

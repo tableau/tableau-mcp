@@ -1,25 +1,11 @@
 import z from 'zod';
 
 import { pulseMetricSchema } from '../../../../src/sdks/tableau/types/pulse';
-import { getOAuthClient } from '../oauthClient';
-import { connectOAuthClient, expect, test } from './base';
+import { expect, test } from './base';
 import { getTableauMcpPulseDefinition } from './testEnv';
 
 test.describe('list-pulse-metrics-from-metric-ids', () => {
-  const client = getOAuthClient();
-
-  test.afterEach(async () => {
-    await client.close();
-  });
-
-  test.afterAll(async () => {
-    await client.resetConsent();
-    await client.revokeToken();
-  });
-
-  test('list pulse metrics from metric definition id', async ({ page, env }) => {
-    await connectOAuthClient({ client, page, env });
-
+  test('list pulse metrics from metric definition id', async ({ client }) => {
     const definition = getTableauMcpPulseDefinition();
 
     const pulseMetrics = await client.callTool('list-pulse-metrics-from-metric-ids', {

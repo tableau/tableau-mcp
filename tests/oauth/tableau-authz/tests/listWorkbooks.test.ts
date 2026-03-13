@@ -1,26 +1,12 @@
 import z from 'zod';
 
 import { workbookSchema } from '../../../../src/sdks/tableau/types/workbook';
-import { getOAuthClient } from '../oauthClient';
-import { connectOAuthClient, expect, test } from './base';
+import { expect, test } from './base';
 import { getSuperstoreWorkbook } from './testEnv';
 
 // Skip until Content Exploration issues are resolved
 test.describe.skip('list-workbooks', () => {
-  const client = getOAuthClient();
-
-  test.afterEach(async () => {
-    await client.close();
-  });
-
-  test.afterAll(async () => {
-    await client.resetConsent();
-    await client.revokeToken();
-  });
-
-  test('list workbooks', async ({ page, env }) => {
-    await connectOAuthClient({ client, page, env });
-
+  test('list workbooks', async ({ client }) => {
     const superstore = getSuperstoreWorkbook();
 
     const workbooks = await client.callTool('list-workbooks', {

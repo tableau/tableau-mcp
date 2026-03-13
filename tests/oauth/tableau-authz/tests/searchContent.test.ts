@@ -1,23 +1,9 @@
 import z from 'zod';
 
-import { getOAuthClient } from '../oauthClient';
-import { connectOAuthClient, expect, test } from './base';
+import { expect, test } from './base';
 
 test.describe('search-content', () => {
-  const client = getOAuthClient();
-
-  test.afterEach(async () => {
-    await client.close();
-  });
-
-  test.afterAll(async () => {
-    await client.resetConsent();
-    await client.revokeToken();
-  });
-
-  test('search content', async ({ page, env }) => {
-    await connectOAuthClient({ client, page, env });
-
+  test('search content', async ({ client }) => {
     const searchResults = await client.callTool('search-content', {
       schema: z.array(z.record(z.string(), z.unknown())),
       toolArgs: {

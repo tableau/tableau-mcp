@@ -1,25 +1,11 @@
 import z from 'zod';
 
 import { queryOutputSchema } from '../../../../src/sdks/tableau/apis/vizqlDataServiceApi';
-import { getOAuthClient } from '../oauthClient';
-import { connectOAuthClient, expect, test } from './base';
+import { expect, test } from './base';
 import { getSuperstoreDatasource } from './testEnv';
 
 test.describe('query-datasource', () => {
-  const client = getOAuthClient();
-
-  test.afterEach(async () => {
-    await client.close();
-  });
-
-  test.afterAll(async () => {
-    await client.resetConsent();
-    await client.revokeToken();
-  });
-
-  test('query datasource', async ({ page, env }) => {
-    await connectOAuthClient({ client, page, env });
-
+  test('query datasource', async ({ client }) => {
     const superstore = getSuperstoreDatasource();
 
     const { data } = await client.callTool('query-datasource', {

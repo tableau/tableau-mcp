@@ -1,22 +1,8 @@
 import { toolNames } from '../../../../src/tools/toolName';
-import { getOAuthClient } from '../oauthClient';
-import { connectOAuthClient, expect, test } from './base';
+import { expect, test } from './base';
 
 test.describe('oauth', () => {
-  const client = getOAuthClient();
-
-  test.afterEach(async () => {
-    await client.close();
-  });
-
-  test.afterAll(async () => {
-    await client.resetConsent();
-    await client.revokeToken();
-  });
-
-  test('list tools', async ({ page, env }) => {
-    await connectOAuthClient({ client, page, env });
-
+  test('list tools', async ({ client }) => {
     const { tools } = await client.listTools();
     const names = tools.map((tool) => tool.name);
     expect(names).toEqual(expect.arrayContaining([...toolNames]));
