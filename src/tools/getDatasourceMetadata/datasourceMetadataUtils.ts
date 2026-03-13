@@ -29,7 +29,7 @@ export const fieldSchema = z
 
 export const logicalTableGroupSchema = z.object({
   logicalTableId: z.string().nullable(),
-  columns: z.array(fieldSchema),
+  fields: z.array(fieldSchema),
 });
 
 export const parameterSchema = z
@@ -58,7 +58,7 @@ export const parameterSchema = z
 
 export const fieldsResultSchema = z.object({
   datasourceDescription: z.string(),
-  fields: z.array(logicalTableGroupSchema),
+  fieldGroups: z.array(logicalTableGroupSchema),
   parameters: z.array(parameterSchema),
 });
 
@@ -70,7 +70,7 @@ export type FieldsResult = z.infer<typeof fieldsResultSchema>;
 export function simplifyReadMetadataResult(readMetadataResult: MetadataResponse): FieldsResult {
   const simplifiedResponse: FieldsResult = {
     datasourceDescription: '',
-    fields: [],
+    fieldGroups: [],
     parameters: [],
   };
 
@@ -127,7 +127,7 @@ export function simplifyReadMetadataResult(readMetadataResult: MetadataResponse)
     }
   }
 
-  simplifiedResponse.fields = groupFieldsByLogicalTableId(fields);
+  simplifiedResponse.fieldGroups = groupFieldsByLogicalTableId(fields);
 
   return simplifiedResponse;
 }
@@ -141,7 +141,7 @@ export function combineFields(
   // to optimize for LLM accuracy and reduce tokens in response.
   const combinedFields: FieldsResult = {
     datasourceDescription: listFieldsResult.data.publishedDatasources[0]?.description ?? '',
-    fields: [],
+    fieldGroups: [],
     parameters: [],
   };
   const fields: Field[] = [];
@@ -165,7 +165,7 @@ export function combineFields(
       }
     }
 
-    combinedFields.fields = groupFieldsByLogicalTableId(fields);
+    combinedFields.fieldGroups = groupFieldsByLogicalTableId(fields);
     return combinedFields;
   }
 
@@ -218,7 +218,7 @@ export function combineFields(
   }
 
   if (!listFieldsResult.data.publishedDatasources[0]?.fields.length) {
-    combinedFields.fields = groupFieldsByLogicalTableId(fields);
+    combinedFields.fieldGroups = groupFieldsByLogicalTableId(fields);
     return combinedFields;
   }
 
@@ -232,7 +232,7 @@ export function combineFields(
     }
   }
 
-  combinedFields.fields = groupFieldsByLogicalTableId(fields);
+  combinedFields.fieldGroups = groupFieldsByLogicalTableId(fields);
 
   return combinedFields;
 }
@@ -280,9 +280,9 @@ function groupFieldsByLogicalTableId(fields: Field[]): LogicalTableGroup[] {
     groupedFields.set(groupKey, existingGroup);
   }
 
-  return [...groupedFields.entries()].map(([logicalTableId, columns]) => ({
+  return [...groupedFields.entries()].map(([logicalTableId, fields]) => ({
     logicalTableId,
-    columns,
+    fields,
   }));
 }
 

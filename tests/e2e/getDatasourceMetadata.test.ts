@@ -11,7 +11,7 @@ describe('get-datasource-metadata', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreDatasource(env);
 
-    const { fields } = await callTool('get-datasource-metadata', {
+    const { fieldGroups } = await callTool('get-datasource-metadata', {
       env,
       schema: fieldsResultSchema,
       toolArgs: {
@@ -19,8 +19,8 @@ describe('get-datasource-metadata', () => {
       },
     });
 
-    invariant(fields, 'data is undefined');
-    const flatFields = fields.flatMap((group) => group.columns ?? []);
+    invariant(fieldGroups, 'data is undefined');
+    const flatFields = fieldGroups.flatMap((group) => group.fields ?? []);
     expect(flatFields.length).toBeGreaterThan(0);
 
     const fieldNames = flatFields.map((field) => field.name);

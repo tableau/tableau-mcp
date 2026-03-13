@@ -321,14 +321,14 @@ describe('getDatasourceMetadataTool', () => {
         value: 'Hello World!',
       },
     ]);
-    expect(responseData.fields).toMatchObject([
+    expect(responseData.fieldGroups).toMatchObject([
       {
         logicalTableId: null,
-        columns: [expect.objectContaining({ name: 'Profit Ratio' })],
+        fields: [expect.objectContaining({ name: 'Profit Ratio' })],
       },
       {
         logicalTableId: 'Orders_123456789',
-        columns: expect.arrayContaining([
+        fields: expect.arrayContaining([
           expect.objectContaining({ name: 'Product Name' }),
           expect.objectContaining({ name: 'Quantity' }),
         ]),
@@ -354,7 +354,7 @@ describe('getDatasourceMetadataTool', () => {
     const responseData = JSON.parse(result.content[0].text);
     expect(responseData).toEqual({
       datasourceDescription: 'Test Description',
-      fields: [],
+      fieldGroups: [],
       parameters: [],
     });
   });
@@ -419,10 +419,10 @@ describe('getDatasourceMetadataTool', () => {
       },
     ]);
     expect(responseData.parameters).toEqual([]);
-    expect(responseData.fields).toEqual([
+    expect(responseData.fieldGroups).toEqual([
       {
         logicalTableId: null,
-        columns: expect.arrayContaining([
+        fields: expect.arrayContaining([
           expect.objectContaining({ name: 'Profit Ratio', logicalTableId: null }),
           expect.objectContaining({ name: 'Product Name', logicalTableId: null }),
           expect.objectContaining({ name: 'Quantity', logicalTableId: null }),
@@ -762,14 +762,14 @@ async function getToolResult(): Promise<CallToolResult> {
 }
 
 function flattenResponseFields(responseData: Record<string, unknown>): Record<string, unknown>[] {
-  const fieldGroups = responseData.fields;
+  const fieldGroups = responseData.fieldGroups;
   if (!Array.isArray(fieldGroups)) {
     return [];
   }
 
   return fieldGroups.flatMap((group) => {
-    if (group && typeof group === 'object' && 'columns' in group && Array.isArray(group.columns)) {
-      return group.columns as Record<string, unknown>[];
+    if (group && typeof group === 'object' && 'fields' in group && Array.isArray(group.fields)) {
+      return group.fields as Record<string, unknown>[];
     }
     return [];
   });
