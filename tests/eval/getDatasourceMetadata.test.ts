@@ -92,10 +92,14 @@ describe('get-datasource-metadata', () => {
       'get_datasource_metadata tool execution not found',
     );
 
-    const { fields } = getCallToolResult(getDatasourceMetadataToolExecution, fieldsResultSchema);
-    expect(fields.length).toBeGreaterThan(0);
+    const { fieldGroups } = getCallToolResult(
+      getDatasourceMetadataToolExecution,
+      fieldsResultSchema,
+    );
+    const flatFields = fieldGroups.flatMap((group) => group.fields ?? []);
+    expect(flatFields.length).toBeGreaterThan(0);
 
-    const fieldNames = fields.map((field) => field.name);
+    const fieldNames = flatFields.map((field) => field.name);
     expect(fieldNames).toContain('Postal Code');
     expect(fieldNames).toContain('Product Name');
   });
