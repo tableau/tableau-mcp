@@ -92,7 +92,10 @@ describe('get-datasource-metadata', () => {
       'get_datasource_metadata tool execution not found',
     );
 
-    const { fieldGroups } = getCallToolResult(getDatasourceMetadataToolExecution, fieldsResultSchema);
+    const { fieldGroups } = getCallToolResult(
+      getDatasourceMetadataToolExecution,
+      fieldsResultSchema,
+    );
     const flatFields = fieldGroups.flatMap((group) => group.fields ?? []);
     expect(flatFields.length).toBeGreaterThan(0);
 
