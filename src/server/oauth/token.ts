@@ -96,6 +96,15 @@ export function token(
             return;
           }
 
+          // Validate client_id matches what was used at authorization (when provided)
+          if (result.data.clientId && result.data.clientId !== authCode.clientId) {
+            res.status(400).json({
+              error: 'invalid_grant',
+              error_description: 'Client ID mismatch',
+            });
+            return;
+          }
+
           // Generate tokens
           const refreshTokenId = randomBytes(32).toString('hex');
           const accessToken = await createAccessToken(authCode, publicKey);
