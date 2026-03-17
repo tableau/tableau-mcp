@@ -157,7 +157,7 @@ const getNewRestApiInstanceAsync = async (
 
 export const useRestApi = async <T>(
   args: RestApiArgs & {
-    jwtScopes: Array<JwtScopes>;
+    jwtScopes: ReadonlyArray<JwtScopes>;
     callback: (restApi: RestApi) => Promise<T>;
   },
 ): Promise<T> => {

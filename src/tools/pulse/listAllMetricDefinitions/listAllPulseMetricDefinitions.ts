@@ -64,7 +64,7 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
         callback: async () => {
           return await useRestApi({
             ...extra,
-            jwtScopes: ['tableau:insight_definitions_metrics:read'],
+            jwtScopes: listAllPulseMetricDefinitionsTool.requiredApiScopes,
             callback: async (restApi) => {
               const maxResultLimit = configWithOverrides.getMaxResultLimit(
                 listAllPulseMetricDefinitionsTool.name,
