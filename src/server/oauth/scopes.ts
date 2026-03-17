@@ -6,7 +6,6 @@
  */
 
 import { getConfig } from '../../config.js';
-import { resourceAccessCheckerRequiredApiScopes } from '../../tools/resourceAccessChecker.js';
 import type { ToolName } from '../../tools/toolName.js';
 
 /**
@@ -39,7 +38,7 @@ export type TableauApiScope =
  *
  * This list can be configured via environment variable or config file.
  */
-export const DEFAULT_SCOPES_SUPPORTED: McpScope[] = [
+export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:content:read',
   'tableau:mcp:datasource:read',
   'tableau:mcp:workbook:read',
@@ -47,6 +46,10 @@ export const DEFAULT_SCOPES_SUPPORTED: McpScope[] = [
   'tableau:mcp:view:download',
   'tableau:mcp:pulse:read',
   'tableau:mcp:insight:create',
+];
+
+export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:content:read',
 ];
 
 /**
@@ -74,27 +77,27 @@ const toolScopeMap: Record<
   },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
-    api: new Set(['tableau:viz_data_service:read', ...resourceAccessCheckerRequiredApiScopes]),
+    api: new Set(['tableau:viz_data_service:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
   'get-datasource-metadata': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set([
       'tableau:content:read',
       'tableau:viz_data_service:read',
-      ...resourceAccessCheckerRequiredApiScopes,
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
-    api: new Set(['tableau:content:read', ...resourceAccessCheckerRequiredApiScopes]),
+    api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
   'get-view-data': {
     mcp: ['tableau:mcp:view:download'],
-    api: new Set(['tableau:views:download', ...resourceAccessCheckerRequiredApiScopes]),
+    api: new Set(['tableau:views:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
   'get-view-image': {
     mcp: ['tableau:mcp:view:download'],
-    api: new Set(['tableau:views:download', ...resourceAccessCheckerRequiredApiScopes]),
+    api: new Set(['tableau:views:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
   'list-all-pulse-metric-definitions': {
     mcp: ['tableau:mcp:pulse:read'],
