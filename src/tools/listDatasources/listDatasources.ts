@@ -86,7 +86,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
         callback: async () => {
           const datasources = await useRestApi({
             ...extra,
-            jwtScopes: ['tableau:content:read'],
+            jwtScopes: listDatasourcesTool.requiredApiScopes,
             callback: async (restApi) => {
               const maxResultLimit = configWithOverrides.getMaxResultLimit(
                 listDatasourcesTool.name,

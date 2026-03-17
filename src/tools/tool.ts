@@ -6,6 +6,7 @@ import { fromError, isZodErrorLike } from 'zod-validation-error/v3';
 
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
+import { getRequiredApiScopesForTool, TableauApiScope } from '../server/oauth/scopes.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
 import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
@@ -105,6 +106,8 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
   callback: TypeOrProvider<TableauToolCallback<Args>>;
 
+  requiredApiScopes: ReadonlyArray<TableauApiScope>;
+
   constructor({
     server,
     name,
@@ -121,6 +124,8 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.annotations = annotations;
     this.argsValidator = argsValidator;
     this.callback = callback;
+
+    this.requiredApiScopes = getRequiredApiScopesForTool(name);
   }
 
   logInvocation({
