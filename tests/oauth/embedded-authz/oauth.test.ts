@@ -5,6 +5,7 @@ import request from 'supertest';
 import { getConfig } from '../../../src/config.js';
 import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
+import { generateCodeChallenge } from '../../../src/server/oauth/generateCodeChallenge.js';
 import { AwaitableWritableStream } from './awaitableWritableStream.js';
 import { exchangeAuthzCodeForAccessToken } from './exchangeAuthzCodeForAccessToken.js';
 import { resetEnv, setEnv } from './testEnv.js';
@@ -349,6 +350,74 @@ describe('OAuth', () => {
     expect(lines[0]).toBe('event: message');
     const data = JSON.parse(lines[1].substring(lines[1].indexOf('data: ') + 6));
     expect(data).toMatchObject({ result: { tools: expect.any(Array) } });
+  });
+
+  it('should reject token exchange when redirect_uri does not match authorization request', async () => {
+    const { app } = await startServer();
+
+    mocks.mockGetTokenResult.mockResolvedValue({
+      accessToken: 'test-access-token',
+      refreshToken: 'test-refresh-token',
+      expiresInSeconds: 3600,
+      originHost: '10ax.online.tableau.com',
+    });
+
+    const codeChallenge = 'test-code-challenge';
+    const authzResponse = await request(app)
+      .get('/oauth2/authorize')
+      .query({
+        client_id: 'test-client-id',
+        redirect_uri: 'http://localhost:3000',
+        response_type: 'code',
+        code_challenge: generateCodeChallenge(codeChallenge),
+        code_challenge_method: 'S256',
+        state: 'test-state',
+      });
+
+    const authzLocation = new URL(authzResponse.headers['location']);
+    const [authKey, tableauState] = authzLocation.searchParams.get('state')?.split(':') ?? [];
+
+    const callbackResponse = await request(app)
+      .get('/Callback')
+      .query({
+        code: 'test-code',
+        state: `${authKey}:${tableauState}`,
+      });
+
+    expect(callbackResponse.status).toBe(302);
+    const location = new URL(callbackResponse.headers['location']);
+    const code = location.searchParams.get('code');
+
+    const tokenResponse = await request(app).post('/oauth2/token').send({
+      grant_type: 'authorization_code',
+      code,
+      code_verifier: codeChallenge,
+      redirect_uri: 'http://localhost:9999/different',
+      client_id: 'test-client-id',
+      client_secret: 'test-client-secret',
+    });
+
+    expect(tokenResponse.status).toBe(400);
+    expect(tokenResponse.body).toEqual({
+      error: 'invalid_grant',
+      error_description: 'Redirect URI mismatch',
+    });
+  });
+
+  it('should succeed at token exchange when redirect_uri matches authorization request', async () => {
+    const { app } = await startServer();
+
+    mocks.mockGetTokenResult.mockResolvedValue({
+      accessToken: 'test-access-token',
+      refreshToken: 'test-refresh-token',
+      expiresInSeconds: 3600,
+      originHost: '10ax.online.tableau.com',
+    });
+
+    const tokenResponse = await exchangeAuthzCodeForAccessToken(app);
+
+    expect(tokenResponse.access_token).toBeDefined();
+    expect(tokenResponse.token_type).toBe('Bearer');
   });
 
   it('should reject if the access token is invalid or expired', async () => {
