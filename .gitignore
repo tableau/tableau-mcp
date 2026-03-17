@@ -1,6 +1,7 @@
 *.local
 .env
 .env.*
+.cursor/
 .vscode/
 build/
 node_modules/
