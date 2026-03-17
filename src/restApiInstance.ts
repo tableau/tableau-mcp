@@ -50,7 +50,7 @@ const getNewRestApiInstanceAsync = async (
   args: RestApiArgs & {
     jwtScopes: Set<JwtScopes>;
   },
-): Promise<RestApi> => {
+): Promise<{ restApi: RestApi; signOutWhenCompleted: boolean }> => {
   const {
     config,
     server,
@@ -101,58 +101,71 @@ const getNewRestApiInstanceAsync = async (
         ],
   });
 
-  if (config.auth === 'pat') {
-    await restApi.signIn({
-      type: 'pat',
-      patName: config.patName,
-      patValue: config.patValue,
-      siteName: config.siteName,
-    });
-    setSiteLuid?.(restApi.siteId);
-    setUserLuid?.(restApi.userId);
-  } else if (config.auth === 'direct-trust') {
-    await restApi.signIn({
-      type: 'direct-trust',
-      siteName: config.siteName,
-      username: getJwtUsername(config, tableauAuthInfo),
-      clientId: config.connectedAppClientId,
-      secretId: config.connectedAppSecretId,
-      secretValue: config.connectedAppSecretValue,
-      scopes: jwtScopes,
-      additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
-    });
-    setSiteLuid?.(restApi.siteId);
-    setUserLuid?.(restApi.userId);
-  } else if (config.auth === 'uat') {
-    await restApi.signIn({
-      type: 'uat',
-      siteName: config.siteName,
-      username: getJwtUsername(config, tableauAuthInfo),
-      tenantId: config.uatTenantId,
-      issuer: config.uatIssuer,
-      usernameClaimName: config.uatUsernameClaimName,
-      privateKey: config.uatPrivateKey,
-      keyId: config.uatKeyId,
-      scopes: jwtScopes,
-      additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
-    });
-    setSiteLuid?.(restApi.siteId);
-    setUserLuid?.(restApi.userId);
+  let signOutWhenCompleted = true;
+  if (tableauAuthInfo?.type === 'Passthrough') {
+    if (!tableauAuthInfo.raw || !tableauAuthInfo.userId) {
+      throw new Error('Auth info is required when not signing in first.');
+    }
+
+    signOutWhenCompleted = false;
+    restApi.setCredentials(tableauAuthInfo.raw, tableauAuthInfo.userId);
   } else {
-    if (tableauAuthInfo?.type === 'Bearer') {
-      restApi.setBearerToken(tableauAuthInfo.raw);
-    } else if (tableauAuthInfo?.type === 'X-Tableau-Auth') {
-      if (!tableauAuthInfo?.accessToken || !tableauAuthInfo?.userId) {
+    if (config.auth === 'pat') {
+      await restApi.signIn({
+        type: 'pat',
+        patName: config.patName,
+        patValue: config.patValue,
+        siteName: config.siteName,
+      });
+      setSiteLuid?.(restApi.siteId);
+      setUserLuid?.(restApi.userId);
+    } else if (config.auth === 'direct-trust') {
+      await restApi.signIn({
+        type: 'direct-trust',
+        siteName: config.siteName,
+        username: getJwtUsername(config, tableauAuthInfo),
+        clientId: config.connectedAppClientId,
+        secretId: config.connectedAppSecretId,
+        secretValue: config.connectedAppSecretValue,
+        scopes: jwtScopes,
+        additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
+      });
+      setSiteLuid?.(restApi.siteId);
+      setUserLuid?.(restApi.userId);
+    } else if (config.auth === 'uat') {
+      await restApi.signIn({
+        type: 'uat',
+        siteName: config.siteName,
+        username: getJwtUsername(config, tableauAuthInfo),
+        tenantId: config.uatTenantId,
+        issuer: config.uatIssuer,
+        usernameClaimName: config.uatUsernameClaimName,
+        privateKey: config.uatPrivateKey,
+        keyId: config.uatKeyId,
+        scopes: jwtScopes,
+        additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
+      });
+      setSiteLuid?.(restApi.siteId);
+      setUserLuid?.(restApi.userId);
+    } else if (config.auth === 'oauth') {
+      invariant(tableauAuthInfo, 'Tableau auth info not provided.');
+
+      signOutWhenCompleted = false;
+      if (tableauAuthInfo?.type === 'Bearer') {
+        restApi.setBearerToken(tableauAuthInfo.raw);
+      } else if (tableauAuthInfo?.type === 'X-Tableau-Auth') {
+        if (!tableauAuthInfo?.accessToken || !tableauAuthInfo?.userId) {
+          throw new Error('Auth info is required when not signing in first.');
+        }
+
+        restApi.setCredentials(tableauAuthInfo.accessToken, tableauAuthInfo.userId);
+      } else {
         throw new Error('Auth info is required when not signing in first.');
       }
-
-      restApi.setCredentials(tableauAuthInfo.accessToken, tableauAuthInfo.userId);
-    } else {
-      throw new Error('Auth info is required when not signing in first.');
     }
   }
 
-  return restApi;
+  return { restApi, signOutWhenCompleted };
 };
 
 export const useRestApi = async <T>(
@@ -162,17 +175,16 @@ export const useRestApi = async <T>(
   },
 ): Promise<T> => {
   const { callback, ...remaining } = args;
-  const { config } = remaining;
-  const restApi = await getNewRestApiInstanceAsync({
+  const { restApi, signOutWhenCompleted } = await getNewRestApiInstanceAsync({
     ...remaining,
     jwtScopes: new Set(args.jwtScopes),
   });
   try {
     return await callback(restApi);
   } finally {
-    if (config.auth !== 'oauth') {
+    if (signOutWhenCompleted) {
       // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.
-      // Sessions for 'oauth' are not. Signing out would invalidate the session,
+      // Sessions for 'oauth' and 'passthrough' are not. Signing out would invalidate the session,
       // preventing the access token from being reused for subsequent requests.
       await restApi.signOut();
     }
