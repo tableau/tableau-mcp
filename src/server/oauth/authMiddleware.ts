@@ -1,4 +1,4 @@
-import { CallToolRequestSchema, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
