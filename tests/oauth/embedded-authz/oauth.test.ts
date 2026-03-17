@@ -531,6 +531,67 @@ describe('OAuth', () => {
     expect(tokenResponse.body.token_type).toBe('Bearer');
   });
 
+  it('should reject token exchange when client_id mismatches via Basic Auth (no body client_id)', async () => {
+    vi.stubEnv(
+      'OAUTH_CLIENT_ID_SECRET_PAIRS',
+      'test-client-id:test-client-secret,other-client-id:other-client-secret',
+    );
+
+    const { app } = await startServer();
+
+    mocks.mockGetTokenResult.mockResolvedValue({
+      accessToken: 'test-access-token',
+      refreshToken: 'test-refresh-token',
+      expiresInSeconds: 3600,
+      originHost: '10ax.online.tableau.com',
+    });
+
+    const codeChallenge = 'test-code-challenge';
+    const authzResponse = await request(app)
+      .get('/oauth2/authorize')
+      .query({
+        client_id: 'test-client-id',
+        redirect_uri: 'http://localhost:3000',
+        response_type: 'code',
+        code_challenge: generateCodeChallenge(codeChallenge),
+        code_challenge_method: 'S256',
+        state: 'test-state',
+      });
+
+    const authzLocation = new URL(authzResponse.headers['location']);
+    const [authKey, tableauState] = authzLocation.searchParams.get('state')?.split(':') ?? [];
+
+    const callbackResponse = await request(app)
+      .get('/Callback')
+      .query({
+        code: 'test-code',
+        state: `${authKey}:${tableauState}`,
+      });
+
+    expect(callbackResponse.status).toBe(302);
+    const location = new URL(callbackResponse.headers['location']);
+    const code = location.searchParams.get('code');
+
+    // Send token request with Basic Auth as `other-client-id` but no `client_id` in body.
+    // The effectiveClientId fallback should detect the mismatch.
+    const basicAuth = Buffer.from('other-client-id:other-client-secret').toString('base64');
+    const tokenResponse = await request(app)
+      .post('/oauth2/token')
+      .set('Authorization', `Basic ${basicAuth}`)
+      .send({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: codeChallenge,
+        redirect_uri: 'http://localhost:3000',
+      });
+
+    expect(tokenResponse.status).toBe(400);
+    expect(tokenResponse.body).toEqual({
+      error: 'invalid_grant',
+      error_description: 'Client ID mismatch',
+    });
+  });
+
   it('should reject if the access token is invalid or expired', async () => {
     const { app } = await startServer();
 

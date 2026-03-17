@@ -96,8 +96,10 @@ export function token(
             return;
           }
 
-          // Validate client_id matches what was used at authorization (when provided)
-          if (result.data.clientId && result.data.clientId !== authCode.clientId) {
+          // Validate client_id matches what was used at authorization (when provided).
+          // Fall back to the credential-verified identity from the Basic Auth path.
+          const effectiveClientId = result.data.clientId || clientCredentialClientId || undefined;
+          if (effectiveClientId && effectiveClientId !== authCode.clientId) {
             res.status(400).json({
               error: 'invalid_grant',
               error_description: 'Client ID mismatch',
