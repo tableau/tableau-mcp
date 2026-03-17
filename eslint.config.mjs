@@ -40,6 +40,12 @@ export default [
     },
   },
   {
+    files: ['src/server/**/*.ts', 'src/restApiInstance.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
+    },
+  },
+  {
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
