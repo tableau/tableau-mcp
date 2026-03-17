@@ -11,7 +11,7 @@ import { Config } from '../config.js';
 import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
-import { handlePingRequest, validateProtocolVersion } from './middleware.js';
+import { handlePingRequest } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { EmbeddedOAuthProvider, TableauOAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
@@ -66,7 +66,6 @@ export async function startExpressServer({
 
     oauthProvider.setupRoutes(app);
     middleware.push(oauthProvider.authMiddleware);
-    middleware.push(validateProtocolVersion);
   }
 
   const path = `/${basePath}`;
