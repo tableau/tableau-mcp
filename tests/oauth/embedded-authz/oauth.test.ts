@@ -237,6 +237,120 @@ describe('OAuth', () => {
     expect(data).toMatchObject({ result: { tools: expect.any(Array) } });
   });
 
+  it('should allow authenticated requests using the X-Tableau-Auth header', async () => {
+    vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+
+    const { app } = await startServer();
+
+    const awaitableWritableStream = new AwaitableWritableStream();
+
+    const response = await request(app)
+      .post(`/${serverName}`)
+      .set('X-Tableau-Auth', 'valid-access-token')
+      .set('Content-Type', 'application/json')
+      .set('Accept', 'application/json, text/event-stream')
+      .send({
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {
+            elicitation: {},
+          },
+          clientInfo: {
+            name: 'tableau-mcp-tests',
+            version: '1.0.0',
+          },
+        },
+        jsonrpc: '2.0',
+        id: 0,
+      })
+      .expect(200);
+
+    const sessionId = response.headers['mcp-session-id'];
+
+    request(app)
+      .post(`/${serverName}`)
+      .set('X-Tableau-Auth', 'valid-access-token')
+      .set('Content-Type', 'application/json')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('mcp-session-id', sessionId)
+      .send({
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'tools/list',
+      })
+      .pipe(awaitableWritableStream.stream);
+
+    const messages = await awaitableWritableStream.getChunks((chunk) =>
+      Buffer.from(chunk).toString('utf-8'),
+    );
+
+    expect(messages.length).toBeGreaterThan(0);
+    const message = messages.join('');
+    const lines = message.split('\n').filter(Boolean);
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines[0]).toBe('event: message');
+    const data = JSON.parse(lines[1].substring(lines[1].indexOf('data: ') + 6));
+    expect(data).toMatchObject({ result: { tools: expect.any(Array) } });
+  });
+
+  it('should allow authenticated requests using the workgroup_session_id cookie', async () => {
+    vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+
+    const { app } = await startServer();
+
+    const awaitableWritableStream = new AwaitableWritableStream();
+
+    const response = await request(app)
+      .post(`/${serverName}`)
+      .set('Cookie', 'workgroup_session_id=valid-access-token')
+      .set('Content-Type', 'application/json')
+      .set('Accept', 'application/json, text/event-stream')
+      .send({
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {
+            elicitation: {},
+          },
+          clientInfo: {
+            name: 'tableau-mcp-tests',
+            version: '1.0.0',
+          },
+        },
+        jsonrpc: '2.0',
+        id: 0,
+      })
+      .expect(200);
+
+    const sessionId = response.headers['mcp-session-id'];
+
+    request(app)
+      .post(`/${serverName}`)
+      .set('Cookie', 'workgroup_session_id=valid-access-token')
+      .set('Content-Type', 'application/json')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('mcp-session-id', sessionId)
+      .send({
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'tools/list',
+      })
+      .pipe(awaitableWritableStream.stream);
+
+    const messages = await awaitableWritableStream.getChunks((chunk) =>
+      Buffer.from(chunk).toString('utf-8'),
+    );
+
+    expect(messages.length).toBeGreaterThan(0);
+    const message = messages.join('');
+    const lines = message.split('\n').filter(Boolean);
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines[0]).toBe('event: message');
+    const data = JSON.parse(lines[1].substring(lines[1].indexOf('data: ') + 6));
+    expect(data).toMatchObject({ result: { tools: expect.any(Array) } });
+  });
+
   it('should reject if the access token is invalid or expired', async () => {
     const { app } = await startServer();
 

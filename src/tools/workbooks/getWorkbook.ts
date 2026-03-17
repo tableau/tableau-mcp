@@ -52,7 +52,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
           return new Ok(
             await useRestApi({
               ...extra,
-              jwtScopes: ['tableau:content:read'],
+              jwtScopes: getWorkbookTool.requiredApiScopes,
               callback: async (restApi) => {
                 // Notice that we already have the workbook if it had been allowed by a project scope.
                 const workbook =

@@ -73,7 +73,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
           return new Ok(
             await useRestApi({
               ...extra,
-              jwtScopes: ['tableau:content:read'],
+              jwtScopes: listWorkbooksTool.requiredApiScopes,
               callback: async (restApi) => {
                 const maxResultLimit = configWithOverrides.getMaxResultLimit(
                   listWorkbooksTool.name,
