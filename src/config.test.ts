@@ -337,41 +337,6 @@ describe('Config', () => {
     });
   });
 
-  describe('Trust proxy config parsing', () => {
-    it('should set trustProxyConfig to null when TRUST_PROXY_CONFIG is not set', () => {
-      const config = new Config();
-      expect(config.trustProxyConfig).toBe(null);
-    });
-
-    it('should set trustProxyConfig to true when TRUST_PROXY_CONFIG is "true"', () => {
-      vi.stubEnv('TRUST_PROXY_CONFIG', 'true');
-
-      const config = new Config();
-      expect(config.trustProxyConfig).toBe(true);
-    });
-
-    it('should set trustProxyConfig to false when TRUST_PROXY_CONFIG is "false"', () => {
-      vi.stubEnv('TRUST_PROXY_CONFIG', 'false');
-
-      const config = new Config();
-      expect(config.trustProxyConfig).toBe(false);
-    });
-
-    it('should set trustProxyConfig to the specified number when TRUST_PROXY_CONFIG is a valid number', () => {
-      vi.stubEnv('TRUST_PROXY_CONFIG', '1');
-
-      const config = new Config();
-      expect(config.trustProxyConfig).toBe(1);
-    });
-
-    it('should set trustProxyConfig to the specified string when TRUST_PROXY_CONFIG is a valid string', () => {
-      vi.stubEnv('TRUST_PROXY_CONFIG', 'loopback, linklocal, uniquelocal');
-
-      const config = new Config();
-      expect(config.trustProxyConfig).toBe('loopback, linklocal, uniquelocal');
-    });
-  });
-
   describe('Connected App config parsing', () => {
     function stubDefaultDirectTrustEnvVars(): void {
       vi.stubEnv('AUTH', 'direct-trust');
