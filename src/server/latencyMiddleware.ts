@@ -23,10 +23,7 @@ export function latencyMiddleware(provider: TelemetryProvider): express.RequestH
 
       // only record latency for tool calls
       if (toolName) {
-        // '1agg1' is a placeholder required by the MonCloud APM agent's OtelFunnelMetricTransformer.
-        // It gets replaced with statistical suffixes (min, max, avg, p50, median, p90, p95, p99),
-        // producing distinct metric names like apm_http_server_min_request_duration, etc.
-        provider.recordHistogram('http_server_1agg1_request_duration', durationMs, {
+        provider.recordHistogram(config.latencyMetricName, durationMs, {
           'http.request.method': req.method,
           'http.route': req.route?.path ?? req.path,
           'http.response.status_code': res.statusCode,

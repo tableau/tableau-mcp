@@ -343,6 +343,24 @@ interface TelemetryProvider {
 
 <hr />
 
+## `LATENCY_METRIC_NAME`
+
+The name of the histogram metric used to record HTTP request latency for tool calls.
+
+- Default: `http_server_1agg1_request_duration`
+- Only recorded for requests that contain a tool call (non-tool requests such as `initialize` are not tracked).
+- When using the MonCloud APM agent, the `1agg1` segment in the default value is a placeholder that
+  gets replaced with statistical suffixes (`min`, `max`, `avg`, `p50`, `median`, `p90`, `p95`,
+  `p99`), producing distinct metric names such as `apm_http_server_min_request_duration`.
+
+**Example:**
+
+```bash
+LATENCY_METRIC_NAME=http_server_1agg1_request_duration
+```
+
+<hr />
+
 ## `PRODUCT_TELEMETRY_ENABLED`
 
 Enables product telemetry for tool usage tracking.
