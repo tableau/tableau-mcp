@@ -61,7 +61,7 @@ export async function startExpressServer({
 
   const middleware: Array<RequestHandler> = [handlePingRequest];
   if (config.enablePassthroughAuth) {
-    middleware.push(passthroughAuthMiddleware);
+    middleware.push(passthroughAuthMiddleware());
   }
 
   if (config.oauth.enabled) {

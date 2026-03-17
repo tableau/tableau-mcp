@@ -1,4 +1,4 @@
-import { NextFunction, Response } from 'express';
+import { NextFunction, RequestHandler, Response } from 'express';
 import { z } from 'zod';
 
 import { getConfig } from '../config';
@@ -22,74 +22,78 @@ export type PassthroughAuthInfo = z.infer<typeof passthroughAuthInfoSchema>;
 
 let passthroughAuthInfoCache: ExpiringMap<string, PassthroughAuthInfo> | undefined;
 
-export async function passthroughAuthMiddleware(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  const tableauAccessToken: string =
-    getHeader(req, X_TABLEAU_AUTH_HEADER) || getCookie(req, 'workgroup_session_id');
-
-  if (!tableauAccessToken) {
-    next();
-    return;
-  }
-
+export function passthroughAuthMiddleware(): RequestHandler {
   const config = getConfig();
-  const enableCaching = config.passthroughAuthUserSessionCheckIntervalInMinutes > 0;
 
-  if (enableCaching && !passthroughAuthInfoCache) {
-    passthroughAuthInfoCache = new ExpiringMap<string, PassthroughAuthInfo>({
-      defaultExpirationTimeMs: config.passthroughAuthUserSessionCheckIntervalInMinutes * 60 * 1000,
-    });
+  if (!config.enablePassthroughAuth) {
+    throw new Error('Passthrough auth is not enabled');
   }
 
-  let passthroughAuthInfo = passthroughAuthInfoCache?.get(tableauAccessToken);
-  if (!passthroughAuthInfo) {
-    const { server, maxRequestTimeoutMs } = config;
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    const tableauAccessToken: string =
+      getHeader(req, X_TABLEAU_AUTH_HEADER) || getCookie(req, 'workgroup_session_id');
 
-    const restApi = new RestApi(server, {
-      maxRequestTimeoutMs,
-    });
-
-    restApi.setCredentials(tableauAccessToken, 'unknown user id');
-    const sessionResult = await restApi.authenticatedServerMethods.getCurrentServerSession();
-    if (!sessionResult.isOk()) {
-      res.status(401).json({
-        error: 'invalid_token',
-        error_description: sessionResult.error.message,
-      });
+    if (!tableauAccessToken) {
+      next();
       return;
     }
 
-    passthroughAuthInfo = {
-      type: 'Passthrough',
-      username: sessionResult.value.user.name,
-      userId: sessionResult.value.user.id,
-      server,
-      siteId: sessionResult.value.site.id,
-      raw: tableauAccessToken,
+    const enableCaching = config.passthroughAuthUserSessionCheckIntervalInMinutes > 0;
+
+    if (enableCaching && !passthroughAuthInfoCache) {
+      passthroughAuthInfoCache = new ExpiringMap<string, PassthroughAuthInfo>({
+        defaultExpirationTimeMs:
+          config.passthroughAuthUserSessionCheckIntervalInMinutes * 60 * 1000,
+      });
+    }
+
+    let passthroughAuthInfo = passthroughAuthInfoCache?.get(tableauAccessToken);
+    if (!passthroughAuthInfo) {
+      const { server, maxRequestTimeoutMs } = config;
+
+      const restApi = new RestApi(server, {
+        maxRequestTimeoutMs,
+      });
+
+      restApi.setCredentials(tableauAccessToken, 'unknown user id');
+      const sessionResult = await restApi.authenticatedServerMethods.getCurrentServerSession();
+      if (!sessionResult.isOk()) {
+        res.status(401).json({
+          error: 'invalid_token',
+          error_description: sessionResult.error.message,
+        });
+        return;
+      }
+
+      passthroughAuthInfo = {
+        type: 'Passthrough',
+        username: sessionResult.value.user.name,
+        userId: sessionResult.value.user.id,
+        server,
+        siteId: sessionResult.value.site.id,
+        raw: tableauAccessToken,
+      };
+
+      if (
+        passthroughAuthInfoCache &&
+        passthroughAuthInfoCache.size < PASSTHROUGH_AUTH_CACHE_MAX_ENTRIES
+      ) {
+        passthroughAuthInfoCache.set(tableauAccessToken, passthroughAuthInfo);
+      }
+    }
+
+    req.auth = {
+      token: 'passthrough',
+      clientId: 'passthrough',
+      // From TMCP, we have no way of verifying which scopes, if any, were used to obtain the access token.
+      // We will rely on the downstream REST APIs to enforce scopes at the API level.
+      // MCP scopes will not be enforced for passthrough auth.
+      scopes: [],
+      extra: passthroughAuthInfo,
     };
 
-    if (
-      passthroughAuthInfoCache &&
-      passthroughAuthInfoCache.size < PASSTHROUGH_AUTH_CACHE_MAX_ENTRIES
-    ) {
-      passthroughAuthInfoCache.set(tableauAccessToken, passthroughAuthInfo);
-    }
-  }
-
-  req.auth = {
-    token: 'passthrough',
-    clientId: 'passthrough',
-    // From TMCP, we have no way of verifying which scopes, if any, were used to obtain the access token.
-    // We will rely on the downstream REST APIs to enforce scopes at the API level.
-    // MCP scopes will not be enforced for passthrough auth.
-    scopes: [],
-    extra: passthroughAuthInfo,
+    next();
   };
-
-  next();
 }
 
 function getCookie(req: AuthenticatedRequest, cookieName: string): string {
