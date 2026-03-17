@@ -7,6 +7,7 @@ export const fieldSchema = z
   .object({
     name: z.string(),
     columnClass: z.string(),
+    logicalTableId: z.string().nullable(),
     dataType: z.string().nullable(),
     defaultAggregation: z.string().nullable(),
     description: z.string().nullable(),
@@ -25,6 +26,11 @@ export const fieldSchema = z
     binSize: z.number().nullable(),
   })
   .partial();
+
+export const logicalTableGroupSchema = z.object({
+  logicalTableId: z.string().nullable(),
+  fields: z.array(fieldSchema),
+});
 
 export const parameterSchema = z
   .object({
@@ -52,18 +58,19 @@ export const parameterSchema = z
 
 export const fieldsResultSchema = z.object({
   datasourceDescription: z.string(),
-  fields: z.array(fieldSchema),
+  fieldGroups: z.array(logicalTableGroupSchema),
   parameters: z.array(parameterSchema),
 });
 
 type Parameter = z.infer<typeof parameterSchema>;
 type Field = z.infer<typeof fieldSchema>;
+type LogicalTableGroup = z.infer<typeof logicalTableGroupSchema>;
 export type FieldsResult = z.infer<typeof fieldsResultSchema>;
 
 export function simplifyReadMetadataResult(readMetadataResult: MetadataResponse): FieldsResult {
   const simplifiedResponse: FieldsResult = {
     datasourceDescription: '',
-    fields: [],
+    fieldGroups: [],
     parameters: [],
   };
 
@@ -73,11 +80,13 @@ export function simplifyReadMetadataResult(readMetadataResult: MetadataResponse)
 
   // This is a simplified response that attempts to reduce tokens by
   // only including essential fields and renaming properties.
+  const fields: Field[] = [];
   for (const field of readMetadataResult.data) {
     const toPush: Field = {
       name: field.fieldCaption,
       dataType: field.dataType,
       columnClass: field.columnClass,
+      logicalTableId: normalizeLogicalTableId(field.logicalTableId),
     };
 
     if (field.defaultAggregation) {
@@ -88,7 +97,7 @@ export function simplifyReadMetadataResult(readMetadataResult: MetadataResponse)
       toPush.formula = field.formula;
     }
 
-    simplifiedResponse.fields.push(toPush);
+    fields.push(toPush);
   }
 
   // Populate parameters from readMetadata results.
@@ -118,6 +127,8 @@ export function simplifyReadMetadataResult(readMetadataResult: MetadataResponse)
     }
   }
 
+  simplifiedResponse.fieldGroups = groupFieldsByLogicalTableId(fields);
+
   return simplifiedResponse;
 }
 
@@ -130,15 +141,19 @@ export function combineFields(
   // to optimize for LLM accuracy and reduce tokens in response.
   const combinedFields: FieldsResult = {
     datasourceDescription: listFieldsResult.data.publishedDatasources[0]?.description ?? '',
-    fields: [],
+    fieldGroups: [],
     parameters: [],
   };
+  const fields: Field[] = [];
 
   if (!readMetadataResult.data) {
     if (listFieldsResult.data.publishedDatasources[0]?.fields.length) {
       // fallback to returning listFields results if we don't have any fields from readMetadata.
       for (const field of listFieldsResult.data.publishedDatasources[0].fields) {
-        const toPush: Field = { name: field.name };
+        const toPush: Field = {
+          name: field.name,
+          logicalTableId: null,
+        };
         if (field.dataType) {
           toPush.dataType = field.dataType;
         }
@@ -146,10 +161,11 @@ export function combineFields(
           toPush.defaultAggregation = field.aggregation;
         }
         populateFieldWithAdditionalProperties(field, toPush);
-        combinedFields.fields.push(toPush);
+        fields.push(toPush);
       }
     }
 
+    combinedFields.fieldGroups = groupFieldsByLogicalTableId(fields);
     return combinedFields;
   }
 
@@ -160,6 +176,7 @@ export function combineFields(
       name: field.fieldCaption,
       dataType: field.dataType,
       columnClass: field.columnClass,
+      logicalTableId: normalizeLogicalTableId(field.logicalTableId),
     };
 
     if (field.defaultAggregation) {
@@ -170,7 +187,7 @@ export function combineFields(
       toPush.formula = field.formula;
     }
 
-    combinedFields.fields.push(toPush);
+    fields.push(toPush);
   }
 
   // Populate parameters from readMetadata results.
@@ -201,11 +218,12 @@ export function combineFields(
   }
 
   if (!listFieldsResult.data.publishedDatasources[0]?.fields.length) {
+    combinedFields.fieldGroups = groupFieldsByLogicalTableId(fields);
     return combinedFields;
   }
 
   // Of the fields in our response object, populate them with additional properties we get from listFields results.
-  for (const field of combinedFields.fields) {
+  for (const field of fields) {
     const matchingListField = listFieldsResult.data.publishedDatasources[0].fields.find(
       (f) => f.name === field.name,
     );
@@ -213,6 +231,8 @@ export function combineFields(
       populateFieldWithAdditionalProperties(matchingListField, field);
     }
   }
+
+  combinedFields.fieldGroups = groupFieldsByLogicalTableId(fields);
 
   return combinedFields;
 }
@@ -248,4 +268,29 @@ function populateFieldWithAdditionalProperties(sourceField: Field, targetField: 
   if (sourceField.binSize != undefined) {
     targetField.binSize = sourceField.binSize;
   }
+}
+
+function groupFieldsByLogicalTableId(fields: Field[]): LogicalTableGroup[] {
+  const groupedFields = new Map<string | null, Field[]>();
+
+  for (const field of fields) {
+    const groupKey = field.logicalTableId ?? null;
+    const existingGroup = groupedFields.get(groupKey) ?? [];
+    existingGroup.push(field);
+    groupedFields.set(groupKey, existingGroup);
+  }
+
+  return [...groupedFields.entries()].map(([logicalTableId, fields]) => ({
+    logicalTableId,
+    fields,
+  }));
+}
+
+function normalizeLogicalTableId(logicalTableId?: string | null): string | null {
+  if (logicalTableId == undefined) {
+    return null;
+  }
+
+  const normalizedLogicalTableId = logicalTableId.trim();
+  return normalizedLogicalTableId.length > 0 ? normalizedLogicalTableId : null;
 }

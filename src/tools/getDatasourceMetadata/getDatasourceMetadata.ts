@@ -33,6 +33,9 @@ export const getGraphqlQuery = (datasourceLuid: string): string => `
         }
         fullyQualifiedName
         __typename
+        upstreamTables {
+          name
+        }
         ... on AnalyticsField {
           __typename
         }

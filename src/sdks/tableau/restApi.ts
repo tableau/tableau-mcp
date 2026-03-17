@@ -22,7 +22,7 @@ import { AuthenticatedServerMethods, ServerMethods } from './methods/serverMetho
 import ViewsMethods from './methods/viewsMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
 import WorkbooksMethods from './methods/workbooksMethods.js';
-import { bearerTokenSchema } from './types/bearerToken.js';
+import { BearerToken, bearerTokenSchema } from './types/bearerToken.js';
 import { Credentials } from './types/credentials.js';
 import { McpSiteSettings } from './types/mcpSiteSettings.js';
 
@@ -90,14 +90,15 @@ export class RestApi {
       return this.creds.site.id;
     }
 
-    const [_header, payload, _signature] = this.creds.token.split('.');
-    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
-    const bearerToken = bearerTokenSchema.safeParse(decoded);
-    if (!bearerToken.success) {
-      throw new Error(`Invalid bearer token: ${fromError(bearerToken.error).toString()}`);
+    return getBearerTokenPayload(this.creds.token)['https://tableau.com/siteId'];
+  }
+
+  get userId(): string {
+    if (this.creds.type === 'X-Tableau-Auth') {
+      return this.creds.user.id;
     }
 
-    return bearerToken.data['https://tableau.com/siteId'];
+    return getBearerTokenPayload(this.creds.token)['https://tableau.com/userId'] ?? '';
   }
 
   private get authenticationMethods(): AuthenticationMethods {
@@ -321,4 +322,15 @@ export class RestApi {
       },
     );
   };
+}
+
+function getBearerTokenPayload(token: string): BearerToken {
+  const [_header, payload, _signature] = token.split('.');
+  const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
+  const bearerToken = bearerTokenSchema.safeParse(decoded);
+  if (!bearerToken.success) {
+    throw new Error(`Invalid bearer token: ${fromError(bearerToken.error).toString()}`);
+  }
+
+  return bearerToken.data;
 }

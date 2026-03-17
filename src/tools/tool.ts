@@ -11,7 +11,6 @@ import { getTelemetryProvider } from '../telemetry/init.js';
 import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../utils/getHttpStatus.js';
-import { getSiteLuidFromAccessToken } from '../utils/getSiteLuidFromAccessToken.js';
 import { Provider, TypeOrProvider } from '../utils/provider.js';
 import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
 import { ToolName } from './toolName.js';
@@ -255,12 +254,12 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     } finally {
-      // Single telemetry call - always executed
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
         request_id: requestId.toString(),
         session_id: sessionId ?? '',
-        site_luid: getSiteLuidFromAccessToken(tableauAuthInfo),
+        site_luid: extra.getSiteLuid(),
+        user_luid: extra.getUserLuid(),
         podname: config.server,
         is_hyperforce: config.isHyperforce,
         success,

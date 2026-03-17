@@ -9,5 +9,8 @@ export const bearerTokenSchema = z.object({
   sub: requiredString('sub'),
   scope: requiredString('scope'),
   'https://tableau.com/siteId': requiredString('https://tableau.com/siteId'),
+  'https://tableau.com/userId': z.string().optional(), // Unavailable for users without MFA
   'https://tableau.com/targetUrl': requiredString('https://tableau.com/targetUrl'),
 });
+
+export type BearerToken = z.infer<typeof bearerTokenSchema>;
