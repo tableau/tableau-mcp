@@ -163,6 +163,18 @@ describe('Config', () => {
     expect(config.tableauServerVersionCheckIntervalInHours).toBe(2);
   });
 
+  it('should set passthroughAuthUserSessionCheckIntervalInMinutes to default when not specified', () => {
+    const config = new Config();
+    expect(config.passthroughAuthUserSessionCheckIntervalInMinutes).toBe(10);
+  });
+
+  it('should set passthroughAuthUserSessionCheckIntervalInMinutes to the specified value when specified', () => {
+    vi.stubEnv('PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES', '2');
+
+    const config = new Config();
+    expect(config.passthroughAuthUserSessionCheckIntervalInMinutes).toBe(2);
+  });
+
   it('should set mcpSiteSettingsCheckIntervalInMinutes to default when not specified', () => {
     const config = new Config();
     expect(config.mcpSiteSettingsCheckIntervalInMinutes).toBe(10);
@@ -185,6 +197,18 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.enableMcpSiteSettings).toBe(true);
+  });
+
+  it('should set enablePassthroughAuth to false by default', () => {
+    const config = new Config();
+    expect(config.enablePassthroughAuth).toBe(false);
+  });
+
+  it('should set enablePassthroughAuth to true when specified', () => {
+    vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+
+    const config = new Config();
+    expect(config.enablePassthroughAuth).toBe(true);
   });
 
   describe('HTTP server config parsing', () => {

@@ -1,5 +1,5 @@
 import { CallToolRequestSchema, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
-import express, { RequestHandler } from 'express';
+import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
 import { isToolName, ToolName } from '../../tools/toolName.js';
@@ -23,11 +23,13 @@ import { AuthenticatedRequest } from './types.js';
  * @returns Express middleware function
  */
 export function authMiddleware(accessTokenValidator: AccessTokenValidator): RequestHandler {
-  return async (
-    req: AuthenticatedRequest,
-    res: express.Response,
-    next: express.NextFunction,
-  ): Promise<void> => {
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    if (req.auth) {
+      // Auth already defined by previous middleware
+      next();
+      return;
+    }
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {

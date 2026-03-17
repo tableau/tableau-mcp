@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "Helping agents see and understand data.",
-  "version": "1.17.15",
+  "version": "1.17.16",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -54,6 +54,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@zodios/core": "^10.9.6",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
@@ -69,6 +70,7 @@
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.25.1",
     "@openai/agents": "^0.1.9",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/eslint__js": "^8.42.3",
     "@types/express": "^5.0.3",
