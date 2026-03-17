@@ -13,7 +13,7 @@ describe('getToolNamesFromRequestBody', () => {
     expect(result).toEqual('get-datasource-metadata');
   });
 
-  it('should return empty array for non-tool requests', () => {
+  it('should return undefined for non-tool requests', () => {
     const body = {
       jsonrpc: '2.0',
       id: 1,
@@ -29,7 +29,7 @@ describe('getToolNamesFromRequestBody', () => {
     expect(result).toEqual(undefined);
   });
 
-  it('should return empty array for undefined body', () => {
+  it('should return undefined for undefined body', () => {
     const result = getToolNameFromRequestBody(undefined);
     expect(result).toEqual(undefined);
   });

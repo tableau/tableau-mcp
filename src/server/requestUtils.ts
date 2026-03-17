@@ -3,8 +3,7 @@ import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { isToolName, ToolName } from '../tools/toolName.js';
 
 /**
- * Extract tool names from a JSON-RPC request body.
- * Handles both single requests and batched request arrays.
+ * Extract tool name from a JSON-RPC request body.
  */
 export function getToolNameFromRequestBody(body: unknown): ToolName | undefined {
   const callToolRequestResult = CallToolRequestSchema.safeParse(body);
@@ -15,5 +14,4 @@ export function getToolNameFromRequestBody(body: unknown): ToolName | undefined 
       return name;
     }
   }
-  return undefined;
 }
