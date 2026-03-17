@@ -16,7 +16,6 @@ export function latencyMiddleware(provider: TelemetryProvider): express.RequestH
     const start = performance.now();
 
     res.on('finish', () => {
-
       const toolName = getToolNameFromRequestBody(req.body);
 
       // only record latency for tool calls
