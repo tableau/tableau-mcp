@@ -54,11 +54,6 @@ export async function startExpressServer({
     }),
   );
 
-  if (config.trustProxyConfig !== null) {
-    // https://expressjs.com/en/guide/behind-proxies.html
-    app.set('trust proxy', config.trustProxyConfig);
-  }
-
   const middleware: Array<RequestHandler> = [handlePingRequest];
   if (config.enablePassthroughAuth) {
     middleware.push(passthroughAuthMiddleware());
