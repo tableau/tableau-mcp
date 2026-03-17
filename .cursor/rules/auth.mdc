@@ -1,0 +1,86 @@
+---
+description: Auth architecture, middleware chain, and auth-specific coding standards
+globs:
+  - "src/server/**/*.ts"
+  - "src/restApiInstance.ts"
+---
+
+# Auth Standards
+
+## Three Auth Paths
+
+### 1. Passthrough Auth
+- Header `x-tableau-auth` or cookie `workgroup_session_id`
+- Validated via `RestApi.authenticatedServerMethods.getCurrentServerSession()`
+- Optional session caching via `ExpiringMap` (configurable interval)
+- Location: `src/server/passthroughAuthMiddleware.ts`
+- Enabled when `config.enablePassthroughAuth` is true
+- MCP scopes NOT enforced (no way to verify original token scopes)
+
+### 2. Embedded OAuth (PKCE)
+- JWE-encrypted MCP access tokens signed with server's private key
+- Contains embedded Tableau access/refresh tokens
+- `EmbeddedAccessTokenValidator` validates via `jose`
+- Location: `src/server/oauth/provider.ts`, `accessTokenValidator.ts`,
+  `token.ts`, `authorize.ts`, `callback.ts`
+
+### 3. Tableau Cloud OAuth
+- Tableau Cloud JWT Bearer tokens
+- `TableauAccessTokenValidator` validates JWT claims
+- Location: `src/server/oauth/provider.ts`, `accessTokenValidator.ts`
+
+## Middleware Chain Order (express.ts)
+```
+handlePingRequest
+  → passthroughAuthMiddleware (if enabled)
+    → oauthProvider.authMiddleware
+      → validateProtocolVersion
+        → createMcpServer
+```
+
+## Auth Info Flow
+```
+req.auth
+  → getTableauAuthInfo(req.auth)
+    → TableauAuthInfo (discriminated union: 'X-Tableau-Auth' | 'Bearer' | 'Passthrough')
+      → TableauRequestHandlerExtra.tableauAuthInfo
+        → useRestApi() (handles sign-in, token setup, sign-out lifecycle)
+```
+
+## TableauAuthInfo Type (src/server/oauth/schemas.ts)
+Discriminated union on `type` field:
+- `'X-Tableau-Auth'` — username, server, siteId?, userId?, accessToken?, refreshToken?
+- `'Bearer'` — username, server, siteId, userId?, raw (the JWT string)
+- `'Passthrough'` — username, userId, server, siteId, raw (the session token)
+
+## REST API Auth Lifecycle (src/restApiInstance.ts)
+`useRestApi()` is the single entry point for all authenticated API calls:
+- Creates a fresh `RestApi` instance per call
+- Routes to correct auth method based on `tableauAuthInfo.type` and `config.auth`
+- Auth methods: `pat`, `direct-trust`, `uat`, `oauth`
+- PAT/direct-trust sessions are ephemeral (signed out after use)
+- OAuth/passthrough sessions are long-lived (NOT signed out)
+- Accepts `jwtScopes` for direct-trust/UAT token generation
+
+## Scope System (src/server/oauth/scopes.ts)
+Two scope layers:
+- **MCP scopes** (`tableau:mcp:*`) — permissions clients request from MCP server
+- **Tableau API scopes** (`tableau:*`) — permissions for Tableau REST API calls
+- `toolScopeMap` maps each tool → required MCP scopes + required API scopes
+- MCP scope enforcement is optional (`oauth.enforceScopes` config)
+- API scopes always passed to `useRestApi()` via `tool.requiredApiScopes`
+
+## Non-Negotiable Auth Rules
+- Every tool touching Tableau APIs requires auth verification BEFORE execution
+- Auth context must be explicitly passed — never assume it exists in scope
+- Token refresh is transient and retryable
+- Invalid credentials are validation errors — not retryable
+- Insufficient permissions are permission errors — escalate, don't retry
+- No `any` types in auth-related code (see ESLint override)
+
+## Before Changing Auth Code
+1. Identify which of the three auth paths this change affects
+2. Trace the middleware chain to understand where this change sits
+3. Check if a similar pattern exists in the other auth paths
+4. Plan error cases — what happens when auth fails at this point?
+5. Consider scope implications — does this change affect `toolScopeMap`?

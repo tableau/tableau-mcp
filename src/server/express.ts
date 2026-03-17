@@ -1,5 +1,6 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Request, RequestHandler, Response } from 'express';
 import fs, { existsSync } from 'fs';
@@ -18,6 +19,7 @@ import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { EmbeddedOAuthProvider, TableauOAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
+import { passthroughAuthMiddleware, X_TABLEAU_AUTH_HEADER } from './passthroughAuthMiddleware.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
 
@@ -35,6 +37,10 @@ export async function startExpressServer({
 
   app.use(express.json());
   app.use(express.urlencoded());
+  if (config.enablePassthroughAuth) {
+    // cookie-parser is used to parse the workgroup_session_id cookie for passthrough auth
+    app.use(cookieParser());
+  }
 
   app.use(
     cors({
@@ -46,17 +52,17 @@ export async function startExpressServer({
         'Cache-Control',
         'Accept',
         'MCP-Protocol-Version',
+        X_TABLEAU_AUTH_HEADER,
       ],
       exposedHeaders: [SESSION_ID_HEADER, 'x-session-id'],
     }),
   );
 
-  if (config.trustProxyConfig !== null) {
-    // https://expressjs.com/en/guide/behind-proxies.html
-    app.set('trust proxy', config.trustProxyConfig);
+  const middleware: Array<RequestHandler> = [handlePingRequest];
+  if (config.enablePassthroughAuth) {
+    middleware.push(passthroughAuthMiddleware());
   }
 
-  const middleware: Array<RequestHandler> = [handlePingRequest];
   if (config.oauth.enabled) {
     const oauthProvider = config.oauth.embeddedAuthzServer
       ? new EmbeddedOAuthProvider()
