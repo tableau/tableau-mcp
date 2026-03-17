@@ -16,18 +16,18 @@ export function latencyMiddleware(provider: TelemetryProvider): express.RequestH
     const start = performance.now();
 
     res.on('finish', () => {
-      const durationMs = performance.now() - start;
 
       const toolName = getToolNameFromRequestBody(req.body);
-      const authExtra = getTableauAuthInfo(req.auth);
 
       // only record latency for tool calls
       if (toolName) {
+        const durationMs = performance.now() - start;
+        const authExtra = getTableauAuthInfo(req.auth);
         provider.recordHistogram(config.latencyMetricName, durationMs, {
           'http.request.method': req.method,
           'http.route': req.route?.path ?? req.path,
           'http.response.status_code': res.statusCode,
-          tool_name: toolName || undefined,
+          tool_name: toolName,
           server: config.server,
           site_id: authExtra?.siteId,
         });
