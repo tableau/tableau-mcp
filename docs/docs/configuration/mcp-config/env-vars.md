@@ -343,6 +343,22 @@ interface TelemetryProvider {
 
 <hr />
 
+## `LATENCY_METRIC_NAME`
+
+The name of the histogram metric used to record HTTP request latency for tool calls.
+
+- Default: `http_server_1agg1_request_duration`
+- Only recorded for requests that contain a tool call (non-tool requests such as `initialize` are
+  not tracked).
+
+**Example:**
+
+```bash
+LATENCY_METRIC_NAME=http_server_1agg1_request_duration
+```
+
+<hr />
+
 ## `PRODUCT_TELEMETRY_ENABLED`
 
 Enables product telemetry for tool usage tracking.
@@ -350,7 +366,9 @@ Enables product telemetry for tool usage tracking.
 - Default: `true`
 - When `true`, the server will send telemetry events to Tableau's telemetry endpoint for each tool
   call, including tool name, request ID, session ID, and site name.
-- Set to `false` to disable product telemetry. Read https://help.tableau.com/current/server/en-us/usage_data_basic_product_data.htm for more information
+- Set to `false` to disable product telemetry. Read
+  https://help.tableau.com/current/server/en-us/usage_data_basic_product_data.htm for more
+  information
 
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [tab-ds-connections]:

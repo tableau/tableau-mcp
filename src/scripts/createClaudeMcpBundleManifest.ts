@@ -560,6 +560,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  LATENCY_METRIC_NAME: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Latency Metric Name',
+    description:
+      'The histogram metric name used to record HTTP request latency for tool calls. Defaults to "http_server_1agg1_request_duration".',
+    required: false,
+    sensitive: false,
+  },
 } satisfies EnvVars;
 
 const userConfig = Object.entries(envVars).reduce<Record<string, McpbUserConfigurationOption>>(
