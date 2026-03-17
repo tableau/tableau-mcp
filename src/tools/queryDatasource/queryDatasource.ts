@@ -13,7 +13,6 @@ import {
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
-import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
@@ -131,7 +130,7 @@ export const getQueryDatasourceTool = (
 
           return await useRestApi({
             ...extra,
-            jwtScopes: getRequiredApiScopesForTool(queryDatasourceTool.name),
+            jwtScopes: queryDatasourceTool.requiredApiScopes,
             callback: async (restApi) => {
               if (!configWithOverrides.disableQueryDatasourceValidationRequests) {
                 // Validate query against metadata

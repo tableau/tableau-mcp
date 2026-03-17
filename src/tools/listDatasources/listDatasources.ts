@@ -6,7 +6,6 @@ import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { Server } from '../../server.js';
-import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, Tool } from '../tool.js';
@@ -87,7 +86,7 @@ export const getListDatasourcesTool = (server: Server): Tool<typeof paramsSchema
         callback: async () => {
           const datasources = await useRestApi({
             ...extra,
-            jwtScopes: getRequiredApiScopesForTool(listDatasourcesTool.name),
+            jwtScopes: listDatasourcesTool.requiredApiScopes,
             callback: async (restApi) => {
               const maxResultLimit = configWithOverrides.getMaxResultLimit(
                 listDatasourcesTool.name,

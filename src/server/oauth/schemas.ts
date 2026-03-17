@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { requiredString } from '../../utils/requiredString.js';
+import { passthroughAuthInfoSchema } from '../passthroughAuthMiddleware.js';
 
 export const mcpAuthorizeSchema = z.object({
   client_id: requiredString('client_id'),
@@ -94,6 +95,7 @@ export const mcpAccessTokenUserOnlySchema = z.object({
   tableauServer: requiredString('tableauServer'),
   // Optional because there may not be a user associated with the access token, e.g. for client credentials grant type
   tableauUserId: z.string().optional(),
+  tableauSiteId: z.string().optional(),
   scope: z.string().optional(),
 });
 
@@ -112,6 +114,7 @@ export const tableauBearerTokenSchema = z.object({
   sub: requiredString('sub'),
   scope: requiredString('scope'),
   'https://tableau.com/siteId': requiredString('https://tableau.com/siteId'),
+  'https://tableau.com/userId': z.string().optional(), // Unavailable for users without MFA
   'https://tableau.com/targetUrl': requiredString('https://tableau.com/targetUrl'),
 });
 
@@ -122,8 +125,9 @@ export const tableauAuthInfoSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('X-Tableau-Auth'),
     username: z.string(),
-    userId: z.string().optional(),
     server: z.string(),
+    siteId: z.string().optional(),
+    userId: z.string().optional(),
     accessToken: z.string().optional(),
     refreshToken: z.string().optional(),
   }),
@@ -132,8 +136,10 @@ export const tableauAuthInfoSchema = z.discriminatedUnion('type', [
     username: z.string(),
     server: z.string(),
     siteId: z.string(),
+    userId: z.string().optional(),
     raw: z.string(),
   }),
+  passthroughAuthInfoSchema,
 ]);
 
 export const cimdMetadataSchema = z.object({

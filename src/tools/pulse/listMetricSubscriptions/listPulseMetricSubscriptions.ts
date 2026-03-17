@@ -9,12 +9,13 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { ConstrainedResult, Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
+const toolName = 'list-pulse-metric-subscriptions';
 const paramsSchema = {};
 
 export const getListPulseMetricSubscriptionsTool = (server: Server): Tool<typeof paramsSchema> => {
   const listPulseMetricSubscriptionsTool = new Tool({
     server,
-    name: 'list-pulse-metric-subscriptions',
+    name: toolName,
     description: `
 Retrieves a list of published Pulse Metric Subscriptions for the current user using the Tableau REST API.  Use this tool when a user requests to list Tableau Pulse Metric Subscriptions for the current user.
 
@@ -40,7 +41,7 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
         callback: async () => {
           return await useRestApi({
             ...extra,
-            jwtScopes: getRequiredApiScopesForTool(listPulseMetricSubscriptionsTool.name),
+            jwtScopes: listPulseMetricSubscriptionsTool.requiredApiScopes,
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
             },
@@ -93,7 +94,7 @@ export async function constrainPulseMetricSubscriptions({
   try {
     const metricsResult = await useRestApi({
       ...restApiArgs,
-      jwtScopes: getRequiredApiScopesForTool('list-pulse-metric-subscriptions'),
+      jwtScopes: getRequiredApiScopesForTool(toolName),
       callback: async (restApi) => {
         return await restApi.pulseMethods.listPulseMetricsFromMetricIds(
           subscriptions.map((subscription) => subscription.metric_id),

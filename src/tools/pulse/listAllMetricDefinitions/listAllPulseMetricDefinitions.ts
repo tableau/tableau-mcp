@@ -8,7 +8,6 @@ import {
   pulseMetricDefinitionViewEnum,
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
 import { pulsePaginate } from '../../../utils/paginate.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
@@ -65,7 +64,7 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
         callback: async () => {
           return await useRestApi({
             ...extra,
-            jwtScopes: getRequiredApiScopesForTool(listAllPulseMetricDefinitionsTool.name),
+            jwtScopes: listAllPulseMetricDefinitionsTool.requiredApiScopes,
             callback: async (restApi) => {
               const maxResultLimit = configWithOverrides.getMaxResultLimit(
                 listAllPulseMetricDefinitionsTool.name,

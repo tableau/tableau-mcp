@@ -7,17 +7,18 @@ test.describe('get-datasource-metadata', () => {
   test('get datasource metadata', async ({ client }) => {
     const superstore = getSuperstoreDatasource();
 
-    const { fields } = await client.callTool('get-datasource-metadata', {
+    const { fieldGroups } = await client.callTool('get-datasource-metadata', {
       schema: fieldsResultSchema,
       toolArgs: {
         datasourceLuid: superstore.id,
       },
     });
 
-    invariant(fields, 'fields is undefined');
-    expect(fields.length).toBeGreaterThan(0);
+    invariant(fieldGroups, 'fieldGroups is undefined');
+    const flatFields = fieldGroups.flatMap((group) => group.fields ?? []);
+    expect(flatFields.length).toBeGreaterThan(0);
 
-    const fieldNames = fields.map((field) => field.name);
+    const fieldNames = flatFields.map((field) => field.name);
     expect(fieldNames).toContain('Postal Code');
     expect(fieldNames).toContain('Product Name');
   });

@@ -30,7 +30,6 @@ export class Config {
   sslCert: string;
   httpPort: number;
   corsOriginConfig: CorsOptions['origin'];
-  trustProxyConfig: boolean | number | string | null;
   siteName: string;
   patName: string;
   patValue: string;
@@ -52,8 +51,10 @@ export class Config {
   enableServerLogging: boolean;
   serverLogDirectory: string;
   tableauServerVersionCheckIntervalInHours: number;
+  passthroughAuthUserSessionCheckIntervalInMinutes: number;
   mcpSiteSettingsCheckIntervalInMinutes: number;
   enableMcpSiteSettings: boolean;
+  enablePassthroughAuth: boolean;
   oauth: {
     enabled: boolean;
     embeddedAuthzServer: boolean;
@@ -88,7 +89,6 @@ export class Config {
       SSL_CERT: sslCert,
       HTTP_PORT_ENV_VAR_NAME: httpPortEnvVarName,
       CORS_ORIGIN_CONFIG: corsOriginConfig,
-      TRUST_PROXY_CONFIG: trustProxyConfig,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
       JWT_SUB_CLAIM: jwtSubClaim,
@@ -111,8 +111,11 @@ export class Config {
       ENABLE_SERVER_LOGGING: enableServerLogging,
       SERVER_LOG_DIRECTORY: serverLogDirectory,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
+      PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES:
+        passthroughAuthUserSessionCheckIntervalInMinutes,
       MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: mcpSiteSettingsCheckIntervalInMinutes,
       ENABLE_MCP_SITE_SETTINGS: enableMcpSiteSettings,
+      ENABLE_PASSTHROUGH_AUTH: enablePassthroughAuth,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_EMBEDDED_AUTHZ_SERVER: oauthEmbeddedAuthzServer,
       OAUTH_ISSUER: oauthIssuer,
@@ -148,7 +151,6 @@ export class Config {
       maxValue: 65535,
     });
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
-    this.trustProxyConfig = getTrustProxyConfig(trustProxyConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
@@ -165,6 +167,15 @@ export class Config {
       },
     );
 
+    this.passthroughAuthUserSessionCheckIntervalInMinutes = parseNumber(
+      passthroughAuthUserSessionCheckIntervalInMinutes,
+      {
+        defaultValue: 10,
+        minValue: 0,
+        maxValue: 60 * 24, // 24 hours
+      },
+    );
+
     this.mcpSiteSettingsCheckIntervalInMinutes = parseNumber(
       mcpSiteSettingsCheckIntervalInMinutes,
       {
@@ -175,6 +186,7 @@ export class Config {
     );
 
     this.enableMcpSiteSettings = enableMcpSiteSettings === 'true';
+    this.enablePassthroughAuth = enablePassthroughAuth === 'true';
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';
     const enforceScopes = !disableScopes;
@@ -420,22 +432,6 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
       `The environment variable CORS_ORIGIN_CONFIG is not a valid URL: ${corsOriginConfig}`,
     );
   }
-}
-
-function getTrustProxyConfig(trustProxyConfig: string): boolean | number | string | null {
-  if (!trustProxyConfig) {
-    return null;
-  }
-
-  if (trustProxyConfig.match(/^true|false$/i)) {
-    return trustProxyConfig.toLowerCase() === 'true';
-  }
-
-  if (trustProxyConfig.match(/^\d+$/)) {
-    return parseInt(trustProxyConfig, 10);
-  }
-
-  return trustProxyConfig;
 }
 
 // When the user does not provide a site name in the Claude MCP Bundle configuration,

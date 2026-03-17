@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { useRestApi } from '../../restApiInstance.js';
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { Server } from '../../server.js';
-import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -34,6 +33,9 @@ export const getGraphqlQuery = (datasourceLuid: string): string => `
         }
         fullyQualifiedName
         __typename
+        upstreamTables {
+          name
+        }
         ... on AnalyticsField {
           __typename
         }
@@ -135,7 +137,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
 
           return await useRestApi({
             ...extra,
-            jwtScopes: getRequiredApiScopesForTool(getDatasourceMetadataTool.name),
+            jwtScopes: getDatasourceMetadataTool.requiredApiScopes,
             callback: async (restApi) => {
               // Fetching metadata from VizQL Data Service API.
               const readMetadataResult = await restApi.vizqlDataServiceMethods.readMetadata({

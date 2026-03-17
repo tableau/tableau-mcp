@@ -8,7 +8,6 @@ import {
   PulseInsightBriefResponse,
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
 import { Tool } from '../../tool.js';
 import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
@@ -227,7 +226,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
 
           const result = await useRestApi({
             ...extra,
-            jwtScopes: getRequiredApiScopesForTool(generatePulseInsightBriefTool.name),
+            jwtScopes: generatePulseInsightBriefTool.requiredApiScopes,
             callback: async (restApi) =>
               await restApi.pulseMethods.generatePulseInsightBrief(briefRequest),
           });

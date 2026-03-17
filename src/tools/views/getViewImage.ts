@@ -4,7 +4,6 @@ import { z } from 'zod';
 
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
-import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { convertPngDataToToolResult } from '../convertPngDataToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -52,7 +51,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
           return new Ok(
             await useRestApi({
               ...extra,
-              jwtScopes: getRequiredApiScopesForTool(getViewImageTool.name),
+              jwtScopes: getViewImageTool.requiredApiScopes,
               callback: async (restApi) => {
                 return await restApi.viewsMethods.queryViewImage({
                   viewId,

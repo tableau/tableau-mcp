@@ -6,7 +6,6 @@ import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
-import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ConstrainedResult, Tool } from '../tool.js';
 
@@ -53,7 +52,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
           return new Ok(
             await useRestApi({
               ...extra,
-              jwtScopes: getRequiredApiScopesForTool(getWorkbookTool.name),
+              jwtScopes: getWorkbookTool.requiredApiScopes,
               callback: async (restApi) => {
                 // Notice that we already have the workbook if it had been allowed by a project scope.
                 const workbook =

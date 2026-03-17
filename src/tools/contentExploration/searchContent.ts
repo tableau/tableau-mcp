@@ -8,7 +8,6 @@ import {
   searchContentFilterSchema,
 } from '../../sdks/tableau/types/contentExploration.js';
 import { Server } from '../../server.js';
-import { getRequiredApiScopesForTool } from '../../server/oauth/scopes.js';
 import { Tool } from '../tool.js';
 import {
   buildFilterString,
@@ -71,7 +70,7 @@ This tool searches across all supported content types for objects relevant to th
           return new Ok(
             await useRestApi({
               ...extra,
-              jwtScopes: getRequiredApiScopesForTool(searchContentTool.name),
+              jwtScopes: searchContentTool.requiredApiScopes,
               callback: async (restApi) => {
                 const maxResultLimit = configWithOverrides.getMaxResultLimit(
                   searchContentTool.name,
