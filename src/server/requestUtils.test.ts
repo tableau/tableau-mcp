@@ -1,4 +1,4 @@
-import { getToolNamesFromRequestBody } from './requestUtils.js';
+import { getToolNameFromRequestBody } from './requestUtils.js';
 
 describe('getToolNamesFromRequestBody', () => {
   it('should extract tool name from a valid CallToolRequest', () => {
@@ -9,28 +9,8 @@ describe('getToolNamesFromRequestBody', () => {
       params: { name: 'get-datasource-metadata', arguments: {} },
     };
 
-    const result = getToolNamesFromRequestBody(body);
-    expect(result).toEqual(['get-datasource-metadata']);
-  });
-
-  it('should extract multiple tool names from a batched request', () => {
-    const body = [
-      {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/call',
-        params: { name: 'get-datasource-metadata', arguments: {} },
-      },
-      {
-        jsonrpc: '2.0',
-        id: 2,
-        method: 'tools/call',
-        params: { name: 'list-datasources', arguments: {} },
-      },
-    ];
-
-    const result = getToolNamesFromRequestBody(body);
-    expect(result).toEqual(['get-datasource-metadata', 'list-datasources']);
+    const result = getToolNameFromRequestBody(body);
+    expect(result).toEqual('get-datasource-metadata');
   });
 
   it('should return empty array for non-tool requests', () => {
@@ -45,33 +25,13 @@ describe('getToolNamesFromRequestBody', () => {
       },
     };
 
-    const result = getToolNamesFromRequestBody(body);
-    expect(result).toEqual([]);
+    const result = getToolNameFromRequestBody(body);
+    expect(result).toEqual(undefined);
   });
 
   it('should return empty array for undefined body', () => {
-    const result = getToolNamesFromRequestBody(undefined);
-    expect(result).toEqual([]);
-  });
-
-  it('should deduplicate tool names', () => {
-    const body = [
-      {
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/call',
-        params: { name: 'get-datasource-metadata', arguments: {} },
-      },
-      {
-        jsonrpc: '2.0',
-        id: 2,
-        method: 'tools/call',
-        params: { name: 'get-datasource-metadata', arguments: {} },
-      },
-    ];
-
-    const result = getToolNamesFromRequestBody(body);
-    expect(result).toEqual(['get-datasource-metadata']);
+    const result = getToolNameFromRequestBody(undefined);
+    expect(result).toEqual(undefined);
   });
 
   it('should ignore requests with unrecognized tool names', () => {
@@ -82,7 +42,7 @@ describe('getToolNamesFromRequestBody', () => {
       params: { name: 'not-a-real-tool', arguments: {} },
     };
 
-    const result = getToolNamesFromRequestBody(body);
-    expect(result).toEqual([]);
+    const result = getToolNameFromRequestBody(body);
+    expect(result).toEqual(undefined);
   });
 });

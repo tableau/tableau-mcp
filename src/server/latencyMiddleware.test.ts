@@ -30,9 +30,19 @@ describe('latencyMiddleware', () => {
     vi.clearAllMocks();
   });
 
-  it('should record duration on response finish', () => {
+  it('should record duration for tool call requests', () => {
     const middleware = latencyMiddleware(provider);
-    const req = { method: 'POST', path: '/tableau-mcp', auth: validAuth };
+    const req = {
+      method: 'POST',
+      path: '/tableau-mcp',
+      auth: validAuth,
+      body: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'list-datasources', arguments: {} },
+      },
+    };
     const res = Object.assign(new EventEmitter(), { statusCode: 200 });
     const next = vi.fn();
 
@@ -49,6 +59,33 @@ describe('latencyMiddleware', () => {
         site_id: 'site-123',
       }),
     );
+  });
+
+  it('should not record duration for non-tool-call requests', () => {
+    const middleware = latencyMiddleware(provider);
+    const req = {
+      method: 'POST',
+      path: '/tableau-mcp',
+      auth: validAuth,
+      body: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'test', version: '1.0' },
+        },
+      },
+    };
+    const res = Object.assign(new EventEmitter(), { statusCode: 200 });
+    const next = vi.fn();
+
+    middleware(req as AuthenticatedRequest, res as any, next);
+    res.emit('finish');
+
+    expect(next).toHaveBeenCalled();
+    expect(provider.recordHistogram).not.toHaveBeenCalled();
   });
 
   it('should include tool_name when request body contains a tool call', () => {
@@ -82,7 +119,17 @@ describe('latencyMiddleware', () => {
 
   it('should record a non-negative duration', () => {
     const middleware = latencyMiddleware(provider);
-    const req = { method: 'GET', path: '/tableau-mcp', auth: validAuth };
+    const req = {
+      method: 'POST',
+      path: '/tableau-mcp',
+      auth: validAuth,
+      body: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'list-datasources', arguments: {} },
+      },
+    };
     const res = Object.assign(new EventEmitter(), { statusCode: 200 });
     const next = vi.fn();
 

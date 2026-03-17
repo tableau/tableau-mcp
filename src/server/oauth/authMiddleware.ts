@@ -2,7 +2,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import express, { RequestHandler } from 'express';
 
 import { getConfig } from '../../config.js';
-import { getToolNamesFromRequestBody } from '../requestUtils.js';
+import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
   formatScopes,
@@ -146,16 +146,14 @@ function getRequiredMcpScopesForRequest(body: unknown): string[] {
     return getSupportedMcpScopes();
   }
 
-  const toolNames = getToolNamesFromRequestBody(body);
-  if (toolNames.length === 0) {
+  const toolName = getToolNameFromRequestBody(body);
+  if (toolName === undefined) {
     return getSupportedMcpScopes();
   }
 
   const scopes = new Set<string>();
-  for (const toolName of toolNames) {
-    for (const scope of getRequiredScopesForTool(toolName)) {
-      scopes.add(scope);
-    }
+  for (const scope of getRequiredScopesForTool(toolName)) {
+    scopes.add(scope);
   }
 
   return Array.from(scopes);
@@ -170,16 +168,14 @@ function getRequiredApiScopesForRequest(body: unknown, includeApiScopes: boolean
     return getSupportedApiScopes();
   }
 
-  const toolNames = getToolNamesFromRequestBody(body);
-  if (toolNames.length === 0) {
+  const toolName = getToolNameFromRequestBody(body);
+  if (toolName === undefined) {
     return [];
   }
 
   const scopes = new Set<string>();
-  for (const toolName of toolNames) {
-    for (const scope of getRequiredApiScopesForTool(toolName)) {
-      scopes.add(scope);
-    }
+  for (const scope of getRequiredApiScopesForTool(toolName)) {
+    scopes.add(scope);
   }
 
   return Array.from(scopes);
