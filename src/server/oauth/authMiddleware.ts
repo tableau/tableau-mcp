@@ -1,8 +1,8 @@
-import { CallToolRequestSchema, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
-import { isToolName, ToolName } from '../../tools/toolName.js';
+import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
   formatScopes,
@@ -149,16 +149,14 @@ function getRequiredMcpScopesForRequest(body: unknown): string[] {
     return getSupportedMcpScopes();
   }
 
-  const toolNames = getToolNamesFromRequestBody(body);
-  if (toolNames.length === 0) {
+  const toolName = getToolNameFromRequestBody(body);
+  if (toolName === undefined) {
     return getSupportedMcpScopes();
   }
 
   const scopes = new Set<string>();
-  for (const toolName of toolNames) {
-    for (const scope of getRequiredScopesForTool(toolName)) {
-      scopes.add(scope);
-    }
+  for (const scope of getRequiredScopesForTool(toolName)) {
+    scopes.add(scope);
   }
 
   return Array.from(scopes);
@@ -173,36 +171,15 @@ function getRequiredApiScopesForRequest(body: unknown, includeApiScopes: boolean
     return getSupportedApiScopes();
   }
 
-  const toolNames = getToolNamesFromRequestBody(body);
-  if (toolNames.length === 0) {
+  const toolName = getToolNameFromRequestBody(body);
+  if (toolName === undefined) {
     return [];
   }
 
   const scopes = new Set<string>();
-  for (const toolName of toolNames) {
-    for (const scope of getRequiredApiScopesForTool(toolName)) {
-      scopes.add(scope);
-    }
+  for (const scope of getRequiredApiScopesForTool(toolName)) {
+    scopes.add(scope);
   }
 
   return Array.from(scopes);
-}
-
-function getToolNamesFromRequestBody(body: unknown): ToolName[] {
-  const requests = Array.isArray(body) ? body : [body];
-  const toolNames = new Set<ToolName>();
-
-  for (const request of requests) {
-    const callToolRequestResult = CallToolRequestSchema.safeParse(request);
-    if (!callToolRequestResult.success) {
-      continue;
-    }
-
-    const { name } = callToolRequestResult.data.params;
-    if (isToolName(name)) {
-      toolNames.add(name);
-    }
-  }
-
-  return Array.from(toolNames);
 }

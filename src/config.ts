@@ -74,6 +74,7 @@ export class Config {
     advertiseApiScopes: boolean;
   };
   telemetry: TelemetryConfig;
+  latencyMetricName: string;
   productTelemetryEndpoint: string;
   productTelemetryEnabled: boolean;
   isHyperforce: boolean;
@@ -134,6 +135,7 @@ export class Config {
       OAUTH_DISABLE_SCOPES: oauthDisableScopes,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
+      LATENCY_METRIC_NAME: latencyMetricName,
       PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
       IS_HYPERFORCE: isHyperforce,
@@ -259,6 +261,7 @@ export class Config {
       };
     }
 
+    this.latencyMetricName = latencyMetricName || 'http_server_1agg1_request_duration';
     this.productTelemetryEndpoint =
       productTelemetryEndpoint || 'https://prod.telemetry.tableausoftware.com';
     this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
