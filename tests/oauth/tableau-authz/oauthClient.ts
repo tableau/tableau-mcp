@@ -113,7 +113,7 @@ export class OAuthClient {
         });
         invariant(authCode, 'Authorization code is empty');
 
-        console.log('[OAuthClient] Authorization code received:', authCode.slice(0, 10) + '...');
+        console.log('[OAuthClient] Authorization code received:', authCode.slice(0, 3) + '...');
         console.log('[OAuthClient] Exchanging authorization code for access token');
         await transport.finishAuth(authCode);
 
@@ -238,11 +238,13 @@ export class OAuthClient {
     } else if (content.type === 'image') {
       const data = content.data;
       invariant(typeof data === 'string');
-      const result = schema.safeParse(JSON.parse(data));
+      const result = schema.safeParse(data);
       if (!result.success) {
         throw new Error(`Failed to parse tool result in the expected format: ${data}`);
       }
       return result.data;
+    } else {
+      throw new Error(`Unknown content type: ${content.type}`);
     }
   }
 
