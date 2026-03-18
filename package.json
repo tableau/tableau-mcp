@@ -20,6 +20,7 @@
   },
   "exports": {
     ".": "./build/index.js",
+    "./experimental": "./build/index-experimental.js",
     "./tracing": "./build/telemetry/tracing.js"
   },
   "scripts": {
