@@ -1,20 +1,8 @@
 import { pulseInsightBriefResponseSchema } from '../../../../src/sdks/tableau/types/pulse';
-import { getOAuthClient } from '../oauthClient';
 import { expect, test } from './base';
 import { getSuperstoreDatasource, getTableauMcpPulseDefinition } from './testEnv';
 
 test.describe('generate-pulse-insight-brief', () => {
-  const client = getOAuthClient();
-
-  test.afterEach(async () => {
-    await client.close();
-  });
-
-  test.afterAll(async () => {
-    await client.resetConsent();
-    await client.revokeToken();
-  });
-
   // This test requires Tableau AI to be enabled on the site
   test('generate pulse insight brief', async ({ client }) => {
     const superstore = getSuperstoreDatasource();
