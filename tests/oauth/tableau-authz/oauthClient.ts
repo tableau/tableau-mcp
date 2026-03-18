@@ -230,13 +230,19 @@ export class OAuthClient {
     if (content.type === 'text') {
       const text = content.text;
       invariant(typeof text === 'string');
-      const response = schema.parse(JSON.parse(text));
-      return response;
+      const result = schema.safeParse(JSON.parse(text));
+      if (!result.success) {
+        throw new Error(`Failed to parse tool result in the expected format: ${text}`);
+      }
+      return result.data;
     } else if (content.type === 'image') {
       const data = content.data;
       invariant(typeof data === 'string');
-      const response = schema.parse(data);
-      return response;
+      const result = schema.safeParse(JSON.parse(data));
+      if (!result.success) {
+        throw new Error(`Failed to parse tool result in the expected format: ${data}`);
+      }
+      return result.data;
     }
   }
 
