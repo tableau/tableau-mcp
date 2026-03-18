@@ -27,6 +27,7 @@ describe('initializeTelemetry', () => {
     mocks.MockNoOpTelemetryProvider.mockImplementation(() => ({
       initialize: vi.fn(),
       recordMetric: vi.fn(),
+      recordHistogram: vi.fn(),
     }));
   });
 

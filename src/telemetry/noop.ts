@@ -16,4 +16,8 @@ export class NoOpTelemetryProvider implements TelemetryProvider {
   recordMetric(_name: string, _value: number, _attributes: TelemetryAttributes): void {
     // No-op
   }
+
+  recordHistogram(_name: string, _value: number, _attributes: TelemetryAttributes): void {
+    // No-op
+  }
 }
