@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { getConfig } from './config.js';
 import { isLoggingLevel, log, setLogLevel, setServerLogger, writeToStderr } from './logging/log.js';
 import { ServerLogger } from './logging/serverLogger.js';
+import { getMetaEnv } from './metaEnv.js';
 import { Server, serverName, serverVersion } from './server.js';
 import { startExpressServer } from './server/express.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
@@ -29,6 +30,7 @@ async function startServer(): Promise<void> {
 
       setLogLevel(server, logLevel);
       log.info(server, `${server.name} v${server.version} running on stdio`);
+      log.info(server, `Build configuration: ${getMetaEnv().buildConfiguration}`);
       break;
     }
     case 'http': {
@@ -44,6 +46,8 @@ async function startServer(): Promise<void> {
       console.log(
         `${serverName} v${serverVersion} ${config.disableSessionManagement ? 'stateless ' : ''}streamable HTTP server available at ${url}`,
       );
+      // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
+      console.log(`Build configuration: ${getMetaEnv().buildConfiguration}`);
       break;
     }
   }
