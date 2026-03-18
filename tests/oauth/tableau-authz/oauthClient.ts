@@ -193,7 +193,7 @@ export class OAuthClient {
     },
   ): Promise<z.infer<Z>> {
     console.log('[OAuthClient] Calling tool:', toolName);
-    console.log('[OAuthClient] Tool arguments:', toolArgs);
+    console.log('[OAuthClient] Tool arguments:', JSON.stringify(toolArgs, null, 2));
     contentType = contentType ?? 'text';
     toolArgs = toolArgs ?? {};
 
