@@ -1,6 +1,6 @@
 import { BuildOptions } from 'esbuild';
 
-import { BuildConfiguration } from './build';
+import { BuildConfiguration } from './buildConfigurations';
 
 type GlobalIdentifier = {
   name: string;

@@ -1,4 +1,4 @@
-import { BuildConfiguration, isBuildConfiguration } from './scripts/build';
+import { BuildConfiguration, isBuildConfiguration } from './scripts/buildConfigurations';
 
 class MetaEnv {
   buildConfiguration: BuildConfiguration;

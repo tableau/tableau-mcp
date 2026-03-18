@@ -3,15 +3,10 @@
 import { build, BuildOptions, BuildResult } from 'esbuild';
 import { chmod, mkdir, rm } from 'fs/promises';
 
+import { buildConfigurations } from './buildConfigurations';
 import { globalIdentifiers } from './globalIndentifiers';
 
 const dev = process.argv.includes('--dev');
-
-export const buildConfigurations = ['default', 'experimental'] as const;
-export type BuildConfiguration = (typeof buildConfigurations)[number];
-export function isBuildConfiguration(value: unknown): value is BuildConfiguration {
-  return buildConfigurations.some((c) => c === value);
-}
 
 (async () => {
   await rm('./build', { recursive: true, force: true });
