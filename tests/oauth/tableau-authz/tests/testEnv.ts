@@ -7,7 +7,7 @@ import {
   getWorkbook,
   PulseDefinition,
   Workbook,
-} from '../../../constants';
+} from '../../../constants.js';
 
 export function getSuperstoreDatasource(): Datasource {
   const { SERVER, TEST_SITE_NAME } = z

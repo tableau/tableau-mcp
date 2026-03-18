@@ -1,6 +1,6 @@
-import { workbookSchema } from '../../../../src/sdks/tableau/types/workbook';
-import { expect, test } from './base';
-import { getSuperstoreWorkbook } from './testEnv';
+import { workbookSchema } from '../../../../src/sdks/tableau/types/workbook.js';
+import { expect, test } from './base.js';
+import { getSuperstoreWorkbook } from './testEnv.js';
 
 test.describe('get-workbook', () => {
   test('get workbook', async ({ client }) => {

@@ -1,4 +1,4 @@
-import { Flow } from './flow';
+import { Flow } from './flow.js';
 
 export class ConsentFlow extends Flow {
   grantConsentIfNecessary = async (): Promise<void> => {

@@ -1,5 +1,5 @@
-import { toolNames } from '../../../../src/tools/toolName';
-import { expect, test } from './base';
+import { toolNames } from '../../../../src/tools/toolName.js';
+import { expect, test } from './base.js';
 
 test.describe('oauth', () => {
   test('list tools', async ({ client }) => {

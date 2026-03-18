@@ -1,9 +1,9 @@
 import { expect, test as base } from '@playwright/test';
 
-import { getOAuthClientFixture } from '../fixtures/connectOAuthClient';
-import { getEnvFixture } from '../fixtures/env';
-import { OAuthClient } from '../oauthClient';
-import { Env } from '../testEnv';
+import { getOAuthClientFixture } from '../fixtures/connectOAuthClient.js';
+import { getEnvFixture } from '../fixtures/env.js';
+import { OAuthClient } from '../oauthClient.js';
+import { Env } from '../testEnv.js';
 
 type TestFixtures = {
   env: Env;

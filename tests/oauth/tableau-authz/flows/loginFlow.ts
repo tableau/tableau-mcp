@@ -1,6 +1,6 @@
 import { Locator } from '@playwright/test';
 
-import { Flow } from './flow';
+import { Flow } from './flow.js';
 
 export class LoginFlow extends Flow {
   get usernameTextbox(): Locator {

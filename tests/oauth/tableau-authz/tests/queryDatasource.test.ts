@@ -1,8 +1,8 @@
-import z from 'zod';
+import { z } from 'zod';
 
-import { queryOutputSchema } from '../../../../src/sdks/tableau/apis/vizqlDataServiceApi';
-import { expect, test } from './base';
-import { getSuperstoreDatasource } from './testEnv';
+import { queryOutputSchema } from '../../../../src/sdks/tableau/apis/vizqlDataServiceApi.js';
+import { expect, test } from './base.js';
+import { getSuperstoreDatasource } from './testEnv.js';
 
 test.describe('query-datasource', () => {
   test('query datasource', async ({ client }) => {

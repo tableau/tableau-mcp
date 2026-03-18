@@ -1,7 +1,7 @@
-import z from 'zod';
+import { z } from 'zod';
 
-import { viewSchema } from '../../../../src/sdks/tableau/types/view';
-import { expect, test } from './base';
+import { viewSchema } from '../../../../src/sdks/tableau/types/view.js';
+import { expect, test } from './base.js';
 
 // Skip until Content Exploration issues are resolved
 test.describe.skip('list-views', () => {

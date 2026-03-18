@@ -1,6 +1,6 @@
 import { Browser, TestFixture } from '@playwright/test';
 
-import { Env, getEnv } from '../testEnv';
+import { Env, getEnv } from '../testEnv.js';
 
 /**
  * This is a test fixture that provides validated environment variables to tests.

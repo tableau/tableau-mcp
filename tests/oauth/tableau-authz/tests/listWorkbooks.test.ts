@@ -1,8 +1,8 @@
-import z from 'zod';
+import { z } from 'zod';
 
-import { workbookSchema } from '../../../../src/sdks/tableau/types/workbook';
-import { expect, test } from './base';
-import { getSuperstoreWorkbook } from './testEnv';
+import { workbookSchema } from '../../../../src/sdks/tableau/types/workbook.js';
+import { expect, test } from './base.js';
+import { getSuperstoreWorkbook } from './testEnv.js';
 
 // Skip until Content Exploration issues are resolved
 test.describe.skip('list-workbooks', () => {

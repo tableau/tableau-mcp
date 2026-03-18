@@ -1,9 +1,9 @@
 import { Browser, Page, WorkerFixture } from '@playwright/test';
 
-import { ConsentFlow } from '../flows/consentFlow';
-import { LoginFlow } from '../flows/loginFlow';
-import { GetAuthZCodeFn, getOAuthClient, OAuthClient } from '../oauthClient';
-import { Env, getEnv } from '../testEnv';
+import { ConsentFlow } from '../flows/consentFlow.js';
+import { LoginFlow } from '../flows/loginFlow.js';
+import { GetAuthZCodeFn, getOAuthClient, OAuthClient } from '../oauthClient.js';
+import { Env, getEnv } from '../testEnv.js';
 
 /**
  * This is a worker fixture that provides an authenticated MCP OAuth client to each test.
@@ -28,6 +28,7 @@ export const getOAuthClientFixture: WorkerFixture<OAuthClient, { browser: Browse
   // Reset consent and revoke token to clean up after the tests complete
   await client.resetConsent();
   await client.revokeToken();
+  await client.close();
 };
 
 async function connectOAuthClient({

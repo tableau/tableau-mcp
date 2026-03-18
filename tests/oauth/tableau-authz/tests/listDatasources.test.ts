@@ -1,7 +1,7 @@
-import z from 'zod';
+import { z } from 'zod';
 
-import { dataSourceSchema } from '../../../../src/sdks/tableau/types/dataSource';
-import { expect, test } from './base';
+import { dataSourceSchema } from '../../../../src/sdks/tableau/types/dataSource.js';
+import { expect, test } from './base.js';
 
 // Skip until Content Exploration issues are resolved
 test.describe.skip('list-datasources', () => {

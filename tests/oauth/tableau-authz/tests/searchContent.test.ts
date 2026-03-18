@@ -1,6 +1,6 @@
-import z from 'zod';
+import { z } from 'zod';
 
-import { expect, test } from './base';
+import { expect, test } from './base.js';
 
 test.describe('search-content', () => {
   test('search content', async ({ client }) => {
