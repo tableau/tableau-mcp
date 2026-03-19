@@ -49,7 +49,7 @@
     "version:major": "npm version major --no-git-tag-version",
     "version:minor": "npm version minor --no-git-tag-version",
     "version:patch": "npm version patch --no-git-tag-version",
-    "docs:start": "npm run start --prefix docs"
+    "validate:slack-mcp": "tsx scripts/validate-slack-mcp-flow.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
