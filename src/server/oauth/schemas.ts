@@ -21,7 +21,7 @@ export const mcpTokenSchema = z
         grant_type: z.literal('authorization_code'),
         code: requiredString('code'),
         redirect_uri: requiredString('redirect_uri'),
-        code_verifier: requiredString('code_verifier'),
+        code_verifier: z.string().optional(),
       }),
       z.object({
         grant_type: z.literal('refresh_token'),
@@ -61,7 +61,7 @@ export const mcpTokenSchema = z
         grantType: data.grant_type,
         code: data.code,
         redirectUri: data.redirect_uri,
-        codeVerifier: data.code_verifier,
+        codeVerifier: data.code_verifier ?? '',
         ...clientIdSecretPair,
       };
     }

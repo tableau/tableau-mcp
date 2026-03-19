@@ -81,14 +81,20 @@ export function token(
           }
 
           // Verify PKCE
-          const challengeFromVerifier = generateCodeChallenge(codeVerifier);
-          if (challengeFromVerifier !== authCode.codeChallenge) {
-            console.error('Invalid code verifier:', challengeFromVerifier, authCode.codeChallenge);
-            res.status(400).json({
-              error: 'invalid_grant',
-              error_description: 'Invalid code verifier',
-            });
-            return;
+          if (codeVerifier) {
+            const challengeFromVerifier = generateCodeChallenge(codeVerifier);
+            if (challengeFromVerifier !== authCode.codeChallenge) {
+              console.error(
+                'Invalid code verifier:',
+                challengeFromVerifier,
+                authCode.codeChallenge,
+              );
+              res.status(400).json({
+                error: 'invalid_grant',
+                error_description: 'Invalid code verifier',
+              });
+              return;
+            }
           }
 
           // Generate tokens
