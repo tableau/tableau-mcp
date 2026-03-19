@@ -1,0 +1,35 @@
+{
+  "name": "Tableau MCP Server",
+  "description": "A Model Context Protocol (MCP) Server for interacting with the Tableau platform",
+  "repository": "https://github.com/tableau/tableau-mcp",
+  "success_url": "/tableau-mcp",
+  "keywords": ["node", "mcp", "tableau"],
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "env": {
+    "SERVER": {
+      "description": "The URL of the Tableau server to connect to",
+      "required": true
+    },
+    "SITE_NAME": {
+      "description": "The name of the Tableau site to connect to",
+      "required": true
+    },
+    "PAT_NAME": {
+      "description": "The name of the Tableau Personal Access Token to use for authentication",
+      "required": true
+    },
+    "PAT_VALUE": {
+      "description": "The value of the Tableau Personal Access Token to use for authentication",
+      "required": true
+    },
+    "TRANSPORT": {
+      "description": "The MCP transport type to use for the server. Must be http.",
+      "required": true,
+      "value": "http"
+    }
+  }
+}

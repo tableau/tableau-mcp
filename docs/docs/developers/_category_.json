@@ -1,0 +1,8 @@
+{
+  "label": "Developers",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "description": "Information for developers working on or using the Tableau MCP project, including building from source, testing, debugging, contributing, and using development tools."
+  }
+}

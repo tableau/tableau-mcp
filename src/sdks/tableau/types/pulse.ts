@@ -5,9 +5,9 @@ const pulseMetadataSchema = z.object({
   description: z.string(),
   id: z.string(),
   schema_version: z.string(),
-  metric_version: z.number(),
-  definition_version: z.number(),
-  last_updated_user: z.object({ id: z.string() }),
+  metric_version: z.coerce.number(),
+  definition_version: z.coerce.number(),
+  last_updated_user: z.object({ id: z.string() }).optional(),
 });
 
 const pulseDatasourceSchema = z.object({
@@ -34,8 +34,8 @@ const pulseBasicSpecificationSchema = z.object({
 
 const pulseSpecificationSchema = z.object({
   datasource: pulseDatasourceSchema,
-  basic_specification: pulseBasicSpecificationSchema,
-  viz_state_specification: z.object({ viz_state_string: z.string() }),
+  basic_specification: pulseBasicSpecificationSchema.optional(),
+  viz_state_specification: z.object({ viz_state_string: z.string() }).optional(),
   is_running_total: z.boolean(),
 });
 
@@ -64,9 +64,10 @@ export const pulseMetricSchema = z.object({
   definition_id: z.string(),
   is_default: z.boolean(),
   schema_version: z.string(),
-  metric_version: z.number(),
+  metric_version: z.coerce.number(),
   goals: pulseGoalsSchema.optional(),
   is_followed: z.boolean(),
+  datasource_luid: z.string(),
 });
 
 export const pulseRepresentationOptionsSchema = z.object({
@@ -93,16 +94,20 @@ export const comparisonSchema = z.object({
   comparisons: z.array(
     z.object({
       compare_config: z.object({ comparison: z.string() }),
-      index: z.number(),
+      index: z.coerce.number(),
     }),
   ),
 });
 
 export const datasourceGoalsSchema = z.array(
   z.object({
-    basic_specification: pulseBasicSpecificationSchema,
-    viz_state_specification: z.object({ viz_state_string: z.string() }),
+    basic_specification: pulseBasicSpecificationSchema.optional(),
+    threshold_basic_specification: pulseBasicSpecificationSchema.optional(),
+    threshold_viz_state_specification: z.object({ viz_state_string: z.string() }).optional(),
+    viz_state_specification: z.object({ viz_state_string: z.string() }).optional(),
     minimum_granularity: z.string(),
+    benchmark_sentiment_type: z.string(),
+    name: z.string(),
   }),
 );
 
@@ -111,7 +116,7 @@ export const pulseMetricDefinitionSchema = z.object({
   specification: pulseSpecificationSchema,
   extension_options: pulseExtensionOptionsSchema,
   metrics: z.array(pulseMetricSchema),
-  total_metrics: z.number(),
+  total_metrics: z.coerce.number(),
   representation_options: pulseRepresentationOptionsSchema,
   insights_options: insightOptionsSchema,
   comparisons: comparisonSchema,
@@ -121,6 +126,14 @@ export const pulseMetricDefinitionSchema = z.object({
 export const pulseMetricSubscriptionSchema = z.object({
   id: z.string(),
   metric_id: z.string(),
+});
+
+export const pulseCorrelationCandidateDefinitionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  specification: pulseSpecificationSchema,
+  extension_options: pulseExtensionOptionsSchema,
+  representation_options: pulseRepresentationOptionsSchema,
 });
 
 export const languageEnumSchema = z.enum([
@@ -264,6 +277,66 @@ export const outputFormatEnumSchema = z.enum([
 ]);
 export type OutputFormatEnumType = z.infer<typeof outputFormatEnumSchema>;
 
+// Tableau datetime format: YYYY-MM-DD HH:MM:SS or YYYY-MM-DD
+// If no time is specified, midnight (00:00:00) is used
+export const tableauDateTimeSchema = z
+  .string()
+  .regex(
+    /^(\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?)?$/,
+    'Format must be YYYY-MM-DD HH:MM:SS, YYYY-MM-DD, or empty. If no time is specified, midnight (00:00:00) is used.',
+  );
+
+export const actionTypeEnumSchema = z.enum([
+  'ACTION_TYPE_UNDEFINED',
+  'ACTION_TYPE_ANSWER',
+  'ACTION_TYPE_SUMMARIZE',
+  'ACTION_TYPE_ADVISE',
+]);
+export type ActionTypeEnumType = z.infer<typeof actionTypeEnumSchema>;
+
+export const roleEnumSchema = z.enum(['ROLE_UNDEFINED', 'ROLE_USER', 'ROLE_ASSISTANT']);
+export type RoleEnumType = z.infer<typeof roleEnumSchema>;
+
+export const metricGroupContextSchema = z.array(
+  z.object({
+    metadata: z.object({
+      name: z.string(),
+      metric_id: z.string(),
+      definition_id: z.string(),
+    }),
+    metric: z.object({
+      definition: pulseSpecificationSchema,
+      metric_specification: pulseMetricSpecificationSchema,
+      extension_options: pulseExtensionOptionsSchema,
+      representation_options: pulseRepresentationOptionsSchema,
+      insights_options: insightOptionsSchema,
+      goals: z
+        .object({
+          datasource_goals: datasourceGoalsSchema.optional(),
+          metric_goals: pulseGoalsSchema.optional(),
+        })
+        .optional(),
+      candidates: z.array(pulseCorrelationCandidateDefinitionSchema),
+    }),
+  }),
+);
+
+export const messagesSchema = z.object({
+  action_type: actionTypeEnumSchema,
+  content: z.string(),
+  metric_group_context: metricGroupContextSchema,
+  metric_group_context_resolved: z.boolean(),
+  role: roleEnumSchema,
+});
+
+export const pulseInsightBriefRequestSchema = z.object({
+  language: languageEnumSchema,
+  locale: localeEnumSchema,
+  messages: z.array(messagesSchema),
+  now: tableauDateTimeSchema.optional(),
+  time_zone: z.string().optional(),
+});
+
 export const pulseBundleRequestSchema = z.object({
   bundle_request: z.object({
     version: z.number(),
@@ -297,21 +370,67 @@ export const pulseBundleRequestSchema = z.object({
   }),
 });
 
+export const insightSchema = z.object({
+  type: z.string(),
+  version: z.number(),
+  content: z.string().optional(),
+  markup: z.string().optional(),
+  viz: z.any().optional(),
+  facts: z.any().optional(),
+  characterization: z.string().optional(),
+  question: z.string(),
+  score: z.number(),
+});
+
+export const sourceInsightSchema = z
+  .object({
+    type: z.string(),
+    version: z.number(),
+    content: z.string(),
+    markup: z.string(),
+    viz: z.any(),
+    facts: z.any(),
+    characterization: z.string(),
+    question: z.string(),
+    score: z.number(),
+    id: z.string(),
+    generation_id: z.string(),
+    insight_feedback_metadata: z.object({
+      candidate_definition_id: z.string(),
+      dimension_hash: z.string(),
+      score: z.number(),
+      type: z.string(),
+    }),
+    table: z.object({
+      columns: z.array(
+        z.object({
+          label: z.string(),
+        }),
+      ),
+      rows: z.array(
+        z.object({
+          entries: z.array(
+            z.object({
+              error: z.object({
+                code: z.string(),
+                message: z.string(),
+              }),
+              value: z.object({
+                formatted_value: z.string(),
+              }),
+            }),
+          ),
+        }),
+      ),
+    }),
+  })
+  .partial();
+
 export const popcBanInsightGroupSchema = z.object({
   type: z.string(),
   insights: z.array(
     z.object({
-      result: z.object({
-        type: z.string(),
-        version: z.number(),
-        content: z.string().optional(),
-        markup: z.string().optional(),
-        viz: z.any().optional(),
-        facts: z.any().optional(),
-        characterization: z.string().optional(),
-        question: z.string(),
-        score: z.number(),
-      }),
+      result: insightSchema,
       insight_type: z.string(),
     }),
   ),
@@ -322,8 +441,8 @@ export const popcBanInsightGroupSchema = z.object({
         markup: z.string().optional(),
         viz: z.any().optional(),
         generation_id: z.string(),
-        timestamp: z.string(),
-        last_attempted_timestamp: z.string(),
+        timestamp: z.string().optional(),
+        last_attempted_timestamp: z.string().optional(),
       }),
     }),
   ),
@@ -338,6 +457,23 @@ export const pulseBundleResponseSchema = z.object({
     }),
   }),
 });
+
+export const pulseInsightBriefResponseSchema = z.object({
+  follow_up_questions: z.array(
+    z.object({
+      content: z.string(),
+      metric_group_context_resolved: z.boolean().optional(),
+    }),
+  ),
+  generation_id: z.string(),
+  group_context: metricGroupContextSchema,
+  markup: z.string(),
+  not_enough_information: z.boolean(),
+  source_insights: z.array(sourceInsightSchema),
+});
+
+export type PulseBundleResponse = z.infer<typeof pulseBundleResponseSchema>;
+export type PulseInsightBriefResponse = z.infer<typeof pulseInsightBriefResponseSchema>;
 
 export const pulseInsightBundleTypeEnum = ['ban', 'springboard', 'basic', 'detail'] as const;
 export type PulseInsightBundleType = (typeof pulseInsightBundleTypeEnum)[number];

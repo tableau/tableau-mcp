@@ -1,11 +1,26 @@
 import { CorsOptions } from 'cors';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 
-import { isToolName, ToolName } from './tools/toolName.js';
+import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport, TransportName } from './transports.js';
+import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
 
-const authTypes = ['pat', 'direct-trust'] as const;
+const __dirname = getDirname();
+
+export const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
+export const ONE_HOUR_IN_MS = 60 * 60 * 1000;
+export const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
+export const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
+export const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
+
+const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
+
+function isAuthType(auth: unknown): auth is AuthType {
+  return authTypes.some((type) => type === auth);
+}
 
 export class Config {
   auth: AuthType;
@@ -18,21 +33,54 @@ export class Config {
   siteName: string;
   patName: string;
   patValue: string;
-  jwtSubClaim: string;
+  jwtUsername: string;
   connectedAppClientId: string;
   connectedAppSecretId: string;
   connectedAppSecretValue: string;
+  uatTenantId: string;
+  uatIssuer: string;
+  uatUsernameClaimName: string;
+  uatPrivateKey: string;
+  uatKeyId: string;
   jwtAdditionalPayload: string;
   datasourceCredentials: string;
   defaultLogLevel: string;
   disableLogMasking: boolean;
-  includeTools: Array<ToolName>;
-  excludeTools: Array<ToolName>;
-  maxResultLimit: number | null;
-  disableQueryDatasourceFilterValidation: boolean;
+  maxRequestTimeoutMs: number;
+  disableSessionManagement: boolean;
+  enableServerLogging: boolean;
+  serverLogDirectory: string;
+  tableauServerVersionCheckIntervalInHours: number;
+  passthroughAuthUserSessionCheckIntervalInMinutes: number;
+  mcpSiteSettingsCheckIntervalInMinutes: number;
+  enableMcpSiteSettings: boolean;
+  enablePassthroughAuth: boolean;
+  oauth: {
+    enabled: boolean;
+    embeddedAuthzServer: boolean;
+    issuer: string;
+    redirectUri: string;
+    resourceUri: string;
+    lockSite: boolean;
+    jwePrivateKey: string;
+    jwePrivateKeyPath: string;
+    jwePrivateKeyPassphrase: string | undefined;
+    authzCodeTimeoutMs: number;
+    accessTokenTimeoutMs: number;
+    refreshTokenTimeoutMs: number;
+    clientIdSecretPairs: Record<string, string> | null;
+    dnsServers: string[];
+    enforceScopes: boolean;
+    advertiseApiScopes: boolean;
+  };
+  telemetry: TelemetryConfig;
+  latencyMetricName: string;
+  productTelemetryEndpoint: string;
+  productTelemetryEnabled: boolean;
+  isHyperforce: boolean;
 
   constructor() {
-    const cleansedVars = removeClaudeDesktopExtensionUserConfigTemplates(process.env);
+    const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
     const {
       AUTH: auth,
       SERVER: server,
@@ -48,56 +96,236 @@ export class Config {
       CONNECTED_APP_CLIENT_ID: clientId,
       CONNECTED_APP_SECRET_ID: secretId,
       CONNECTED_APP_SECRET_VALUE: secretValue,
+      UAT_TENANT_ID: uatTenantId,
+      UAT_ISSUER: uatIssuer,
+      UAT_USERNAME_CLAIM_NAME: uatUsernameClaimName,
+      UAT_USERNAME_CLAIM: uatUsernameClaim,
+      UAT_PRIVATE_KEY: uatPrivateKey,
+      UAT_PRIVATE_KEY_PATH: uatPrivateKeyPath,
+      UAT_KEY_ID: uatKeyId,
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
-      INCLUDE_TOOLS: includeTools,
-      EXCLUDE_TOOLS: excludeTools,
-      MAX_RESULT_LIMIT: maxResultLimit,
-      DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION: disableQueryDatasourceFilterValidation,
+      MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
+      DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
+      ENABLE_SERVER_LOGGING: enableServerLogging,
+      SERVER_LOG_DIRECTORY: serverLogDirectory,
+      TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
+      PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES:
+        passthroughAuthUserSessionCheckIntervalInMinutes,
+      MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: mcpSiteSettingsCheckIntervalInMinutes,
+      ENABLE_MCP_SITE_SETTINGS: enableMcpSiteSettings,
+      ENABLE_PASSTHROUGH_AUTH: enablePassthroughAuth,
+      DANGEROUSLY_DISABLE_OAUTH: disableOauth,
+      OAUTH_EMBEDDED_AUTHZ_SERVER: oauthEmbeddedAuthzServer,
+      OAUTH_ISSUER: oauthIssuer,
+      OAUTH_LOCK_SITE: oauthLockSite,
+      OAUTH_JWE_PRIVATE_KEY: oauthJwePrivateKey,
+      OAUTH_JWE_PRIVATE_KEY_PATH: oauthJwePrivateKeyPath,
+      OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
+      OAUTH_RESOURCE_URI: oauthResourceUri,
+      OAUTH_REDIRECT_URI: redirectUri,
+      OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
+      OAUTH_CIMD_DNS_SERVERS: dnsServers,
+      ADVERTISE_API_SCOPES: advertiseApiScopes,
+      OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
+      OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
+      OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
+      OAUTH_DISABLE_SCOPES: oauthDisableScopes,
+      TELEMETRY_PROVIDER: telemetryProvider,
+      TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
+      LATENCY_METRIC_NAME: latencyMetricName,
+      PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
+      PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
+      IS_HYPERFORCE: isHyperforce,
     } = cleansedVars;
 
-    const defaultPort = 3927;
-    const httpPort = cleansedVars[httpPortEnvVarName?.trim() || 'PORT'] || defaultPort.toString();
-    const httpPortNumber = parseInt(httpPort, 10);
+    let jwtUsername = '';
 
     this.siteName = siteName ?? '';
-    this.auth = authTypes.find((type) => type === auth) ?? 'pat';
-    this.transport = isTransport(transport) ? transport : 'stdio';
+
     this.sslKey = sslKey?.trim() ?? '';
     this.sslCert = sslCert?.trim() ?? '';
-    this.httpPort = isNaN(httpPortNumber) ? defaultPort : httpPortNumber;
+    this.httpPort = parseNumber(cleansedVars[httpPortEnvVarName?.trim() || 'PORT'], {
+      defaultValue: 3927,
+      minValue: 1,
+      maxValue: 65535,
+    });
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
-    this.disableQueryDatasourceFilterValidation = disableQueryDatasourceFilterValidation === 'true';
+    this.disableSessionManagement = disableSessionManagement === 'true';
+    this.enableServerLogging = enableServerLogging === 'true';
+    this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
 
-    const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
-    this.maxResultLimit =
-      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
+    this.tableauServerVersionCheckIntervalInHours = parseNumber(
+      tableauServerVersionCheckIntervalInHours,
+      {
+        defaultValue: 1,
+        minValue: 1,
+        maxValue: 24 * 7, // 7 days
+      },
+    );
 
-    this.includeTools = includeTools
-      ? includeTools
-          .split(',')
-          .map((s) => s.trim())
-          .filter(isToolName)
-      : [];
+    this.passthroughAuthUserSessionCheckIntervalInMinutes = parseNumber(
+      passthroughAuthUserSessionCheckIntervalInMinutes,
+      {
+        defaultValue: 10,
+        minValue: 0,
+        maxValue: 60 * 24, // 24 hours
+      },
+    );
 
-    this.excludeTools = excludeTools
-      ? excludeTools
-          .split(',')
-          .map((s) => s.trim())
-          .filter(isToolName)
-      : [];
+    this.mcpSiteSettingsCheckIntervalInMinutes = parseNumber(
+      mcpSiteSettingsCheckIntervalInMinutes,
+      {
+        defaultValue: 10,
+        minValue: 1,
+        maxValue: 60 * 24, // 24 hours
+      },
+    );
 
-    if (this.includeTools.length > 0 && this.excludeTools.length > 0) {
-      throw new Error('Cannot specify both INCLUDE_TOOLS and EXCLUDE_TOOLS');
+    this.enableMcpSiteSettings = enableMcpSiteSettings === 'true';
+    this.enablePassthroughAuth = enablePassthroughAuth === 'true';
+    const disableOauthOverride = disableOauth === 'true';
+    const disableScopes = oauthDisableScopes === 'true';
+    const enforceScopes = !disableScopes;
+    const embeddedAuthzServer = oauthEmbeddedAuthzServer !== 'false';
+
+    this.oauth = {
+      enabled: disableOauthOverride ? false : !!oauthIssuer,
+      embeddedAuthzServer,
+      issuer: oauthIssuer ?? '',
+      resourceUri: oauthResourceUri ?? `http://127.0.0.1:${this.httpPort}`,
+      redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
+      lockSite: oauthLockSite !== 'false', // Site locking is enabled by default
+      jwePrivateKey: oauthJwePrivateKey ?? '',
+      jwePrivateKeyPath: oauthJwePrivateKeyPath ?? '',
+      jwePrivateKeyPassphrase: oauthJwePrivateKeyPassphrase || undefined,
+      dnsServers: dnsServers
+        ? dnsServers.split(',').map((ip) => ip.trim())
+        : ['1.1.1.1', '1.0.0.1' /* Cloudflare public DNS */],
+      authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
+        defaultValue: TEN_MINUTES_IN_MS,
+        minValue: 0,
+        maxValue: ONE_HOUR_IN_MS,
+      }),
+      accessTokenTimeoutMs: parseNumber(accessTokenTimeoutMs, {
+        defaultValue: ONE_HOUR_IN_MS,
+        minValue: 0,
+        maxValue: THIRTY_DAYS_IN_MS,
+      }),
+      refreshTokenTimeoutMs: parseNumber(refreshTokenTimeoutMs, {
+        defaultValue: THIRTY_DAYS_IN_MS,
+        minValue: 0,
+        maxValue: ONE_YEAR_IN_MS,
+      }),
+      clientIdSecretPairs: oauthClientIdSecretPairs
+        ? oauthClientIdSecretPairs.split(',').reduce<Record<string, string>>((acc, curr) => {
+            const [clientId, secret] = curr.split(':');
+            if (clientId && secret) {
+              acc[clientId] = secret;
+            }
+            return acc;
+          }, {})
+        : null,
+      enforceScopes,
+      advertiseApiScopes: advertiseApiScopes === 'true',
+    };
+
+    if (
+      this.oauth.clientIdSecretPairs &&
+      Object.keys(this.oauth.clientIdSecretPairs).length === 0
+    ) {
+      throw new Error(
+        `OAUTH_CLIENT_ID_SECRET_PAIRS is in an invalid format: ${oauthClientIdSecretPairs}. Should be in the format: clientId:secret`,
+      );
     }
 
-    invariant(server, 'The environment variable SERVER is not set');
-    validateServer(server);
+    const parsedProvider = isTelemetryProvider(telemetryProvider) ? telemetryProvider : 'noop';
+    if (parsedProvider === 'custom') {
+      if (!telemetryProviderConfig) {
+        throw new Error(
+          'TELEMETRY_PROVIDER_CONFIG is required when TELEMETRY_PROVIDER is "custom"',
+        );
+      }
+      this.telemetry = {
+        provider: 'custom',
+        providerConfig: providerConfigSchema.parse(JSON.parse(telemetryProviderConfig)),
+      };
+    } else {
+      this.telemetry = {
+        provider: 'noop',
+      };
+    }
+
+    this.latencyMetricName = latencyMetricName || 'http_server_1agg1_request_duration';
+    this.productTelemetryEndpoint =
+      productTelemetryEndpoint || 'https://prod.telemetry.tableausoftware.com';
+    this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
+    this.isHyperforce = isHyperforce === 'true';
+
+    this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
+    this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
+
+    if (this.transport === 'http' && !disableOauthOverride && !this.oauth.issuer) {
+      throw new Error(
+        'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true"',
+      );
+    }
+
+    if (this.auth === 'oauth') {
+      if (disableOauthOverride) {
+        throw new Error('When AUTH is "oauth", DANGEROUSLY_DISABLE_OAUTH cannot be "true"');
+      }
+
+      if (!this.oauth.issuer) {
+        throw new Error('When AUTH is "oauth", OAUTH_ISSUER must be set');
+      }
+    } else {
+      invariant(server, 'The environment variable SERVER is not set');
+      validateServer(server);
+    }
+
+    if (this.oauth.enabled) {
+      if (this.oauth.embeddedAuthzServer) {
+        invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
+
+        if (!this.oauth.jwePrivateKey && !this.oauth.jwePrivateKeyPath) {
+          throw new Error(
+            'One of the environment variables: OAUTH_JWE_PRIVATE_KEY_PATH or OAUTH_JWE_PRIVATE_KEY must be set',
+          );
+        }
+
+        if (this.oauth.jwePrivateKey && this.oauth.jwePrivateKeyPath) {
+          throw new Error(
+            'Only one of the environment variables: OAUTH_JWE_PRIVATE_KEY or OAUTH_JWE_PRIVATE_KEY_PATH must be set',
+          );
+        }
+
+        if (
+          this.oauth.jwePrivateKeyPath &&
+          process.env.TABLEAU_MCP_TEST !== 'true' &&
+          !existsSync(this.oauth.jwePrivateKeyPath)
+        ) {
+          throw new Error(
+            `OAuth JWE private key path does not exist: ${this.oauth.jwePrivateKeyPath}`,
+          );
+        }
+      }
+
+      if (this.transport === 'stdio') {
+        throw new Error('TRANSPORT must be "http" when OAUTH_ISSUER is set');
+      }
+    }
+
+    this.maxRequestTimeoutMs = parseNumber(maxRequestTimeoutMs, {
+      defaultValue: TEN_MINUTES_IN_MS,
+      minValue: 5000,
+      maxValue: ONE_HOUR_IN_MS,
+    });
 
     if (this.auth === 'pat') {
       invariant(patName, 'The environment variable PAT_NAME is not set');
@@ -107,22 +335,63 @@ export class Config {
       invariant(clientId, 'The environment variable CONNECTED_APP_CLIENT_ID is not set');
       invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
       invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
+
+      jwtUsername = jwtSubClaim ?? '';
+    } else if (this.auth === 'uat') {
+      invariant(uatTenantId, 'The environment variable UAT_TENANT_ID is not set');
+      invariant(uatIssuer, 'The environment variable UAT_ISSUER is not set');
+
+      if (!uatUsernameClaim && !jwtSubClaim) {
+        throw new Error(
+          'One of the environment variables: UAT_USERNAME_CLAIM or JWT_SUB_CLAIM must be set',
+        );
+      }
+
+      jwtUsername = uatUsernameClaim ?? jwtSubClaim ?? '';
+
+      if (!uatPrivateKey && !uatPrivateKeyPath) {
+        throw new Error(
+          'One of the environment variables: UAT_PRIVATE_KEY_PATH or UAT_PRIVATE_KEY must be set',
+        );
+      }
+
+      if (uatPrivateKey && uatPrivateKeyPath) {
+        throw new Error(
+          'Only one of the environment variables: UAT_PRIVATE_KEY or UAT_PRIVATE_KEY_PATH must be set',
+        );
+      }
+
+      if (
+        uatPrivateKeyPath &&
+        process.env.TABLEAU_MCP_TEST !== 'true' &&
+        !existsSync(uatPrivateKeyPath)
+      ) {
+        throw new Error(`UAT private key path does not exist: ${uatPrivateKeyPath}`);
+      }
     }
 
-    this.server = server;
+    this.server = server ?? '';
     this.patName = patName ?? '';
     this.patValue = patValue ?? '';
-    this.jwtSubClaim = jwtSubClaim ?? '';
+    this.jwtUsername = jwtUsername ?? '';
     this.connectedAppClientId = clientId ?? '';
     this.connectedAppSecretId = secretId ?? '';
     this.connectedAppSecretValue = secretValue ?? '';
+    this.uatTenantId = uatTenantId ?? '';
+    this.uatIssuer = uatIssuer ?? '';
+    this.uatUsernameClaimName = uatUsernameClaimName || 'email';
+    this.uatPrivateKey =
+      uatPrivateKey || (uatPrivateKeyPath ? readFileSync(uatPrivateKeyPath, 'utf8') : '');
+    this.uatKeyId = uatKeyId ?? '';
     this.jwtAdditionalPayload = jwtAdditionalPayload || '{}';
   }
 }
 
 function validateServer(server: string): void {
-  if (!server.startsWith('https://')) {
-    throw new Error(`The environment variable SERVER must start with "https://": ${server}`);
+  if (!['https://', 'http://'].find((prefix) => server.startsWith(prefix))) {
+    throw new Error(
+      `The environment variable SERVER must start with "http://" or "https://": ${server}`,
+    );
   }
 
   try {
@@ -168,9 +437,9 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
   }
 }
 
-// When the user does not provide a site name in the Claude Desktop Extension configuration,
+// When the user does not provide a site name in the Claude MCP Bundle configuration,
 // Claude doesn't replace its value and sets the site name to "${user_config.site_name}".
-function removeClaudeDesktopExtensionUserConfigTemplates(
+export function removeClaudeMcpBundleUserConfigTemplates(
   envVars: Record<string, string | undefined>,
 ): Record<string, string | undefined> {
   return Object.entries(envVars).reduce<Record<string, string | undefined>>((acc, [key, value]) => {
@@ -183,8 +452,33 @@ function removeClaudeDesktopExtensionUserConfigTemplates(
   }, {});
 }
 
+function parseNumber(
+  value: string | undefined,
+  {
+    defaultValue,
+    minValue,
+    maxValue,
+  }: { defaultValue: number; minValue?: number; maxValue?: number } = {
+    defaultValue: 0,
+    minValue: Number.NEGATIVE_INFINITY,
+    maxValue: Number.POSITIVE_INFINITY,
+  },
+): number {
+  if (!value) {
+    return defaultValue;
+  }
+
+  const number = parseFloat(value);
+  return isNaN(number) ||
+    (minValue !== undefined && number < minValue) ||
+    (maxValue !== undefined && number > maxValue)
+    ? defaultValue
+    : number;
+}
+
 export const getConfig = (): Config => new Config();
 
 export const exportedForTesting = {
   Config,
+  parseNumber,
 };

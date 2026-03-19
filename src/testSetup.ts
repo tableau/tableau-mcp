@@ -1,8 +1,6 @@
-vi.stubEnv('SERVER', 'https://my-tableau-server.com');
-vi.stubEnv('SITE_NAME', 'tc25');
-vi.stubEnv('PAT_NAME', 'sponge');
-vi.stubEnv('PAT_VALUE', 'bob');
-vi.stubEnv('TABLEAU_MCP_TEST', 'true');
+import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
+
+stubDefaultEnvVars();
 
 vi.mock('./server.js', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -10,6 +8,21 @@ vi.mock('./server.js', async (importOriginal) => ({
     name: 'test-server',
     server: {
       notification: vi.fn(),
+    },
+  })),
+}));
+
+vi.mock('./sdks/tableau/restApi.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  RestApi: vi.fn().mockImplementation(() => ({
+    signIn: vi.fn().mockResolvedValue(undefined),
+    signOut: vi.fn().mockResolvedValue(undefined),
+    setCredentials: vi.fn(),
+    setBearerToken: vi.fn(),
+    serverMethods: {
+      getServerInfo: vi.fn().mockResolvedValue({
+        productVersion: testProductVersion,
+      }),
     },
   })),
 }));

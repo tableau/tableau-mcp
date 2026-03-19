@@ -1,7 +1,12 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
-import { getListViewsTool } from './listViews.js';
+import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
+import invariant from '../../utils/invariant.js';
+import { Provider } from '../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { constrainViews, getListViewsTool } from './listViews.js';
+import { mockView } from './mockView.js';
 
 const mockViews = {
   pagination: {
@@ -9,21 +14,7 @@ const mockViews = {
     pageSize: 10,
     totalAvailable: 1,
   },
-  views: [
-    {
-      id: 'be75437c-fa5c-4218-914c-8c3efcf6a59c',
-      name: 'Overview',
-      createdAt: '2024-06-10T23:23:23Z',
-      updatedAt: '2024-06-10T23:23:23Z',
-      tags: {
-        tag: [
-          {
-            label: 'tag-1',
-          },
-        ],
-      },
-    },
-  ],
+  views: [mockView],
 };
 
 const mocks = vi.hoisted(() => ({
@@ -59,6 +50,7 @@ describe('listViewsTool', () => {
     mocks.mockQueryViewsForSiteData.mockResolvedValue(mockViews);
     const result = await getToolResult({ filter: 'name:eq:Overview' });
     expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
     expect(JSON.parse(`${result.content[0].text}`)).toMatchObject(mockViews.views);
     expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -74,16 +66,79 @@ describe('listViewsTool', () => {
     mocks.mockQueryViewsForSiteData.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ filter: 'name:eq:Overview' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
+  });
+
+  describe('constrainViews', () => {
+    it('should return empty result when no views are found', () => {
+      const result = constrainViews({
+        views: [],
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        'No views were found. Either none exist or you do not have permission to view them.',
+      );
+    });
+
+    it('should return empty results when all views were filtered out by the bounded context', () => {
+      const result = constrainViews({
+        views: mockViews.views,
+        boundedContext: {
+          projectIds: new Set(['123']),
+          datasourceIds: null,
+          workbookIds: null,
+          tags: null,
+        },
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        [
+          'The set of allowed views that can be queried is limited by the server configuration.',
+          'While views were found, they were all filtered out by the server configuration.',
+        ].join(' '),
+      );
+    });
+
+    test.each(
+      getCombinationsOfBoundedContextInputs({
+        projectIds: [null, new Set([mockViews.views[0].project.id])],
+        datasourceIds: [null], // n/a for views
+        workbookIds: [null, new Set([mockViews.views[0].workbook.id])],
+        tags: [null, new Set([mockViews.views[0].tags.tag[0].label])],
+      }),
+    )(
+      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
+      async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+        const result = constrainViews({
+          views: mockViews.views,
+          boundedContext: {
+            projectIds,
+            datasourceIds,
+            workbookIds,
+            tags,
+          },
+        });
+
+        invariant(result.type === 'success');
+        if (!projectIds && !workbookIds && !tags) {
+          expect(result.result).toEqual(mockViews.views);
+        } else {
+          expect(result.result).toEqual([mockViews.views[0]]);
+        }
+      },
+    );
   });
 });
 
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
   const listViewsTool = getListViewsTool(new Server());
-  return await listViewsTool.callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  const callback = await Provider.from(listViewsTool.callback);
+  return await callback(
+    { filter: params.filter, pageSize: undefined, limit: undefined },
+    getMockRequestHandlerExtra(),
+  );
 }

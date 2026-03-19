@@ -82,7 +82,7 @@ describe('log', () => {
       const args = { param1: 'value1' };
       const result = getToolLogMessage({
         requestId: '2',
-        toolName: 'list-fields',
+        toolName: 'get-datasource-metadata',
         args,
       });
 
@@ -90,7 +90,7 @@ describe('log', () => {
         type: 'tool',
         requestId: '2',
         tool: {
-          name: 'list-fields',
+          name: 'get-datasource-metadata',
           args,
         },
       });
@@ -99,7 +99,7 @@ describe('log', () => {
     it('should create a tool log message without args', () => {
       const result = getToolLogMessage({
         requestId: '2',
-        toolName: 'list-fields',
+        toolName: 'get-datasource-metadata',
         args: undefined,
       });
 
@@ -107,7 +107,7 @@ describe('log', () => {
         type: 'tool',
         requestId: '2',
         tool: {
-          name: 'list-fields',
+          name: 'get-datasource-metadata',
         },
       });
     });
@@ -126,7 +126,7 @@ describe('log', () => {
           params: {
             level: 'info',
             logger: 'test-logger',
-            message: expect.stringContaining('test message'),
+            data: expect.stringContaining('test message'),
           },
         },
         {
@@ -156,7 +156,7 @@ describe('log', () => {
           params: {
             level: 'info',
             logger: 'test-server',
-            message: expect.stringContaining('test message'),
+            data: expect.stringContaining('test message'),
           },
         },
         {
@@ -182,7 +182,7 @@ describe('log', () => {
           params: {
             level: 'info',
             logger: 'test-logger',
-            message: expect.any(String),
+            data: expect.any(String),
           },
         },
         {

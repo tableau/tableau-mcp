@@ -15,4 +15,15 @@ export type AuthConfig = {
       scopes: Set<string>;
       additionalPayload?: Record<string, unknown>;
     }
+  | {
+      type: 'uat';
+      username: string;
+      tenantId: string;
+      issuer: string;
+      usernameClaimName: string;
+      privateKey: string;
+      keyId: string;
+      scopes: Set<string>;
+      additionalPayload?: Record<string, unknown>;
+    }
 );

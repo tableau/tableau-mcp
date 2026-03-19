@@ -1,16 +1,17 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { FilterField, Query } from '../queryDatasourceValidator.js';
+import { Filter, FilterField } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { ToolRules } from '../../tool.js';
 import { hasFieldCaptionAndCalculation, hasFunctionAndCalculation } from './validateFields.js';
 
-export function validateFilters(filters: Query['filters']): void {
+export function validateFilters(filters: Filter[] | undefined, rules: ToolRules): void {
   if (!filters) {
     return;
   }
 
   if (filters.some((filter) => !('field' in filter))) {
     throw new Error(
-      `The query must not include filters with invalid fields. The following field errors occurred: The filter must include a field property.`,
+      'The query must not include filters with invalid fields. The following field errors occurred: The filter must include a field property.',
     );
   }
 
@@ -60,7 +61,7 @@ export function validateFilters(filters: Query['filters']): void {
     }
   }
 
-  {
+  if (rules.restrictFunctionsAndCalculationsInFilters) {
     // Set, Match, and Relative Date filters can't have functions or calculations.
     const setFiltersWithFunctionsOrCalculations = filters.filter((filter) => {
       return (
@@ -72,7 +73,7 @@ export function validateFilters(filters: Query['filters']): void {
 
     if (setFiltersWithFunctionsOrCalculations.length > 0) {
       throw new Error(
-        `The query must not include Set Filters, Match Filters, or Relative Date Filters with functions or calculations.`,
+        'The query must not include Set Filters, Match Filters, or Relative Date Filters with functions or calculations.',
       );
     }
   }
@@ -86,7 +87,7 @@ export function validateFilters(filters: Query['filters']): void {
       });
 
       if (setFiltersWithEmptyValues.length > 0) {
-        throw new Error(`The query must not include Set Filters with an empty values array.`);
+        throw new Error('The query must not include Set Filters with an empty values array.');
       }
     }
   }
@@ -112,7 +113,7 @@ export function validateFilters(filters: Query['filters']): void {
 
       if (quantitativeDateFiltersWithInvalidDates.length > 0) {
         throw new Error(
-          `The query must not include Quantitative Date Filters with invalid dates. Dates must use the RFC 3339 standard. Example: 2025-03-14`,
+          'The query must not include Quantitative Date Filters with invalid dates. Dates must use the RFC 3339 standard. Example: 2025-03-14',
         );
       }
     }
@@ -130,7 +131,7 @@ export function validateFilters(filters: Query['filters']): void {
 
       if (relativeDateFiltersWithInvalidDates.length > 0) {
         throw new Error(
-          `The query must not include Relative Date Filters with invalid anchor dates. Anchor dates must use the RFC 3339 standard. Example: 2025-03-14`,
+          'The query must not include Relative Date Filters with invalid anchor dates. Anchor dates must use the RFC 3339 standard. Example: 2025-03-14',
         );
       }
     }
@@ -171,9 +172,15 @@ export function validateFilters(filters: Query['filters']): void {
         }
 
         if (!filter.startsWith && !filter.endsWith && !filter.contains) {
-          acc.push(
-            `The match filter for field "${filter.field.fieldCaption}" must include at least one of the following properties: startsWith, endsWith, or contains`,
-          );
+          if ('fieldCaption' in filter.field) {
+            acc.push(
+              `The match filter for field "${filter.field.fieldCaption}" must include at least one of the following properties: startsWith, endsWith, or contains`,
+            );
+          } else {
+            acc.push(
+              `The match filter with calculation "${filter.field.calculation}" must include at least one of the following properties: startsWith, endsWith, or contains`,
+            );
+          }
         }
 
         return acc;
@@ -192,7 +199,7 @@ function validateFilterField(field: FilterField): Result<void, string> {
   {
     // Field caption must be a non-empty string.
     if (hasEmptyFieldCaption(field)) {
-      return new Err(`The fieldCaption property must be a non-empty string.`);
+      return new Err('The fieldCaption property must be a non-empty string.');
     }
   }
 

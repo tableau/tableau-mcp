@@ -1,19 +1,12 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../../server.js';
-import { getListDatasourcesTool } from './listDatasources.js';
-
-const mockDatasources = {
-  pagination: {
-    pageNumber: 1,
-    pageSize: 10,
-    totalAvailable: 2,
-  },
-  datasources: [
-    { id: 'ds1', name: 'Superstore', project: { name: 'Samples', id: 'proj1' } },
-    { id: 'ds2', name: 'Finance', project: { name: 'Finance', id: 'proj2' } },
-  ],
-};
+import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
+import invariant from '../../utils/invariant.js';
+import { Provider } from '../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { constrainDatasources, getListDatasourcesTool } from './listDatasources.js';
+import { mockDatasources } from './mockDatasources.js';
 
 const mocks = vi.hoisted(() => ({
   mockListDatasources: vi.fn(),
@@ -46,6 +39,7 @@ describe('listDatasourcesTool', () => {
     mocks.mockListDatasources.mockResolvedValue(mockDatasources);
     const result = await getToolResult({ filter: 'name:eq:Superstore' });
     expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Superstore');
     expect(mocks.mockListDatasources).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -60,16 +54,79 @@ describe('listDatasourcesTool', () => {
     mocks.mockListDatasources.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ filter: 'name:eq:Superstore' });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
+  });
+
+  describe('constrainDatasources', () => {
+    it('should return empty result when no datasources are found', () => {
+      const result = constrainDatasources({
+        datasources: [],
+        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        'No datasources were found. Either none exist or you do not have permission to view them.',
+      );
+    });
+
+    it('should return empty results when all datasources were filtered out by the bounded context', () => {
+      const result = constrainDatasources({
+        datasources: mockDatasources.datasources,
+        boundedContext: {
+          projectIds: new Set(['123']),
+          datasourceIds: null,
+          workbookIds: null,
+          tags: null,
+        },
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        [
+          'The set of allowed data sources that can be queried is limited by the server configuration.',
+          'While data sources were found, they were all filtered out by the server configuration.',
+        ].join(' '),
+      );
+    });
+
+    test.each(
+      getCombinationsOfBoundedContextInputs({
+        projectIds: [null, new Set([mockDatasources.datasources[0].project.id])],
+        datasourceIds: [null, new Set([mockDatasources.datasources[0].id])],
+        workbookIds: [null], // n/a for datasources
+        tags: [null, new Set([mockDatasources.datasources[0].tags.tag[0].label])],
+      }),
+    )(
+      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
+      async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+        const result = constrainDatasources({
+          datasources: mockDatasources.datasources,
+          boundedContext: {
+            projectIds,
+            datasourceIds,
+            workbookIds,
+            tags,
+          },
+        });
+
+        invariant(result.type === 'success');
+        if (!projectIds && !datasourceIds && !tags) {
+          expect(result.result).toEqual(mockDatasources.datasources);
+        } else {
+          expect(result.result).toEqual([mockDatasources.datasources[0]]);
+        }
+      },
+    );
   });
 });
 
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
   const listDatasourcesTool = getListDatasourcesTool(new Server());
-  return await listDatasourcesTool.callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  const callback = await Provider.from(listDatasourcesTool.callback);
+  return await callback(
+    { filter: params.filter, pageSize: undefined, limit: undefined },
+    getMockRequestHandlerExtra(),
+  );
 }

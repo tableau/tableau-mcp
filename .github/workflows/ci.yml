@@ -1,7 +1,6 @@
 name: Build and Test
 
 on:
-  push:
   pull_request:
     branches:
       - main
@@ -12,7 +11,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20.x]
+        node-version: ['>=22.7.5 <23', '24.x']
     steps:
       - uses: actions/checkout@v4
 
@@ -40,13 +39,41 @@ jobs:
       - name: Build Docker image
         run: npm run build:docker
 
-      - name: Build Claude Desktop Extension
-        run: npm run build:dxt
+      - name: Build NPM package
+        run: npm pack
 
       - name: Tests
         run: npm run coverage
 
+      - name: E2E Tests
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+        uses: ./.github/actions/run-e2e-tests
+        env:
+          SERVER: ${{ secrets.E2E_TEST_SERVER }}
+          SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
+          AUTH: ${{ secrets.E2E_TEST_AUTH }}
+          JWT_SUB_CLAIM: ${{ secrets.E2E_TEST_JWT_SUB_CLAIM }}
+          CONNECTED_APP_CLIENT_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_CLIENT_ID }}
+          CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
+          CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
+
+      - name: OAuth Tests
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+        uses: ./.github/actions/run-oauth-embedded-authz-tests
+        env:
+          SERVER: ${{ secrets.E2E_TEST_SERVER }}
+          SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
+          OAUTH_JWE_PRIVATE_KEY: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY }}
+          OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY_PASSPHRASE }}
+
+      - name: Build Claude MCP Bundle
+        run: |
+          npm run build:manifest
+          npm ci --omit=dev
+          npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb
+
       - name: Report code coverage
+        if: matrix.node-version == '>=22.7.5 <23'
         uses: irongut/CodeCoverageSummary@v1.3.0
         with:
           filename: coverage/**/cobertura-coverage.xml
@@ -62,8 +89,9 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts
+          name: artifacts-node${{ matrix.node-version == '>=22.7.5 <23' && '22.x' || matrix.node-version }}
           if-no-files-found: error
           path: |
             build/
-            tableau-mcp.dxt
+            junit/
+            tableau-mcp.mcpb

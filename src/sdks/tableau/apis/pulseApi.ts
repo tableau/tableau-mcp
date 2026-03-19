@@ -4,6 +4,8 @@ import { z } from 'zod';
 import {
   pulseBundleRequestSchema,
   pulseBundleResponseSchema,
+  pulseInsightBriefRequestSchema,
+  pulseInsightBriefResponseSchema,
   pulseInsightBundleTypeEnum,
   pulseMetricDefinitionSchema,
   pulseMetricDefinitionViewEnum,
@@ -26,9 +28,24 @@ const listAllPulseMetricDefinitionsRestEndpoint = makeEndpoint({
         - 'DEFINITION_VIEW_FULL' - Return the metric definition and the specified number of metrics.
         - 'DEFINITION_VIEW_DEFAULT' - Return the metric definition and the default metric.`,
     },
+    {
+      name: 'page_size',
+      type: 'Query',
+      schema: z.optional(z.coerce.number().int().positive()),
+      description: 'Specifies the number of results in a paged response.',
+    },
+    {
+      name: 'page_token',
+      type: 'Query',
+      schema: z.optional(z.string()),
+      description: 'Token for retrieving the next page of results. Omit for the first page.',
+    },
   ],
   response: z.object({
     definitions: z.array(pulseMetricDefinitionSchema),
+    next_page_token: z.string().optional(),
+    offset: z.coerce.number(),
+    total_available: z.coerce.number(),
   }),
 });
 
@@ -132,8 +149,25 @@ const generatePulseMetricValueInsightBundleRestEndpoint = makeEndpoint({
   response: pulseBundleResponseSchema,
 });
 
+const generatePulseInsightBriefRestEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/pulse/insights/brief',
+  alias: 'generatePulseInsightBrief',
+  description:
+    'Generates an AI-powered insight brief for Pulse metrics based on natural language questions.',
+  parameters: [
+    {
+      name: 'brief_request',
+      type: 'Body',
+      schema: pulseInsightBriefRequestSchema,
+    },
+  ],
+  response: pulseInsightBriefResponseSchema,
+});
+
 const pulseApi = makeApi([
   generatePulseMetricValueInsightBundleRestEndpoint,
+  generatePulseInsightBriefRestEndpoint,
   listAllPulseMetricDefinitionsRestEndpoint,
   listPulseMetricDefinitionsFromMetricDefinitionIdsRestEndpoint,
   listPulseMetricsFromMetricDefinitionIdRestEndpoint,

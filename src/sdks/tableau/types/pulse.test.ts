@@ -1,4 +1,6 @@
 import {
+  PulseMetric,
+  PulseMetricDefinition,
   pulseMetricDefinitionSchema,
   pulseMetricDefinitionViewEnum,
   pulseMetricSchema,
@@ -19,7 +21,7 @@ describe('PulseMetricDefinition schema', () => {
 
   it('rejects a PulseMetricDefinition with invalid metrics', () => {
     const data = createValidPulseMetricDefinition({
-      // is_default should be boolean
+      // @ts-expect-error - is_default should be boolean
       metrics: [createValidPulseMetric({ is_default: 'yes' })],
       total_metrics: 1,
     });
@@ -40,7 +42,7 @@ describe('PulseMetric schema', () => {
   });
 
   it('rejects a PulseMetric with non-boolean is_default', () => {
-    // is_default should be boolean
+    // @ts-expect-error - is_default should be boolean
     const data = createValidPulseMetric({ is_default: 'yes' });
     expect(() => pulseMetricSchema.parse(data)).toThrow();
   });
@@ -100,7 +102,7 @@ describe('PulseMetricSubscription schema', () => {
   });
 });
 
-function createValidPulseMetric(overrides = {}): any {
+export function createValidPulseMetric(overrides: Partial<PulseMetric> = {}): PulseMetric {
   return {
     id: 'CF32DDCC-362B-4869-9487-37DA4D152552',
     specification: {
@@ -115,6 +117,7 @@ function createValidPulseMetric(overrides = {}): any {
       comparison: { comparison: 'previous_period' },
     },
     definition_id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
+    datasource_luid: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11',
     is_default: true,
     schema_version: '1.0',
     metric_version: 1,
@@ -124,7 +127,9 @@ function createValidPulseMetric(overrides = {}): any {
   };
 }
 
-function createValidPulseMetricDefinition(overrides = {}): any {
+export function createValidPulseMetricDefinition(
+  overrides: Partial<PulseMetricDefinition> = {},
+): PulseMetricDefinition {
   return {
     metadata: {
       name: 'Test Metric',
@@ -189,6 +194,8 @@ function createValidPulseMetricDefinition(overrides = {}): any {
         },
         viz_state_specification: { viz_state_string: 'goal_state' },
         minimum_granularity: 'day',
+        benchmark_sentiment_type: 'BENCHMARK_SENTIMENT_TYPE_ABOVE_THRESHOLD_IS_FAVORABLE',
+        name: 'Test Goal',
       },
     ],
     ...overrides,

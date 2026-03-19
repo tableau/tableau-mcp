@@ -1,22 +1,35 @@
-import { Ok } from 'ts-results-es';
-import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { ZodiosError } from '@zodios/core';
+import { AxiosError } from 'axios';
+import { Err, Ok } from 'ts-results-es';
+import { z, ZodError } from 'zod';
 
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
+import invariant from '../utils/invariant.js';
 import { Tool } from './tool.js';
+import { getMockRequestHandlerExtra } from './toolContext.mock.js';
+
+// Mock for product telemetry - tracks calls to send()
+const mockTelemetrySend = vi.hoisted(() => vi.fn());
+vi.mock('../telemetry/productTelemetry/telemetryForwarder.js', () => ({
+  getProductTelemetry: vi.fn().mockReturnValue({
+    send: mockTelemetrySend,
+  }),
+}));
 
 describe('Tool', () => {
+  const mockExtra = getMockRequestHandlerExtra();
+
   const mockParams = {
     server: new Server(),
-    name: 'list-fields',
+    name: 'get-datasource-metadata',
     description: 'A test tool',
     paramsSchema: {
       param1: z.string(),
     },
     argsValidator: vi.fn(),
     annotations: {
-      title: 'List Fields',
+      title: 'Get Datasource Metadata',
       readOnlyHint: true,
       openWorldHint: false,
     },
@@ -38,14 +51,15 @@ describe('Tool', () => {
     const tool = new Tool(mockParams);
     const testArgs = { param1: 'test' };
 
-    tool.logInvocation({ requestId: '2', args: testArgs });
+    tool.logInvocation({ requestId: '2', args: testArgs, username: 'test-user' });
 
     const server = expect.any(Object);
     expect(spy).toHaveBeenCalledExactlyOnceWith(server, {
       type: 'tool',
       requestId: '2',
+      username: 'test-user',
       tool: {
-        name: 'list-fields',
+        name: 'get-datasource-metadata',
         args: testArgs,
       },
     });
@@ -60,17 +74,23 @@ describe('Tool', () => {
 
     const spy = vi.spyOn(tool, 'logInvocation');
     const result = await tool.logAndExecute({
-      requestId: '2',
+      extra: mockExtra,
       args: { param1: 'test' },
       callback,
+      constrainSuccessResult: (result) => {
+        return {
+          type: 'success',
+          result,
+        };
+      },
     });
 
     expect(result.isError).toBe(false);
-    expect(result.content[0].type).toBe('text');
-    expect(JSON.parse(result.content[0].text as string)).toEqual(successResult);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual(successResult);
 
     expect(spy).toHaveBeenCalledExactlyOnceWith({
-      requestId: '2',
+      requestId: 2,
       args: {
         param1: 'test',
       },
@@ -85,13 +105,19 @@ describe('Tool', () => {
     });
 
     const result = await tool.logAndExecute({
-      requestId: '2',
+      extra: mockExtra,
       args: { param1: 'test' },
       callback,
+      constrainSuccessResult: (result) => {
+        return {
+          type: 'success',
+          result,
+        };
+      },
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].type).toBe('text');
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('requestId: 2, error: Test error');
   });
 
@@ -100,9 +126,15 @@ describe('Tool', () => {
     const args = { param1: 'test' };
 
     await tool.logAndExecute({
-      requestId: '2',
+      extra: mockExtra,
       args,
       callback: vi.fn(),
+      constrainSuccessResult: (result) => {
+        return {
+          type: 'success',
+          result,
+        };
+      },
     });
 
     expect(mockParams.argsValidator).toHaveBeenCalledWith(args);
@@ -111,7 +143,7 @@ describe('Tool', () => {
   it('should return error result when argsValidator throws', async () => {
     const tool = new Tool({
       server: new Server(),
-      name: 'list-fields',
+      name: 'get-datasource-metadata',
       description: 'test',
       paramsSchema: z.object({ param1: z.string() }).shape,
       annotations: { title: 'test', readOnlyHint: true, openWorldHint: false },
@@ -127,13 +159,339 @@ describe('Tool', () => {
     });
 
     const result = await tool.logAndExecute({
-      requestId: '2',
+      extra: mockExtra,
       args: { param1: 'test' },
       callback: () => Promise.resolve(Ok('test')),
+      constrainSuccessResult: (result) => {
+        return {
+          type: 'success',
+          result,
+        };
+      },
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].type).toBe('text');
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe('requestId: 2, error: Test error');
+  });
+
+  it('should constrain the success result', async () => {
+    const tool = new Tool(mockParams);
+    const successResult = { data: 'success' };
+
+    const result = await tool.logAndExecute({
+      extra: mockExtra,
+      args: { param1: 'test' },
+      callback: () => Promise.resolve(Ok(successResult)),
+      constrainSuccessResult: (result) => {
+        return {
+          type: 'success',
+          result: {
+            ...result,
+            additionalField: 'extra',
+          },
+        };
+      },
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      ...successResult,
+      additionalField: 'extra',
+    });
+  });
+
+  it('should return empty result when the constrained result is empty', async () => {
+    const tool = new Tool(mockParams);
+    const successResult = { data: 'success' };
+
+    const result = await tool.logAndExecute({
+      extra: mockExtra,
+      args: { param1: 'test' },
+      callback: () => Promise.resolve(Ok(successResult)),
+      constrainSuccessResult: (_result) => {
+        return {
+          type: 'empty',
+          message: 'No data found',
+        };
+      },
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe('No data found');
+  });
+
+  it('should return error result when the constrained result is error', async () => {
+    const tool = new Tool(mockParams);
+    const successResult = { data: 'success' };
+
+    const result = await tool.logAndExecute({
+      extra: mockExtra,
+      args: { param1: 'test' },
+      callback: () => Promise.resolve(Ok(successResult)),
+      constrainSuccessResult: (_result) => {
+        return {
+          type: 'error',
+          message: 'An error occurred',
+        };
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe('An error occurred');
+  });
+
+  describe('product telemetry', () => {
+    beforeEach(() => {
+      mockTelemetrySend.mockClear();
+    });
+
+    it('should send telemetry with success=true and empty error_code on success', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          tool_name: 'get-datasource-metadata',
+          request_id: '2',
+          session_id: '',
+          site_luid: 'test-site-luid',
+          user_luid: 'test-user-luid',
+          podname: 'https://my-tableau-server.com',
+          is_hyperforce: false,
+          success: true,
+          error_code: '',
+        }),
+      );
+    });
+
+    it('should send telemetry with success=false and error_code=400 on validation error', async () => {
+      const tool = new Tool({
+        ...mockParams,
+        argsValidator: () => {
+          throw new Error('Validation failed');
+        },
+      });
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          is_hyperforce: false,
+          success: false,
+          error_code: '400',
+        }),
+      );
+    });
+
+    it('should send telemetry with success=false on callback error', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => {
+          throw new Error('Callback failed');
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          is_hyperforce: false,
+          success: false,
+          error_code: '', // No HTTP status for generic errors
+        }),
+      );
+    });
+
+    it('should send telemetry with actual HTTP status code on API error', async () => {
+      const tool = new Tool(mockParams);
+      const axiosError = new AxiosError('Unauthorized');
+      axiosError.response = { status: 401 } as AxiosError['response'];
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => {
+          throw axiosError;
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          is_hyperforce: false,
+          success: false,
+          error_code: '401',
+        }),
+      );
+    });
+
+    it('should send telemetry with success=false and empty error_code on constrained error', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: () => ({ type: 'error', message: 'Constrained error' }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          is_hyperforce: false,
+          success: false,
+          error_code: '',
+        }),
+      );
+    });
+
+    it('should send telemetry with success=true on constrained empty result', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: () => ({ type: 'empty', message: 'No data' }),
+      });
+
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          is_hyperforce: false,
+          success: true,
+          error_code: '',
+        }),
+      );
+    });
+  });
+
+  describe('ZodiosError handling', () => {
+    it('should return isError: false with data and validation warning for ZodiosError with valid ZodError cause', async () => {
+      const tool = new Tool(mockParams);
+      const rawApiData = { fields: [], parameters: [{ unexpected: 'data' }] };
+      const zodError = new ZodError([
+        {
+          code: 'invalid_type',
+          expected: 'string',
+          received: 'object',
+          path: ['parameters', 0, 'members', 0],
+          message: 'Expected string, received object',
+        },
+      ]);
+      const zodiosError = new ZodiosError(
+        'Zodios: Invalid Response',
+        undefined,
+        rawApiData,
+        zodError,
+      );
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => Promise.resolve(Err(zodiosError)),
+        getErrorText: () => 'unused',
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.data).toEqual(rawApiData);
+      expect(parsed.warning).toContain('Expected string, received object');
+    });
+
+    it('should return isError: false with validation warning for discriminatedUnion schema errors', async () => {
+      const tool = new Tool(mockParams);
+      const rawApiData = {
+        parameters: [{ parameterType: 'LIST', members: [{ value: '5', alias: 'Top 5' }] }],
+      };
+
+      const schema = z.discriminatedUnion('parameterType', [
+        z.object({ parameterType: z.literal('LIST'), members: z.array(z.string()) }).strict(),
+        z.object({ parameterType: z.literal('RANGE'), min: z.number(), max: z.number() }).strict(),
+      ]);
+
+      const parseResult = schema.safeParse(rawApiData.parameters[0]);
+      expect(parseResult.success).toBe(false);
+      if (parseResult.success) return;
+
+      const zodiosError = new ZodiosError(
+        'Zodios: Invalid Response',
+        undefined,
+        rawApiData,
+        parseResult.error,
+      );
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => Promise.resolve(Err(zodiosError)),
+        getErrorText: () => 'unused',
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.data).toEqual(rawApiData);
+      expect(parsed.warning).toContain('Validation error');
+    });
+
+    it('should return isError: false with data when ZodiosError is thrown (not returned)', async () => {
+      const tool = new Tool(mockParams);
+      const rawApiData = { fields: [], parameters: [] };
+      const zodError = new ZodError([
+        {
+          code: 'invalid_type',
+          expected: 'string',
+          received: 'number',
+          path: ['value'],
+          message: 'Expected string, received number',
+        },
+      ]);
+      const zodiosError = new ZodiosError(
+        'Zodios: Invalid Response',
+        undefined,
+        rawApiData,
+        zodError,
+      );
+
+      const result = await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test' },
+        callback: () => {
+          throw zodiosError;
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.data).toEqual(rawApiData);
+      expect(parsed.warning).toBeDefined();
+    });
   });
 });

@@ -1,0 +1,8 @@
+{
+  "label": "Tools",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "This section contains additional information about each tool that is available to use in the Tableau MCP."
+  }
+}

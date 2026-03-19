@@ -1,11 +1,25 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
+import { queryOutputSchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
+import {
+  stubDefaultEnvVars,
+  testProductVersion,
+  testProductVersion2025_3,
+} from '../../testShared.js';
+import invariant from '../../utils/invariant.js';
+import { Provider } from '../../utils/provider.js';
+import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
+import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { exportedForTesting as datasourceCredentialsExportedForTesting } from './datasourceCredentials.js';
 import { getQueryDatasourceTool } from './queryDatasource.js';
 
 const { resetDatasourceCredentials } = datasourceCredentialsExportedForTesting;
+const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
 
 const mockVdsResponses = vi.hoisted(() => ({
   success: {
@@ -53,24 +67,22 @@ vi.mock('../../restApiInstance.js', () => ({
 }));
 
 describe('queryDatasourceTool', () => {
-  const originalEnv = process.env;
-
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
     resetDatasourceCredentials();
-    process.env = {
-      ...originalEnv,
-    };
+    resetResourceAccessCheckerSingleton();
   });
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    vi.unstubAllEnvs();
   });
 
   it('should create a tool instance with correct properties', () => {
-    const queryDatasourceTool = getQueryDatasourceTool(new Server());
+    const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
     expect(queryDatasourceTool.name).toBe('query-datasource');
-    expect(queryDatasourceTool.description).toEqual(expect.any(String));
+    expect(queryDatasourceTool.description).toBeInstanceOf(Provider);
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
   });
 
@@ -80,7 +92,8 @@ describe('queryDatasourceTool', () => {
     const result = await getToolResult();
 
     expect(result.isError).toBe(false);
-    expect(JSON.parse(result.content[0].text as string)).toEqual(mockVdsResponses.success);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual(mockVdsResponses.success);
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
       datasource: {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
@@ -105,14 +118,108 @@ describe('queryDatasourceTool', () => {
     });
   });
 
-  it('should add datasource credentials to the request when provided', async () => {
+  it('should successfully query the datasource with a limit', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
 
-    process.env.DATASOURCE_CREDENTIALS = JSON.stringify({
-      '71db762b-6201-466b-93da-57cc0aec8ed9': [
-        { luid: 'test-luid', u: 'test-user', p: 'test-pass' },
-      ],
+    const result = await getToolResult({ limit: 100 });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual(mockVdsResponses.success);
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
+      datasource: {
+        datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+      },
+      options: {
+        debug: true,
+        disaggregate: false,
+        returnFormat: 'OBJECTS',
+        rowLimit: 100,
+      },
+      query: {
+        fields: [
+          {
+            fieldCaption: 'Category',
+          },
+          {
+            fieldCaption: 'Profit',
+            function: 'SUM',
+            sortDirection: 'DESC',
+          },
+        ],
+      },
     });
+  });
+
+  it('should not query the datasource with a limit on 2025.3 or earlier', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+
+    const result = await getToolResult({ limit: 100, productVersion: testProductVersion2025_3 });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual(mockVdsResponses.success);
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
+      datasource: {
+        datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+      },
+      options: {
+        debug: true,
+        disaggregate: false,
+        returnFormat: 'OBJECTS',
+      },
+      query: {
+        fields: [
+          {
+            fieldCaption: 'Category',
+          },
+          {
+            fieldCaption: 'Profit',
+            function: 'SUM',
+            sortDirection: 'DESC',
+          },
+        ],
+      },
+    });
+  });
+
+  it('should return a successful result when the VDS response contains a schema validation error', async () => {
+    const badResponse = {
+      ...mockVdsResponses.success,
+      data: 'hamburgers',
+    };
+
+    mocks.mockQueryDatasource.mockImplementation(() => {
+      const zodiosError = new ZodiosError(
+        'Zodios: Invalid response from endpoint',
+        undefined,
+        badResponse,
+        queryOutputSchema.safeParse(badResponse).error,
+      );
+
+      return new Err(zodiosError);
+    });
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      data: badResponse,
+      warning: 'Validation error: Expected array, received string at "data"',
+    });
+  });
+
+  it('should add datasource credentials to the request when provided', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+    vi.stubEnv(
+      'DATASOURCE_CREDENTIALS',
+      JSON.stringify({
+        '71db762b-6201-466b-93da-57cc0aec8ed9': [
+          { luid: 'test-luid', u: 'test-user', p: 'test-pass' },
+        ],
+      }),
+    );
 
     const result = await getToolResult();
     expect(result.isError).toBe(false);
@@ -148,14 +255,15 @@ describe('queryDatasourceTool', () => {
     });
   });
 
-  it('should return error VDS returns an error', async () => {
+  it('should return error when VDS returns an error', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(new Err(mockVdsResponses.error));
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(
       JSON.stringify({
-        requestId: 'test-request-id',
+        requestId: 2,
         ...mockVdsResponses.error,
         condition: 'Validation failed',
         details: "The incoming request isn't valid per the validation rules.",
@@ -191,7 +299,8 @@ describe('queryDatasourceTool', () => {
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toBe('requestId: test-request-id, error: API Error');
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe('requestId: 2, error: API Error');
   });
 
   describe('Filter Validation', () => {
@@ -210,8 +319,9 @@ describe('queryDatasourceTool', () => {
             ],
           }),
         );
-      const queryDatasourceTool = getQueryDatasourceTool(new Server());
-      const result = await queryDatasourceTool.callback(
+      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const callback = await Provider.from(queryDatasourceTool.callback);
+      const result = await callback(
         {
           datasourceLuid: 'test-datasource-luid',
           query: {
@@ -224,17 +334,14 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
-        {
-          signal: new AbortController().signal,
-          requestId: 'test-request-id',
-          sendNotification: vi.fn(),
-          sendRequest: vi.fn(),
-        },
+        getMockRequestHandlerExtra(),
       );
 
       expect(result.isError).toBe(true);
-      const errorResponse = JSON.parse(result.content[0].text as string);
+      invariant(result.content[0].type === 'text');
+      const errorResponse = JSON.parse(result.content[0].text);
       expect(errorResponse.message).toContain('Filter validation failed for field "Region"');
       expect(errorResponse.message).toContain('Wast');
       expect(errorResponse.message).toContain('Did you mean:');
@@ -259,8 +366,9 @@ describe('queryDatasourceTool', () => {
             ],
           }),
         );
-      const queryDatasourceTool = getQueryDatasourceTool(new Server());
-      const result = await queryDatasourceTool.callback(
+      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const callback = await Provider.from(queryDatasourceTool.callback);
+      const result = await callback(
         {
           datasourceLuid: 'test-datasource-luid',
           query: {
@@ -273,17 +381,14 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
-        {
-          signal: new AbortController().signal,
-          requestId: 'test-request-id',
-          sendNotification: vi.fn(),
-          sendRequest: vi.fn(),
-        },
+        getMockRequestHandlerExtra(),
       );
 
       expect(result.isError).toBe(true);
-      const errorResponse = JSON.parse(result.content[0].text as string);
+      invariant(result.content[0].type === 'text');
+      const errorResponse = JSON.parse(result.content[0].text);
       expect(errorResponse.message).toContain('Filter validation failed for field "Customer Name"');
       expect(errorResponse.message).toContain('starts with "Jon"');
       expect(errorResponse.message).toContain('Similar values in this field:');
@@ -301,8 +406,9 @@ describe('queryDatasourceTool', () => {
       // Mock main query only
       mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
 
-      const queryDatasourceTool = getQueryDatasourceTool(new Server());
-      const result = await queryDatasourceTool.callback(
+      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const callback = await Provider.from(queryDatasourceTool.callback);
+      const result = await callback(
         {
           datasourceLuid: 'test-datasource-luid',
           query: {
@@ -316,24 +422,21 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
-        {
-          signal: new AbortController().signal,
-          requestId: 'test-request-id',
-          sendNotification: vi.fn(),
-          sendRequest: vi.fn(),
-        },
+        getMockRequestHandlerExtra(),
       );
 
       expect(result.isError).toBe(false);
-      expect(JSON.parse(result.content[0].text as string)).toEqual(mockMainQueryResult);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toEqual(mockMainQueryResult);
 
       // Should only call the main query (no validation needed)
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
     });
 
-    it('should not run SET/MATCH filters validation when DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION environment variable is true', async () => {
-      process.env.DISABLE_QUERY_DATASOURCE_FILTER_VALIDATION = 'true';
+    it('should not run SET/MATCH filters validation when DISABLE_QUERY_VALIDATION_REQUESTS environment variable is true', async () => {
+      process.env.DISABLE_QUERY_VALIDATION_REQUESTS = 'true';
 
       const mockMainQueryResult = {
         data: [{ Region: 'East', 'SUM(Sales)': 100000 }],
@@ -342,8 +445,9 @@ describe('queryDatasourceTool', () => {
       // Mock main query only
       mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
 
-      const queryDatasourceTool = getQueryDatasourceTool(new Server());
-      const result = await queryDatasourceTool.callback(
+      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const callback = await Provider.from(queryDatasourceTool.callback);
+      const result = await callback(
         {
           datasourceLuid: 'test-datasource-luid',
           query: {
@@ -357,17 +461,14 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
-        {
-          signal: new AbortController().signal,
-          requestId: 'test-request-id',
-          sendNotification: vi.fn(),
-          sendRequest: vi.fn(),
-        },
+        getMockRequestHandlerExtra(),
       );
 
       expect(result.isError).toBe(false);
-      expect(JSON.parse(result.content[0].text as string)).toEqual(mockMainQueryResult);
+      invariant(result.content[0].type === 'text');
+      expect(JSON.parse(result.content[0].text)).toEqual(mockMainQueryResult);
 
       // Should only call the main query (no validation needed)
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
@@ -398,8 +499,9 @@ describe('queryDatasourceTool', () => {
           }),
         );
 
-      const queryDatasourceTool = getQueryDatasourceTool(new Server());
-      const result = await queryDatasourceTool.callback(
+      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const callback = await Provider.from(queryDatasourceTool.callback);
+      const result = await callback(
         {
           datasourceLuid: 'test-datasource-luid',
           query: {
@@ -417,17 +519,14 @@ describe('queryDatasourceTool', () => {
               },
             ],
           },
+          limit: undefined,
         },
-        {
-          signal: new AbortController().signal,
-          requestId: 'test-request-id',
-          sendNotification: vi.fn(),
-          sendRequest: vi.fn(),
-        },
+        getMockRequestHandlerExtra(),
       );
 
       expect(result.isError).toBe(true);
-      const errorResponse = JSON.parse(result.content[0].text as string);
+      invariant(result.content[0].type === 'text');
+      const errorResponse = JSON.parse(result.content[0].text);
       expect(errorResponse.message).toContain('Filter validation failed for field "Region"');
       expect(errorResponse.message).toContain('Filter validation failed for field "Category"');
       expect(errorResponse.message).toContain('InvalidRegion');
@@ -437,11 +536,46 @@ describe('queryDatasourceTool', () => {
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
     });
   });
+
+  it('should show feature-disabled error when VDS is disabled', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(Err('feature-disabled'));
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
+  });
+
+  it('should return data source not allowed error when datasource is not allowed', async () => {
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      [
+        'The set of allowed data sources that can be queried is limited by the server configuration.',
+        'Querying the datasource with LUID 71db762b-6201-466b-93da-57cc0aec8ed9 is not allowed.',
+      ].join(' '),
+    );
+
+    expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+  });
 });
 
-async function getToolResult(): Promise<CallToolResult> {
-  const queryDatasourceTool = getQueryDatasourceTool(new Server());
-  return await queryDatasourceTool.callback(
+async function getToolResult({
+  limit,
+  productVersion,
+}: {
+  limit?: number;
+  productVersion?: ProductVersion;
+} = {}): Promise<CallToolResult> {
+  const queryDatasourceTool = getQueryDatasourceTool(
+    new Server(),
+    productVersion ?? testProductVersion,
+  );
+  const callback = await Provider.from(queryDatasourceTool.callback);
+  return await callback(
     {
       datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
       query: {
@@ -450,12 +584,8 @@ async function getToolResult(): Promise<CallToolResult> {
           { fieldCaption: 'Profit', function: 'SUM', sortDirection: 'DESC' },
         ],
       },
+      limit,
     },
-    {
-      signal: new AbortController().signal,
-      requestId: 'test-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    },
+    getMockRequestHandlerExtra(),
   );
 }

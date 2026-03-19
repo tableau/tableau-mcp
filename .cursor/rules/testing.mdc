@@ -1,0 +1,80 @@
+---
+description: Testing standards — Vitest framework, test organization, mocking patterns
+globs:
+  - "**/*.test.ts"
+  - "tests/**/*.ts"
+  - "vitest.config*.ts"
+---
+
+# Testing Standards
+
+## Framework: Vitest
+This project uses Vitest. NOT jest, NOT mocha.
+
+## Test Configs
+| Config | Command | Directory | Purpose |
+|--------|---------|-----------|---------|
+| `vitest.config.ts` | `npm test` | `src/` | Unit tests |
+| `vitest.config.e2e.ts` | `npm run test:e2e` | `tests/e2e/` | End-to-end (stdio client) |
+| `vitest.config.eval.ts` | `npm run test:eval` | `tests/eval/` | AI agent evaluation |
+| `vitest.config.oauth.embedded.ts` | `npm run test:oauth:embedded` | `tests/oauth/embedded-authz/` | OAuth flows |
+
+Coverage: `npm run coverage` (v8 provider, cobertura reporter)
+
+## Unit Test Setup
+`src/testSetup.ts` automatically:
+- Mocks `Server` class
+- Mocks `RestApi` class
+- Stubs environment variables
+
+Unit tests live alongside source: `src/tools/myTool/myTool.test.ts`
+
+## E2E Test Pattern
+Tests use `StdioClientTransport` spawning `node build/index.js`:
+```typescript
+import { callTool, getClient, listTools } from './client';
+
+describe('my-tool', () => {
+  it('returns expected data', async () => {
+    const result = await callTool('my-tool', { param: 'value' });
+    expect(result).toBeDefined();
+  });
+});
+```
+
+Helpers in `tests/e2e/client.ts`: `callTool()`, `listTools()`, `getClient()`
+
+## Test Naming
+- Test files: `*.test.ts` (co-located with source for unit tests)
+- Test names: describe the behavior being verified
+- One behavior per test — if "and" appears in the name, split it
+
+## Mocking Rules
+- Use real code whenever possible — mocks only when unavoidable
+- `src/testSetup.ts` provides standard mocks for Server and RestApi
+- When mocking Tableau API responses, use realistic data shapes
+- Never mock the code under test — mock its dependencies
+
+## Running Tests
+```bash
+# Unit tests (fast, run these constantly)
+npm test
+
+# Single file
+npx vitest run src/tools/myTool/myTool.test.ts
+
+# Watch mode
+npx vitest src/tools/myTool/myTool.test.ts
+
+# E2E (requires build first)
+npm run build && npm run test:e2e
+
+# Coverage report
+npm run coverage
+```
+
+## Before Marking Work Complete
+- All unit tests pass: `npm test`
+- No TypeScript errors: `npx tsc --noEmit`
+- No lint errors: `npx eslint src/`
+- New code has test coverage

@@ -19,6 +19,7 @@ const signInRequestSchema = z.object({
         .or(
           z.object({
             jwt: z.string(),
+            isUat: z.boolean().optional(),
           }),
         ),
     ),

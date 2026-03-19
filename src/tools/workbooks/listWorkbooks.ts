@@ -2,12 +2,13 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getConfig } from '../../config.js';
+import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
+import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
-import { Tool } from '../tool.js';
+import { ConstrainedResult, Tool } from '../tool.js';
 import { parseAndValidateWorkbooksFilterString } from './workbooksFilterUtils.js';
 
 const paramsSchema = {
@@ -44,7 +45,7 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
   | updatedAt         | eq, gt, gte, lt, lte |
 
   ${genericFilterDescription}
-  
+
   **Example Usage:**
   - List all workbooks on a site
   - List workbooks with the name "Superstore":
@@ -61,26 +62,28 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, pageSize, limit }, { requestId }): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateWorkbooksFilterString(filter) : undefined;
 
       return await listWorkbooksTool.logAndExecute({
-        requestId,
+        extra,
         args: {},
         callback: async () => {
           return new Ok(
             await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: ['tableau:content:read'],
+              ...extra,
+              jwtScopes: listWorkbooksTool.requiredApiScopes,
               callback: async (restApi) => {
+                const maxResultLimit = configWithOverrides.getMaxResultLimit(
+                  listWorkbooksTool.name,
+                );
+
                 const workbooks = await paginate({
                   pageConfig: {
                     pageSize,
-                    limit: config.maxResultLimit
-                      ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                    limit: maxResultLimit
+                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
                       : limit,
                   },
                   getDataFn: async (pageConfig) => {
@@ -101,9 +104,59 @@ export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> 
             }),
           );
         },
+        constrainSuccessResult: (workbooks) =>
+          constrainWorkbooks({ workbooks, boundedContext: configWithOverrides.boundedContext }),
       });
     },
   });
 
   return listWorkbooksTool;
 };
+
+export function constrainWorkbooks({
+  workbooks,
+  boundedContext,
+}: {
+  workbooks: Array<Workbook>;
+  boundedContext: BoundedContext;
+}): ConstrainedResult<Array<Workbook>> {
+  if (workbooks.length === 0) {
+    return {
+      type: 'empty',
+      message:
+        'No workbooks were found. Either none exist or you do not have permission to view them.',
+    };
+  }
+
+  const { projectIds, workbookIds, tags } = boundedContext;
+  if (projectIds) {
+    workbooks = workbooks.filter((workbook) =>
+      workbook.project?.id ? projectIds.has(workbook.project.id) : false,
+    );
+  }
+
+  if (workbookIds) {
+    workbooks = workbooks.filter((workbook) => workbookIds.has(workbook.id));
+  }
+
+  if (tags) {
+    workbooks = workbooks.filter((workbook) =>
+      workbook.tags?.tag?.some((tag) => tags.has(tag.label)),
+    );
+  }
+
+  if (workbooks.length === 0) {
+    return {
+      type: 'empty',
+      message: [
+        'The set of allowed workbooks that can be queried is limited by the server configuration.',
+        'While workbooks were found, they were all filtered out by the server configuration.',
+      ].join(' '),
+    };
+  }
+
+  return {
+    type: 'success',
+    result: workbooks,
+  };
+}

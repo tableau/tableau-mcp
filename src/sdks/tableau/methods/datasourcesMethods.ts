@@ -1,7 +1,8 @@
 import { Zodios } from '@zodios/core';
 
+import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { datasourcesApis } from '../apis/datasourcesApi.js';
-import { Credentials } from '../types/credentials.js';
+import { RestApiCredentials } from '../restApi.js';
 import { DataSource } from '../types/dataSource.js';
 import { Pagination } from '../types/pagination.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
@@ -14,8 +15,8 @@ import AuthenticatedMethods from './authenticatedMethods.js';
  * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm
  */
 export default class DatasourcesMethods extends AuthenticatedMethods<typeof datasourcesApis> {
-  constructor(baseUrl: string, creds: Credentials) {
-    super(new Zodios(baseUrl, datasourcesApis), creds);
+  constructor(baseUrl: string, creds: RestApiCredentials, axiosConfig: AxiosRequestConfig) {
+    super(new Zodios(baseUrl, datasourcesApis, { axiosConfig }), creds);
   }
 
   /**
@@ -49,5 +50,29 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
       pagination: response.pagination,
       datasources: response.datasources.datasource ?? [],
     };
+  };
+
+  /**
+   * Returns information about the specified data source.
+   *
+   * Required scopes: `tableau:content:read`
+   *
+   * @param siteId - The Tableau site ID
+   * @param datasourceId - The ID of the data source
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source
+   */
+  queryDatasource = async ({
+    siteId,
+    datasourceId,
+  }: {
+    siteId: string;
+    datasourceId: string;
+  }): Promise<DataSource> => {
+    return (
+      await this._apiClient.queryDatasource({
+        params: { siteId, datasourceId },
+        ...this.authHeader,
+      })
+    ).datasource;
   };
 }

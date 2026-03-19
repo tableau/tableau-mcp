@@ -5,7 +5,7 @@ import { dataSourceSchema } from '../types/dataSource.js';
 import { paginationSchema } from '../types/pagination.js';
 import { paginationParameters } from './paginationParameters.js';
 
-const listDatasourcesRestEndpoint = makeEndpoint({
+const listDatasourcesEndpoint = makeEndpoint({
   method: 'get',
   path: '/sites/:siteId/datasources',
   alias: 'listDatasources',
@@ -33,5 +33,15 @@ const listDatasourcesRestEndpoint = makeEndpoint({
   }),
 });
 
-const datasourcesApi = makeApi([listDatasourcesRestEndpoint]);
+const queryDatasourceEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/datasources/:datasourceId',
+  alias: 'queryDatasource',
+  description: 'Returns information about the specified data source.',
+  response: z.object({
+    datasource: dataSourceSchema,
+  }),
+});
+
+const datasourcesApi = makeApi([listDatasourcesEndpoint, queryDatasourceEndpoint]);
 export const datasourcesApis = [...datasourcesApi] as const satisfies ZodiosEndpointDefinitions;

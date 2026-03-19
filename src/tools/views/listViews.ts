@@ -2,12 +2,13 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getConfig } from '../../config.js';
+import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
+import { View } from '../../sdks/tableau/types/view.js';
 import { Server } from '../../server.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
-import { Tool } from '../tool.js';
+import { ConstrainedResult, Tool } from '../tool.js';
 import { parseAndValidateViewsFilterString } from './viewsFilterUtils.js';
 
 const paramsSchema = {
@@ -47,7 +48,7 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
   | workbookName        | eq, in               |
 
   ${genericFilterDescription}
-  
+
   **Example Usage:**
   - List all views on a site
   - List views with the name "Overview":
@@ -64,26 +65,25 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, pageSize, limit }, { requestId }): Promise<CallToolResult> => {
-      const config = getConfig();
+    callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
       const validatedFilter = filter ? parseAndValidateViewsFilterString(filter) : undefined;
 
       return await listViewsTool.logAndExecute({
-        requestId,
+        extra,
         args: {},
         callback: async () => {
           return new Ok(
             await useRestApi({
-              config,
-              requestId,
-              server,
-              jwtScopes: ['tableau:content:read'],
+              ...extra,
+              jwtScopes: listViewsTool.requiredApiScopes,
               callback: async (restApi) => {
-                const workbooks = await paginate({
+                const maxResultLimit = configWithOverrides.getMaxResultLimit(listViewsTool.name);
+                const views = await paginate({
                   pageConfig: {
                     pageSize,
-                    limit: config.maxResultLimit
-                      ? Math.min(config.maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
+                    limit: maxResultLimit
+                      ? Math.min(maxResultLimit, limit ?? Number.MAX_SAFE_INTEGER)
                       : limit,
                   },
                   getDataFn: async (pageConfig) => {
@@ -100,14 +100,59 @@ export const getListViewsTool = (server: Server): Tool<typeof paramsSchema> => {
                   },
                 });
 
-                return workbooks;
+                return views;
               },
             }),
           );
         },
+        constrainSuccessResult: (views) =>
+          constrainViews({ views, boundedContext: configWithOverrides.boundedContext }),
       });
     },
   });
 
   return listViewsTool;
 };
+
+export function constrainViews({
+  views,
+  boundedContext,
+}: {
+  views: Array<View>;
+  boundedContext: BoundedContext;
+}): ConstrainedResult<Array<View>> {
+  if (views.length === 0) {
+    return {
+      type: 'empty',
+      message: 'No views were found. Either none exist or you do not have permission to view them.',
+    };
+  }
+
+  const { projectIds, workbookIds, tags } = boundedContext;
+  if (projectIds) {
+    views = views.filter((view) => (view.project?.id ? projectIds.has(view.project.id) : false));
+  }
+
+  if (workbookIds) {
+    views = views.filter((view) => (view.workbook?.id ? workbookIds.has(view.workbook.id) : false));
+  }
+
+  if (tags) {
+    views = views.filter((view) => view.tags?.tag?.some((tag) => tags.has(tag.label)));
+  }
+
+  if (views.length === 0) {
+    return {
+      type: 'empty',
+      message: [
+        'The set of allowed views that can be queried is limited by the server configuration.',
+        'While views were found, they were all filtered out by the server configuration.',
+      ].join(' '),
+    };
+  }
+
+  return {
+    type: 'success',
+    result: views,
+  };
+}

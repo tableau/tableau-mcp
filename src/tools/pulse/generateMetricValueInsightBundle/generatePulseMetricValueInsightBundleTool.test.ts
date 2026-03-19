@@ -1,6 +1,17 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err, Ok } from 'ts-results-es';
+
+import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
+import { PulseInsightBundleType } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
+import { stubDefaultEnvVars } from '../../../testShared.js';
+import invariant from '../../../utils/invariant.js';
+import { Provider } from '../../../utils/provider.js';
+import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
+import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './generatePulseMetricValueInsightBundleTool.js';
 
+const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
 const mocks = vi.hoisted(() => ({
   mockGeneratePulseMetricValueInsightBundle: vi.fn(),
 }));
@@ -16,8 +27,6 @@ vi.mock('../../../restApiInstance.js', () => ({
 }));
 
 describe('getGeneratePulseMetricValueInsightBundleTool', () => {
-  const tool = getGeneratePulseMetricValueInsightBundleTool(new Server());
-
   const bundleRequest = {
     bundle_request: {
       version: 1,
@@ -103,94 +112,78 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    resetResourceAccessCheckerSingleton();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('should call generatePulseMetricValueInsightBundle without bundleType and return Ok result', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(mockBundleRequestResponse);
-    const result = await tool.callback(
-      { bundleRequest },
-      {
-        signal: new AbortController().signal,
-        requestId: 'test-request-id',
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      },
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
     );
+    const result = await getToolResult();
     expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(
       bundleRequest,
       'ban',
     );
     expect(result.isError).toBe(false);
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockBundleRequestResponse);
   });
 
   it('should call generatePulseMetricValueInsightBundle with bundleType and return Ok result', async () => {
-    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(mockBundleRequestResponse);
-    const result = await tool.callback(
-      { bundleRequest, bundleType: 'springboard' },
-      {
-        signal: new AbortController().signal,
-        requestId: 'test-request-id',
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      },
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Ok(mockBundleRequestResponse),
     );
+    const result = await getToolResult('springboard');
     expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(
       bundleRequest,
       'springboard',
     );
     expect(result.isError).toBe(false);
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockBundleRequestResponse);
   });
 
   it.each(['ban', 'springboard', 'basic', 'detail'] as const)(
     'should call generatePulseMetricValueInsightBundle with bundleType "%s" and return Ok result',
     async (bundleType) => {
-      mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(mockBundleRequestResponse);
-      const result = await tool.callback(
-        { bundleRequest, bundleType },
-        {
-          signal: new AbortController().signal,
-          requestId: 'test-request-id',
-          sendNotification: vi.fn(),
-          sendRequest: vi.fn(),
-        },
+      mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+        new Ok(mockBundleRequestResponse),
       );
+      const result = await getToolResult(bundleType);
       expect(mocks.mockGeneratePulseMetricValueInsightBundle).toHaveBeenCalledWith(
         bundleRequest,
         bundleType,
       );
       expect(result.isError).toBe(false);
-      const parsedValue = JSON.parse(result.content[0].text as string);
+      invariant(result.content[0].type === 'text');
+      const parsedValue = JSON.parse(result.content[0].text);
       expect(parsedValue).toEqual(mockBundleRequestResponse);
     },
   );
 
   it('should have correct tool properties', () => {
+    const tool = getGeneratePulseMetricValueInsightBundleTool(new Server());
     expect(tool.name).toBe('generate-pulse-metric-value-insight-bundle');
     expect(tool.description).toContain(
       'Generate an insight bundle for the current aggregated value',
     );
-    expect(tool.paramsSchema).toMatchObject({
-      bundleRequest: expect.any(Object),
-    });
+    expect(tool.paramsSchema).toMatchObject({ bundleRequest: expect.any(Object) });
   });
 
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
     mocks.mockGeneratePulseMetricValueInsightBundle.mockRejectedValue(new Error(errorMessage));
-    const result = await tool.callback(
-      { bundleRequest },
-      {
-        signal: new AbortController().signal,
-        requestId: 'test-request-id',
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      },
-    );
+    const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -198,13 +191,52 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockRejectedValue(
       new Error('bundleRequest is required'),
     );
-    const result = await tool.callback({} as any, {
-      signal: new AbortController().signal,
-      requestId: 'test-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    });
+    const result = await getToolResult();
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('bundleRequest');
   });
+
+  it('should return an error when executing the tool against Tableau Server', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Err(new PulseDisabledError('tableau-server', 404)),
+    );
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
+  });
+
+  it('should return an error when Pulse is disabled', async () => {
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
+      new Err(new PulseDisabledError('pulse-disabled', 400)),
+    );
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
+  });
+
+  it('should return data source not allowed error when datasource is not allowed', async () => {
+    vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      [
+        'The set of allowed metric insights that can be queried is limited by the server configuration.',
+        'Generating the Pulse Metric Value Insight Bundle is not allowed because the definition is derived from the',
+        'data source with LUID A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11, which is not in the allowed set of data sources.',
+      ].join(' '),
+    );
+
+    expect(mocks.mockGeneratePulseMetricValueInsightBundle).not.toHaveBeenCalled();
+  });
+
+  async function getToolResult(bundleType?: PulseInsightBundleType): Promise<CallToolResult> {
+    const tool = getGeneratePulseMetricValueInsightBundleTool(new Server());
+    const callback = await Provider.from(tool.callback);
+    return await callback({ bundleRequest, bundleType }, getMockRequestHandlerExtra());
+  }
 });

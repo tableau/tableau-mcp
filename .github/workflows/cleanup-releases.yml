@@ -1,0 +1,39 @@
+name: Delete Old Release Assets
+on:
+  schedule:
+    - cron: '0 18 * * 1' # Weekly on Monday 18:00 UTC
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            // Get all releases with pagination, sorted by creation date (newest first)
+            const allReleases = await github.paginate(github.rest.repos.listReleases, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100  // Maximum items per page
+            });
+
+            // Sort releases by created_at date, newest first
+            const sortedReleases = allReleases.sort((a, b) => {
+              return new Date(b.created_at) - new Date(a.created_at);
+            });
+
+            // Keep the assets from the last 10 releases (newest), delete assets from the rest
+            const releasesToClean = sortedReleases.slice(10);
+
+            for (const release of releasesToClean) {
+              // Delete assets from old releases (but keep the release itself)
+              for (const asset of release.assets) {
+                console.log(`Deleting asset: ${asset.name} from release: ${release.tag_name}`);
+                await github.rest.repos.deleteReleaseAsset({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  asset_id: asset.id
+                });
+              }
+            }

@@ -13,26 +13,11 @@ export default [
   eslintPluginPrettierRecommended,
   {
     files: ['**/*.{js,mjs,cjs,ts}'],
-  },
-  {
-    languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
-      globals: {
-        ...globals.node,
-      },
-    },
-  },
-  {
-    ignores: ['node_modules/**', 'build/**'],
-  },
-  {
-    plugins: {
-      'simple-import-sort': simpleImportSort,
-    },
     rules: {
-      'no-console': 'error',
+      'no-console': ['error', { allow: ['warn', 'error'] }],
       'no-duplicate-imports': ['error', { includeExports: true }],
+      'no-trailing-spaces': 'error',
+      quotes: ['error', 'single', { avoidEscape: true }],
       'simple-import-sort/imports': 'error',
       'simple-import-sort/exports': 'error',
       '@typescript-eslint/explicit-function-return-type': ['error', { allowExpressions: true }],
@@ -46,6 +31,29 @@ export default [
           varsIgnorePattern: '^_',
         },
       ],
+    },
+  },
+  {
+    files: ['tests/**/*.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  {
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+  {
+    ignores: ['node_modules/**', 'build/**', 'docs/.docusaurus/**', 'docs/build/**'],
+  },
+  {
+    plugins: {
+      'simple-import-sort': simpleImportSort,
     },
   },
 ];

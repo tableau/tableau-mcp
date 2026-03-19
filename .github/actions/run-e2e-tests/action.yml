@@ -1,0 +1,8 @@
+name: 'Run E2E Tests'
+description: 'Runs E2E tests with required secrets'
+runs:
+  using: 'composite'
+  steps:
+    - name: E2E Tests
+      shell: bash
+      run: npm run test:e2e

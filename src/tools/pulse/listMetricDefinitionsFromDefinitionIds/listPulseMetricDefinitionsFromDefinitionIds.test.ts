@@ -1,29 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err, Ok } from 'ts-results-es';
 
-import type { PulseMetricDefinition } from '../../../sdks/tableau/types/pulse.js';
+import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { Server } from '../../../server.js';
+import invariant from '../../../utils/invariant.js';
+import { Provider } from '../../../utils/provider.js';
+import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
+import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import { getListPulseMetricDefinitionsFromDefinitionIdsTool } from './listPulseMetricDefinitionsFromDefinitionIds.js';
-
-const mockPulseMetricDefinitions: PulseMetricDefinition[] = [
-  {
-    metadata: { name: 'Pulse Metric 1', id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C4' },
-    specification: { datasource: { id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11' } },
-    metrics: [
-      { id: 'CF32DDCC-362B-4869-9487-37DA4D152552', is_default: true, is_followed: false },
-      { id: 'CF32DDCC-362B-4869-9487-37DA4D152553', is_default: false, is_followed: true },
-    ],
-  } as PulseMetricDefinition,
-  {
-    metadata: { name: 'Pulse Metric 2', id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C5' },
-    specification: { datasource: { id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A12' } },
-    metrics: [{ id: 'CF32DDCC-362B-4869-9487-37DA4D152554', is_default: true, is_followed: false }],
-  } as PulseMetricDefinition,
-  {
-    metadata: { name: 'Pulse Metric 3', id: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C6' },
-    specification: { datasource: { id: 'A6FC3C9F-4F40-4906-8DB0-AC70C5FB5A11' } },
-    metrics: [],
-  } as unknown as PulseMetricDefinition,
-];
 
 const mocks = vi.hoisted(() => ({
   mockListPulseMetricDefinitionsFromMetricDefinitionIds: vi.fn(),
@@ -36,6 +20,7 @@ vi.mock('../../../restApiInstance.js', () => ({
         listPulseMetricDefinitionsFromMetricDefinitionIds:
           mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds,
       },
+      siteId: 'test-site-id',
     }),
   ),
 }));
@@ -69,7 +54,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
     { view: 'DEFINITION_VIEW_DEFAULT', label: 'default view' },
   ])('should list pulse metric definitions from IDs with $label', async ({ view }) => {
     mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockResolvedValue(
-      mockPulseMetricDefinitions,
+      new Ok(mockPulseMetricDefinitions),
     );
     const result = await getToolResult({
       metricDefinitionIds: [
@@ -80,7 +65,8 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
       view,
     });
     expect(result.isError).toBe(false);
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockPulseMetricDefinitions);
     expect(mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds).toHaveBeenCalledWith(
       [
@@ -94,7 +80,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
 
   it('should list pulse metric definitions from IDs with no view (default)', async () => {
     mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockResolvedValue(
-      mockPulseMetricDefinitions,
+      new Ok(mockPulseMetricDefinitions),
     );
     const result = await getToolResult({
       metricDefinitionIds: [
@@ -104,7 +90,8 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
       ],
     });
     expect(result.isError).toBe(false);
-    const parsedValue = JSON.parse(result.content[0].text as string);
+    invariant(result.content[0].type === 'text');
+    const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockPulseMetricDefinitions);
     expect(mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds).toHaveBeenCalledWith(
       [
@@ -126,6 +113,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
       view: 'DEFINITION_VIEW_BASIC',
     });
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
@@ -141,6 +129,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
       view: 'INVALID_VIEW',
     } as any);
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('view');
     expect(result.content[0].text).toContain('Enumeration value must be one of');
     expect(result.content[0].text).toContain(
@@ -168,36 +157,70 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
     // Intentionally omitting required parameter for testing
     const result = await getToolResult({} as any);
     expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('metricDefinitionIds');
     expect(result.content[0].text).toContain('Array must contain at least 1 element(s)');
   });
-});
 
-it('should return an error for is metricDefinitionId is too small', async () => {
-  mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockRejectedValue({
-    errorCode: '-32602',
-    message: `MCP error -32602: MCP error -32602: Invalid arguments for tool list-pulse-metric-definitions-from-definition-ids: [
-      {
-        "code": "too_small",
-        "minimum": 36,
-        "type": "string",
-        "inclusive": true,
-        "exact": true,
-        "message": "String must contain exactly 36 character(s)",
-        "path": [
-          "metricDefinitionIds",
-          0
-        ]
-      }
-    ]`,
+  it('should return an error for is metricDefinitionId is too small', async () => {
+    mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockRejectedValue({
+      errorCode: '-32602',
+      message: `MCP error -32602: MCP error -32602: Invalid arguments for tool list-pulse-metric-definitions-from-definition-ids: [
+        {
+          "code": "too_small",
+          "minimum": 36,
+          "type": "string",
+          "inclusive": true,
+          "exact": true,
+          "message": "String must contain exactly 36 character(s)",
+          "path": [
+            "metricDefinitionIds",
+            0
+          ]
+        }
+      ]`,
+    });
+    // Intentionally omitting required parameter for testing
+    const result = await getToolResult({
+      metricDefinitionIds: ['123'],
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('metricDefinitionIds');
+    expect(result.content[0].text).toContain('String must contain exactly 36 character(s)');
   });
-  // Intentionally omitting required parameter for testing
-  const result = await getToolResult({
-    metricDefinitionIds: ['123'],
+
+  it('should return an error when executing the tool against Tableau Server', async () => {
+    mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockResolvedValue(
+      new Err(new PulseDisabledError('tableau-server', 404)),
+    );
+    const result = await getToolResult({
+      metricDefinitionIds: [
+        mockPulseMetricDefinitions[0].metadata.id,
+        mockPulseMetricDefinitions[1].metadata.id,
+        mockPulseMetricDefinitions[2].metadata.id,
+      ],
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
   });
-  expect(result.isError).toBe(true);
-  expect(result.content[0].text).toContain('metricDefinitionIds');
-  expect(result.content[0].text).toContain('String must contain exactly 36 character(s)');
+
+  it('should return an error when Pulse is disabled', async () => {
+    mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockResolvedValue(
+      new Err(new PulseDisabledError('pulse-disabled', 400)),
+    );
+    const result = await getToolResult({
+      metricDefinitionIds: [
+        mockPulseMetricDefinitions[0].metadata.id,
+        mockPulseMetricDefinitions[1].metadata.id,
+        mockPulseMetricDefinitions[2].metadata.id,
+      ],
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
+  });
 });
 
 async function getToolResult(params: {
@@ -206,10 +229,9 @@ async function getToolResult(params: {
 }): Promise<CallToolResult> {
   const listPulseMetricDefinitionsFromDefinitionIdsTool =
     getListPulseMetricDefinitionsFromDefinitionIdsTool(new Server());
-  return await listPulseMetricDefinitionsFromDefinitionIdsTool.callback(params, {
-    signal: new AbortController().signal,
-    requestId: 'test-request-id',
-    sendNotification: vi.fn(),
-    sendRequest: vi.fn(),
-  });
+  const callback = await Provider.from(listPulseMetricDefinitionsFromDefinitionIdsTool.callback);
+  return await callback(
+    { metricDefinitionIds: params.metricDefinitionIds, view: params.view },
+    getMockRequestHandlerExtra(),
+  );
 }
