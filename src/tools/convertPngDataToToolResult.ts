@@ -1,7 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 export function convertPngDataToToolResult(pngData: string): CallToolResult {
-  const base64Data = Buffer.from(pngData).toString('base64');
+  /** REST clients return PNG bytes as a binary string; `latin1` preserves all byte values for base64 encoding. */
+  const base64Data = Buffer.from(pngData, 'latin1').toString('base64');
 
   return {
     isError: false,
