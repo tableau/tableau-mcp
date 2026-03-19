@@ -148,6 +148,7 @@ async function post(body: object, sessionId?: string): Promise<{
 }> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
     'x-tableau-auth': token!,
   };
 
@@ -161,11 +162,52 @@ async function post(body: object, sessionId?: string): Promise<{
     body: JSON.stringify(body),
   });
 
+  const contentType = res.headers.get('content-type') ?? '';
+  const rawBody = await res.text();
+  const method = typeof body === 'object' && body !== null && 'method' in body ? (body as { method?: string }).method : 'unknown';
+
+  if (process.env.VALIDATE_DEBUG || method === 'tools/list') {
+    console.error(`[DEBUG] ${method} -> Content-Type: ${contentType}`);
+    console.error(`[DEBUG] ${method} -> body (first 800 chars):\n${rawBody.slice(0, 800)}`);
+  }
+
+  let data: McpSuccessResponse;
+  if (contentType.includes('text/event-stream')) {
+    const parsed = parseSseBody(rawBody, typeof body === 'object' && body !== null && 'id' in body ? (body as { id?: number }).id : undefined);
+    data = parsed ?? ({} as McpSuccessResponse);
+  } else {
+    try {
+      data = (rawBody ? JSON.parse(rawBody) : {}) as McpSuccessResponse;
+    } catch {
+      data = {} as McpSuccessResponse;
+    }
+  }
+
   return {
     status: res.status,
-    data: (await res.json().catch(() => ({}))) as McpSuccessResponse,
+    data,
     sessionId: res.headers.get('mcp-session-id') || sessionId || '',
   };
+}
+
+function parseSseBody(text: string, expectedId?: number): McpSuccessResponse | undefined {
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('data: ')) {
+      const jsonStr = line.slice(6);
+      if (jsonStr === '[DONE]' || jsonStr.trim() === '') continue;
+      try {
+        const parsed = JSON.parse(jsonStr) as McpSuccessResponse;
+        if (expectedId === undefined || parsed.id === expectedId) {
+          return parsed;
+        }
+      } catch {
+        /* skip malformed data lines */
+      }
+    }
+  }
+  return undefined;
 }
 
 async function callTool(name: string, args: JsonObject, id: number): Promise<unknown> {
@@ -486,6 +528,11 @@ function fail(message: string): never {
 (async () => {
   console.log(`Validator stage: ${stage}`);
   console.log(`MCP URL: ${baseUrl}`);
+  if (process.env.VALIDATE_DEBUG) {
+    console.error('[DEBUG] VALIDATE_DEBUG=1 — logging all MCP request/response details');
+  } else if (stage !== 'handshake') {
+    console.error('[DEBUG] Tip: Set VALIDATE_DEBUG=1 to log Content-Type and raw body for every request');
+  }
 
   printStep('initialize');
   const init = await post(initializeRequest);
@@ -528,6 +575,10 @@ function fail(message: string): never {
   const toolNames = tools.map((tool) => tool.name).filter((name): name is string => !!name);
   console.log(`  success: tools/list`);
   console.log(`  tools discovered: ${toolNames.length}`);
+
+  if (toolNames.length === 0) {
+    console.error('[DEBUG] tools/list returned 0 tools. Parsed result:', JSON.stringify(list.data));
+  }
   console.log(`  joe-flow tools present: ${requiredJoeFlowTools.every((name) => toolNames.includes(name))}`);
 
   for (const requiredTool of requiredJoeFlowTools) {

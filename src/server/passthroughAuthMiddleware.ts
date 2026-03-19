@@ -33,6 +33,15 @@ export function passthroughAuthMiddleware(): RequestHandler {
     const tableauAccessToken: string =
       getHeader(req, X_TABLEAU_AUTH_HEADER) || getCookie(req, 'workgroup_session_id');
 
+    console.log('[passthrough debug] x-tableau-auth present:', !!tableauAccessToken);
+    if (tableauAccessToken) {
+      console.log(
+        '[passthrough debug] x-tableau-auth preview:',
+        `${tableauAccessToken.slice(0, 12)}...`,
+      );
+      console.log('[passthrough debug] x-tableau-auth full:', tableauAccessToken);
+    }
+
     if (!tableauAccessToken) {
       next();
       return;
