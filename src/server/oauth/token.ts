@@ -32,9 +32,11 @@ export function token(
   const config = getConfig();
 
   app.post('/oauth2/token', async (req, res) => {
+    console.warn(JSON.stringify(req.body));
     const result = mcpTokenSchema.safeParse(req.body);
 
     if (!result.success) {
+      console.error('Token endpoint error:', result.error);
       res.status(400).json({
         error: 'invalid_request',
         error_description: fromError(result.error).toString(),
@@ -52,6 +54,7 @@ export function token(
       });
 
       if (clientCredentialsResult.isErr()) {
+        console.error('Invalid client credentials:', clientCredentialsResult.error);
         res.status(401).json({
           error: 'invalid_client',
           error_description: clientCredentialsResult.error,
@@ -80,6 +83,7 @@ export function token(
           // Verify PKCE
           const challengeFromVerifier = generateCodeChallenge(codeVerifier);
           if (challengeFromVerifier !== authCode.codeChallenge) {
+            console.error('Invalid code verifier:', challengeFromVerifier, authCode.codeChallenge);
             res.status(400).json({
               error: 'invalid_grant',
               error_description: 'Invalid code verifier',
@@ -126,6 +130,7 @@ export function token(
           );
 
           if (invalidScopes.length > 0) {
+            console.error('Invalid scopes:', invalidScopes);
             res.status(400).json({
               error: 'invalid_scope',
               error_description: `Unsupported scopes: ${invalidScopes.join(', ')}`,
