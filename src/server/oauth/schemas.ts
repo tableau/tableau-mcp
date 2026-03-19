@@ -7,7 +7,7 @@ export const mcpAuthorizeSchema = z.object({
   client_id: requiredString('client_id'),
   redirect_uri: requiredString('redirect_uri'),
   response_type: requiredString('response_type'),
-  code_challenge: requiredString('code_challenge'),
+  code_challenge: z.string().optional(),
   code_challenge_method: z.string().optional(),
   state: z.string().optional(),
   scope: z.string().optional(),
