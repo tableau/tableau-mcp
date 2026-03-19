@@ -43,15 +43,11 @@ export function authorize(
       return;
     }
 
-    const {
-      client_id,
-      redirect_uri,
-      response_type,
-      code_challenge,
-      code_challenge_method,
-      state,
-      scope,
-    } = result.data;
+    const { client_id, redirect_uri, response_type, code_challenge, state, scope } = result.data;
+
+    let { code_challenge_method } = result.data;
+
+    code_challenge_method = code_challenge_method ?? 'S256';
 
     let clientName: string | undefined;
     const clientIdUrl = parseUrl(client_id);
