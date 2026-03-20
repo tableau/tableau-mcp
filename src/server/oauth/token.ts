@@ -87,6 +87,26 @@ export function token(
             return;
           }
 
+          // Validate redirect_uri matches what was used at authorization (OAuth 2.1 Section 4.1.3)
+          if (result.data.redirectUri !== authCode.redirectUri) {
+            res.status(400).json({
+              error: 'invalid_grant',
+              error_description: 'Redirect URI mismatch',
+            });
+            return;
+          }
+
+          // Validate client_id matches what was used at authorization (when provided).
+          // Fall back to the credential-verified identity from the Basic Auth path.
+          const effectiveClientId = result.data.clientId || clientCredentialClientId || undefined;
+          if (effectiveClientId && effectiveClientId !== authCode.clientId) {
+            res.status(400).json({
+              error: 'invalid_grant',
+              error_description: 'Client ID mismatch',
+            });
+            return;
+          }
+
           // Generate tokens
           const refreshTokenId = randomBytes(32).toString('hex');
           const accessToken = await createAccessToken(authCode, publicKey);
