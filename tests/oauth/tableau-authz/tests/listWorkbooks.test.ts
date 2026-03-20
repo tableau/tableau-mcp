@@ -4,8 +4,7 @@ import { workbookSchema } from '../../../../src/sdks/tableau/types/workbook.js';
 import { expect, test } from './base.js';
 import { getSuperstoreWorkbook } from './testEnv.js';
 
-// Skip until Content Exploration issues are resolved
-test.describe.skip('list-workbooks', () => {
+test.describe('list-workbooks', () => {
   test('list workbooks', async ({ client }) => {
     const superstore = getSuperstoreWorkbook();
 

@@ -3,8 +3,7 @@ import { z } from 'zod';
 import { expect, test } from './base.js';
 import { getSuperstoreWorkbook } from './testEnv.js';
 
-// Skip until Content Exploration issues are resolved
-test.describe.skip('get-view-data', () => {
+test.describe('get-view-data', () => {
   test('get view data', async ({ client }) => {
     const superstore = getSuperstoreWorkbook();
 

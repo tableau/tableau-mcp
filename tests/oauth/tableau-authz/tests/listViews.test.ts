@@ -3,8 +3,7 @@ import { z } from 'zod';
 import { viewSchema } from '../../../../src/sdks/tableau/types/view.js';
 import { expect, test } from './base.js';
 
-// Skip until Content Exploration issues are resolved
-test.describe.skip('list-views', () => {
+test.describe('list-views', () => {
   test('list views', async ({ client }) => {
     const views = await client.callTool('list-views', {
       schema: z.array(viewSchema),

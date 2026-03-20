@@ -3,8 +3,7 @@ import { z } from 'zod';
 import { dataSourceSchema } from '../../../../src/sdks/tableau/types/dataSource.js';
 import { expect, test } from './base.js';
 
-// Skip until Content Exploration issues are resolved
-test.describe.skip('list-datasources', () => {
+test.describe('list-datasources', () => {
   test('list datasources', async ({ client }) => {
     const datasources = await client.callTool('list-datasources', {
       schema: z.array(dataSourceSchema),
