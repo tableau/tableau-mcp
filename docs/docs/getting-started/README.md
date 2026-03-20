@@ -89,8 +89,8 @@ Login to your site, then click your profile in the upper right to bring up My Ac
 
 Scroll down to Personal Access Tokens and create a new one. You can use any token name but "mcp" is
 suggested. Make sure to copy and save the value because it's only shown this one time. (Also, be
-aware that Tableau PATs will expire after not being used for a couple weeks, so you may need to
-periodically create a new one.)
+aware that Tableau PATs will expire after 15 days of inactivity, so you may need to periodically
+create a new one.)
 
 ![Personal Access Token Config](images/pat.png)
 
@@ -180,7 +180,7 @@ When everything is configured it should look like this:
 
 ### List Datasources
 
-To verify that Claude is talking to Tableau correctly, start a new chat and try a question list
+To verify that Claude is talking to Tableau correctly, start a new chat and try a question like
 "list some of the Tableau datasources". Claude will show a pop-up asking for permission to run the
 list-datasources tool, then you should see a result like this:
 
@@ -235,7 +235,7 @@ The MCP project is still under development and new tools (Tableau APIs) are bein
 See the README at https://github.com/tableau/tableau-mcp for the latest.
 
 We used Claude Desktop in this example, but any MCP client should work. People on our team have used
-Cursor, VScode, and other tools. The configuration for most of these follows the same pattern as
+Cursor, VS Code, and other tools. The configuration for most of these follows the same pattern as
 used above ("mcpServers" defined in JSON). The
 [Tableau MCP documentation](https://tableau.github.io/tableau-mcp/) has more details about different
 ways to configure and run, including all of the optional environment variables.
