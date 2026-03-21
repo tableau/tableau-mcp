@@ -1,11 +1,6 @@
 {
   "name": "Tableau MCP Server",
-  "image": "mcr.microsoft.com/devcontainers/javascript-node:20-bookworm",
-
-  "features": {
-    "ghcr.io/devcontainers/features/git:1": {},
-    "ghcr.io/devcontainers/features/github-cli:1": {}
-  },
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:24-trixie",
 
   "secrets": {
     "SERVER": {
@@ -57,7 +52,7 @@
         "ms-vscode.vscode-json"
       ],
       "settings": {
-        "typescript.preferences.includePackageJsonAutoImports": "on",
+        "ts.preferences.includePackageJsonAutoImports": "on",
         "editor.formatOnSave": true,
         "editor.defaultFormatter": "esbenp.prettier-vscode",
         "editor.codeActionsOnSave": {
@@ -70,7 +65,7 @@
     }
   },
 
-  "postCreateCommand": "npm ci && npm run build",
+  "postCreateCommand": "sh .devcontainer/post-create.sh",
 
   "postStartCommand": "npm run build",
 
