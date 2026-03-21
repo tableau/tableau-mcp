@@ -18,6 +18,10 @@
     "PAT_VALUE": {
       "description": "The value of the Personal Access Token to use.",
       "documentationUrl": "https://github.com/tableau/tableau-mcp#personal-access-token-configuration"
+    },
+    "OPENAI_API_KEY": {
+      "description": "OpenAI API key",
+      "documentationUrl": "https://platform.openai.com/api-keys"
     }
   },
 
