@@ -2,8 +2,12 @@ name: Publish
 on:
   release:
     types: [published]
+  push:
+    branches:
+      - experimental
 jobs:
   publish-npm:
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -21,7 +25,25 @@ jobs:
           npm ci
           npm run build
           npm publish
+  publish-npm-experimental:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/experimental'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Needed for OIDC authentication
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '>=22.7.5'
+          registry-url: https://registry.npmjs.org/
+      - run: |
+          npm install -g npm@latest
+          npm ci
+          npm run build
+          npm publish --tag experimental
   upload-mcpb:
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: write # Needed to upload release assets
