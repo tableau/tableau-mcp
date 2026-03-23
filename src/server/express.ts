@@ -11,6 +11,10 @@ import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
 import { handlePingRequest, validateProtocolVersion } from './middleware.js';
+import {
+  jwtSubClaimHeaderCorsAllowList,
+  jwtSubClaimHeaderMiddleware,
+} from './jwtSubClaimHeaderMiddleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { OAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
@@ -43,6 +47,7 @@ export async function startExpressServer({
         'Accept',
         'MCP-Protocol-Version',
         'MCP-Session-Id',
+        ...jwtSubClaimHeaderCorsAllowList(config),
       ],
       exposedHeaders: [SESSION_ID_HEADER, 'x-session-id'],
     }),
@@ -53,7 +58,10 @@ export async function startExpressServer({
     app.set('trust proxy', config.trustProxyConfig);
   }
 
-  const middleware: Array<RequestHandler> = [handlePingRequest];
+  const middleware: Array<RequestHandler> = [
+    handlePingRequest,
+    jwtSubClaimHeaderMiddleware(config),
+  ];
   if (config.oauth.enabled) {
     const oauthProvider = new OAuthProvider();
     oauthProvider.setupRoutes(app);

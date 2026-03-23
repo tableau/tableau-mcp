@@ -21,7 +21,9 @@ it internally calls into VizQL Data Service, the JWT will only have the
 
 The username for the `sub` claim of the JWT.
 
-- Can either be a hard-coded username, or the OAuth username by setting it to `{OAUTH_USERNAME}`.
+- Can either be a hard-coded username, the OAuth username by setting it to `{OAUTH_USERNAME}` when
+  MCP OAuth is enabled, or (when MCP OAuth is disabled) the username sent on each HTTP request via
+  [`JWT_SUB_CLAIM_HEADER`](#jwt_sub_claim_header) below.
 
 <hr />
 
@@ -51,6 +53,38 @@ code where it could accidentally be revealed.
 <hr />
 
 ## Optional Variables
+
+### `JWT_SUB_CLAIM_HEADER`
+
+HTTP header your **trusted gateway** (reverse proxy, backend, etc.) adds on every MCP request with
+the Tableau username to use in the JWT (same value you would put in `JWT_SUB_CLAIM` for a fixed
+user). Set `JWT_SUB_CLAIM` to `{OAUTH_USERNAME}` so that value is taken from this header.
+
+**Requirements (all must be satisfied):**
+
+- `TRANSPORT` is `http`
+- `DANGEROUSLY_DISABLE_OAUTH` is `true` (MCP OAuth off)
+- `DISABLE_SESSION_MANAGEMENT` is `true` (stateless HTTP so each request can carry a different user)
+- `JWT_SUB_CLAIM_HEADER_SECRET` is set (see below)
+
+If the username header is **omitted** on a request, the server does not treat the request as
+header-authenticated (a static `JWT_SUB_CLAIM` without `{OAUTH_USERNAME}` still works).
+
+<hr />
+
+### `JWT_SUB_CLAIM_HEADER_SECRET`
+
+Shared secret. The client must send the same value in the header named by
+`JWT_SUB_CLAIM_HEADER_SECRET_HEADER` (default `x-tableau-mcp-jwt-sub-secret`) whenever it sends the
+username header. Mismatches receive HTTP 401.
+
+<hr />
+
+### `JWT_SUB_CLAIM_HEADER_SECRET_HEADER`
+
+Optional. Custom HTTP header name for the secret. Must be a valid header token if set.
+
+<hr />
 
 ### `JWT_ADDITIONAL_PAYLOAD`
 
