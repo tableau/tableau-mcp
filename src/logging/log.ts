@@ -81,6 +81,16 @@ export const writeToStderr = (message: string): void => {
   process.stderr.write(message);
 };
 
+/** Stdout so hosts (e.g. Railway) do not classify lines as severity "error" like they do for stderr. */
+export const writeToStdout = (message: string): void => {
+  if (process.env.TABLEAU_MCP_TEST === 'true') {
+    return;
+  }
+
+  message = message.endsWith('\n') ? message : `${message}\n`;
+  process.stdout.write(message);
+};
+
 export const getToolLogMessage = ({
   requestId,
   toolName,

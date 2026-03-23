@@ -10,7 +10,7 @@ This note summarizes work on branch **`dynamic_user`** and how callers must send
 
 - **Goal:** Use **direct-trust** (Connected App JWT) to Tableau while allowing the **JWT username / `sub`** to vary **per HTTP request** (e.g. signed-in user email from a web app).
 - **Mechanism:** When **MCP OAuth is disabled**, an Express middleware reads a **configurable HTTP header** and puts its value into `req.auth.extra.username`. Existing code already substitutes `{OAUTH_USERNAME}` in `JWT_SUB_CLAIM` and `JWT_ADDITIONAL_PAYLOAD` from that context when signing into Tableau.
-- **Important:** **`TRANSPORT=http`**, **`DANGEROUSLY_DISABLE_OAUTH=true`**, **`DISABLE_SESSION_MANAGEMENT=true`** are required so each request can carry a different user (stateless HTTP; new `Server` per request in that mode).
+- **Important:** **`TRANSPORT=http`**, **`DANGEROUSLY_DISABLE_OAUTH=true`**. Session management can stay **off** (stateless) or **on**; when sessions are on, JWT username still comes from the **current** request’s header (AsyncLocalStorage), not only from `initialize`.
 - **Security tradeoff:** There is **no shared secret** on the header path. Anyone who can reach the MCP URL can send any username in that header. Mitigate with network restrictions, Railway private networking, or a reverse proxy.
 
 ### Code locations (for maintenance)
@@ -41,7 +41,7 @@ Set in Railway (or `.env` locally) at minimum:
 |----------|---------|
 | `TRANSPORT` | `http` |
 | `DANGEROUSLY_DISABLE_OAUTH` | `true` |
-| `DISABLE_SESSION_MANAGEMENT` | `true` |
+| `DISABLE_SESSION_MANAGEMENT` | optional; if `false` (default), send the username header on **every** MCP HTTP request including tool calls |
 | `AUTH` | `direct-trust` |
 | `SERVER` | Tableau site base URL (`https://...`) |
 | `SITE_NAME` | Tableau site content URL |
@@ -126,7 +126,7 @@ X-Tableau-Jwt-Username: user@company.com
 
 ## Request logging (JWT sub header)
 
-When `JWT_SUB_CLAIM_HEADER` is enabled and a client sends that header with a non-empty value, the server writes **one JSON line per request** to **stderr** (visible in Railway logs, Docker logs, or your terminal):
+When `JWT_SUB_CLAIM_HEADER` is enabled and a client sends that header with a non-empty value, the server writes **one JSON line per request** to **stdout** (so platforms like Railway do not tag the line as `error`, which they often do for **stderr**):
 
 - `type`: `jwt-sub-header-request`
 - `jwtSubClaimTemplate`: value of env `JWT_SUB_CLAIM` (e.g. `{OAUTH_USERNAME}`)

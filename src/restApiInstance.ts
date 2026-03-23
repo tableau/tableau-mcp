@@ -16,6 +16,7 @@ import {
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { getTableauAuthInfoFromRequestContext } from './server/tableauRequestContext.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
@@ -282,14 +283,25 @@ function getUserAgent(server: Server): string {
   return userAgentParts.join(' ');
 }
 
+function resolveTableauAuthForJwt(authInfo: TableauAuthInfo | undefined): TableauAuthInfo | undefined {
+  const fromRequest = getTableauAuthInfoFromRequestContext();
+  const u = fromRequest?.username;
+  if (u != null && String(u).trim() !== '') {
+    return { ...authInfo, ...fromRequest };
+  }
+  return authInfo;
+}
+
 function getJwtUsername(config: Config, authInfo: TableauAuthInfo | undefined): string {
-  return config.jwtUsername.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
+  const auth = resolveTableauAuthForJwt(authInfo);
+  return config.jwtUsername.replaceAll('{OAUTH_USERNAME}', auth?.username ?? '');
 }
 
 function getJwtAdditionalPayload(
   config: Config,
   authInfo: TableauAuthInfo | undefined,
 ): Record<string, unknown> {
-  const json = config.jwtAdditionalPayload.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
+  const auth = resolveTableauAuthForJwt(authInfo);
+  const json = config.jwtAdditionalPayload.replaceAll('{OAUTH_USERNAME}', auth?.username ?? '');
   return JSON.parse(json || '{}');
 }

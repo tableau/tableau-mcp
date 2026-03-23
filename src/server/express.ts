@@ -16,6 +16,7 @@ import {
   jwtSubClaimHeaderMiddleware,
 } from './jwtSubClaimHeaderMiddleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
+import { runWithTableauAuthInfo } from './tableauRequestContext.js';
 import { OAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
@@ -156,7 +157,10 @@ export async function startExpressServer({
         }
       }
 
-      await transport.handleRequest(req, res, req.body);
+      const requestTableauAuth = getTableauAuthInfo(req.auth);
+      await runWithTableauAuthInfo(requestTableauAuth, () =>
+        transport.handleRequest(req, res, req.body),
+      );
     } catch (error) {
       console.error('Error handling MCP request:', error);
       if (!res.headersSent) {
@@ -208,5 +212,8 @@ async function handleSessionRequest(req: express.Request, res: express.Response)
     return;
   }
 
-  await session.transport.handleRequest(req, res);
+  const requestTableauAuth = getTableauAuthInfo((req as AuthenticatedRequest).auth);
+  await runWithTableauAuthInfo(requestTableauAuth, () =>
+    session.transport.handleRequest(req, res),
+  );
 }

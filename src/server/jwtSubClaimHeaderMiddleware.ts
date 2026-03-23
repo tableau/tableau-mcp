@@ -2,7 +2,7 @@ import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import express, { RequestHandler } from 'express';
 
 import { Config } from '../config.js';
-import { writeToStderr } from '../logging/log.js';
+import { writeToStdout } from '../logging/log.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 
 function logJwtSubHeaderRequest(
@@ -24,7 +24,7 @@ function logJwtSubHeaderRequest(
     clientIp: clientIp || undefined,
     xForwardedFor: forwardedFor || undefined,
   });
-  writeToStderr(`[tableau-mcp] ${line}`);
+  writeToStdout(`[tableau-mcp] ${line}`);
 }
 
 /**
@@ -57,7 +57,7 @@ export function jwtSubClaimHeaderMiddleware(config: Config): RequestHandler {
 
     const username = rawUsername.trim();
     if (!username) {
-      writeToStderr(
+      writeToStdout(
         `[tableau-mcp] ${JSON.stringify({
           type: 'jwt-sub-header-request-invalid',
           timestamp: new Date().toISOString(),

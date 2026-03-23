@@ -66,7 +66,10 @@ With stateless HTTP, **each request may send a different username** in that head
 
 - `TRANSPORT` is `http`
 - `DANGEROUSLY_DISABLE_OAUTH` is `true` (MCP OAuth off)
-- `DISABLE_SESSION_MANAGEMENT` is `true` (stateless HTTP so each request can carry a different user)
+
+`DISABLE_SESSION_MANAGEMENT` may be `true` or `false`. When sessions are enabled, the username
+header on **each** HTTP request (including tool calls after `initialize`) is still applied to JWT
+sign-in via request-scoped context.
 
 If the username header is **omitted** on a request, the server does not treat the request as
 header-authenticated (a static `JWT_SUB_CLAIM` without `{OAUTH_USERNAME}` still works).

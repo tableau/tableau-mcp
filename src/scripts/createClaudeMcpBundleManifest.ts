@@ -171,7 +171,7 @@ const envVars = {
     type: 'string',
     title: 'JWT Sub Claim HTTP Header',
     description:
-      'When MCP OAuth is off: HTTP header name your gateway sends with the Tableau username (e.g. email). Requires TRANSPORT=http and DISABLE_SESSION_MANAGEMENT=true.',
+      'When MCP OAuth is off: HTTP header name your gateway sends with the Tableau username (e.g. email). Requires TRANSPORT=http. Send on every MCP request (including tool calls) if using sessions.',
     required: false,
     sensitive: false,
   },

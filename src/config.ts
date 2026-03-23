@@ -367,11 +367,6 @@ function validateJwtSubClaimHeaderConfig(config: Config): void {
       'JWT_SUB_CLAIM_HEADER cannot be used when OAuth is enabled (OAUTH_ISSUER is set)',
     );
   }
-  if (!config.disableSessionManagement) {
-    throw new Error(
-      'DISABLE_SESSION_MANAGEMENT must be "true" when JWT_SUB_CLAIM_HEADER is set so each MCP request can carry its own username',
-    );
-  }
 
   if (!isSafeHttpHeaderName(config.jwtSubClaimRequestHeaderName)) {
     throw new Error('JWT_SUB_CLAIM_HEADER must be a valid HTTP header name');

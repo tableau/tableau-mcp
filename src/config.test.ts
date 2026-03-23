@@ -464,13 +464,13 @@ describe('Config', () => {
       );
     });
 
-    it('should throw when JWT_SUB_CLAIM_HEADER is set without DISABLE_SESSION_MANAGEMENT', () => {
+    it('should allow JWT_SUB_CLAIM_HEADER when DISABLE_SESSION_MANAGEMENT is false (request-scoped auth)', () => {
       stubDirectTrustHttpStateless();
       vi.stubEnv('DISABLE_SESSION_MANAGEMENT', 'false');
 
-      expect(() => new Config()).toThrow(
-        'DISABLE_SESSION_MANAGEMENT must be "true" when JWT_SUB_CLAIM_HEADER is set',
-      );
+      const config = new Config();
+      expect(config.jwtSubClaimRequestHeaderName).toBe('x-tableau-jwt-username');
+      expect(config.disableSessionManagement).toBe(false);
     });
 
     it('should throw when JWT_SUB_CLAIM_HEADER is set while OAuth is enabled', () => {
