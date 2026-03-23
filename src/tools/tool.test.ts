@@ -37,7 +37,6 @@ describe('Tool', () => {
     paramsSchema: {
       param1: z.string(),
     },
-    argsValidator: vi.fn(),
     annotations: {
       title: 'Get Datasource Metadata',
       readOnlyHint: true,
@@ -118,60 +117,6 @@ describe('Tool', () => {
       extra: mockExtra,
       args: { param1: 'test' },
       callback,
-      constrainSuccessResult: (result) => {
-        return {
-          type: 'success',
-          result,
-        };
-      },
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe('requestId: 2, error: Test error');
-  });
-
-  it('should call argsValidator with provided args', async () => {
-    const tool = new Tool(mockParams);
-    const args = { param1: 'test' };
-
-    await tool.logAndExecute({
-      extra: mockExtra,
-      args,
-      callback: vi.fn(),
-      constrainSuccessResult: (result) => {
-        return {
-          type: 'success',
-          result,
-        };
-      },
-    });
-
-    expect(mockParams.argsValidator).toHaveBeenCalledWith(args);
-  });
-
-  it('should return error result when argsValidator throws', async () => {
-    const tool = new Tool({
-      server: new Server(),
-      name: 'get-datasource-metadata',
-      description: 'test',
-      paramsSchema: z.object({ param1: z.string() }).shape,
-      annotations: { title: 'test', readOnlyHint: true, openWorldHint: false },
-      argsValidator: (_) => {
-        throw new Error('Test error');
-      },
-      callback: ({ param1 }) => {
-        return {
-          isError: false,
-          content: [{ type: 'text', text: param1 }],
-        };
-      },
-    });
-
-    const result = await tool.logAndExecute({
-      extra: mockExtra,
-      args: { param1: 'test' },
-      callback: () => Promise.resolve(Ok('test')),
       constrainSuccessResult: (result) => {
         return {
           type: 'success',
@@ -288,9 +233,6 @@ describe('Tool', () => {
     it('should send telemetry with success=false and error_code=400 on validation error', async () => {
       const tool = new Tool({
         ...mockParams,
-        argsValidator: () => {
-          throw new Error('Validation failed');
-        },
       });
 
       await tool.logAndExecute({
@@ -404,27 +346,6 @@ describe('Tool', () => {
 
     it('should record no error on success', async () => {
       const tool = new Tool(mockParams);
-
-      await tool.logAndExecute({
-        extra: mockExtra,
-        args: { param1: 'test-value' },
-        callback: () => Promise.resolve(Ok({ data: 'success' })),
-        constrainSuccessResult: (result) => ({ type: 'success', result }),
-      });
-
-      expect(mockRecordMetric).toHaveBeenCalledWith('mcp.tool.calls', 1, {
-        tool_name: 'get-datasource-metadata',
-        request_id: '2',
-      });
-    });
-
-    it('should record validation category when argsValidator throws', async () => {
-      const tool = new Tool({
-        ...mockParams,
-        argsValidator: () => {
-          throw new Error('Validation failed');
-        },
-      });
 
       await tool.logAndExecute({
         extra: mockExtra,

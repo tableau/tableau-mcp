@@ -10,13 +10,9 @@ import { getTelemetryProvider } from '../telemetry/init.js';
 import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../utils/getHttpStatus.js';
-import { Provider, TypeOrProvider } from '../utils/provider.js';
+import { TypeOrProvider } from '../utils/provider.js';
 import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
 import { ToolName } from './toolName.js';
-
-type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args extends ZodRawShape
-  ? (args: z.objectOutputType<Args, ZodTypeAny>) => void
-  : never;
 
 export type ToolRules = Record<string, boolean | undefined>;
 
@@ -55,9 +51,6 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
 
   // The annotations of the tool
   annotations: TypeOrProvider<ToolAnnotations>;
-
-  // A function that validates the tool's arguments provided by the client
-  argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
 
   // The implementation of the tool itself
   callback: TypeOrProvider<TableauToolCallback<Args>>;
@@ -102,7 +95,6 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   description: TypeOrProvider<string>;
   paramsSchema: TypeOrProvider<Args>;
   annotations: TypeOrProvider<ToolAnnotations>;
-  argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
   callback: TypeOrProvider<TableauToolCallback<Args>>;
 
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
@@ -113,7 +105,6 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     description,
     paramsSchema,
     annotations,
-    argsValidator,
     callback,
   }: ToolParams<Args>) {
     this.server = server;
@@ -121,7 +112,6 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.description = description;
     this.paramsSchema = paramsSchema;
     this.annotations = annotations;
-    this.argsValidator = argsValidator;
     this.callback = callback;
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name);
@@ -192,18 +182,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     let toolResult: CallToolResult;
 
     try {
-      if (args) {
-        try {
-          (await Provider.from(this.argsValidator))?.(args);
-        } catch (error) {
-          errorCode = '400'; // Validation errors are client errors
-          toolResult = getErrorResult(requestId, error);
-          return toolResult;
-        }
-      }
-
       const result = await callback();
-
       if (result.isOk()) {
         const constrainedResult = await constrainSuccessResult(result.value);
 
