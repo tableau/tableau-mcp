@@ -1,4 +1,4 @@
-import { PulseDisabledError } from '../sdks/tableau/methods/pulseMethods.js';
+import { TableauMCPError } from '../errors/error.js';
 import { isAxiosError } from './axios.js';
 
 /**
@@ -11,8 +11,8 @@ export function getHttpStatus(error: Error): string {
     return String(error.response.status);
   }
   // Check if the error is a PulseDisabledError
-  if (error instanceof PulseDisabledError) {
-    return String(error.httpStatus);
+  if (error instanceof TableauMCPError) {
+    return String(error.statusCode);
   }
   // Check if the error wraps an AxiosError in its cause (e.g., ZodiosError)
   if (error.cause && isAxiosError(error.cause) && error.cause.response?.status) {

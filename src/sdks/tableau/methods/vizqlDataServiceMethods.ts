@@ -1,13 +1,15 @@
 import { isErrorFromAlias, Zodios, ZodiosError } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
+import { fromError } from 'zod-validation-error/v3';
 
+import { TableauMCPError } from '../../../errors/error.js';
+import { handleQueryDatasourceError } from '../../../tools/queryDatasource/queryDatasourceErrorHandler.js';
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import {
   MetadataResponse,
   QueryOutput,
   QueryRequest,
   ReadMetadataRequest,
-  TableauError,
   vizqlDataServiceApis,
 } from '../apis/vizqlDataServiceApi.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -38,20 +40,35 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    */
   queryDatasource = async (
     queryRequest: QueryRequest,
-  ): Promise<Result<QueryOutput, 'feature-disabled' | TableauError | ZodiosError>> => {
+  ): Promise<Result<QueryOutput, TableauMCPError>> => {
     try {
       return Ok(await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader }));
     } catch (error) {
       if (isErrorFromAlias(this._apiClient.api, 'queryDatasource', error)) {
         if (error.response.status === 404) {
-          return Err('feature-disabled');
+          return Err(new TableauMCPError('feature-disabled', 'Query Datasource is disabled', 404));
         }
+        const tableauMCPError = handleQueryDatasourceError(
+          'tableau-error',
+          error.response.data.message ?? 'Unknown Tableau error',
+          400,
+          error.response.data.errorCode,
+        );
 
-        return Err(error.response.data);
+        return Err(tableauMCPError);
       }
 
       if (error instanceof ZodiosError) {
-        return Err(error);
+        return Err(
+          new TableauMCPError(
+            'zodios-error',
+            error.message,
+            400,
+            undefined,
+            error.data?.toString(),
+            fromError(error.cause).toString(),
+          ),
+        );
       }
 
       throw error;

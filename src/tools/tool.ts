@@ -1,9 +1,8 @@
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
-import { ZodiosError } from '@zodios/core';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
-import { fromError, isZodErrorLike } from 'zod-validation-error/v3';
 
+import { TableauMCPError } from '../errors/error.js';
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../server/oauth/scopes.js';
@@ -71,7 +70,7 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
  * @typeParam E - The type of the error the tool's implementation can return
  * @typeParam Args - The schema of the tool's parameters
  */
-type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined> = {
+type LogAndExecuteParams<T, Args extends ZodRawShape | undefined = undefined> = {
   // The extra data provided to request handlers
   extra: TableauRequestHandlerExtra;
 
@@ -79,14 +78,14 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
   args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
 
   // A function that contains the business logic of the tool to be logged and executed
-  callback: () => Promise<Result<T, E | ZodiosError>>;
+  callback: () => Promise<Result<T, TableauMCPError>>;
 
   // A function that can transform a successful result of the callback into a CallToolResult
   getSuccessResult?: (result: T) => CallToolResult;
 
   // A function that can transform an error result of the callback into a string.
   // Required if the callback can return an error result.
-  getErrorText?: (error: E) => string;
+  getErrorText?: (error: TableauMCPError) => string;
 
   // A function that constrains the success result of the tool
   constrainSuccessResult: (result: T) => ConstrainedResult<T> | Promise<ConstrainedResult<T>>;
@@ -150,28 +149,26 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
 
   // Overload for E = undefined (getErrorText omitted)
   async logAndExecute<T>(
-    params: Omit<LogAndExecuteParams<T, undefined, Args>, 'getErrorText'>,
+    params: Omit<LogAndExecuteParams<T, Args>, 'getErrorText'>,
   ): Promise<CallToolResult>;
 
   // Overload for E != undefined (getSuccessResult omitted)
-  async logAndExecute<T, E>(
-    params: Required<Omit<LogAndExecuteParams<T, E, Args>, 'getSuccessResult'>>,
+  async logAndExecute<T>(
+    params: Required<Omit<LogAndExecuteParams<T, Args>, 'getSuccessResult'>>,
   ): Promise<CallToolResult>;
 
   // Overload for E != undefined (getErrorText required)
-  async logAndExecute<T, E>(
-    params: Required<LogAndExecuteParams<T, E, Args>>,
-  ): Promise<CallToolResult>;
+  async logAndExecute<T>(params: Required<LogAndExecuteParams<T, Args>>): Promise<CallToolResult>;
 
   // Implementation
-  async logAndExecute<T, E>({
+  async logAndExecute<T>({
     extra,
     args,
     callback,
     getSuccessResult,
     getErrorText,
     constrainSuccessResult,
-  }: LogAndExecuteParams<T, E, Args>): Promise<CallToolResult> {
+  }: LogAndExecuteParams<T, Args>): Promise<CallToolResult> {
     const { config, requestId, sessionId, tableauAuthInfo } = extra;
     const username = tableauAuthInfo?.username;
 
@@ -234,11 +231,9 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       }
 
       // Handle error result - extract actual HTTP status if available
-      if (result.error instanceof Error) {
-        errorCode = getHttpStatus(result.error);
-      }
+      errorCode = getHttpStatus(result.error);
 
-      if (result.error instanceof ZodiosError) {
+      if (result.error.type === 'zodios-error') {
         toolResult = getErrorResult(requestId, result.error);
         return toolResult;
       }
@@ -270,22 +265,21 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
 }
 
 function getErrorResult(requestId: RequestId, error: unknown): CallToolResult {
-  if (error instanceof ZodiosError && isZodErrorLike(error.cause)) {
+  if (error instanceof TableauMCPError && error.type === 'zodios-error') {
     // Schema validation errors on otherwise successful API calls will not return an "error" result to the MCP client.
     // We instead return the full response from the API with a data quality warning message
     // that mentions why the schema validation failed.
     // This should make it so users don't get "stuck" when our schemas are too strict or wrong.
     // The only con is that the full response from the API might be larger than normal
     // since a successful schema validation "trims" the response down to the shape of the schema.
-    const validationError = fromError(error.cause);
     return {
       isError: false,
       content: [
         {
           type: 'text',
           text: JSON.stringify({
-            data: error.data,
-            warning: validationError.toString(),
+            data: error.internalError,
+            warning: error.internalErrorDetails,
           }),
         },
       ],

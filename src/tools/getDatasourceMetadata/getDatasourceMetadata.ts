@@ -2,13 +2,13 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { TableauMCPError } from '../../errors/error.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { Server } from '../../server.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
-import { validateDatasourceLuid } from '../validateDatasourceLuid.js';
 import {
   combineFields,
   FieldsResult,
@@ -110,17 +110,22 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
       readOnlyHint: true,
       openWorldHint: false,
     },
-    argsValidator: validateDatasourceLuid,
     callback: async ({ datasourceLuid }, extra): Promise<CallToolResult> => {
       const query = getGraphqlQuery(datasourceLuid);
 
-      return await getDatasourceMetadataTool.logAndExecute<
-        FieldsResult,
-        GetDatasourceMetadataError
-      >({
+      return await getDatasourceMetadataTool.logAndExecute<FieldsResult>({
         extra,
         args: { datasourceLuid },
         callback: async () => {
+          if (!datasourceLuid) {
+            return Err(
+              new TableauMCPError(
+                'args-validation',
+                'datasourceLuid must be a non-empty string.',
+                400,
+              ),
+            );
+          }
           const configWithOverrides = await extra.getConfigWithOverrides();
 
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
@@ -129,10 +134,9 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
           });
 
           if (!isDatasourceAllowedResult.allowed) {
-            return new Err({
-              type: 'datasource-not-allowed',
-              message: isDatasourceAllowedResult.message,
-            });
+            return Err(
+              new TableauMCPError('datasource-not-allowed', isDatasourceAllowedResult.message, 403),
+            );
           }
 
           return await useRestApi({
@@ -147,7 +151,9 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
               });
 
               if (readMetadataResult.isErr()) {
-                return Err({ type: 'feature-disabled' });
+                return Err(
+                  new TableauMCPError('feature-disabled', getVizqlDataServiceDisabledError(), 404),
+                );
               }
 
               if (configWithOverrides.disableMetadataApiRequests) {
@@ -176,13 +182,8 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
             result: fields,
           };
         },
-        getErrorText: (error: GetDatasourceMetadataError) => {
-          switch (error.type) {
-            case 'feature-disabled':
-              return getVizqlDataServiceDisabledError();
-            case 'datasource-not-allowed':
-              return error.message;
-          }
+        getErrorText: (error: TableauMCPError) => {
+          return error.message;
         },
       });
     },

@@ -1,8 +1,8 @@
-import { ZodiosError } from '@zodios/core';
 import { AxiosError } from 'axios';
 import { Err, Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
+import { TableauMCPError } from '../errors/error.js';
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
 import invariant from '../utils/invariant.js';
@@ -14,6 +14,16 @@ const mockTelemetrySend = vi.hoisted(() => vi.fn());
 vi.mock('../telemetry/productTelemetry/telemetryForwarder.js', () => ({
   getProductTelemetry: vi.fn().mockReturnValue({
     send: mockTelemetrySend,
+  }),
+}));
+
+// Mock for MonCloud telemetry - tracks calls to recordMetric()
+const mockRecordMetric = vi.hoisted(() => vi.fn());
+vi.mock('../telemetry/init.js', () => ({
+  getTelemetryProvider: vi.fn().mockReturnValue({
+    initialize: vi.fn(),
+    recordMetric: mockRecordMetric,
+    recordHistogram: vi.fn(),
   }),
 }));
 
@@ -387,6 +397,121 @@ describe('Tool', () => {
     });
   });
 
+  describe('request count telemetry', () => {
+    beforeEach(() => {
+      mockRecordMetric.mockClear();
+    });
+
+    it('should record no error on success', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockRecordMetric).toHaveBeenCalledWith('mcp.tool.calls', 1, {
+        tool_name: 'get-datasource-metadata',
+        request_id: '2',
+      });
+    });
+
+    it('should record validation category when argsValidator throws', async () => {
+      const tool = new Tool({
+        ...mockParams,
+        argsValidator: () => {
+          throw new Error('Validation failed');
+        },
+      });
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockRecordMetric).toHaveBeenCalledWith('mcp.tool.calls', 1, {
+        tool_name: 'get-datasource-metadata',
+        request_id: '2',
+      });
+    });
+
+    it('should record tableau_api category when callback throws AxiosError', async () => {
+      const tool = new Tool(mockParams);
+      const axiosError = new AxiosError('Forbidden');
+      axiosError.response = { status: 403 } as AxiosError['response'];
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => {
+          throw axiosError;
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockRecordMetric).toHaveBeenCalledWith('mcp.tool.calls', 1, {
+        tool_name: 'get-datasource-metadata',
+        request_id: '2',
+      });
+    });
+
+    it('should record unexpected category when callback throws a non-HTTP error', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => {
+          throw new Error('Something unexpected happened');
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockRecordMetric).toHaveBeenCalledWith('mcp.tool.calls', 1, {
+        tool_name: 'get-datasource-metadata',
+        request_id: '2',
+      });
+    });
+
+    it('should record business_logic category when callback returns typed Err object', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () =>
+          Promise.resolve(Err(new TableauMCPError('datasource-not-allowed', 'Not allowed', 403))),
+        getErrorText: (err: TableauMCPError) => `Error: ${err.type}`,
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(mockRecordMetric).toHaveBeenCalledWith('mcp.tool.calls', 1, {
+        tool_name: 'get-datasource-metadata',
+        request_id: '2',
+      });
+    });
+
+    it('should record no error on empty constrained result', async () => {
+      const tool = new Tool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: () => ({ type: 'empty', message: 'No data' }),
+      });
+
+      expect(mockRecordMetric).toHaveBeenCalledWith('mcp.tool.calls', 1, {
+        tool_name: 'get-datasource-metadata',
+        request_id: '2',
+      });
+    });
+  });
+
   describe('ZodiosError handling', () => {
     it('should return isError: false with data and validation warning for ZodiosError with valid ZodError cause', async () => {
       const tool = new Tool(mockParams);
@@ -400,17 +525,23 @@ describe('Tool', () => {
           message: 'Expected string, received object',
         },
       ]);
-      const zodiosError = new ZodiosError(
-        'Zodios: Invalid Response',
-        undefined,
-        rawApiData,
-        zodError,
-      );
 
       const result = await tool.logAndExecute({
         extra: mockExtra,
         args: { param1: 'test' },
-        callback: () => Promise.resolve(Err(zodiosError)),
+        callback: () =>
+          Promise.resolve(
+            Err(
+              new TableauMCPError(
+                'zodios-error',
+                'Zodios: Invalid Response',
+                400,
+                undefined,
+                rawApiData.toString(),
+                zodError.toString(),
+              ),
+            ),
+          ),
         getErrorText: () => 'unused',
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
@@ -418,7 +549,7 @@ describe('Tool', () => {
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.data).toEqual(rawApiData);
+      expect(parsed.data).toEqual(rawApiData.toString());
       expect(parsed.warning).toContain('Expected string, received object');
     });
 
@@ -437,17 +568,22 @@ describe('Tool', () => {
       expect(parseResult.success).toBe(false);
       if (parseResult.success) return;
 
-      const zodiosError = new ZodiosError(
-        'Zodios: Invalid Response',
-        undefined,
-        rawApiData,
-        parseResult.error,
-      );
-
       const result = await tool.logAndExecute({
         extra: mockExtra,
         args: { param1: 'test' },
-        callback: () => Promise.resolve(Err(zodiosError)),
+        callback: () =>
+          Promise.resolve(
+            Err(
+              new TableauMCPError(
+                'zodios-error',
+                'Zodios: Invalid Response',
+                400,
+                undefined,
+                rawApiData.toString(),
+                'Validation error',
+              ),
+            ),
+          ),
         getErrorText: () => 'unused',
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
@@ -455,43 +591,8 @@ describe('Tool', () => {
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.data).toEqual(rawApiData);
+      expect(parsed.data).toEqual(rawApiData.toString());
       expect(parsed.warning).toContain('Validation error');
-    });
-
-    it('should return isError: false with data when ZodiosError is thrown (not returned)', async () => {
-      const tool = new Tool(mockParams);
-      const rawApiData = { fields: [], parameters: [] };
-      const zodError = new ZodError([
-        {
-          code: 'invalid_type',
-          expected: 'string',
-          received: 'number',
-          path: ['value'],
-          message: 'Expected string, received number',
-        },
-      ]);
-      const zodiosError = new ZodiosError(
-        'Zodios: Invalid Response',
-        undefined,
-        rawApiData,
-        zodError,
-      );
-
-      const result = await tool.logAndExecute({
-        extra: mockExtra,
-        args: { param1: 'test' },
-        callback: () => {
-          throw zodiosError;
-        },
-        constrainSuccessResult: (result) => ({ type: 'success', result }),
-      });
-
-      expect(result.isError).toBe(false);
-      invariant(result.content[0].type === 'text');
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.data).toEqual(rawApiData);
-      expect(parsed.warning).toBeDefined();
     });
   });
 });

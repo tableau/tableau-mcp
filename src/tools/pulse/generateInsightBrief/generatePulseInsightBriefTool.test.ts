@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
+import { TableauMCPError } from '../../../errors/error.js';
 import { Server } from '../../../server.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
@@ -175,17 +175,19 @@ describe('getGeneratePulseInsightBriefTool', () => {
 
   it('should return an error when executing the tool against Tableau Server', async () => {
     mocks.mockGeneratePulseInsightBrief.mockResolvedValue(
-      new Err(new PulseDisabledError('tableau-server', 404)),
+      Err(new TableauMCPError('tableau-server', 'Pulse not available on Tableau Server', 404)),
     );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
+    expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
   });
 
   it('should return an error when Pulse is disabled', async () => {
     mocks.mockGeneratePulseInsightBrief.mockResolvedValue(
-      new Err(new PulseDisabledError('pulse-disabled', 400)),
+      new Err(
+        new TableauMCPError('pulse-disabled', 'Pulse is disabled on this Tableau Cloud site.', 400),
+      ),
     );
     const result = await getToolResult();
     expect(result.isError).toBe(true);

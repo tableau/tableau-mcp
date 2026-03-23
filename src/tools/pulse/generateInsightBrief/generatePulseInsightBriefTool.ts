@@ -1,8 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err } from 'ts-results-es';
 
+import { TableauMCPError } from '../../../errors/error.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import {
   pulseInsightBriefRequestSchema,
   PulseInsightBriefResponse,
@@ -14,16 +14,6 @@ import { getPulseDisabledError } from '../getPulseDisabledError.js';
 const paramsSchema = {
   briefRequest: pulseInsightBriefRequestSchema,
 };
-
-export type GeneratePulseInsightBriefError =
-  | {
-      type: 'feature-disabled';
-      reason: PulseDisabledError;
-    }
-  | {
-      type: 'datasource-not-allowed';
-      message: string;
-    };
 
 export const getGeneratePulseInsightBriefTool = (server: Server): Tool<typeof paramsSchema> => {
   const generatePulseInsightBriefTool = new Tool({
@@ -193,10 +183,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
     callback: async ({ briefRequest }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 
-      return await generatePulseInsightBriefTool.logAndExecute<
-        PulseInsightBriefResponse,
-        GeneratePulseInsightBriefError
-      >({
+      return await generatePulseInsightBriefTool.logAndExecute<PulseInsightBriefResponse>({
         extra,
         args: { briefRequest },
         callback: async () => {
@@ -212,13 +199,13 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
 
                 // If filtering removed all metrics from this message, return an error
                 if (message.metric_group_context.length === 0) {
-                  return new Err({
-                    type: 'datasource-not-allowed',
-                    message: [
-                      'The set of allowed metric insights that can be queried is limited by the server configuration.',
-                      'One or more messages in the request contain only metrics derived from data sources that are not in the allowed set.',
-                    ].join(' '),
-                  });
+                  return Err(
+                    new TableauMCPError(
+                      'generate-pulse-insight-brief',
+                      getPulseDisabledError('datasource-not-allowed'),
+                      403,
+                    ),
+                  );
                 }
               }
             }
@@ -232,10 +219,9 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
           });
 
           if (result.isErr()) {
-            return new Err({
-              type: 'feature-disabled',
-              reason: result.error,
-            });
+            return new Err(
+              new TableauMCPError('feature-disabled', getPulseDisabledError('pulse-disabled'), 404),
+            );
           }
 
           return result;
@@ -246,13 +232,8 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
             result: insightBrief,
           };
         },
-        getErrorText: (error) => {
-          switch (error.type) {
-            case 'feature-disabled':
-              return getPulseDisabledError(error.reason);
-            case 'datasource-not-allowed':
-              return error.message;
-          }
+        getErrorText: (error: TableauMCPError) => {
+          return error.message;
         },
       });
     },

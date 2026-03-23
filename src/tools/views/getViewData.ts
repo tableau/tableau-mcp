@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { TableauMCPError } from '../../errors/error.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -9,11 +10,6 @@ import { Tool } from '../tool.js';
 
 const paramsSchema = {
   viewId: z.string(),
-};
-
-export type GetViewDataError = {
-  type: 'view-not-allowed';
-  message: string;
 };
 
 export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -29,7 +25,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
       openWorldHint: false,
     },
     callback: async ({ viewId }, extra): Promise<CallToolResult> => {
-      return await getViewDataTool.logAndExecute<string, GetViewDataError>({
+      return await getViewDataTool.logAndExecute<string>({
         extra,
         args: { viewId },
         callback: async () => {
@@ -39,10 +35,9 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
           });
 
           if (!isViewAllowedResult.allowed) {
-            return new Err({
-              type: 'view-not-allowed',
-              message: isViewAllowedResult.message,
-            });
+            return new Err(
+              new TableauMCPError('view-not-allowed', isViewAllowedResult.message, 403),
+            );
           }
 
           return new Ok(
@@ -64,11 +59,8 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
             result: viewData,
           };
         },
-        getErrorText: (error: GetViewDataError) => {
-          switch (error.type) {
-            case 'view-not-allowed':
-              return error.message;
-          }
+        getErrorText: (error: TableauMCPError) => {
+          return error.message;
         },
       });
     },

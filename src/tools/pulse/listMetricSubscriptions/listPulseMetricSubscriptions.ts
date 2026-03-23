@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { TableauMCPError } from '../../../errors/error.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { RestApiArgs, useRestApi } from '../../../restApiInstance.js';
 import { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
@@ -56,7 +57,7 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
             restApiArgs: extra,
           });
         },
-        getErrorText: getPulseDisabledError,
+        getErrorText: (error: TableauMCPError) => getPulseDisabledError(error.type),
       });
     },
   });

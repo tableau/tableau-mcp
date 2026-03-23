@@ -1,29 +1,27 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { TableauMCPError } from '../../errors/error.js';
 import { useRestApi } from '../../restApiInstance.js';
 import {
   Datasource,
   QueryOutput,
   QueryRequest,
   querySchema,
-  TableauError,
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
+import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../utils/provider.js';
-import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool, ToolRules } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { queryDatasourceToolDescription20253 } from './descriptions/queryDescription.2025.3.js';
 import { queryDatasourceToolDescription20261 } from './descriptions/queryDescription.2026.1.js';
 import { queryDatasourceToolDescription } from './descriptions/queryDescription.js';
-import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
-import { validateQueryWithRules } from './queryDatasourceValidator.js';
+import { validateQuery } from './queryDatasourceValidator.js';
 import {
   ContextFilterWarning,
   validateContextFilters,
@@ -42,23 +40,6 @@ type QueryDatasourceResult = QueryOutput & {
     warnings: ContextFilterWarning[];
   };
 };
-
-export type QueryDatasourceError =
-  | {
-      type: 'feature-disabled';
-    }
-  | {
-      type: 'datasource-not-allowed';
-      message: string;
-    }
-  | {
-      type: 'query-validation';
-      message: string;
-    }
-  | {
-      type: 'tableau-error';
-      error: TableauError;
-    };
 
 export const getQueryDatasourceTool = (
   server: Server,
@@ -84,13 +65,17 @@ export const getQueryDatasourceTool = (
       readOnlyHint: true,
       openWorldHint: false,
     },
-    argsValidator: validateQueryWithRules(rules),
     callback: async ({ datasourceLuid, query, limit }, extra): Promise<CallToolResult> => {
-      const { requestId, getConfigWithOverrides } = extra;
-      return await queryDatasourceTool.logAndExecute<QueryDatasourceResult, QueryDatasourceError>({
+      const { getConfigWithOverrides } = extra;
+      return await queryDatasourceTool.logAndExecute<QueryDatasourceResult>({
         extra,
         args: { datasourceLuid, query },
         callback: async () => {
+          try {
+            validateQuery({ datasourceLuid, query, rules });
+          } catch (error) {
+            return Err(new TableauMCPError('args-validation', getExceptionMessage(error), 400));
+          }
           const configWithOverrides = await getConfigWithOverrides();
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
             datasourceLuid,
@@ -98,10 +83,9 @@ export const getQueryDatasourceTool = (
           });
 
           if (!isDatasourceAllowedResult.allowed) {
-            return new Err({
-              type: 'datasource-not-allowed',
-              message: isDatasourceAllowedResult.message,
-            });
+            return Err(
+              new TableauMCPError('datasource-not-allowed', isDatasourceAllowedResult.message, 403),
+            );
           }
 
           const datasource: Datasource = { datasourceLuid };
@@ -143,10 +127,7 @@ export const getQueryDatasourceTool = (
                 if (metadataValidationResult.isErr()) {
                   const errors = metadataValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join('\n\n');
-                  return new Err({
-                    type: 'query-validation',
-                    message: errorMessage,
-                  });
+                  return new Err(new TableauMCPError('query-validation', errorMessage, 400));
                 }
 
                 // Validate filters values for SET and MATCH filters
@@ -160,10 +141,7 @@ export const getQueryDatasourceTool = (
                 if (filterValidationResult.isErr()) {
                   const errors = filterValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join(', ');
-                  return new Err({
-                    type: 'query-validation',
-                    message: errorMessage,
-                  });
+                  return new Err(new TableauMCPError('query-validation', errorMessage, 400));
                 }
               }
 
@@ -171,16 +149,7 @@ export const getQueryDatasourceTool = (
 
               const result = await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
               if (result.isErr()) {
-                return new Err(
-                  result.error instanceof ZodiosError
-                    ? result.error
-                    : result.error === 'feature-disabled'
-                      ? { type: 'feature-disabled' }
-                      : {
-                          type: 'tableau-error',
-                          error: result.error,
-                        },
-                );
+                return result;
               }
 
               if (rowLimit && result.value.data && result.value.data.length > rowLimit) {
@@ -206,24 +175,8 @@ export const getQueryDatasourceTool = (
             result: queryOutput,
           };
         },
-        getErrorText: (error: QueryDatasourceError) => {
-          switch (error.type) {
-            case 'feature-disabled':
-              return getVizqlDataServiceDisabledError();
-            case 'datasource-not-allowed':
-              return error.message;
-            case 'query-validation':
-              return JSON.stringify({
-                requestId,
-                errorType: 'validation',
-                message: error.message,
-              });
-            case 'tableau-error':
-              return JSON.stringify({
-                requestId,
-                ...handleQueryDatasourceError(error.error),
-              });
-          }
+        getErrorText: (error: TableauMCPError) => {
+          return error.message;
         },
       });
     },

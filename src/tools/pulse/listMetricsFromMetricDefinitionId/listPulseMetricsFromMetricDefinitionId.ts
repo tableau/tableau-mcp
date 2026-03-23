@@ -1,8 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
+import { TableauMCPError } from '../../../errors/error.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
@@ -35,10 +35,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
       openWorldHint: false,
     },
     callback: async ({ pulseMetricDefinitionID }, extra): Promise<CallToolResult> => {
-      return await listPulseMetricsFromMetricDefinitionIdTool.logAndExecute<
-        Array<PulseMetric>,
-        PulseDisabledError
-      >({
+      return await listPulseMetricsFromMetricDefinitionIdTool.logAndExecute<Array<PulseMetric>>({
         extra,
         args: { pulseMetricDefinitionID },
         callback: async () => {
@@ -60,7 +57,7 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
             boundedContext: configWithOverrides.boundedContext,
           });
         },
-        getErrorText: getPulseDisabledError,
+        getErrorText: (error: TableauMCPError) => getPulseDisabledError(error.type),
       });
     },
   });

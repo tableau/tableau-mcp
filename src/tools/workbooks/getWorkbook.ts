@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { TableauMCPError } from '../../errors/error.js';
 import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
@@ -11,11 +12,6 @@ import { ConstrainedResult, Tool } from '../tool.js';
 
 const paramsSchema = {
   workbookId: z.string(),
-};
-
-export type GetWorkbookError = {
-  type: 'workbook-not-allowed';
-  message: string;
 };
 
 export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -33,7 +29,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
     callback: async ({ workbookId }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 
-      return await getWorkbookTool.logAndExecute<Workbook, GetWorkbookError>({
+      return await getWorkbookTool.logAndExecute<Workbook>({
         extra,
         args: { workbookId },
         callback: async () => {
@@ -43,10 +39,9 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
           });
 
           if (!isWorkbookAllowedResult.allowed) {
-            return new Err({
-              type: 'workbook-not-allowed',
-              message: isWorkbookAllowedResult.message,
-            });
+            return new Err(
+              new TableauMCPError('workbook-not-allowed', isWorkbookAllowedResult.message, 403),
+            );
           }
 
           return new Ok(
@@ -81,11 +76,8 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
         },
         constrainSuccessResult: (workbook) =>
           filterWorkbookViews({ workbook, boundedContext: configWithOverrides.boundedContext }),
-        getErrorText: (error: GetWorkbookError) => {
-          switch (error.type) {
-            case 'workbook-not-allowed':
-              return error.message;
-          }
+        getErrorText: (error: TableauMCPError) => {
+          return error.message;
         },
       });
     },
