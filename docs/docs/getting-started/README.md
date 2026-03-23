@@ -1,11 +1,9 @@
 # Getting Started
 
-This document walks through getting started with the new Tableau MCP server, enabling you to bring
-Tableau data into AI tools like Claude for analysis and asking questions of your data. This process
-works equally well with published datasources located on either Tableau Cloud or Tableau Server.
-
-This guide builds on the MCP project documentation, but is focused more for a general audience
-rather than developers.
+This guide walks through getting started with Tableau MCP to integrate Tableau data with AI tools
+for natural language data analysis and querying. These instructions are written for a general
+audience and work equally well with published datasources located on either Tableau Cloud or Tableau
+Server.
 
 Tableau MCP GitHub project links:
 
@@ -14,23 +12,12 @@ Tableau MCP GitHub project links:
 
 ## Overview
 
-[Model Context Protocol](https://modelcontextprotocol.io/introduction) (MCP) is a relatively new
-standard that makes it simpler for agents and AI-apps to interact with external software. It's an
-exciting development that reduces the overhead in making agents more powerful and useful, especially
-in the enterprise context.
+[Tableau MCP](https://github.com/tableau/tableau-mcp) is an open source GitHub project that uses the
+[Model Context Protocol](https://modelcontextprotocol.io/introduction) standard for simplifying
+agent-to-Tableau communication, enabling users to bring their Tableau data into AI tools by
+leveraging VizQL Data Service, Metadata API, and other Tableau APIs.
 
-Over the last year, thousands of MCP servers have been created, the biggest agent-development
-frameworks have announced support for MCP, and
-[ChatGPT](https://help.openai.com/en/articles/11487775-connectors-in-chatgpt) and
-[Claude](https://support.anthropic.com/en/articles/11175166-about-custom-integrations-using-remote-mcp#h_0f43251470)
-are using it as the basis for 3rd-party connectors and integrations.
-
-In June 2025, Tableau released v1 of the
-[Tableau MCP Server](https://github.com/tableau/tableau-mcp) project on GitHub, enabling developers
-and customers to query their data in natural language and explore using the power of AI. Tableau MCP
-takes advantage of existing APIs including the VizQL Data Service (VDS) and the Metadata API.
-
-This guide walks you through everything needed to explore Tableau data via MCP using
+This guide walks you through everything you need to explore Tableau data via MCP using
 [Claude Desktop](https://claude.ai/download) (the free version is all that's needed). Once it's
 running you'll be able to explore data like this example:
 
@@ -38,7 +25,8 @@ running you'll be able to explore data like this example:
 
 ### Basic Architecture
 
-The MCP Server is not strictly speaking a "server", but instead it runs locally on your computer.
+In this setup, Tableau MCP runs locally on your computer as a separate process that Claude Desktop
+will communicate with directly using its standard input/output streams.
 
 ```mermaid
 ---
@@ -87,10 +75,10 @@ and follow the steps.
 
 Login to your site, then click your profile in the upper right to bring up My Account Settings.
 
-Scroll down to Personal Access Tokens and create a new one. You can use any token name but "mcp" is
-suggested. Make sure to copy and save the value because it's only shown this one time. (Also, be
-aware that Tableau PATs will expire after 15 days of inactivity, so you may need to periodically
-create a new one.)
+Scroll down to Personal Access Tokens and create a new one. You can use any token name but something
+memorable like "mcp" is suggested to make later configuraton easier. Make sure to copy and save the
+value because it's only shown this one time. (Also, be aware that Tableau PATs will expire after 15
+days of inactivity, so you may need to periodically create a new one.)
 
 ![Personal Access Token Config](images/pat.png)
 
@@ -141,8 +129,8 @@ If you run into problems exceeding the free limit, you can upgrade to
 
 ### Install Tableau MCP Extension
 
-Tableau MCP can be built and run several different ways. Perhaps the easiest is running the
-pre-built Claude Desktop Extension.
+Tableau MCP can be run several different ways. Perhaps the easiest is running the pre-built Claude
+Desktop Extension.
 
 Option 1: Install from Claude Marketplace
 
@@ -151,7 +139,7 @@ Option 1: Install from Claude Marketplace
 3. Click on Browse Extensions
 4. Search for Tableau and install it
 
-Option 2: Install latest from MCP GitHub
+Option 2: Install latest from Tableau MCP GitHub
 
 1. Go to the [Releases page](https://github.com/tableau/tableau-mcp/releases)
 2. For the newest release, under Assets, find and download the .mcpb file (it will be named
