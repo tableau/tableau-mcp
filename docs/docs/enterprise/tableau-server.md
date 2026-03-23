@@ -32,6 +32,8 @@ being accessed by multiple users simultaneously, similar to any other web applic
 
 Before beginning the deployment process, ensure the following prerequisites are met:
 
+- **Tableau Server build**: If enabling OAuth, Tableau Server 2025.3 or newer. Otherwise, any
+  supported version is fine.
 - **Operating System**: Any operating system that is capable of running Docker or Node.js 22.7.5 or
   higher.
   - **Node.js**: Install Node.js 22.7.5 or higher. Not required if using Docker or a Node.js Single

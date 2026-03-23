@@ -8,7 +8,7 @@ like telemetry and monitoring can be provided based on your needs.
 
 ## Tableau Server
 
-Tableau Server customers **on 2025.3 or newer** should use the
+Tableau Server customers should use the
 [deployment guide for Tableau Server customers](./tableau-server.md).
 
 ## Tableau Cloud
