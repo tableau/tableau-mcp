@@ -1,6 +1,8 @@
 *.local
 .env
 .env.*
+# .env.* does not match .env-oauth (hyphen); keep env templates with secrets out of git
+.env-oauth
 build/
 node_modules/
 junit/
