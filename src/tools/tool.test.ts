@@ -247,7 +247,7 @@ describe('Tool', () => {
         expect.objectContaining({
           is_hyperforce: false,
           success: false,
-          error_code: '', // No HTTP status for generic errors
+          error_code: '500',
         }),
       );
     });
@@ -317,7 +317,7 @@ describe('Tool', () => {
     });
   });
 
-  describe('request count telemetry', () => {
+  describe('recordMetric telemetry', () => {
     beforeEach(() => {
       mockRecordMetric.mockClear();
     });
@@ -335,6 +335,7 @@ describe('Tool', () => {
       expect(mockRecordMetric).toHaveBeenCalledWith('mcp.tool.calls', 1, {
         tool_name: 'get-datasource-metadata',
         request_id: '2',
+        error_code: '',
       });
     });
 
@@ -355,6 +356,7 @@ describe('Tool', () => {
       expect(mockRecordMetric).toHaveBeenCalledWith('mcp.tool.calls', 1, {
         tool_name: 'get-datasource-metadata',
         request_id: '2',
+        error_code: '403',
       });
     });
 
@@ -373,6 +375,7 @@ describe('Tool', () => {
       expect(mockRecordMetric).toHaveBeenCalledWith('mcp.tool.calls', 1, {
         tool_name: 'get-datasource-metadata',
         request_id: '2',
+        error_code: '500',
       });
     });
 
@@ -391,6 +394,7 @@ describe('Tool', () => {
       expect(mockRecordMetric).toHaveBeenCalledWith('mcp.tool.calls', 1, {
         tool_name: 'get-datasource-metadata',
         request_id: '2',
+        error_code: '403',
       });
     });
 
@@ -407,6 +411,7 @@ describe('Tool', () => {
       expect(mockRecordMetric).toHaveBeenCalledWith('mcp.tool.calls', 1, {
         tool_name: 'get-datasource-metadata',
         request_id: '2',
+        error_code: '',
       });
     });
   });

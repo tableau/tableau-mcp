@@ -10,7 +10,7 @@ export function getHttpStatus(error: Error): string {
   if (isAxiosError(error) && error.response?.status) {
     return String(error.response.status);
   }
-  // Check if the error is a PulseDisabledError
+  // Check if the error is a TableauMCPError
   if (error instanceof TableauMCPError) {
     return String(error.statusCode);
   }
@@ -18,5 +18,5 @@ export function getHttpStatus(error: Error): string {
   if (error.cause && isAxiosError(error.cause) && error.cause.response?.status) {
     return String(error.cause.response.status);
   }
-  return '';
+  return '500'; // Internal server error
 }

@@ -164,13 +164,6 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
 
     this.logInvocation({ requestId, args, username });
 
-    // Record custom metric for this tool call
-    const telemetry = getTelemetryProvider();
-    telemetry.recordMetric('mcp.tool.calls', 1, {
-      tool_name: this.name,
-      request_id: requestId.toString(),
-    });
-
     const productTelemetryForwarder = getProductTelemetry(
       config.productTelemetryEndpoint,
       config.productTelemetryEnabled,
@@ -190,8 +183,9 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
           // Constrained result is either 'empty' or 'error'
           const isError = constrainedResult.type === 'error';
           success = !isError;
-          errorCode =
-            isError && constrainedResult.error ? getHttpStatus(constrainedResult.error) : '';
+          if (isError && constrainedResult.error) {
+            errorCode = getHttpStatus(constrainedResult.error);
+          }
           toolResult = {
             isError,
             content: [{ type: 'text', text: constrainedResult.message }],
@@ -237,6 +231,13 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
         podname: config.server,
         is_hyperforce: config.isHyperforce,
         success,
+        error_code: errorCode,
+      });
+      // Record custom metric for this tool call
+      const telemetry = getTelemetryProvider();
+      telemetry.recordMetric('mcp.tool.calls', 1, {
+        tool_name: this.name,
+        request_id: requestId.toString(),
         error_code: errorCode,
       });
     }
