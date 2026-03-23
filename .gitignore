@@ -1,3 +1,4 @@
+.cursor/
 *.local
 .env
 .env.*

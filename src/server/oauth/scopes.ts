@@ -103,7 +103,7 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_definitions_metrics:read']),
   },
-  'list-pulse-metric-definitions-from-definition-ids': {
+  'list-metric-definitions-from-definition-ids': {
     mcp: ['tableau:mcp:pulse:read'],
     api: new Set(['tableau:insight_definitions_metrics:read']),
   },

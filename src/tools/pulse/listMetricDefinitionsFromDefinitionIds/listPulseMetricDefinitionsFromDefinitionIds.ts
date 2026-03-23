@@ -18,7 +18,7 @@ export const getListPulseMetricDefinitionsFromDefinitionIdsTool = (
 ): Tool<typeof paramsSchema> => {
   const listPulseMetricDefinitionsFromDefinitionIdsTool = new Tool({
     server,
-    name: 'list-pulse-metric-definitions-from-definition-ids',
+    name: 'list-metric-definitions-from-definition-ids',
     description: `
 Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API from a list of metric definition IDs.  Use this tool when a user requests information about specific Pulse Metric Definitions on the current site.
 

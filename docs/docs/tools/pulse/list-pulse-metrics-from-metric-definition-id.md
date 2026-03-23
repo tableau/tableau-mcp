@@ -16,7 +16,7 @@ Retrieves a list of published Pulse metrics from a Pulse metric definition ID.
 
 The ID of the Pulse metric definition to list metrics for potentially retrieved by the
 [List All Metric Definitions](list-all-pulse-metric-definitions.md) or
-[List Metric Definitions](list-pulse-metric-definitions-from-definition-ids.md) tool.
+[List Metric Definitions](list-metric-definitions-from-definition-ids.md) tool.
 
 Example: `9ad098f4-49cf-4e8a-bec0-0ca803091dd0`
 

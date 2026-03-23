@@ -58,7 +58,7 @@ Datasource: `list-datasources`, `get-datasource-metadata`, `query-datasource`
 Workbook: `list-workbooks`, `get-workbook`
 View: `list-views`, `get-view-data`, `get-view-image`
 Pulse: `list-all-pulse-metric-definitions`,
-  `list-pulse-metric-definitions-from-definition-ids`,
+  `list-metric-definitions-from-definition-ids`,
   `list-pulse-metrics-from-metric-definition-id`,
   `list-pulse-metrics-from-metric-ids`,
   `list-pulse-metric-subscriptions`,
