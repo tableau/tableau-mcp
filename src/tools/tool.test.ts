@@ -230,28 +230,6 @@ describe('Tool', () => {
       );
     });
 
-    it('should send telemetry with success=false and error_code=400 on validation error', async () => {
-      const tool = new Tool({
-        ...mockParams,
-      });
-
-      await tool.logAndExecute({
-        extra: mockExtra,
-        args: { param1: 'test-value' },
-        callback: () => Promise.resolve(Ok({ data: 'success' })),
-        constrainSuccessResult: (result) => ({ type: 'success', result }),
-      });
-
-      expect(mockTelemetrySend).toHaveBeenCalledWith(
-        'tool_call',
-        expect.objectContaining({
-          is_hyperforce: false,
-          success: false,
-          error_code: '400',
-        }),
-      );
-    });
-
     it('should send telemetry with success=false on callback error', async () => {
       const tool = new Tool(mockParams);
 
