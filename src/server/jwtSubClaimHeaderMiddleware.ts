@@ -4,18 +4,14 @@ import express, { RequestHandler } from 'express';
 import { Config } from '../config.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 
-export { DEFAULT_JWT_SUB_SECRET_HEADER } from '../utils/safeHttpHeaderName.js';
-
 /**
  * When MCP OAuth is disabled, allows a trusted gateway to pass the Tableau JWT username per request.
  * Use with JWT_SUB_CLAIM={OAUTH_USERNAME} (and optional JWT_ADDITIONAL_PAYLOAD placeholders).
  */
 export function jwtSubClaimHeaderMiddleware(config: Config): RequestHandler {
   const usernameHeader = config.jwtSubClaimRequestHeaderName;
-  const secret = config.jwtSubClaimRequestSecret;
-  const secretHeader = config.jwtSubClaimRequestSecretHeaderName;
 
-  if (!usernameHeader || !secret) {
+  if (!usernameHeader) {
     return (_req, _res, next) => next();
   }
 
@@ -33,15 +29,6 @@ export function jwtSubClaimHeaderMiddleware(config: Config): RequestHandler {
     const rawUsername = authReq.get(usernameHeader);
     if (rawUsername === undefined) {
       next();
-      return;
-    }
-
-    const sentSecret = authReq.get(secretHeader);
-    if (sentSecret !== secret) {
-      res.status(401).json({
-        error: 'unauthorized',
-        error_description: 'Invalid or missing JWT sub claim header secret.',
-      });
       return;
     }
 
@@ -66,12 +53,5 @@ export function jwtSubClaimHeaderMiddleware(config: Config): RequestHandler {
 }
 
 export function jwtSubClaimHeaderCorsAllowList(config: Config): string[] {
-  const names: string[] = [];
-  if (config.jwtSubClaimRequestHeaderName) {
-    names.push(config.jwtSubClaimRequestHeaderName);
-  }
-  if (config.jwtSubClaimRequestSecretHeaderName) {
-    names.push(config.jwtSubClaimRequestSecretHeaderName);
-  }
-  return names;
+  return config.jwtSubClaimRequestHeaderName ? [config.jwtSubClaimRequestHeaderName] : [];
 }

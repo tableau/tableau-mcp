@@ -65,24 +65,16 @@ user). Set `JWT_SUB_CLAIM` to `{OAUTH_USERNAME}` so that value is taken from thi
 - `TRANSPORT` is `http`
 - `DANGEROUSLY_DISABLE_OAUTH` is `true` (MCP OAuth off)
 - `DISABLE_SESSION_MANAGEMENT` is `true` (stateless HTTP so each request can carry a different user)
-- `JWT_SUB_CLAIM_HEADER_SECRET` is set (see below)
 
 If the username header is **omitted** on a request, the server does not treat the request as
 header-authenticated (a static `JWT_SUB_CLAIM` without `{OAUTH_USERNAME}` still works).
 
-<hr />
+:::warning
 
-### `JWT_SUB_CLAIM_HEADER_SECRET`
+Anyone who can reach this MCP URL can supply any username in that header. Restrict network access
+or place a trusted proxy in front of the server if you use this option.
 
-Shared secret. The client must send the same value in the header named by
-`JWT_SUB_CLAIM_HEADER_SECRET_HEADER` (default `x-tableau-mcp-jwt-sub-secret`) whenever it sends the
-username header. Mismatches receive HTTP 401.
-
-<hr />
-
-### `JWT_SUB_CLAIM_HEADER_SECRET_HEADER`
-
-Optional. Custom HTTP header name for the secret. Must be a valid header token if set.
+:::
 
 <hr />
 

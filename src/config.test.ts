@@ -446,7 +446,6 @@ describe('Config', () => {
       vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
       vi.stubEnv('DISABLE_SESSION_MANAGEMENT', 'true');
       vi.stubEnv('JWT_SUB_CLAIM_HEADER', 'X-Tableau-Jwt-Username');
-      vi.stubEnv('JWT_SUB_CLAIM_HEADER_SECRET', 'gateway-shared-secret');
     }
 
     it('should parse JWT sub claim header settings when requirements are met', () => {
@@ -454,35 +453,6 @@ describe('Config', () => {
 
       const config = new Config();
       expect(config.jwtSubClaimRequestHeaderName).toBe('x-tableau-jwt-username');
-      expect(config.jwtSubClaimRequestSecret).toBe('gateway-shared-secret');
-      expect(config.jwtSubClaimRequestSecretHeaderName).toBe('x-tableau-mcp-jwt-sub-secret');
-    });
-
-    it('should use JWT_SUB_CLAIM_HEADER_SECRET_HEADER when set', () => {
-      stubDirectTrustHttpStateless();
-      vi.stubEnv('JWT_SUB_CLAIM_HEADER_SECRET_HEADER', 'X-Custom-Sub-Secret');
-
-      const config = new Config();
-      expect(config.jwtSubClaimRequestSecretHeaderName).toBe('x-custom-sub-secret');
-    });
-
-    it('should throw when JWT_SUB_CLAIM_HEADER is set without JWT_SUB_CLAIM_HEADER_SECRET', () => {
-      stubDirectTrustHttpStateless();
-      vi.stubEnv('JWT_SUB_CLAIM_HEADER_SECRET', undefined);
-
-      expect(() => new Config()).toThrow(
-        'JWT_SUB_CLAIM_HEADER and JWT_SUB_CLAIM_HEADER_SECRET must both be set or both unset',
-      );
-    });
-
-    it('should throw when JWT_SUB_CLAIM_HEADER_SECRET is set without JWT_SUB_CLAIM_HEADER', () => {
-      stubDirectTrustHttpStateless();
-      vi.stubEnv('JWT_SUB_CLAIM_HEADER', undefined);
-      vi.stubEnv('JWT_SUB_CLAIM_HEADER_SECRET', 'x');
-
-      expect(() => new Config()).toThrow(
-        'JWT_SUB_CLAIM_HEADER and JWT_SUB_CLAIM_HEADER_SECRET must both be set or both unset',
-      );
     });
 
     it('should throw when JWT_SUB_CLAIM_HEADER is set with TRANSPORT stdio', () => {

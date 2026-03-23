@@ -6,7 +6,7 @@ import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './te
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
-import { DEFAULT_JWT_SUB_SECRET_HEADER, isSafeHttpHeaderName } from './utils/safeHttpHeaderName.js';
+import { isSafeHttpHeaderName } from './utils/safeHttpHeaderName.js';
 
 const __dirname = getDirname();
 
@@ -75,9 +75,6 @@ export class Config {
   isHyperforce: boolean;
   /** HTTP header (lowercase) carrying Tableau username for JWT when MCP OAuth is off; empty = disabled */
   jwtSubClaimRequestHeaderName: string;
-  /** HTTP header (lowercase) carrying shared secret for JWT_SUB_CLAIM_HEADER; empty when feature disabled */
-  jwtSubClaimRequestSecretHeaderName: string;
-  jwtSubClaimRequestSecret: string;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -133,8 +130,6 @@ export class Config {
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
       IS_HYPERFORCE: isHyperforce,
       JWT_SUB_CLAIM_HEADER: jwtSubClaimHeader,
-      JWT_SUB_CLAIM_HEADER_SECRET: jwtSubClaimHeaderSecret,
-      JWT_SUB_CLAIM_HEADER_SECRET_HEADER: jwtSubClaimHeaderSecretHeader,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -237,15 +232,7 @@ export class Config {
     this.isHyperforce = isHyperforce === 'true';
 
     const jwtSubHeaderTrimmed = jwtSubClaimHeader?.trim() ?? '';
-    const jwtSubSecretTrimmed = jwtSubClaimHeaderSecret?.trim() ?? '';
-    const jwtSubSecretHeaderTrimmed = (jwtSubClaimHeaderSecretHeader ?? '').trim();
     this.jwtSubClaimRequestHeaderName = jwtSubHeaderTrimmed.toLowerCase();
-    this.jwtSubClaimRequestSecret = jwtSubSecretTrimmed;
-    this.jwtSubClaimRequestSecretHeaderName = jwtSubHeaderTrimmed
-      ? jwtSubSecretHeaderTrimmed
-        ? jwtSubSecretHeaderTrimmed.toLowerCase()
-        : DEFAULT_JWT_SUB_SECRET_HEADER
-      : '';
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
@@ -368,14 +355,7 @@ export class Config {
 }
 
 function validateJwtSubClaimHeaderConfig(config: Config): void {
-  const headerOn = !!config.jwtSubClaimRequestHeaderName;
-  const secretOn = !!config.jwtSubClaimRequestSecret;
-  if (headerOn !== secretOn) {
-    throw new Error(
-      'JWT_SUB_CLAIM_HEADER and JWT_SUB_CLAIM_HEADER_SECRET must both be set or both unset',
-    );
-  }
-  if (!headerOn) {
+  if (!config.jwtSubClaimRequestHeaderName) {
     return;
   }
 
@@ -395,9 +375,6 @@ function validateJwtSubClaimHeaderConfig(config: Config): void {
 
   if (!isSafeHttpHeaderName(config.jwtSubClaimRequestHeaderName)) {
     throw new Error('JWT_SUB_CLAIM_HEADER must be a valid HTTP header name');
-  }
-  if (!isSafeHttpHeaderName(config.jwtSubClaimRequestSecretHeaderName)) {
-    throw new Error('JWT_SUB_CLAIM_HEADER_SECRET_HEADER must be a valid HTTP header name');
   }
 }
 

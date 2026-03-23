@@ -171,25 +171,7 @@ const envVars = {
     type: 'string',
     title: 'JWT Sub Claim HTTP Header',
     description:
-      'When MCP OAuth is off: HTTP header name your gateway sends with the Tableau username. Requires JWT_SUB_CLAIM_HEADER_SECRET, TRANSPORT=http, and DISABLE_SESSION_MANAGEMENT=true.',
-    required: false,
-    sensitive: false,
-  },
-  JWT_SUB_CLAIM_HEADER_SECRET: {
-    includeInUserConfig: false,
-    type: 'string',
-    title: 'JWT Sub Claim Header Secret',
-    description:
-      'Shared secret; clients must send the same value in the header named by JWT_SUB_CLAIM_HEADER_SECRET_HEADER (default x-tableau-mcp-jwt-sub-secret).',
-    required: false,
-    sensitive: true,
-  },
-  JWT_SUB_CLAIM_HEADER_SECRET_HEADER: {
-    includeInUserConfig: false,
-    type: 'string',
-    title: 'JWT Sub Claim Secret Header Name',
-    description:
-      'Optional. HTTP header name for JWT_SUB_CLAIM_HEADER_SECRET. Defaults to x-tableau-mcp-jwt-sub-secret.',
+      'When MCP OAuth is off: HTTP header name your gateway sends with the Tableau username (e.g. email). Requires TRANSPORT=http and DISABLE_SESSION_MANAGEMENT=true.',
     required: false,
     sensitive: false,
   },

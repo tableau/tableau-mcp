@@ -9,8 +9,6 @@ function mockConfig(overrides: Partial<Config> = {}): Config {
   return {
     oauth: { enabled: false },
     jwtSubClaimRequestHeaderName: 'x-tableau-jwt-username',
-    jwtSubClaimRequestSecretHeaderName: 'x-tableau-mcp-jwt-sub-secret',
-    jwtSubClaimRequestSecret: 'the-secret',
     ...overrides,
   } as Config;
 }
@@ -27,40 +25,18 @@ function createReq(headers: Record<string, string>): AuthenticatedRequest {
 }
 
 describe('jwtSubClaimHeaderMiddleware', () => {
-  it('sets req.auth.extra.username when headers are valid', () => {
+  it('sets req.auth.extra.username when header is present', () => {
     const mw = jwtSubClaimHeaderMiddleware(mockConfig());
-    const req = createReq({
-      'x-tableau-jwt-username': '  alice@example.com  ',
-      'x-tableau-mcp-jwt-sub-secret': 'the-secret',
-    });
-    const res = {} as express.Response;
+    const req = createReq({ 'x-tableau-jwt-username': '  alice@example.com  ' });
     const next = vi.fn();
-    mw(req, res, next);
+    mw(req, {} as express.Response, next);
     expect(next).toHaveBeenCalledOnce();
     expect(req.auth?.extra).toEqual({ username: 'alice@example.com' });
   });
 
-  it('returns 401 when secret is wrong', () => {
-    const mw = jwtSubClaimHeaderMiddleware(mockConfig());
-    const req = createReq({
-      'x-tableau-jwt-username': 'alice@example.com',
-      'x-tableau-mcp-jwt-sub-secret': 'wrong',
-    });
-    const status = vi.fn().mockReturnThis();
-    const json = vi.fn();
-    const res = { status, json } as unknown as express.Response;
-    const next = vi.fn();
-    mw(req, res, next);
-    expect(next).not.toHaveBeenCalled();
-    expect(status).toHaveBeenCalledWith(401);
-  });
-
   it('returns 400 when username is only whitespace', () => {
     const mw = jwtSubClaimHeaderMiddleware(mockConfig());
-    const req = createReq({
-      'x-tableau-jwt-username': '   ',
-      'x-tableau-mcp-jwt-sub-secret': 'the-secret',
-    });
+    const req = createReq({ 'x-tableau-jwt-username': '   ' });
     const status = vi.fn().mockReturnThis();
     const json = vi.fn();
     const res = { status, json } as unknown as express.Response;
@@ -81,7 +57,7 @@ describe('jwtSubClaimHeaderMiddleware', () => {
 
   it('no-ops when feature is disabled', () => {
     const mw = jwtSubClaimHeaderMiddleware(
-      mockConfig({ jwtSubClaimRequestHeaderName: '', jwtSubClaimRequestSecret: '' }),
+      mockConfig({ jwtSubClaimRequestHeaderName: '' }),
     );
     const req = createReq({ 'x-tableau-jwt-username': 'alice@example.com' });
     const next = vi.fn();
@@ -94,10 +70,7 @@ describe('jwtSubClaimHeaderMiddleware', () => {
     const mw = jwtSubClaimHeaderMiddleware(
       mockConfig({ oauth: { enabled: true } as Config['oauth'] }),
     );
-    const req = createReq({
-      'x-tableau-jwt-username': 'alice@example.com',
-      'x-tableau-mcp-jwt-sub-secret': 'the-secret',
-    });
+    const req = createReq({ 'x-tableau-jwt-username': 'alice@example.com' });
     const next = vi.fn();
     mw(req, {} as express.Response, next);
     expect(next).toHaveBeenCalledOnce();
