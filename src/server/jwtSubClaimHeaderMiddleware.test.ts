@@ -9,6 +9,7 @@ function mockConfig(overrides: Partial<Config> = {}): Config {
   return {
     oauth: { enabled: false },
     jwtSubClaimRequestHeaderName: 'x-tableau-jwt-username',
+    jwtUsername: '{OAUTH_USERNAME}',
     ...overrides,
   } as Config;
 }
@@ -18,13 +19,25 @@ function createReq(headers: Record<string, string>): AuthenticatedRequest {
     Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]),
   );
   return {
+    method: 'POST',
+    path: '/tableau-mcp',
+    url: '/tableau-mcp',
     get(name: string): string | undefined {
       return lower[name.toLowerCase()];
     },
+    socket: { remoteAddress: '127.0.0.1' },
   } as AuthenticatedRequest;
 }
 
 describe('jwtSubClaimHeaderMiddleware', () => {
+  beforeEach(() => {
+    vi.stubEnv('TABLEAU_MCP_TEST', 'true');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('sets req.auth.extra.username when header is present', () => {
     const mw = jwtSubClaimHeaderMiddleware(mockConfig());
     const req = createReq({ 'x-tableau-jwt-username': '  alice@example.com  ' });

@@ -2,7 +2,30 @@ import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import express, { RequestHandler } from 'express';
 
 import { Config } from '../config.js';
+import { writeToStderr } from '../logging/log.js';
 import { AuthenticatedRequest } from './oauth/types.js';
+
+function logJwtSubHeaderRequest(
+  config: Config,
+  req: express.Request,
+  jwtSubClaimResolved: string,
+): void {
+  const forwardedFor = req.get('x-forwarded-for');
+  const clientIp =
+    (forwardedFor?.split(',')[0] ?? '').trim() || req.socket?.remoteAddress || req.ip;
+  const line = JSON.stringify({
+    type: 'jwt-sub-header-request',
+    timestamp: new Date().toISOString(),
+    method: req.method,
+    path: req.path || req.url,
+    headerName: config.jwtSubClaimRequestHeaderName,
+    jwtSubClaimTemplate: config.jwtUsername,
+    jwtSubClaimResolved,
+    clientIp: clientIp || undefined,
+    xForwardedFor: forwardedFor || undefined,
+  });
+  writeToStderr(`[tableau-mcp] ${line}`);
+}
 
 /**
  * When MCP OAuth is disabled, allows a trusted gateway to pass the Tableau JWT username per request.
@@ -34,12 +57,25 @@ export function jwtSubClaimHeaderMiddleware(config: Config): RequestHandler {
 
     const username = rawUsername.trim();
     if (!username) {
+      writeToStderr(
+        `[tableau-mcp] ${JSON.stringify({
+          type: 'jwt-sub-header-request-invalid',
+          timestamp: new Date().toISOString(),
+          method: req.method,
+          path: req.path || req.url,
+          headerName: usernameHeader,
+          jwtSubClaimTemplate: config.jwtUsername,
+          reason: 'empty_username_after_trim',
+        })}`,
+      );
       res.status(400).json({
         error: 'invalid_request',
         error_description: 'JWT sub claim header must be a non-empty username.',
       });
       return;
     }
+
+    logJwtSubHeaderRequest(config, req, username);
 
     const authInfo: AuthInfo = {
       token: '',
