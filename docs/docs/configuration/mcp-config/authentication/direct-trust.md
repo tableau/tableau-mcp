@@ -60,6 +60,8 @@ HTTP header your **trusted gateway** (reverse proxy, backend, etc.) adds on ever
 the Tableau username to use in the JWT (same value you would put in `JWT_SUB_CLAIM` for a fixed
 user). Set `JWT_SUB_CLAIM` to `{OAUTH_USERNAME}` so that value is taken from this header.
 
+With stateless HTTP, **each request may send a different username** in that header.
+
 **Requirements (all must be satisfied):**
 
 - `TRANSPORT` is `http`
