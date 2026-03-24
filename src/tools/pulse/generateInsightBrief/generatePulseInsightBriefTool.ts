@@ -216,12 +216,6 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
               await restApi.pulseMethods.generatePulseInsightBrief(briefRequest),
           });
 
-          if (result.isErr()) {
-            return new Err(
-              TableauMCPErrorFactory.featureDisabled(getPulseDisabledError('pulse-disabled')),
-            );
-          }
-
           return result;
         },
         constrainSuccessResult: (insightBrief) => {
@@ -230,9 +224,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
             result: insightBrief,
           };
         },
-        getErrorText: (error: TableauMCPError) => {
-          return error.message;
-        },
+        getErrorText: (error: TableauMCPError) => getPulseDisabledError(error.type),
       });
     },
   });

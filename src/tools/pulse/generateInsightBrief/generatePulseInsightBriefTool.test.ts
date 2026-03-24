@@ -180,7 +180,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
+    expect(result.content[0].text).toContain('Pulse is not available on Tableau Server.');
   });
 
   it('should return an error when Pulse is disabled', async () => {

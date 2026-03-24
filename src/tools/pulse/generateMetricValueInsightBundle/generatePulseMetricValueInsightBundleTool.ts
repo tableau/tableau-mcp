@@ -169,12 +169,6 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               ),
           });
 
-          if (result.isErr()) {
-            return new Err(
-              TableauMCPErrorFactory.featureDisabled(getPulseDisabledError('pulse-disabled')),
-            );
-          }
-
           return result;
         },
         constrainSuccessResult: (insightBundle) => {
@@ -184,7 +178,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
           };
         },
         getErrorText: (error: TableauMCPError) => {
-          return error.message;
+          return getPulseDisabledError(error.type);
         },
       });
     },
