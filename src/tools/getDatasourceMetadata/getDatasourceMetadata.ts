@@ -147,7 +147,9 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
               });
 
               if (readMetadataResult.isErr()) {
-                return Err(TableauMCPErrorFactory.featureDisabled(getVizqlDataServiceDisabledError()));
+                return Err(
+                  TableauMCPErrorFactory.featureDisabled(getVizqlDataServiceDisabledError()),
+                );
               }
 
               if (configWithOverrides.disableMetadataApiRequests) {
