@@ -10,7 +10,7 @@ server in a self-hosted environment.
 
 :::info
 
-For Tableau Cloud customers, as part of the 2026.2 release, Tableau MCP is rolling out a
+For Tableau Cloud customers, as part of the 2026.2 release, Tableau is planning to roll out a
 cloud-hosted service, available to all editions. Tableau Cloud customers will be able to self-host
 Tableau MCP at this time, and a deployment guide will also be provided.
 
@@ -48,7 +48,7 @@ Before beginning the deployment process, ensure the following prerequisites are 
 - **User Access**: This guide steps through running the MCP server over a local address. Exposing it
   to your users and only your users (e.g. via reverse proxy or tunnel) is left to the reader.
   Additional necessary precautions are described in the "Network isolation" section below.
-- **Tableau MCP build**:
+- **Tableau MCP build**: One of the following:
   - [NPM package](https://www.npmjs.com/package/@tableau/mcp-server)
   - [Docker container](https://github.com/tableau/tableau-mcp/pkgs/container/tableau-mcp)
   - Node.js
@@ -132,11 +132,10 @@ The MCP server relies on environment variables for configuration. Please set env
 however your hosting platform and security model allows. Several examples for common configurations
 are provided below and assume the use of a `.env` file in the working directory for simplicity.
 
-#### Required environment variables
+Which environment variables are required depend on your desired authentication mechanism.
 
-| Name     | Description                                                                                     |
-| -------- | ----------------------------------------------------------------------------------------------- |
-| `SERVER` | This is the URL of your Tableau Server (not the MCP server) e.g. https://tableau.superstore.com |
+The `SERVER` environment variable is always required; the value is the URL of your Tableau Server
+(not the MCP server).
 
 <hr />
 
@@ -222,7 +221,7 @@ executed.
    mechanism that prevents the Tableau sign in flow for your sites from issuing authorization codes
    to any application other than Tableau MCP's embedded authorization server. The value should be
    the same as OAUTH_ISSUER but without the protocol or any trailing slash. This is not necessary
-   when testing the MCP server when accessed locally i.e. @ http://127.0.0.1:3927/tableau-mcp
+   when testing the MCP server when accessed locally e.g. @ http://127.0.0.1:3927/tableau-mcp
 
    ```shell
    tsm configuration set -k oauth.allowed_redirect_uri_hosts -v tableau-mcp.superstore.com
@@ -372,10 +371,12 @@ Each value is a comma-separated list. For more information, see
 
 Examples:
 
-1. Limit all requests and filter results to content that exists within a specific project.
+1. Limit all requests and filter results to content that exists within a specific project and has a
+   specific tag.
 
    ```
    INCLUDE_PROJECT_IDS=d87d843b-4326-4ce3-bc50-a68c1e6c9ca5
+   INCLUDE_TAGS=sales
    ```
 
 2. Only allow clients to query a single data source. The List Datasources tool will only return this
@@ -391,12 +392,6 @@ Examples:
 
    ```
    INCLUDE_WORKBOOK_IDS=222ea993-9391-4910-a167-56b3d19b4e3b
-   ```
-
-4. Limit all requests and filter results to content that has a specific tag.
-
-   ```
-   INCLUDE_TAGS=sales
    ```
 
 #### Telemetry
