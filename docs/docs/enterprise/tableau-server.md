@@ -47,7 +47,7 @@ Before beginning the deployment process, ensure the following prerequisites are 
   communicate with it.
 - **User Access**: this guide steps through running the MCP server over a local address. Exposing it
   to your users and only your users (e.g. via reverse proxy or tunnel) is left to the reader.
-  Additional necessary precautions are described in the “Network isolation” section below.
+  Additional necessary precautions are described in the "Network isolation" section below.
 - **Tableau MCP build**:
   - [NPM package](https://www.npmjs.com/package/@tableau/mcp-server)
   - [Docker container](https://github.com/tableau/tableau-mcp/pkgs/container/tableau-mcp)
@@ -338,23 +338,24 @@ Tableau MCP has a lot of tools, some of which may not be necessary for your desi
 - [EXCLUDE_TOOLS](../configuration/mcp-config/env-vars#exclude_tools) allows you to specify which
   tools should not be made available to your users. All others will be available.
 
-The values are a comma-separated list of tool names, or tool group names. A tool group is a
-collection of tools. For the list of tools and their groupings, see
+Only one of these environment variables can be specified at a time. Their values are a
+comma-separated list of tool names, or tool group names. A tool group is a collection of tools. For
+the list of tools and their groupings, see
 [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.ts).
 
 Examples:
 
 1. **Datasource querying only**. `datasource` is a tool group name that includes all tools for
-   getting datasource metadata and querying the datasources themselves.
+   getting datasource metadata and querying the data sources themselves.
 
    ```
    INCLUDE_TOOLS=datasource
    ```
 
-2. **Exclude Pulse tools and the Get View Image tool**. If your workflows don't use Tableau Pulse,
-   they can be easily excluded using the `pulse` tool group. This example also excludes the
-   `get-view-image` tool to demonstrate tool groups and individual tools can be provided
-   simultaneously.
+2. **Exclude Pulse tools and the Get View Image tool**. Since Tableau Pulse is not available on
+   Tableau Server, the Pulse tools can be easily excluded using the `pulse` tool group. This example
+   also excludes the `get-view-image` tool to demonstrate tool groups and individual tools can be
+   provided simultaneously.
 
    ```
    EXCLUDE_TOOLS=pulse,get-view-image
@@ -398,7 +399,7 @@ Examples:
    INCLUDE_TAGS=sales
    ```
 
-#### Telemtry
+#### Telemetry
 
 ##### Service Telemetry
 
@@ -415,7 +416,7 @@ record service level metrics and latency observations.
    TELEMETRY_PROVIDER_CONFIG='{"module":"./path/to/my-telemetry-provider.js"}'
    ```
 
-##### Product Telemtry
+##### Product Telemetry
 
 By default, Tableau MCP will send basic product data to Tableau's telemetry endpoint for each tool
 call, including tool name, request ID, session ID, and site name.
@@ -454,8 +455,8 @@ OAUTH_LOCK_SITE=false
 
 When OAuth is enabled by providing a value for the `OAUTH_ISSUER`, users must first sign into their
 Tableau site to access the MCP server. By default, the MCP server will then make its requests to the
-underlying Tableau REST APIs on behalf of the user themself. It is highly recommended to rely on
-this default behavior, however it can be configured if deemed unnecessary or undesirable for your
+underlying Tableau REST APIs on behalf of the user themself. **It is highly recommended to rely on
+this default behavior**, however it can be configured if deemed unnecessary or undesirable for your
 workflow.
 
 The `AUTH` environment variable can still be set to any of the non-OAuth authentication mechanisms,
@@ -501,8 +502,9 @@ request (e.g. from the web browser) to http://127.0.0.1:3927/tableau-mcp, you'll
 
 This means the MCP server is indeed running, but simply rejecting the GET request.
 
-MCP clients initiate the client-server handshake with an “Initialization” POST request that looks
-like this:
+MCP clients initiate the client-server handshake with an
+[Initialization](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#initialization)
+POST request that looks like this:
 
 ```shell
 curl --request POST \
@@ -525,7 +527,8 @@ curl --request POST \
 }'
 ```
 
-When OAuth is not enabled, the response will look like this:
+When OAuth is not enabled, the response will look like this, which provides server metadata and
+capabilities to the client:
 
 ```json
 {
@@ -548,7 +551,7 @@ When OAuth is not enabled, the response will look like this:
 ```
 
 When OAuth is enabled, the response will look like this. This response includes clues that MCP
-clients understand means “Hey, you have to sign in first!”
+clients understand to mean "Hey, you have to sign in first!"
 
 ```json
 {
@@ -559,7 +562,7 @@ clients understand means “Hey, you have to sign in first!”
 
 If you need a basic health check endpoint, you can make a
 [Ping](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/ping) request (which
-does not require any authentication):
+does not require any authentication) and mirrors the request body in its response:
 
 ```shell
 curl --request POST \
@@ -599,7 +602,7 @@ first:
 
 ![Cursor Auth Required](images/cursor-auth-required.png)
 
-Clicking **Connect** should prompt the user to sign into the site and once they do, Cursor will be
+Clicking **Connect** will prompt the user to sign into the site and once they do, Cursor will be
 fully connected to the MCP server and display the list of available tools. If you encounter any
 issues during the sign in process, this suggests a misconfiguration of the OAuth environment
 variables. The easiest way to debug exactly what is wrong is to use an MCP OAuth debugger like the
@@ -612,7 +615,7 @@ URI. Please don't hesitate to create an issue on the repo if a bug is suspected!
 For the purposes of verifying the functionality of the MCP server, please temporarily disable any
 other installed MCP servers that may conflict, and make a basic prompt in your agent.
 
-“List my Tableau datasources” is a simple example prompt that should help verify all the pieces are
+"List my Tableau datasources" is a simple example prompt that should help verify all the pieces are
 working.
 
 - If you see the model choose and call the `list-datasources` tool and successfully return a list of
@@ -630,7 +633,7 @@ working.
 
 ### Embedded authorization server
 
-To support OAuth, the Tableau MCP server ships with its own “embedded” authorization server,
+To support OAuth, the Tableau MCP server ships with its own "embedded" authorization server,
 responsible for issuing access and refresh tokens to MCP clients. It leverages the authentication
 mechanisms provided by Tableau Server and configured at the Tableau site level to ensure access is
 limited to users who can already access the Tableau sites. When OAuth is enabled on the MCP server,

@@ -14,5 +14,5 @@ Tableau Server customers should use the
 ## Tableau Cloud
 
 As part of the 2026.2 release, Tableau MCP is rolling out a cloud-hosted service, available to all
-editions. Tableau Cloud customers will be able to self-host Tableau MCP at this time, at which a
+editions. Tableau Cloud customers will be able to self-host Tableau MCP at this time, and a
 deployment guide will also be provided here.
