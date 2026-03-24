@@ -14,8 +14,9 @@ const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedFor
 // 1x1 png image
 const encodedPngData =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
-const mockPngData = Buffer.from(encodedPngData, 'base64').toString();
-const base64PngData = Buffer.from(mockPngData).toString('base64');
+/** Binary string (latin1) as returned by {@link ViewsMethods.queryViewImage}. */
+const mockPngData = Buffer.from(encodedPngData, 'base64').toString('latin1');
+const base64PngData = encodedPngData;
 
 const mocks = vi.hoisted(() => ({
   mockGetView: vi.fn(),

@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "tableau": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "TRANSPORT=stdio",
+        "--env-file",
+        "/ABS/PATH/TO/your-tableau.env",
+        "tableau-mcp:latest"
+      ]
+    }
+  }
+}

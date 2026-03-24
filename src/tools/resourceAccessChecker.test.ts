@@ -2,12 +2,14 @@ import { getCombinationsOfBoundedContextInputs } from '../utils/getCombinationsO
 import { mockDatasources } from './listDatasources/mockDatasources.js';
 import { exportedForTesting } from './resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
+import { mockCustomView } from './views/mockCustomView.js';
 import { mockView } from './views/mockView.js';
 import { mockWorkbook } from './workbooks/mockWorkbook.js';
 
 const { createResourceAccessChecker } = exportedForTesting;
 
 const mocks = vi.hoisted(() => ({
+  mockGetCustomView: vi.fn(),
   mockGetView: vi.fn(),
   mockGetWorkbook: vi.fn(),
   mockQueryDatasource: vi.fn(),
@@ -17,6 +19,7 @@ vi.mock('../restApiInstance.js', () => ({
   useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
     callback({
       viewsMethods: {
+        getCustomView: mocks.mockGetCustomView,
         getView: mocks.mockGetView,
       },
       workbooksMethods: {
@@ -393,6 +396,56 @@ describe('ResourceAccessChecker', () => {
           expect(mocks.mockGetView).toHaveBeenCalledTimes(expectedNumberOfCalls);
         },
       );
+    });
+  });
+
+  describe('isCustomViewAllowed', () => {
+    beforeEach(() => {
+      mocks.mockGetCustomView.mockResolvedValue(mockCustomView);
+      mocks.mockGetView.mockResolvedValue(mockView);
+    });
+
+    it('should allow when the underlying published view is allowed', async () => {
+      const resourceAccessChecker = createResourceAccessChecker({
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+        tags: null,
+      });
+
+      expect(
+        await resourceAccessChecker.isCustomViewAllowed({
+          customViewId: mockCustomView.id,
+          extra,
+        }),
+      ).toEqual({ allowed: true });
+
+      expect(mocks.mockGetCustomView).toHaveBeenCalledWith({
+        siteId: 'test-site-id',
+        customViewId: mockCustomView.id,
+      });
+    });
+
+    it('should not allow when the underlying view is excluded by workbook id gate', async () => {
+      const resourceAccessChecker = createResourceAccessChecker({
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: new Set(['some-workbook-id']),
+        tags: null,
+      });
+
+      expect(
+        await resourceAccessChecker.isCustomViewAllowed({
+          customViewId: mockCustomView.id,
+          extra,
+        }),
+      ).toEqual({
+        allowed: false,
+        message: [
+          'The set of allowed views that can be queried is limited by the server configuration.',
+          `The view with LUID ${mockView.id} cannot be queried because it does not belong to an allowed workbook.`,
+        ].join(' '),
+      });
     });
   });
 });

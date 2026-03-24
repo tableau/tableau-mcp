@@ -95,6 +95,14 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:view:download'],
     api: new Set(['tableau:views:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
+  'get-custom-view-data': {
+    mcp: ['tableau:mcp:view:download'],
+    api: new Set(['tableau:views:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  'get-custom-view-image': {
+    mcp: ['tableau:mcp:view:download'],
+    api: new Set(['tableau:views:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
   'get-view-image': {
     mcp: ['tableau:mcp:view:download'],
     api: new Set(['tableau:views:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
