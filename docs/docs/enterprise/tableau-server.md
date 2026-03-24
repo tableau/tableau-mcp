@@ -11,8 +11,8 @@ server in a self-hosted environment.
 :::info
 
 For Tableau Cloud customers, Tableau MCP is rolling out a cloud-hosted service as part of the 2026.2
-release, available to all editions. Tableau Cloud customers will be able to self-host Tableau MCP at
-this time, at which a deployment guide will also be provided.
+release, available to all editions. Tableau Cloud customers will then be able to self-host Tableau
+MCP, at which point a deployment guide will also be provided.
 
 :::
 
@@ -45,7 +45,7 @@ Before beginning the deployment process, ensure the following prerequisites are 
 - **Network Access**: Ensure the MCP server machine can communicate with your Tableau Server
   instance. The MCP server makes requests to the Tableau Server REST APIs so it must be able to
   communicate with it.
-- **User Access**: this guide steps through running the MCP server over a local address. Exposing it
+- **User Access**: This guide steps through running the MCP server over a local address. Exposing it
   to your users and only your users (e.g. via reverse proxy or tunnel) is left to the reader.
   Additional necessary precautions are described in the "Network isolation" section below.
 - **Tableau MCP build**:
