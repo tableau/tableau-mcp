@@ -10,9 +10,9 @@ server in a self-hosted environment.
 
 :::info
 
-For Tableau Cloud customers, Tableau MCP is rolling out a cloud-hosted service as part of the 2026.2
-release, available to all editions. Tableau Cloud customers will then be able to self-host Tableau
-MCP, at which point a deployment guide will also be provided.
+For Tableau Cloud customers, as part of the 2026.2 release, Tableau MCP is rolling out a
+cloud-hosted service, available to all editions. Tableau Cloud customers will be able to self-host
+Tableau MCP at this time, and a deployment guide will also be provided.
 
 :::
 
