@@ -436,11 +436,8 @@ describe('Tool', () => {
         callback: () =>
           Promise.resolve(
             Err(
-              new TableauMCPError(
-                'zodios-error',
+              TableauMCPErrorFactory.zodiosError(
                 'Zodios: Invalid Response',
-                400,
-                undefined,
                 rawApiData.toString(),
                 zodError.toString(),
               ),
@@ -478,11 +475,8 @@ describe('Tool', () => {
         callback: () =>
           Promise.resolve(
             Err(
-              new TableauMCPError(
-                'zodios-error',
+              TableauMCPErrorFactory.zodiosError(
                 'Zodios: Invalid Response',
-                400,
-                undefined,
                 rawApiData.toString(),
                 'Validation error',
               ),

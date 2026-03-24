@@ -60,11 +60,8 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
 
       if (error instanceof ZodiosError) {
         return Err(
-          new TableauMCPError(
-            'zodios-error',
+          TableauMCPErrorFactory.zodiosError(
             error.message,
-            400,
-            undefined,
             error.data?.toString(),
             fromError(error.cause).toString(),
           ),

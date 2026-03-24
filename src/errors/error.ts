@@ -48,4 +48,6 @@ export const TableauMCPErrorFactory = {
     new TableauMCPError('query-validation', message, 400),
   argsValidation: (message: string): TableauMCPError =>
     new TableauMCPError('args-validation', message, 400),
+  zodiosError: (message: string, data: string | undefined, details: string): TableauMCPError =>
+    new TableauMCPError('zodios-error', message, 400, undefined, data, details),
 };

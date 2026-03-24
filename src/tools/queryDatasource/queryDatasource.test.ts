@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { TableauMCPError, TableauMCPErrorFactory } from '../../errors/error.js';
+import { TableauMCPErrorFactory } from '../../errors/error.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
 import {
@@ -208,11 +208,8 @@ describe('queryDatasourceTool', () => {
     };
 
     mocks.mockQueryDatasource.mockImplementation(() => {
-      const zodiosError = new TableauMCPError(
-        'zodios-error',
+      const zodiosError = TableauMCPErrorFactory.zodiosError(
         'Zodios: Invalid response from endpoint',
-        400,
-        undefined,
         badResponse.toString(),
         'Validation error: Expected array, received string at "data"',
       );
