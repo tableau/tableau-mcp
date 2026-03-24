@@ -2,7 +2,7 @@ import { Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 import z from 'zod';
 
-import { TableauMCPError } from '../../../errors/error.js';
+import { TableauMCPError, TableauMCPErrorFactory } from '../../../errors/error.js';
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { pulseApis } from '../apis/pulseApi.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -197,9 +197,7 @@ async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise
   } catch (error) {
     if (isAxiosError(error)) {
       if (error.response?.status === 404) {
-        return new Err(
-          new TableauMCPError('tableau-server', 'Pulse not available on Tableau Server', 404),
-        );
+        return new Err(TableauMCPErrorFactory.pulseNotAvailable());
       }
 
       if (
@@ -208,7 +206,7 @@ async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise
         error.response.headers.validation_code === '400999'
       ) {
         // ntbue-service-chassis/-/blob/main/server/interceptors/site_settings.go
-        return new Err(new TableauMCPError('pulse-disabled', 'Pulse is disabled', 400));
+        return new Err(TableauMCPErrorFactory.pulseDisabled());
       }
     }
 
