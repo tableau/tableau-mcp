@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { TableauMCPError } from '../../errors/error.js';
+import { TableauMCPError, TableauMCPErrorFactory } from '../../errors/error.js';
 import { useRestApi } from '../../restApiInstance.js';
 import {
   Datasource,
@@ -74,7 +74,7 @@ export const getQueryDatasourceTool = (
           try {
             validateQuery({ datasourceLuid, query, rules });
           } catch (error) {
-            return Err(new TableauMCPError('args-validation', getExceptionMessage(error), 400));
+            return Err(TableauMCPErrorFactory.argsValidation(getExceptionMessage(error)));
           }
           const configWithOverrides = await getConfigWithOverrides();
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
@@ -84,7 +84,7 @@ export const getQueryDatasourceTool = (
 
           if (!isDatasourceAllowedResult.allowed) {
             return Err(
-              new TableauMCPError('datasource-not-allowed', isDatasourceAllowedResult.message, 403),
+              TableauMCPErrorFactory.datasourceNotAllowed(isDatasourceAllowedResult.message),
             );
           }
 
@@ -127,7 +127,7 @@ export const getQueryDatasourceTool = (
                 if (metadataValidationResult.isErr()) {
                   const errors = metadataValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join('\n\n');
-                  return new Err(new TableauMCPError('query-validation', errorMessage, 400));
+                  return new Err(TableauMCPErrorFactory.queryValidation(errorMessage));
                 }
 
                 // Validate filters values for SET and MATCH filters
@@ -141,7 +141,7 @@ export const getQueryDatasourceTool = (
                 if (filterValidationResult.isErr()) {
                   const errors = filterValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join(', ');
-                  return new Err(new TableauMCPError('query-validation', errorMessage, 400));
+                  return new Err(TableauMCPErrorFactory.queryValidation(errorMessage));
                 }
               }
 

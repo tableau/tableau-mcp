@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { TableauMCPError } from '../../errors/error.js';
+import { TableauMCPError, TableauMCPErrorFactory } from '../../errors/error.js';
 import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
@@ -40,7 +40,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
 
           if (!isWorkbookAllowedResult.allowed) {
             return new Err(
-              new TableauMCPError('workbook-not-allowed', isWorkbookAllowedResult.message, 403),
+              TableauMCPErrorFactory.workbookNotAllowed(isWorkbookAllowedResult.message),
             );
           }
 

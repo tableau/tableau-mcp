@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { TableauMCPError } from '../../../errors/error.js';
+import { TableauMCPErrorFactory } from '../../../errors/error.js';
 import { PulseInsightBundleType } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
@@ -200,7 +200,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
 
   it('should return an error when executing the tool against Tableau Server', async () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
-      Err(new TableauMCPError('tableau-server', 'Pulse not available on Tableau Server', 404)),
+      Err(TableauMCPErrorFactory.pulseNotAvailable()),
     );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
@@ -210,7 +210,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
 
   it('should return an error when Pulse is disabled', async () => {
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(
-      Err(new TableauMCPError('pulse-disabled', 'Pulse is disabled', 400)),
+      Err(TableauMCPErrorFactory.pulseDisabled()),
     );
     const result = await getToolResult();
     expect(result.isError).toBe(true);

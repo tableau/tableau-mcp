@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { TableauMCPError } from '../../errors/error.js';
+import { TableauMCPError, TableauMCPErrorFactory } from '../../errors/error.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -35,9 +35,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
           });
 
           if (!isViewAllowedResult.allowed) {
-            return new Err(
-              new TableauMCPError('view-not-allowed', isViewAllowedResult.message, 403),
-            );
+            return new Err(TableauMCPErrorFactory.viewNotAllowed(isViewAllowedResult.message));
           }
 
           return new Ok(

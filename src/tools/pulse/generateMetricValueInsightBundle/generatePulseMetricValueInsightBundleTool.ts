@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err } from 'ts-results-es';
 import z from 'zod';
 
-import { TableauMCPError } from '../../../errors/error.js';
+import { TableauMCPError, TableauMCPErrorFactory } from '../../../errors/error.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
   pulseBundleRequestSchema,
@@ -152,10 +152,8 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
 
             if (!datasourceIds.has(datasourceLuid)) {
               return new Err(
-                new TableauMCPError(
-                  'datasource-not-allowed',
+                TableauMCPErrorFactory.datasourceNotAllowed(
                   getPulseDisabledError('datasource-not-allowed'),
-                  403,
                 ),
               );
             }
@@ -173,7 +171,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
 
           if (result.isErr()) {
             return new Err(
-              new TableauMCPError('feature-disabled', getPulseDisabledError('pulse-disabled'), 404),
+              TableauMCPErrorFactory.featureDisabled(getPulseDisabledError('pulse-disabled')),
             );
           }
 

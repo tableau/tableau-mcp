@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { TableauMCPError } from '../../../errors/error.js';
+import { TableauMCPErrorFactory } from '../../../errors/error.js';
 import { Server } from '../../../server.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -86,7 +86,7 @@ describe('listPulseMetricsFromMetricIdsTool', () => {
 
   it('should return an error when executing the tool against Tableau Server', async () => {
     mocks.mockListPulseMetricsFromMetricIds.mockResolvedValue(
-      Err(new TableauMCPError('tableau-server', 'Pulse not available on Tableau Server', 404)),
+      Err(TableauMCPErrorFactory.pulseNotAvailable()),
     );
     const result = await getToolResult({
       metricIds: ['CF32DDCC-362B-4869-9487-37DA4D152552', 'CF32DDCC-362B-4869-9487-37DA4D152553'],
@@ -98,7 +98,7 @@ describe('listPulseMetricsFromMetricIdsTool', () => {
 
   it('should return an error when Pulse is disabled', async () => {
     mocks.mockListPulseMetricsFromMetricIds.mockResolvedValue(
-      Err(new TableauMCPError('pulse-disabled', 'Pulse is disabled', 400)),
+      Err(TableauMCPErrorFactory.pulseDisabled()),
     );
     const result = await getToolResult({
       metricIds: ['CF32DDCC-362B-4869-9487-37DA4D152552', 'CF32DDCC-362B-4869-9487-37DA4D152553'],

@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { TableauMCPError } from '../../errors/error.js';
+import { TableauMCPError, TableauMCPErrorFactory } from '../../errors/error.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
 import {
@@ -552,7 +552,7 @@ describe('queryDatasourceTool', () => {
 
   it('should show feature-disabled error when VDS is disabled', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(
-      Err(new TableauMCPError('feature-disabled', getVizqlDataServiceDisabledError(), 404)),
+      Err(TableauMCPErrorFactory.featureDisabled(getVizqlDataServiceDisabledError())),
     );
 
     const result = await getToolResult();

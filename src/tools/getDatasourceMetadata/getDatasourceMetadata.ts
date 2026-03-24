@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { TableauMCPError } from '../../errors/error.js';
+import { TableauMCPError, TableauMCPErrorFactory } from '../../errors/error.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { Server } from '../../server.js';
@@ -119,11 +119,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
         callback: async () => {
           if (!datasourceLuid) {
             return Err(
-              new TableauMCPError(
-                'args-validation',
-                'datasourceLuid must be a non-empty string.',
-                400,
-              ),
+              TableauMCPErrorFactory.argsValidation('datasourceLuid must be a non-empty string.'),
             );
           }
           const configWithOverrides = await extra.getConfigWithOverrides();
@@ -135,7 +131,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
 
           if (!isDatasourceAllowedResult.allowed) {
             return Err(
-              new TableauMCPError('datasource-not-allowed', isDatasourceAllowedResult.message, 403),
+              TableauMCPErrorFactory.datasourceNotAllowed(isDatasourceAllowedResult.message),
             );
           }
 
@@ -151,9 +147,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
               });
 
               if (readMetadataResult.isErr()) {
-                return Err(
-                  new TableauMCPError('feature-disabled', getVizqlDataServiceDisabledError(), 404),
-                );
+                return Err(TableauMCPErrorFactory.featureDisabled(getVizqlDataServiceDisabledError()));
               }
 
               if (configWithOverrides.disableMetadataApiRequests) {

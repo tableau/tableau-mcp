@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err } from 'ts-results-es';
 
-import { TableauMCPError } from '../../../errors/error.js';
+import { TableauMCPError, TableauMCPErrorFactory } from '../../../errors/error.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
   pulseInsightBriefRequestSchema,
@@ -220,7 +220,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
 
           if (result.isErr()) {
             return new Err(
-              new TableauMCPError('feature-disabled', getPulseDisabledError('pulse-disabled'), 404),
+              TableauMCPErrorFactory.featureDisabled(getPulseDisabledError('pulse-disabled')),
             );
           }
 

@@ -2,7 +2,7 @@ import { AxiosError } from 'axios';
 import { Err, Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
-import { TableauMCPError } from '../errors/error.js';
+import { TableauMCPError, TableauMCPErrorFactory } from '../errors/error.js';
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
 import invariant from '../utils/invariant.js';
@@ -386,7 +386,7 @@ describe('Tool', () => {
         extra: mockExtra,
         args: { param1: 'test-value' },
         callback: () =>
-          Promise.resolve(Err(new TableauMCPError('datasource-not-allowed', 'Not allowed', 403))),
+          Promise.resolve(Err(TableauMCPErrorFactory.datasourceNotAllowed('Not allowed'))),
         getErrorText: (err: TableauMCPError) => `Error: ${err.type}`,
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
