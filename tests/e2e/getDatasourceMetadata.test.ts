@@ -19,7 +19,7 @@ describe('get-datasource-metadata', () => {
       },
     });
 
-    invariant(fieldGroups, 'data is undefined');
+    invariant(fieldGroups, 'fieldGroups is undefined');
     const flatFields = fieldGroups.flatMap((group) => group.fields ?? []);
     expect(flatFields.length).toBeGreaterThan(0);
 

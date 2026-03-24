@@ -53,6 +53,47 @@ const environmentData: EnvironmentData = {
         },
       },
     },
+    'https://test-dataplane1.tableau.sfdc-ckzqgc.svc.sfdcfc.net': {
+      sites: {
+        andytdp1: {
+          datasources: {
+            'Superstore Datasource': { id: 'f39b2742-e156-49da-85e0-ac1c73547d6d' },
+          },
+          workbooks: {
+            Superstore: {
+              id: 'c1beaa20-0b98-43d8-a5de-0bff82bf6a8f',
+              defaultViewId: '6e341026-2d87-4a80-b238-86dafa75c2f6',
+            },
+          },
+          pulse: {
+            definitions: {
+              'Tableau MCP': {
+                id: 'f353e870-26c4-40bb-9c65-70b2855364c8',
+                metrics: [{ id: 'b2b1a35e-d065-4692-87b8-5d6f8acddab1' }],
+              },
+            },
+          },
+        },
+      },
+    },
+    'https://test-dataplane7.tableau.sfdc-ckzqgc.svc.sfdcfc.net': {
+      sites: {
+        'mcp-test-vnext': {
+          datasources: {
+            'Superstore Datasource': { id: '39974b17-887b-479e-930f-9bc4136e85fa' },
+          },
+          workbooks: {
+            Superstore: {
+              id: '44bb9110-456f-4b26-a82f-4d9d9271f1af',
+              defaultViewId: 'f19c1ed1-7294-45e8-818e-dbc6814bb19c',
+            },
+          },
+          pulse: {
+            definitions: {},
+          },
+        },
+      },
+    },
   },
 };
 
