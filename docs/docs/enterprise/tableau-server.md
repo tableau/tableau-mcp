@@ -11,8 +11,9 @@ server in a self-hosted environment.
 :::info
 
 For Tableau Cloud customers, as part of the 2026.2 release, Tableau is planning to roll out a
-cloud-hosted service, available to all editions. Tableau Cloud customers will be able to self-host
-Tableau MCP at this time, and a deployment guide will also be provided.
+cloud-hosted service, available to all editions. The release will unlock the ability for Tableau
+Cloud customers to self-host Tableau MCP at scale using OAuth. A Tableau MCP deployment guide for
+Tableau Cloud customers will also be made available with the release.
 
 :::
 
@@ -132,10 +133,12 @@ The MCP server relies on environment variables for configuration. Please set env
 however your hosting platform and security model allows. Several examples for common configurations
 are provided below and assume the use of a `.env` file in the working directory for simplicity.
 
-Which environment variables are required depend on your desired authentication mechanism.
+#### Required Environment Variables
 
-The `SERVER` environment variable is always required; the value is the URL of your Tableau Server
-(not the MCP server).
+- The `SERVER` environment variable is always required; the value is the URL of your Tableau Server
+  (not the MCP server).
+- Other required variables depend on your desired authentication mechanism and are as shown in the
+  examples below
 
 <hr />
 
