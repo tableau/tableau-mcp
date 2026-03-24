@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-title: Tableau Server Customers
+title: Deployment Guide for Tableau Server Customers
 ---
 
 # Tableau MCP Deployment Guide for Tableau Server Customers
