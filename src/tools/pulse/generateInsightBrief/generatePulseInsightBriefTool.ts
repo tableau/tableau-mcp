@@ -200,9 +200,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
                 // If filtering removed all metrics from this message, return an error
                 if (message.metric_group_context.length === 0) {
                   return Err(
-                    TableauMCPErrorFactory.datasourceNotAllowed(
-                      getPulseDisabledError('datasource-not-allowed'),
-                    ),
+                    TableauMCPErrorFactory.datasourceNotAllowed('Datasource not in allowed set'),
                   );
                 }
               }

@@ -152,9 +152,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
 
             if (!datasourceIds.has(datasourceLuid)) {
               return new Err(
-                TableauMCPErrorFactory.datasourceNotAllowed(
-                  getPulseDisabledError('datasource-not-allowed'),
-                ),
+                TableauMCPErrorFactory.datasourceNotAllowed('Datasource not in allowed set'),
               );
             }
           }
