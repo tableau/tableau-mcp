@@ -19,7 +19,7 @@ const mockPngData = Buffer.from(encodedPngData, 'base64').toString('latin1');
 const mocks = vi.hoisted(() => ({
   mockGetCustomView: vi.fn(),
   mockGetView: vi.fn(),
-  mockQueryCustomViewImage: vi.fn(),
+  mockGetCustomViewImage: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -28,7 +28,7 @@ vi.mock('../../restApiInstance.js', () => ({
       viewsMethods: {
         getCustomView: mocks.mockGetCustomView,
         getView: mocks.mockGetView,
-        queryCustomViewImage: mocks.mockQueryCustomViewImage,
+        getCustomViewImage: mocks.mockGetCustomViewImage,
       },
       siteId: 'test-site-id',
     }),
@@ -43,7 +43,7 @@ describe('getCustomViewImageTool', () => {
     resetResourceAccessCheckerSingleton();
     mocks.mockGetCustomView.mockResolvedValue(mockCustomView);
     mocks.mockGetView.mockResolvedValue(mockView);
-    mocks.mockQueryCustomViewImage.mockResolvedValue(mockPngData);
+    mocks.mockGetCustomViewImage.mockResolvedValue(mockPngData);
   });
 
   afterEach(() => {
@@ -72,7 +72,7 @@ describe('getCustomViewImageTool', () => {
       data: encodedPngData,
       mimeType: 'image/png',
     });
-    expect(mocks.mockQueryCustomViewImage).toHaveBeenCalledWith({
+    expect(mocks.mockGetCustomViewImage).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       customViewId: mockCustomView.id,
       width: undefined,
@@ -91,7 +91,7 @@ describe('getCustomViewImageTool', () => {
       maxAge: 30,
       viewFilters: { Region: 'West' },
     });
-    expect(mocks.mockQueryCustomViewImage).toHaveBeenCalledWith({
+    expect(mocks.mockGetCustomViewImage).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       customViewId: mockCustomView.id,
       width: 1024,
@@ -104,7 +104,7 @@ describe('getCustomViewImageTool', () => {
 
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
-    mocks.mockQueryCustomViewImage.mockRejectedValue(new Error(errorMessage));
+    mocks.mockGetCustomViewImage.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({ customViewId: mockCustomView.id });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -117,7 +117,7 @@ describe('getCustomViewImageTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('does not belong to an allowed workbook');
-    expect(mocks.mockQueryCustomViewImage).not.toHaveBeenCalled();
+    expect(mocks.mockGetCustomViewImage).not.toHaveBeenCalled();
   });
 });
 

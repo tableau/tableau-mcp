@@ -12,13 +12,12 @@ import { mockView } from './mockView.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
 
-const mockCsv =
-  '"Country/Region,State/Province,Profit Ratio\nCanada,Alberta,19.5%\n"';
+const mockCsv = '"Country/Region,State/Province,Profit Ratio\nCanada,Alberta,19.5%\n"';
 
 const mocks = vi.hoisted(() => ({
   mockGetCustomView: vi.fn(),
   mockGetView: vi.fn(),
-  mockQueryCustomViewData: vi.fn(),
+  mockGetCustomViewData: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -27,7 +26,7 @@ vi.mock('../../restApiInstance.js', () => ({
       viewsMethods: {
         getCustomView: mocks.mockGetCustomView,
         getView: mocks.mockGetView,
-        queryCustomViewData: mocks.mockQueryCustomViewData,
+        getCustomViewData: mocks.mockGetCustomViewData,
       },
       siteId: 'test-site-id',
     }),
@@ -42,7 +41,7 @@ describe('getCustomViewDataTool', () => {
     resetResourceAccessCheckerSingleton();
     mocks.mockGetCustomView.mockResolvedValue(mockCustomView);
     mocks.mockGetView.mockResolvedValue(mockView);
-    mocks.mockQueryCustomViewData.mockResolvedValue(mockCsv);
+    mocks.mockGetCustomViewData.mockResolvedValue(mockCsv);
   });
 
   afterEach(() => {
@@ -69,7 +68,7 @@ describe('getCustomViewDataTool', () => {
       siteId: 'test-site-id',
       customViewId: mockCustomView.id,
     });
-    expect(mocks.mockQueryCustomViewData).toHaveBeenCalledWith({
+    expect(mocks.mockGetCustomViewData).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       customViewId: mockCustomView.id,
       maxAge: undefined,
@@ -82,7 +81,7 @@ describe('getCustomViewDataTool', () => {
       maxAge: 5,
       viewFilters: { Year: '2024' },
     });
-    expect(mocks.mockQueryCustomViewData).toHaveBeenCalledWith({
+    expect(mocks.mockGetCustomViewData).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       customViewId: mockCustomView.id,
       maxAge: 5,
@@ -92,7 +91,7 @@ describe('getCustomViewDataTool', () => {
 
   it('should handle API errors when fetching data', async () => {
     const errorMessage = 'API Error';
-    mocks.mockQueryCustomViewData.mockRejectedValue(new Error(errorMessage));
+    mocks.mockGetCustomViewData.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult(mockCustomView.id);
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -105,7 +104,7 @@ describe('getCustomViewDataTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('does not belong to an allowed workbook');
-    expect(mocks.mockQueryCustomViewData).not.toHaveBeenCalled();
+    expect(mocks.mockGetCustomViewData).not.toHaveBeenCalled();
   });
 });
 
