@@ -3,6 +3,7 @@ import { Zodios } from '@zodios/core';
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { viewsApis } from '../apis/viewsApi.js';
 import { RestApiCredentials } from '../restApi.js';
+import type { CustomView } from '../types/customView.js';
 import { Pagination } from '../types/pagination.js';
 import { View } from '../types/view.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
@@ -30,6 +31,125 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
    */
   getView = async ({ viewId, siteId }: { viewId: string; siteId: string }): Promise<View> => {
     return (await this._apiClient.getView({ params: { siteId, viewId }, ...this.authHeader })).view;
+  };
+
+  /**
+   * Gets the details of a specified custom view.
+   *
+   * Required scopes: `tableau:content:read`
+   *
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view
+   */
+  getCustomView = async ({
+    customViewId,
+    siteId,
+  }: {
+    customViewId: string;
+    siteId: string;
+  }): Promise<CustomView> => {
+    return (
+      await this._apiClient.getCustomView({
+        params: { siteId, customViewId },
+        ...this.authHeader,
+      })
+    ).customView;
+  };
+
+  /**
+   * Returns a specified custom view as CSV (same semantics as Query View Data for the underlying sheet).
+   * Supports optional `maxAge` and Tableau view filter query params (`vf_<fieldname>=value`).
+   *
+   * Required scopes: `tableau:views:download`
+   *
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view_data
+   */
+  queryCustomViewData = async ({
+    customViewId,
+    siteId,
+    maxAge,
+    viewFilters,
+  }: {
+    customViewId: string;
+    siteId: string;
+    maxAge?: number;
+    /** Map of field name to filter value; keys are prefixed with `vf_` unless already present. */
+    viewFilters?: Record<string, string>;
+  }): Promise<string> => {
+    const params: Record<string, string | number> = {};
+    if (maxAge !== undefined) {
+      params.maxAge = maxAge;
+    }
+    if (viewFilters) {
+      for (const [key, value] of Object.entries(viewFilters)) {
+        const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
+        params[paramName] = value;
+      }
+    }
+    const response = await this._apiClient.axios.get<string>(
+      `/sites/${siteId}/customviews/${customViewId}/data`,
+      {
+        params,
+        ...this.authHeader,
+        responseType: 'text',
+      },
+    );
+    return response.data;
+  };
+
+  /**
+   * Returns a .png image of the specified custom view (saved view state / filters).
+   * Supports optional `resolution`, `maxAge`, `vizWidth` / `vizHeight`, and `vf_` filter query params.
+   *
+   * Required scopes: `tableau:views:download`
+   *
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view_image
+   */
+  queryCustomViewImage = async ({
+    customViewId,
+    siteId,
+    width,
+    height,
+    resolution = 'high',
+    maxAge,
+    viewFilters,
+  }: {
+    customViewId: string;
+    siteId: string;
+    width?: number;
+    height?: number;
+    resolution?: 'high';
+    maxAge?: number;
+    /** Map of field name to filter value; keys are prefixed with `vf_` unless already present. */
+    viewFilters?: Record<string, string>;
+  }): Promise<string> => {
+    const params: Record<string, string | number> = {};
+    if (maxAge !== undefined) {
+      params.maxAge = maxAge;
+    }
+    if (resolution !== undefined) {
+      params.resolution = resolution;
+    }
+    if (width !== undefined) {
+      params.vizWidth = width;
+    }
+    if (height !== undefined) {
+      params.vizHeight = height;
+    }
+    if (viewFilters) {
+      for (const [key, value] of Object.entries(viewFilters)) {
+        const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
+        params[paramName] = value;
+      }
+    }
+    const response = await this._apiClient.axios.get<ArrayBuffer>(
+      `/sites/${siteId}/customviews/${customViewId}/image`,
+      {
+        params,
+        ...this.authHeader,
+        responseType: 'arraybuffer',
+      },
+    );
+    return Buffer.from(response.data).toString('latin1');
   };
 
   /**

@@ -464,6 +464,44 @@ class ResourceAccessChecker {
 
     return { allowed: true };
   }
+
+  /**
+   * Resolves a custom view to its underlying published view, then applies the same rules as {@link isViewAllowed}.
+   */
+  async isCustomViewAllowed({
+    customViewId,
+    extra,
+  }: {
+    customViewId: string;
+    extra: TableauRequestHandlerExtra;
+  }): Promise<AllowedResult> {
+    let underlyingViewId: string;
+    try {
+      const customView = await useRestApi({
+        ...extra,
+        jwtScopes: RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+        callback: async (restApi) =>
+          await restApi.viewsMethods.getCustomView({
+            siteId: restApi.siteId,
+            customViewId,
+          }),
+      });
+      underlyingViewId = customView.view.id;
+    } catch (error) {
+      return {
+        allowed: false,
+        message: [
+          'Could not resolve the custom view for access checks.',
+          getExceptionMessage(error),
+        ].join(' '),
+      };
+    }
+
+    return await this.isViewAllowed({
+      viewId: underlyingViewId,
+      extra,
+    });
+  }
 }
 
 let resourceAccessChecker = ResourceAccessChecker.create();

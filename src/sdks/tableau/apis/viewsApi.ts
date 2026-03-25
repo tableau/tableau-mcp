@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { customViewSchema } from '../types/customView.js';
 import { paginationSchema } from '../types/pagination.js';
 import { viewSchema } from '../types/view.js';
 import { paginationParameters } from './paginationParameters.js';
@@ -19,6 +20,14 @@ const queryViewDataEndpoint = makeEndpoint({
   alias: 'queryViewData',
   description: 'Returns a specified view rendered as data in comma separated value (CSV) format.',
   response: z.string(),
+});
+
+const getCustomViewEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/customviews/:customViewId',
+  alias: 'getCustomView',
+  description: 'Gets the details of a specified custom view.',
+  response: z.object({ customView: customViewSchema }),
 });
 
 const queryViewImageEndpoint = makeEndpoint({
@@ -99,6 +108,7 @@ const queryViewsForSiteEndpoint = makeEndpoint({
 
 const viewsApi = makeApi([
   getViewEndpoint,
+  getCustomViewEndpoint,
   queryViewDataEndpoint,
   queryViewImageEndpoint,
   queryViewsForWorkbookEndpoint,
