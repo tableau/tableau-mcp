@@ -1,4 +1,3 @@
-import { getPulseDisabledError } from '../tools/pulse/getPulseDisabledError.js';
 import { McpToolError } from './McpToolError.js';
 
 export class PulseNotAvailableError extends McpToolError {
@@ -7,6 +6,6 @@ export class PulseNotAvailableError extends McpToolError {
   }
 
   override getErrorText(): string {
-    return getPulseDisabledError(this.type);
+    return 'Pulse is not available on Tableau Server. Consider disabling the Pulse MCP tools in your client or removing them using the EXCLUDE_TOOLS environment variable. To enable Pulse on your Tableau Cloud site, please see the instructions at https://help.tableau.com/current/online/en-us/pulse_set_up.htm.';
   }
 }

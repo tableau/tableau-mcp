@@ -9,7 +9,6 @@ import {
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
-import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
   briefRequest: pulseInsightBriefRequestSchema,
@@ -200,7 +199,9 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
                 // If filtering removed all metrics from this message, return an error
                 if (message.metric_group_context.length === 0) {
                   return Err(
-                    new DatasourceNotAllowedError(getPulseDisabledError('datasource-not-allowed')),
+                    new DatasourceNotAllowedError(
+                      'The set of allowed metric insights that can be queried is limited by the server configuration. One or more messages in the request contain only metrics derived from data sources that are not in the allowed set.',
+                    ),
                   );
                 }
               }

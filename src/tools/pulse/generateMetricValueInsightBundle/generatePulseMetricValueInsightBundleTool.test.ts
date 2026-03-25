@@ -9,7 +9,6 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../../resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
-import { getPulseDisabledError } from '../getPulseDisabledError.js';
 import { getGeneratePulseMetricValueInsightBundleTool } from './generatePulseMetricValueInsightBundleTool.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
@@ -224,7 +223,9 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(getPulseDisabledError('datasource-not-allowed'));
+    expect(result.content[0].text).toBe(
+      'The set of allowed metric insights that can be queried is limited by the server configuration. One or more messages in the request contain only metrics derived from data sources that are not in the allowed set.',
+    );
 
     expect(mocks.mockGeneratePulseMetricValueInsightBundle).not.toHaveBeenCalled();
   });

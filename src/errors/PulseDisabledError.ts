@@ -1,4 +1,3 @@
-import { getPulseDisabledError } from '../tools/pulse/getPulseDisabledError.js';
 import { McpToolError } from './McpToolError.js';
 
 export class PulseDisabledError extends McpToolError {
@@ -7,6 +6,6 @@ export class PulseDisabledError extends McpToolError {
   }
 
   override getErrorText(): string {
-    return getPulseDisabledError(this.type);
+    return 'Pulse is disabled on this Tableau Cloud site. To enable Pulse, please see the instructions at https://help.tableau.com/current/online/en-us/pulse_set_up.htm.';
   }
 }

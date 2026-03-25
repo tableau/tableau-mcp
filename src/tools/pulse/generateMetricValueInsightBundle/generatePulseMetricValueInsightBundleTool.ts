@@ -11,7 +11,6 @@ import {
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
-import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
   bundleRequest: pulseBundleRequestSchema,
@@ -151,9 +150,9 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               bundleRequest.bundle_request.input.metric.definition.datasource.id;
 
             if (!datasourceIds.has(datasourceLuid)) {
-              return new Err(
-                new DatasourceNotAllowedError(getPulseDisabledError('datasource-not-allowed')),
-              );
+              const message =
+                'The set of allowed metric insights that can be queried is limited by the server configuration. One or more messages in the request contain only metrics derived from data sources that are not in the allowed set.';
+              return new Err(new DatasourceNotAllowedError(message));
             }
           }
 
