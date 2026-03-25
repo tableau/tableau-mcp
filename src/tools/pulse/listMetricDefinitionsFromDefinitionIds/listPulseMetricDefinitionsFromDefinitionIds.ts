@@ -6,7 +6,6 @@ import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
-import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
   metricDefinitionIds: z.array(z.string().length(36)).min(1),
@@ -79,7 +78,6 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
             boundedContext: configWithOverrides.boundedContext,
           });
         },
-        getErrorText: getPulseDisabledError,
       });
     },
   });

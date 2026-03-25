@@ -6,6 +6,7 @@ import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './te
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
+import { parseNumber } from './utils/parseNumber.js';
 
 const __dirname = getDirname();
 
@@ -452,33 +453,8 @@ export function removeClaudeMcpBundleUserConfigTemplates(
   }, {});
 }
 
-function parseNumber(
-  value: string | undefined,
-  {
-    defaultValue,
-    minValue,
-    maxValue,
-  }: { defaultValue: number; minValue?: number; maxValue?: number } = {
-    defaultValue: 0,
-    minValue: Number.NEGATIVE_INFINITY,
-    maxValue: Number.POSITIVE_INFINITY,
-  },
-): number {
-  if (!value) {
-    return defaultValue;
-  }
-
-  const number = parseFloat(value);
-  return isNaN(number) ||
-    (minValue !== undefined && number < minValue) ||
-    (maxValue !== undefined && number > maxValue)
-    ? defaultValue
-    : number;
-}
-
 export const getConfig = (): Config => new Config();
 
 export const exportedForTesting = {
   Config,
-  parseNumber,
 };

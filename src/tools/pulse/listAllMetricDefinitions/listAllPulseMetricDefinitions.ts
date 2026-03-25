@@ -11,7 +11,6 @@ import { Server } from '../../../server.js';
 import { pulsePaginate } from '../../../utils/paginate.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
-import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
   view: z.optional(z.enum(pulseMetricDefinitionViewEnum)),
@@ -104,7 +103,6 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
             boundedContext: configWithOverrides.boundedContext,
           });
         },
-        getErrorText: getPulseDisabledError,
       });
     },
   });

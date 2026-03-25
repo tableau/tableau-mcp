@@ -1,7 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { ViewNotAllowedError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { convertPngDataToToolResult } from '../convertPngDataToToolResult.js';
@@ -12,11 +13,6 @@ const paramsSchema = {
   viewId: z.string(),
   width: z.number().gt(0).optional(),
   height: z.number().gt(0).optional(),
-};
-
-export type GetViewImageError = {
-  type: 'view-not-allowed';
-  message: string;
 };
 
 export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -32,7 +28,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
       openWorldHint: false,
     },
     callback: async ({ viewId, width, height }, extra): Promise<CallToolResult> => {
-      return await getViewImageTool.logAndExecute<string, GetViewImageError>({
+      return await getViewImageTool.logAndExecute<string>({
         extra,
         args: { viewId },
         callback: async () => {
@@ -42,10 +38,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
           });
 
           if (!isViewAllowedResult.allowed) {
-            return new Err({
-              type: 'view-not-allowed',
-              message: isViewAllowedResult.message,
-            });
+            return new ViewNotAllowedError(isViewAllowedResult.message).toErr();
           }
 
           return new Ok(
@@ -71,12 +64,6 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
           };
         },
         getSuccessResult: convertPngDataToToolResult,
-        getErrorText: (error: GetViewImageError) => {
-          switch (error.type) {
-            case 'view-not-allowed':
-              return error.message;
-          }
-        },
       });
     },
   });
