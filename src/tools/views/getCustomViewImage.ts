@@ -17,15 +17,11 @@ const paramsSchema = {
     .positive()
     .int()
     .optional()
-    .describe(
-      'Optional max age in minutes for cached image (Tableau REST `maxAge`). Minimum interval is 1 minute.',
-    ),
+    .describe('Optional max age in minutes for cached image. Minimum interval is 1 minute.'),
   viewFilters: z
     .record(z.string())
     .optional()
-    .describe(
-      'Optional map of view filter field names to values. Keys are sent as `vf_<fieldname>` query parameters.',
-    ),
+    .describe('Optional map of view filter field names to values.'),
 };
 
 export type GetCustomViewImageError = {
@@ -38,9 +34,9 @@ export const getGetCustomViewImageTool = (server: Server): Tool<typeof paramsSch
     server,
     name: 'get-custom-view-image',
     description: [
-      'Retrieves a PNG image of a Tableau **custom view** (saved/personalized view state), including the user’s filters.',
-      'Uses the Tableau REST API Get Custom View Image endpoint (API 3.18+). Requires the custom view LUID from the content URL (not the published view id).',
-      'Optional width and height in pixels control render size (`vizWidth` / `vizHeight`); defaults follow Tableau when omitted. For published views only, use `get-view-image` with the view id.',
+      "Retrieves a PNG image of a Tableau Custom View (saved/personalized view state), including the user's filters.",
+      'Requires the custom view LUID from the content URL (not the published view id).',
+      'Optional width and height in pixels control render size (`width` / `height`); defaults follow Tableau when omitted. For published views only, use the tool to get view image by view id instead.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -73,7 +69,7 @@ export const getGetCustomViewImageTool = (server: Server): Tool<typeof paramsSch
               ...extra,
               jwtScopes: getCustomViewImageTool.requiredApiScopes,
               callback: async (restApi) => {
-                return await restApi.viewsMethods.queryCustomViewImage({
+                return await restApi.viewsMethods.getCustomViewImage({
                   customViewId,
                   siteId: restApi.siteId,
                   width,

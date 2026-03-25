@@ -14,15 +14,11 @@ const paramsSchema = {
     .positive()
     .int()
     .optional()
-    .describe(
-      'Optional max age in minutes for cached view data (Tableau REST `maxAge` query parameter). Minimum interval is 1 minute.',
-    ),
+    .describe('Optional max age in minutes for cached view data. Minimum interval is 1 minute.'),
   viewFilters: z
     .record(z.string())
     .optional()
-    .describe(
-      'Optional map of view filter field names to values. Keys are sent as `vf_<fieldname>` query parameters per Tableau REST API filter-query-views.',
-    ),
+    .describe('Optional map of view filter field names to values.'),
 };
 
 export type GetCustomViewDataError = {
@@ -35,9 +31,9 @@ export const getGetCustomViewDataTool = (server: Server): Tool<typeof paramsSche
     server,
     name: 'get-custom-view-data',
     description: [
-      'Retrieves comma-separated value (CSV) data for a Tableau **custom view** (saved/personalized view state), including the user’s filters.',
-      'Uses the Tableau REST API Get Custom View Data endpoint (API 3.23+). Requires the custom view LUID from the content URL (not the published view id).',
-      'For published views without a custom view, use `get-view-data` with the view id instead.',
+      "Retrieves comma-separated value (CSV) data for a Tableau Custom View (saved/personalized view state), including the user's filters.",
+      'Requires the custom view LUID from the content URL (not the published view id).',
+      'For published views without a custom view, use the tool to get view data by view id instead.',
     ].join(' '),
     paramsSchema,
     annotations: {
@@ -67,7 +63,7 @@ export const getGetCustomViewDataTool = (server: Server): Tool<typeof paramsSche
               ...extra,
               jwtScopes: getCustomViewDataTool.requiredApiScopes,
               callback: async (restApi) => {
-                return await restApi.viewsMethods.queryCustomViewData({
+                return await restApi.viewsMethods.getCustomViewData({
                   customViewId,
                   siteId: restApi.siteId,
                   maxAge,

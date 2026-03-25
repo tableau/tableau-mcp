@@ -30,6 +30,48 @@ const getCustomViewEndpoint = makeEndpoint({
   response: z.object({ customView: customViewSchema }),
 });
 
+const getCustomViewDataEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/customviews/:customViewId/data',
+  alias: 'getCustomViewData',
+  description:
+    'Returns a specified custom view rendered as data in comma separated value (CSV) format.',
+  parameters: [
+    {
+      name: 'maxAge',
+      type: 'Query',
+      schema: z.number().optional(),
+      description:
+        'The maximum number of minutes view data will be cached before being refreshed. To prevent multiple view data requests from overloading the server, the shortest interval you can set is one minute. There is no maximum value, but the server job enacting the caching action may expire before a long cache period is reached.',
+    },
+  ],
+  response: z.string(),
+});
+
+const getCustomViewImageEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/customviews/:customViewId/image',
+  alias: 'getCustomViewImage',
+  description: 'Returns an image of the specified custom view.',
+  parameters: [
+    {
+      name: 'resolution',
+      type: 'Query',
+      schema: z.literal('high').optional(),
+      description:
+        'The resolution of the image. Image width and actual pixel density are determined by the display context of the image. Aspect ratio is always preserved. Set the value to high to ensure maximum pixel density.',
+    },
+    {
+      name: 'maxAge',
+      type: 'Query',
+      schema: z.number().optional(),
+      description:
+        'The maximum number of minutes view data will be cached before being refreshed. To prevent multiple view data requests from overloading the server, the shortest interval you can set is one minute. There is no maximum value, but the server job enacting the caching action may expire before a long cache period is reached.',
+    },
+  ],
+  response: z.string(),
+});
+
 const queryViewImageEndpoint = makeEndpoint({
   method: 'get',
   path: '/sites/:siteId/views/:viewId/image',
@@ -109,6 +151,8 @@ const queryViewsForSiteEndpoint = makeEndpoint({
 const viewsApi = makeApi([
   getViewEndpoint,
   getCustomViewEndpoint,
+  getCustomViewDataEndpoint,
+  getCustomViewImageEndpoint,
   queryViewDataEndpoint,
   queryViewImageEndpoint,
   queryViewsForWorkbookEndpoint,

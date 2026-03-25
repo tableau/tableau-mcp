@@ -23,6 +23,7 @@ class ResourceAccessChecker {
   private readonly _cachedDatasourceIds: Map<string, AllowedResult>;
   private readonly _cachedWorkbookIds: Map<string, AllowedResult<Workbook>>;
   private readonly _cachedViewIds: Map<string, AllowedResult>;
+  private readonly _cachedCustomViewIds: Map<string, AllowedResult>;
 
   static create(): ResourceAccessChecker {
     return new ResourceAccessChecker();
@@ -45,6 +46,7 @@ class ResourceAccessChecker {
     this._cachedDatasourceIds = new Map();
     this._cachedWorkbookIds = new Map();
     this._cachedViewIds = new Map();
+    this._cachedCustomViewIds = new Map();
   }
 
   private async getAllowedProjectIds({
@@ -475,7 +477,12 @@ class ResourceAccessChecker {
     customViewId: string;
     extra: TableauRequestHandlerExtra;
   }): Promise<AllowedResult> {
-    let underlyingViewId: string;
+    const cachedResult = this._cachedCustomViewIds.get(customViewId);
+    if (cachedResult) {
+      return cachedResult;
+    }
+
+    let underlyingViewId: string | undefined;
     try {
       const customView = await useRestApi({
         ...extra,
@@ -497,10 +504,23 @@ class ResourceAccessChecker {
       };
     }
 
-    return await this.isViewAllowed({
+    // The custom view is allowed if view that contains it is allowed.
+    const isCustomViewAllowed = await this.isViewAllowed({
       viewId: underlyingViewId,
       extra,
     });
+
+    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
+    const allowedTags = await this.getAllowedTags({ extra });
+    if (!allowedProjectIds && !allowedTags) {
+      // If project filtering is enabled, we cannot cache the result since the workbook containing the view
+      // that contains the custom view may be moved between projects.
+      // If tag filtering is enabled, we cannot cache the result since the tags on the view
+      // that contains the custom view can change over time.
+      this._cachedCustomViewIds.set(customViewId, isCustomViewAllowed);
+    }
+
+    return isCustomViewAllowed;
   }
 }
 

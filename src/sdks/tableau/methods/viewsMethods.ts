@@ -57,13 +57,12 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
 
   /**
    * Returns a specified custom view as CSV (same semantics as Query View Data for the underlying sheet).
-   * Supports optional `maxAge` and Tableau view filter query params (`vf_<fieldname>=value`).
    *
    * Required scopes: `tableau:views:download`
    *
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view_data
    */
-  queryCustomViewData = async ({
+  getCustomViewData = async ({
     customViewId,
     siteId,
     maxAge,
@@ -75,36 +74,33 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     /** Map of field name to filter value; keys are prefixed with `vf_` unless already present. */
     viewFilters?: Record<string, string>;
   }): Promise<string> => {
-    const params: Record<string, string | number> = {};
+    const queries: Record<string, string | number> = {};
     if (maxAge !== undefined) {
-      params.maxAge = maxAge;
+      queries.maxAge = maxAge;
     }
+
     if (viewFilters) {
       for (const [key, value] of Object.entries(viewFilters)) {
         const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
-        params[paramName] = value;
+        queries[paramName] = value;
       }
     }
-    const response = await this._apiClient.axios.get<string>(
-      `/sites/${siteId}/customviews/${customViewId}/data`,
-      {
-        params,
-        ...this.authHeader,
-        responseType: 'text',
-      },
-    );
-    return response.data;
+
+    return await this._apiClient.getCustomViewData({
+      params: { siteId, customViewId },
+      queries,
+      ...this.authHeader,
+    });
   };
 
   /**
    * Returns a .png image of the specified custom view (saved view state / filters).
-   * Supports optional `resolution`, `maxAge`, `vizWidth` / `vizHeight`, and `vf_` filter query params.
    *
    * Required scopes: `tableau:views:download`
    *
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view_image
    */
-  queryCustomViewImage = async ({
+  getCustomViewImage = async ({
     customViewId,
     siteId,
     width,
@@ -122,34 +118,36 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     /** Map of field name to filter value; keys are prefixed with `vf_` unless already present. */
     viewFilters?: Record<string, string>;
   }): Promise<string> => {
-    const params: Record<string, string | number> = {};
+    const queries: Record<string, string | number> = {};
     if (maxAge !== undefined) {
-      params.maxAge = maxAge;
+      queries.maxAge = maxAge;
     }
+
     if (resolution !== undefined) {
-      params.resolution = resolution;
+      queries.resolution = resolution;
     }
+
     if (width !== undefined) {
-      params.vizWidth = width;
+      queries.vizWidth = width;
     }
+
     if (height !== undefined) {
-      params.vizHeight = height;
+      queries.vizHeight = height;
     }
+
     if (viewFilters) {
       for (const [key, value] of Object.entries(viewFilters)) {
         const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
-        params[paramName] = value;
+        queries[paramName] = value;
       }
     }
-    const response = await this._apiClient.axios.get<ArrayBuffer>(
-      `/sites/${siteId}/customviews/${customViewId}/image`,
-      {
-        params,
-        ...this.authHeader,
-        responseType: 'arraybuffer',
-      },
-    );
-    return Buffer.from(response.data).toString('latin1');
+
+    return await this._apiClient.getCustomViewImage({
+      params: { siteId, customViewId },
+      queries,
+      ...this.authHeader,
+      responseType: 'arraybuffer',
+    });
   };
 
   /**
