@@ -1,7 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
-import { ZodError } from 'zod';
 
 import { McpToolError } from '../../errors/mcpToolError.js';
 import { queryOutputSchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
