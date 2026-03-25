@@ -4,6 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 import { ZodError } from 'zod';
 
 import { McpToolError } from '../../errors/mcpToolError.js';
+import { queryOutputSchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
 import {
@@ -210,20 +211,11 @@ describe('queryDatasourceTool', () => {
     };
 
     mocks.mockQueryDatasource.mockImplementation(() => {
-      const cause = new ZodError([
-        {
-          code: 'invalid_type',
-          expected: 'array',
-          received: 'string',
-          path: ['data'],
-          message: 'Expected array, received string',
-        },
-      ]);
       const zodiosError = new ZodiosError(
         'Zodios: Invalid response from endpoint',
-        {} as never,
+        undefined,
         badResponse,
-        cause,
+        queryOutputSchema.safeParse(badResponse).error,
       );
 
       return new Err({ type: 'zodios-error', error: zodiosError });
