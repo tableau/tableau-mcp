@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 
+import { McpToolError } from '../../errors/mcpToolError.js';
 import { queryOutputSchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
@@ -84,6 +85,25 @@ describe('queryDatasourceTool', () => {
     expect(queryDatasourceTool.name).toBe('query-datasource');
     expect(queryDatasourceTool.description).toBeInstanceOf(Provider);
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
+  });
+
+  it('should return error when query args fail validation', async () => {
+    const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+    const callback = await Provider.from(queryDatasourceTool.callback);
+
+    const result = await callback(
+      {
+        datasourceLuid: '',
+        query: { fields: [{ fieldCaption: 'Category' }] },
+        limit: undefined,
+      },
+      getMockRequestHandlerExtra(),
+    );
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe('datasourceLuid must be a non-empty string.');
+    expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
   });
 
   it('should successfully query the datasource', async () => {
@@ -197,7 +217,7 @@ describe('queryDatasourceTool', () => {
         queryOutputSchema.safeParse(badResponse).error,
       );
 
-      return new Err(zodiosError);
+      return new Err({ type: 'zodios-error', error: zodiosError });
     });
 
     const result = await getToolResult();
@@ -205,7 +225,7 @@ describe('queryDatasourceTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(result.content[0].text)).toEqual({
-      data: badResponse,
+      data: badResponse.toString(),
       warning: 'Validation error: Expected array, received string at "data"',
     });
   });
@@ -256,19 +276,18 @@ describe('queryDatasourceTool', () => {
   });
 
   it('should return error when VDS returns an error', async () => {
-    mocks.mockQueryDatasource.mockResolvedValue(new Err(mockVdsResponses.error));
+    mocks.mockQueryDatasource.mockResolvedValue(
+      new McpToolError({
+        type: 'tableau-error',
+        message: mockVdsResponses.error.message,
+        statusCode: 400,
+      }).toErr(),
+    );
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(
-      JSON.stringify({
-        requestId: 2,
-        ...mockVdsResponses.error,
-        condition: 'Validation failed',
-        details: "The incoming request isn't valid per the validation rules.",
-      }),
-    );
+    expect(result.content[0].text).toBe('Unknown Field: Foobar.');
     expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
       datasource: {
         datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
@@ -341,11 +360,11 @@ describe('queryDatasourceTool', () => {
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
-      const errorResponse = JSON.parse(result.content[0].text);
-      expect(errorResponse.message).toContain('Filter validation failed for field "Region"');
-      expect(errorResponse.message).toContain('Wast');
-      expect(errorResponse.message).toContain('Did you mean:');
-      expect(errorResponse.message).toContain('West'); // Should suggest fuzzy match
+      const errorResponse = result.content[0].text;
+      expect(errorResponse).toContain('Filter validation failed for field "Region"');
+      expect(errorResponse).toContain('Wast');
+      expect(errorResponse).toContain('Did you mean:');
+      expect(errorResponse).toContain('West'); // Should suggest fuzzy match
 
       // Should call only the validation query & error on invalid values
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
@@ -388,11 +407,11 @@ describe('queryDatasourceTool', () => {
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
-      const errorResponse = JSON.parse(result.content[0].text);
-      expect(errorResponse.message).toContain('Filter validation failed for field "Customer Name"');
-      expect(errorResponse.message).toContain('starts with "Jon"');
-      expect(errorResponse.message).toContain('Similar values in this field:');
-      expect(errorResponse.message).toContain('John Doe'); // Should suggest similar value
+      const errorResponse = result.content[0].text;
+      expect(errorResponse).toContain('Filter validation failed for field "Customer Name"');
+      expect(errorResponse).toContain('starts with "Jon"');
+      expect(errorResponse).toContain('Similar values in this field:');
+      expect(errorResponse).toContain('John Doe'); // Should suggest similar value
 
       // Should call main query first, then validation query
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
@@ -526,11 +545,11 @@ describe('queryDatasourceTool', () => {
 
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
-      const errorResponse = JSON.parse(result.content[0].text);
-      expect(errorResponse.message).toContain('Filter validation failed for field "Region"');
-      expect(errorResponse.message).toContain('Filter validation failed for field "Category"');
-      expect(errorResponse.message).toContain('InvalidRegion');
-      expect(errorResponse.message).toContain('InvalidCategory');
+      const errorResponse = result.content[0].text;
+      expect(errorResponse).toContain('Filter validation failed for field "Region"');
+      expect(errorResponse).toContain('Filter validation failed for field "Category"');
+      expect(errorResponse).toContain('InvalidRegion');
+      expect(errorResponse).toContain('InvalidCategory');
 
       // Should call main query first, then both validation queries
       expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
@@ -538,7 +557,7 @@ describe('queryDatasourceTool', () => {
   });
 
   it('should show feature-disabled error when VDS is disabled', async () => {
-    mocks.mockQueryDatasource.mockResolvedValue(Err('feature-disabled'));
+    mocks.mockQueryDatasource.mockResolvedValue(Err({ type: 'feature-disabled' }));
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);

@@ -7,7 +7,6 @@ import { Server } from '../../../server.js';
 import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { ConstrainedResult, Tool } from '../../tool.js';
-import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const toolName = 'list-pulse-metric-subscriptions';
 const paramsSchema = {};
@@ -56,7 +55,6 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
             restApiArgs: extra,
           });
         },
-        getErrorText: getPulseDisabledError,
       });
     },
   });
