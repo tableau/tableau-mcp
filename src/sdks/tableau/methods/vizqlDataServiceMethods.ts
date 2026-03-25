@@ -1,12 +1,6 @@
 import { isErrorFromAlias, Zodios, ZodiosError } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
-import {
-  FeatureDisabledError,
-  McpToolError,
-  ZodiosValidationError,
-} from '../../../errors/error.js';
-import { handleQueryDatasourceError } from '../../../tools/queryDatasource/queryDatasourceErrorHandler.js';
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import {
   MetadataResponse,
@@ -17,6 +11,11 @@ import {
 } from '../apis/vizqlDataServiceApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
+
+export type VdsQueryError =
+  | { type: 'feature-disabled' }
+  | { type: 'api-error'; message: string; httpStatus: number; errorCode: string | undefined }
+  | { type: 'zodios-error'; error: ZodiosError };
 
 /**
  * The VizQL Data Service (VDS) provides a programmatic way for you to access your published data outside of a Tableau visualization.
@@ -43,26 +42,24 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    */
   queryDatasource = async (
     queryRequest: QueryRequest,
-  ): Promise<Result<QueryOutput, McpToolError>> => {
+  ): Promise<Result<QueryOutput, VdsQueryError>> => {
     try {
       return Ok(await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader }));
     } catch (error) {
       if (isErrorFromAlias(this._apiClient.api, 'queryDatasource', error)) {
         if (error.response.status === 404) {
-          return Err(new FeatureDisabledError('Query Datasource is disabled'));
+          return Err({ type: 'feature-disabled' });
         }
-        const tableauMCPError = handleQueryDatasourceError(
-          'tableau-error',
-          error.response.data.message ?? 'Unknown Tableau error',
-          400,
-          error.response.data.errorCode,
-        );
-
-        return Err(tableauMCPError);
+        return Err({
+          type: 'api-error',
+          message: error.response.data.message ?? 'Unknown Tableau error',
+          httpStatus: 400,
+          errorCode: error.response.data.errorCode,
+        });
       }
 
       if (error instanceof ZodiosError) {
-        return Err(new ZodiosValidationError(error));
+        return Err({ type: 'zodios-error', error });
       }
 
       throw error;

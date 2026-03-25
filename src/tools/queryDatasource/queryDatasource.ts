@@ -5,7 +5,9 @@ import { z } from 'zod';
 import {
   ArgsValidationError,
   DatasourceNotAllowedError,
+  FeatureDisabledError,
   QueryValidationError,
+  ZodiosValidationError,
 } from '../../errors/error.js';
 import { useRestApi } from '../../restApiInstance.js';
 import {
@@ -19,12 +21,14 @@ import { Server } from '../../server.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../utils/provider.js';
+import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool, ToolRules } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { queryDatasourceToolDescription20253 } from './descriptions/queryDescription.2025.3.js';
 import { queryDatasourceToolDescription20261 } from './descriptions/queryDescription.2026.1.js';
 import { queryDatasourceToolDescription } from './descriptions/queryDescription.js';
+import { handleQueryDatasourceError } from './queryDatasourceErrorHandler.js';
 import { validateQuery } from './queryDatasourceValidator.js';
 import {
   ContextFilterWarning,
@@ -151,7 +155,21 @@ export const getQueryDatasourceTool = (
 
               const result = await restApi.vizqlDataServiceMethods.queryDatasource(queryRequest);
               if (result.isErr()) {
-                return result;
+                const vdsError = result.error;
+                if (vdsError.type === 'feature-disabled') {
+                  return Err(new FeatureDisabledError(getVizqlDataServiceDisabledError()));
+                }
+                if (vdsError.type === 'zodios-error') {
+                  return Err(new ZodiosValidationError(vdsError.error));
+                }
+                return Err(
+                  handleQueryDatasourceError(
+                    'tableau-error',
+                    vdsError.message,
+                    vdsError.httpStatus,
+                    vdsError.errorCode,
+                  ),
+                );
               }
 
               if (rowLimit && result.value.data && result.value.data.length > rowLimit) {
