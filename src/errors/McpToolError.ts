@@ -9,15 +9,22 @@ export class McpToolError extends Error {
   readonly internalError?: string;
   readonly internalErrorDetails?: string;
 
-  constructor(
-    type: string,
-    message: string,
-    statusCode: number,
+  constructor({
+    type,
+    message,
+    statusCode,
     // internal error is any underlying error caused by dependencies
-    internalStatusCode?: number,
-    internalError?: string,
-    internalErrorDetails?: string,
-  ) {
+    internalStatusCode,
+    internalError,
+    internalErrorDetails,
+  }: {
+    type: string;
+    message: string;
+    statusCode: number;
+    internalStatusCode?: number;
+    internalError?: string;
+    internalErrorDetails?: string;
+  }) {
     super(message);
     this.type = type;
     this.statusCode = statusCode;
@@ -37,25 +44,25 @@ export class McpToolError extends Error {
 
 export class ArgsValidationError extends McpToolError {
   constructor(message: string) {
-    super('args-validation', message, 400);
+    super({ type: 'args-validation', message, statusCode: 400 });
   }
 }
 
 export class DatasourceNotAllowedError extends McpToolError {
   constructor(message: string) {
-    super('datasource-not-allowed', message, 403);
+    super({ type: 'datasource-not-allowed', message, statusCode: 403 });
   }
 }
 
 export class FeatureDisabledError extends McpToolError {
   constructor(message: string) {
-    super('feature-disabled', message, 404);
+    super({ type: 'feature-disabled', message, statusCode: 404 });
   }
 }
 
 export class PulseDisabledError extends McpToolError {
   constructor() {
-    super('pulse-disabled', 'Pulse is disabled', 400);
+    super({ type: 'pulse-disabled', message: 'Pulse is disabled', statusCode: 400 });
   }
 
   override getErrorText(): string {
@@ -65,7 +72,11 @@ export class PulseDisabledError extends McpToolError {
 
 export class PulseNotAvailableError extends McpToolError {
   constructor() {
-    super('tableau-server', 'Pulse not available on Tableau Server', 404);
+    super({
+      type: 'tableau-server',
+      message: 'Pulse not available on Tableau Server',
+      statusCode: 404,
+    });
   }
 
   override getErrorText(): string {
@@ -75,31 +86,30 @@ export class PulseNotAvailableError extends McpToolError {
 
 export class QueryValidationError extends McpToolError {
   constructor(message: string) {
-    super('query-validation', message, 400);
+    super({ type: 'query-validation', message, statusCode: 400 });
   }
 }
 
 export class ViewNotAllowedError extends McpToolError {
   constructor(message: string) {
-    super('view-not-allowed', message, 403);
+    super({ type: 'view-not-allowed', message, statusCode: 403 });
   }
 }
 
 export class WorkbookNotAllowedError extends McpToolError {
   constructor(message: string) {
-    super('workbook-not-allowed', message, 403);
+    super({ type: 'workbook-not-allowed', message, statusCode: 403 });
   }
 }
 
 export class ZodiosValidationError extends McpToolError {
   constructor(error: ZodiosError) {
-    super(
-      'zodios-error',
-      error.message,
-      400,
-      undefined,
-      error.data?.toString(),
-      fromError(error.cause).toString(),
-    );
+    super({
+      type: 'zodios-error',
+      message: error.message,
+      statusCode: 400,
+      internalError: error.data?.toString(),
+      internalErrorDetails: fromError(error.cause).toString(),
+    });
   }
 }

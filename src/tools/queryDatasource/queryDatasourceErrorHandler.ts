@@ -113,13 +113,13 @@ export function handleQueryDatasourceError(
       break;
   }
 
-  return new McpToolError(
-    errorType,
-    errorMessage,
-    errorStatusCode,
-    Number(errorTableauStatusCode),
-    condition,
-    details,
-  );
+  return new McpToolError({
+    type: errorType,
+    message: errorMessage,
+    statusCode: errorStatusCode,
+    internalStatusCode: Number(errorTableauStatusCode),
+    internalError: condition,
+    internalErrorDetails: details,
+  });
 }
 /* v8 ignore stop */
