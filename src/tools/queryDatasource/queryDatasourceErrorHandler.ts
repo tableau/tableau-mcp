@@ -1,6 +1,7 @@
 /* v8 ignore start -- Exhaustive tests have limited value for this file */
 
 import { McpToolError } from '../../errors/mcpToolError.js';
+import { parseNumber } from '../../utils/parseNumber.js';
 
 /**
  * Enriches a tableau-error McpToolError with human-readable condition and details
@@ -117,7 +118,7 @@ export function handleQueryDatasourceError(
     type: errorType,
     message: errorMessage,
     statusCode: errorStatusCode,
-    internalStatusCode: Number(errorTableauStatusCode),
+    internalStatusCode: parseNumber(errorTableauStatusCode),
     internalError: condition,
     internalErrorDetails: details,
   });
