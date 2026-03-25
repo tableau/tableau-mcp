@@ -1,7 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { CustomViewNotAllowedError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { convertPngDataToToolResult } from '../convertPngDataToToolResult.js';
@@ -48,7 +49,7 @@ export const getGetCustomViewImageTool = (server: Server): Tool<typeof paramsSch
       { customViewId, width, height, maxAge, viewFilters },
       extra,
     ): Promise<CallToolResult> => {
-      return await getCustomViewImageTool.logAndExecute<string, GetCustomViewImageError>({
+      return await getCustomViewImageTool.logAndExecute<string>({
         extra,
         args: { customViewId, width, height, maxAge, viewFilters },
         callback: async () => {
@@ -58,10 +59,7 @@ export const getGetCustomViewImageTool = (server: Server): Tool<typeof paramsSch
           });
 
           if (!isAllowedResult.allowed) {
-            return new Err({
-              type: 'custom-view-not-allowed',
-              message: isAllowedResult.message,
-            });
+            return new CustomViewNotAllowedError(isAllowedResult.message).toErr();
           }
 
           return new Ok(
@@ -89,12 +87,6 @@ export const getGetCustomViewImageTool = (server: Server): Tool<typeof paramsSch
           };
         },
         getSuccessResult: convertPngDataToToolResult,
-        getErrorText: (error: GetCustomViewImageError) => {
-          switch (error.type) {
-            case 'custom-view-not-allowed':
-              return error.message;
-          }
-        },
       });
     },
   });

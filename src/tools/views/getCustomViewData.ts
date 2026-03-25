@@ -1,7 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { CustomViewNotAllowedError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -42,7 +43,7 @@ export const getGetCustomViewDataTool = (server: Server): Tool<typeof paramsSche
       openWorldHint: false,
     },
     callback: async ({ customViewId, maxAge, viewFilters }, extra): Promise<CallToolResult> => {
-      return await getCustomViewDataTool.logAndExecute<string, GetCustomViewDataError>({
+      return await getCustomViewDataTool.logAndExecute<string>({
         extra,
         args: { customViewId, maxAge, viewFilters },
         callback: async () => {
@@ -52,10 +53,7 @@ export const getGetCustomViewDataTool = (server: Server): Tool<typeof paramsSche
           });
 
           if (!isAllowedResult.allowed) {
-            return new Err({
-              type: 'custom-view-not-allowed',
-              message: isAllowedResult.message,
-            });
+            return new CustomViewNotAllowedError(isAllowedResult.message).toErr();
           }
 
           return new Ok(
@@ -78,12 +76,6 @@ export const getGetCustomViewDataTool = (server: Server): Tool<typeof paramsSche
             type: 'success',
             result: viewData,
           };
-        },
-        getErrorText: (error: GetCustomViewDataError) => {
-          switch (error.type) {
-            case 'custom-view-not-allowed':
-              return error.message;
-          }
         },
       });
     },
