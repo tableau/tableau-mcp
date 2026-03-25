@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err } from 'ts-results-es';
 import z from 'zod';
 
-import { DatasourceNotAllowedError } from '../../../errors/error.js';
+import { DatasourceNotAllowedError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
   pulseBundleRequestSchema,

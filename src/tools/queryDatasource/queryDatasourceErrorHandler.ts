@@ -1,6 +1,6 @@
 /* v8 ignore start -- Exhaustive tests have limited value for this file */
 
-import { McpToolError } from '../../errors/error.js';
+import { McpToolError } from '../../errors/mcpToolError.js';
 
 /**
  * Enriches a tableau-error McpToolError with human-readable condition and details

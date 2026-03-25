@@ -3,7 +3,7 @@ import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 import { ZodError } from 'zod';
 
-import { McpToolError } from '../../errors/error.js';
+import { McpToolError } from '../../errors/mcpToolError.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
 import {

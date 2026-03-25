@@ -2,7 +2,7 @@ import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotoco
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 
-import { McpToolError, ZodiosValidationError } from '../errors/error.js';
+import { McpToolError, ZodiosValidationError } from '../errors/mcpToolError.js';
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../server/oauth/scopes.js';
@@ -226,7 +226,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
 }
 
 function getErrorResult(requestId: RequestId, error: unknown): CallToolResult {
-  if (error instanceof McpToolError && error.type === 'zodios-error') {
+  if (error instanceof ZodiosValidationError) {
     // Schema validation errors on otherwise successful API calls will not return an "error" result to the MCP client.
     // We instead return the full response from the API with a data quality warning message
     // that mentions why the schema validation failed.

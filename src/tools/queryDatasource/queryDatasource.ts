@@ -8,7 +8,7 @@ import {
   FeatureDisabledError,
   QueryValidationError,
   ZodiosValidationError,
-} from '../../errors/error.js';
+} from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import {
   Datasource,

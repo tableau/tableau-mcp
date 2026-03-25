@@ -1,4 +1,4 @@
-import { McpToolError } from '../errors/error.js';
+import { McpToolError } from '../errors/mcpToolError.js';
 import { isAxiosError } from './axios.js';
 
 /**

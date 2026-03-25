@@ -3,7 +3,7 @@ import { AxiosError } from 'axios';
 import { Err, Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
-import { DatasourceNotAllowedError, ZodiosValidationError } from '../errors/error.js';
+import { DatasourceNotAllowedError, ZodiosValidationError } from '../errors/mcpToolError.js';
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
 import invariant from '../utils/invariant.js';

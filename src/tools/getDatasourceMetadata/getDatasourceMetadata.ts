@@ -6,18 +6,14 @@ import {
   ArgsValidationError,
   DatasourceNotAllowedError,
   FeatureDisabledError,
-} from '../../errors/error.js';
+} from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { Server } from '../../server.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
-import {
-  combineFields,
-  FieldsResult,
-  simplifyReadMetadataResult,
-} from './datasourceMetadataUtils.js';
+import { combineFields, simplifyReadMetadataResult } from './datasourceMetadataUtils.js';
 
 export const getGraphqlQuery = (datasourceLuid: string): string => `
   query datasourceFieldInfo {
@@ -117,7 +113,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
     callback: async ({ datasourceLuid }, extra): Promise<CallToolResult> => {
       const query = getGraphqlQuery(datasourceLuid);
 
-      return await getDatasourceMetadataTool.logAndExecute<FieldsResult>({
+      return await getDatasourceMetadataTool.logAndExecute({
         extra,
         args: { datasourceLuid },
         callback: async () => {
