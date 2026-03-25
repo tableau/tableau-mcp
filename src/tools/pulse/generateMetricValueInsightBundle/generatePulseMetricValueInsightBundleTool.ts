@@ -1,9 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err } from 'ts-results-es';
 import z from 'zod';
 
+import { DatasourceNotAllowedError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
@@ -11,22 +10,11 @@ import {
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
-import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
   bundleRequest: pulseBundleRequestSchema,
   bundleType: z.optional(z.enum(pulseInsightBundleTypeEnum)),
 };
-
-export type GeneratePulseMetricValueInsightBundleError =
-  | {
-      type: 'feature-disabled';
-      reason: PulseDisabledError;
-    }
-  | {
-      type: 'datasource-not-allowed';
-      message: string;
-    };
 
 export const getGeneratePulseMetricValueInsightBundleTool = (
   server: Server,
@@ -149,10 +137,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
       openWorldHint: false,
     },
     callback: async ({ bundleRequest, bundleType }, extra): Promise<CallToolResult> => {
-      return await generatePulseMetricValueInsightBundleTool.logAndExecute<
-        PulseBundleResponse,
-        GeneratePulseMetricValueInsightBundleError
-      >({
+      return await generatePulseMetricValueInsightBundleTool.logAndExecute<PulseBundleResponse>({
         extra,
         args: { bundleRequest, bundleType },
         callback: async () => {
@@ -164,14 +149,9 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               bundleRequest.bundle_request.input.metric.definition.datasource.id;
 
             if (!datasourceIds.has(datasourceLuid)) {
-              return new Err({
-                type: 'datasource-not-allowed',
-                message: [
-                  'The set of allowed metric insights that can be queried is limited by the server configuration.',
-                  'Generating the Pulse Metric Value Insight Bundle is not allowed because the definition is derived',
-                  `from the data source with LUID ${datasourceLuid}, which is not in the allowed set of data sources.`,
-                ].join(' '),
-              });
+              const message =
+                'The set of allowed metric insights that can be queried is limited by the server configuration. One or more messages in the request contain only metrics derived from data sources that are not in the allowed set.';
+              return new DatasourceNotAllowedError(message).toErr();
             }
           }
 
@@ -185,13 +165,6 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               ),
           });
 
-          if (result.isErr()) {
-            return new Err({
-              type: 'feature-disabled',
-              reason: result.error,
-            });
-          }
-
           return result;
         },
         constrainSuccessResult: (insightBundle) => {
@@ -199,14 +172,6 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
             type: 'success',
             result: insightBundle,
           };
-        },
-        getErrorText: (error) => {
-          switch (error.type) {
-            case 'feature-disabled':
-              return getPulseDisabledError(error.reason);
-            case 'datasource-not-allowed':
-              return error.message;
-          }
         },
       });
     },

@@ -727,6 +727,19 @@ describe('getDatasourceMetadataTool', () => {
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
 
+  it('should return error when datasourceLuid is empty', async () => {
+    const getDatasourceMetadataTool = getGetDatasourceMetadataTool(new Server());
+    const callback = await Provider.from(getDatasourceMetadataTool.callback);
+
+    const result = await callback({ datasourceLuid: '' }, getMockRequestHandlerExtra());
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe('datasourceLuid must be a non-empty string.');
+    expect(mocks.mockReadMetadata).not.toHaveBeenCalled();
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
+  });
+
   it('should show feature-disabled error when VDS is disabled', async () => {
     mocks.mockReadMetadata.mockResolvedValue(Err('feature-disabled'));
 

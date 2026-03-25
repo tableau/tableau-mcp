@@ -1,7 +1,12 @@
 import { Zodios } from '@zodios/core';
-import { Err, Ok, Result } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 import z from 'zod';
 
+import {
+  McpToolError,
+  PulseDisabledError,
+  PulseNotAvailableError,
+} from '../../../errors/mcpToolError.js';
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { pulseApis } from '../apis/pulseApi.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -189,30 +194,14 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
   };
 }
 
-export type PulseDisabledErrorType = 'tableau-server' | 'pulse-disabled';
-
-export class PulseDisabledError extends Error {
-  readonly type: PulseDisabledErrorType;
-  readonly httpStatus: number;
-
-  constructor(type: PulseDisabledErrorType, httpStatus: number) {
-    super(
-      type === 'tableau-server' ? 'Pulse not available on Tableau Server' : 'Pulse is disabled',
-    );
-    this.name = 'PulseDisabledError';
-    this.type = type;
-    this.httpStatus = httpStatus;
-  }
-}
-
-export type PulseResult<T> = Result<T, PulseDisabledError>;
+export type PulseResult<T> = Result<T, McpToolError>;
 async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise<PulseResult<T>> {
   try {
     return new Ok(await callback());
   } catch (error) {
     if (isAxiosError(error)) {
       if (error.response?.status === 404) {
-        return new Err(new PulseDisabledError('tableau-server', 404));
+        return new PulseNotAvailableError().toErr();
       }
 
       if (
@@ -221,7 +210,7 @@ async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise
         error.response.headers.validation_code === '400999'
       ) {
         // ntbue-service-chassis/-/blob/main/server/interceptors/site_settings.go
-        return new Err(new PulseDisabledError('pulse-disabled', 400));
+        return new PulseDisabledError().toErr();
       }
     }
 

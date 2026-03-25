@@ -7,11 +7,15 @@ import {
   QueryOutput,
   QueryRequest,
   ReadMetadataRequest,
-  TableauError,
   vizqlDataServiceApis,
 } from '../apis/vizqlDataServiceApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
+
+export type VdsQueryError =
+  | { type: 'feature-disabled' }
+  | { type: 'api-error'; message: string; httpStatus: number; errorCode: string | undefined }
+  | { type: 'zodios-error'; error: ZodiosError };
 
 /**
  * The VizQL Data Service (VDS) provides a programmatic way for you to access your published data outside of a Tableau visualization.
@@ -38,20 +42,24 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    */
   queryDatasource = async (
     queryRequest: QueryRequest,
-  ): Promise<Result<QueryOutput, 'feature-disabled' | TableauError | ZodiosError>> => {
+  ): Promise<Result<QueryOutput, VdsQueryError>> => {
     try {
       return Ok(await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader }));
     } catch (error) {
       if (isErrorFromAlias(this._apiClient.api, 'queryDatasource', error)) {
         if (error.response.status === 404) {
-          return Err('feature-disabled');
+          return Err({ type: 'feature-disabled' });
         }
-
-        return Err(error.response.data);
+        return Err({
+          type: 'api-error',
+          message: error.response.data.message ?? 'Unknown Tableau error',
+          httpStatus: 400,
+          errorCode: error.response.data.errorCode,
+        });
       }
 
       if (error instanceof ZodiosError) {
-        return Err(error);
+        return Err({ type: 'zodios-error', error });
       }
 
       throw error;
