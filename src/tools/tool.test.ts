@@ -248,7 +248,7 @@ describe('Tool', () => {
         expect.objectContaining({
           is_hyperforce: false,
           success: false,
-          error_code: '',
+          error_code: '500',
         }),
       );
     });
@@ -361,7 +361,7 @@ describe('Tool', () => {
       });
     });
 
-    it('should record unexpected category when callback throws a non-HTTP error', async () => {
+    it('should record error_code of 500 when callback throws a plain Error with no HTTP status', async () => {
       const tool = new Tool(mockParams);
 
       await tool.logAndExecute({
@@ -376,7 +376,7 @@ describe('Tool', () => {
       expect(mockRecordMetric).toHaveBeenCalledWith('mcp.tool.calls', 1, {
         tool_name: 'get-datasource-metadata',
         request_id: '2',
-        error_code: '',
+        error_code: '500',
       });
     });
 

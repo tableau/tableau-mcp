@@ -198,7 +198,10 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       return toolResult;
     } catch (error) {
       if (error instanceof Error) {
-        errorCode = getHttpStatus(error);
+        errorCode = getHttpStatus(error); // Default to 500 if no HTTP status can be determined
+      }
+      if (!errorCode) {
+        errorCode = '500'; // Default to 500 if no HTTP status can be determined
       }
       toolResult = getErrorResult(requestId, error);
       return toolResult;

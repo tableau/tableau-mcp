@@ -2,7 +2,7 @@ import { McpToolError } from '../errors/mcpToolError.js';
 import { isAxiosError } from './axios.js';
 
 /**
- * Extracts HTTP status code from an error if available (e.g., "401", "404", "500")
+ * Extracts HTTP status code from an error if available
  * Returns empty string if no HTTP status can be determined
  */
 export function getHttpStatus(error: Error): string {
