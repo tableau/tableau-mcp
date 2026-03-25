@@ -21,4 +21,8 @@ export class McpToolError extends Error {
     this.internalError = internalError;
     this.internalErrorDetails = internalErrorDetails;
   }
+
+  getErrorText(): string {
+    return this.message;
+  }
 }

@@ -3,7 +3,7 @@ import { AxiosError } from 'axios';
 import { Err, Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
-import { DatasourceNotAllowedError, McpToolError, ZodiosValidationError } from '../errors/error.js';
+import { DatasourceNotAllowedError, ZodiosValidationError } from '../errors/error.js';
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
 import invariant from '../utils/invariant.js';
@@ -248,7 +248,7 @@ describe('Tool', () => {
         expect.objectContaining({
           is_hyperforce: false,
           success: false,
-          error_code: '500',
+          error_code: '',
         }),
       );
     });
@@ -376,7 +376,7 @@ describe('Tool', () => {
       expect(mockRecordMetric).toHaveBeenCalledWith('mcp.tool.calls', 1, {
         tool_name: 'get-datasource-metadata',
         request_id: '2',
-        error_code: '500',
+        error_code: '',
       });
     });
 
@@ -387,7 +387,6 @@ describe('Tool', () => {
         extra: mockExtra,
         args: { param1: 'test-value' },
         callback: () => Promise.resolve(Err(new DatasourceNotAllowedError('Not allowed'))),
-        getErrorText: (err: McpToolError) => `Error: ${err.type}`,
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
 
@@ -441,7 +440,6 @@ describe('Tool', () => {
         extra: mockExtra,
         args: { param1: 'test' },
         callback: () => Promise.resolve(Err(new ZodiosValidationError(zodiosError))),
-        getErrorText: () => 'unused',
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
 
@@ -478,7 +476,6 @@ describe('Tool', () => {
         extra: mockExtra,
         args: { param1: 'test' },
         callback: () => Promise.resolve(Err(new ZodiosValidationError(zodiosError))),
-        getErrorText: () => 'unused',
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
 

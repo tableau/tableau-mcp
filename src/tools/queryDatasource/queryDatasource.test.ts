@@ -3,7 +3,7 @@ import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
 import { ZodError } from 'zod';
 
-import { FeatureDisabledError, ZodiosValidationError } from '../../errors/error.js';
+import { FeatureDisabledError, McpToolError, ZodiosValidationError } from '../../errors/error.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
 import {
@@ -282,7 +282,9 @@ describe('queryDatasourceTool', () => {
   });
 
   it('should return error when VDS returns an error', async () => {
-    mocks.mockQueryDatasource.mockResolvedValue(new Err(mockVdsResponses.error));
+    mocks.mockQueryDatasource.mockResolvedValue(
+      new Err(new McpToolError('tableau-error', mockVdsResponses.error.message, 400)),
+    );
 
     const result = await getToolResult();
     expect(result.isError).toBe(true);

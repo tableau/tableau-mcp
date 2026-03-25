@@ -178,9 +178,6 @@ export const getQueryDatasourceTool = (
             result: queryOutput,
           };
         },
-        getErrorText: (error: McpToolError) => {
-          return error.message;
-        },
       });
     },
   });

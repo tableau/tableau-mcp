@@ -1,12 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { McpToolError } from '../../../errors/error.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
-import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
   metricIds: z.array(z.string().length(36)),
@@ -58,7 +56,6 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
             boundedContext: configWithOverrides.boundedContext,
           });
         },
-        getErrorText: (error: McpToolError) => getPulseDisabledError(error.type),
       });
     },
   });

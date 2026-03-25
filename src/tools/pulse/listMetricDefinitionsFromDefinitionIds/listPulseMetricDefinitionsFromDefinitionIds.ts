@@ -1,13 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { McpToolError } from '../../../errors/error.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
-import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
   metricDefinitionIds: z.array(z.string().length(36)).min(1),
@@ -80,7 +78,6 @@ Retrieves a list of specific Pulse Metric Definitions using the Tableau REST API
             boundedContext: configWithOverrides.boundedContext,
           });
         },
-        getErrorText: (error: McpToolError) => getPulseDisabledError(error.type),
       });
     },
   });

@@ -64,9 +64,6 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
           };
         },
         getSuccessResult: convertPngDataToToolResult,
-        getErrorText: (error: McpToolError) => {
-          return error.message;
-        },
       });
     },
   });

@@ -6,7 +6,6 @@ import {
   ArgsValidationError,
   DatasourceNotAllowedError,
   FeatureDisabledError,
-  McpToolError,
 } from '../../errors/error.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
@@ -176,9 +175,6 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
             type: 'success',
             result: fields,
           };
-        },
-        getErrorText: (error: McpToolError) => {
-          return error.message;
         },
       });
     },

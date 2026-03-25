@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err } from 'ts-results-es';
 
-import { DatasourceNotAllowedError, McpToolError } from '../../../errors/error.js';
+import { DatasourceNotAllowedError } from '../../../errors/error.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
   pulseInsightBriefRequestSchema,
@@ -199,7 +199,9 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
 
                 // If filtering removed all metrics from this message, return an error
                 if (message.metric_group_context.length === 0) {
-                  return Err(new DatasourceNotAllowedError('Datasource not in allowed set'));
+                  return Err(
+                    new DatasourceNotAllowedError(getPulseDisabledError('datasource-not-allowed')),
+                  );
                 }
               }
             }
@@ -220,7 +222,6 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
             result: insightBrief,
           };
         },
-        getErrorText: (error: McpToolError) => getPulseDisabledError(error.type),
       });
     },
   });

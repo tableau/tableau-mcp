@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err } from 'ts-results-es';
 import z from 'zod';
 
-import { DatasourceNotAllowedError, McpToolError } from '../../../errors/error.js';
+import { DatasourceNotAllowedError } from '../../../errors/error.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
   pulseBundleRequestSchema,
@@ -151,7 +151,9 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               bundleRequest.bundle_request.input.metric.definition.datasource.id;
 
             if (!datasourceIds.has(datasourceLuid)) {
-              return new Err(new DatasourceNotAllowedError('Datasource not in allowed set'));
+              return new Err(
+                new DatasourceNotAllowedError(getPulseDisabledError('datasource-not-allowed')),
+              );
             }
           }
 
@@ -172,9 +174,6 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
             type: 'success',
             result: insightBundle,
           };
-        },
-        getErrorText: (error: McpToolError) => {
-          return getPulseDisabledError(error.type);
         },
       });
     },

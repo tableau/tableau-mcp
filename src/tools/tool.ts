@@ -2,7 +2,7 @@ import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotoco
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 
-import { McpToolError } from '../errors/error.js';
+import { McpToolError, ZodiosValidationError } from '../errors/error.js';
 import { getToolLogMessage, log } from '../logging/log.js';
 import { Server } from '../server.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../server/oauth/scopes.js';
@@ -75,10 +75,6 @@ type LogAndExecuteParams<T, Args extends ZodRawShape | undefined = undefined> = 
   // A function that can transform a successful result of the callback into a CallToolResult
   getSuccessResult?: (result: T) => CallToolResult;
 
-  // A function that can transform an error result of the callback into a string.
-  // Required if the callback can return an error result.
-  getErrorText?: (error: McpToolError) => string;
-
   // A function that constrains the success result of the tool
   constrainSuccessResult: (result: T) => ConstrainedResult<T> | Promise<ConstrainedResult<T>>;
 };
@@ -136,26 +132,11 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     );
   }
 
-  // Overload for E = undefined (getErrorText omitted)
-  async logAndExecute<T>(
-    params: Omit<LogAndExecuteParams<T, Args>, 'getErrorText'>,
-  ): Promise<CallToolResult>;
-
-  // Overload for E != undefined (getSuccessResult omitted)
-  async logAndExecute<T>(
-    params: Required<Omit<LogAndExecuteParams<T, Args>, 'getSuccessResult'>>,
-  ): Promise<CallToolResult>;
-
-  // Overload for E != undefined (getErrorText required)
-  async logAndExecute<T>(params: Required<LogAndExecuteParams<T, Args>>): Promise<CallToolResult>;
-
-  // Implementation
   async logAndExecute<T>({
     extra,
     args,
     callback,
     getSuccessResult,
-    getErrorText,
     constrainSuccessResult,
   }: LogAndExecuteParams<T, Args>): Promise<CallToolResult> {
     const { config, requestId, sessionId, tableauAuthInfo } = extra;
@@ -205,14 +186,15 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       // Handle error result - extract actual HTTP status if available
       errorCode = getHttpStatus(result.error);
 
-      if (result.error.type === 'zodios-error') {
+      if (result.error instanceof ZodiosValidationError) {
         toolResult = getErrorResult(requestId, result.error);
         return toolResult;
       }
 
-      toolResult = getErrorText
-        ? { isError: true, content: [{ type: 'text', text: getErrorText(result.error) }] }
-        : getErrorResult(requestId, result.error);
+      toolResult = {
+        isError: true,
+        content: [{ type: 'text', text: result.error.getErrorText() }],
+      };
       return toolResult;
     } catch (error) {
       if (error instanceof Error) {
