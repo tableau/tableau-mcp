@@ -1,4 +1,4 @@
-import { TableauMCPError } from '../errors/error.js';
+import { McpToolError } from '../errors/error.js';
 import { isAxiosError } from './axios.js';
 
 /**
@@ -10,13 +10,13 @@ export function getHttpStatus(error: Error): string {
   if (isAxiosError(error) && error.response?.status) {
     return String(error.response.status);
   }
-  // Check if the error is a TableauMCPError
-  if (error instanceof TableauMCPError) {
+  // Check if the error is a McpToolError
+  if (error instanceof McpToolError) {
     return String(error.statusCode);
   }
   // Check if the error wraps an AxiosError in its cause (e.g., ZodiosError)
   if (error.cause && isAxiosError(error.cause) && error.cause.response?.status) {
     return String(error.cause.response.status);
   }
-  return '500'; // Internal server error
+  return '';
 }

@@ -1,8 +1,11 @@
 import { isErrorFromAlias, Zodios, ZodiosError } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
-import { fromError } from 'zod-validation-error/v3';
 
-import { TableauMCPError, TableauMCPErrorFactory } from '../../../errors/error.js';
+import {
+  FeatureDisabledError,
+  McpToolError,
+  ZodiosValidationError,
+} from '../../../errors/error.js';
 import { handleQueryDatasourceError } from '../../../tools/queryDatasource/queryDatasourceErrorHandler.js';
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import {
@@ -40,13 +43,13 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
    */
   queryDatasource = async (
     queryRequest: QueryRequest,
-  ): Promise<Result<QueryOutput, TableauMCPError>> => {
+  ): Promise<Result<QueryOutput, McpToolError>> => {
     try {
       return Ok(await this._apiClient.queryDatasource(queryRequest, { ...this.authHeader }));
     } catch (error) {
       if (isErrorFromAlias(this._apiClient.api, 'queryDatasource', error)) {
         if (error.response.status === 404) {
-          return Err(TableauMCPErrorFactory.featureDisabled('Query Datasource is disabled'));
+          return Err(new FeatureDisabledError('Query Datasource is disabled'));
         }
         const tableauMCPError = handleQueryDatasourceError(
           'tableau-error',
@@ -59,13 +62,7 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
       }
 
       if (error instanceof ZodiosError) {
-        return Err(
-          TableauMCPErrorFactory.zodiosError(
-            error.message,
-            error.data?.toString(),
-            fromError(error.cause).toString(),
-          ),
-        );
+        return Err(new ZodiosValidationError(error));
       }
 
       throw error;

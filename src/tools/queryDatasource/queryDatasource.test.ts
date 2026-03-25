@@ -1,7 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ZodiosError } from '@zodios/core';
 import { Err, Ok } from 'ts-results-es';
+import { ZodError } from 'zod';
 
-import { TableauMCPErrorFactory } from '../../errors/error.js';
+import { FeatureDisabledError, ZodiosValidationError } from '../../errors/error.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
 import {
@@ -208,10 +210,17 @@ describe('queryDatasourceTool', () => {
     };
 
     mocks.mockQueryDatasource.mockImplementation(() => {
-      const zodiosError = TableauMCPErrorFactory.zodiosError(
-        'Zodios: Invalid response from endpoint',
-        badResponse.toString(),
-        'Validation error: Expected array, received string at "data"',
+      const cause = new ZodError([
+        {
+          code: 'invalid_type',
+          expected: 'array',
+          received: 'string',
+          path: ['data'],
+          message: 'Expected array, received string',
+        },
+      ]);
+      const zodiosError = new ZodiosValidationError(
+        new ZodiosError('Zodios: Invalid response from endpoint', {} as never, badResponse, cause),
       );
 
       return new Err(zodiosError);
@@ -549,7 +558,7 @@ describe('queryDatasourceTool', () => {
 
   it('should show feature-disabled error when VDS is disabled', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(
-      Err(TableauMCPErrorFactory.featureDisabled(getVizqlDataServiceDisabledError())),
+      Err(new FeatureDisabledError(getVizqlDataServiceDisabledError())),
     );
 
     const result = await getToolResult();

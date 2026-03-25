@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { TableauMCPError, TableauMCPErrorFactory } from '../../errors/error.js';
+import { McpToolError, WorkbookNotAllowedError } from '../../errors/error.js';
 import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
@@ -39,9 +39,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
           });
 
           if (!isWorkbookAllowedResult.allowed) {
-            return new Err(
-              TableauMCPErrorFactory.workbookNotAllowed(isWorkbookAllowedResult.message),
-            );
+            return new Err(new WorkbookNotAllowedError(isWorkbookAllowedResult.message));
           }
 
           return new Ok(
@@ -76,7 +74,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
         },
         constrainSuccessResult: (workbook) =>
           filterWorkbookViews({ workbook, boundedContext: configWithOverrides.boundedContext }),
-        getErrorText: (error: TableauMCPError) => {
+        getErrorText: (error: McpToolError) => {
           return error.message;
         },
       });

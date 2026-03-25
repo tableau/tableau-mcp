@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../config.js';
-import { TableauMCPErrorFactory } from '../../../errors/error.js';
+import { PulseDisabledError, PulseNotAvailableError } from '../../../errors/error.js';
 import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import invariant from '../../../utils/invariant.js';
@@ -76,7 +76,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
 
   it('should return an error when executing the tool against Tableau Server', async () => {
     mocks.mockListPulseMetricSubscriptionsForCurrentUser.mockResolvedValue(
-      Err(TableauMCPErrorFactory.pulseNotAvailable()),
+      Err(new PulseNotAvailableError()),
     );
     const result = await getToolResult();
     expect(result.isError).toBe(true);
@@ -86,7 +86,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
 
   it('should return an error when Pulse is disabled', async () => {
     mocks.mockListPulseMetricSubscriptionsForCurrentUser.mockResolvedValue(
-      Err(TableauMCPErrorFactory.pulseDisabled()),
+      Err(new PulseDisabledError()),
     );
     const result = await getToolResult();
     expect(result.isError).toBe(true);

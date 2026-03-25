@@ -1,13 +1,13 @@
 /* v8 ignore start -- Exhaustive tests have limited value for this file */
 
-import { TableauMCPError } from '../../errors/error.js';
+import { McpToolError } from '../../errors/error.js';
 
 /**
- * Enriches a tableau-error TableauMCPError with human-readable condition and details
+ * Enriches a tableau-error McpToolError with human-readable condition and details
  * based on the Tableau VizQL Data Service error code.
  *
- * @param {TableauMCPError} error
- * @returns {TableauMCPError}
+ * @param {McpToolError} error
+ * @returns {McpToolError}
  * @see https://help.tableau.com/current/api/vizql-data-service/en-us/docs/vds_error_codes.html
  */
 export function handleQueryDatasourceError(
@@ -15,7 +15,7 @@ export function handleQueryDatasourceError(
   errorMessage: string,
   errorStatusCode: number,
   errorTableauStatusCode: string | undefined,
-): TableauMCPError {
+): McpToolError {
   let condition: string | undefined;
   let details: string | undefined;
 
@@ -113,7 +113,7 @@ export function handleQueryDatasourceError(
       break;
   }
 
-  return new TableauMCPError(
+  return new McpToolError(
     errorType,
     errorMessage,
     errorStatusCode,

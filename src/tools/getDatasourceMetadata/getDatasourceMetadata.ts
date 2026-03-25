@@ -2,7 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { TableauMCPError, TableauMCPErrorFactory } from '../../errors/error.js';
+import {
+  ArgsValidationError,
+  DatasourceNotAllowedError,
+  FeatureDisabledError,
+  McpToolError,
+} from '../../errors/error.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { Server } from '../../server.js';
@@ -118,9 +123,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
         args: { datasourceLuid },
         callback: async () => {
           if (!datasourceLuid) {
-            return Err(
-              TableauMCPErrorFactory.argsValidation('datasourceLuid must be a non-empty string.'),
-            );
+            return Err(new ArgsValidationError('datasourceLuid must be a non-empty string.'));
           }
           const configWithOverrides = await extra.getConfigWithOverrides();
 
@@ -130,9 +133,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
           });
 
           if (!isDatasourceAllowedResult.allowed) {
-            return Err(
-              TableauMCPErrorFactory.datasourceNotAllowed(isDatasourceAllowedResult.message),
-            );
+            return Err(new DatasourceNotAllowedError(isDatasourceAllowedResult.message));
           }
 
           return await useRestApi({
@@ -147,9 +148,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
               });
 
               if (readMetadataResult.isErr()) {
-                return Err(
-                  TableauMCPErrorFactory.featureDisabled(getVizqlDataServiceDisabledError()),
-                );
+                return Err(new FeatureDisabledError(getVizqlDataServiceDisabledError()));
               }
 
               if (configWithOverrides.disableMetadataApiRequests) {
@@ -178,7 +177,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
             result: fields,
           };
         },
-        getErrorText: (error: TableauMCPError) => {
+        getErrorText: (error: McpToolError) => {
           return error.message;
         },
       });

@@ -1,8 +1,9 @@
+import { ZodiosError } from '@zodios/core';
 import { AxiosError } from 'axios';
 import { Err, Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
-import { TableauMCPError, TableauMCPErrorFactory } from '../errors/error.js';
+import { DatasourceNotAllowedError, McpToolError, ZodiosValidationError } from '../errors/error.js';
 import { log } from '../logging/log.js';
 import { Server } from '../server.js';
 import invariant from '../utils/invariant.js';
@@ -385,9 +386,8 @@ describe('Tool', () => {
       await tool.logAndExecute({
         extra: mockExtra,
         args: { param1: 'test-value' },
-        callback: () =>
-          Promise.resolve(Err(TableauMCPErrorFactory.datasourceNotAllowed('Not allowed'))),
-        getErrorText: (err: TableauMCPError) => `Error: ${err.type}`,
+        callback: () => Promise.resolve(Err(new DatasourceNotAllowedError('Not allowed'))),
+        getErrorText: (err: McpToolError) => `Error: ${err.type}`,
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
 
@@ -430,19 +430,17 @@ describe('Tool', () => {
         },
       ]);
 
+      const zodiosError = new ZodiosError(
+        'Zodios: Invalid Response',
+        undefined,
+        rawApiData,
+        zodError,
+      );
+
       const result = await tool.logAndExecute({
         extra: mockExtra,
         args: { param1: 'test' },
-        callback: () =>
-          Promise.resolve(
-            Err(
-              TableauMCPErrorFactory.zodiosError(
-                'Zodios: Invalid Response',
-                rawApiData.toString(),
-                zodError.toString(),
-              ),
-            ),
-          ),
+        callback: () => Promise.resolve(Err(new ZodiosValidationError(zodiosError))),
         getErrorText: () => 'unused',
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
@@ -469,19 +467,17 @@ describe('Tool', () => {
       expect(parseResult.success).toBe(false);
       if (parseResult.success) return;
 
+      const zodiosError = new ZodiosError(
+        'Zodios: Invalid Response',
+        undefined,
+        rawApiData,
+        parseResult.error,
+      );
+
       const result = await tool.logAndExecute({
         extra: mockExtra,
         args: { param1: 'test' },
-        callback: () =>
-          Promise.resolve(
-            Err(
-              TableauMCPErrorFactory.zodiosError(
-                'Zodios: Invalid Response',
-                rawApiData.toString(),
-                'Validation error',
-              ),
-            ),
-          ),
+        callback: () => Promise.resolve(Err(new ZodiosValidationError(zodiosError))),
         getErrorText: () => 'unused',
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });

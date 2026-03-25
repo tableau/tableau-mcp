@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { TableauMCPError } from '../../../errors/error.js';
+import { McpToolError } from '../../../errors/error.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
   PulseMetricDefinition,
@@ -105,7 +105,7 @@ Retrieves a list of all published Pulse Metric Definitions using the Tableau RES
             boundedContext: configWithOverrides.boundedContext,
           });
         },
-        getErrorText: (error: TableauMCPError) => getPulseDisabledError(error.type),
+        getErrorText: (error: McpToolError) => getPulseDisabledError(error.type),
       });
     },
   });

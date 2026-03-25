@@ -2,7 +2,7 @@ import { Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 import z from 'zod';
 
-import { TableauMCPError, TableauMCPErrorFactory } from '../../../errors/error.js';
+import { McpToolError, PulseDisabledError, PulseNotAvailableError } from '../../../errors/error.js';
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { pulseApis } from '../apis/pulseApi.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -190,14 +190,14 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
   };
 }
 
-export type PulseResult<T> = Result<T, TableauMCPError>;
+export type PulseResult<T> = Result<T, McpToolError>;
 async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise<PulseResult<T>> {
   try {
     return new Ok(await callback());
   } catch (error) {
     if (isAxiosError(error)) {
       if (error.response?.status === 404) {
-        return new Err(TableauMCPErrorFactory.pulseNotAvailable());
+        return new Err(new PulseNotAvailableError());
       }
 
       if (
@@ -206,7 +206,7 @@ async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise
         error.response.headers.validation_code === '400999'
       ) {
         // ntbue-service-chassis/-/blob/main/server/interceptors/site_settings.go
-        return new Err(TableauMCPErrorFactory.pulseDisabled());
+        return new Err(new PulseDisabledError());
       }
     }
 

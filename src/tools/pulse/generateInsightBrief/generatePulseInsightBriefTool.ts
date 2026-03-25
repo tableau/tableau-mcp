@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err } from 'ts-results-es';
 
-import { TableauMCPError, TableauMCPErrorFactory } from '../../../errors/error.js';
+import { DatasourceNotAllowedError, McpToolError } from '../../../errors/error.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
   pulseInsightBriefRequestSchema,
@@ -199,9 +199,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
 
                 // If filtering removed all metrics from this message, return an error
                 if (message.metric_group_context.length === 0) {
-                  return Err(
-                    TableauMCPErrorFactory.datasourceNotAllowed('Datasource not in allowed set'),
-                  );
+                  return Err(new DatasourceNotAllowedError('Datasource not in allowed set'));
                 }
               }
             }
@@ -222,7 +220,7 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
             result: insightBrief,
           };
         },
-        getErrorText: (error: TableauMCPError) => getPulseDisabledError(error.type),
+        getErrorText: (error: McpToolError) => getPulseDisabledError(error.type),
       });
     },
   });

@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { TableauMCPErrorFactory } from '../../../errors/error.js';
+import { PulseDisabledError, PulseNotAvailableError } from '../../../errors/error.js';
 import { Server } from '../../../server.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -86,7 +86,7 @@ describe('listPulseMetricsFromMetricDefinitionIdTool', () => {
 
   it('should return an error when executing the tool against Tableau Server', async () => {
     mocks.mockListPulseMetricsFromMetricDefinitionId.mockResolvedValue(
-      Err(TableauMCPErrorFactory.pulseNotAvailable()),
+      Err(new PulseNotAvailableError()),
     );
     const result = await getToolResult({
       pulseMetricDefinitionID: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',
@@ -98,7 +98,7 @@ describe('listPulseMetricsFromMetricDefinitionIdTool', () => {
 
   it('should return an error when Pulse is disabled', async () => {
     mocks.mockListPulseMetricsFromMetricDefinitionId.mockResolvedValue(
-      Err(TableauMCPErrorFactory.pulseDisabled()),
+      Err(new PulseDisabledError()),
     );
     const result = await getToolResult({
       pulseMetricDefinitionID: 'BBC908D8-29ED-48AB-A78E-ACF8A424C8C3',

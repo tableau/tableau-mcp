@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { TableauMCPError } from '../../../errors/error.js';
+import { McpToolError } from '../../../errors/error.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
@@ -58,7 +58,7 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
             boundedContext: configWithOverrides.boundedContext,
           });
         },
-        getErrorText: (error: TableauMCPError) => getPulseDisabledError(error.type),
+        getErrorText: (error: McpToolError) => getPulseDisabledError(error.type),
       });
     },
   });

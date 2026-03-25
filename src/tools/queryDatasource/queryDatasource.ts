@@ -2,7 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { TableauMCPError, TableauMCPErrorFactory } from '../../errors/error.js';
+import {
+  ArgsValidationError,
+  DatasourceNotAllowedError,
+  McpToolError,
+  QueryValidationError,
+} from '../../errors/error.js';
 import { useRestApi } from '../../restApiInstance.js';
 import {
   Datasource,
@@ -74,7 +79,7 @@ export const getQueryDatasourceTool = (
           try {
             validateQuery({ datasourceLuid, query, rules });
           } catch (error) {
-            return Err(TableauMCPErrorFactory.argsValidation(getExceptionMessage(error)));
+            return Err(new ArgsValidationError(getExceptionMessage(error)));
           }
           const configWithOverrides = await getConfigWithOverrides();
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
@@ -83,9 +88,7 @@ export const getQueryDatasourceTool = (
           });
 
           if (!isDatasourceAllowedResult.allowed) {
-            return Err(
-              TableauMCPErrorFactory.datasourceNotAllowed(isDatasourceAllowedResult.message),
-            );
+            return Err(new DatasourceNotAllowedError(isDatasourceAllowedResult.message));
           }
 
           const datasource: Datasource = { datasourceLuid };
@@ -127,7 +130,7 @@ export const getQueryDatasourceTool = (
                 if (metadataValidationResult.isErr()) {
                   const errors = metadataValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join('\n\n');
-                  return new Err(TableauMCPErrorFactory.queryValidation(errorMessage));
+                  return new Err(new QueryValidationError(errorMessage));
                 }
 
                 // Validate filters values for SET and MATCH filters
@@ -141,7 +144,7 @@ export const getQueryDatasourceTool = (
                 if (filterValidationResult.isErr()) {
                   const errors = filterValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join(', ');
-                  return new Err(TableauMCPErrorFactory.queryValidation(errorMessage));
+                  return new Err(new QueryValidationError(errorMessage));
                 }
               }
 
@@ -175,7 +178,7 @@ export const getQueryDatasourceTool = (
             result: queryOutput,
           };
         },
-        getErrorText: (error: TableauMCPError) => {
+        getErrorText: (error: McpToolError) => {
           return error.message;
         },
       });
