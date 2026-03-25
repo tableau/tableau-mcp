@@ -5,7 +5,6 @@ import { z } from 'zod';
 import {
   ArgsValidationError,
   DatasourceNotAllowedError,
-  McpToolError,
   QueryValidationError,
 } from '../../errors/error.js';
 import { useRestApi } from '../../restApiInstance.js';
