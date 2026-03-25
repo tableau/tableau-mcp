@@ -43,7 +43,7 @@ export const getGetCustomViewDataTool = (server: Server): Tool<typeof paramsSche
       openWorldHint: false,
     },
     callback: async ({ customViewId, maxAge, viewFilters }, extra): Promise<CallToolResult> => {
-      return await getCustomViewDataTool.logAndExecute<string>({
+      return await getCustomViewDataTool.logAndExecute({
         extra,
         args: { customViewId, maxAge, viewFilters },
         callback: async () => {

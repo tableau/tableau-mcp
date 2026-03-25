@@ -49,7 +49,7 @@ export const getGetCustomViewImageTool = (server: Server): Tool<typeof paramsSch
       { customViewId, width, height, maxAge, viewFilters },
       extra,
     ): Promise<CallToolResult> => {
-      return await getCustomViewImageTool.logAndExecute<string>({
+      return await getCustomViewImageTool.logAndExecute({
         extra,
         args: { customViewId, width, height, maxAge, viewFilters },
         callback: async () => {
