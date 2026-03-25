@@ -82,7 +82,7 @@ export const getQueryDatasourceTool = (
           try {
             validateQuery({ datasourceLuid, query, rules });
           } catch (error) {
-            return Err(new ArgsValidationError(getExceptionMessage(error)));
+            return new ArgsValidationError(getExceptionMessage(error)).toErr();
           }
           const configWithOverrides = await getConfigWithOverrides();
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
@@ -91,7 +91,7 @@ export const getQueryDatasourceTool = (
           });
 
           if (!isDatasourceAllowedResult.allowed) {
-            return Err(new DatasourceNotAllowedError(isDatasourceAllowedResult.message));
+            return new DatasourceNotAllowedError(isDatasourceAllowedResult.message).toErr();
           }
 
           const datasource: Datasource = { datasourceLuid };
@@ -133,7 +133,7 @@ export const getQueryDatasourceTool = (
                 if (metadataValidationResult.isErr()) {
                   const errors = metadataValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join('\n\n');
-                  return new Err(new QueryValidationError(errorMessage));
+                  return new QueryValidationError(errorMessage).toErr();
                 }
 
                 // Validate filters values for SET and MATCH filters
@@ -147,7 +147,7 @@ export const getQueryDatasourceTool = (
                 if (filterValidationResult.isErr()) {
                   const errors = filterValidationResult.error;
                   const errorMessage = errors.map((error) => error.message).join(', ');
-                  return new Err(new QueryValidationError(errorMessage));
+                  return new QueryValidationError(errorMessage).toErr();
                 }
               }
 
@@ -157,10 +157,10 @@ export const getQueryDatasourceTool = (
               if (result.isErr()) {
                 const vdsError = result.error;
                 if (vdsError.type === 'feature-disabled') {
-                  return Err(new FeatureDisabledError(getVizqlDataServiceDisabledError()));
+                  return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
                 }
                 if (vdsError.type === 'zodios-error') {
-                  return Err(new ZodiosValidationError(vdsError.error));
+                  return new ZodiosValidationError(vdsError.error).toErr();
                 }
                 return Err(
                   handleQueryDatasourceError(

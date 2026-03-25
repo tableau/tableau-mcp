@@ -1,6 +1,6 @@
 import { ZodiosError } from '@zodios/core';
 import { AxiosError } from 'axios';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
 import { DatasourceNotAllowedError, ZodiosValidationError } from '../errors/mcpToolError.js';
@@ -386,7 +386,7 @@ describe('Tool', () => {
       await tool.logAndExecute({
         extra: mockExtra,
         args: { param1: 'test-value' },
-        callback: () => Promise.resolve(Err(new DatasourceNotAllowedError('Not allowed'))),
+        callback: () => Promise.resolve(new DatasourceNotAllowedError('Not allowed').toErr()),
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
 
@@ -439,7 +439,7 @@ describe('Tool', () => {
       const result = await tool.logAndExecute({
         extra: mockExtra,
         args: { param1: 'test' },
-        callback: () => Promise.resolve(Err(new ZodiosValidationError(zodiosError))),
+        callback: () => Promise.resolve(new ZodiosValidationError(zodiosError).toErr()),
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
 
@@ -475,7 +475,7 @@ describe('Tool', () => {
       const result = await tool.logAndExecute({
         extra: mockExtra,
         args: { param1: 'test' },
-        callback: () => Promise.resolve(Err(new ZodiosValidationError(zodiosError))),
+        callback: () => Promise.resolve(new ZodiosValidationError(zodiosError).toErr()),
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
 

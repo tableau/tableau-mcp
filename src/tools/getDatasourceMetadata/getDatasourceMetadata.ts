@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
@@ -118,7 +118,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
         args: { datasourceLuid },
         callback: async () => {
           if (!datasourceLuid) {
-            return Err(new ArgsValidationError('datasourceLuid must be a non-empty string.'));
+            return new ArgsValidationError('datasourceLuid must be a non-empty string.').toErr();
           }
           const configWithOverrides = await extra.getConfigWithOverrides();
 
@@ -128,7 +128,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
           });
 
           if (!isDatasourceAllowedResult.allowed) {
-            return Err(new DatasourceNotAllowedError(isDatasourceAllowedResult.message));
+            return new DatasourceNotAllowedError(isDatasourceAllowedResult.message).toErr();
           }
 
           return await useRestApi({
@@ -143,7 +143,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
               });
 
               if (readMetadataResult.isErr()) {
-                return Err(new FeatureDisabledError(getVizqlDataServiceDisabledError()));
+                return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
               }
 
               if (configWithOverrides.disableMetadataApiRequests) {

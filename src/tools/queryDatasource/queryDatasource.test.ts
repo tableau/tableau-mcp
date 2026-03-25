@@ -286,7 +286,7 @@ describe('queryDatasourceTool', () => {
 
   it('should return error when VDS returns an error', async () => {
     mocks.mockQueryDatasource.mockResolvedValue(
-      new Err(new McpToolError('tableau-error', mockVdsResponses.error.message, 400)),
+      new McpToolError('tableau-error', mockVdsResponses.error.message, 400).toErr(),
     );
 
     const result = await getToolResult();

@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { ViewNotAllowedError } from '../../errors/mcpToolError.js';
@@ -38,7 +38,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
           });
 
           if (!isViewAllowedResult.allowed) {
-            return new Err(new ViewNotAllowedError(isViewAllowedResult.message));
+            return new ViewNotAllowedError(isViewAllowedResult.message).toErr();
           }
 
           return new Ok(

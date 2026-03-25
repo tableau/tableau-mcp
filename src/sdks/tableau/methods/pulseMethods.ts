@@ -1,5 +1,5 @@
 import { Zodios } from '@zodios/core';
-import { Err, Ok, Result } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 import z from 'zod';
 
 import {
@@ -201,7 +201,7 @@ async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise
   } catch (error) {
     if (isAxiosError(error)) {
       if (error.response?.status === 404) {
-        return new Err(new PulseNotAvailableError());
+        return new PulseNotAvailableError().toErr();
       }
 
       if (
@@ -210,7 +210,7 @@ async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise
         error.response.headers.validation_code === '400999'
       ) {
         // ntbue-service-chassis/-/blob/main/server/interceptors/site_settings.go
-        return new Err(new PulseDisabledError());
+        return new PulseDisabledError().toErr();
       }
     }
 

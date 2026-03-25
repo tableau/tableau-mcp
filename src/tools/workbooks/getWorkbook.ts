@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { WorkbookNotAllowedError } from '../../errors/mcpToolError.js';
@@ -39,7 +39,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
           });
 
           if (!isWorkbookAllowedResult.allowed) {
-            return new Err(new WorkbookNotAllowedError(isWorkbookAllowedResult.message));
+            return new WorkbookNotAllowedError(isWorkbookAllowedResult.message).toErr();
           }
 
           return new Ok(

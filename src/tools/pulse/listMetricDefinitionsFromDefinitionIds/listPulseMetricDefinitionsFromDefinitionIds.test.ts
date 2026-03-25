@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 
 import { PulseDisabledError, PulseNotAvailableError } from '../../../errors/mcpToolError.js';
 import { Server } from '../../../server.js';
@@ -192,7 +192,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
 
   it('should return an error when executing the tool against Tableau Server', async () => {
     mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockResolvedValue(
-      Err(new PulseNotAvailableError()),
+      new PulseNotAvailableError().toErr(),
     );
     const result = await getToolResult({
       metricDefinitionIds: [
@@ -208,7 +208,7 @@ describe('listPulseMetricDefinitionsFromDefinitionIdsTool', () => {
 
   it('should return an error when Pulse is disabled', async () => {
     mocks.mockListPulseMetricDefinitionsFromMetricDefinitionIds.mockResolvedValue(
-      Err(new PulseDisabledError()),
+      new PulseDisabledError().toErr(),
     );
     const result = await getToolResult({
       metricDefinitionIds: [

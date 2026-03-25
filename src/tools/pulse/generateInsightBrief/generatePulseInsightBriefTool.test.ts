@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 
 import { PulseDisabledError, PulseNotAvailableError } from '../../../errors/mcpToolError.js';
 import { Server } from '../../../server.js';
@@ -174,7 +174,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
   });
 
   it('should return an error when executing the tool against Tableau Server', async () => {
-    mocks.mockGeneratePulseInsightBrief.mockResolvedValue(Err(new PulseNotAvailableError()));
+    mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new PulseNotAvailableError().toErr());
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -182,7 +182,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
   });
 
   it('should return an error when Pulse is disabled', async () => {
-    mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new Err(new PulseDisabledError()));
+    mocks.mockGeneratePulseInsightBrief.mockResolvedValue(new PulseDisabledError().toErr());
     const result = await getToolResult();
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');

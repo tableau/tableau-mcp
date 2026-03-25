@@ -1,4 +1,5 @@
 import { ZodiosError } from '@zodios/core';
+import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
 export class McpToolError extends Error {
@@ -27,6 +28,10 @@ export class McpToolError extends Error {
 
   getErrorText(): string {
     return this.message;
+  }
+
+  toErr(): Err<this> {
+    return new Err(this);
   }
 }
 

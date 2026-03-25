@@ -1,5 +1,4 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err } from 'ts-results-es';
 import z from 'zod';
 
 import { DatasourceNotAllowedError } from '../../../errors/mcpToolError.js';
@@ -152,7 +151,7 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
             if (!datasourceIds.has(datasourceLuid)) {
               const message =
                 'The set of allowed metric insights that can be queried is limited by the server configuration. One or more messages in the request contain only metrics derived from data sources that are not in the allowed set.';
-              return new Err(new DatasourceNotAllowedError(message));
+              return new DatasourceNotAllowedError(message).toErr();
             }
           }
 
