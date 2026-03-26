@@ -376,7 +376,24 @@ After fetching results, tools apply **bounded context** filtering via `constrain
 
 ### Error Handling
 
-You generally don't need to write error handling code. The `logAndExecute` method on the base `Tool` class catches exceptions, extracts HTTP status codes from Axios errors, logs failures, records telemetry, and returns structured error messages to the AI. If you need custom error text for specific failure modes (e.g., "Pulse is not enabled on this site"), use the `getErrorText` option.
+You generally don't need to write error handling code. The `logAndExecute` method on the base `Tool` class catches exceptions, extracts HTTP status codes, logs failures, records telemetry, and returns structured error messages to the AI.
+
+When your tool needs to return a domain-specific error (e.g., a resource isn't allowed by bounded context, or a feature is disabled), return an `McpToolError` subclass from `src/errors/mcpToolError.ts`. Each subclass carries its own status code and user-facing message via `getErrorText()`:
+
+```typescript
+import { FeatureDisabledError, DatasourceNotAllowedError } from '../../errors/mcpToolError.js';
+
+// Inside your callback:
+if (!isFeatureEnabled) {
+  return new FeatureDisabledError('My feature requires Tableau Cloud 2025.3+.').toErr();
+}
+
+if (!isAllowed) {
+  return new DatasourceNotAllowedError('This datasource is outside the allowed scope.').toErr();
+}
+```
+
+Existing error subclasses include `ArgsValidationError`, `DatasourceNotAllowedError`, `FeatureDisabledError`, `PulseDisabledError`, `ViewNotAllowedError`, `WorkbookNotAllowedError`, and `QueryValidationError`. If none of these fit your case, extend `McpToolError` with a new subclass in the same file.
 
 ### Result Formatting
 
@@ -403,4 +420,3 @@ Return data as clean, structured objects. The framework serializes them to JSON 
 
 - **Slack:** `#tab-dev-mcp-project`
 - **Codebase reference:** Look at `src/tools/listDatasources/` for a straightforward read-only tool, or `src/tools/pulse/` for a group of related tools
-- **Existing docs:** [https://tableau.github.io/tableau-mcp/](https://tableau.github.io/tableau-mcp/)
