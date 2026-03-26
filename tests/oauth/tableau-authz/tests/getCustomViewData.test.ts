@@ -3,14 +3,14 @@ import { z } from 'zod';
 import { expect, test } from './base.js';
 import { getSuperstoreWorkbook } from './testEnv.js';
 
-test.describe('get-view-data', () => {
-  test('get view data', async ({ client }) => {
+test.describe('get-custom-view-data', () => {
+  test('get custom view data', async ({ client }) => {
     const superstore = getSuperstoreWorkbook();
 
-    const viewData = await client.callTool('get-view-data', {
+    const viewData = await client.callTool('get-custom-view-data', {
       schema: z.string(),
       toolArgs: {
-        viewId: superstore.defaultView.id,
+        customViewId: superstore.defaultView.customViewId,
       },
     });
 
