@@ -7,7 +7,7 @@ import invariant from '../../src/utils/invariant.js';
 import { getEnv } from '../testEnv.js';
 
 const envSchema = z.object({
-  TRANSPORT: z.enum(['stdio', 'http']),
+  TRANSPORT: z.enum(['stdio', 'http']).optional(),
   SERVER: z.string(),
   SITE_NAME: z.string(),
   AUTH: z.string(),
@@ -101,7 +101,7 @@ export async function getClient(): Promise<Client> {
   // https://github.com/nodejs/node/issues/55374
   const env = { ...getEnv(envSchema), PATH: process.env.PATH ?? '' };
 
-  if (env.TRANSPORT !== 'stdio') {
+  if (env.TRANSPORT && env.TRANSPORT !== 'stdio') {
     throw new Error('Only stdio transport is currently supported for e2e tests');
   }
 
