@@ -482,6 +482,15 @@ class ResourceAccessChecker {
       return cachedResult;
     }
 
+    const allowedWorkbookIds = await this.getAllowedWorkbookIds({ extra });
+    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
+    const allowedTags = await this.getAllowedTags({ extra });
+    if (!allowedWorkbookIds && !allowedProjectIds && !allowedTags) {
+      // If no filtering is enabled, there's no need to resolve the view the custom view belongs to.
+      this._cachedCustomViewIds.set(customViewId, { allowed: true });
+      return { allowed: true };
+    }
+
     let underlyingViewId: string | undefined;
     try {
       const customView = await useRestApi({
@@ -498,7 +507,9 @@ class ResourceAccessChecker {
       return {
         allowed: false,
         message: [
-          'Could not resolve the custom view for access checks.',
+          'The set of allowed views that can be queried is limited by the server configuration.',
+          `An error occurred while checking if the custom view with LUID ${customViewId} belongs to an allowed view.`,
+          'Please verify that the custom view LUID is correct and you have access to it.',
           getExceptionMessage(error),
         ].join(' '),
       };
@@ -510,8 +521,6 @@ class ResourceAccessChecker {
       extra,
     });
 
-    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
-    const allowedTags = await this.getAllowedTags({ extra });
     if (!allowedProjectIds && !allowedTags) {
       // If project filtering is enabled, we cannot cache the result since the workbook containing the view
       // that contains the custom view may be moved between projects.

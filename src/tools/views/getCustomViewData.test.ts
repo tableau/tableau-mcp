@@ -64,10 +64,6 @@ describe('getCustomViewDataTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Country/Region');
-    expect(mocks.mockGetCustomView).toHaveBeenCalledWith({
-      siteId: 'test-site-id',
-      customViewId: mockCustomView.id,
-    });
     expect(mocks.mockGetCustomViewData).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       customViewId: mockCustomView.id,
