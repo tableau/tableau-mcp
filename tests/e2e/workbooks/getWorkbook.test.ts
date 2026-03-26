@@ -1,17 +1,18 @@
+import dotenv from 'dotenv';
+
 import { workbookSchema } from '../../../src/sdks/tableau/types/workbook.js';
-import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
+import { getSuperstoreWorkbook } from '../../testEnv.js';
 import { callTool } from '../client.js';
 
 describe('get-workbook', () => {
-  beforeAll(setEnv);
-  afterAll(resetEnv);
+  beforeAll(() => {
+    dotenv.config();
+  });
 
   it('should get workbook', async () => {
-    const env = getDefaultEnv();
-    const superstore = getSuperstoreWorkbook(env);
+    const superstore = getSuperstoreWorkbook();
 
     const workbook = await callTool('get-workbook', {
-      env,
       schema: workbookSchema,
       toolArgs: { workbookId: superstore.id },
     });

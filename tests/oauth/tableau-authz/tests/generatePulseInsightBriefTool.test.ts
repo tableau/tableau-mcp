@@ -1,6 +1,6 @@
 import { pulseInsightBriefResponseSchema } from '../../../../src/sdks/tableau/types/pulse.js';
+import { getSuperstoreDatasource, getTableauMcpPulseDefinition } from '../../../testEnv.js';
 import { expect, test } from './base.js';
-import { getSuperstoreDatasource, getTableauMcpPulseDefinition } from './testEnv.js';
 
 test.describe('generate-pulse-insight-brief', () => {
   // This test requires Tableau AI to be enabled on the site

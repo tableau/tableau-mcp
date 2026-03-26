@@ -1,20 +1,19 @@
+import dotenv from 'dotenv';
 import z from 'zod';
 
 import { pulseMetricSubscriptionSchema } from '../../../src/sdks/tableau/types/pulse.js';
-import { getPulseDefinition } from '../../constants.js';
-import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
+import { getTableauMcpPulseDefinition } from '../../testEnv.js';
 import { callTool } from '../client.js';
 
 describe('list-pulse-metric-subscriptions', () => {
-  beforeAll(setEnv);
-  afterAll(resetEnv);
+  beforeAll(() => {
+    dotenv.config();
+  });
 
   it('should list all pulse metric subscriptions', async () => {
-    const env = getDefaultEnv();
-    const tableauMcpDefinition = getPulseDefinition(env.SERVER, env.SITE_NAME, 'Tableau MCP');
+    const tableauMcpDefinition = getTableauMcpPulseDefinition();
 
     const subscriptions = await callTool('list-pulse-metric-subscriptions', {
-      env,
       schema: z.array(pulseMetricSubscriptionSchema),
     });
 

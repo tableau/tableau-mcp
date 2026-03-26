@@ -1,7 +1,7 @@
 import { fieldsResultSchema } from '../../../../src/tools/getDatasourceMetadata/datasourceMetadataUtils.js';
 import invariant from '../../../../src/utils/invariant.js';
+import { getSuperstoreDatasource } from '../../../testEnv.js';
 import { expect, test } from './base.js';
-import { getSuperstoreDatasource } from './testEnv.js';
 
 test.describe('get-datasource-metadata', () => {
   test('get datasource metadata', async ({ client }) => {

@@ -1,6 +1,14 @@
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { testProductVersion } from '../../../src/testShared.js';
+import { getEnv } from '../../testEnv.js';
+
+const { SITE_NAME } = getEnv(
+  z.object({
+    SITE_NAME: z.string(),
+  }),
+);
 
 vi.mock('../../../src/sdks/tableau/restApi.js', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -13,8 +21,8 @@ vi.mock('../../../src/sdks/tableau/restApi.js', async (importOriginal) => ({
         Ok({
           site: {
             id: 'site_id',
-            name: 'mcp-test',
-            contentUrl: 'mcp-test',
+            name: SITE_NAME,
+            contentUrl: SITE_NAME,
           },
           user: {
             id: 'user_id',

@@ -1,17 +1,15 @@
+import dotenv from 'dotenv';
 import { z } from 'zod';
 
-import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
 import { callTool } from './client.js';
 
 describe('search-content', () => {
-  beforeAll(setEnv);
-  afterAll(resetEnv);
+  beforeAll(() => {
+    dotenv.config();
+  });
 
   it('should search content', async () => {
-    const env = getDefaultEnv();
-
     const searchResults = await callTool('search-content', {
-      env,
       schema: z.array(z.record(z.string(), z.unknown())),
       toolArgs: {
         terms: 'superstore',

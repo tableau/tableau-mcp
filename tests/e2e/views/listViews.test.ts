@@ -1,20 +1,20 @@
+import dotenv from 'dotenv';
 import z from 'zod';
 
 import { viewSchema } from '../../../src/sdks/tableau/types/view.js';
 import invariant from '../../../src/utils/invariant.js';
-import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
+import { getSuperstoreWorkbook } from '../../testEnv.js';
 import { callTool } from '../client.js';
 
 describe('list-views', () => {
-  beforeAll(setEnv);
-  afterAll(resetEnv);
+  beforeAll(() => {
+    dotenv.config();
+  });
 
   it('should list views', async () => {
-    const env = getDefaultEnv();
-    const superstore = getSuperstoreWorkbook(env);
+    const superstore = getSuperstoreWorkbook();
 
     const views = await callTool('list-views', {
-      env,
       schema: z.array(viewSchema),
     });
 
@@ -32,11 +32,9 @@ describe('list-views', () => {
   });
 
   it('should list views with filter', async () => {
-    const env = getDefaultEnv();
-    const superstore = getSuperstoreWorkbook(env);
+    const superstore = getSuperstoreWorkbook();
 
     const views = await callTool('list-views', {
-      env,
       schema: z.array(viewSchema),
       toolArgs: { filter: 'name:eq:Overview,workbookName:eq:Superstore' },
     });

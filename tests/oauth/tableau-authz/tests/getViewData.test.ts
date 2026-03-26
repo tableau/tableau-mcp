@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
+import { getSuperstoreWorkbook } from '../../../testEnv.js';
 import { expect, test } from './base.js';
-import { getSuperstoreWorkbook } from './testEnv.js';
 
 test.describe('get-view-data', () => {
   test('get view data', async ({ client }) => {

@@ -5,7 +5,6 @@ import request from 'supertest';
 import { getConfig } from '../../../src/config.js';
 import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
-import { resetEnv, setEnv } from './testEnv.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
@@ -17,9 +16,6 @@ vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
 
 describe('client credentials grant type', () => {
   let _server: http.Server | undefined;
-
-  beforeAll(setEnv);
-  afterAll(resetEnv);
 
   beforeEach(() => {
     vi.clearAllMocks();

@@ -2,17 +2,25 @@ import express from 'express';
 import http from 'http';
 import request from 'supertest';
 import { MockedFunction, vi } from 'vitest';
+import { z } from 'zod';
 
 import { getConfig, ONE_DAY_IN_MS } from '../../../src/config.js';
 import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { clientMetadataCache } from '../../../src/server/oauth/clientMetadataCache.js';
 import { axios } from '../../../src/utils/axios.js';
-import { resetEnv, setEnv } from './testEnv.js';
+import { getEnv } from '../../testEnv.js';
 
 const constants = vi.hoisted(() => ({
   FAKE_CLIENT_METADATA_URL: 'https://www.fakemcpclient.com/.well-known/oauth/client-metadata.json',
 }));
+
+const { SERVER, SITE_NAME } = getEnv(
+  z.object({
+    SERVER: z.string(),
+    SITE_NAME: z.string(),
+  }),
+);
 
 const mocks = vi.hoisted(() => ({
   MOCK_AXIOS_GET_RESPONSE: {
@@ -77,9 +85,6 @@ describe('clientIdMetadataDocuments', () => {
     vi.useRealTimers();
   });
 
-  beforeAll(setEnv);
-  afterAll(resetEnv);
-
   beforeEach(() => {
     vi.clearAllMocks();
     clientMetadataCache.clear();
@@ -132,7 +137,7 @@ describe('clientIdMetadataDocuments', () => {
 
     expect(response.status).toBe(302);
     const location = new URL(response.headers['location']);
-    expect(location.hostname).toBe('10ax.online.tableau.com');
+    expect(location.hostname).toBe(new URL(SERVER).hostname);
     expect(location.pathname).toBe('/oauth2/v1/auth');
     expect(location.searchParams.get('client_id')).toEqual(expect.any(String));
     expect(location.searchParams.get('code_challenge')).toEqual(expect.any(String));
@@ -141,7 +146,7 @@ describe('clientIdMetadataDocuments', () => {
     expect(location.searchParams.get('redirect_uri')).toBe('http://127.0.0.1:3927/Callback');
     expect(location.searchParams.get('state')).toEqual(expect.any(String));
     expect(location.searchParams.get('device_id')).toEqual(expect.any(String));
-    expect(location.searchParams.get('target_site')).toBe('mcp-test');
+    expect(location.searchParams.get('target_site')).toBe(SITE_NAME);
     expect(location.searchParams.get('device_name')).toBe('tableau-mcp (Fake MCP Client)');
     expect(location.searchParams.get('client_type')).toBe('tableau-mcp');
   });

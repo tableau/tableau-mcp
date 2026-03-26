@@ -1,17 +1,17 @@
+import dotenv from 'dotenv';
 import z from 'zod';
 
-import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
+import { getSuperstoreWorkbook } from '../../testEnv.js';
 import { callTool } from '../client.js';
 
 describe('get-view-image', () => {
-  beforeAll(setEnv);
-  afterAll(resetEnv);
+  beforeAll(() => {
+    dotenv.config();
+  });
 
   it('should get view image', async () => {
-    const env = getDefaultEnv();
-    const superstore = getSuperstoreWorkbook(env);
+    const superstore = getSuperstoreWorkbook();
     const pngData = await callTool('get-view-image', {
-      env,
       schema: z.string(),
       toolArgs: { viewId: superstore.defaultViewId },
       contentType: 'image',

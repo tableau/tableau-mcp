@@ -1,19 +1,19 @@
+import dotenv from 'dotenv';
 import z from 'zod';
 
 import { workbookSchema } from '../../../src/sdks/tableau/types/workbook.js';
-import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
+import { getSuperstoreWorkbook } from '../../testEnv.js';
 import { callTool } from '../client.js';
 
 describe('list-workbooks', () => {
-  beforeAll(setEnv);
-  afterAll(resetEnv);
+  beforeAll(() => {
+    dotenv.config();
+  });
 
   it('should list workbooks', async () => {
-    const env = getDefaultEnv();
-    const superstore = getSuperstoreWorkbook(env);
+    const superstore = getSuperstoreWorkbook();
 
     const workbooks = await callTool('list-workbooks', {
-      env,
       schema: z.array(workbookSchema),
     });
 
@@ -28,11 +28,9 @@ describe('list-workbooks', () => {
   });
 
   it('should list workbooks with filter', async () => {
-    const env = getDefaultEnv();
-    const superstore = getSuperstoreWorkbook(env);
+    const superstore = getSuperstoreWorkbook();
 
     const workbooks = await callTool('list-workbooks', {
-      env,
       schema: z.array(workbookSchema),
       toolArgs: { filter: 'name:eq:Superstore' },
     });

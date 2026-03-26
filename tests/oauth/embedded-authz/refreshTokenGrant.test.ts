@@ -1,12 +1,20 @@
 import express from 'express';
 import http from 'http';
 import request from 'supertest';
+import { z } from 'zod';
 
 import { getConfig } from '../../../src/config.js';
 import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
+import { getEnv } from '../../testEnv.js';
 import { exchangeAuthzCodeForAccessToken } from './exchangeAuthzCodeForAccessToken.js';
-import { resetEnv, setEnv } from './testEnv.js';
+
+const { SERVER, SITE_NAME } = getEnv(
+  z.object({
+    SERVER: z.string(),
+    SITE_NAME: z.string(),
+  }),
+);
 
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
@@ -18,9 +26,6 @@ vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
 
 describe('refresh token grant type', () => {
   let _server: http.Server | undefined;
-
-  beforeAll(setEnv);
-  afterAll(resetEnv);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -77,7 +82,7 @@ describe('refresh token grant type', () => {
         accessToken: 'test-access-token',
         refreshToken: 'test-refresh-token',
         expiresInSeconds: 3600,
-        originHost: '10ax.online.tableau.com',
+        originHost: `${new URL(SERVER).hostname}`,
       });
 
       const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
@@ -107,7 +112,7 @@ describe('refresh token grant type', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost: `${new URL(SERVER).hostname}`,
     });
 
     const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
@@ -140,7 +145,7 @@ describe('refresh token grant type', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost: `${new URL(SERVER).hostname}`,
     });
 
     const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
@@ -149,7 +154,7 @@ describe('refresh token grant type', () => {
       accessToken: 'refreshed-access-token',
       refreshToken: 'refreshed-refresh-token',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost: `${new URL(SERVER).hostname}`,
     });
 
     await request(app).post('/oauth2/token').send({
@@ -163,7 +168,7 @@ describe('refresh token grant type', () => {
     expect(refreshCall?.[1]).toEqual(
       expect.objectContaining({
         grant_type: 'refresh_token',
-        site_namespace: 'mcp-test',
+        site_namespace: SITE_NAME,
       }),
     );
   });
@@ -175,7 +180,7 @@ describe('refresh token grant type', () => {
       accessToken: 'initial-access-token',
       refreshToken: 'initial-refresh-token',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost: `${new URL(SERVER).hostname}`,
     });
 
     const { refresh_token: firstRefreshToken } = await exchangeAuthzCodeForAccessToken(app);
@@ -185,7 +190,7 @@ describe('refresh token grant type', () => {
       accessToken: 'refreshed-access-token-1',
       refreshToken: 'refreshed-refresh-token-1',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost: `${new URL(SERVER).hostname}`,
     });
 
     const firstRefreshResponse = await request(app).post('/oauth2/token').send({
@@ -201,7 +206,7 @@ describe('refresh token grant type', () => {
       accessToken: 'refreshed-access-token-2',
       refreshToken: 'refreshed-refresh-token-2',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost: `${new URL(SERVER).hostname}`,
     });
 
     const secondRefreshResponse = await request(app).post('/oauth2/token').send({
@@ -219,7 +224,7 @@ describe('refresh token grant type', () => {
       expect.objectContaining({
         grant_type: 'refresh_token',
         refresh_token: 'refreshed-refresh-token-1',
-        site_namespace: 'mcp-test',
+        site_namespace: SITE_NAME,
       }),
     );
   });

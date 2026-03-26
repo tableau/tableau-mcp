@@ -12,12 +12,23 @@ import { Err, Ok, Result } from 'ts-results-es';
 import z from 'zod';
 
 import invariant from '../../src/utils/invariant.js';
+import { getEnv } from '../testEnv.js';
 
 type ToolExecution = {
   name: string;
   arguments: Record<string, unknown>;
   output: string;
 };
+
+const envSchema = z.object({
+  SERVER: z.string(),
+  SITE_NAME: z.string(),
+  AUTH: z.string(),
+  JWT_SUB_CLAIM: z.string(),
+  CONNECTED_APP_CLIENT_ID: z.string(),
+  CONNECTED_APP_SECRET_ID: z.string(),
+  CONNECTED_APP_SECRET_VALUE: z.string(),
+});
 
 const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
 
@@ -35,11 +46,11 @@ export function getModel(): string {
   return process.env.EVAL_TEST_MODEL || DEFAULT_MODEL;
 }
 
-export async function getMcpServer(env?: Record<string, string>): Promise<MCPServerStdio> {
+export async function getMcpServer(): Promise<MCPServerStdio> {
   const mcpServer = new MCPServerStdio({
     command: 'node',
     args: ['build/index.js'],
-    env,
+    env: getEnv(envSchema),
     cacheToolsList: true,
   });
 

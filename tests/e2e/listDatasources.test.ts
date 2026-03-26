@@ -1,19 +1,19 @@
+import dotenv from 'dotenv';
 import z from 'zod';
 
 import { dataSourceSchema } from '../../src/sdks/tableau/types/dataSource.js';
-import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../testEnv.js';
+import { getSuperstoreDatasource } from '../testEnv.js';
 import { callTool } from './client.js';
 
 describe('list-datasources', () => {
-  beforeAll(setEnv);
-  afterAll(resetEnv);
+  beforeAll(() => {
+    dotenv.config();
+  });
 
   it('should list datasources', async () => {
-    const env = getDefaultEnv();
-    const superstore = getSuperstoreDatasource(env);
+    const superstore = getSuperstoreDatasource();
 
     const datasources = await callTool('list-datasources', {
-      env,
       schema: z.array(dataSourceSchema),
     });
 
@@ -29,11 +29,9 @@ describe('list-datasources', () => {
   });
 
   it('should list datasources with filter', async () => {
-    const env = getDefaultEnv();
-    const superstore = getSuperstoreDatasource(env);
+    const superstore = getSuperstoreDatasource();
 
     const datasources = await callTool('list-datasources', {
-      env,
       schema: z.array(dataSourceSchema),
       toolArgs: { filter: 'name:eq:Super*' },
     });

@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 import { pulseMetricDefinitionSchema } from '../../../../src/sdks/tableau/types/pulse.js';
+import { getTableauMcpPulseDefinition } from '../../../testEnv.js';
 import { expect, test } from './base.js';
-import { getTableauMcpPulseDefinition } from './testEnv.js';
 
 test.describe('list-pulse-metric-definitions-from-definition-ids', () => {
   test('list pulse metric definitions from definition ids', async ({ client }) => {

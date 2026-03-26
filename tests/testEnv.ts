@@ -1,56 +1,65 @@
 import dotenv from 'dotenv';
-import { existsSync } from 'fs';
+import { z } from 'zod';
+import { fromError } from 'zod-validation-error/v3';
 
-import { ProcessEnvEx } from '../types/process-env.js';
-import { Datasource, getDatasource, getWorkbook, Workbook } from './constants.js';
+import {
+  Datasource,
+  getDatasource,
+  getPulseDefinition,
+  getWorkbook,
+  PulseDefinition,
+  Workbook,
+} from './constants.js';
 
-type EnvValues = Record<keyof ProcessEnvEx, string>;
+export function getEnv<Z extends z.ZodSchema>(schema: Z): z.infer<Z> {
+  dotenv.config();
 
-export function setEnv(): void {
-  if (existsSync('.env')) {
+  const result = schema.safeParse(process.env);
+
+  if (!result.success) {
     throw new Error(
-      'Please remove or rename the .env file at the base of the project before running the tests.',
+      fromError(result.error, { prefix: 'Invalid environment variables' }).toString(),
     );
   }
 
-  dotenv.config({ path: 'tests/.env', override: true });
-  if (!process.env.OAUTH_DISABLE_SCOPES) {
-    process.env.OAUTH_DISABLE_SCOPES = 'true';
-  }
+  return result.data;
 }
 
-export function resetEnv(): void {
-  dotenv.config({ path: 'tests/.env.reset', override: true });
-}
-
-export function getEnv(envKeys: Array<keyof ProcessEnvEx>): EnvValues {
-  return envKeys.reduce(
-    (acc, key) => {
-      acc[key] = process.env[key] ?? '';
-      return acc;
-    },
-    {} as Record<keyof ProcessEnvEx, string>,
+export function getSuperstoreDatasource(): Datasource {
+  const { SERVER, SITE_NAME, TEST_SITE_NAME } = getEnv(
+    z.object({
+      SERVER: z.string(),
+      SITE_NAME: z.string().optional(),
+      TEST_SITE_NAME: z.string().optional(),
+    }),
   );
+
+  const siteName = SITE_NAME ?? TEST_SITE_NAME ?? '';
+  return getDatasource(SERVER, siteName, 'Superstore Datasource');
 }
 
-export function getDefaultEnv(): EnvValues {
-  return getEnv([
-    'SERVER',
-    'SITE_NAME',
-    'AUTH',
-    'JWT_SUB_CLAIM',
-    'CONNECTED_APP_CLIENT_ID',
-    'CONNECTED_APP_SECRET_ID',
-    'CONNECTED_APP_SECRET_VALUE',
-  ]);
+export function getSuperstoreWorkbook(): Workbook {
+  const { SERVER, SITE_NAME, TEST_SITE_NAME } = z
+    .object({
+      SERVER: z.string(),
+      SITE_NAME: z.string().optional(),
+      TEST_SITE_NAME: z.string().optional(),
+    })
+    .parse(process.env);
+
+  const siteName = SITE_NAME ?? TEST_SITE_NAME ?? '';
+  return getWorkbook(SERVER, siteName, 'Superstore');
 }
 
-export function getSuperstoreDatasource(env?: EnvValues): Datasource {
-  const { SERVER, SITE_NAME } = env ?? getDefaultEnv();
-  return getDatasource(SERVER, SITE_NAME, 'Superstore Datasource');
-}
+export function getTableauMcpPulseDefinition(): PulseDefinition {
+  const { SERVER, SITE_NAME, TEST_SITE_NAME } = z
+    .object({
+      SERVER: z.string(),
+      SITE_NAME: z.string().optional(),
+      TEST_SITE_NAME: z.string().optional(),
+    })
+    .parse(process.env);
 
-export function getSuperstoreWorkbook(env?: EnvValues): Workbook {
-  const { SERVER, SITE_NAME } = env ?? getDefaultEnv();
-  return getWorkbook(SERVER, SITE_NAME, 'Superstore');
+  const siteName = SITE_NAME ?? TEST_SITE_NAME ?? '';
+  return getPulseDefinition(SERVER, siteName, 'Tableau MCP');
 }
