@@ -510,3 +510,31 @@ The MCP server supports three OAuth 2.1 grant types:
 - `/oauth2/authorize`: Authorization endpoint with PKCE (authorization code only)
 - `/Callback`: OAuth callback handler (authorization code only)
 - `/oauth2/token`: Token exchange and refresh (all grant types)
+- `/oauth2/revoke`: Token revocation (embedded authorization server mode only)
+
+#### Token Revocation
+
+The MCP server implements an [RFC 7009](https://www.rfc-editor.org/rfc/rfc7009) token revocation endpoint. **This endpoint is only available in embedded authorization server mode** (`OAUTH_EMBEDDED_AUTHZ_SERVER=true`, the default). In Tableau authorization server mode (`OAUTH_EMBEDDED_AUTHZ_SERVER=false`), the MCP server does not issue tokens and does not expose a `/oauth2/revoke` endpoint. Clients that need to revoke tokens in Tableau authorization server mode must call Tableau's own revocation endpoint directly.
+
+**What this implementation provides — refresh-grant revocation only:**
+
+- **Refresh token revocation**: Submitting a refresh token to `POST /oauth2/revoke` removes it from the server. Any subsequent attempt to use that refresh token to obtain a new access token will return `invalid_grant`.
+- **Anything else** (access tokens, unknown tokens, malformed tokens): Returns `200 OK` per RFC 7009 Section 2.2 without taking any action. This avoids disclosing whether a submitted value was valid.
+
+**What this implementation does NOT provide — no immediate access token invalidation:**
+
+Access tokens are self-contained JWE blobs. There is no server-side state for issued access tokens. Submitting an access token to `/oauth2/revoke` returns `200 OK` but the token is **not invalidated** — it continues to be accepted until its `exp` claim passes (default: 1 hour). To stop a client's ability to obtain new access tokens, submit the refresh token instead. To reduce the exposure window, lower `OAUTH_ACCESS_TOKEN_TIMEOUT_MS`.
+
+True immediate access token invalidation would require a server-side deny-list keyed on a per-token identifier (`jti`), which is not implemented in the current release.
+
+**Example request:**
+
+```http
+POST /oauth2/revoke
+Content-Type: application/json
+
+{
+  "token": "<refresh_token>",
+  "token_type_hint": "refresh_token"
+}
+```

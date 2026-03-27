@@ -11,7 +11,8 @@ import { getSupportedScopes } from '../scopes.js';
  */
 export function oauthAuthorizationServer(app: express.Application): void {
   app.get('/.well-known/oauth-authorization-server', (_req, res) => {
-    const { issuer, advertiseApiScopes, enforceScopes, clientIdSecretPairs } = getConfig().oauth;
+    const { issuer, advertiseApiScopes, enforceScopes, clientIdSecretPairs, embeddedAuthzServer } =
+      getConfig().oauth;
 
     const grant_types_supported = ['authorization_code', 'refresh_token'];
     const token_endpoint_auth_methods_supported = ['none'];
@@ -27,6 +28,10 @@ export function oauthAuthorizationServer(app: express.Application): void {
       authorization_endpoint: `${issuer}/oauth2/authorize`,
       token_endpoint: `${issuer}/oauth2/token`,
       registration_endpoint: `${issuer}/oauth2/register`,
+      // revocation_endpoint is only available in embedded authorization server mode.
+      // In Tableau authorization server mode (OAUTH_EMBEDDED_AUTHZ_SERVER=false),
+      // the MCP server does not issue tokens and therefore does not implement revocation.
+      ...(embeddedAuthzServer ? { revocation_endpoint: `${issuer}/oauth2/revoke` } : {}),
       response_types_supported: ['code'],
       grant_types_supported,
       code_challenge_methods_supported: ['S256'],
