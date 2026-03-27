@@ -179,7 +179,7 @@ const envVars = {
     type: 'string',
     title: 'Logging',
     description:
-      'Comma-separated list of loggers to enable. Valid values: fileLogger, appLogger. Example: "fileLogger,appLogger".',
+      'Comma-separated list of loggers to enable. Valid values: fileLogger, appLogger. Example: "fileLogger,appLogger". Note: appLogger logs to stdout and only has effect when TRANSPORT is set to "http"; it is ignored on stdio transport.',
     required: false,
     sensitive: false,
   },
