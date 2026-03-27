@@ -11,8 +11,9 @@ import { startExpressServer } from '../../../src/server/express.js';
 import { testProductVersion } from '../../../src/testShared.js';
 import { getEnv, setEnv } from '../../testEnv.js';
 
-const { SITE_NAME } = getEnv(
+const { SERVER, SITE_NAME } = getEnv(
   z.object({
+    SERVER: z.string(),
     SITE_NAME: z.string(),
   }),
 );
@@ -173,7 +174,7 @@ describe('authorization code callback', () => {
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
       error: 'invalid_request',
-      error_description: `Invalid origin host: 10az.online.tableau.com. Expected: ${new URL(process.env.SERVER!).hostname}`,
+      error_description: `Invalid origin host: 10az.online.tableau.com. Expected: ${new URL(SERVER).hostname}`,
     });
   });
 
@@ -198,7 +199,7 @@ describe('authorization code callback', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: `${new URL(process.env.SERVER!).hostname}`,
+      originHost: `${new URL(SERVER).hostname}`,
     });
 
     const response = await request(app)
@@ -266,7 +267,7 @@ describe('authorization code callback', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: `${new URL(process.env.SERVER!).hostname}`,
+      originHost: `${new URL(SERVER).hostname}`,
     });
 
     const response = await request(app)
@@ -314,7 +315,7 @@ describe('authorization code callback', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: `${new URL(process.env.SERVER!).hostname}`,
+      originHost: `${new URL(SERVER).hostname}`,
     });
 
     const response = await request(app)
@@ -350,7 +351,7 @@ describe('authorization code callback', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: `${new URL(process.env.SERVER!).hostname}`,
+      originHost: `${new URL(SERVER).hostname}`,
     });
 
     const response = await request(app)
