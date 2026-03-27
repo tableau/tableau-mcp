@@ -1,5 +1,5 @@
 import { getConfig } from '../config.js';
-import { FileLogger } from './fileLogger.js';
+import { getFileLogger, LogEntry } from './fileLogger.js';
 
 export const writeToStderr = (message: string): void => {
   if (process.env.TABLEAU_MCP_TEST === 'true') {
@@ -11,31 +11,14 @@ export const writeToStderr = (message: string): void => {
   process.stderr.write(message);
 };
 
-export function httpErrorLog(message: string): void {
+export function log(entry: LogEntry): void {
   const config = getConfig();
   if (config.transport === 'http' && config.enableLogging.has('appLogger')) {
-    console.error(message);
+    // eslint-disable-next-line no-console
+    console.log(JSON.stringify(entry));
   }
-}
-
-/**
- * Logs a message to all enabled outputs:
- * - disk via FileLogger (when fileLogger is in ENABLE_LOGGING)
- * - stdout via console.log (when appLogger is in ENABLE_LOGGING and transport is http)
- */
-export class Logger {
-  private readonly _fileLogger: FileLogger | undefined;
-
-  constructor({ fileLogger }: { fileLogger?: FileLogger } = {}) {
-    this._fileLogger = fileLogger;
-  }
-
-  log(message: string): void {
-    void this._fileLogger?.log({ message });
-    const config = getConfig();
-    if (config.transport === 'http' && config.enableLogging.has('appLogger')) {
-      // eslint-disable-next-line no-console
-      console.log(message);
-    }
+  const fileLogger = getFileLogger();
+  if (config.enableLogging.has('fileLogger') && fileLogger) {
+    fileLogger.log(entry);
   }
 }

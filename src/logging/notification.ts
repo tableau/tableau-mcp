@@ -2,7 +2,7 @@ import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../server.js';
 import { ToolName } from '../tools/toolName.js';
-import { FileLogger } from './fileLogger.js';
+import { getFileLogger } from './fileLogger.js';
 
 type LoggerName = 'rest-api' | (string & {});
 type LogType = LoggingLevel | 'request' | 'response' | 'tool' | 'request-cancelled';
@@ -23,11 +23,6 @@ export const loggingLevels = [
 ] as const;
 
 let currentLogLevel: LoggingLevel = 'debug';
-let _fileLogger: FileLogger | undefined;
-
-export const setFileLogger = (logger: FileLogger): void => {
-  _fileLogger = logger;
-};
 
 export function isLoggingLevel(level: unknown): level is LoggingLevel {
   return !!loggingLevels.find((l) => l === level);
@@ -102,7 +97,7 @@ function getSendLoggingMessageFn(level: LoggingLevel) {
       logger: server.name,
     },
   ) => {
-    _fileLogger?.log({ message, level, logger });
+    getFileLogger()?.log({ message, level, logger });
 
     if (!shouldLogWhenLevelIsAtLeast(level)) {
       return;
