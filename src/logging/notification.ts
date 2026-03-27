@@ -2,8 +2,9 @@ import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../server.js';
 import { ToolName } from '../tools/toolName.js';
-import { ServerLogger } from './serverLogger.js';
-type Logger = 'rest-api' | (string & {});
+import { FileLogger } from './fileLogger.js';
+
+type LoggerName = 'rest-api' | (string & {});
 type LogType = LoggingLevel | 'request' | 'response' | 'tool' | 'request-cancelled';
 type LogMessage = {
   type: LogType;
@@ -22,7 +23,11 @@ export const loggingLevels = [
 ] as const;
 
 let currentLogLevel: LoggingLevel = 'debug';
-let serverLogger: ServerLogger | undefined;
+let _fileLogger: FileLogger | undefined;
+
+export const setFileLogger = (logger: FileLogger): void => {
+  _fileLogger = logger;
+};
 
 export function isLoggingLevel(level: unknown): level is LoggingLevel {
   return !!loggingLevels.find((l) => l === level);
@@ -44,11 +49,7 @@ export const setLogLevel = (
   }
 };
 
-export const setServerLogger = (logger: ServerLogger): void => {
-  serverLogger = logger;
-};
-
-type LogMethodOptions = Partial<{ logger: Logger; requestId: RequestId }>;
+type LogMethodOptions = Partial<{ logger: LoggerName; requestId: RequestId }>;
 
 export const log = {
   debug: getSendLoggingMessageFn('debug'),
@@ -69,16 +70,6 @@ export const log = {
 
 export const shouldLogWhenLevelIsAtLeast = (level = currentLogLevel): boolean => {
   return loggingLevels.indexOf(level) >= loggingLevels.indexOf(currentLogLevel);
-};
-
-export const writeToStderr = (message: string): void => {
-  if (process.env.TABLEAU_MCP_TEST === 'true') {
-    // Silence logging when running in test mode
-    return;
-  }
-
-  message = message.endsWith('\n') ? message : `${message}\n`;
-  process.stderr.write(message);
 };
 
 export const getToolLogMessage = ({
@@ -111,7 +102,7 @@ function getSendLoggingMessageFn(level: LoggingLevel) {
       logger: server.name,
     },
   ) => {
-    serverLogger?.log({ message, level, logger });
+    _fileLogger?.log({ message, level, logger });
 
     if (!shouldLogWhenLevelIsAtLeast(level)) {
       return;

@@ -3,7 +3,7 @@ import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 
 import { McpToolError, ZodiosValidationError } from '../errors/mcpToolError.js';
-import { getToolLogMessage, log } from '../logging/log.js';
+import { getToolLogMessage, log } from '../logging/notification.js';
 import { Server } from '../server.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../server/oauth/scopes.js';
 import { getTelemetryProvider } from '../telemetry/init.js';

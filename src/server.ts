@@ -10,7 +10,7 @@ import {
 import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { getTableauServerVersion } from './getTableauServerVersion';
-import { setLogLevel } from './logging/log.js';
+import { setLogLevel } from './logging/notification.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { Tool } from './tools/tool.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';

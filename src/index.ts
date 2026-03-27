@@ -3,8 +3,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import dotenv from 'dotenv';
 
 import { getConfig } from './config.js';
-import { isLoggingLevel, log, setLogLevel, setServerLogger, writeToStderr } from './logging/log.js';
-import { ServerLogger } from './logging/serverLogger.js';
+import { writeToStderr } from './logging/appLogger.js';
+import { FileLogger } from './logging/fileLogger.js';
+import { isLoggingLevel, log, setFileLogger, setLogLevel } from './logging/notification.js';
 import { Server, serverName, serverVersion } from './server.js';
 import { startExpressServer } from './server/express.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
@@ -15,7 +16,7 @@ async function startServer(): Promise<void> {
 
   const logLevel = isLoggingLevel(config.defaultLogLevel) ? config.defaultLogLevel : 'debug';
   if (config.enableServerLogging) {
-    setServerLogger(new ServerLogger({ logDirectory: config.serverLogDirectory }));
+    setFileLogger(new FileLogger({ logDirectory: config.serverLogDirectory }));
   }
 
   switch (config.transport) {

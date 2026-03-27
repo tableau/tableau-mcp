@@ -4,9 +4,9 @@ import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
-import { writeToStderr } from './log.js';
+import { writeToStderr } from './Logger.js';
 
-export class ServerLogger {
+export class FileLogger {
   private readonly _logDirectory: string;
   private readonly _fileMutexes = new Map<string, Promise<void>>();
 

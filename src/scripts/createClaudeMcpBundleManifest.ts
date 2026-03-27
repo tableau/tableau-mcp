@@ -174,11 +174,12 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  ENABLE_SERVER_LOGGING: {
+  ENABLE_LOGGING: {
     includeInUserConfig: false,
     type: 'string',
-    title: 'Enable Server Logging',
-    description: 'Enable logging of server activity to local files.',
+    title: 'Logging',
+    description:
+      'Comma-separated list of loggers to enable. Valid values: fileLogger, appLogger. Example: "fileLogger,appLogger".',
     required: false,
     sensitive: false,
   },
@@ -186,7 +187,7 @@ const envVars = {
     includeInUserConfig: false,
     type: 'string',
     title: 'Server Log Directory',
-    description: 'The directory to write the server logs to when ENABLE_SERVER_LOGGING is true.',
+    description: 'The directory to write the server logs to when fileLogger is enabled.',
     required: false,
     sensitive: false,
   },

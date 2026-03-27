@@ -32,7 +32,7 @@ export interface ProcessEnvEx {
   DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: string | undefined;
   DISABLE_METADATA_API_REQUESTS: string | undefined;
   DISABLE_SESSION_MANAGEMENT: string | undefined;
-  ENABLE_SERVER_LOGGING: string | undefined;
+  ENABLE_LOGGING: string | undefined;
   SERVER_LOG_DIRECTORY: string | undefined;
   INCLUDE_PROJECT_IDS: string | undefined;
   INCLUDE_DATASOURCE_IDS: string | undefined;

@@ -4,8 +4,8 @@ import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { loggingLevels } from './log.js';
-import { ServerLogger } from './serverLogger.js';
+import { FileLogger } from './fileLogger.js';
+import { loggingLevels } from './notification.js';
 
 const logLineSchema = z.object({
   timestamp: z.coerce.date(),
@@ -14,11 +14,11 @@ const logLineSchema = z.object({
   logger: z.string(),
 });
 
-describe('ServerLogger', () => {
+describe('FileLogger', () => {
   const testLogDirectory = 'test-logs';
   const logger = 'test-logger';
 
-  let serverLogger: ServerLogger;
+  let fileLogger: FileLogger;
 
   beforeEach(() => {
     // Clean up any existing test directory
@@ -26,7 +26,7 @@ describe('ServerLogger', () => {
       rmSync(testLogDirectory, { recursive: true, force: true });
     }
 
-    serverLogger = new ServerLogger({ logDirectory: testLogDirectory });
+    fileLogger = new FileLogger({ logDirectory: testLogDirectory });
   });
 
   afterEach(() => {
@@ -44,7 +44,7 @@ describe('ServerLogger', () => {
     const message = 'Test log message';
     const level = 'info';
 
-    await serverLogger.log({ message, level, logger });
+    await fileLogger.log({ message, level, logger });
 
     // Find the log file (it will have a timestamp-based name)
     const files = readdirSync(testLogDirectory);
@@ -69,7 +69,7 @@ describe('ServerLogger', () => {
     const messages = [message1, message2, message3];
 
     // Wait for all operations to complete
-    await Promise.all(messages.map((message) => serverLogger.log({ message, level, logger })));
+    await Promise.all(messages.map((message) => fileLogger.log({ message, level, logger })));
 
     // Find the log file
     const files = readdirSync(testLogDirectory);
@@ -102,7 +102,7 @@ describe('ServerLogger', () => {
     const messages = Array.from({ length: numConcurrentLogs }, (_, i) => `${baseMessage} ${i}`);
 
     // Create many concurrent log operations
-    await Promise.all(messages.map((message) => serverLogger.log({ message, level, logger })));
+    await Promise.all(messages.map((message) => fileLogger.log({ message, level, logger })));
 
     // Find the log file
     const files = readdirSync(testLogDirectory);
@@ -136,7 +136,7 @@ describe('ServerLogger', () => {
     ];
 
     for (const { message, level } of messages) {
-      await serverLogger.log({ message, level, logger });
+      await fileLogger.log({ message, level, logger });
     }
 
     // Find the log file
