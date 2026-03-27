@@ -11,13 +11,6 @@ import { startExpressServer } from '../../../src/server/express.js';
 import { testProductVersion } from '../../../src/testShared.js';
 import { getEnv, setEnv } from '../../testEnv.js';
 
-const { SERVER, SITE_NAME } = getEnv(
-  z.object({
-    SERVER: z.string(),
-    SITE_NAME: z.string(),
-  }),
-);
-
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
 }));
@@ -28,6 +21,13 @@ vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
 
 describe('authorization code callback', () => {
   let _server: http.Server | undefined;
+
+  const { SERVER, SITE_NAME } = getEnv(
+    z.object({
+      SERVER: z.string(),
+      SITE_NAME: z.string(),
+    }),
+  );
 
   beforeAll(setEnv);
 

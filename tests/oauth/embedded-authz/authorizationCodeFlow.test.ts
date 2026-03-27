@@ -7,17 +7,19 @@ import { getConfig } from '../../../src/config.js';
 import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { generateCodeChallenge } from '../../../src/server/oauth/generateCodeChallenge.js';
-import { getEnv } from '../../testEnv.js';
-
-const { SERVER, SITE_NAME } = getEnv(
-  z.object({
-    SERVER: z.string(),
-    SITE_NAME: z.string(),
-  }),
-);
+import { getEnv, setEnv } from '../../testEnv.js';
 
 describe('authorization code flow', () => {
   let _server: http.Server | undefined;
+
+  const { SERVER, SITE_NAME } = getEnv(
+    z.object({
+      SERVER: z.string(),
+      SITE_NAME: z.string(),
+    }),
+  );
+
+  beforeAll(setEnv);
 
   beforeEach(() => {
     vi.clearAllMocks();

@@ -6,15 +6,8 @@ import { z } from 'zod';
 import { getConfig } from '../../../src/config.js';
 import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
-import { getEnv } from '../../testEnv.js';
+import { getEnv, setEnv } from '../../testEnv.js';
 import { exchangeAuthzCodeForAccessToken } from './exchangeAuthzCodeForAccessToken.js';
-
-const { SERVER, SITE_NAME } = getEnv(
-  z.object({
-    SERVER: z.string(),
-    SITE_NAME: z.string(),
-  }),
-);
 
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
@@ -26,6 +19,15 @@ vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
 
 describe('refresh token grant type', () => {
   let _server: http.Server | undefined;
+
+  const { SERVER, SITE_NAME } = getEnv(
+    z.object({
+      SERVER: z.string(),
+      SITE_NAME: z.string(),
+    }),
+  );
+
+  beforeAll(setEnv);
 
   beforeEach(() => {
     vi.clearAllMocks();

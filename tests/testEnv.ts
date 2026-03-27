@@ -43,26 +43,26 @@ export function getSuperstoreDatasource(): Datasource {
 }
 
 export function getSuperstoreWorkbook(): Workbook {
-  const { SERVER, SITE_NAME, TEST_SITE_NAME } = z
-    .object({
+  const { SERVER, SITE_NAME, TEST_SITE_NAME } = getEnv(
+    z.object({
       SERVER: z.string(),
       SITE_NAME: z.string().optional(),
       TEST_SITE_NAME: z.string().optional(),
-    })
-    .parse(process.env);
+    }),
+  );
 
   const siteName = SITE_NAME ?? TEST_SITE_NAME ?? '';
   return getWorkbook(SERVER, siteName, 'Superstore');
 }
 
 export function getTableauMcpPulseDefinition(): PulseDefinition {
-  const { SERVER, SITE_NAME, TEST_SITE_NAME } = z
-    .object({
+  const { SERVER, SITE_NAME, TEST_SITE_NAME } = getEnv(
+    z.object({
       SERVER: z.string(),
       SITE_NAME: z.string().optional(),
       TEST_SITE_NAME: z.string().optional(),
-    })
-    .parse(process.env);
+    }),
+  );
 
   const siteName = SITE_NAME ?? TEST_SITE_NAME ?? '';
   return getPulseDefinition(SERVER, siteName, 'Tableau MCP');

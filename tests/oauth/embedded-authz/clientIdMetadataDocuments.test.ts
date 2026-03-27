@@ -9,18 +9,11 @@ import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { clientMetadataCache } from '../../../src/server/oauth/clientMetadataCache.js';
 import { axios } from '../../../src/utils/axios.js';
-import { getEnv } from '../../testEnv.js';
+import { getEnv, setEnv } from '../../testEnv.js';
 
 const constants = vi.hoisted(() => ({
   FAKE_CLIENT_METADATA_URL: 'https://www.fakemcpclient.com/.well-known/oauth/client-metadata.json',
 }));
-
-const { SERVER, SITE_NAME } = getEnv(
-  z.object({
-    SERVER: z.string(),
-    SITE_NAME: z.string(),
-  }),
-);
 
 const mocks = vi.hoisted(() => ({
   MOCK_AXIOS_GET_RESPONSE: {
@@ -76,6 +69,15 @@ vi.mock('../../../src/server/oauth/dnsResolver.js', () => ({
 
 describe('clientIdMetadataDocuments', () => {
   let _server: http.Server | undefined;
+
+  const { SERVER, SITE_NAME } = getEnv(
+    z.object({
+      SERVER: z.string(),
+      SITE_NAME: z.string(),
+    }),
+  );
+
+  beforeAll(setEnv);
 
   beforeEach(() => {
     vi.useFakeTimers();
