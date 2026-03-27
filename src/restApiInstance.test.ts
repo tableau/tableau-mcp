@@ -12,7 +12,7 @@ import {
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
 
-vi.mock('./logging/log.js', () => ({
+vi.mock('./logging/notification.js', () => ({
   log: {
     info: vi.fn(),
     error: vi.fn(),
