@@ -1,7 +1,7 @@
 import levenshtein from 'fast-levenshtein';
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { log } from '../../../logging/log.js';
+import { log } from '../../../logging/notification.js';
 import {
   Datasource,
   MatchFilter,

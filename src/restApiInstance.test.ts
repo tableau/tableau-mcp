@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getConfig } from './config.js';
-import { log } from './logging/log.js';
+import { log } from './logging/notification.js';
 import {
   getRequestErrorInterceptor,
   getRequestInterceptor,
@@ -12,7 +12,7 @@ import {
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
 
-vi.mock('./logging/log.js', () => ({
+vi.mock('./logging/notification.js', () => ({
   log: {
     info: vi.fn(),
     error: vi.fn(),

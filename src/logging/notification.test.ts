@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Server } from '../server.js';
+import { writeToStderr } from './Logger.js';
 import {
   getToolLogMessage,
   isLoggingLevel,
   log,
   setLogLevel,
   shouldLogWhenLevelIsAtLeast,
-  writeToStderr,
-} from './log.js';
+} from './notification.js';
 
-describe('log', () => {
+describe('notification', () => {
   const originalEnv = process.env.TABLEAU_MCP_TEST;
 
   beforeEach(() => {

@@ -4,7 +4,7 @@ import { Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
 import { DatasourceNotAllowedError, ZodiosValidationError } from '../errors/mcpToolError.js';
-import { log } from '../logging/log.js';
+import { log } from '../logging/notification.js';
 import { Server } from '../server.js';
 import invariant from '../utils/invariant.js';
 import { Tool } from './tool.js';

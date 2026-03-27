@@ -1,7 +1,7 @@
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { Config, getConfig } from './config.js';
-import { log, shouldLogWhenLevelIsAtLeast } from './logging/log.js';
+import { log, shouldLogWhenLevelIsAtLeast } from './logging/notification.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
 import {
   AxiosResponseInterceptorConfig,

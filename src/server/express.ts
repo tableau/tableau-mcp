@@ -8,7 +8,7 @@ import http from 'http';
 import https from 'https';
 
 import { Config } from '../config.js';
-import { setLogLevel } from '../logging/log.js';
+import { setLogLevel } from '../logging/notification.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
