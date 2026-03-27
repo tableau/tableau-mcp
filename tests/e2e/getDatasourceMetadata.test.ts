@@ -1,18 +1,15 @@
 import { fieldsResultSchema } from '../../src/tools/getDatasourceMetadata/datasourceMetadataUtils.js';
 import invariant from '../../src/utils/invariant.js';
-import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../testEnv.js';
+import { getSuperstoreDatasource, setEnv } from '../testEnv.js';
 import { callTool } from './client.js';
 
 describe('get-datasource-metadata', () => {
   beforeAll(setEnv);
-  afterAll(resetEnv);
 
   it('should get metadata', async () => {
-    const env = getDefaultEnv();
-    const superstore = getSuperstoreDatasource(env);
+    const superstore = getSuperstoreDatasource();
 
     const { fieldGroups } = await callTool('get-datasource-metadata', {
-      env,
       schema: fieldsResultSchema,
       toolArgs: {
         datasourceLuid: superstore.id,

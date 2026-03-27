@@ -6,7 +6,7 @@ import { dataSourceSchema } from '../../src/sdks/tableau/types/dataSource.js';
 import { fieldsResultSchema } from '../../src/tools/getDatasourceMetadata/datasourceMetadataUtils.js';
 import invariant from '../../src/utils/invariant.js';
 import { Datasource } from '../constants.js';
-import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../testEnv.js';
+import { getSuperstoreDatasource } from '../testEnv.js';
 import {
   getCallToolResult,
   getCallToolResultSafe,
@@ -20,17 +20,13 @@ describe('get-datasource-metadata', () => {
   let mcpServer: MCPServerStdio;
   let superstore: Datasource;
 
-  beforeAll(setEnv);
-  afterAll(resetEnv);
-
   beforeAll(async () => {
     dotenv.config({ path: 'tests/eval/.env' });
   });
 
   beforeEach(async () => {
-    const env = getDefaultEnv();
-    superstore = getSuperstoreDatasource(env);
-    mcpServer = await getMcpServer(env);
+    superstore = getSuperstoreDatasource();
+    mcpServer = await getMcpServer();
   });
 
   afterEach(async () => {

@@ -4,7 +4,18 @@ import { z } from 'zod';
 
 import { ToolName } from '../../src/tools/toolName.js';
 import invariant from '../../src/utils/invariant.js';
-import { getDefaultEnv } from '../testEnv.js';
+import { getEnv } from '../testEnv.js';
+
+const envSchema = z.object({
+  TRANSPORT: z.enum(['stdio', 'http']).optional(),
+  SERVER: z.string(),
+  SITE_NAME: z.string(),
+  AUTH: z.string(),
+  JWT_SUB_CLAIM: z.string(),
+  CONNECTED_APP_CLIENT_ID: z.string(),
+  CONNECTED_APP_SECRET_ID: z.string(),
+  CONNECTED_APP_SECRET_VALUE: z.string(),
+});
 
 /**
  * Lists the tools available in the MCP server.
@@ -30,7 +41,6 @@ export async function listTools(): Promise<Array<string>> {
  *   })} options Additional options
  * @param options.schema The expected shape of the tool result
  * @param options.contentType The expected content type of the tool result
- * @param options.env The environment to use when spawning the node process running the MCP server
  * @param options.toolArgs The arguments to pass to the tool
  * @returns {*}  {Promise<z.infer<Z>>} The tool call result
  */
@@ -39,19 +49,17 @@ export async function callTool<Z extends z.ZodTypeAny = z.ZodNever>(
   {
     schema,
     contentType,
-    env,
     toolArgs,
   }: {
     schema: Z;
     contentType?: 'text' | 'image';
-    env?: Record<string, string>;
     toolArgs?: Record<string, unknown>;
   },
 ): Promise<z.infer<Z>> {
   contentType = contentType ?? 'text';
   toolArgs = toolArgs ?? {};
 
-  const client = await getClient(env);
+  const client = await getClient();
   const result = await client.callTool({
     name: toolName,
     arguments: toolArgs,
@@ -87,14 +95,15 @@ export async function callTool<Z extends z.ZodTypeAny = z.ZodNever>(
 /**
  * Gets a new instance of an MCP client using stdio transport.
  *
- * @param {Record<string, string>} [env] The environment to use when spawning the node process running the MCP server
  * @returns {*}  {Promise<Client>} The MCP client
  */
-export async function getClient(env?: Record<string, string>): Promise<Client> {
-  env = env ?? getDefaultEnv();
-
+export async function getClient(): Promise<Client> {
   // https://github.com/nodejs/node/issues/55374
-  env.PATH = process.env.PATH ?? '';
+  const env = { ...getEnv(envSchema), PATH: process.env.PATH ?? '' };
+
+  if (env.TRANSPORT && env.TRANSPORT !== 'stdio') {
+    throw new Error('Only stdio transport is currently supported for e2e tests');
+  }
 
   const transport = new StdioClientTransport({
     command: 'node',

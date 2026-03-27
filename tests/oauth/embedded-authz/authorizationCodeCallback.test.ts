@@ -2,13 +2,14 @@ import express from 'express';
 import http from 'http';
 import request from 'supertest';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { getConfig } from '../../../src/config.js';
 import { RestApi } from '../../../src/sdks/tableau/restApi.js';
 import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { testProductVersion } from '../../../src/testShared.js';
-import { resetEnv, setEnv } from './testEnv.js';
+import { getEnv, setEnv } from '../../testEnv.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
@@ -21,8 +22,14 @@ vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
 describe('authorization code callback', () => {
   let _server: http.Server | undefined;
 
+  const { SERVER, SITE_NAME } = getEnv(
+    z.object({
+      SERVER: z.string(),
+      SITE_NAME: z.string(),
+    }),
+  );
+
   beforeAll(setEnv);
-  afterAll(resetEnv);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -167,8 +174,7 @@ describe('authorization code callback', () => {
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
       error: 'invalid_request',
-      error_description:
-        'Invalid origin host: 10az.online.tableau.com. Expected: 10ax.online.tableau.com',
+      error_description: `Invalid origin host: 10az.online.tableau.com. Expected: ${new URL(SERVER).hostname}`,
     });
   });
 
@@ -193,7 +199,7 @@ describe('authorization code callback', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost: `${new URL(SERVER).hostname}`,
     });
 
     const response = await request(app)
@@ -207,8 +213,7 @@ describe('authorization code callback', () => {
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
       error: 'invalid_request',
-      error_description:
-        'User signed in to site: mcp-test. Expected site: other-site. Please reconnect your client and choose the [other-site] site in the site picker if prompted.',
+      error_description: `User signed in to site: ${SITE_NAME}. Expected site: other-site. Please reconnect your client and choose the [other-site] site in the site picker if prompted.`,
     });
   });
 
@@ -262,7 +267,7 @@ describe('authorization code callback', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost: `${new URL(SERVER).hostname}`,
     });
 
     const response = await request(app)
@@ -310,7 +315,7 @@ describe('authorization code callback', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost: `${new URL(SERVER).hostname}`,
     });
 
     const response = await request(app)
@@ -346,7 +351,7 @@ describe('authorization code callback', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost: `${new URL(SERVER).hostname}`,
     });
 
     const response = await request(app)

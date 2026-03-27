@@ -1,6 +1,6 @@
 import { pulseBundleResponseSchema } from '../../../../src/sdks/tableau/types/pulse';
+import { getSuperstoreDatasource, getTableauMcpPulseDefinition } from '../../../testEnv.js';
 import { expect, test } from './base';
-import { getSuperstoreDatasource, getTableauMcpPulseDefinition } from './testEnv';
 
 test.describe('generate-pulse-metric-value-insight-bundle', () => {
   test('generate pulse metric value insight bundle', async ({ client }) => {

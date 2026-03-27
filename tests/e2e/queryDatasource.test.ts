@@ -1,19 +1,16 @@
 import z from 'zod';
 
 import { queryOutputSchema } from '../../src/sdks/tableau/apis/vizqlDataServiceApi.js';
-import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../testEnv.js';
+import { getSuperstoreDatasource, setEnv } from '../testEnv.js';
 import { callTool } from './client.js';
 
 describe('query-datasource', () => {
   beforeAll(setEnv);
-  afterAll(resetEnv);
 
   it('should query datasource', async () => {
-    const env = getDefaultEnv();
-    const superstore = getSuperstoreDatasource(env);
+    const superstore = getSuperstoreDatasource();
 
     const { data } = await callTool('query-datasource', {
-      env,
       schema: queryOutputSchema,
       toolArgs: {
         datasourceLuid: superstore.id,
