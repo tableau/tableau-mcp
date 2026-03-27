@@ -1,13 +1,9 @@
-import dotenv from 'dotenv';
-
 import { pulseBundleResponseSchema } from '../../../src/sdks/tableau/types/pulse.js';
-import { getSuperstoreDatasource, getTableauMcpPulseDefinition } from '../../testEnv.js';
+import { getSuperstoreDatasource, getTableauMcpPulseDefinition, setEnv } from '../../testEnv.js';
 import { callTool } from '../client.js';
 
 describe('generate-pulse-metric-value-insight-bundle', () => {
-  beforeAll(() => {
-    dotenv.config();
-  });
+  beforeAll(setEnv);
 
   it('should list all pulse metric definitions', async () => {
     const superstore = getSuperstoreDatasource();

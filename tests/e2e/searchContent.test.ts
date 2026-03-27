@@ -1,12 +1,10 @@
-import dotenv from 'dotenv';
 import { z } from 'zod';
 
+import { setEnv } from '../testEnv.js';
 import { callTool } from './client.js';
 
 describe('search-content', () => {
-  beforeAll(() => {
-    dotenv.config();
-  });
+  beforeAll(setEnv);
 
   it('should search content', async () => {
     const searchResults = await callTool('search-content', {

@@ -1,13 +1,10 @@
-import dotenv from 'dotenv';
-
 import { serverName, serverVersion } from '../../src/server.js';
 import { toolNames } from '../../src/tools/toolName.js';
+import { setEnv } from '../testEnv.js';
 import { getClient, listTools } from './client.js';
 
 describe('server', () => {
-  beforeAll(() => {
-    dotenv.config();
-  });
+  beforeAll(setEnv);
 
   it('should get server version', async () => {
     const client = await getClient();

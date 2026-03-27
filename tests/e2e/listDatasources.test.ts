@@ -1,14 +1,11 @@
-import dotenv from 'dotenv';
 import z from 'zod';
 
 import { dataSourceSchema } from '../../src/sdks/tableau/types/dataSource.js';
-import { getSuperstoreDatasource } from '../testEnv.js';
+import { getSuperstoreDatasource, setEnv } from '../testEnv.js';
 import { callTool } from './client.js';
 
 describe('list-datasources', () => {
-  beforeAll(() => {
-    dotenv.config();
-  });
+  beforeAll(setEnv);
 
   it('should list datasources', async () => {
     const superstore = getSuperstoreDatasource();

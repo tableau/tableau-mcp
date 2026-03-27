@@ -1,13 +1,10 @@
-import dotenv from 'dotenv';
 import z from 'zod';
 
-import { getSuperstoreWorkbook } from '../../testEnv.js';
+import { getSuperstoreWorkbook, setEnv } from '../../testEnv.js';
 import { callTool } from '../client.js';
 
 describe('get-view-image', () => {
-  beforeAll(() => {
-    dotenv.config();
-  });
+  beforeAll(setEnv);
 
   it('should get view image', async () => {
     const superstore = getSuperstoreWorkbook();

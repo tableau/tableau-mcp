@@ -11,6 +11,10 @@ import {
   Workbook,
 } from './constants.js';
 
+export function setEnv(): void {
+  dotenv.config();
+}
+
 export function getEnv<Z extends z.ZodSchema>(schema: Z): z.infer<Z> {
   dotenv.config();
 

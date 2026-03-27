@@ -1,14 +1,11 @@
-import dotenv from 'dotenv';
 import z from 'zod';
 
 import { pulseMetricDefinitionSchema } from '../../../src/sdks/tableau/types/pulse.js';
-import { getTableauMcpPulseDefinition } from '../../testEnv.js';
+import { getTableauMcpPulseDefinition, setEnv } from '../../testEnv.js';
 import { callTool } from '../client.js';
 
 describe('list-pulse-metric-definitions-from-definition-ids', () => {
-  beforeAll(() => {
-    dotenv.config();
-  });
+  beforeAll(setEnv);
 
   it('should list all pulse metrics from a metric definition id', async () => {
     const tableauMcpDefinition = getTableauMcpPulseDefinition();

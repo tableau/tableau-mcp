@@ -1,14 +1,11 @@
-import dotenv from 'dotenv';
 import z from 'zod';
 
 import { workbookSchema } from '../../../src/sdks/tableau/types/workbook.js';
-import { getSuperstoreWorkbook } from '../../testEnv.js';
+import { getSuperstoreWorkbook, setEnv } from '../../testEnv.js';
 import { callTool } from '../client.js';
 
 describe('list-workbooks', () => {
-  beforeAll(() => {
-    dotenv.config();
-  });
+  beforeAll(setEnv);
 
   it('should list workbooks', async () => {
     const superstore = getSuperstoreWorkbook();

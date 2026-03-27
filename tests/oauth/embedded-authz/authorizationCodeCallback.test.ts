@@ -1,4 +1,3 @@
-import dotenv from 'dotenv';
 import express from 'express';
 import http from 'http';
 import request from 'supertest';
@@ -10,7 +9,7 @@ import { RestApi } from '../../../src/sdks/tableau/restApi.js';
 import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { testProductVersion } from '../../../src/testShared.js';
-import { getEnv } from '../../testEnv.js';
+import { getEnv, setEnv } from '../../testEnv.js';
 
 const { SITE_NAME } = getEnv(
   z.object({
@@ -29,9 +28,7 @@ vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
 describe('authorization code callback', () => {
   let _server: http.Server | undefined;
 
-  beforeAll(() => {
-    dotenv.config();
-  });
+  beforeAll(setEnv);
 
   beforeEach(() => {
     vi.clearAllMocks();

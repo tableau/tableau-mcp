@@ -1,14 +1,11 @@
-import dotenv from 'dotenv';
 import z from 'zod';
 
 import { queryOutputSchema } from '../../src/sdks/tableau/apis/vizqlDataServiceApi.js';
-import { getSuperstoreDatasource } from '../testEnv.js';
+import { getSuperstoreDatasource, setEnv } from '../testEnv.js';
 import { callTool } from './client.js';
 
 describe('query-datasource', () => {
-  beforeAll(() => {
-    dotenv.config();
-  });
+  beforeAll(setEnv);
 
   it('should query datasource', async () => {
     const superstore = getSuperstoreDatasource();

@@ -1,14 +1,10 @@
-import dotenv from 'dotenv';
-
 import { fieldsResultSchema } from '../../src/tools/getDatasourceMetadata/datasourceMetadataUtils.js';
 import invariant from '../../src/utils/invariant.js';
-import { getSuperstoreDatasource } from '../testEnv.js';
+import { getSuperstoreDatasource, setEnv } from '../testEnv.js';
 import { callTool } from './client.js';
 
 describe('get-datasource-metadata', () => {
-  beforeAll(() => {
-    dotenv.config();
-  });
+  beforeAll(setEnv);
 
   it('should get metadata', async () => {
     const superstore = getSuperstoreDatasource();

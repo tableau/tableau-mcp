@@ -1,15 +1,12 @@
-import dotenv from 'dotenv';
 import z from 'zod';
 
 import { viewSchema } from '../../../src/sdks/tableau/types/view.js';
 import invariant from '../../../src/utils/invariant.js';
-import { getSuperstoreWorkbook } from '../../testEnv.js';
+import { getSuperstoreWorkbook, setEnv } from '../../testEnv.js';
 import { callTool } from '../client.js';
 
 describe('list-views', () => {
-  beforeAll(() => {
-    dotenv.config();
-  });
+  beforeAll(setEnv);
 
   it('should list views', async () => {
     const superstore = getSuperstoreWorkbook();
