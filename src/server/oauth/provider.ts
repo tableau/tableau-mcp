@@ -14,6 +14,7 @@ import { authMiddleware } from './authMiddleware.js';
 import { authorize } from './authorize.js';
 import { callback } from './callback.js';
 import { register } from './register.js';
+import { revoke } from './revoke.js';
 import { token } from './token.js';
 import { AuthorizationCode, PendingAuthorization, RefreshTokenData } from './types.js';
 
@@ -82,6 +83,9 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
 
     // oauth2/token
     token(app, this.authorizationCodes, this.refreshTokens, this.publicKey);
+
+    // oauth2/revoke
+    revoke(app, this.refreshTokens);
   }
 
   private getPrivateKey(): KeyObject {
