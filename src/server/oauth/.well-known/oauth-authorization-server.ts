@@ -11,13 +11,8 @@ import { getSupportedScopes } from '../scopes.js';
  */
 export function oauthAuthorizationServer(app: express.Application): void {
   app.get('/.well-known/oauth-authorization-server', (_req, res) => {
-    const {
-      issuer,
-      advertiseApiScopes,
-      enforceScopes,
-      clientIdSecretPairs,
-      embeddedAuthzServer,
-    } = getConfig().oauth;
+    const { issuer, advertiseApiScopes, enforceScopes, clientIdSecretPairs, embeddedAuthzServer } =
+      getConfig().oauth;
 
     const grant_types_supported = ['authorization_code', 'refresh_token'];
     const token_endpoint_auth_methods_supported = ['none'];

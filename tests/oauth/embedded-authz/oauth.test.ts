@@ -640,9 +640,7 @@ describe('OAuth', () => {
     const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
 
     // Revoke the refresh token
-    const revokeResponse = await request(app)
-      .post('/oauth2/revoke')
-      .send({ token: refresh_token });
+    const revokeResponse = await request(app).post('/oauth2/revoke').send({ token: refresh_token });
 
     expect(revokeResponse.status).toBe(200);
 
@@ -759,9 +757,7 @@ describe('OAuth', () => {
 
     const { app } = await startServer();
 
-    const response = await request(app)
-      .post('/oauth2/revoke')
-      .send({ token: 'some-token' });
+    const response = await request(app).post('/oauth2/revoke').send({ token: 'some-token' });
 
     expect(response.status).toBe(404);
   });
