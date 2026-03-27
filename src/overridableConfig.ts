@@ -133,7 +133,7 @@ export class OverridableConfig {
 
 // Creates a set from a comma-separated string of values.
 // Returns null if the value is undefined.
-function createSetFromCommaSeparatedString(value: string | undefined): Set<string> | null {
+export function createSetFromCommaSeparatedString(value: string | undefined): Set<string> | null {
   if (value === undefined) {
     return null;
   }

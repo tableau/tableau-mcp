@@ -2,12 +2,12 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
+import { LoggerType, parseLoggerTypes } from './logging/Logger.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
 import { parseNumber } from './utils/parseNumber.js';
-
 const __dirname = getDirname();
 
 export const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
@@ -49,7 +49,7 @@ export class Config {
   disableLogMasking: boolean;
   maxRequestTimeoutMs: number;
   disableSessionManagement: boolean;
-  enableLogging: Set<'fileLogger' | 'appLogger'>;
+  enableLogging: Set<LoggerType>;
   serverLogDirectory: string;
   tableauServerVersionCheckIntervalInHours: number;
   passthroughAuthUserSessionCheckIntervalInMinutes: number;
@@ -160,12 +160,7 @@ export class Config {
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableSessionManagement = disableSessionManagement === 'true';
-    this.enableLogging = new Set(
-      (logging ?? '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter((s): s is 'fileLogger' | 'appLogger' => s === 'fileLogger' || s === 'appLogger'),
-    );
+    this.enableLogging = parseLoggerTypes(logging);
     this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
 
     this.tableauServerVersionCheckIntervalInHours = parseNumber(
