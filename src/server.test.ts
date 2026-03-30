@@ -1,5 +1,5 @@
 import { exportedForTesting as serverExportedForTesting } from './server.js';
-import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
+import { getAdminUsersTool } from './tools/admin/users/adminUsers.js';
 import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
 import { Provider } from './utils/provider.js';
@@ -40,11 +40,11 @@ describe('server', () => {
   });
 
   it('should register tools filtered by includeTools', async () => {
-    process.env.INCLUDE_TOOLS = 'query-datasource';
+    process.env.INCLUDE_TOOLS = 'admin-users';
     const server = getServer();
     await server.registerTools();
 
-    const tool = getQueryDatasourceTool(server);
+    const tool = getAdminUsersTool(server);
     expect(server.registerTool).toHaveBeenCalledWith(
       tool.name,
       {
@@ -57,13 +57,13 @@ describe('server', () => {
   });
 
   it('should register tools filtered by excludeTools', async () => {
-    process.env.EXCLUDE_TOOLS = 'query-datasource';
+    process.env.EXCLUDE_TOOLS = 'admin-users';
     const server = getServer();
     await server.registerTools();
 
     const tools = toolFactories.map((toolFactory) => toolFactory(server));
     for (const tool of tools) {
-      if (tool.name === 'query-datasource') {
+      if (tool.name === 'admin-users') {
         expect(server.registerTool).not.toHaveBeenCalledWith(
           tool.name,
           {

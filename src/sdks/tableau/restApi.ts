@@ -8,6 +8,7 @@ import {
   RequestInterceptor,
   ResponseInterceptor,
 } from './interceptors.js';
+import AdminMethods from './methods/adminMethods.js';
 import {
   AuthenticatedAuthenticationMethods,
   AuthenticationMethods,
@@ -38,6 +39,7 @@ export class RestApi {
   private _authenticationMethods?: AuthenticationMethods;
   private _authenticatedAuthenticationMethods?: AuthenticatedAuthenticationMethods;
   private _authenticatedServerMethods?: AuthenticatedServerMethods;
+  private _adminMethods?: AdminMethods;
   private _contentExplorationMethods?: ContentExplorationMethods;
   private _datasourcesMethods?: DatasourcesMethods;
   private _metadataMethods?: MetadataMethods;
@@ -117,6 +119,17 @@ export class RestApi {
       this._addInterceptors(this._baseUrl, this._authenticatedServerMethods.interceptors);
     }
     return this._authenticatedServerMethods;
+  }
+
+  get adminMethods(): AdminMethods {
+    if (!this._adminMethods) {
+      this._adminMethods = new AdminMethods(this._baseUrl, this.creds, {
+        timeout: this._maxRequestTimeoutMs,
+        signal: this._signal,
+      });
+      this._addInterceptors(this._baseUrl, this._adminMethods.interceptors);
+    }
+    return this._adminMethods;
   }
 
   get contentExplorationMethods(): ContentExplorationMethods {

@@ -1,46 +1,11 @@
-export const toolNames = [
-  'list-datasources',
-  'list-workbooks',
-  'list-views',
-  'query-datasource',
-  'get-datasource-metadata',
-  'get-workbook',
-  'get-view-data',
-  'get-view-image',
-  'list-all-pulse-metric-definitions',
-  'list-pulse-metric-definitions-from-definition-ids',
-  'list-pulse-metrics-from-metric-definition-id',
-  'list-pulse-metrics-from-metric-ids',
-  'list-pulse-metric-subscriptions',
-  'generate-pulse-metric-value-insight-bundle',
-  'generate-pulse-insight-brief',
-  'search-content',
-] as const;
+export const toolNames = ['admin-users', 'admin-groups'] as const;
 export type ToolName = (typeof toolNames)[number];
 
-export const toolGroupNames = [
-  'datasource',
-  'workbook',
-  'view',
-  'pulse',
-  'content-exploration',
-] as const;
+export const toolGroupNames = ['admin'] as const;
 export type ToolGroupName = (typeof toolGroupNames)[number];
 
 export const toolGroups = {
-  datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
-  workbook: ['list-workbooks', 'get-workbook'],
-  view: ['list-views', 'get-view-data', 'get-view-image'],
-  pulse: [
-    'list-all-pulse-metric-definitions',
-    'list-pulse-metric-definitions-from-definition-ids',
-    'list-pulse-metrics-from-metric-definition-id',
-    'list-pulse-metrics-from-metric-ids',
-    'list-pulse-metric-subscriptions',
-    'generate-pulse-metric-value-insight-bundle',
-    'generate-pulse-insight-brief',
-  ],
-  'content-exploration': ['search-content'],
+  admin: ['admin-users', 'admin-groups'],
 } as const satisfies Record<ToolGroupName, Array<ToolName>>;
 
 export function isToolName(value: unknown): value is ToolName {
