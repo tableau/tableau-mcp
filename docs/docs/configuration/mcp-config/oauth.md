@@ -4,13 +4,6 @@ sidebar_position: 4
 
 # Enabling OAuth
 
-:::warning
-
-Tableau Server 2025.3+ only. Full Tableau Cloud is not supported yet but is coming soon ETA Q2 2026.
-Until then, enabling OAuth support against a Tableau Cloud site will only work when the MCP server
-is accessed using a local development URL e.g. `http://127.0.0.1:3927/tableau-mcp`.
-
-:::
 
 ## How to Enable OAuth
 
@@ -536,5 +529,55 @@ Content-Type: application/json
 {
   "token": "<refresh_token>",
   "token_type_hint": "refresh_token"
+}
+```
+
+---
+
+### `revoke-access-token` MCP Tool
+
+The MCP server exposes a built-in `revoke-access-token` tool that allows MCP clients (or the AI model) to revoke the Tableau-issued access token used by the current session. This is the recommended way to sign a user out of an MCP session.
+
+**How it works:**
+
+- The tool requires **no input arguments**. It derives the token to revoke directly from the current session context. The model never sees or handles the raw token value.
+- The tool posts the Tableau-issued JWT to the Tableau authorization server revocation endpoint (`${OAUTH_ISSUER}/oauth2/revoke`).
+- On success it returns `{ "message": "Access token has been submitted for revocation. Subsequent Tableau API calls may fail." }`.
+- After revocation, the access token is invalidated on the Tableau authorization server side. Subsequent Tableau API calls in the same MCP session may fail.
+
+**Supported authentication modes:**
+
+| Auth Mode | Token Source | Revocation Endpoint |
+|---|---|---|
+| Tableau authZ server (`OAUTH_EMBEDDED_AUTHZ_SERVER=false`) | `Bearer` JWT from Tableau Cloud/Server | `${OAUTH_ISSUER}/oauth2/revoke` |
+
+**Not supported:**
+
+- **Embedded authZ server mode** (`OAUTH_EMBEDDED_AUTHZ_SERVER=true`): In this mode the credential stored in the session is a Tableau REST API session token, not an OAuth JWT. The correct invalidation path (`POST /auth/signout`) has different semantics and is not yet exposed by this tool. Deferred to a future release.
+- PAT, UAT, direct-trust, or Passthrough authentication modes. The tool returns an error if called in these modes.
+
+**Example tool call (via MCP client):**
+
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "revoke-access-token",
+    "arguments": {}
+  }
+}
+```
+
+**Example success response:**
+
+```json
+{
+  "isError": false,
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"message\":\"Access token has been submitted for revocation. Subsequent Tableau API calls may fail.\"}"
+    }
+  ]
 }
 ```

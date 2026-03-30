@@ -1,4 +1,5 @@
 import { getSearchContentTool } from './contentExploration/searchContent.js';
+import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
@@ -32,4 +33,5 @@ export const toolFactories = [
   getListWorkbooksTool,
   getListViewsTool,
   getSearchContentTool,
+  getRevokeAccessTokenTool,
 ];

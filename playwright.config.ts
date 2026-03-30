@@ -55,6 +55,17 @@ export default defineConfig({
   projects: [
     {
       name: 'default',
+      // Exclude the revoke test so it runs last, after all other tests complete.
+      // revokeAccessToken.test.ts intentionally destroys the shared worker-scoped
+      // client token, which would break any test file that runs after it.
+      testIgnore: '**/revokeAccessToken.test.ts',
+    },
+    {
+      name: 'revoke',
+      testMatch: '**/revokeAccessToken.test.ts',
+      // Run only after 'default' finishes, so the shared client from other tests
+      // is already torn down before the revoke test acquires its own client.
+      dependencies: ['default'],
     },
   ],
 
