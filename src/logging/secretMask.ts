@@ -5,7 +5,7 @@ import {
   ResponseInterceptorConfig,
 } from '../sdks/tableau/interceptors.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
-import { writeToStderr } from './Logger.js';
+import { writeToStderr } from './logger.js';
 import { shouldLogWhenLevelIsAtLeast } from './notification.js';
 
 type MaskedKeys = 'data' | 'headers';

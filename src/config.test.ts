@@ -1,5 +1,4 @@
 import { exportedForTesting, ONE_HOUR_IN_MS, TEN_MINUTES_IN_MS } from './config.js';
-import { LoggerType } from './logging/Logger.js';
 import { stubDefaultEnvVars } from './testShared.js';
 
 describe('Config', () => {
@@ -96,35 +95,35 @@ describe('Config', () => {
 
   it('should set enableLogging to appLogger by default', () => {
     const config = new Config();
-    expect(config.enableLogging).toEqual(new Set([LoggerType.AppLogger]));
+    expect(config.enableLogging).toEqual(new Set(['appLogger']));
   });
 
   it('should set enableLogging to fileLogger when specified', () => {
-    vi.stubEnv('ENABLE_LOGGING', LoggerType.FileLogger);
+    vi.stubEnv('ENABLE_LOGGING', 'fileLogger');
 
     const config = new Config();
-    expect(config.enableLogging).toEqual(new Set([LoggerType.FileLogger]));
+    expect(config.enableLogging).toEqual(new Set(['fileLogger']));
   });
 
   it('should set enableLogging to appLogger when specified', () => {
-    vi.stubEnv('ENABLE_LOGGING', LoggerType.AppLogger);
+    vi.stubEnv('ENABLE_LOGGING', 'appLogger');
 
     const config = new Config();
-    expect(config.enableLogging).toEqual(new Set([LoggerType.AppLogger]));
+    expect(config.enableLogging).toEqual(new Set(['appLogger']));
   });
 
   it('should set enableLogging to both when both are specified', () => {
-    vi.stubEnv('ENABLE_LOGGING', `${LoggerType.FileLogger},${LoggerType.AppLogger}`);
+    vi.stubEnv('ENABLE_LOGGING', 'fileLogger,appLogger');
 
     const config = new Config();
-    expect(config.enableLogging).toEqual(new Set([LoggerType.FileLogger, LoggerType.AppLogger]));
+    expect(config.enableLogging).toEqual(new Set(['fileLogger', 'appLogger']));
   });
 
   it('should ignore unknown values in ENABLE_LOGGING', () => {
-    vi.stubEnv('ENABLE_LOGGING', `${LoggerType.FileLogger},unknown,${LoggerType.AppLogger}`);
+    vi.stubEnv('ENABLE_LOGGING', 'fileLogger,unknown,appLogger');
 
     const config = new Config();
-    expect(config.enableLogging).toEqual(new Set([LoggerType.FileLogger, LoggerType.AppLogger]));
+    expect(config.enableLogging).toEqual(new Set(['fileLogger', 'appLogger']));
   });
 
   it('should set maxRequestTimeoutMs to the default value when not specified', () => {

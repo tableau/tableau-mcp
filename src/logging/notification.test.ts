@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Server } from '../server.js';
-import { writeToStderr } from './Logger.js';
+import { writeToStderr } from './logger.js';
 import {
   getToolLogMessage,
   isLoggingLevel,

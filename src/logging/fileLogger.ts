@@ -5,7 +5,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
-import { writeToStderr } from './Logger.js';
+import { writeToStderr } from './logger.js';
 
 export type LogEntry = {
   message: unknown;

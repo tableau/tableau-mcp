@@ -1,24 +1,19 @@
 import { getConfig } from '../config.js';
 import { getFileLogger, LogEntry } from './fileLogger.js';
 
-export const LoggerType = {
-  FileLogger: 'fileLogger',
-  AppLogger: 'appLogger',
-} as const;
-
-export type LoggerType = (typeof LoggerType)[keyof typeof LoggerType];
-
-const validLoggerTypes = new Set<string>(Object.values(LoggerType));
+export const loggerTypes = ['fileLogger', 'appLogger'] as const;
+export type LoggerType = (typeof loggerTypes)[number];
+const validLoggerTypes = new Set(loggerTypes);
 
 export function parseLoggerTypes(value: string | undefined): Set<LoggerType> {
   if (!value) {
-    return new Set([LoggerType.AppLogger]);
+    return new Set<LoggerType>(['appLogger']);
   }
   return new Set(
     value
       .split(',')
       .map((s) => s.trim())
-      .filter((s): s is LoggerType => validLoggerTypes.has(s)),
+      .filter((s): s is LoggerType => validLoggerTypes.has(s as LoggerType)),
   );
 }
 
@@ -34,12 +29,11 @@ export const writeToStderr = (message: string): void => {
 
 export function log(entry: LogEntry): void {
   const config = getConfig();
-  if (config.transport === 'http' && config.enableLogging.has(LoggerType.AppLogger)) {
+  if (config.transport === 'http' && config.enableLogging.has('appLogger')) {
     // eslint-disable-next-line no-console
     console.log(JSON.stringify(entry));
   }
-  const fileLogger = getFileLogger();
-  if (config.enableLogging.has(LoggerType.FileLogger) && fileLogger) {
-    fileLogger.log(entry);
+  if (config.enableLogging.has('fileLogger')) {
+    getFileLogger()?.log(entry);
   }
 }
