@@ -22,18 +22,19 @@ describe('revokeAccessTokenTool', () => {
     vi.unstubAllGlobals();
   });
 
-  it('should create a tool instance with correct properties', () => {
+  it('should create a tool instance with correct properties', async () => {
     const tool = getRevokeAccessTokenTool(new Server());
+    const annotations = await Provider.from(tool.annotations);
     expect(tool.name).toBe('revoke-access-token');
     expect(tool.paramsSchema).toEqual({});
-    expect(tool.annotations?.readOnlyHint).toBe(false);
-    expect(tool.annotations?.destructiveHint).toBe(true);
-    expect(tool.annotations?.idempotentHint).toBe(true);
-    expect(tool.annotations?.openWorldHint).toBe(false);
+    expect(annotations?.readOnlyHint).toBe(false);
+    expect(annotations?.destructiveHint).toBe(true);
+    expect(annotations?.idempotentHint).toBe(true);
+    expect(annotations?.openWorldHint).toBe(false);
   });
 
   describe('Bearer auth (Tableau authZ server mode)', () => {
-    function makeBearerExtra() {
+    function makeBearerExtra(): ReturnType<typeof getMockRequestHandlerExtra> {
       const extra = getMockRequestHandlerExtra();
       extra.config.oauth.issuer = MOCK_ISSUER;
       extra.tableauAuthInfo = {

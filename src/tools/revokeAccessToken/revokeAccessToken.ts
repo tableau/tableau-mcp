@@ -123,7 +123,10 @@ This tool does not require any input — it operates on the token already associ
             );
           }
 
-          return Ok({ message: 'Access token has been submitted for revocation. Subsequent Tableau API calls may fail.' });
+          return Ok({
+            message:
+              'Access token has been submitted for revocation. Subsequent Tableau API calls may fail.',
+          });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
