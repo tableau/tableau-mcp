@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Server } from '../server.js';
 import { writeToStderr } from './logger.js';
 import {
-  getToolLogMessage,
-  isLoggingLevel,
-  log,
-  setLogLevel,
-  shouldLogWhenLevelIsAtLeast,
+  getNotificationMessageForTool,
+  isNotificationLevel,
+  notifier,
+  setNotificationLevel,
+  shouldNotifyWhenLevelIsAtLeast,
 } from './notification.js';
 
 describe('notification', () => {
@@ -21,39 +21,39 @@ describe('notification', () => {
 
   describe('isLoggingLevel', () => {
     it('should return true for valid logging levels', () => {
-      expect(isLoggingLevel('debug')).toBe(true);
-      expect(isLoggingLevel('info')).toBe(true);
-      expect(isLoggingLevel('error')).toBe(true);
+      expect(isNotificationLevel('debug')).toBe(true);
+      expect(isNotificationLevel('info')).toBe(true);
+      expect(isNotificationLevel('error')).toBe(true);
     });
 
     it('should return false for invalid logging levels', () => {
-      expect(isLoggingLevel('invalid')).toBe(false);
-      expect(isLoggingLevel(123)).toBe(false);
-      expect(isLoggingLevel(null)).toBe(false);
+      expect(isNotificationLevel('invalid')).toBe(false);
+      expect(isNotificationLevel(123)).toBe(false);
+      expect(isNotificationLevel(null)).toBe(false);
     });
   });
 
   describe('setLogLevel', () => {
     it('should set the log level', () => {
-      setLogLevel(new Server(), 'error', { silent: true });
-      expect(shouldLogWhenLevelIsAtLeast('error')).toBe(true);
-      expect(shouldLogWhenLevelIsAtLeast('debug')).toBe(false);
+      setNotificationLevel(new Server(), 'error', { silent: true });
+      expect(shouldNotifyWhenLevelIsAtLeast('error')).toBe(true);
+      expect(shouldNotifyWhenLevelIsAtLeast('debug')).toBe(false);
     });
 
     it('should not change level if it is the same', () => {
       const server = new Server();
-      setLogLevel(server, 'debug', { silent: true });
-      setLogLevel(server, 'debug', { silent: true });
+      setNotificationLevel(server, 'debug', { silent: true });
+      setNotificationLevel(server, 'debug', { silent: true });
       expect(server.server.notification).not.toHaveBeenCalled();
     });
   });
 
   describe('shouldLogWhenLevelIsAtLeast', () => {
     it('should return true for levels at or above current level', () => {
-      setLogLevel(new Server(), 'warning', { silent: true });
-      expect(shouldLogWhenLevelIsAtLeast('warning')).toBe(true);
-      expect(shouldLogWhenLevelIsAtLeast('error')).toBe(true);
-      expect(shouldLogWhenLevelIsAtLeast('info')).toBe(false);
+      setNotificationLevel(new Server(), 'warning', { silent: true });
+      expect(shouldNotifyWhenLevelIsAtLeast('warning')).toBe(true);
+      expect(shouldNotifyWhenLevelIsAtLeast('error')).toBe(true);
+      expect(shouldNotifyWhenLevelIsAtLeast('info')).toBe(false);
     });
   });
 
@@ -80,7 +80,7 @@ describe('notification', () => {
   describe('getToolLogMessage', () => {
     it('should create a tool log message with args', () => {
       const args = { param1: 'value1' };
-      const result = getToolLogMessage({
+      const result = getNotificationMessageForTool({
         requestId: '2',
         toolName: 'get-datasource-metadata',
         args,
@@ -97,7 +97,7 @@ describe('notification', () => {
     });
 
     it('should create a tool log message without args', () => {
-      const result = getToolLogMessage({
+      const result = getNotificationMessageForTool({
         requestId: '2',
         toolName: 'get-datasource-metadata',
         args: undefined,
@@ -116,9 +116,9 @@ describe('notification', () => {
   describe('log functions', () => {
     it('should send logging message when level is appropriate', async () => {
       const server = new Server();
-      setLogLevel(server, 'info', { silent: true });
+      setNotificationLevel(server, 'info', { silent: true });
 
-      await log.info(server, 'test message', { logger: 'test-logger' });
+      await notifier.info(server, 'test message', { notifier: 'test-logger' });
 
       expect(server.server.notification).toHaveBeenCalledWith(
         {
@@ -137,18 +137,18 @@ describe('notification', () => {
 
     it('should not send logging message when level is below current level', async () => {
       const server = new Server();
-      setLogLevel(server, 'warning', { silent: true });
+      setNotificationLevel(server, 'warning', { silent: true });
 
-      await log.debug(server, 'test message', { logger: 'test-logger' });
+      await notifier.debug(server, 'test message', { notifier: 'test-logger' });
 
       expect(server.server.notification).not.toHaveBeenCalled();
     });
 
     it('should use server name as default logger', async () => {
       const server = new Server();
-      setLogLevel(server, 'info', { silent: true });
+      setNotificationLevel(server, 'info', { silent: true });
 
-      await log.info(server, 'test message');
+      await notifier.info(server, 'test message');
 
       expect(server.server.notification).toHaveBeenCalledWith(
         {
@@ -167,14 +167,14 @@ describe('notification', () => {
 
     it('should handle LogMessage objects', async () => {
       const server = new Server();
-      setLogLevel(server, 'info', { silent: true });
+      setNotificationLevel(server, 'info', { silent: true });
       const logMessage = {
         type: 'request',
         method: 'GET',
         path: '/test',
       } as const;
 
-      await log.info(server, logMessage, { logger: 'test-logger' });
+      await notifier.info(server, logMessage, { notifier: 'test-logger' });
 
       expect(server.server.notification).toHaveBeenCalledWith(
         {

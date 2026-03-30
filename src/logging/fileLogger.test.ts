@@ -5,12 +5,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { FileLogger } from './fileLogger.js';
-import { loggingLevels } from './notification.js';
+import { notificationLevels } from './notification.js';
 
 const logLineSchema = z.object({
   timestamp: z.coerce.date(),
   message: z.string().or(z.record(z.string(), z.any())),
-  level: z.enum(loggingLevels),
+  level: z.enum(notificationLevels),
   logger: z.string(),
 });
 

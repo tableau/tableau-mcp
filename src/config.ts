@@ -49,7 +49,7 @@ export class Config {
   disableLogMasking: boolean;
   maxRequestTimeoutMs: number;
   disableSessionManagement: boolean;
-  enableLogging: Set<LoggerType>;
+  loggers: Set<LoggerType>;
   serverLogDirectory: string;
   tableauServerVersionCheckIntervalInHours: number;
   passthroughAuthUserSessionCheckIntervalInMinutes: number;
@@ -110,8 +110,6 @@ export class Config {
       DISABLE_LOG_MASKING: disableLogMasking,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
-      ENABLE_SERVER_LOGGING: _enableServerLogging,
-      ENABLE_APPLICATION_LOGGING: _enableApplicationLogging,
       ENABLE_LOGGING: logging,
       SERVER_LOG_DIRECTORY: serverLogDirectory,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
@@ -160,7 +158,7 @@ export class Config {
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableSessionManagement = disableSessionManagement === 'true';
-    this.enableLogging = parseLoggerTypes(logging);
+    this.loggers = parseLoggerTypes(logging);
     this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
 
     this.tableauServerVersionCheckIntervalInHours = parseNumber(

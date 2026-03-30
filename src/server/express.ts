@@ -8,7 +8,7 @@ import http from 'http';
 import https from 'https';
 
 import { Config } from '../config.js';
-import { setLogLevel } from '../logging/notification.js';
+import { setNotificationLevel } from '../logging/notification.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
@@ -189,7 +189,7 @@ async function connect(
   server.registerRequestHandlers();
 
   await server.connect(transport);
-  setLogLevel(server, logLevel);
+  setNotificationLevel(server, logLevel);
 }
 
 async function methodNotAllowed(_req: Request, res: Response): Promise<void> {

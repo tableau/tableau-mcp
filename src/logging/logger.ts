@@ -29,11 +29,11 @@ export const writeToStderr = (message: string): void => {
 
 export function log(entry: LogEntry): void {
   const config = getConfig();
-  if (config.transport === 'http' && config.enableLogging.has('appLogger')) {
+  if (config.transport === 'http' && config.loggers.has('appLogger')) {
     // eslint-disable-next-line no-console
     console.log(JSON.stringify(entry));
   }
-  if (config.enableLogging.has('fileLogger')) {
+  if (config.loggers.has('fileLogger')) {
     getFileLogger()?.log(entry);
   }
 }

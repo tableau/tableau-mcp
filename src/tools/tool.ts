@@ -3,7 +3,7 @@ import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 
 import { McpToolError, ZodiosValidationError } from '../errors/mcpToolError.js';
-import { getToolLogMessage, log } from '../logging/notification.js';
+import { getNotificationMessageForTool, notifier } from '../logging/notification.js';
 import { Server } from '../server.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../server/oauth/scopes.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
@@ -121,9 +121,9 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     args: unknown;
     username?: string;
   }): void {
-    log.debug(
+    notifier.debug(
       this.server,
-      getToolLogMessage({
+      getNotificationMessageForTool({
         requestId,
         toolName: this.name,
         args,

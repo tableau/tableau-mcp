@@ -95,35 +95,35 @@ describe('Config', () => {
 
   it('should set enableLogging to appLogger by default', () => {
     const config = new Config();
-    expect(config.enableLogging).toEqual(new Set(['appLogger']));
+    expect(config.loggers).toEqual(new Set(['appLogger']));
   });
 
   it('should set enableLogging to fileLogger when specified', () => {
     vi.stubEnv('ENABLE_LOGGING', 'fileLogger');
 
     const config = new Config();
-    expect(config.enableLogging).toEqual(new Set(['fileLogger']));
+    expect(config.loggers).toEqual(new Set(['fileLogger']));
   });
 
   it('should set enableLogging to appLogger when specified', () => {
     vi.stubEnv('ENABLE_LOGGING', 'appLogger');
 
     const config = new Config();
-    expect(config.enableLogging).toEqual(new Set(['appLogger']));
+    expect(config.loggers).toEqual(new Set(['appLogger']));
   });
 
   it('should set enableLogging to both when both are specified', () => {
     vi.stubEnv('ENABLE_LOGGING', 'fileLogger,appLogger');
 
     const config = new Config();
-    expect(config.enableLogging).toEqual(new Set(['fileLogger', 'appLogger']));
+    expect(config.loggers).toEqual(new Set(['fileLogger', 'appLogger']));
   });
 
   it('should ignore unknown values in ENABLE_LOGGING', () => {
     vi.stubEnv('ENABLE_LOGGING', 'fileLogger,unknown,appLogger');
 
     const config = new Config();
-    expect(config.enableLogging).toEqual(new Set(['fileLogger', 'appLogger']));
+    expect(config.loggers).toEqual(new Set(['fileLogger', 'appLogger']));
   });
 
   it('should set maxRequestTimeoutMs to the default value when not specified', () => {

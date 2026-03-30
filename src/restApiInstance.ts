@@ -1,7 +1,7 @@
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { Config, getConfig } from './config.js';
-import { log, shouldLogWhenLevelIsAtLeast } from './logging/notification.js';
+import { notifier, shouldNotifyWhenLevelIsAtLeast } from './logging/notification.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
 import {
   AxiosResponseInterceptorConfig,
@@ -67,14 +67,14 @@ const getNewRestApiInstanceAsync = async (
     signal.addEventListener(
       'abort',
       () => {
-        log.info(
+        notifier.info(
           server,
           {
             type: 'request-cancelled',
             requestId,
             reason: signal.reason,
           },
-          { logger: server.name, requestId },
+          { notifier: server.name, requestId },
         );
       },
       { once: true },
@@ -203,10 +203,14 @@ export const getRequestErrorInterceptor =
   (server: Server, requestId: RequestId): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.request) {
-      log.error(server, `Request ${requestId} failed with error: ${getExceptionMessage(error)}`, {
-        logger: 'rest-api',
-        requestId,
-      });
+      notifier.error(
+        server,
+        `Request ${requestId} failed with error: ${getExceptionMessage(error)}`,
+        {
+          notifier: 'rest-api',
+          requestId,
+        },
+      );
       return;
     }
 
@@ -232,10 +236,10 @@ export const getResponseErrorInterceptor =
   (server: Server, requestId: RequestId): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.response) {
-      log.error(
+      notifier.error(
         server,
         `Response from request ${requestId} failed with error: ${getExceptionMessage(error)}`,
-        { logger: 'rest-api', requestId },
+        { notifier: 'rest-api', requestId },
       );
       return;
     }
@@ -267,14 +271,14 @@ function logRequest(server: Server, request: RequestInterceptorConfig, requestId
     requestId,
     method: maskedRequest.method,
     url: url.toString(),
-    ...(shouldLogWhenLevelIsAtLeast('debug') && {
+    ...(shouldNotifyWhenLevelIsAtLeast('debug') && {
       headers: maskedRequest.headers,
       data: maskedRequest.data,
       params: maskedRequest.params,
     }),
   } as const;
 
-  log.info(server, messageObj, { logger: 'rest-api', requestId });
+  notifier.info(server, messageObj, { notifier: 'rest-api', requestId });
 }
 
 function logResponse(
@@ -295,13 +299,13 @@ function logResponse(
     requestId,
     url: url.toString(),
     status: maskedResponse.status,
-    ...(shouldLogWhenLevelIsAtLeast('debug') && {
+    ...(shouldNotifyWhenLevelIsAtLeast('debug') && {
       headers: maskedResponse.headers,
       data: maskedResponse.data,
     }),
   } as const;
 
-  log.info(server, messageObj, { logger: 'rest-api', requestId });
+  notifier.info(server, messageObj, { notifier: 'rest-api', requestId });
 }
 
 function getUserAgent(server: Server): string {

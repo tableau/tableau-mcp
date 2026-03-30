@@ -4,14 +4,14 @@ import { Server } from '../server.js';
 import { ToolName } from '../tools/toolName.js';
 import { getFileLogger } from './fileLogger.js';
 
-type LoggerName = 'rest-api' | (string & {});
-type LogType = LoggingLevel | 'request' | 'response' | 'tool' | 'request-cancelled';
-type LogMessage = {
-  type: LogType;
+type NotificationName = 'rest-api' | (string & {});
+type NotificationType = LoggingLevel | 'request' | 'response' | 'tool' | 'request-cancelled';
+type NotificationMessage = {
+  type: NotificationType;
   [key: string]: any;
 };
 
-export const loggingLevels = [
+export const notificationLevels = [
   'debug',
   'info',
   'notice',
@@ -22,52 +22,52 @@ export const loggingLevels = [
   'emergency',
 ] as const;
 
-let currentLogLevel: LoggingLevel = 'debug';
+let currentNotificationLevel: LoggingLevel = 'debug';
 
-export function isLoggingLevel(level: unknown): level is LoggingLevel {
-  return !!loggingLevels.find((l) => l === level);
+export function isNotificationLevel(level: unknown): level is LoggingLevel {
+  return !!notificationLevels.find((l) => l === level);
 }
 
-export const setLogLevel = (
+export const setNotificationLevel = (
   server: Server,
   level: LoggingLevel,
   { silent = false }: { silent?: boolean } = {},
 ): void => {
-  if (currentLogLevel === level) {
+  if (currentNotificationLevel === level) {
     return;
   }
 
-  currentLogLevel = level;
+  currentNotificationLevel = level;
 
   if (!silent) {
-    log.notice(server, `Logging level set to: ${level}`);
+    notifier.notice(server, `Logging level set to: ${level}`);
   }
 };
 
-type LogMethodOptions = Partial<{ logger: LoggerName; requestId: RequestId }>;
+type NotificationMethodOptions = Partial<{ notifier: NotificationName; requestId: RequestId }>;
 
-export const log = {
-  debug: getSendLoggingMessageFn('debug'),
-  info: getSendLoggingMessageFn('info'),
-  notice: getSendLoggingMessageFn('notice'),
-  warning: getSendLoggingMessageFn('warning'),
-  error: getSendLoggingMessageFn('error'),
-  critical: getSendLoggingMessageFn('critical'),
-  alert: getSendLoggingMessageFn('alert'),
-  emergency: getSendLoggingMessageFn('emergency'),
+export const notifier = {
+  debug: getSendNotificationMessageFn('debug'),
+  info: getSendNotificationMessageFn('info'),
+  notice: getSendNotificationMessageFn('notice'),
+  warning: getSendNotificationMessageFn('warning'),
+  error: getSendNotificationMessageFn('error'),
+  critical: getSendNotificationMessageFn('critical'),
+  alert: getSendNotificationMessageFn('alert'),
+  emergency: getSendNotificationMessageFn('emergency'),
 } satisfies {
   [level in LoggingLevel]: (
     server: Server,
-    message: string | LogMessage,
-    { logger, requestId }: LogMethodOptions,
+    message: string | NotificationMessage,
+    { notifier, requestId }: NotificationMethodOptions,
   ) => Promise<void>;
 };
 
-export const shouldLogWhenLevelIsAtLeast = (level = currentLogLevel): boolean => {
-  return loggingLevels.indexOf(level) >= loggingLevels.indexOf(currentLogLevel);
+export const shouldNotifyWhenLevelIsAtLeast = (level = currentNotificationLevel): boolean => {
+  return notificationLevels.indexOf(level) >= notificationLevels.indexOf(currentNotificationLevel);
 };
 
-export const getToolLogMessage = ({
+export const getNotificationMessageForTool = ({
   requestId,
   toolName,
   args,
@@ -77,7 +77,7 @@ export const getToolLogMessage = ({
   toolName: ToolName;
   args: unknown;
   username?: string;
-}): LogMessage => {
+}): NotificationMessage => {
   return {
     type: 'tool',
     requestId,
@@ -89,17 +89,17 @@ export const getToolLogMessage = ({
   };
 };
 
-function getSendLoggingMessageFn(level: LoggingLevel) {
+function getSendNotificationMessageFn(level: LoggingLevel) {
   return async (
     server: Server,
-    message: string | LogMessage,
-    { logger, requestId }: LogMethodOptions = {
-      logger: server.name,
+    message: string | NotificationMessage,
+    { notifier: notifier, requestId }: NotificationMethodOptions = {
+      notifier: server.name,
     },
   ) => {
-    getFileLogger()?.log({ message, level, logger });
+    getFileLogger()?.log({ message, level, logger: notifier });
 
-    if (!shouldLogWhenLevelIsAtLeast(level)) {
+    if (!shouldNotifyWhenLevelIsAtLeast(level)) {
       return;
     }
 
@@ -110,11 +110,11 @@ function getSendLoggingMessageFn(level: LoggingLevel) {
         method: 'notifications/message',
         params: {
           level,
-          logger,
+          logger: notifier,
           data: JSON.stringify(
             {
               timestamp: new Date().toISOString(),
-              currentLogLevel,
+              currentLogLevel: currentNotificationLevel,
               message,
             },
             null,
