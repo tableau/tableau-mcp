@@ -8,6 +8,7 @@ import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
 import { parseNumber } from './utils/parseNumber.js';
+
 const __dirname = getDirname();
 
 export const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
