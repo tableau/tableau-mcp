@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { getEnv as getBaseEnv } from '../../testEnv';
+import { getEnv as getBaseEnv } from '../../testEnv.js';
 
 const envSchema = z.object({
   TEST_USER: z.string(),

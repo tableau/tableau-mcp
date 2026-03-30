@@ -36,7 +36,6 @@ export async function listTools(): Promise<Array<string>> {
  * @param {({
  *     schema: Z;
  *     contentType?: 'text' | 'image';
- *     env?: Record<string, string>;
  *     toolArgs?: Record<string, unknown>;
  *   })} options Additional options
  * @param options.schema The expected shape of the tool result
