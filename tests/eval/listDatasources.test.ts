@@ -1,10 +1,9 @@
 import { MCPServerStdio } from '@openai/agents';
-import dotenv from 'dotenv';
 import z from 'zod';
 
 import { dataSourceSchema } from '../../src/sdks/tableau/types/dataSource.js';
 import { Datasource } from '../constants.js';
-import { getSuperstoreDatasource } from '../testEnv.js';
+import { getSuperstoreDatasource, setEnv } from '../testEnv.js';
 import { getCallToolResult, getMcpServer, getModel, getToolExecutions } from './base.js';
 import { grade } from './grade.js';
 
@@ -12,9 +11,7 @@ describe('list-datasources', () => {
   let mcpServer: MCPServerStdio;
   let superstore: Datasource;
 
-  beforeAll(async () => {
-    dotenv.config({ path: 'tests/eval/.env' });
-  });
+  beforeAll(setEnv);
 
   beforeEach(async () => {
     superstore = getSuperstoreDatasource();

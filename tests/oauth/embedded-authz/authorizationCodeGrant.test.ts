@@ -27,6 +27,8 @@ describe('authorization code grant type', () => {
     }),
   );
 
+  const originHost = new URL(SERVER).hostname;
+
   beforeAll(setEnv);
 
   beforeEach(() => {
@@ -100,7 +102,7 @@ describe('authorization code grant type', () => {
         accessToken: 'test-access-token',
         refreshToken: 'test-refresh-token',
         expiresInSeconds: 3600,
-        originHost: `${new URL(SERVER).hostname}`,
+        originHost,
       });
 
       const response = await request(app)

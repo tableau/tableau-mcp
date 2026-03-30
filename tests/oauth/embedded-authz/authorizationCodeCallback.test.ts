@@ -29,6 +29,8 @@ describe('authorization code callback', () => {
     }),
   );
 
+  const originHost = new URL(SERVER).hostname;
+
   beforeAll(setEnv);
 
   beforeEach(() => {
@@ -174,7 +176,7 @@ describe('authorization code callback', () => {
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
       error: 'invalid_request',
-      error_description: `Invalid origin host: 10az.online.tableau.com. Expected: ${new URL(SERVER).hostname}`,
+      error_description: `Invalid origin host: 10az.online.tableau.com. Expected: ${originHost}`,
     });
   });
 
@@ -199,7 +201,7 @@ describe('authorization code callback', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: `${new URL(SERVER).hostname}`,
+      originHost,
     });
 
     const response = await request(app)
@@ -267,7 +269,7 @@ describe('authorization code callback', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: `${new URL(SERVER).hostname}`,
+      originHost,
     });
 
     const response = await request(app)
@@ -315,7 +317,7 @@ describe('authorization code callback', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: `${new URL(SERVER).hostname}`,
+      originHost,
     });
 
     const response = await request(app)
@@ -351,7 +353,7 @@ describe('authorization code callback', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: `${new URL(SERVER).hostname}`,
+      originHost,
     });
 
     const response = await request(app)

@@ -19,6 +19,8 @@ describe('authorization code flow', () => {
     }),
   );
 
+  const originHost = new URL(SERVER).hostname;
+
   beforeAll(setEnv);
 
   beforeEach(() => {
@@ -63,7 +65,7 @@ describe('authorization code flow', () => {
     expect(response.status).toBe(302);
 
     const location = new URL(response.headers['location']);
-    expect(location.hostname).toBe(new URL(SERVER).hostname);
+    expect(location.hostname).toBe(originHost);
     expect(location.pathname).toBe('/oauth2/v1/auth');
     expect(location.searchParams.get('client_id')).not.toBeNull();
     expect(location.searchParams.get('code_challenge')).not.toBe(

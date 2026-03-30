@@ -27,6 +27,8 @@ describe('refresh token grant type', () => {
     }),
   );
 
+  const originHost = new URL(SERVER).hostname;
+
   beforeAll(setEnv);
 
   beforeEach(() => {
@@ -86,7 +88,7 @@ describe('refresh token grant type', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: `${new URL(SERVER).hostname}`,
+      originHost,
     });
 
     const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
@@ -113,7 +115,7 @@ describe('refresh token grant type', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: `${new URL(SERVER).hostname}`,
+      originHost,
     });
 
     const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
@@ -146,7 +148,7 @@ describe('refresh token grant type', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: `${new URL(SERVER).hostname}`,
+      originHost,
     });
 
     const { refresh_token } = await exchangeAuthzCodeForAccessToken(app);
@@ -155,7 +157,7 @@ describe('refresh token grant type', () => {
       accessToken: 'refreshed-access-token',
       refreshToken: 'refreshed-refresh-token',
       expiresInSeconds: 3600,
-      originHost: `${new URL(SERVER).hostname}`,
+      originHost,
     });
 
     await request(app).post('/oauth2/token').send({
@@ -181,7 +183,7 @@ describe('refresh token grant type', () => {
       accessToken: 'initial-access-token',
       refreshToken: 'initial-refresh-token',
       expiresInSeconds: 3600,
-      originHost: `${new URL(SERVER).hostname}`,
+      originHost,
     });
 
     const { refresh_token: firstRefreshToken } = await exchangeAuthzCodeForAccessToken(app);
@@ -191,7 +193,7 @@ describe('refresh token grant type', () => {
       accessToken: 'refreshed-access-token-1',
       refreshToken: 'refreshed-refresh-token-1',
       expiresInSeconds: 3600,
-      originHost: `${new URL(SERVER).hostname}`,
+      originHost,
     });
 
     const firstRefreshResponse = await request(app).post('/oauth2/token').send({
@@ -207,7 +209,7 @@ describe('refresh token grant type', () => {
       accessToken: 'refreshed-access-token-2',
       refreshToken: 'refreshed-refresh-token-2',
       expiresInSeconds: 3600,
-      originHost: `${new URL(SERVER).hostname}`,
+      originHost,
     });
 
     const secondRefreshResponse = await request(app).post('/oauth2/token').send({

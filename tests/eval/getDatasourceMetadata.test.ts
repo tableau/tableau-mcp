@@ -1,12 +1,11 @@
 import { MCPServerStdio } from '@openai/agents';
-import dotenv from 'dotenv';
 import z from 'zod';
 
 import { dataSourceSchema } from '../../src/sdks/tableau/types/dataSource.js';
 import { fieldsResultSchema } from '../../src/tools/getDatasourceMetadata/datasourceMetadataUtils.js';
 import invariant from '../../src/utils/invariant.js';
 import { Datasource } from '../constants.js';
-import { getSuperstoreDatasource } from '../testEnv.js';
+import { getSuperstoreDatasource, setEnv } from '../testEnv.js';
 import {
   getCallToolResult,
   getCallToolResultSafe,
@@ -20,9 +19,7 @@ describe('get-datasource-metadata', () => {
   let mcpServer: MCPServerStdio;
   let superstore: Datasource;
 
-  beforeAll(async () => {
-    dotenv.config({ path: 'tests/eval/.env' });
-  });
+  beforeAll(setEnv);
 
   beforeEach(async () => {
     superstore = getSuperstoreDatasource();

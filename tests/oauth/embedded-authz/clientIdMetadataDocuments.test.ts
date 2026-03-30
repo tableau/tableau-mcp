@@ -77,6 +77,8 @@ describe('clientIdMetadataDocuments', () => {
     }),
   );
 
+  const originHost = new URL(SERVER).hostname;
+
   beforeAll(setEnv);
 
   beforeEach(() => {
@@ -139,7 +141,7 @@ describe('clientIdMetadataDocuments', () => {
 
     expect(response.status).toBe(302);
     const location = new URL(response.headers['location']);
-    expect(location.hostname).toBe(new URL(SERVER).hostname);
+    expect(location.hostname).toBe(originHost);
     expect(location.pathname).toBe('/oauth2/v1/auth');
     expect(location.searchParams.get('client_id')).toEqual(expect.any(String));
     expect(location.searchParams.get('code_challenge')).toEqual(expect.any(String));

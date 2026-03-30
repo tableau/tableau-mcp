@@ -28,6 +28,8 @@ describe('OAuth', () => {
     }),
   );
 
+  const originHost = new URL(SERVER).hostname;
+
   beforeAll(setEnv);
 
   beforeEach(() => {
@@ -187,7 +189,7 @@ describe('OAuth', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: new URL(SERVER).hostname,
+      originHost,
     });
 
     const { access_token } = await exchangeAuthzCodeForAccessToken(app);
@@ -365,7 +367,7 @@ describe('OAuth', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: new URL(SERVER).hostname,
+      originHost,
     });
 
     const codeChallenge = 'test-code-challenge';
@@ -417,7 +419,7 @@ describe('OAuth', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: new URL(SERVER).hostname,
+      originHost,
     });
 
     const tokenResponse = await exchangeAuthzCodeForAccessToken(app);
@@ -440,7 +442,7 @@ describe('OAuth', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: new URL(SERVER).hostname,
+      originHost,
     });
 
     const codeChallenge = 'test-code-challenge';
@@ -496,7 +498,7 @@ describe('OAuth', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: new URL(SERVER).hostname,
+      originHost,
     });
 
     const codeChallenge = 'test-code-challenge';
@@ -549,7 +551,7 @@ describe('OAuth', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: new URL(SERVER).hostname,
+      originHost,
     });
 
     const codeChallenge = 'test-code-challenge';
