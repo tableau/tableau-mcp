@@ -11,12 +11,7 @@ import { setLogLevel } from '../logging/log.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
 import { handlePingRequest, validateProtocolVersion } from './middleware.js';
-import {
-  jwtSubClaimHeaderCorsAllowList,
-  jwtSubClaimHeaderMiddleware,
-} from './jwtSubClaimHeaderMiddleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
-import { runWithTableauAuthInfo } from './tableauRequestContext.js';
 import { OAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
@@ -48,7 +43,6 @@ export async function startExpressServer({
         'Accept',
         'MCP-Protocol-Version',
         'MCP-Session-Id',
-        ...jwtSubClaimHeaderCorsAllowList(config),
       ],
       exposedHeaders: [SESSION_ID_HEADER, 'x-session-id'],
     }),
@@ -59,10 +53,7 @@ export async function startExpressServer({
     app.set('trust proxy', config.trustProxyConfig);
   }
 
-  const middleware: Array<RequestHandler> = [
-    handlePingRequest,
-    jwtSubClaimHeaderMiddleware(config),
-  ];
+  const middleware: Array<RequestHandler> = [handlePingRequest];
   if (config.oauth.enabled) {
     const oauthProvider = new OAuthProvider();
     oauthProvider.setupRoutes(app);
@@ -157,10 +148,7 @@ export async function startExpressServer({
         }
       }
 
-      const requestTableauAuth = getTableauAuthInfo(req.auth);
-      await runWithTableauAuthInfo(requestTableauAuth, () =>
-        transport.handleRequest(req, res, req.body),
-      );
+      await transport.handleRequest(req, res, req.body);
     } catch (error) {
       console.error('Error handling MCP request:', error);
       if (!res.headersSent) {
@@ -212,8 +200,5 @@ async function handleSessionRequest(req: express.Request, res: express.Response)
     return;
   }
 
-  const requestTableauAuth = getTableauAuthInfo((req as AuthenticatedRequest).auth);
-  await runWithTableauAuthInfo(requestTableauAuth, () =>
-    session.transport.handleRequest(req, res),
-  );
+  await session.transport.handleRequest(req, res);
 }
