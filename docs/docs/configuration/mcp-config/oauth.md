@@ -503,22 +503,31 @@ The MCP server supports three OAuth 2.1 grant types:
 - `/oauth2/authorize`: Authorization endpoint with PKCE (authorization code only)
 - `/Callback`: OAuth callback handler (authorization code only)
 - `/oauth2/token`: Token exchange and refresh (all grant types)
-- `/oauth2/revoke`: Token revocation (embedded authorization server mode only)
+- `/oauth2/revoke`: Token revocation (embedded authorization server mode only — see [Token Revocation](#token-revocation))
 
 #### Token Revocation
 
-The MCP server implements an [RFC 7009](https://www.rfc-editor.org/rfc/rfc7009) token revocation endpoint. **This endpoint is only available in embedded authorization server mode** (`OAUTH_EMBEDDED_AUTHZ_SERVER=true`, the default). In Tableau authorization server mode (`OAUTH_EMBEDDED_AUTHZ_SERVER=false`), the MCP server does not issue tokens and does not expose a `/oauth2/revoke` endpoint. Clients that need to revoke tokens in Tableau authorization server mode must call Tableau's own revocation endpoint directly.
+The MCP server implements an [RFC 7009](https://www.rfc-editor.org/rfc/rfc7009) token revocation endpoint at `POST /oauth2/revoke`. This endpoint is only available in embedded authorization server mode (`OAUTH_EMBEDDED_AUTHZ_SERVER=true`, the default).
 
-**What this implementation provides — refresh-grant revocation only:**
+**Refresh token revocation:**
 
-- **Refresh token revocation**: Submitting a refresh token to `POST /oauth2/revoke` removes it from the server. Any subsequent attempt to use that refresh token to obtain a new access token will return `invalid_grant`.
-- **Anything else** (access tokens, unknown tokens, malformed tokens): Returns `200 OK` per RFC 7009 Section 2.2 without taking any action. This avoids disclosing whether a submitted value was valid.
+Submitting a refresh token removes it from the server. Any subsequent attempt to use that refresh token will return `invalid_grant`.
 
-**What this implementation does NOT provide — no immediate access token invalidation:**
+**Access token revocation:**
 
-Access tokens are self-contained JWE blobs. There is no server-side state for issued access tokens. Submitting an access token to `/oauth2/revoke` returns `200 OK` but the token is **not invalidated** — it continues to be accepted until its `exp` claim passes (default: 1 hour). To stop a client's ability to obtain new access tokens, submit the refresh token instead. To reduce the exposure window, lower `OAUTH_ACCESS_TOKEN_TIMEOUT_MS`.
+Submitting a JWE access token causes the server to:
+1. Decrypt the token to extract the embedded Tableau session credential and server URL.
+2. Call Tableau's `/auth/signout` to invalidate the upstream Tableau session (best-effort).
+3. Delete any associated refresh tokens from the server.
 
-True immediate access token invalidation would require a server-side deny-list keyed on a per-token identifier (`jti`), which is not implemented in the current release.
+The JWE itself is self-contained and remains structurally valid until its `exp` claim, but is functionally revoked — the Tableau session is dead and no new tokens can be obtained without re-authenticating.
+
+**Token type routing** (via optional `token_type_hint`):
+- `token_type_hint=refresh_token`: try refresh token first, then access token
+- `token_type_hint=access_token`: try access token first, then refresh token
+- No hint: try refresh token first (cheaper), then access token
+
+**Always returns `200 OK`** per RFC 7009 Section 2.2, regardless of outcome. This avoids disclosing whether a submitted token was valid.
 
 **Example request:**
 
@@ -527,8 +536,8 @@ POST /oauth2/revoke
 Content-Type: application/json
 
 {
-  "token": "<refresh_token>",
-  "token_type_hint": "refresh_token"
+  "token": "<access_token_or_refresh_token>",
+  "token_type_hint": "access_token"
 }
 ```
 
@@ -536,25 +545,21 @@ Content-Type: application/json
 
 ### `revoke-access-token` MCP Tool
 
-The MCP server exposes a built-in `revoke-access-token` tool that allows MCP clients (or the AI model) to revoke the Tableau-issued access token used by the current session. This is the recommended way to sign a user out of an MCP session.
+The MCP server exposes a built-in `revoke-access-token` tool that allows MCP clients (or the AI model) to revoke the access token used by the current session. This is the recommended way to sign a user out of an MCP session.
+
+This tool is only registered when `AUTH=oauth`. It is not available in PAT, UAT, direct-trust, or Passthrough authentication modes.
 
 **How it works:**
 
 - The tool requires **no input arguments**. It derives the token to revoke directly from the current session context. The model never sees or handles the raw token value.
-- The tool posts the Tableau-issued JWT to the Tableau authorization server revocation endpoint (`${OAUTH_ISSUER}/oauth2/revoke`).
 - On success it returns `{ "message": "Access token has been submitted for revocation. Subsequent Tableau API calls may fail." }`.
-- After revocation, the access token is invalidated on the Tableau authorization server side. Subsequent Tableau API calls in the same MCP session may fail.
 
 **Supported authentication modes:**
 
-| Auth Mode | Token Source | Revocation Endpoint |
+| Auth Mode | Token submitted | Revocation endpoint |
 |---|---|---|
-| Tableau authZ server (`OAUTH_EMBEDDED_AUTHZ_SERVER=false`) | `Bearer` JWT from Tableau Cloud/Server | `${OAUTH_ISSUER}/oauth2/revoke` |
-
-**Not supported:**
-
-- **Embedded authZ server mode** (`OAUTH_EMBEDDED_AUTHZ_SERVER=true`): In this mode the credential stored in the session is a Tableau REST API session token, not an OAuth JWT. The correct invalidation path (`POST /auth/signout`) has different semantics and is not yet exposed by this tool. Deferred to a future release.
-- PAT, UAT, direct-trust, or Passthrough authentication modes. The tool returns an error if called in these modes.
+| Tableau authZ server (`OAUTH_EMBEDDED_AUTHZ_SERVER=false`) | Tableau-issued JWT (`Bearer` token) | `${OAUTH_ISSUER}/oauth2/revoke` on the Tableau authZ server |
+| Embedded authZ server (`OAUTH_EMBEDDED_AUTHZ_SERVER=true`) | MCP JWE access token | `${OAUTH_ISSUER}/oauth2/revoke` on the embedded server, which decrypts the token, calls Tableau `/auth/signout`, and removes the associated refresh token |
 
 **Example tool call (via MCP client):**
 

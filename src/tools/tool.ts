@@ -54,6 +54,9 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
 
   // The implementation of the tool itself
   callback: TypeOrProvider<TableauToolCallback<Args>>;
+
+  // When true, the tool is not registered with the MCP server (model never sees it)
+  disabled?: boolean;
 };
 
 /**
@@ -91,6 +94,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   paramsSchema: TypeOrProvider<Args>;
   annotations: TypeOrProvider<ToolAnnotations>;
   callback: TypeOrProvider<TableauToolCallback<Args>>;
+  disabled: boolean;
 
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
 
@@ -101,6 +105,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     paramsSchema,
     annotations,
     callback,
+    disabled,
   }: ToolParams<Args>) {
     this.server = server;
     this.name = name;
@@ -108,6 +113,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.paramsSchema = paramsSchema;
     this.annotations = annotations;
     this.callback = callback;
+    this.disabled = disabled ?? false;
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name);
   }

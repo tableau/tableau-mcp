@@ -142,6 +142,10 @@ export class Server extends McpServer {
 
     const tools = toolFactories.map((toolFactory) => toolFactory(this, tableauServerVersion));
     const toolsToRegister = tools.filter((tool) => {
+      if (tool.disabled) {
+        return false;
+      }
+
       if (includeTools.length > 0) {
         return includeTools.includes(tool.name);
       }
