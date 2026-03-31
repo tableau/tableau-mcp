@@ -130,8 +130,12 @@ describe('revokeAccessTokenTool', () => {
   });
 
   describe('X-Tableau-Auth (embedded authZ mode)', () => {
-    function makeEmbeddedExtra(rawMcpToken?: string): ReturnType<typeof getMockRequestHandlerExtra> & { authInfo?: AuthInfo } {
-      const extra = getMockRequestHandlerExtra() as ReturnType<typeof getMockRequestHandlerExtra> & { authInfo?: AuthInfo };
+    function makeEmbeddedExtra(
+      rawMcpToken?: string,
+    ): ReturnType<typeof getMockRequestHandlerExtra> & { authInfo?: AuthInfo } {
+      const extra = getMockRequestHandlerExtra() as ReturnType<
+        typeof getMockRequestHandlerExtra
+      > & { authInfo?: AuthInfo };
       extra.config.oauth.issuer = MOCK_ISSUER;
       extra.tableauAuthInfo = {
         type: 'X-Tableau-Auth',

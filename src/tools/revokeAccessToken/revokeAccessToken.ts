@@ -5,8 +5,8 @@ import { Err, Ok } from 'ts-results-es';
 import { getConfig } from '../../config.js';
 import { McpToolError } from '../../errors/mcpToolError.js';
 import { Server } from '../../server.js';
-import { TableauRequestHandlerExtra } from '../toolContext.js';
 import { Tool } from '../tool.js';
+import { TableauRequestHandlerExtra } from '../toolContext.js';
 
 const paramsSchema = {};
 
@@ -81,7 +81,8 @@ This tool requires no input — it operates on the token already associated with
           } else if (tableauAuthInfo.type === 'X-Tableau-Auth') {
             // Embedded authZ mode: submit the raw MCP JWE access token to the local
             // revocation endpoint, which handles decryption, signout, and cleanup.
-            const authInfo = (extra as TableauRequestHandlerExtra & { authInfo?: AuthInfo }).authInfo;
+            const authInfo = (extra as TableauRequestHandlerExtra & { authInfo?: AuthInfo })
+              .authInfo;
             const rawMcpToken = authInfo?.token;
             if (!rawMcpToken) {
               return new Err(
