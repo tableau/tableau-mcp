@@ -41,16 +41,16 @@ Example: `1200`
 
 ### `format`
 
-The format of the image. Default: `png`
+The format of the image. Default: `PNG`
 
-- **`png`** (default): Raster image format. Works with all Tableau Server versions.
-- **`svg`**: Vector graphics format. Scalable and smaller file size. **Requires Tableau Server 2026.2.0+ (REST API v3.29+)**.
+- **`PNG`** (default): Raster image format. Works with all Tableau Server versions.
+- **`SVG`**: Vector graphics format. Scalable and smaller file size. **Requires Tableau Server 2026.2.0+ (REST API v3.29+)**.
 
 **Choosing a format:**
-- Prefer `png` when the image will be **analyzed or interpreted** (e.g. answering questions about the data in the viz).
-- Prefer `svg` when the image will be **displayed to the user** (e.g. embedding or rendering the viz in a response).
+- Prefer `PNG` when the image will be **analyzed or interpreted** (e.g. answering questions about the data in the viz).
+- Prefer `SVG` when the image will be **displayed to the user** (e.g. embedding or rendering the viz in a response).
 
-Example: `svg`
+Example: `SVG`
 
 ## Example result
 

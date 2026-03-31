@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { ViewNotAllowedError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
-import { convertPngDataToToolResult } from '../convertPngDataToToolResult.js';
+import { convertViewImageToToolResult } from '../convertPngDataToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
@@ -13,6 +13,12 @@ const paramsSchema = {
   viewId: z.string(),
   width: z.number().gt(0).optional(),
   height: z.number().gt(0).optional(),
+  format: z
+    .enum(['PNG', 'SVG'])
+    .optional()
+    .describe(
+      'The image format to return. Use "PNG" (default) when the image will be analyzed or interpreted. Use "SVG" when the image will be displayed to the user — SVG is scalable and produces smaller file sizes.',
+    ),
 };
 
 export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -27,7 +33,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ viewId, width, height }, extra): Promise<CallToolResult> => {
+    callback: async ({ viewId, width, height, format }, extra): Promise<CallToolResult> => {
       return await getViewImageTool.logAndExecute<string>({
         extra,
         args: { viewId },
@@ -52,6 +58,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
                   width,
                   height,
                   resolution: 'high',
+                  format,
                 });
               },
             }),
@@ -63,7 +70,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
             result: viewImage,
           };
         },
-        getSuccessResult: convertPngDataToToolResult,
+        getSuccessResult: (imageData) => convertViewImageToToolResult(imageData, format),
       });
     },
   });

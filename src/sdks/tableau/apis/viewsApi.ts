@@ -48,6 +48,12 @@ const queryViewImageEndpoint = makeEndpoint({
       description:
         'The resolution of the image. Image width and actual pixel density are determined by the display context of the image. Aspect ratio is always preserved. Set the value to high to ensure maximum pixel density.',
     },
+    {
+      name: 'format',
+      type: 'Query',
+      schema: z.enum(['PNG', 'SVG']).optional(),
+      description: 'The format of the image. PNG (default) or SVG.',
+    },
   ],
   response: z.string(),
 });

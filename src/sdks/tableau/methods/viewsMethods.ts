@@ -72,18 +72,20 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     width,
     height,
     resolution,
+    format,
   }: {
     viewId: string;
     siteId: string;
     width?: number;
     height?: number;
     resolution?: 'high';
+    format?: 'PNG' | 'SVG';
   }): Promise<string> => {
     return await this._apiClient.queryViewImage({
       params: { siteId, viewId },
-      queries: { vizWidth: width, vizHeight: height, resolution },
+      queries: { vizWidth: width, vizHeight: height, resolution, format },
       ...this.authHeader,
-      responseType: 'arraybuffer',
+      responseType: format === 'SVG' ? 'text' : 'arraybuffer',
     });
   };
 
