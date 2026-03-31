@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { ViewNotAllowedError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
-import { convertViewImageToToolResult } from '../convertPngDataToToolResult.js';
+import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 

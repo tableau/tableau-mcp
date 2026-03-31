@@ -85,7 +85,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       params: { siteId, viewId },
       queries: { vizWidth: width, vizHeight: height, resolution, format },
       ...this.authHeader,
-      responseType: format === 'SVG' ? 'text' : 'arraybuffer',
+      responseType: 'arraybuffer',
     });
   };
 

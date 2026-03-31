@@ -17,6 +17,9 @@ const encodedPngData =
 const mockPngData = Buffer.from(encodedPngData, 'base64').toString();
 const base64PngData = Buffer.from(mockPngData).toString('base64');
 
+const mockSvgData =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="red"/></svg>';
+
 const mocks = vi.hoisted(() => ({
   mockGetView: vi.fn(),
   mockQueryViewImage: vi.fn(),
@@ -55,7 +58,7 @@ describe('getViewImageTool', () => {
     expect(getViewImageTool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
   });
 
-  it('should successfully get view image', async () => {
+  it('should successfully get view image as PNG when format is omitted', async () => {
     mocks.mockQueryViewImage.mockResolvedValue(mockPngData);
     const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
     expect(result.isError).toBe(false);
@@ -71,6 +74,43 @@ describe('getViewImageTool', () => {
       width: undefined,
       height: undefined,
       resolution: 'high',
+      format: undefined,
+    });
+  });
+
+  it('should call queryViewImage with format SVG and return text content', async () => {
+    mocks.mockQueryViewImage.mockResolvedValue(mockSvgData);
+    const result = await getToolResult({
+      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      format: 'SVG',
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content).toHaveLength(1);
+    expect(result.content[0]).toMatchObject({
+      type: 'text',
+      text: mockSvgData,
+    });
+    expect(mocks.mockQueryViewImage).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      width: undefined,
+      height: undefined,
+      resolution: 'high',
+      format: 'SVG',
+    });
+  });
+
+  it('should return text content with SVG decoded from a Buffer', async () => {
+    mocks.mockQueryViewImage.mockResolvedValue(Buffer.from(mockSvgData, 'utf-8'));
+    const result = await getToolResult({
+      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      format: 'SVG',
+    });
+    expect(result.isError).toBe(false);
+    expect(result.content).toHaveLength(1);
+    expect(result.content[0]).toMatchObject({
+      type: 'text',
+      text: mockSvgData,
     });
   });
 
@@ -101,11 +141,14 @@ describe('getViewImageTool', () => {
   });
 });
 
-async function getToolResult(params: { viewId: string }): Promise<CallToolResult> {
+async function getToolResult(params: {
+  viewId: string;
+  format?: 'PNG' | 'SVG';
+}): Promise<CallToolResult> {
   const getViewImageTool = getGetViewImageTool(new Server());
   const callback = await Provider.from(getViewImageTool.callback);
   return await callback(
-    { viewId: params.viewId, width: undefined, height: undefined },
+    { viewId: params.viewId, width: undefined, height: undefined, format: params.format },
     getMockRequestHandlerExtra(),
   );
 }
