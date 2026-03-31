@@ -515,7 +515,7 @@ class ResourceAccessChecker {
       };
     }
 
-    // The custom view is allowed if view that contains it is allowed.
+    // The custom view is allowed if the underlying view that contains it is allowed.
     const isCustomViewAllowed = await this.isViewAllowed({
       viewId: underlyingViewId,
       extra,

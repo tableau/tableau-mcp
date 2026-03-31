@@ -16,7 +16,6 @@ const encodedPngData =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 /** Binary string (latin1) as returned by {@link ViewsMethods.queryViewImage}. */
 const mockPngData = Buffer.from(encodedPngData, 'base64').toString('latin1');
-const base64PngData = encodedPngData;
 
 const mocks = vi.hoisted(() => ({
   mockGetView: vi.fn(),
@@ -63,7 +62,7 @@ describe('getViewImageTool', () => {
     expect(result.content).toHaveLength(1);
     expect(result.content[0]).toMatchObject({
       type: 'image',
-      data: base64PngData,
+      data: encodedPngData,
       mimeType: 'image/png',
     });
     expect(mocks.mockQueryViewImage).toHaveBeenCalledWith({
