@@ -8,12 +8,6 @@ Retrieves data in comma separated value (CSV) format for a **custom view** (a sa
 state of a published sheet, including the user's filters). For the default published sheet only, use
 [Get View Data](get-view-data.md) with the view id.
 
-:::info
-
-Requires **Tableau REST API 3.23+** (Tableau Cloud December 2024 / Server 2024.3 and later).
-
-:::
-
 ## APIs called
 
 - [Get Custom View Data](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view_data)
