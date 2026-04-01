@@ -6,9 +6,10 @@ sidebar_position: 4
 
 :::warning
 
-Tableau Server 2025.3+ only. Full Tableau Cloud is not supported yet but is coming soon ETA Q2 2026.
-Until then, enabling OAuth support against a Tableau Cloud site will only work when the MCP server
-is accessed using a local development URL e.g. `http://127.0.0.1:3927/tableau-mcp`.
+Tableau Server 2025.3+ only. Tableau Cloud OAuth support is currently in beta. Full production
+support requires ABAC scope enforcement from the Tableau authorization server, which is pending a
+platform update (ETA Q2 2026). Basic authentication and API access work today, but token scopes
+may not be fully enforced server-side until that update ships.
 
 :::
 

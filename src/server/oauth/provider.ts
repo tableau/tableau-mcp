@@ -34,9 +34,6 @@ abstract class OAuthProvider {
   }
 
   setupRoutes(app: express.Application): void {
-    // .well-known/oauth-authorization-server
-    oauthAuthorizationServer(app);
-
     // .well-known/oauth-protected-resource
     oauthProtectedResource(app);
   }
@@ -69,8 +66,11 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
   }
 
   setupRoutes(app: express.Application): void {
-    // .well-known endpoints
+    // .well-known/oauth-protected-resource (from base)
     super.setupRoutes(app);
+
+    // .well-known/oauth-authorization-server (embedded AS only)
+    oauthAuthorizationServer(app);
 
     // oauth2/register
     register(app);
@@ -114,17 +114,12 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
  * OAuth provider for the Tableau authorization server.
  *
  * In this mode the Tableau server IS the authorization server, so this MCP server
- * only acts as a resource server. We expose the protected-resource metadata document
- * (so clients can discover the real AS) but do not create our own AS metadata route.
+ * only acts as a resource server. The base setupRoutes() exposes the protected-resource
+ * metadata document (so clients can discover the real AS) and nothing more — we must not
+ * shadow the Tableau AS's own /.well-known/oauth-authorization-server.
  */
 export class TableauOAuthProvider extends OAuthProvider {
   get accessTokenValidator(): AccessTokenValidator {
     return new TableauAccessTokenValidator();
-  }
-
-  setupRoutes(app: express.Application): void {
-    // Only expose the protected-resource metadata. The Tableau AS owns its own
-    // /.well-known/oauth-authorization-server; we must not shadow it here.
-    oauthProtectedResource(app);
   }
 }

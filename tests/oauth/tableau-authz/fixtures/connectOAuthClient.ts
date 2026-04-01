@@ -1,4 +1,5 @@
-import { Browser, Page, WorkerFixture } from '@playwright/test';
+import { Browser, expect, Page, WorkerFixture } from '@playwright/test';
+import { z } from 'zod';
 
 import { ConsentFlow } from '../flows/consentFlow.js';
 import { LoginFlow } from '../flows/loginFlow.js';
@@ -25,10 +26,20 @@ export const getOAuthClientFixture: WorkerFixture<OAuthClient, { browser: Browse
 
   await use(client);
 
-  // Reset consent and revoke token to clean up after the tests complete
+  // Teardown: reset consent first (requires a valid token), then revoke via the MCP tool.
+  // Order matters: resetConsent() uses the access token, so it must run before revocation.
+  // resetConsent() is best-effort; revoking the token is asserted so failures are surfaced.
   await client.resetConsent();
-  await client.revokeToken();
-  await client.close();
+
+  try {
+    const revokeResult = await client.callTool('revoke-access-token', {
+      schema: z.object({ message: z.string() }),
+      toolArgs: {},
+    });
+    expect(revokeResult.message).toContain('revocation');
+  } finally {
+    await client.close();
+  }
 };
 
 async function connectOAuthClient({

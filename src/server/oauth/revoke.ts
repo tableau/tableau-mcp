@@ -4,7 +4,7 @@ import { compactDecrypt } from 'jose';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error/v3';
 
-import { mcpAccessTokenUserOnlySchema } from './schemas.js';
+import { mcpAccessTokenSchema, mcpAccessTokenUserOnlySchema } from './schemas.js';
 import { RefreshTokenData } from './types.js';
 
 /**
@@ -79,11 +79,7 @@ function tryRevokeRefreshToken(
   token: string,
   refreshTokens: Map<string, RefreshTokenData>,
 ): boolean {
-  if (refreshTokens.has(token)) {
-    refreshTokens.delete(token);
-    return true;
-  }
-  return false;
+  return refreshTokens.delete(token);
 }
 
 /**
@@ -109,14 +105,21 @@ async function tryRevokeAccessToken(
   try {
     const { plaintext } = await compactDecrypt(token, privateKey);
     const payload = JSON.parse(new TextDecoder().decode(plaintext));
-    const parsed = mcpAccessTokenUserOnlySchema.safeParse(payload);
-    if (!parsed.success) {
-      return;
+
+    // Try the full schema first: authorization-code tokens carry tableauAccessToken.
+    const fullParsed = mcpAccessTokenSchema.safeParse(payload);
+    if (fullParsed.success) {
+      tableauServer = fullParsed.data.tableauServer;
+      tableauAccessToken = fullParsed.data.tableauAccessToken;
+    } else {
+      // Fall back to the narrower schema: client-credentials tokens have tableauServer
+      // but no tableauAccessToken, so there is no upstream session to sign out.
+      const userOnlyParsed = mcpAccessTokenUserOnlySchema.safeParse(payload);
+      if (!userOnlyParsed.success) {
+        return;
+      }
+      tableauServer = userOnlyParsed.data.tableauServer;
     }
-    tableauServer = parsed.data.tableauServer;
-    // tableauAccessToken is only present when the MCP server acts as an OAuth relay
-    // (config.auth === 'oauth'). Client-credentials tokens don't carry it.
-    tableauAccessToken = (payload as { tableauAccessToken?: string }).tableauAccessToken;
   } catch {
     // Not a valid JWE for this server — treat as unknown token, return 200 (RFC 7009)
     return;
@@ -133,7 +136,7 @@ async function tryRevokeAccessToken(
     // Best-effort signout of the upstream Tableau session
     if (tableauServer) {
       try {
-        await fetch(`${tableauServer}/api/-/auth/signout`, {
+        await fetch(`${tableauServer}/api/3.24/auth/signout`, {
           method: 'POST',
           headers: { 'X-Tableau-Auth': tableauAccessToken },
         });

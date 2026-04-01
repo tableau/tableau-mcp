@@ -4,6 +4,14 @@ sidebar_position: 4
 
 # Enabling OAuth
 
+:::warning
+
+Tableau Server 2025.3+ only. Tableau Cloud OAuth support is currently in beta. Full production
+support requires ABAC scope enforcement from the Tableau authorization server, which is pending a
+platform update (ETA Q2 2026). Basic authentication and API access work today, but token scopes
+may not be fully enforced server-side until that update ships.
+
+:::
 
 ## How to Enable OAuth
 
@@ -552,14 +560,8 @@ This tool is only registered when `AUTH=oauth`. It is not available in PAT, UAT,
 **How it works:**
 
 - The tool requires **no input arguments**. It derives the token to revoke directly from the current session context. The model never sees or handles the raw token value.
+- It posts the token to the embedded revocation endpoint at `${OAUTH_ISSUER}/oauth2/revoke`. For MCP JWE access tokens the endpoint also decrypts the token, calls Tableau `/auth/signout` (best-effort), and removes the associated refresh token from the server.
 - On success it returns `{ "message": "Access token has been submitted for revocation. Subsequent Tableau API calls may fail." }`.
-
-**Supported authentication modes:**
-
-| Auth Mode | Token submitted | Revocation endpoint |
-|---|---|---|
-| Tableau authZ server (`OAUTH_EMBEDDED_AUTHZ_SERVER=false`) | Tableau-issued JWT (`Bearer` token) | `${OAUTH_ISSUER}/oauth2/revoke` on the Tableau authZ server |
-| Embedded authZ server (`OAUTH_EMBEDDED_AUTHZ_SERVER=true`) | MCP JWE access token | `${OAUTH_ISSUER}/oauth2/revoke` on the embedded server, which decrypts the token, calls Tableau `/auth/signout`, and removes the associated refresh token |
 
 **Example tool call (via MCP client):**
 
