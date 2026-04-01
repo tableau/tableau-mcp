@@ -40,6 +40,7 @@ export function revoke(
   app: express.Application,
   refreshTokens: Map<string, RefreshTokenData>,
   privateKey: KeyObject,
+  refreshTokenIndex: Map<string, string>,
 ): void {
   app.post('/oauth2/revoke', async (req, res) => {
     const result = revokeSchema.safeParse(req.body);
@@ -55,14 +56,14 @@ export function revoke(
     const { token, token_type_hint } = result.data;
 
     if (token_type_hint === 'access_token') {
-      await tryRevokeAccessToken(token, privateKey, refreshTokens);
-      tryRevokeRefreshToken(token, refreshTokens);
+      await tryRevokeAccessToken(token, privateKey, refreshTokens, refreshTokenIndex);
+      tryRevokeRefreshToken(token, refreshTokens, refreshTokenIndex);
     } else {
       // hint=refresh_token or no hint: try refresh token first (O(1) Map lookup),
       // then fall through to JWE decryption
-      const revokedAsRefresh = tryRevokeRefreshToken(token, refreshTokens);
+      const revokedAsRefresh = tryRevokeRefreshToken(token, refreshTokens, refreshTokenIndex);
       if (!revokedAsRefresh) {
-        await tryRevokeAccessToken(token, privateKey, refreshTokens);
+        await tryRevokeAccessToken(token, privateKey, refreshTokens, refreshTokenIndex);
       }
     }
 
@@ -73,13 +74,19 @@ export function revoke(
 
 /**
  * Attempts to revoke a refresh token by removing it from the in-memory Map.
+ * Also removes the corresponding entry from the secondary index.
  * Returns true if the token was found and deleted.
  */
 function tryRevokeRefreshToken(
   token: string,
   refreshTokens: Map<string, RefreshTokenData>,
+  refreshTokenIndex: Map<string, string>,
 ): boolean {
-  return refreshTokens.delete(token);
+  const data = refreshTokens.get(token);
+  if (!data) return false;
+  refreshTokenIndex.delete(data.tokens.accessToken);
+  refreshTokens.delete(token);
+  return true;
 }
 
 /**
@@ -98,6 +105,7 @@ async function tryRevokeAccessToken(
   token: string,
   privateKey: KeyObject,
   refreshTokens: Map<string, RefreshTokenData>,
+  refreshTokenIndex: Map<string, string>,
 ): Promise<void> {
   let tableauAccessToken: string | undefined;
   let tableauServer: string | undefined;
@@ -125,12 +133,12 @@ async function tryRevokeAccessToken(
     return;
   }
 
-  // Delete any refresh tokens associated with the same Tableau session
+  // Delete any refresh token associated with the same Tableau session (O(1) via index)
   if (tableauAccessToken) {
-    for (const [key, value] of refreshTokens.entries()) {
-      if (value.tokens.accessToken === tableauAccessToken) {
-        refreshTokens.delete(key);
-      }
+    const refreshTokenId = refreshTokenIndex.get(tableauAccessToken);
+    if (refreshTokenId) {
+      refreshTokens.delete(refreshTokenId);
+      refreshTokenIndex.delete(tableauAccessToken);
     }
 
     // Best-effort signout of the upstream Tableau session

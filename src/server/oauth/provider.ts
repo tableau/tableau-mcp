@@ -50,6 +50,9 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
   private readonly pendingAuthorizations = new Map<string, PendingAuthorization>();
   private readonly authorizationCodes = new Map<string, AuthorizationCode>();
   private readonly refreshTokens = new Map<string, RefreshTokenData>();
+  // Secondary index for O(1) revocation: Tableau access token -> MCP refresh token ID.
+  // Expiry-timeout entries may become stale but are harmless and self-clean on next revoke.
+  private readonly refreshTokenIndex = new Map<string, string>();
 
   private readonly privateKey: KeyObject;
   private readonly publicKey: KeyObject;
@@ -82,10 +85,10 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
     callback(app, this.pendingAuthorizations, this.authorizationCodes);
 
     // oauth2/token
-    token(app, this.authorizationCodes, this.refreshTokens, this.publicKey);
+    token(app, this.authorizationCodes, this.refreshTokens, this.publicKey, this.refreshTokenIndex);
 
     // oauth2/revoke
-    revoke(app, this.refreshTokens, this.privateKey);
+    revoke(app, this.refreshTokens, this.privateKey, this.refreshTokenIndex);
   }
 
   private getPrivateKey(): KeyObject {

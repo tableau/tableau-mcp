@@ -28,6 +28,7 @@ export function token(
   authorizationCodes: Map<string, AuthorizationCode>,
   refreshTokens: Map<string, RefreshTokenData>,
   publicKey: KeyObject,
+  refreshTokenIndex: Map<string, string>,
 ): void {
   const config = getConfig();
 
@@ -120,6 +121,7 @@ export function token(
             expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
             tableauClientId: authCode.tableauClientId,
           });
+          refreshTokenIndex.set(authCode.tokens.accessToken, refreshTokenId);
 
           setLongTimeout(
             () => refreshTokens.delete(refreshTokenId),
@@ -186,6 +188,7 @@ export function token(
           const tokenData = refreshTokens.get(refreshToken);
           if (!tokenData || tokenData.expiresAt < Math.floor(Date.now() / 1000)) {
             // Refresh token is expired
+            if (tokenData) refreshTokenIndex.delete(tokenData.tokens.accessToken);
             refreshTokens.delete(refreshToken);
             res.status(400).json({
               error: 'invalid_grant',
@@ -246,6 +249,7 @@ export function token(
           }
 
           // Rotate the refresh token and extend its expiration time
+          refreshTokenIndex.delete(tokenData.tokens.accessToken);
           refreshTokens.delete(refreshToken);
           const refreshTokenId = randomBytes(32).toString('hex');
 
@@ -259,6 +263,7 @@ export function token(
             expiresAt: Math.floor((Date.now() + config.oauth.refreshTokenTimeoutMs) / 1000),
             tableauClientId: tokenData.tableauClientId,
           });
+          refreshTokenIndex.set(tokensToStore.accessToken, refreshTokenId);
 
           res.json({
             access_token: accessToken,
