@@ -11,8 +11,6 @@ import { Config } from '../config.js';
 import { setNotificationLevel } from '../logging/notification.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
-import { getTelemetryProvider } from '../telemetry/init.js';
-import { NoOpTelemetryProvider } from '../telemetry/noop.js';
 import { latencyMiddleware } from './latencyMiddleware.js';
 import { handlePingRequest } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
@@ -33,7 +31,6 @@ export async function startExpressServer({
   logLevel: LoggingLevel;
 }): Promise<{ url: string; app: express.Application; server: http.Server }> {
   const app = express();
-  const telemetryProvider = getTelemetryProvider();
 
   app.use(express.json());
   app.use(express.urlencoded());
@@ -71,9 +68,7 @@ export async function startExpressServer({
     oauthProvider.setupRoutes(app);
     middleware.push(oauthProvider.authMiddleware);
   }
-  if (!(telemetryProvider instanceof NoOpTelemetryProvider)) {
-    middleware.push(latencyMiddleware(telemetryProvider));
-  }
+  middleware.push(latencyMiddleware());
 
   const path = `/${basePath}`;
   app.post(path, ...middleware, createMcpServer);

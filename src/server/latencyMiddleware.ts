@@ -2,7 +2,7 @@ import express from 'express';
 import { performance } from 'perf_hooks';
 
 import { getConfig } from '../config.js';
-import { TelemetryProvider } from '../telemetry/types.js';
+import { getTelemetryProvider } from '../telemetry/init.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 import { getToolNameFromRequestBody } from './requestUtils.js';
@@ -10,7 +10,7 @@ import { getToolNameFromRequestBody } from './requestUtils.js';
 /**
  * Express middleware that records HTTP request latency as an OTel histogram.
  */
-export function latencyMiddleware(provider: TelemetryProvider): express.RequestHandler {
+export function latencyMiddleware(): express.RequestHandler {
   const config = getConfig();
   return (req: AuthenticatedRequest, res, next) => {
     const start = performance.now();
@@ -22,7 +22,7 @@ export function latencyMiddleware(provider: TelemetryProvider): express.RequestH
       if (toolName) {
         const durationMs = performance.now() - start;
         const authExtra = getTableauAuthInfo(req.auth);
-        provider.recordHistogram(config.latencyMetricName, durationMs, {
+        getTelemetryProvider().recordHistogram(config.latencyMetricName, durationMs, {
           'http.request.method': req.method,
           'http.route': req.route?.path ?? req.path,
           'http.response.status_code': res.statusCode,
