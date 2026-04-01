@@ -4,12 +4,15 @@ export function convertViewImageToToolResult(
   imageData: Buffer | string,
   format: 'PNG' | 'SVG' | undefined = 'PNG',
 ): CallToolResult {
-  const buffer = Buffer.isBuffer(imageData) ? imageData : Buffer.from(imageData as string);
+  const buffer = Buffer.isBuffer(imageData) ? imageData : Buffer.from(imageData);
 
   if (format === 'SVG') {
     return {
       isError: false,
-      content: [{ type: 'text', text: buffer.toString('utf-8') }],
+      content: [
+        { type: 'text', text: buffer.toString('utf-8') },
+        { type: 'image', data: buffer.toString('base64'), mimeType: 'image/svg+xml' },
+      ],
     };
   }
 

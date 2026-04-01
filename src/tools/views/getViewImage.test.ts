@@ -78,17 +78,19 @@ describe('getViewImageTool', () => {
     });
   });
 
-  it('should call queryViewImage with format SVG and return text content', async () => {
+  it('should call queryViewImage with format SVG and return both text and image content', async () => {
     mocks.mockQueryViewImage.mockResolvedValue(mockSvgData);
     const result = await getToolResult({
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
       format: 'SVG',
     });
     expect(result.isError).toBe(false);
-    expect(result.content).toHaveLength(1);
-    expect(result.content[0]).toMatchObject({
-      type: 'text',
-      text: mockSvgData,
+    expect(result.content).toHaveLength(2);
+    expect(result.content[0]).toMatchObject({ type: 'text', text: mockSvgData });
+    expect(result.content[1]).toMatchObject({
+      type: 'image',
+      data: Buffer.from(mockSvgData).toString('base64'),
+      mimeType: 'image/svg+xml',
     });
     expect(mocks.mockQueryViewImage).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -100,17 +102,20 @@ describe('getViewImageTool', () => {
     });
   });
 
-  it('should return text content with SVG decoded from a Buffer', async () => {
-    mocks.mockQueryViewImage.mockResolvedValue(Buffer.from(mockSvgData, 'utf-8'));
+  it('should return both text and image content with SVG decoded from a Buffer', async () => {
+    const svgBuffer = Buffer.from(mockSvgData, 'utf-8');
+    mocks.mockQueryViewImage.mockResolvedValue(svgBuffer);
     const result = await getToolResult({
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
       format: 'SVG',
     });
     expect(result.isError).toBe(false);
-    expect(result.content).toHaveLength(1);
-    expect(result.content[0]).toMatchObject({
-      type: 'text',
-      text: mockSvgData,
+    expect(result.content).toHaveLength(2);
+    expect(result.content[0]).toMatchObject({ type: 'text', text: mockSvgData });
+    expect(result.content[1]).toMatchObject({
+      type: 'image',
+      data: svgBuffer.toString('base64'),
+      mimeType: 'image/svg+xml',
     });
   });
 
