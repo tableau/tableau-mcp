@@ -124,6 +124,7 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
       const {
         sub,
         iss,
+        aud,
         exp,
         scope,
         'https://tableau.com/siteId': siteId,
@@ -146,7 +147,9 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
 
       return Ok({
         token,
-        clientId: iss,
+        // aud is the OAuth client_id (client metadata document URL) registered with the
+        // Tableau authZ server. Required when posting to the Tableau authZ /oauth2/revoke endpoint.
+        clientId: aud,
         scopes: parseScopes(scope),
         expiresAt: exp,
         extra: tableauAuthInfo,

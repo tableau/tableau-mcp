@@ -106,17 +106,31 @@ This tool requires no input — it operates on the token already associated with
             );
           }
 
-          const body: Record<string, string> =
-            tableauAuthInfo.type === 'X-Tableau-Auth'
-              ? { token, token_type_hint: 'access_token' }
-              : { token };
-
-          const response = await fetch(revokeUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            signal,
-          });
+          let response: Response;
+          if (tableauAuthInfo.type === 'Bearer') {
+            // Tableau authZ server requires RFC 7009 form-encoded body with client_id.
+            // extra.authInfo.clientId is the aud claim from the JWT (the registered client
+            // metadata document URL), which is what the Tableau authZ /oauth2/revoke expects.
+            const clientId = extra.authInfo?.clientId ?? '';
+            const params = new URLSearchParams({ token, client_id: clientId });
+            response = await fetch(revokeUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                Accept: 'application/json',
+              },
+              body: params.toString(),
+              signal,
+            });
+          } else {
+            // Embedded authZ server parses JSON (express.json() middleware).
+            response = await fetch(revokeUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token, token_type_hint: 'access_token' }),
+              signal,
+            });
+          }
 
           if (!response.ok) {
             return new Err(

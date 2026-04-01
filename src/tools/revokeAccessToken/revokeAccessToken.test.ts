@@ -11,6 +11,7 @@ const MOCK_ISSUER = 'https://sso.online.tableau.com';
 const MOCK_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.dGVzdC1wYXlsb2Fk.signature';
 const MOCK_JWE_TOKEN = 'eyJhbGciOiJSU0EtT0FFUC0yNTYifQ.encrypted-key.iv.ciphertext.tag';
 const MOCK_SERVER = 'https://my-tableau-server.com';
+const MOCK_CLIENT_ID = 'https://client.dev/oauth/metadata.json';
 
 describe('revokeAccessTokenTool', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
@@ -64,8 +65,12 @@ describe('revokeAccessTokenTool', () => {
   });
 
   describe('Bearer auth (Tableau authZ server mode)', () => {
-    function makeBearerExtra(): ReturnType<typeof getMockRequestHandlerExtra> {
-      const extra = getMockRequestHandlerExtra();
+    function makeBearerExtra(): ReturnType<typeof getMockRequestHandlerExtra> & {
+      authInfo?: AuthInfo;
+    } {
+      const extra = getMockRequestHandlerExtra() as ReturnType<
+        typeof getMockRequestHandlerExtra
+      > & { authInfo?: AuthInfo };
       extra.config.oauth.issuer = MOCK_ISSUER;
       extra.tableauAuthInfo = {
         type: 'Bearer',
@@ -74,19 +79,33 @@ describe('revokeAccessTokenTool', () => {
         server: MOCK_ISSUER,
         siteId: 'test-site-id',
       };
+      extra.authInfo = {
+        token: MOCK_TOKEN,
+        clientId: MOCK_CLIENT_ID,
+        scopes: [],
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      };
       return extra;
     }
 
-    it('should POST the raw JWT to the issuer revocation endpoint', async () => {
+    it('should POST form-encoded body with client_id to the issuer revocation endpoint', async () => {
       mockFetch.mockResolvedValue(new Response('{}', { status: 200 }));
       await getToolResult(makeBearerExtra());
+
+      const expectedBody = new URLSearchParams({
+        token: MOCK_TOKEN,
+        client_id: MOCK_CLIENT_ID,
+      }).toString();
 
       expect(mockFetch).toHaveBeenCalledWith(
         `${MOCK_ISSUER}/oauth2/revoke`,
         expect.objectContaining({
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: MOCK_TOKEN }),
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Accept: 'application/json',
+          },
+          body: expectedBody,
         }),
       );
     });
