@@ -54,7 +54,6 @@ describe('getCustomViewDataTool', () => {
     expect(tool.description).toContain('custom view');
     expect(tool.paramsSchema).toMatchObject({
       customViewId: expect.any(Object),
-      maxAge: expect.any(Object),
       viewFilters: expect.any(Object),
     });
   });
@@ -67,20 +66,17 @@ describe('getCustomViewDataTool', () => {
     expect(mocks.mockGetCustomViewData).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       customViewId: mockCustomView.id,
-      maxAge: undefined,
       viewFilters: undefined,
     });
   });
 
-  it('should pass maxAge and viewFilters to the REST layer', async () => {
+  it('should pass viewFilters to the REST layer', async () => {
     await getToolResult(mockCustomView.id, {
-      maxAge: 5,
       viewFilters: { Year: '2024' },
     });
     expect(mocks.mockGetCustomViewData).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       customViewId: mockCustomView.id,
-      maxAge: 5,
       viewFilters: { Year: '2024' },
     });
   });
@@ -106,14 +102,13 @@ describe('getCustomViewDataTool', () => {
 
 async function getToolResult(
   customViewId: string,
-  options: { maxAge?: number; viewFilters?: Record<string, string> } = {},
+  options: { viewFilters?: Record<string, string> } = {},
 ): Promise<CallToolResult> {
   const tool = getGetCustomViewDataTool(new Server());
   const callback = await Provider.from(tool.callback);
   return await callback(
     {
       customViewId,
-      maxAge: options.maxAge,
       viewFilters: options.viewFilters,
     },
     getMockRequestHandlerExtra(),

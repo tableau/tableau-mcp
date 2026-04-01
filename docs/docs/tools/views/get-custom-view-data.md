@@ -29,11 +29,6 @@ Example: `f69e71d6-8a91-4f46-bea7-dc7d2e124ab7`
 
 ## Optional arguments
 
-### `maxAge`
-
-Maximum age in minutes for cached data (Tableau `maxAge` query parameter). Minimum interval is one
-minute.
-
 ### `viewFilters`
 
 Optional map of field names to values, sent as `vf_<fieldname>` query parameters per

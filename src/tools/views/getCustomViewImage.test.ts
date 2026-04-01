@@ -56,9 +56,6 @@ describe('getCustomViewImageTool', () => {
     expect(tool.description).toContain('custom view');
     expect(tool.paramsSchema).toMatchObject({
       customViewId: expect.any(Object),
-      width: expect.any(Object),
-      height: expect.any(Object),
-      maxAge: expect.any(Object),
       viewFilters: expect.any(Object),
     });
   });
@@ -75,29 +72,20 @@ describe('getCustomViewImageTool', () => {
     expect(mocks.mockGetCustomViewImage).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       customViewId: mockCustomView.id,
-      width: undefined,
-      height: undefined,
       resolution: 'high',
-      maxAge: undefined,
       viewFilters: undefined,
     });
   });
 
-  it('should pass width, height, maxAge, and viewFilters to the REST layer', async () => {
+  it('should pass viewFilters to the REST layer', async () => {
     await getToolResult({
       customViewId: mockCustomView.id,
-      width: 1024,
-      height: 768,
-      maxAge: 30,
       viewFilters: { Region: 'West' },
     });
     expect(mocks.mockGetCustomViewImage).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       customViewId: mockCustomView.id,
-      width: 1024,
-      height: 768,
       resolution: 'high',
-      maxAge: 30,
       viewFilters: { Region: 'West' },
     });
   });
@@ -123,9 +111,6 @@ describe('getCustomViewImageTool', () => {
 
 async function getToolResult(params: {
   customViewId: string;
-  width?: number;
-  height?: number;
-  maxAge?: number;
   viewFilters?: Record<string, string>;
 }): Promise<CallToolResult> {
   const tool = getGetCustomViewImageTool(new Server());
@@ -133,10 +118,9 @@ async function getToolResult(params: {
   return await callback(
     {
       customViewId: params.customViewId,
-      width: params.width,
-      height: params.height,
-      maxAge: params.maxAge,
       viewFilters: params.viewFilters,
+      width: undefined,
+      height: undefined,
     },
     getMockRequestHandlerExtra(),
   );

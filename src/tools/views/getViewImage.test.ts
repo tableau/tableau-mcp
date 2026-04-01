@@ -101,11 +101,18 @@ describe('getViewImageTool', () => {
   });
 });
 
-async function getToolResult(params: { viewId: string }): Promise<CallToolResult> {
+async function getToolResult({
+  viewId,
+  width,
+  height,
+  viewFilters,
+}: {
+  viewId: string;
+  width?: number;
+  height?: number;
+  viewFilters?: Record<string, string>;
+}): Promise<CallToolResult> {
   const getViewImageTool = getGetViewImageTool(new Server());
   const callback = await Provider.from(getViewImageTool.callback);
-  return await callback(
-    { viewId: params.viewId, width: undefined, height: undefined },
-    getMockRequestHandlerExtra(),
-  );
+  return await callback({ viewId, width, height, viewFilters }, getMockRequestHandlerExtra());
 }

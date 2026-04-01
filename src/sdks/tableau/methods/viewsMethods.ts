@@ -65,20 +65,13 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
   getCustomViewData = async ({
     customViewId,
     siteId,
-    maxAge,
     viewFilters,
   }: {
     customViewId: string;
     siteId: string;
-    maxAge?: number;
-    /** Map of field name to filter value; keys are prefixed with `vf_` unless already present. */
     viewFilters?: Record<string, string>;
   }): Promise<string> => {
-    const queries: Record<string, string | number> = {};
-    if (maxAge !== undefined) {
-      queries.maxAge = maxAge;
-    }
-
+    const queries: Record<string, string> = {};
     if (viewFilters) {
       for (const [key, value] of Object.entries(viewFilters)) {
         const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
@@ -103,37 +96,24 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
   getCustomViewImage = async ({
     customViewId,
     siteId,
+    resolution = 'high',
     width,
     height,
-    resolution = 'high',
-    maxAge,
     viewFilters,
   }: {
     customViewId: string;
     siteId: string;
+    resolution?: 'high';
     width?: number;
     height?: number;
-    resolution?: 'high';
-    maxAge?: number;
     /** Map of field name to filter value; keys are prefixed with `vf_` unless already present. */
     viewFilters?: Record<string, string>;
   }): Promise<string> => {
-    const queries: Record<string, string | number> = {};
-    if (maxAge !== undefined) {
-      queries.maxAge = maxAge;
-    }
-
-    if (resolution !== undefined) {
-      queries.resolution = resolution;
-    }
-
-    if (width !== undefined) {
-      queries.vizWidth = width;
-    }
-
-    if (height !== undefined) {
-      queries.vizHeight = height;
-    }
+    const queries: Record<string, string | number> = {
+      ...(width !== undefined ? { vizWidth: width } : {}),
+      ...(height !== undefined ? { vizHeight: height } : {}),
+      ...(resolution !== undefined ? { resolution } : {}),
+    };
 
     if (viewFilters) {
       for (const [key, value] of Object.entries(viewFilters)) {
@@ -162,12 +142,23 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
   queryViewData = async ({
     viewId,
     siteId,
+    viewFilters,
   }: {
     viewId: string;
     siteId: string;
+    viewFilters?: Record<string, string>;
   }): Promise<string> => {
+    const queries: Record<string, string> = {};
+    if (viewFilters) {
+      for (const [key, value] of Object.entries(viewFilters)) {
+        const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
+        queries[paramName] = value;
+      }
+    }
+
     return await this._apiClient.queryViewData({
       params: { siteId, viewId },
+      queries,
       ...this.authHeader,
     });
   };
@@ -190,16 +181,30 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     width,
     height,
     resolution,
+    viewFilters,
   }: {
     viewId: string;
     siteId: string;
     width?: number;
     height?: number;
     resolution?: 'high';
+    viewFilters?: Record<string, string>;
   }): Promise<string> => {
+    const extraParams: Record<string, string> = {};
+    if (viewFilters) {
+      for (const [key, value] of Object.entries(viewFilters)) {
+        const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
+        extraParams[paramName] = value;
+      }
+    }
+
     return await this._apiClient.queryViewImage({
-      params: { siteId, viewId },
-      queries: { vizWidth: width, vizHeight: height, resolution },
+      params: { siteId, viewId, ...extraParams },
+      queries: {
+        ...(width !== undefined ? { vizWidth: width } : {}),
+        ...(height !== undefined ? { vizHeight: height } : {}),
+        ...(resolution !== undefined ? { resolution } : {}),
+      },
       ...this.authHeader,
       responseType: 'arraybuffer',
     });

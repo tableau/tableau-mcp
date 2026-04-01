@@ -30,11 +30,6 @@ The LUID of the custom view, as in the Tableau URL (e.g.
 
 Pixel dimensions for the rendered image (`vizWidth` / `vizHeight` in the REST API).
 
-### `maxAge`
-
-Maximum age in minutes for a cached image (`maxAge` query parameter). Minimum interval is one
-minute.
-
 ### `viewFilters`
 
 Map of filter field names to values; sent as `vf_<fieldname>` query parameters per

@@ -10,12 +10,6 @@ import { Tool } from '../tool.js';
 
 const paramsSchema = {
   customViewId: z.string(),
-  maxAge: z
-    .number()
-    .positive()
-    .int()
-    .optional()
-    .describe('Optional max age in minutes for cached view data. Minimum interval is 1 minute.'),
   viewFilters: z
     .record(z.string())
     .optional()
@@ -42,10 +36,10 @@ export const getGetCustomViewDataTool = (server: Server): Tool<typeof paramsSche
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ customViewId, maxAge, viewFilters }, extra): Promise<CallToolResult> => {
+    callback: async ({ customViewId, viewFilters }, extra): Promise<CallToolResult> => {
       return await getCustomViewDataTool.logAndExecute({
         extra,
-        args: { customViewId, maxAge, viewFilters },
+        args: { customViewId, viewFilters },
         callback: async () => {
           const isAllowedResult = await resourceAccessChecker.isCustomViewAllowed({
             customViewId,
@@ -64,7 +58,6 @@ export const getGetCustomViewDataTool = (server: Server): Tool<typeof paramsSche
                 return await restApi.viewsMethods.getCustomViewData({
                   customViewId,
                   siteId: restApi.siteId,
-                  maxAge,
                   viewFilters,
                 });
               },

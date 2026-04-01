@@ -13,12 +13,6 @@ const paramsSchema = {
   customViewId: z.string(),
   width: z.number().gt(0).optional(),
   height: z.number().gt(0).optional(),
-  maxAge: z
-    .number()
-    .positive()
-    .int()
-    .optional()
-    .describe('Optional max age in minutes for cached image. Minimum interval is 1 minute.'),
   viewFilters: z
     .record(z.string())
     .optional()
@@ -46,12 +40,12 @@ export const getGetCustomViewImageTool = (server: Server): Tool<typeof paramsSch
       openWorldHint: false,
     },
     callback: async (
-      { customViewId, width, height, maxAge, viewFilters },
+      { customViewId, width, height, viewFilters },
       extra,
     ): Promise<CallToolResult> => {
       return await getCustomViewImageTool.logAndExecute({
         extra,
-        args: { customViewId, width, height, maxAge, viewFilters },
+        args: { customViewId, width, height, viewFilters },
         callback: async () => {
           const isAllowedResult = await resourceAccessChecker.isCustomViewAllowed({
             customViewId,
@@ -73,7 +67,6 @@ export const getGetCustomViewImageTool = (server: Server): Tool<typeof paramsSch
                   width,
                   height,
                   resolution: 'high',
-                  maxAge,
                   viewFilters,
                 });
               },

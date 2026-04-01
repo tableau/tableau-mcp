@@ -19,6 +19,14 @@ const queryViewDataEndpoint = makeEndpoint({
   path: '/sites/:siteId/views/:viewId/data',
   alias: 'queryViewData',
   description: 'Returns a specified view rendered as data in comma separated value (CSV) format.',
+  parameters: [
+    {
+      name: 'dummy',
+      type: 'Query',
+      schema: z.never().optional(),
+      description: 'Dummy parameter to allow arbitrary filter parameters to be provided',
+    },
+  ],
   response: z.string(),
 });
 
@@ -38,11 +46,10 @@ const getCustomViewDataEndpoint = makeEndpoint({
     'Returns a specified custom view rendered as data in comma separated value (CSV) format.',
   parameters: [
     {
-      name: 'maxAge',
+      name: 'dummy',
       type: 'Query',
-      schema: z.number().optional(),
-      description:
-        'The maximum number of minutes view data will be cached before being refreshed. To prevent multiple view data requests from overloading the server, the shortest interval you can set is one minute. There is no maximum value, but the server job enacting the caching action may expire before a long cache period is reached.',
+      schema: z.never().optional(),
+      description: 'Dummy parameter to allow arbitrary filter parameters to be provided',
     },
   ],
   response: z.string(),
@@ -55,18 +62,25 @@ const getCustomViewImageEndpoint = makeEndpoint({
   description: 'Returns an image of the specified custom view.',
   parameters: [
     {
+      name: 'vizWidth',
+      type: 'Query',
+      schema: z.number().optional(),
+      description:
+        'The width of the rendered image in pixels that, along with the value of vizHeight determine its resolution and aspect ratio.',
+    },
+    {
+      name: 'vizHeight',
+      type: 'Query',
+      schema: z.number().optional(),
+      description:
+        'The height of the rendered image in pixels that, along with the value of vizWidth determine its resolution and aspect ratio.',
+    },
+    {
       name: 'resolution',
       type: 'Query',
       schema: z.literal('high').optional(),
       description:
         'The resolution of the image. Image width and actual pixel density are determined by the display context of the image. Aspect ratio is always preserved. Set the value to high to ensure maximum pixel density.',
-    },
-    {
-      name: 'maxAge',
-      type: 'Query',
-      schema: z.number().optional(),
-      description:
-        'The maximum number of minutes view data will be cached before being refreshed. To prevent multiple view data requests from overloading the server, the shortest interval you can set is one minute. There is no maximum value, but the server job enacting the caching action may expire before a long cache period is reached.',
     },
   ],
   response: z.string(),

@@ -19,7 +19,7 @@ describe('get-custom-view-image', () => {
 
     // Assert the PNG data starts with the eight-byte PNG signature.
     // https://en.wikipedia.org/wiki/PNG#File_header
-    const decoded = Buffer.from(pngData, 'base64').toString('binary');
+    const decoded = Buffer.from(pngData, 'base64').toString('latin1');
     expect(
       [...decoded.substring(0, 8)]
         .map((c) => c.charCodeAt(0).toString(16).padStart(2, '0').toUpperCase())

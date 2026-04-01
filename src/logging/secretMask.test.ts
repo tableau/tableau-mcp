@@ -87,6 +87,7 @@ describe('secretMask', () => {
   it('should mask secrets in responses', () => {
     const maskedResponse = maskResponse({
       status: 200,
+      params: {},
       baseUrl: 'https://example.com',
       url: '/api/v1/users',
       headers: { 'Some-Header': 'hamburgers' },
@@ -98,6 +99,7 @@ describe('secretMask', () => {
 
     expect(maskedResponse).toEqual({
       status: 200,
+      params: {},
       baseUrl: 'https://example.com',
       url: '/api/v1/users',
       headers: { 'Some-Header': 'hamburgers' },
@@ -136,6 +138,7 @@ describe('secretMask', () => {
 
     const maskedResponse = maskResponse({
       status: 200,
+      params: {},
       baseUrl: 'https://example.com',
       url: '/api/v1/users',
       headers: { 'Some-Header': 'hamburgers' },
@@ -147,6 +150,7 @@ describe('secretMask', () => {
 
     expect(maskedResponse).toEqual({
       status: 200,
+      params: {},
       baseUrl: 'https://example.com',
       url: '/api/v1/users',
     });
@@ -171,6 +175,7 @@ describe('secretMask', () => {
   it('should not mask when response config cannot be cloned', () => {
     const response: ResponseInterceptorConfig = {
       status: 200,
+      params: {},
       baseUrl: 'https://example.com',
       url: '/api/v1/users',
       headers: { 'Some-Header': 'hamburgers' },
