@@ -1,7 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
-import { stubDefaultEnvVars } from '../../testShared.js';
+import { stubDefaultEnvVars, testProductVersion } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
@@ -19,6 +20,15 @@ const base64PngData = Buffer.from(mockPngData).toString('base64');
 
 const mockSvgData =
   '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="red"/></svg>';
+
+// Version that supports SVG format (2026.2.0+)
+const testProductVersionWithSvg: ProductVersion = {
+  value: '2026.2.0',
+  build: '20262.26.0101.1234',
+};
+
+// Version that doesn't support SVG format (older than 2026.2.0)
+const testProductVersionWithoutSvg: ProductVersion = testProductVersion; // 2026.1.0
 
 const mocks = vi.hoisted(() => ({
   mockGetView: vi.fn(),
@@ -50,7 +60,7 @@ describe('getViewImageTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const getViewImageTool = getGetViewImageTool(new Server());
+    const getViewImageTool = getGetViewImageTool(new Server(), testProductVersionWithSvg);
     expect(getViewImageTool.name).toBe('get-view-image');
     expect(getViewImageTool.description).toContain(
       'Retrieves an image of the specified view in a Tableau workbook.',
@@ -144,13 +154,102 @@ describe('getViewImageTool', () => {
 
     expect(mocks.mockQueryViewImage).not.toHaveBeenCalled();
   });
+
+  it('should return error when SVG format is requested on old Tableau version', async () => {
+    const result = await getToolResult({
+      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      format: 'SVG',
+      productVersion: testProductVersionWithoutSvg,
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('SVG format requires Tableau Server 2026.2.0 or later');
+    expect(result.content[0].text).toContain('2026.1.0');
+    expect(mocks.mockQueryViewImage).not.toHaveBeenCalled();
+  });
+
+  it('should omit format parameter when PNG is requested on old Tableau version', async () => {
+    mocks.mockQueryViewImage.mockResolvedValue(mockPngData);
+    const result = await getToolResult({
+      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      format: 'PNG',
+      productVersion: testProductVersionWithoutSvg,
+    });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockQueryViewImage).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      width: undefined,
+      height: undefined,
+      resolution: 'high',
+      format: undefined, 
+    });
+  });
+
+  it('should include format parameter when PNG is requested on new Tableau version', async () => {
+    mocks.mockQueryViewImage.mockResolvedValue(mockPngData);
+    const result = await getToolResult({
+      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      format: 'PNG',
+      productVersion: testProductVersionWithSvg,
+    });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockQueryViewImage).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      width: undefined,
+      height: undefined,
+      resolution: 'high',
+      format: 'PNG', 
+    });
+  });
+
+  it('should allow SVG format on new Tableau version', async () => {
+    mocks.mockQueryViewImage.mockResolvedValue(mockSvgData);
+    const result = await getToolResult({
+      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      format: 'SVG',
+      productVersion: testProductVersionWithSvg,
+    });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockQueryViewImage).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      width: undefined,
+      height: undefined,
+      resolution: 'high',
+      format: 'SVG',
+    });
+  });
+
+  it('should handle 403157 FEATURE_DISABLED error', async () => {
+    const featureDisabledError = {
+      isAxiosError: true,
+      response: {
+        status: 400,
+        headers: {
+          tableau_error_code: '403157',
+        },
+      },
+    };
+    mocks.mockQueryViewImage.mockRejectedValue(featureDisabledError);
+    const result = await getToolResult({
+      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      format: 'SVG',
+      productVersion: testProductVersionWithSvg,
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('The image format feature is disabled on this Tableau Server');
+  });
 });
 
 async function getToolResult(params: {
   viewId: string;
   format?: 'PNG' | 'SVG';
+  productVersion?: ProductVersion;
 }): Promise<CallToolResult> {
-  const getViewImageTool = getGetViewImageTool(new Server());
+  const getViewImageTool = getGetViewImageTool(new Server(), params.productVersion ?? testProductVersionWithSvg);
   const callback = await Provider.from(getViewImageTool.callback);
   return await callback(
     { viewId: params.viewId, width: undefined, height: undefined, format: params.format },

@@ -2,9 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ViewNotAllowedError } from '../../errors/mcpToolError.js';
+import { ArgsValidationError, FeatureDisabledError, ViewNotAllowedError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
+import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
+import { isAxiosError } from '../../utils/axios.js';
+import { exportedForTesting as versionUtils } from '../../utils/isTableauVersionAtLeast.js';
 import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -21,7 +24,9 @@ const paramsSchema = {
     ),
 };
 
-export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> => {
+const MIN_VERSION_FOR_SVG = '2026.2.0';
+
+export const getGetViewImageTool = (server: Server, tableauServerVersion: ProductVersion): Tool<typeof paramsSchema> => {
   const getViewImageTool = new Tool({
     server,
     name: 'get-view-image',
@@ -38,6 +43,22 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
         extra,
         args: { viewId },
         callback: async () => {
+          // Version check for format parameter
+          const supportsFormat = versionUtils.isTableauVersionAtLeast({
+            productVersion: tableauServerVersion,
+            minVersion: MIN_VERSION_FOR_SVG,
+          });
+
+          // If SVG is requested but version is too old, return an error
+          if (format === 'SVG' && !supportsFormat) {
+            return new ArgsValidationError(
+              `SVG format requires Tableau Server ${MIN_VERSION_FOR_SVG} or later. Current version: ${tableauServerVersion.value}`,
+            ).toErr();
+          }
+
+          // If PNG is requested but version is too old, omit format parameter (PNG is default)
+          const formatToUse = format === 'PNG' && !supportsFormat ? undefined : format;
+
           const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
             viewId,
             extra,
@@ -47,22 +68,32 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
             return new ViewNotAllowedError(isViewAllowedResult.message).toErr();
           }
 
-          return new Ok(
-            await useRestApi({
-              ...extra,
-              jwtScopes: getViewImageTool.requiredApiScopes,
-              callback: async (restApi) => {
-                return await restApi.viewsMethods.queryViewImage({
-                  viewId,
-                  siteId: restApi.siteId,
-                  width,
-                  height,
-                  resolution: 'high',
-                  format,
-                });
-              },
-            }),
-          );
+          try {
+            return new Ok(
+              await useRestApi({
+                ...extra,
+                jwtScopes: getViewImageTool.requiredApiScopes,
+                callback: async (restApi) => {
+                  return await restApi.viewsMethods.queryViewImage({
+                    viewId,
+                    siteId: restApi.siteId,
+                    width,
+                    height,
+                    resolution: 'high',
+                    format: formatToUse,
+                  });
+                },
+              }),
+            );
+          } catch (error) {
+            // Check if this is a feature disabled error (403157)
+            if (isAxiosError(error) && error.response?.headers?.tableau_error_code === '403157') {
+              return new FeatureDisabledError(
+                'The image format feature is disabled on this Tableau Server.',
+              ).toErr();
+            }
+            throw error;
+          }
         },
         constrainSuccessResult: (viewImage) => {
           return {
