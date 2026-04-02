@@ -1,14 +1,15 @@
 import express from 'express';
 import http from 'http';
 import request from 'supertest';
+import { z } from 'zod';
 
 import { getConfig } from '../../../src/config.js';
 import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { generateCodeChallenge } from '../../../src/server/oauth/generateCodeChallenge.js';
+import { getEnv, setEnv } from '../../testEnv.js';
 import { AwaitableWritableStream } from './awaitableWritableStream.js';
 import { exchangeAuthzCodeForAccessToken } from './exchangeAuthzCodeForAccessToken.js';
-import { resetEnv, setEnv } from './testEnv.js';
 
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),
@@ -21,8 +22,15 @@ vi.mock('../../../src/sdks/tableau-oauth/methods.js', () => ({
 describe('OAuth', () => {
   let _server: http.Server | undefined;
 
+  const { SERVER } = getEnv(
+    z.object({
+      SERVER: z.string(),
+    }),
+  );
+
+  const originHost = new URL(SERVER).hostname;
+
   beforeAll(setEnv);
-  afterAll(resetEnv);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -181,7 +189,7 @@ describe('OAuth', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost,
     });
 
     const { access_token } = await exchangeAuthzCodeForAccessToken(app);
@@ -359,7 +367,7 @@ describe('OAuth', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost,
     });
 
     const codeChallenge = 'test-code-challenge';
@@ -411,7 +419,7 @@ describe('OAuth', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost,
     });
 
     const tokenResponse = await exchangeAuthzCodeForAccessToken(app);
@@ -434,7 +442,7 @@ describe('OAuth', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost,
     });
 
     const codeChallenge = 'test-code-challenge';
@@ -490,7 +498,7 @@ describe('OAuth', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost,
     });
 
     const codeChallenge = 'test-code-challenge';
@@ -543,7 +551,7 @@ describe('OAuth', () => {
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresInSeconds: 3600,
-      originHost: '10ax.online.tableau.com',
+      originHost,
     });
 
     const codeChallenge = 'test-code-challenge';

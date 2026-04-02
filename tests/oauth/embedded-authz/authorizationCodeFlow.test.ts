@@ -1,18 +1,27 @@
 import express from 'express';
 import http from 'http';
 import request from 'supertest';
+import { z } from 'zod';
 
 import { getConfig } from '../../../src/config.js';
 import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { generateCodeChallenge } from '../../../src/server/oauth/generateCodeChallenge.js';
-import { resetEnv, setEnv } from './testEnv.js';
+import { getEnv, setEnv } from '../../testEnv.js';
 
 describe('authorization code flow', () => {
   let _server: http.Server | undefined;
 
+  const { SERVER, SITE_NAME } = getEnv(
+    z.object({
+      SERVER: z.string(),
+      SITE_NAME: z.string(),
+    }),
+  );
+
+  const originHost = new URL(SERVER).hostname;
+
   beforeAll(setEnv);
-  afterAll(resetEnv);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -56,7 +65,7 @@ describe('authorization code flow', () => {
     expect(response.status).toBe(302);
 
     const location = new URL(response.headers['location']);
-    expect(location.hostname).toBe('10ax.online.tableau.com');
+    expect(location.hostname).toBe(originHost);
     expect(location.pathname).toBe('/oauth2/v1/auth');
     expect(location.searchParams.get('client_id')).not.toBeNull();
     expect(location.searchParams.get('code_challenge')).not.toBe(
@@ -68,7 +77,7 @@ describe('authorization code flow', () => {
     expect(location.searchParams.get('state')).not.toBeNull();
     expect(location.searchParams.get('state')).toContain(':');
     expect(location.searchParams.get('device_id')).not.toBeNull();
-    expect(location.searchParams.get('target_site')).toBe('mcp-test');
+    expect(location.searchParams.get('target_site')).toBe(SITE_NAME);
     expect(location.searchParams.get('device_name')).toBe('tableau-mcp (Unknown agent)');
     expect(location.searchParams.get('client_type')).toBe('tableau-mcp');
   });

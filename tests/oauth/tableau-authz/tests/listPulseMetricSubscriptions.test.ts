@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 import { pulseMetricSubscriptionSchema } from '../../../../src/sdks/tableau/types/pulse.js';
+import { getTableauMcpPulseDefinition } from '../../../testEnv.js';
 import { expect, test } from './base.js';
-import { getTableauMcpPulseDefinition } from './testEnv.js';
 
 // Skip until we can reliably get the user id from the bearer token
 test.describe.skip('list-pulse-metric-subscriptions', () => {

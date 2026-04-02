@@ -1,16 +1,13 @@
 import { pulseBundleResponseSchema } from '../../../src/sdks/tableau/types/pulse.js';
-import { getPulseDefinition } from '../../constants.js';
-import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../../testEnv.js';
+import { getSuperstoreDatasource, getTableauMcpPulseDefinition, setEnv } from '../../testEnv.js';
 import { callTool } from '../client.js';
 
 describe('generate-pulse-metric-value-insight-bundle', () => {
   beforeAll(setEnv);
-  afterAll(resetEnv);
 
   it('should list all pulse metric definitions', async () => {
-    const env = getDefaultEnv();
-    const superstore = getSuperstoreDatasource(env);
-    const tableauMcpDefinition = getPulseDefinition(env.SERVER, env.SITE_NAME, 'Tableau MCP');
+    const superstore = getSuperstoreDatasource();
+    const tableauMcpDefinition = getTableauMcpPulseDefinition();
 
     const bundleRequest = {
       bundle_request: {
@@ -86,7 +83,6 @@ describe('generate-pulse-metric-value-insight-bundle', () => {
     };
 
     const bundle = await callTool('generate-pulse-metric-value-insight-bundle', {
-      env,
       schema: pulseBundleResponseSchema,
       toolArgs: {
         bundleRequest,
