@@ -6,7 +6,6 @@ import { ArgsValidationError, FeatureDisabledError, ViewNotAllowedError } from '
 import { useRestApi } from '../../restApiInstance.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
-import { isAxiosError } from '../../utils/axios.js';
 import { exportedForTesting as versionUtils } from '../../utils/isTableauVersionAtLeast.js';
 import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -68,35 +67,31 @@ export const getGetViewImageTool = (server: Server, tableauServerVersion: Produc
             return new ViewNotAllowedError(isViewAllowedResult.message).toErr();
           }
 
-          try {
-            return new Ok(
-              await useRestApi({
-                ...extra,
-                jwtScopes: getViewImageTool.requiredApiScopes,
-                callback: async (restApi) => {
-                  return await restApi.viewsMethods.queryViewImage({
-                    viewId,
-                    siteId: restApi.siteId,
-                    width,
-                    height,
-                    resolution: 'high',
-                    format: formatToUse,
-                  });
-                },
-              }),
-            );
-          } catch (error) {
-            // Check if this is a feature disabled error (403157)
-            if (isAxiosError(error) && error.response?.data) {
-              const bodyText = Buffer.from(error.response.data as ArrayBuffer).toString('utf-8');
-              if (bodyText.includes('code="403157"')) {
-                return new FeatureDisabledError(
-                  'The image format feature is disabled on this Tableau Server.',
-                ).toErr();
+          return await useRestApi({
+            ...extra,
+            jwtScopes: getViewImageTool.requiredApiScopes,
+            callback: async (restApi) => {
+              const result = await restApi.viewsMethods.queryViewImage({
+                viewId,
+                siteId: restApi.siteId,
+                width,
+                height,
+                resolution: 'high',
+                format: formatToUse,
+              });
+
+              if (result.isErr()) {
+                if (result.error.type === 'feature-disabled') {
+                  return new FeatureDisabledError(
+                    'The image format feature is disabled on this Tableau Server.',
+                  ).toErr();
+                }
+                throw new Error(String(result.error.message));
               }
-            }
-            throw error;
-          }
+
+              return new Ok(result.value);
+            },
+          });
         },
         constrainSuccessResult: (viewImage) => {
           return {

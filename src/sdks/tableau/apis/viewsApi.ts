@@ -56,6 +56,18 @@ const queryViewImageEndpoint = makeEndpoint({
     },
   ],
   response: z.string(),
+  errors: [
+    {
+      status: 403,
+      schema: z.object({
+        error: z.object({
+          code: z.string(),
+          summary: z.string(),
+          detail: z.string(),
+        }),
+      }),
+    },
+  ],
 });
 
 const queryViewsForWorkbookEndpoint = makeEndpoint({

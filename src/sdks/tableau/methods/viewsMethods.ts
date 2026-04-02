@@ -1,6 +1,8 @@
-import { Zodios } from '@zodios/core';
+import { isErrorFromAlias, Zodios } from '@zodios/core';
+import { Err, Ok, Result } from 'ts-results-es';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { viewsApis } from '../apis/viewsApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { Pagination } from '../types/pagination.js';
@@ -80,13 +82,24 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     height?: number;
     resolution?: 'high';
     format?: 'PNG' | 'SVG';
-  }): Promise<string> => {
-    return await this._apiClient.queryViewImage({
-      params: { siteId, viewId },
-      queries: { vizWidth: width, vizHeight: height, resolution, format },
-      ...this.authHeader,
-      responseType: 'arraybuffer',
-    });
+  }): Promise<Result<string, { type: 'feature-disabled' | 'unknown'; message: unknown }>> => {
+    try {
+      const response = await this._apiClient.queryViewImage({
+        params: { siteId, viewId },
+        queries: { vizWidth: width, vizHeight: height, resolution, format },
+        ...this.authHeader,
+        responseType: 'arraybuffer',
+      });
+      return Ok(response);
+    } catch (error) {
+      if (
+        isErrorFromAlias(this._apiClient.api, 'queryViewImage', error) &&
+        error.response.data.error.code === '403157'
+      ) {
+        return Err({ type: 'feature-disabled', message: error.response.data.error });
+      }
+      return Err({ type: 'unknown', message: getExceptionMessage(error) });
+    }
   };
 
   /**

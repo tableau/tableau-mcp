@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err, Ok } from 'ts-results-es';
 
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
@@ -69,7 +70,7 @@ describe('getViewImageTool', () => {
   });
 
   it('should successfully get view image as PNG when format is omitted', async () => {
-    mocks.mockQueryViewImage.mockResolvedValue(mockPngData);
+    mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
     const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
     expect(result.isError).toBe(false);
     expect(result.content).toHaveLength(1);
@@ -89,7 +90,7 @@ describe('getViewImageTool', () => {
   });
 
   it('should call queryViewImage with format SVG and return both text and image content', async () => {
-    mocks.mockQueryViewImage.mockResolvedValue(mockSvgData);
+    mocks.mockQueryViewImage.mockResolvedValue(Ok(mockSvgData));
     const result = await getToolResult({
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
       format: 'SVG',
@@ -114,7 +115,7 @@ describe('getViewImageTool', () => {
 
   it('should return both text and image content with SVG decoded from a Buffer', async () => {
     const svgBuffer = Buffer.from(mockSvgData, 'utf-8');
-    mocks.mockQueryViewImage.mockResolvedValue(svgBuffer);
+    mocks.mockQueryViewImage.mockResolvedValue(Ok(svgBuffer));
     const result = await getToolResult({
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
       format: 'SVG',
@@ -131,7 +132,12 @@ describe('getViewImageTool', () => {
 
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
-    mocks.mockQueryViewImage.mockRejectedValue(new Error(errorMessage));
+    mocks.mockQueryViewImage.mockResolvedValue(
+      Err({
+        type: 'unknown',
+        message: errorMessage,
+      }),
+    );
     const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -169,7 +175,7 @@ describe('getViewImageTool', () => {
   });
 
   it('should omit format parameter when PNG is requested on old Tableau version', async () => {
-    mocks.mockQueryViewImage.mockResolvedValue(mockPngData);
+    mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
     const result = await getToolResult({
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
       format: 'PNG',
@@ -182,12 +188,12 @@ describe('getViewImageTool', () => {
       width: undefined,
       height: undefined,
       resolution: 'high',
-      format: undefined, 
+      format: undefined,
     });
   });
 
   it('should include format parameter when PNG is requested on new Tableau version', async () => {
-    mocks.mockQueryViewImage.mockResolvedValue(mockPngData);
+    mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
     const result = await getToolResult({
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
       format: 'PNG',
@@ -200,12 +206,12 @@ describe('getViewImageTool', () => {
       width: undefined,
       height: undefined,
       resolution: 'high',
-      format: 'PNG', 
+      format: 'PNG',
     });
   });
 
   it('should allow SVG format on new Tableau version', async () => {
-    mocks.mockQueryViewImage.mockResolvedValue(mockSvgData);
+    mocks.mockQueryViewImage.mockResolvedValue(Ok(mockSvgData));
     const result = await getToolResult({
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
       format: 'SVG',
@@ -223,17 +229,16 @@ describe('getViewImageTool', () => {
   });
 
   it('should handle 403157 FEATURE_DISABLED error', async () => {
-    const xmlBody =
-      '<?xml version="1.0" encoding="UTF-8"?>' +
-      '<tsResponse><error code="403157"><summary>Feature Disabled</summary>' +
-      '<detail>The image format feature is disabled.</detail></error></tsResponse>';
-    const featureDisabledError = {
-      isAxiosError: true,
-      response: {
-        data: Buffer.from(xmlBody).buffer,
-      },
-    };
-    mocks.mockQueryViewImage.mockRejectedValue(featureDisabledError);
+    mocks.mockQueryViewImage.mockResolvedValue(
+      Err({
+        type: 'feature-disabled',
+        message: {
+          code: '403157',
+          summary: 'Feature Disabled',
+          detail: 'The image format feature is disabled.',
+        },
+      }),
+    );
     const result = await getToolResult({
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
       format: 'SVG',
