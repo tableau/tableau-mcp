@@ -24,6 +24,10 @@ describe('restApiInstance', () => {
   const mockHost = 'https://my-tableau-server.com';
   const mockRequestId = 'test-request-id';
 
+  beforeAll(() => {
+    RestApi.host = mockHost;
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();

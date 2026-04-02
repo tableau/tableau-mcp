@@ -289,9 +289,6 @@ export class Config {
     } else {
       invariant(server, 'The environment variable SERVER is not set');
       validateServer(server);
-      if (!RestApi.isHostSet) {
-        RestApi.host = server;
-      }
     }
 
     if (this.oauth.enabled) {
