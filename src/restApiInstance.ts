@@ -84,7 +84,7 @@ const getNewRestApiInstanceAsync = async (
   const tableauServer = config.server || tableauAuthInfo?.server;
   invariant(tableauServer, 'Tableau server could not be determined');
 
-  const restApi = new RestApi(tableauServer, {
+  const restApi = new RestApi({
     maxRequestTimeoutMs: config.maxRequestTimeoutMs,
     signal,
     requestInterceptor: disableLogging

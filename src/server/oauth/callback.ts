@@ -101,7 +101,7 @@ export function callback(
       }
 
       const server = originHostUrl.toString();
-      const restApi = new RestApi(server, {
+      const restApi = new RestApi({
         maxRequestTimeoutMs: config.maxRequestTimeoutMs,
       });
 

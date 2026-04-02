@@ -3,49 +3,50 @@ import { fromError, isZodErrorLike } from 'zod-validation-error/v3';
 
 import { getConfig } from './config.js';
 import { RestApi } from './sdks/tableau/restApi.js';
-import { ProductVersion } from './sdks/tableau/types/serverInfo.js';
+import { ServerInfo } from './sdks/tableau/types/serverInfo.js';
 import { ExpiringMap } from './utils/expiringMap.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
-let tableauServerVersions: ExpiringMap<string, ProductVersion> | undefined;
+let tableauServerInfoCache: ExpiringMap<string, ServerInfo> | undefined;
 
 /**
- * Get the version of the Tableau Server or Cloud.
+ * Get the server info for a Tableau Server or Cloud pod.
  *
  * @param server - The host name of the Tableau Server or Cloud pod.
- * @returns The version of the Tableau Server or Cloud pod.
+ * @returns Server info for the Tableau Server or Cloud pod.
  */
-export const getTableauServerVersion = async (server?: string): Promise<ProductVersion> => {
+export const getTableauServerInfo = async (server?: string): Promise<ServerInfo> => {
   if (!server) {
     throw new Error('server cannot be empty');
   }
 
-  if (!tableauServerVersions) {
-    tableauServerVersions = new ExpiringMap<string, ProductVersion>({
+  if (!tableauServerInfoCache) {
+    tableauServerInfoCache = new ExpiringMap<string, ServerInfo>({
       defaultExpirationTimeMs:
         getConfig().tableauServerVersionCheckIntervalInHours * 60 * 60 * 1000,
     });
   }
 
-  const serverVersion = tableauServerVersions.get(server);
-  if (serverVersion) {
-    return serverVersion;
+  const serverInfo = tableauServerInfoCache.get(server);
+  if (serverInfo) {
+    return serverInfo;
   }
 
-  const restApi = new RestApi(server, {
+  const restApi = new RestApi({
     maxRequestTimeoutMs: getConfig().maxRequestTimeoutMs,
   });
 
   try {
-    const serverVersion = (await restApi.serverMethods.getServerInfo()).productVersion;
-    tableauServerVersions.set(server, serverVersion);
-    return serverVersion;
+    const serverInfo = await restApi.serverMethods.getServerInfo();
+    RestApi.version = serverInfo.restApiVersion;
+    tableauServerInfoCache.set(server, serverInfo);
+    return serverInfo;
   } catch (error) {
     const reason =
       error instanceof ZodiosError && isZodErrorLike(error.cause)
         ? fromError(error.cause).toString()
         : getExceptionMessage(error);
 
-    throw new Error(`Failed to get server version: ${reason}`);
+    throw new Error(`Failed to get server info: ${reason}`);
   }
 };
