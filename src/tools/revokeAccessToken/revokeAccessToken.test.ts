@@ -116,8 +116,7 @@ describe('revokeAccessTokenTool', () => {
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.message).toContain('submitted for revocation');
+      expect(result.content[0].text).toContain('submitted for revocation');
     });
 
     it('should return an error result when the revocation endpoint returns non-200', async () => {
@@ -196,8 +195,7 @@ describe('revokeAccessTokenTool', () => {
 
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.message).toContain('submitted for revocation');
+      expect(result.content[0].text).toContain('submitted for revocation');
     });
 
     it('should return an error result when the revocation endpoint returns non-200', async () => {

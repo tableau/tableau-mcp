@@ -52,7 +52,7 @@ This tool requires no input — it operates on the token already associated with
     },
     disabled: config.auth !== 'oauth',
     callback: async (_args, extra): Promise<CallToolResult> => {
-      return revokeAccessTokenTool.logAndExecute<{ message: string }>({
+      return revokeAccessTokenTool.logAndExecute<string>({
         extra,
         args: {},
         callback: async () => {
@@ -130,10 +130,9 @@ This tool requires no input — it operates on the token already associated with
             );
           }
 
-          return Ok({
-            message:
-              'Access token has been submitted for revocation. Subsequent Tableau API calls may fail.',
-          });
+          return Ok(
+            'Access token has been submitted for revocation. Subsequent Tableau API calls may fail.',
+          );
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
