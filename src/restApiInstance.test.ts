@@ -47,7 +47,7 @@ describe('restApiInstance', () => {
         callback: (restApi) => Promise.resolve(restApi),
       });
 
-      expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
+      expect(RestApi.host).toBe(mockHost);
       expect(restApi.signIn).toHaveBeenCalledWith({
         type: 'pat',
         patName: 'sponge',
@@ -74,7 +74,7 @@ describe('restApiInstance', () => {
         callback: (restApi) => Promise.resolve(restApi),
       });
 
-      expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
+      expect(RestApi.host).toBe(mockHost);
       expect(restApi.signIn).toHaveBeenCalledWith({
         type: 'direct-trust',
         siteName: 'tc25',
@@ -107,7 +107,7 @@ describe('restApiInstance', () => {
         callback: (restApi) => Promise.resolve(restApi),
       });
 
-      expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
+      expect(RestApi.host).toBe(mockHost);
       expect(restApi.signIn).toHaveBeenCalledWith({
         type: 'uat',
         siteName: 'tc25',
@@ -144,7 +144,7 @@ describe('restApiInstance', () => {
         callback: (restApi) => Promise.resolve(restApi),
       });
 
-      expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
+      expect(RestApi.host).toBe(mockHost);
       expect(restApi.setBearerToken).toHaveBeenCalledWith('abc123|xyz789|site-luid');
       expect(restApi.signIn).not.toHaveBeenCalled();
       expect(restApi.signOut).not.toHaveBeenCalled();
@@ -172,7 +172,7 @@ describe('restApiInstance', () => {
         callback: (restApi) => Promise.resolve(restApi),
       });
 
-      expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
+      expect(RestApi.host).toBe(mockHost);
       expect(restApi.setCredentials).toHaveBeenCalledWith(
         'abc123|xyz789|site-luid',
         'user-luid-123',
