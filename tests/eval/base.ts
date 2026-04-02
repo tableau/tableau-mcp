@@ -157,7 +157,7 @@ export function getCallToolResultSafe<Z extends z.ZodTypeAny = z.ZodNever>(
 }
 
 export function log(message?: any, force?: boolean): void {
-  if (process.env.ENABLED_LOGGERS === 'true' || force) {
+  if (process.env.ENABLE_LOGGING === 'true' || force) {
     console.log(message);
   }
 }

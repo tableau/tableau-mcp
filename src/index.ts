@@ -15,7 +15,7 @@ async function startServer(): Promise<void> {
   const config = getConfig();
   const logLevel = isNotificationLevel(config.defaultLogLevel) ? config.defaultLogLevel : 'debug';
   if (config.loggers.has('fileLogger')) {
-    setFileLogger(new FileLogger({ logDirectory: config.serverLogDirectory }));
+    setFileLogger(new FileLogger({ logDirectory: config.fileLoggerDirectory }));
   }
 
   switch (config.transport) {

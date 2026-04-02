@@ -51,7 +51,7 @@ export class Config {
   maxRequestTimeoutMs: number;
   disableSessionManagement: boolean;
   loggers: Set<LoggerType>;
-  serverLogDirectory: string;
+  fileLoggerDirectory: string;
   tableauServerVersionCheckIntervalInHours: number;
   passthroughAuthUserSessionCheckIntervalInMinutes: number;
   mcpSiteSettingsCheckIntervalInMinutes: number;
@@ -112,7 +112,7 @@ export class Config {
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
       ENABLED_LOGGERS: logging,
-      SERVER_LOG_DIRECTORY: serverLogDirectory,
+      FILE_LOGGER_DIRECTORY: fileLoggerDirectory,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES:
         passthroughAuthUserSessionCheckIntervalInMinutes,
@@ -160,7 +160,7 @@ export class Config {
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableSessionManagement = disableSessionManagement === 'true';
     this.loggers = parseLoggerTypes(logging);
-    this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
+    this.fileLoggerDirectory = fileLoggerDirectory || join(__dirname, 'logs');
 
     this.tableauServerVersionCheckIntervalInHours = parseNumber(
       tableauServerVersionCheckIntervalInHours,

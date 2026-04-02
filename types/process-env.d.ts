@@ -33,7 +33,7 @@ export interface ProcessEnvEx {
   DISABLE_METADATA_API_REQUESTS: string | undefined;
   DISABLE_SESSION_MANAGEMENT: string | undefined;
   ENABLED_LOGGERS: string | undefined;
-  SERVER_LOG_DIRECTORY: string | undefined;
+  FILE_LOGGER_DIRECTORY: string | undefined;
   INCLUDE_PROJECT_IDS: string | undefined;
   INCLUDE_DATASOURCE_IDS: string | undefined;
   INCLUDE_WORKBOOK_IDS: string | undefined;

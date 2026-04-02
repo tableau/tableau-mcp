@@ -183,7 +183,7 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  SERVER_LOG_DIRECTORY: {
+  FILE_LOGGER_DIRECTORY: {
     includeInUserConfig: false,
     type: 'string',
     title: 'Server Log Directory',

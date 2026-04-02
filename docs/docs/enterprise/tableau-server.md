@@ -434,7 +434,7 @@ information.
 
 ```
 ENABLED_LOGGERS=fileLogger
-SERVER_LOG_DIRECTORY=D:\logs
+FILE_LOGGER_DIRECTORY=D:\logs
 ```
 
 ##### OAuth Site Locking
