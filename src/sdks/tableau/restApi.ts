@@ -46,18 +46,6 @@ export class RestApi {
   private _requestInterceptor?: [RequestInterceptor, ErrorInterceptor?];
   private _responseInterceptor?: [ResponseInterceptor, ErrorInterceptor?];
 
-  private _authenticationMethods?: AuthenticationMethods;
-  private _authenticatedAuthenticationMethods?: AuthenticatedAuthenticationMethods;
-  private _authenticatedServerMethods?: AuthenticatedServerMethods;
-  private _contentExplorationMethods?: ContentExplorationMethods;
-  private _datasourcesMethods?: DatasourcesMethods;
-  private _metadataMethods?: MetadataMethods;
-  private _pulseMethods?: PulseMethods;
-  private _serverMethods?: ServerMethods;
-  private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
-  private _viewsMethods?: ViewsMethods;
-  private _workbooksMethods?: WorkbooksMethods;
-
   constructor(
     options: { maxRequestTimeoutMs: number } & Partial<{
       signal: AbortSignal;
@@ -128,112 +116,84 @@ export class RestApi {
   }
 
   private get authenticationMethods(): AuthenticationMethods {
-    if (!this._authenticationMethods) {
-      this._authenticationMethods = new AuthenticationMethods(RestApi.baseUrl, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(RestApi.baseUrl, this._authenticationMethods.interceptors);
-    }
-    return this._authenticationMethods;
+    const authenticationMethods = new AuthenticationMethods(RestApi.baseUrl, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, authenticationMethods.interceptors);
+    return authenticationMethods;
   }
 
   private get authenticatedAuthenticationMethods(): AuthenticatedAuthenticationMethods {
-    if (!this._authenticatedAuthenticationMethods) {
-      this._authenticatedAuthenticationMethods = new AuthenticatedAuthenticationMethods(
-        RestApi.baseUrl,
-        this.creds,
-        {
-          timeout: this._maxRequestTimeoutMs,
-          signal: this._signal,
-        },
-      );
-      this._addInterceptors(RestApi.baseUrl, this._authenticatedAuthenticationMethods.interceptors);
-    }
-    return this._authenticatedAuthenticationMethods;
+    const authenticatedAuthenticationMethods = new AuthenticatedAuthenticationMethods(
+      RestApi.baseUrl,
+      this.creds,
+      {
+        timeout: this._maxRequestTimeoutMs,
+        signal: this._signal,
+      },
+    );
+    this._addInterceptors(RestApi.baseUrl, authenticatedAuthenticationMethods.interceptors);
+    return authenticatedAuthenticationMethods;
   }
 
   get authenticatedServerMethods(): AuthenticatedServerMethods {
-    if (!this._authenticatedServerMethods) {
-      this._authenticatedServerMethods = new AuthenticatedServerMethods(
-        RestApi.baseUrl,
-        this.creds,
-        {
-          timeout: this._maxRequestTimeoutMs,
-          signal: this._signal,
-        },
-      );
-      this._addInterceptors(RestApi.baseUrl, this._authenticatedServerMethods.interceptors);
-    }
-    return this._authenticatedServerMethods;
+    const authenticatedServerMethods = new AuthenticatedServerMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, authenticatedServerMethods.interceptors);
+    return authenticatedServerMethods;
   }
 
   get contentExplorationMethods(): ContentExplorationMethods {
-    if (!this._contentExplorationMethods) {
-      this._contentExplorationMethods = new ContentExplorationMethods(
-        RestApi.baseUrlWithoutVersion,
-        this.creds,
-        {
-          timeout: this._maxRequestTimeoutMs,
-          signal: this._signal,
-        },
-      );
-      this._addInterceptors(
-        RestApi.baseUrlWithoutVersion,
-        this._contentExplorationMethods.interceptors,
-      );
-    }
-
-    return this._contentExplorationMethods;
+    const contentExplorationMethods = new ContentExplorationMethods(
+      RestApi.baseUrlWithoutVersion,
+      this.creds,
+      {
+        timeout: this._maxRequestTimeoutMs,
+        signal: this._signal,
+      },
+    );
+    this._addInterceptors(RestApi.baseUrlWithoutVersion, contentExplorationMethods.interceptors);
+    return contentExplorationMethods;
   }
 
   get datasourcesMethods(): DatasourcesMethods {
-    if (!this._datasourcesMethods) {
-      this._datasourcesMethods = new DatasourcesMethods(RestApi.baseUrl, this.creds, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(RestApi.baseUrl, this._datasourcesMethods.interceptors);
-    }
-
-    return this._datasourcesMethods;
+    const datasourcesMethods = new DatasourcesMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, datasourcesMethods.interceptors);
+    return datasourcesMethods;
   }
 
   get metadataMethods(): MetadataMethods {
-    if (!this._metadataMethods) {
-      const baseUrl = `${RestApi.host}/api/metadata`;
-      this._metadataMethods = new MetadataMethods(baseUrl, this.creds, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(baseUrl, this._metadataMethods.interceptors);
-    }
-
-    return this._metadataMethods;
+    const baseUrl = `${RestApi.host}/api/metadata`;
+    const metadataMethods = new MetadataMethods(baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(baseUrl, metadataMethods.interceptors);
+    return metadataMethods;
   }
 
   get pulseMethods(): PulseMethods {
-    if (!this._pulseMethods) {
-      this._pulseMethods = new PulseMethods(RestApi.baseUrlWithoutVersion, this.creds, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(RestApi.baseUrlWithoutVersion, this._pulseMethods.interceptors);
-    }
-
-    return this._pulseMethods;
+    const pulseMethods = new PulseMethods(RestApi.baseUrlWithoutVersion, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrlWithoutVersion, pulseMethods.interceptors);
+    return pulseMethods;
   }
 
   get serverMethods(): ServerMethods {
-    if (!this._serverMethods) {
-      this._serverMethods = new ServerMethods(RestApi.baseUrl, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(RestApi.baseUrl, this._serverMethods.interceptors);
-    }
-
-    return this._serverMethods;
+    const serverMethods = new ServerMethods(RestApi.baseUrl, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, serverMethods.interceptors);
+    return serverMethods;
   }
 
   get siteMethods(): { getMcpSettings: () => Promise<McpSiteSettings> } {
@@ -250,40 +210,32 @@ export class RestApi {
   }
 
   get vizqlDataServiceMethods(): VizqlDataServiceMethods {
-    if (!this._vizqlDataServiceMethods) {
-      const baseUrl = `${RestApi.host}/api/v1/vizql-data-service`;
-      this._vizqlDataServiceMethods = new VizqlDataServiceMethods(baseUrl, this.creds, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(baseUrl, this._vizqlDataServiceMethods.interceptors);
-    }
+    const baseUrl = `${RestApi.host}/api/v1/vizql-data-service`;
+    const vizqlDataServiceMethods = new VizqlDataServiceMethods(baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(baseUrl, vizqlDataServiceMethods.interceptors);
 
-    return this._vizqlDataServiceMethods;
+    return vizqlDataServiceMethods;
   }
 
   get viewsMethods(): ViewsMethods {
-    if (!this._viewsMethods) {
-      this._viewsMethods = new ViewsMethods(RestApi.baseUrl, this.creds, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(RestApi.baseUrl, this._viewsMethods.interceptors);
-    }
-
-    return this._viewsMethods;
+    const viewsMethods = new ViewsMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, viewsMethods.interceptors);
+    return viewsMethods;
   }
 
   get workbooksMethods(): WorkbooksMethods {
-    if (!this._workbooksMethods) {
-      this._workbooksMethods = new WorkbooksMethods(RestApi.baseUrl, this.creds, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(RestApi.baseUrl, this._workbooksMethods.interceptors);
-    }
-
-    return this._workbooksMethods;
+    const workbooksMethods = new WorkbooksMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, workbooksMethods.interceptors);
+    return workbooksMethods;
   }
 
   signIn = async (authConfig: AuthConfig): Promise<void> => {
