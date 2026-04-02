@@ -2,6 +2,7 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
+import { RestApi } from './sdks/tableau/restApi.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
@@ -288,6 +289,9 @@ export class Config {
     } else {
       invariant(server, 'The environment variable SERVER is not set');
       validateServer(server);
+      if (!RestApi.isHostSet) {
+        RestApi.host = server;
+      }
     }
 
     if (this.oauth.enabled) {

@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import dotenv from 'dotenv';
 
 import { getConfig } from './config.js';
+import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { isLoggingLevel, log, setLogLevel, setServerLogger, writeToStderr } from './logging/log.js';
 import { ServerLogger } from './logging/serverLogger.js';
 import { Server, serverName, serverVersion } from './server.js';
@@ -12,6 +13,8 @@ import { getExceptionMessage } from './utils/getExceptionMessage.js';
 async function startServer(): Promise<void> {
   dotenv.config();
   const config = getConfig();
+  // Caching server info for the first time, which will initialize our Rest API version for subsequent requests
+  await getTableauServerInfo(config.server);
 
   const logLevel = isLoggingLevel(config.defaultLogLevel) ? config.defaultLogLevel : 'debug';
   if (config.enableServerLogging) {
