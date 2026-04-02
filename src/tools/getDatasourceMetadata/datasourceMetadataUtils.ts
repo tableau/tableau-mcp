@@ -42,7 +42,7 @@ export const parameterSchema = z
       z.union([z.number(), z.string(), z.boolean(), z.null()]).or(
         z.object({
           value: z.union([z.number(), z.string(), z.boolean(), z.null()]),
-          alias: z.string(),
+          alias: z.string().optional(),
         }),
       ),
     ),
