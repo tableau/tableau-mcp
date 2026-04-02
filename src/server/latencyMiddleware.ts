@@ -3,6 +3,7 @@ import { performance } from 'perf_hooks';
 
 import { getConfig } from '../config.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
+import { NoOpTelemetryProvider } from '../telemetry/noop.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 import { getToolNameFromRequestBody } from './requestUtils.js';
@@ -16,13 +17,18 @@ export function latencyMiddleware(): express.RequestHandler {
     const start = performance.now();
 
     res.on('finish', () => {
+      const telemetryProvider = getTelemetryProvider();
+      if (telemetryProvider instanceof NoOpTelemetryProvider) {
+        return;
+      }
+
       const toolName = getToolNameFromRequestBody(req.body);
 
       // only record latency for tool calls
       if (toolName) {
         const durationMs = performance.now() - start;
         const authExtra = getTableauAuthInfo(req.auth);
-        getTelemetryProvider().recordHistogram(config.latencyMetricName, durationMs, {
+        telemetryProvider.recordHistogram(config.latencyMetricName, durationMs, {
           'http.request.method': req.method,
           'http.route': req.route?.path ?? req.path,
           'http.response.status_code': res.statusCode,

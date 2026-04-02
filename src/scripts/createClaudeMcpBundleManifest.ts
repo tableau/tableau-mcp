@@ -174,7 +174,7 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  ENABLE_LOGGING: {
+  ENABLED_LOGGERS: {
     includeInUserConfig: false,
     type: 'string',
     title: 'Logging',

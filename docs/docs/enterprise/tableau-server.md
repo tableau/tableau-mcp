@@ -429,11 +429,11 @@ By default, Tableau MCP sends notifications to MCP clients containing the reques
 traces for each request Tableau MCP tools make to the Tableau REST APIs. Many clients will save
 these notifications to their own log files, but if you need a way to gather and audit these traces,
 server-level logging can be enabled. See
-[ENABLE_SERVER_LOGGING](../configuration/mcp-config/env-vars#enable_server_logging) for more
+[ENABLED_LOGGERS](../configuration/mcp-config/env-vars#enabled_loggers) for more
 information.
 
 ```
-ENABLE_SERVER_LOGGING=true
+ENABLED_LOGGERS=fileLogger
 SERVER_LOG_DIRECTORY=D:\logs
 ```
 

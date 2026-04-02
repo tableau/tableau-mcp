@@ -110,11 +110,12 @@ function getSendNotificationMessageFn(level: LoggingLevel) {
         method: 'notifications/message',
         params: {
           level,
-          logger: notifier,
+          notifier,
           data: JSON.stringify(
             {
               timestamp: new Date().toISOString(),
-              currentLogLevel: currentNotificationLevel,
+              currentNotificationLevel,
+              notifier,
               message,
             },
             null,

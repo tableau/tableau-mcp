@@ -50,7 +50,7 @@ export async function grade({
 
   const result = await withTrace('run_eval_agent', async () => {
     const stream = await run(evalAgent, evalAgentPrompt, { stream: true });
-    if (process.env.ENABLE_LOGGING === 'true') {
+    if (process.env.ENABLED_LOGGERS === 'true') {
       stream.toTextStream({ compatibleWithNodeStreams: true }).pipe(process.stdout);
     }
 
@@ -101,7 +101,7 @@ async function promptAgent({
 
   const result = await withTrace('run_agent_with_tools', async () => {
     const stream = await run(agentWithTools, prompt, { stream: true });
-    if (process.env.ENABLE_LOGGING === 'true') {
+    if (process.env.ENABLED_LOGGERS === 'true') {
       stream.toTextStream({ compatibleWithNodeStreams: true }).pipe(process.stdout);
     }
 

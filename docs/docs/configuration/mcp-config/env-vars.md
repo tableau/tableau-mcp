@@ -49,29 +49,30 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 <hr />
 
-## `ENABLE_SERVER_LOGGING`
+## `ENABLED_LOGGERS`
 
-When `true`, the server will continue sending notifications to MCP clients, but will now also write
-them to local files in the directory specified in the
-[`SERVER_LOG_DIRECTORY`](#server_log_directory) environment variable. Notifications include tool
-calls and their arguments as well as HTTP traces for the requests and responses to the Tableau REST
-APIs.
+A comma-separated list of loggers to enable. The server will continue sending notifications to MCP
+clients. Notifications include tool calls
+and their arguments as well as HTTP traces for the requests and responses to the Tableau REST APIs.
 
-- Default: `false`
+- Default: `appLogger`
+- Possible values (may be combined): `fileLogger`, `appLogger`
+  - `fileLogger` — writes log entries and mcp notifications to hourly rotating files in the directory specified by
+    [`SERVER_LOG_DIRECTORY`](#server_log_directory).
+  - `appLogger` — writes log entries to stdout as JSON. Enabled by default when transport is `http`.
 - The log file names are in the format `YYYY-MM-DDTHH-00-00-000Z.log` e.g.
   `2025-10-15T22-00-00-000Z.log` meaning this log file contains all log messages for hour 22 of
   2025-10-15 in UTC time. All log entries for a given hour of the day are appended to the same file.
-- Each line in the log file is a JSON object with the following properties:
+- Each line in the log file is a JSON object with a timestamp and additional properties:
 
   - `timestamp`: The timestamp of the log message in UTC time.
-  - `username`: For tool calls, the username of the user who made the call. This is only present
     when OAuth is enabled and has the user context.
   - `level`: The logging level of the log message.
   - `logger`: The logger of the log message. This is typically `rest-api` for HTTP traces or
     `tableau-mcp` for tool calls.
   - `message`: The log message itself. This may be a string or a JSON object.
 
-- All notifications are written to the local log files regardless of the server's currently
+- All notifications are written to the enabled loggers regardless of the server's currently
   configured minimum logging level, since that only applies to notifications sent to MCP clients.
   See [`DEFAULT_LOG_LEVEL`](#default_log_level) for more information.
 - Secrets are masked by default in the log files. To reveal them for debugging purposes, set the
@@ -81,8 +82,8 @@ APIs.
 
 ## `SERVER_LOG_DIRECTORY`
 
-The directory server logs are written to when [`ENABLE_SERVER_LOGGING`](#enable_server_logging) is
-`true`.
+The directory server logs are written to when [`ENABLED_LOGGERS`](#enabled_loggers) includes
+`fileLogger`.
 
 - Default: `[build directory]/logs` i.e. `build/logs`.
 - The server will attempt to create the directory if it does not exist.
