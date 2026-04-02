@@ -47,20 +47,20 @@ describe('revokeAccessTokenTool', () => {
       process.env = savedEnv;
     });
 
-    it('should be disabled when AUTH is not oauth (default PAT mode)', () => {
+    it('should be disabled when AUTH is not oauth (default PAT mode)', async () => {
       // Default test env uses PAT auth, not oauth
       delete process.env.OAUTH_ISSUER;
       const tool = getRevokeAccessTokenTool(new Server());
-      expect(tool.disabled).toBe(true);
+      expect(await Provider.from(tool.disabled)).toBe(true);
     });
 
-    it('should be enabled when AUTH=oauth', () => {
+    it('should be enabled when AUTH=oauth', async () => {
       // Use OAUTH_EMBEDDED_AUTHZ_SERVER=false to avoid the JWE private key requirement
       process.env.AUTH = 'oauth';
       process.env.OAUTH_ISSUER = MOCK_ISSUER;
       process.env.OAUTH_EMBEDDED_AUTHZ_SERVER = 'false';
       const tool = getRevokeAccessTokenTool(new Server());
-      expect(tool.disabled).toBe(false);
+      expect(await Provider.from(tool.disabled)).toBe(false);
     });
   });
 
@@ -200,16 +200,6 @@ describe('revokeAccessTokenTool', () => {
       expect(parsed.message).toContain('submitted for revocation');
     });
 
-    it('should return an error when authInfo.token is not available', async () => {
-      const extra = makeEmbeddedExtra(undefined);
-      const result = await getToolResult(extra);
-
-      expect(result.isError).toBe(true);
-      expect(mockFetch).not.toHaveBeenCalled();
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('raw MCP access token could not be determined');
-    });
-
     it('should return an error result when the revocation endpoint returns non-200', async () => {
       mockFetch.mockResolvedValue(new Response('error', { status: 500 }));
       const result = await getToolResult(makeEmbeddedExtra(MOCK_JWE_TOKEN));
@@ -225,19 +215,6 @@ describe('revokeAccessTokenTool', () => {
 
       const fullText = result.content.map((c) => (c.type === 'text' ? c.text : '')).join('');
       expect(fullText).not.toContain(MOCK_JWE_TOKEN);
-    });
-  });
-
-  describe('Missing auth info (non-OAuth modes)', () => {
-    it('should return an error and make no fetch call when tableauAuthInfo is undefined', async () => {
-      const extra = getMockRequestHandlerExtra();
-      extra.tableauAuthInfo = undefined;
-      const result = await getToolResult(extra);
-
-      expect(result.isError).toBe(true);
-      expect(mockFetch).not.toHaveBeenCalled();
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('OAuth authentication');
     });
   });
 

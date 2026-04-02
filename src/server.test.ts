@@ -26,9 +26,9 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools();
 
-    const tools = toolFactories
-      .map((toolFactory) => toolFactory(server, testProductVersion))
-      .filter((tool) => !tool.disabled);
+    const allTools = toolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
+    const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
+    const tools = allTools.filter((_, i) => !disabledFlags[i]);
     for (const tool of tools) {
       expect(server.registerTool).toHaveBeenCalledWith(
         tool.name,
@@ -46,9 +46,13 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools();
 
-    const disabledTools = toolFactories
-      .map((toolFactory) => toolFactory(server, testProductVersion))
-      .filter((tool) => tool.disabled);
+    const allDisabledTools = toolFactories.map((toolFactory) =>
+      toolFactory(server, testProductVersion),
+    );
+    const disabledToolFlags = await Promise.all(
+      allDisabledTools.map((tool) => Provider.from(tool.disabled)),
+    );
+    const disabledTools = allDisabledTools.filter((_, i) => disabledToolFlags[i]);
     for (const tool of disabledTools) {
       expect(server.registerTool).not.toHaveBeenCalledWith(
         tool.name,
@@ -81,8 +85,11 @@ describe('server', () => {
     await server.registerTools();
 
     const tools = toolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
-    for (const tool of tools) {
-      if (tool.name === 'query-datasource' || tool.disabled) {
+    const excludeDisabledFlags = await Promise.all(
+      tools.map((tool) => Provider.from(tool.disabled)),
+    );
+    for (const [i, tool] of tools.entries()) {
+      if (tool.name === 'query-datasource' || excludeDisabledFlags[i]) {
         expect(server.registerTool).not.toHaveBeenCalledWith(
           tool.name,
           expect.anything(),

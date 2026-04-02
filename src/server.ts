@@ -141,8 +141,9 @@ export class Server extends McpServer {
     const { includeTools, excludeTools } = configOverrides;
 
     const tools = toolFactories.map((toolFactory) => toolFactory(this, tableauServerVersion));
-    const toolsToRegister = tools.filter((tool) => {
-      if (tool.disabled) {
+    const disabledFlags = await Promise.all(tools.map((tool) => Provider.from(tool.disabled)));
+    const toolsToRegister = tools.filter((tool, i) => {
+      if (disabledFlags[i]) {
         return false;
       }
 

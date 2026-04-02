@@ -4,6 +4,7 @@ import { Err, Ok } from 'ts-results-es';
 import { getConfig } from '../../config.js';
 import { McpToolError } from '../../errors/mcpToolError.js';
 import { Server } from '../../server.js';
+import invariant from '../../utils/invariant.js';
 import { Tool } from '../tool.js';
 
 const paramsSchema = {};
@@ -56,18 +57,7 @@ This tool requires no input — it operates on the token already associated with
         args: {},
         callback: async () => {
           const { tableauAuthInfo, config: extraConfig, signal } = extra;
-
-          if (!tableauAuthInfo) {
-            return new Err(
-              new McpToolError({
-                type: 'not-supported',
-                message:
-                  'Access token revocation is only available when OAuth authentication is active. ' +
-                  'This session is using a non-OAuth authentication method (e.g. PAT, direct trust, or UAT).',
-                statusCode: 400,
-              }),
-            );
-          }
+          invariant(tableauAuthInfo, 'tableauAuthInfo must be set in OAuth mode');
 
           let token: string;
           let revokeUrl: string;
@@ -80,16 +70,7 @@ This tool requires no input — it operates on the token already associated with
             // Embedded authZ mode: submit the raw MCP JWE access token to the local
             // revocation endpoint, which handles decryption, signout, and cleanup.
             const rawMcpToken = extra.authInfo?.token;
-            if (!rawMcpToken) {
-              return new Err(
-                new McpToolError({
-                  type: 'not-supported',
-                  message:
-                    'Access token revocation is not available: the raw MCP access token could not be determined from the current session context.',
-                  statusCode: 400,
-                }),
-              );
-            }
+            invariant(rawMcpToken, 'authInfo.token must be set in OAuth mode');
             token = rawMcpToken;
             revokeUrl = `${extraConfig.oauth.issuer}/oauth2/revoke`;
           } else {

@@ -56,7 +56,7 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   callback: TypeOrProvider<TableauToolCallback<Args>>;
 
   // When true, the tool is not registered with the MCP server (model never sees it)
-  disabled?: boolean;
+  disabled?: TypeOrProvider<boolean>;
 };
 
 /**
@@ -94,7 +94,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   paramsSchema: TypeOrProvider<Args>;
   annotations: TypeOrProvider<ToolAnnotations>;
   callback: TypeOrProvider<TableauToolCallback<Args>>;
-  disabled: boolean;
+  disabled: TypeOrProvider<boolean>;
 
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
 
