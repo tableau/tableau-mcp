@@ -51,7 +51,7 @@ export function passthroughAuthMiddleware(): RequestHandler {
     if (!passthroughAuthInfo) {
       const { server, maxRequestTimeoutMs } = config;
 
-      const restApi = new RestApi(server, {
+      const restApi = new RestApi({
         maxRequestTimeoutMs,
       });
 
