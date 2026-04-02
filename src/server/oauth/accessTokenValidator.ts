@@ -143,13 +143,14 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
         siteId,
         userId,
         raw: token,
+        oauthClientIdForRevoke: aud,
       };
 
       return Ok({
         token,
-        // aud is the OAuth client_id (client metadata document URL) registered with the
-        // Tableau authZ server. Required when posting to the Tableau authZ /oauth2/revoke endpoint.
-        clientId: aud,
+        // AuthInfo.clientId stays mapped to issuer semantics for this validator.
+        // Revoke-specific client_id is carried separately on tableauAuthInfo.
+        clientId: iss,
         scopes: parseScopes(scope),
         expiresAt: exp,
         extra: tableauAuthInfo,

@@ -138,6 +138,7 @@ export const tableauAuthInfoSchema = z.discriminatedUnion('type', [
     siteId: z.string(),
     userId: z.string().optional(),
     raw: z.string(),
+    oauthClientIdForRevoke: z.string().optional(),
   }),
   passthroughAuthInfoSchema,
 ]);

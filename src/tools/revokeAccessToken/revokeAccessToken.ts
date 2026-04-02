@@ -108,10 +108,18 @@ This tool requires no input — it operates on the token already associated with
 
           let response: Response;
           if (tableauAuthInfo.type === 'Bearer') {
-            // Tableau authZ server requires RFC 7009 form-encoded body with client_id.
-            // extra.authInfo.clientId is the aud claim from the JWT (the registered client
-            // metadata document URL), which is what the Tableau authZ /oauth2/revoke expects.
-            const clientId = extra.authInfo?.clientId ?? '';
+            const clientId =
+              tableauAuthInfo.oauthClientIdForRevoke ?? extra.authInfo?.clientId;
+            if (!clientId) {
+              return new Err(
+                new McpToolError({
+                  type: 'not-supported',
+                  message:
+                    'Access token revocation is not available: the OAuth client_id required by the authorization server could not be determined from the current session context.',
+                  statusCode: 400,
+                }),
+              );
+            }
             const params = new URLSearchParams({ token, client_id: clientId });
             response = await fetch(revokeUrl, {
               method: 'POST',
