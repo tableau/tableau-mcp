@@ -223,13 +223,14 @@ describe('getViewImageTool', () => {
   });
 
   it('should handle 403157 FEATURE_DISABLED error', async () => {
+    const xmlBody =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<tsResponse><error code="403157"><summary>Feature Disabled</summary>' +
+      '<detail>The image format feature is disabled.</detail></error></tsResponse>';
     const featureDisabledError = {
       isAxiosError: true,
       response: {
-        status: 400,
-        headers: {
-          tableau_error_code: '403157',
-        },
+        data: Buffer.from(xmlBody).buffer,
       },
     };
     mocks.mockQueryViewImage.mockRejectedValue(featureDisabledError);

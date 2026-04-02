@@ -87,10 +87,13 @@ export const getGetViewImageTool = (server: Server, tableauServerVersion: Produc
             );
           } catch (error) {
             // Check if this is a feature disabled error (403157)
-            if (isAxiosError(error) && error.response?.headers?.tableau_error_code === '403157') {
-              return new FeatureDisabledError(
-                'The image format feature is disabled on this Tableau Server.',
-              ).toErr();
+            if (isAxiosError(error) && error.response?.data) {
+              const bodyText = Buffer.from(error.response.data as ArrayBuffer).toString('utf-8');
+              if (bodyText.includes('code="403157"')) {
+                return new FeatureDisabledError(
+                  'The image format feature is disabled on this Tableau Server.',
+                ).toErr();
+              }
             }
             throw error;
           }
