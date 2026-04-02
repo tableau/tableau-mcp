@@ -125,7 +125,7 @@ describe('notification', () => {
           method: 'notifications/message',
           params: {
             level: 'info',
-            logger: 'test-logger',
+            notifier: 'test-logger',
             data: expect.stringContaining('test message'),
           },
         },
@@ -155,7 +155,7 @@ describe('notification', () => {
           method: 'notifications/message',
           params: {
             level: 'info',
-            logger: 'test-server',
+            notifier: 'test-server',
             data: expect.stringContaining('test message'),
           },
         },
@@ -181,7 +181,7 @@ describe('notification', () => {
           method: 'notifications/message',
           params: {
             level: 'info',
-            logger: 'test-logger',
+            notifier: 'test-logger',
             data: expect.any(String),
           },
         },
