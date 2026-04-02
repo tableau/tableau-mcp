@@ -58,7 +58,7 @@ const queryViewImageEndpoint = makeEndpoint({
   response: z.string(),
   errors: [
     {
-      status: 403,
+      status: 400,
       schema: z.object({
         error: z.object({
           code: z.string(),
