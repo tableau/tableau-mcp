@@ -82,7 +82,9 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     height?: number;
     resolution?: 'high';
     format?: 'PNG' | 'SVG';
-  }): Promise<Result<string, { type: 'feature-disabled' } | { type: 'unknown'; message: string }>> => {
+  }): Promise<
+    Result<string, { type: 'feature-disabled' } | { type: 'unknown'; message: string }>
+  > => {
     try {
       const response = await this._apiClient.queryViewImage({
         params: { siteId, viewId },

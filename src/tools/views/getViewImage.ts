@@ -2,7 +2,11 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ArgsValidationError, FeatureDisabledError, ViewNotAllowedError } from '../../errors/mcpToolError.js';
+import {
+  ArgsValidationError,
+  FeatureDisabledError,
+  ViewNotAllowedError,
+} from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
@@ -25,7 +29,10 @@ const paramsSchema = {
 
 const MIN_VERSION_FOR_SVG = '2026.2.0';
 
-export const getGetViewImageTool = (server: Server, tableauServerVersion: ProductVersion): Tool<typeof paramsSchema> => {
+export const getGetViewImageTool = (
+  server: Server,
+  tableauServerVersion: ProductVersion,
+): Tool<typeof paramsSchema> => {
   const getViewImageTool = new Tool({
     server,
     name: 'get-view-image',

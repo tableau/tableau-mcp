@@ -169,7 +169,9 @@ describe('getViewImageTool', () => {
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('SVG format requires Tableau Server 2026.2.0 or later');
+    expect(result.content[0].text).toContain(
+      'SVG format requires Tableau Server 2026.2.0 or later',
+    );
     expect(result.content[0].text).toContain('2026.1.0');
     expect(mocks.mockQueryViewImage).not.toHaveBeenCalled();
   });
@@ -232,11 +234,6 @@ describe('getViewImageTool', () => {
     mocks.mockQueryViewImage.mockResolvedValue(
       Err({
         type: 'feature-disabled',
-        message: {
-          code: '403157',
-          summary: 'Feature Disabled',
-          detail: 'The image format feature is disabled.',
-        },
       }),
     );
     const result = await getToolResult({
@@ -246,7 +243,9 @@ describe('getViewImageTool', () => {
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('The image format feature is disabled on this Tableau Server');
+    expect(result.content[0].text).toContain(
+      'The image format feature is disabled on this Tableau Server',
+    );
   });
 });
 
@@ -255,7 +254,10 @@ async function getToolResult(params: {
   format?: 'PNG' | 'SVG';
   productVersion?: ProductVersion;
 }): Promise<CallToolResult> {
-  const getViewImageTool = getGetViewImageTool(new Server(), params.productVersion ?? testProductVersionWithSvg);
+  const getViewImageTool = getGetViewImageTool(
+    new Server(),
+    params.productVersion ?? testProductVersionWithSvg,
+  );
   const callback = await Provider.from(getViewImageTool.callback);
   return await callback(
     { viewId: params.viewId, width: undefined, height: undefined, format: params.format },
