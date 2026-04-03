@@ -13,6 +13,10 @@ const paramsSchema = {
   viewId: z.string(),
   width: z.number().gt(0).optional(),
   height: z.number().gt(0).optional(),
+  viewFilters: z
+    .record(z.string())
+    .optional()
+    .describe('Optional map of view filter field names to values.'),
 };
 
 export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -27,10 +31,10 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ viewId, width, height }, extra): Promise<CallToolResult> => {
+    callback: async ({ viewId, width, height, viewFilters }, extra): Promise<CallToolResult> => {
       return await getViewImageTool.logAndExecute<string>({
         extra,
-        args: { viewId },
+        args: { viewId, width, height, viewFilters },
         callback: async () => {
           const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
             viewId,
@@ -52,6 +56,7 @@ export const getGetViewImageTool = (server: Server): Tool<typeof paramsSchema> =
                   width,
                   height,
                   resolution: 'high',
+                  viewFilters,
                 });
               },
             }),

@@ -7,6 +7,8 @@ export const toolNames = [
   'get-workbook',
   'get-view-data',
   'get-view-image',
+  'get-custom-view-data',
+  'get-custom-view-image',
   'list-all-pulse-metric-definitions',
   'list-pulse-metric-definitions-from-definition-ids',
   'list-pulse-metrics-from-metric-definition-id',
@@ -30,7 +32,13 @@ export type ToolGroupName = (typeof toolGroupNames)[number];
 export const toolGroups = {
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
   workbook: ['list-workbooks', 'get-workbook'],
-  view: ['list-views', 'get-view-data', 'get-view-image'],
+  view: [
+    'list-views',
+    'get-view-data',
+    'get-view-image',
+    'get-custom-view-data',
+    'get-custom-view-image',
+  ],
   pulse: [
     'list-all-pulse-metric-definitions',
     'list-pulse-metric-definitions-from-definition-ids',

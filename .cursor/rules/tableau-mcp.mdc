@@ -8,15 +8,18 @@ globs:
 # Tableau MCP — Project Context
 
 ## What This Is
+
 Official Tableau MCP server (`tableau/tableau-mcp`). Provides MCP tools
 for AI applications integrating with Tableau Cloud and Server via
 REST API, VDS API, Metadata API, and Pulse API.
 
 ## Role Context
+
 Auth lead on this project. All auth-related code requires architectural
 rigor — not just working code.
 
 ## Core Principles
+
 - Deterministic control over prompt hope for all auth paths
 - Programmatic enforcement for security-critical operations
 - Structured errors always — never silent failures
@@ -25,6 +28,7 @@ rigor — not just working code.
 ## Architecture Overview
 
 ### Source Layout
+
 ```
 src/
 ├── config.ts              # Config loading from env
@@ -47,16 +51,18 @@ src/
 ```
 
 ### Key Libraries
+
 - `ts-results-es` — `Result<T, E>`, `Ok()`, `Err()` for tool callbacks
 - `zod` — Schema validation for params, auth tokens, configs
 - `@zodios/core` — Type-safe REST API client for Tableau APIs
 - `jose` — JWT/JWE operations for OAuth tokens
 - `vitest` — Test framework (NOT jest)
 
-### Tool Registry (All 16 Tools)
+### Tool Registry (All 18 Tools)
+
 Datasource: `list-datasources`, `get-datasource-metadata`, `query-datasource`
 Workbook: `list-workbooks`, `get-workbook`
-View: `list-views`, `get-view-data`, `get-view-image`
+View: `list-views`, `get-view-data`, `get-custom-view-data`, `get-custom-view-image`, `get-view-image`
 Pulse: `list-all-pulse-metric-definitions`,
   `list-pulse-metric-definitions-from-definition-ids`,
   `list-pulse-metrics-from-metric-definition-id`,
@@ -69,6 +75,7 @@ Content Exploration: `search-content`
 Auth touches ALL of these. Changes to auth affect every tool downstream.
 
 ## Error Handling Patterns
+
 - `getExceptionMessage(error: unknown)` — safe error text extraction
 - `getHttpStatus(error: Error)` — HTTP status from AxiosError or PulseDisabledError
 - `invariant(condition, message)` — internal precondition assertions
@@ -77,13 +84,16 @@ Auth touches ALL of these. Changes to auth affect every tool downstream.
   (so users don't get stuck on schema strictness)
 
 ## PR Standards
+
 PRs must include:
+
 - What problem this solves
 - What alternatives were considered
 - Auth impact assessment (if auth-adjacent)
 - Test coverage for new paths
 
 ## What Good Looks Like
+
 - Auth errors surface cleanly with enough context for the calling agent
   to recover or escalate
 - No tool can execute data operations without verified auth

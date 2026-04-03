@@ -94,8 +94,14 @@ describe('getViewDataTool', () => {
   });
 });
 
-async function getToolResult(params: { viewId: string }): Promise<CallToolResult> {
+async function getToolResult({
+  viewId,
+  viewFilters,
+}: {
+  viewId: string;
+  viewFilters?: Record<string, string>;
+}): Promise<CallToolResult> {
   const getViewDataTool = getGetViewDataTool(new Server());
   const callback = await Provider.from(getViewDataTool.callback);
-  return await callback(params, getMockRequestHandlerExtra());
+  return await callback({ viewId, viewFilters }, getMockRequestHandlerExtra());
 }

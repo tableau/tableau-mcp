@@ -3,6 +3,7 @@ import { Zodios } from '@zodios/core';
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { viewsApis } from '../apis/viewsApi.js';
 import { RestApiCredentials } from '../restApi.js';
+import type { CustomView } from '../types/customView.js';
 import { Pagination } from '../types/pagination.js';
 import { View } from '../types/view.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
@@ -33,6 +34,103 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
   };
 
   /**
+   * Gets the details of a specified custom view.
+   *
+   * Required scopes: `tableau:content:read`
+   *
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view
+   */
+  getCustomView = async ({
+    customViewId,
+    siteId,
+  }: {
+    customViewId: string;
+    siteId: string;
+  }): Promise<CustomView> => {
+    return (
+      await this._apiClient.getCustomView({
+        params: { siteId, customViewId },
+        ...this.authHeader,
+      })
+    ).customView;
+  };
+
+  /**
+   * Returns a specified custom view as CSV (same semantics as Query View Data for the underlying sheet).
+   *
+   * Required scopes: `tableau:views:download`
+   *
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view_data
+   */
+  getCustomViewData = async ({
+    customViewId,
+    siteId,
+    viewFilters,
+  }: {
+    customViewId: string;
+    siteId: string;
+    viewFilters?: Record<string, string>;
+  }): Promise<string> => {
+    const queries: Record<string, string> = {};
+    if (viewFilters) {
+      for (const [key, value] of Object.entries(viewFilters)) {
+        const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
+        queries[paramName] = value;
+      }
+    }
+
+    return await this._apiClient.getCustomViewData({
+      params: { siteId, customViewId },
+      queries,
+      ...this.authHeader,
+    });
+  };
+
+  /**
+   * Returns a .png image of the specified custom view (saved view state / filters).
+   *
+   * Required scopes: `tableau:views:download`
+   *
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view_image
+   */
+  getCustomViewImage = async ({
+    customViewId,
+    siteId,
+    resolution = 'high',
+    width,
+    height,
+    viewFilters,
+  }: {
+    customViewId: string;
+    siteId: string;
+    resolution?: 'high';
+    width?: number;
+    height?: number;
+    /** Map of field name to filter value; keys are prefixed with `vf_` unless already present. */
+    viewFilters?: Record<string, string>;
+  }): Promise<string> => {
+    const queries: Record<string, string | number> = {
+      ...(width !== undefined ? { vizWidth: width } : {}),
+      ...(height !== undefined ? { vizHeight: height } : {}),
+      ...(resolution !== undefined ? { resolution } : {}),
+    };
+
+    if (viewFilters) {
+      for (const [key, value] of Object.entries(viewFilters)) {
+        const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
+        queries[paramName] = value;
+      }
+    }
+
+    return await this._apiClient.getCustomViewImage({
+      params: { siteId, customViewId },
+      queries,
+      ...this.authHeader,
+      responseType: 'arraybuffer',
+    });
+  };
+
+  /**
    * Returns a specified view rendered as data in comma separated value (CSV) format.
    *
    * Required scopes: `tableau:views:download`
@@ -44,12 +142,23 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
   queryViewData = async ({
     viewId,
     siteId,
+    viewFilters,
   }: {
     viewId: string;
     siteId: string;
+    viewFilters?: Record<string, string>;
   }): Promise<string> => {
+    const queries: Record<string, string> = {};
+    if (viewFilters) {
+      for (const [key, value] of Object.entries(viewFilters)) {
+        const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
+        queries[paramName] = value;
+      }
+    }
+
     return await this._apiClient.queryViewData({
       params: { siteId, viewId },
+      queries,
       ...this.authHeader,
     });
   };
@@ -72,16 +181,30 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     width,
     height,
     resolution,
+    viewFilters,
   }: {
     viewId: string;
     siteId: string;
     width?: number;
     height?: number;
     resolution?: 'high';
+    viewFilters?: Record<string, string>;
   }): Promise<string> => {
+    const extraParams: Record<string, string> = {};
+    if (viewFilters) {
+      for (const [key, value] of Object.entries(viewFilters)) {
+        const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
+        extraParams[paramName] = value;
+      }
+    }
+
     return await this._apiClient.queryViewImage({
-      params: { siteId, viewId },
-      queries: { vizWidth: width, vizHeight: height, resolution },
+      params: { siteId, viewId, ...extraParams },
+      queries: {
+        ...(width !== undefined ? { vizWidth: width } : {}),
+        ...(height !== undefined ? { vizHeight: height } : {}),
+        ...(resolution !== undefined ? { resolution } : {}),
+      },
       ...this.authHeader,
       responseType: 'arraybuffer',
     });

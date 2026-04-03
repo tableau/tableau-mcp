@@ -10,6 +10,10 @@ import { Tool } from '../tool.js';
 
 const paramsSchema = {
   viewId: z.string(),
+  viewFilters: z
+    .record(z.string())
+    .optional()
+    .describe('Optional map of view filter field names to values.'),
 };
 
 export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -24,10 +28,10 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ viewId }, extra): Promise<CallToolResult> => {
+    callback: async ({ viewId, viewFilters }, extra): Promise<CallToolResult> => {
       return await getViewDataTool.logAndExecute<string>({
         extra,
-        args: { viewId },
+        args: { viewId, viewFilters },
         callback: async () => {
           const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
             viewId,
@@ -46,6 +50,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
                 return await restApi.viewsMethods.queryViewData({
                   viewId,
                   siteId: restApi.siteId,
+                  viewFilters,
                 });
               },
             }),

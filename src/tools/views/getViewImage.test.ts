@@ -14,8 +14,8 @@ const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedFor
 // 1x1 png image
 const encodedPngData =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
-const mockPngData = Buffer.from(encodedPngData, 'base64').toString();
-const base64PngData = Buffer.from(mockPngData).toString('base64');
+/** Binary string (latin1) as returned by {@link ViewsMethods.queryViewImage}. */
+const mockPngData = Buffer.from(encodedPngData, 'base64').toString('latin1');
 
 const mocks = vi.hoisted(() => ({
   mockGetView: vi.fn(),
@@ -62,7 +62,7 @@ describe('getViewImageTool', () => {
     expect(result.content).toHaveLength(1);
     expect(result.content[0]).toMatchObject({
       type: 'image',
-      data: base64PngData,
+      data: encodedPngData,
       mimeType: 'image/png',
     });
     expect(mocks.mockQueryViewImage).toHaveBeenCalledWith({
@@ -101,11 +101,18 @@ describe('getViewImageTool', () => {
   });
 });
 
-async function getToolResult(params: { viewId: string }): Promise<CallToolResult> {
+async function getToolResult({
+  viewId,
+  width,
+  height,
+  viewFilters,
+}: {
+  viewId: string;
+  width?: number;
+  height?: number;
+  viewFilters?: Record<string, string>;
+}): Promise<CallToolResult> {
   const getViewImageTool = getGetViewImageTool(new Server());
   const callback = await Provider.from(getViewImageTool.callback);
-  return await callback(
-    { viewId: params.viewId, width: undefined, height: undefined },
-    getMockRequestHandlerExtra(),
-  );
+  return await callback({ viewId, width, height, viewFilters }, getMockRequestHandlerExtra());
 }

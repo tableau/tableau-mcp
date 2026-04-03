@@ -96,6 +96,12 @@ export class ViewNotAllowedError extends McpToolError {
   }
 }
 
+export class CustomViewNotAllowedError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'custom-view-not-allowed', message, statusCode: 403 });
+  }
+}
+
 export class WorkbookNotAllowedError extends McpToolError {
   constructor(message: string) {
     super({ type: 'workbook-not-allowed', message, statusCode: 403 });

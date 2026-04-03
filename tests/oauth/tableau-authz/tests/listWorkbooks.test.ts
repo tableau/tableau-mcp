@@ -16,6 +16,10 @@ test.describe('list-workbooks', () => {
     expect(workbooks.length).toBeGreaterThan(0);
     const workbook = workbooks.find((workbook) => workbook.name === 'Superstore');
 
-    expect(workbook).toMatchObject(superstore);
+    expect(workbook).toMatchObject({
+      id: superstore.id,
+      name: 'Superstore',
+      defaultViewId: superstore.defaultView.id,
+    });
   });
 });
