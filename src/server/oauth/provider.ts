@@ -14,6 +14,7 @@ import { authMiddleware } from './authMiddleware.js';
 import { authorize } from './authorize.js';
 import { callback } from './callback.js';
 import { register } from './register.js';
+import { revoke } from './revoke.js';
 import { token } from './token.js';
 import { AuthorizationCode, PendingAuthorization, RefreshTokenData } from './types.js';
 
@@ -33,9 +34,6 @@ abstract class OAuthProvider {
   }
 
   setupRoutes(app: express.Application): void {
-    // .well-known/oauth-authorization-server
-    oauthAuthorizationServer(app);
-
     // .well-known/oauth-protected-resource
     oauthProtectedResource(app);
   }
@@ -52,6 +50,9 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
   private readonly pendingAuthorizations = new Map<string, PendingAuthorization>();
   private readonly authorizationCodes = new Map<string, AuthorizationCode>();
   private readonly refreshTokens = new Map<string, RefreshTokenData>();
+  // Secondary index for O(1) revocation: Tableau access token -> MCP refresh token ID.
+  // Expiry-timeout entries may become stale but are harmless and self-clean on next revoke.
+  private readonly refreshTokenIndex = new Map<string, string>();
 
   private readonly privateKey: KeyObject;
   private readonly publicKey: KeyObject;
@@ -68,8 +69,11 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
   }
 
   setupRoutes(app: express.Application): void {
-    // .well-known endpoints
+    // .well-known/oauth-protected-resource (from base)
     super.setupRoutes(app);
+
+    // .well-known/oauth-authorization-server (embedded AS only)
+    oauthAuthorizationServer(app);
 
     // oauth2/register
     register(app);
@@ -81,7 +85,10 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
     callback(app, this.pendingAuthorizations, this.authorizationCodes);
 
     // oauth2/token
-    token(app, this.authorizationCodes, this.refreshTokens, this.publicKey);
+    token(app, this.authorizationCodes, this.refreshTokens, this.publicKey, this.refreshTokenIndex);
+
+    // oauth2/revoke
+    revoke(app, this.refreshTokens, this.privateKey, this.refreshTokenIndex);
   }
 
   private getPrivateKey(): KeyObject {
@@ -107,8 +114,12 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
 }
 
 /**
- * OAuth provider for the Tableau authorization server
+ * OAuth provider for the Tableau authorization server.
  *
+ * In this mode the Tableau server IS the authorization server, so this MCP server
+ * only acts as a resource server. The base setupRoutes() exposes the protected-resource
+ * metadata document (so clients can discover the real AS) and nothing more — we must not
+ * shadow the Tableau AS's own /.well-known/oauth-authorization-server.
  */
 export class TableauOAuthProvider extends OAuthProvider {
   get accessTokenValidator(): AccessTokenValidator {
