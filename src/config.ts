@@ -2,6 +2,7 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
+import { LoggerType, parseLoggerTypes } from './logging/logger.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
@@ -49,8 +50,8 @@ export class Config {
   disableLogMasking: boolean;
   maxRequestTimeoutMs: number;
   disableSessionManagement: boolean;
-  enableServerLogging: boolean;
-  serverLogDirectory: string;
+  loggers: Set<LoggerType>;
+  fileLoggerDirectory: string;
   tableauServerVersionCheckIntervalInHours: number;
   passthroughAuthUserSessionCheckIntervalInMinutes: number;
   mcpSiteSettingsCheckIntervalInMinutes: number;
@@ -110,8 +111,8 @@ export class Config {
       DISABLE_LOG_MASKING: disableLogMasking,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
-      ENABLE_SERVER_LOGGING: enableServerLogging,
-      SERVER_LOG_DIRECTORY: serverLogDirectory,
+      ENABLED_LOGGERS: logging,
+      FILE_LOGGER_DIRECTORY: fileLoggerDirectory,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES:
         passthroughAuthUserSessionCheckIntervalInMinutes,
@@ -158,8 +159,8 @@ export class Config {
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableSessionManagement = disableSessionManagement === 'true';
-    this.enableServerLogging = enableServerLogging === 'true';
-    this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
+    this.loggers = parseLoggerTypes(logging);
+    this.fileLoggerDirectory = fileLoggerDirectory || join(__dirname, 'logs');
 
     this.tableauServerVersionCheckIntervalInHours = parseNumber(
       tableauServerVersionCheckIntervalInHours,
