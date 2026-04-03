@@ -1,7 +1,7 @@
-import { isErrorFromAlias, Zodios } from '@zodios/core';
+import { Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { viewsApis } from '../apis/viewsApi.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -94,11 +94,26 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       });
       return Ok(response);
     } catch (error) {
-      if (
-        isErrorFromAlias(this._apiClient.api, 'queryViewImage', error) &&
-        error.response.data.error.code === '403157'
-      ) {
-        return Err({ type: 'feature-disabled' });
+      // Handle Axios errors with response data
+      if (isAxiosError(error) && error.response?.data) {
+        let errorData = error.response.data;
+
+        // When responseType is 'arraybuffer', parse the response body
+        if (!errorData.error) {
+          const text = new TextDecoder().decode(errorData);
+          errorData = JSON.parse(text);
+        }
+
+        if (errorData.error?.code === '403157') {
+          return Err({ type: 'feature-disabled' });
+        }
+
+        // Extract the actual error details from Tableau Server response
+        if (errorData.error) {
+          const { summary, detail } = errorData.error;
+          const message = detail ? `${summary}: ${detail}` : summary;
+          return Err({ type: 'unknown', message });
+        }
       }
       return Err({ type: 'unknown', message: getExceptionMessage(error) });
     }

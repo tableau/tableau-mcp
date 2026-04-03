@@ -96,7 +96,7 @@ export const getGetViewImageTool = (
                     'The image format feature is disabled on this Tableau Server.',
                   ).toErr();
                 }
-                throw new Error(result.error.message);
+                return new ArgsValidationError(result.error.message).toErr();
               }
 
               return new Ok(result.value);
