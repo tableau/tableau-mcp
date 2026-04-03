@@ -113,3 +113,9 @@ export class ZodiosValidationError extends McpToolError {
     });
   }
 }
+
+export class UnknownError extends McpToolError {
+  constructor(message: string, statusCode = 500) {
+    super({ type: 'unknown', message, statusCode });
+  }
+}
