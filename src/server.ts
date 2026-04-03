@@ -138,20 +138,16 @@ export class Server extends McpServer {
 
     const { includeTools, excludeTools } = configOverrides;
 
-    const tools = toolFactories.map((toolFactory) =>
+    const allTools = toolFactories.map((toolFactory) =>
       toolFactory(this, tableauServerInfo.productVersion),
     );
-    const toolsToRegister = tools.filter((tool) => {
-      if (includeTools.length > 0) {
-        return includeTools.includes(tool.name);
-      }
-
-      if (excludeTools.length > 0) {
-        return !excludeTools.includes(tool.name);
-      }
-
-      return true;
-    });
+    const toolsToRegister: typeof allTools = [];
+    for (const tool of allTools) {
+      if (await Provider.from(tool.disabled)) continue;
+      if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
+      if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
+      toolsToRegister.push(tool);
+    }
 
     if (toolsToRegister.length === 0) {
       throw new Error(`

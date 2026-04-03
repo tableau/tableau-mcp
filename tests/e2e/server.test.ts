@@ -17,7 +17,11 @@ describe('server', () => {
 
   it('should list tools', async () => {
     const names = await listTools();
-    expect(names).toEqual(expect.arrayContaining([...toolNames]));
-    expect(names).toHaveLength(toolNames.length);
+    const expectedToolNames =
+      process.env.AUTH === 'oauth'
+        ? [...toolNames]
+        : toolNames.filter((name) => name !== 'revoke-access-token');
+    expect(names).toEqual(expect.arrayContaining(expectedToolNames));
+    expect(names).toHaveLength(expectedToolNames.length);
   });
 });
