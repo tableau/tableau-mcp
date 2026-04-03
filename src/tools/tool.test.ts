@@ -4,7 +4,7 @@ import { Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
 import { DatasourceNotAllowedError, ZodiosValidationError } from '../errors/mcpToolError.js';
-import { log } from '../logging/log.js';
+import { notifier } from '../logging/notification.js';
 import { Server } from '../server.js';
 import invariant from '../utils/invariant.js';
 import { Tool } from './tool.js';
@@ -56,7 +56,7 @@ describe('Tool', () => {
   });
 
   it('should log invocation with provided args', () => {
-    const spy = vi.spyOn(log, 'debug');
+    const spy = vi.spyOn(notifier, 'debug');
 
     const tool = new Tool(mockParams);
     const testArgs = { param1: 'test' };

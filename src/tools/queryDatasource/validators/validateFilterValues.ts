@@ -1,7 +1,7 @@
 import levenshtein from 'fast-levenshtein';
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { log } from '../../../logging/log.js';
+import { notifier } from '../../../logging/notification.js';
 import {
   Datasource,
   MatchFilter,
@@ -69,7 +69,10 @@ export async function validateFilterValues(
         }
       }
     } catch (error) {
-      log.warning(server, `Filter value validation failed for field ${fieldCaption}: ${error}`);
+      notifier.warning(
+        server,
+        `Filter value validation failed for field ${fieldCaption}: ${error}`,
+      );
     }
   }
 
