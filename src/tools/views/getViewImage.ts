@@ -5,6 +5,7 @@ import { z } from 'zod';
 import {
   ArgsValidationError,
   FeatureDisabledError,
+  UnknownError,
   ViewNotAllowedError,
 } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
@@ -96,7 +97,7 @@ export const getGetViewImageTool = (
                     'The image format feature is disabled on this Tableau Server.',
                   ).toErr();
                 }
-                return new ArgsValidationError(result.error.message).toErr();
+                return new UnknownError(result.error.message, 400).toErr();
               }
 
               return new Ok(result.value);

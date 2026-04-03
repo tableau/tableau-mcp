@@ -100,8 +100,12 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
 
         // When responseType is 'arraybuffer', parse the response body
         if (!errorData.error) {
-          const text = new TextDecoder().decode(errorData);
-          errorData = JSON.parse(text);
+          try {
+            const text = new TextDecoder().decode(errorData);
+            errorData = JSON.parse(text);
+          } catch {
+            return Err({ type: 'unknown', message: getExceptionMessage(error) });
+          }
         }
 
         if (errorData.error?.code === '403157') {
