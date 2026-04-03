@@ -82,7 +82,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     height?: number;
     resolution?: 'high';
     format?: 'PNG' | 'SVG';
-  }): Promise<Result<string, { type: 'feature-disabled' | 'unknown'; message: unknown }>> => {
+  }): Promise<Result<string, { type: 'feature-disabled' } | { type: 'unknown'; message: string }>> => {
     try {
       const response = await this._apiClient.queryViewImage({
         params: { siteId, viewId },
@@ -96,7 +96,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
         isErrorFromAlias(this._apiClient.api, 'queryViewImage', error) &&
         error.response.data.error.code === '403157'
       ) {
-        return Err({ type: 'feature-disabled', message: error.response.data.error });
+        return Err({ type: 'feature-disabled' });
       }
       return Err({ type: 'unknown', message: getExceptionMessage(error) });
     }

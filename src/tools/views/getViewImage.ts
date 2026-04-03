@@ -6,7 +6,7 @@ import { ArgsValidationError, FeatureDisabledError, ViewNotAllowedError } from '
 import { useRestApi } from '../../restApiInstance.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
-import { exportedForTesting as versionUtils } from '../../utils/isTableauVersionAtLeast.js';
+import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
@@ -43,9 +43,12 @@ export const getGetViewImageTool = (server: Server, tableauServerVersion: Produc
         args: { viewId },
         callback: async () => {
           // Version check for format parameter
-          const supportsFormat = versionUtils.isTableauVersionAtLeast({
+          const supportsFormat = getResultForTableauVersion({
             productVersion: tableauServerVersion,
-            minVersion: MIN_VERSION_FOR_SVG,
+            mappings: {
+              [MIN_VERSION_FOR_SVG]: true,
+              default: false,
+            },
           });
 
           // If SVG is requested but version is too old, return an error
@@ -86,7 +89,7 @@ export const getGetViewImageTool = (server: Server, tableauServerVersion: Produc
                     'The image format feature is disabled on this Tableau Server.',
                   ).toErr();
                 }
-                throw new Error(String(result.error.message));
+                throw new Error(result.error.message);
               }
 
               return new Ok(result.value);
