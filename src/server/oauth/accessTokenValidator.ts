@@ -143,13 +143,13 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
         siteId,
         userId,
         raw: token,
-        oauthClientIdForRevoke: aud,
+        clientId: aud,
       };
 
       return Ok({
         token,
-        // AuthInfo.clientId stays mapped to issuer semantics for this validator.
-        // Revoke-specific client_id is carried separately on tableauAuthInfo.
+        // AuthInfo.clientId is mapped to the issuer here (iss claim).
+        // tableauAuthInfo.clientId carries the OAuth client_id (aud claim) for revocation.
         clientId: iss,
         scopes: parseScopes(scope),
         expiresAt: exp,

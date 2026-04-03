@@ -110,6 +110,57 @@ describe('revokeAccessTokenTool', () => {
       );
     });
 
+    it('should prefer tableauAuthInfo.clientId (JWT aud claim) over authInfo.clientId when both are set', async () => {
+      const TABLEAU_DERIVED_CLIENT_ID = 'https://tableau-client-from-jwt.example.com';
+      mockFetch.mockResolvedValue(new Response('{}', { status: 200 }));
+
+      // Simulate accessTokenValidator populating clientId from the Tableau JWT aud claim.
+      // authInfo.clientId carries the issuer (iss), not the real OAuth client_id.
+      const extra = makeBearerExtra();
+      extra.tableauAuthInfo = {
+        type: 'Bearer',
+        raw: MOCK_TOKEN,
+        username: 'test@example.com',
+        server: MOCK_ISSUER,
+        siteId: 'test-site-id',
+        clientId: TABLEAU_DERIVED_CLIENT_ID,
+      };
+      await getToolResult(extra);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${MOCK_ISSUER}/oauth2/revoke`,
+        expect.objectContaining({
+          body: new URLSearchParams({
+            token: MOCK_TOKEN,
+            client_id: TABLEAU_DERIVED_CLIENT_ID,
+          }).toString(),
+        }),
+      );
+    });
+
+    it('should return an error when no client_id can be determined from either source', async () => {
+      const extra = getMockRequestHandlerExtra() as ReturnType<
+        typeof getMockRequestHandlerExtra
+      > & { authInfo?: AuthInfo };
+      extra.config.oauth.issuer = MOCK_ISSUER;
+      extra.tableauAuthInfo = {
+        type: 'Bearer',
+        raw: MOCK_TOKEN,
+        username: 'test@example.com',
+        server: MOCK_ISSUER,
+        siteId: 'test-site-id',
+        // clientId absent: no aud claim extracted from the JWT
+      };
+      // authInfo absent: no fallback client_id available
+
+      const result = await getToolResult(extra);
+
+      expect(result.isError).toBe(true);
+      expect(mockFetch).not.toHaveBeenCalled();
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('client_id');
+    });
+
     it('should return a success result on HTTP 200', async () => {
       mockFetch.mockResolvedValue(new Response('{}', { status: 200 }));
       const result = await getToolResult(makeBearerExtra());
