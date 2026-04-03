@@ -154,11 +154,11 @@ export class OAuthClient {
     }
 
     const authorizationUrl = await this.authUrlPromise;
-    const resetConsentUrl = new URL(authorizationUrl.split('?')[0]);
-    resetConsentUrl.pathname = '/oauth2/revoke';
+    const revokeTokenUrl = new URL(authorizationUrl.split('?')[0]);
+    revokeTokenUrl.pathname = '/oauth2/revoke';
 
     console.log('[OAuthClient] Revoking token');
-    const response = await fetch(resetConsentUrl, {
+    const response = await fetch(revokeTokenUrl, {
       method: 'POST',
       body: JSON.stringify({
         token: tokens.access_token,

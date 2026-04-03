@@ -26,7 +26,9 @@ describe('server', () => {
     const server = getServer();
     await server.registerTools();
 
-    const tools = toolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
+    const allTools = toolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
+    const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
+    const tools = allTools.filter((_, i) => !disabledFlags[i]);
     for (const tool of tools) {
       expect(server.registerTool).toHaveBeenCalledWith(
         tool.name,
@@ -36,6 +38,26 @@ describe('server', () => {
           annotations: await Provider.from(tool.annotations),
         },
         expect.any(Function),
+      );
+    }
+  });
+
+  it('should not register disabled tools', async () => {
+    const server = getServer();
+    await server.registerTools();
+
+    const allDisabledTools = toolFactories.map((toolFactory) =>
+      toolFactory(server, testProductVersion),
+    );
+    const disabledToolFlags = await Promise.all(
+      allDisabledTools.map((tool) => Provider.from(tool.disabled)),
+    );
+    const disabledTools = allDisabledTools.filter((_, i) => disabledToolFlags[i]);
+    for (const tool of disabledTools) {
+      expect(server.registerTool).not.toHaveBeenCalledWith(
+        tool.name,
+        expect.anything(),
+        expect.anything(),
       );
     }
   });
@@ -63,16 +85,15 @@ describe('server', () => {
     await server.registerTools();
 
     const tools = toolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
-    for (const tool of tools) {
-      if (tool.name === 'query-datasource') {
+    const excludeDisabledFlags = await Promise.all(
+      tools.map((tool) => Provider.from(tool.disabled)),
+    );
+    for (const [i, tool] of tools.entries()) {
+      if (tool.name === 'query-datasource' || excludeDisabledFlags[i]) {
         expect(server.registerTool).not.toHaveBeenCalledWith(
           tool.name,
-          {
-            description: await Provider.from(tool.description),
-            inputSchema: await Provider.from(tool.paramsSchema),
-            annotations: await Provider.from(tool.annotations),
-          },
-          expect.any(Function),
+          expect.anything(),
+          expect.anything(),
         );
       } else {
         expect(server.registerTool).toHaveBeenCalledWith(

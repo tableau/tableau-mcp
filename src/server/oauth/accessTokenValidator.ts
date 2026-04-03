@@ -124,6 +124,7 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
       const {
         sub,
         iss,
+        aud,
         exp,
         scope,
         'https://tableau.com/siteId': siteId,
@@ -142,10 +143,13 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
         siteId,
         userId,
         raw: token,
+        clientId: aud,
       };
 
       return Ok({
         token,
+        // AuthInfo.clientId is mapped to the issuer here (iss claim).
+        // tableauAuthInfo.clientId carries the OAuth client_id (aud claim) for revocation.
         clientId: iss,
         scopes: parseScopes(scope),
         expiresAt: exp,
