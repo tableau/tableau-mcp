@@ -65,7 +65,7 @@ The OpenAI API key.
 
 <hr />
 
-### `ENABLED_LOGGERS`
+### `ENABLE_LOGGING`
 
 When `true`, LLMs will stream their output to the console and tool call information will also be
 logged.
