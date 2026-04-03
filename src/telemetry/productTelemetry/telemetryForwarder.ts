@@ -1,5 +1,7 @@
 import os from 'os';
 
+import { log } from '../../logging/logger';
+
 type ValidPropertyValueType = string | number | boolean;
 type PropertiesType = { [key: string]: ValidPropertyValueType };
 const DEFAULT_HOST_NAME = 'External';
@@ -91,7 +93,11 @@ async function sendTelemetryRequest(req: Request): Promise<void> {
       console.error(`[Telemetry] Failed: ${res.status} ${res.statusText}`, body);
     }
   } catch (error) {
-    console.error('[Telemetry] Network error:', error);
+    log({
+      message: error,
+      level: 'error',
+      logger: 'telemetry',
+    });
   }
 }
 

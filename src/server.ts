@@ -10,7 +10,7 @@ import {
 import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { getTableauServerInfo } from './getTableauServerInfo';
-import { setLogLevel } from './logging/log.js';
+import { setNotificationLevel } from './logging/notification.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { Tool } from './tools/tool.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
@@ -117,7 +117,7 @@ export class Server extends McpServer {
 
   registerRequestHandlers = (): void => {
     this.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
-      setLogLevel(this, request.params.level);
+      setNotificationLevel(this, request.params.level);
       return {};
     });
   };
