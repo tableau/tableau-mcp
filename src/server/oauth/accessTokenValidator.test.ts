@@ -62,9 +62,7 @@ describe('TableauAccessTokenValidator', () => {
     });
 
     it('prefers client_id over aud when both are present and differ', async () => {
-      const token = makeBearer(
-        basePayload({ client_id: MOCK_CLIENT_ID, aud: MOCK_RESOURCE_URL }),
-      );
+      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID, aud: MOCK_RESOURCE_URL }));
       const result = await validator.validate(token);
 
       expect(result.isOk()).toBe(true);
