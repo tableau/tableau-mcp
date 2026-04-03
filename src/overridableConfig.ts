@@ -16,7 +16,7 @@ const overridableVariables = [
 ] as const satisfies ReadonlyArray<keyof ProcessEnvEx>;
 
 type OverridableVariable = (typeof overridableVariables)[number];
-function isOverridableVariable(variable: unknown): variable is OverridableVariable {
+export function isOverridableVariable(variable: unknown): variable is OverridableVariable {
   return overridableVariables.some((v) => v === variable);
 }
 
@@ -134,7 +134,7 @@ export class OverridableConfig {
 // Creates a set from a comma-separated string of values.
 // Returns null if the value is undefined.
 function createSetFromCommaSeparatedString(value: string | undefined): Set<string> | null {
-  if (value === undefined) {
+  if (value === undefined || value === '') {
     return null;
   }
 
