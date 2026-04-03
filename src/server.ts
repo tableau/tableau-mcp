@@ -9,8 +9,8 @@ import {
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
-import { getTableauServerVersion } from './getTableauServerVersion';
-import { setLogLevel } from './logging/log.js';
+import { getTableauServerInfo } from './getTableauServerInfo';
+import { setNotificationLevel } from './logging/notification.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { Tool } from './tools/tool.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
@@ -117,7 +117,7 @@ export class Server extends McpServer {
 
   registerRequestHandlers = (): void => {
     this.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
-      setLogLevel(this, request.params.level);
+      setNotificationLevel(this, request.params.level);
       return {};
     });
   };
@@ -134,13 +134,13 @@ export class Server extends McpServer {
       },
     });
 
-    const tableauServerVersion = await getTableauServerVersion(
-      config.server || tableauAuthInfo?.server,
-    );
+    const tableauServerInfo = await getTableauServerInfo(config.server || tableauAuthInfo?.server);
 
     const { includeTools, excludeTools } = configOverrides;
 
-    const tools = toolFactories.map((toolFactory) => toolFactory(this, tableauServerVersion));
+    const tools = toolFactories.map((toolFactory) =>
+      toolFactory(this, tableauServerInfo.productVersion),
+    );
     const toolsToRegister = tools.filter((tool) => {
       if (includeTools.length > 0) {
         return includeTools.includes(tool.name);
