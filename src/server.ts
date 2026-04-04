@@ -85,8 +85,8 @@ export class Server extends McpServer {
           get tableauAuthInfo() {
             return getTableauAuthInfo(extra.authInfo);
           },
-          _userLuid: tableauAuthInfo?.userId,
-          _siteLuid: tableauAuthInfo?.siteId,
+          _userLuid: getTableauAuthInfo(extra.authInfo)?.userId,
+          _siteLuid: getTableauAuthInfo(extra.authInfo)?.siteId,
           getUserLuid() {
             return tableauRequestHandlerExtra._userLuid ?? '';
           },
