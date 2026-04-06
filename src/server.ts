@@ -85,16 +85,24 @@ export class Server extends McpServer {
           get tableauAuthInfo() {
             return getTableauAuthInfo(extra.authInfo);
           },
-          _userLuid: getTableauAuthInfo(extra.authInfo)?.userId,
-          _siteLuid: getTableauAuthInfo(extra.authInfo)?.siteId,
+          _userLuid: undefined,
+          _siteLuid: undefined,
           getUserLuid() {
-            return tableauRequestHandlerExtra._userLuid ?? '';
+            return (
+              tableauRequestHandlerExtra._userLuid ??
+              getTableauAuthInfo(extra.authInfo)?.userId ??
+              ''
+            );
           },
           setUserLuid(userLuid: string) {
             tableauRequestHandlerExtra._userLuid = userLuid;
           },
           getSiteLuid() {
-            return tableauRequestHandlerExtra._siteLuid ?? '';
+            return (
+              tableauRequestHandlerExtra._siteLuid ??
+              getTableauAuthInfo(extra.authInfo)?.siteId ??
+              ''
+            );
           },
           setSiteLuid(siteLuid: string) {
             tableauRequestHandlerExtra._siteLuid = siteLuid;
