@@ -27,9 +27,9 @@ make it easier for developers to build AI applications that integrate with Table
 | [get-datasource-metadata](tools/data-qna/get-datasource-metadata.md)                                                  | Fetches field metadata for the specified datasource ([Metadata API][meta] & [VDS API][vds])           |
 | [get-workbook](tools/workbooks/get-workbook.md)                                                                       | Retrieves information on a workbook from a specified Tableau site ([REST API][get-workbook])          |
 | [get-view-data](tools/views/get-view-data.md)                                                                         | Retrieves data in CSV format for the specified view in a Tableau workbook ([REST API][get-view-data]) |
-| [get-custom-view-data](tools/views/get-custom-view-data.md)                                                           | Retrieves CSV data for a saved custom view (personalized filters) ([REST API][get-custom-view-data]) |
-| [get-custom-view-image](tools/views/get-custom-view-image.md)                                                         | Retrieves a PNG image for a saved custom view ([REST API][get-custom-view-image])                      |
-| [get-view-image](tools/views/get-view-image.md)                                                                       | Retrieves an image for the specified view in a Tableau workbook ([REST API][get-view-image]) |
+| [get-view-image](tools/views/get-view-image.md)                                                                       | Retrieves an image for the specified view in a Tableau workbook ([REST API][get-view-image])          |
+| [get-custom-view-data](tools/views/get-custom-view-data.md)                                                           | Retrieves CSV data for a saved custom view (personalized filters) ([REST API][get-custom-view-data])  |
+| [get-custom-view-image](tools/views/get-custom-view-image.md)                                                         | Retrieves a PNG image for a saved custom view ([REST API][get-custom-view-image])                     |
 | [query-datasource](tools/data-qna/query-datasource.md)                                                                | Run a Tableau VizQL query ([VDS API][vds])                                                            |
 | [list-all-pulse-metric-definitions](tools/pulse/list-all-pulse-metric-definitions.md)                                 | List All Pulse Metric Definitions ([Pulse API][pulse])                                                |
 | [list-pulse-metric-definitions-from-definition-ids](tools/pulse/list-pulse-metric-definitions-from-definition-ids.md) | List Pulse Metric Definitions from Metric Definition IDs ([Pulse API][pulse])                         |
@@ -37,7 +37,7 @@ make it easier for developers to build AI applications that integrate with Table
 | [list-pulse-metrics-from-metric-ids](tools/pulse/list-pulse-metrics-from-metric-ids.md)                               | List Pulse Metrics from Metric IDs ([Pulse API][pulse])                                               |
 | [list-pulse-metric-subscriptions](tools/pulse/list-pulse-metric-subscriptions.md)                                     | List Pulse Metric Subscriptions for Current User ([Pulse API][pulse])                                 |
 | [generate-pulse-metric-value-insight-bundle](tools/pulse/generate-pulse-metric-value-insight-bundle.md)               | Generate Pulse Metric Value Insight Bundle ([Pulse API][pulse])                                       |
-| [generate-pulse-insight-brief](tools/pulse/generate-pulse-insight-brief.md)                                           | Generate AI-powered Pulse Insight Brief (Discover) ([Pulse API][pulse])                                          |
+| [generate-pulse-insight-brief](tools/pulse/generate-pulse-insight-brief.md)                                           | Generate AI-powered Pulse Insight Brief (Discover) ([Pulse API][pulse])                               |
 | [search-content](tools/content-exploration/search-content.md)                                                         | Searches for content in a Tableau site ([Content Exploration API][content-exploration])               |
 
 [query]:
@@ -59,4 +59,5 @@ make it easier for developers to build AI applications that integrate with Table
 [meta]: https://help.tableau.com/current/api/metadata_api/en-us/index.html
 [vds]: https://help.tableau.com/current/api/vizql-data-service/en-us/index.html
 [pulse]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm
-[content-exploration]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_content_exploration.htm
+[content-exploration]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_content_exploration.htm

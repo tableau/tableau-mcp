@@ -38,8 +38,12 @@ export const getGetViewImageTool = (
   const getViewImageTool = new Tool({
     server,
     name: 'get-view-image',
-    description:
-      'Retrieves an image of the specified view in a Tableau workbook. The width and height in pixels can be provided. The default width and height are both 800 pixels.',
+    description: [
+      'Retrieves an image of the specified view in a Tableau workbook.',
+      'Optional width and height in pixels control render size.',
+      'Optional view field names and values can be provided to filter the view.',
+      'For custom views, use the tool to get view custom view image by custom view id instead.',
+    ].join(' '),
     paramsSchema,
     annotations: {
       title: 'Get View Image',

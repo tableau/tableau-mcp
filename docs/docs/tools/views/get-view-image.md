@@ -44,14 +44,28 @@ Example: `1200`
 The format of the image. Default: `PNG`
 
 - **`PNG`** (default): Raster image format. Works with all Tableau Server versions.
-- **`SVG`**: Vector graphics format. Scalable and smaller file size. **Requires Tableau Server 2026.2.0+ (REST API v3.29+)**.
+- **`SVG`**: Vector graphics format. Scalable and smaller file size. **Requires Tableau Server
+  2026.2.0+ (REST API v3.29+)**.
 
 **Choosing a format:**
-- Prefer `PNG` when the image will be **analyzed or interpreted** (e.g. answering questions about the data in the viz).
-- Prefer `SVG` when the image will be **displayed to the user** (e.g. embedding or rendering the viz in a response).
+
+- Prefer `PNG` when the image will be **analyzed or interpreted** (e.g. answering questions about
+  the data in the viz).
+- Prefer `SVG` when the image will be **displayed to the user** (e.g. embedding or rendering the viz
+  in a response).
 
 Example: `SVG`
 
+### `viewFilters`
+
+Map of filter field names to values; sent as `vf_<fieldname>` query parameters per
+[filter query views](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_filtering_and_sorting.htm#Filter-query-views).
+
 ## Example result
+
+- When `format` is `PNG`, the MCP result will contain the PNG image content (MCP result with
+  `type=image` and `mimeType=image/png`).
+- When `format` is `SVG`, the MCP result will contain both the SVG XML (`type=text`) and the SVG
+  image content (`type=image` and `mimeType=image/svg+xml`)
 
 ![Superstore View Image](./superstore.png)

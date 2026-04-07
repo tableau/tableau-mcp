@@ -44,9 +44,12 @@ export const getGetCustomViewImageTool = (
     server,
     name: 'get-custom-view-image',
     description: [
-      "Retrieves a PNG image of a Tableau Custom View (saved/personalized view state), including the user's filters.",
+      'Retrieves an image of the specified custom view in a published viz.',
+      'A custom view is a shortcut to a specific state of interaction, such as filter selections and sorting, for a published viz.',
       'Requires the custom view LUID from the content URL (not the published view id).',
-      'Optional width and height in pixels control render size (`width` / `height`); defaults follow Tableau when omitted. For published views only, use the tool to get view image by view id instead.',
+      'Optional width and height in pixels control render size.',
+      'Optional view field names and values can be provided to filter the custom view.',
+      'For published views, use the tool to get view image by view id instead.',
     ].join(' '),
     paramsSchema,
     annotations: {

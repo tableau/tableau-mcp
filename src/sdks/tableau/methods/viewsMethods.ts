@@ -64,6 +64,10 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
    *
    * Required scopes: `tableau:views:download`
    *
+   * @param {string} customViewId The ID of the custom view to return data for.
+   * @param {string} siteId - The Tableau site ID
+   * @param {Record<string, string>} viewFilters - Map of field name to filter value; keys are prefixed with `vf_` unless already present.
+   *
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view_data
    */
   getCustomViewData = async ({
@@ -91,18 +95,26 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
   };
 
   /**
-   * Returns a .png image of the specified custom view (saved view state / filters).
+   * Returns an image of the specified custom view (saved view state / filters).
    *
    * Required scopes: `tableau:views:download`
+   *
+   * @param {string} customViewId The ID of the custom view to return an image for.
+   * @param {string} siteId - The Tableau site ID
+   * @param {number} width - (Optional) The width of the rendered image in pixels that, along with the value of vizHeight determine its resolution and aspect ratio.
+   * @param {number} height - (Optional) The height of the rendered image in pixels that, along with the value of vizWidth determine its resolution and aspect ratio.
+   * @param {string} resolution - (Optional) The resolution of the image. Image width and actual pixel density are determined by the display context of the image. Aspect ratio is always preserved. Set the value to high to ensure maximum pixel density.
+   * @param {string} format - (Optional) The format of the image. PNG (default) or SVG.
+   * @param {Record<string, string>} viewFilters - Map of field name to filter value; keys are prefixed with `vf_` unless already present.
    *
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view_image
    */
   getCustomViewImage = async ({
     customViewId,
     siteId,
-    resolution = 'high',
     width,
     height,
+    resolution = 'high',
     format,
     viewFilters,
   }: {
@@ -112,7 +124,6 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     width?: number;
     height?: number;
     format?: 'PNG' | 'SVG';
-    /** Map of field name to filter value; keys are prefixed with `vf_` unless already present. */
     viewFilters?: Record<string, string>;
   }): Promise<Result<string, QueryImageError>> => {
     const queries: Record<string, string | number> = {
@@ -138,7 +149,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       });
       return Ok(response);
     } catch (error) {
-      return this.handleQueryImageError(error);
+      return handleQueryImageError(error);
     }
   };
 
@@ -149,6 +160,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
    *
    * @param {string} viewId The ID of the view to return an image for.
    * @param {string} siteId - The Tableau site ID
+   * @param {Record<string, string>} viewFilters - Map of field name to filter value; keys are prefixed with `vf_` unless already present.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_view_data
    */
   queryViewData = async ({
@@ -185,6 +197,8 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
    * @param {number} width - (Optional) The width of the rendered image in pixels that, along with the value of vizHeight determine its resolution and aspect ratio.
    * @param {number} height - (Optional) The height of the rendered image in pixels that, along with the value of vizWidth determine its resolution and aspect ratio.
    * @param {string} resolution - (Optional) The resolution of the image. Image width and actual pixel density are determined by the display context of the image. Aspect ratio is always preserved. Set the value to high to ensure maximum pixel density.
+   * @param {string} format - (Optional) The format of the image. PNG (default) or SVG.
+   * @param {Record<string, string>} viewFilters - Map of field name to filter value; keys are prefixed with `vf_` unless already present.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_view_image
    */
   queryViewImage = async ({
@@ -227,7 +241,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       });
       return Ok(response);
     } catch (error) {
-      return this.handleQueryImageError(error);
+      return handleQueryImageError(error);
     }
   };
 
@@ -294,33 +308,34 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       views: response.views.view ?? [],
     };
   };
+}
 
-  private handleQueryImageError = (error: unknown): Result<string, QueryImageError> => {
-    // Handle Axios errors with response data
-    if (isAxiosError(error) && error.response?.data) {
-      let errorData = error.response.data;
+function handleQueryImageError(error: unknown): Result<string, QueryImageError> {
+  // Handle Axios errors with response data
+  if (isAxiosError(error) && error.response?.data) {
+    let errorData = error.response.data;
 
-      // When responseType is 'arraybuffer', parse the response body
-      if (!errorData.error) {
-        try {
-          const text = new TextDecoder().decode(errorData);
-          errorData = JSON.parse(text);
-        } catch {
-          return Err({ type: 'unknown', message: getExceptionMessage(error) });
-        }
-      }
-
-      if (errorData.error?.code === '403157') {
-        return Err({ type: 'feature-disabled' });
-      }
-
-      // Extract the actual error details from Tableau Server response
-      if (errorData.error) {
-        const { summary, detail } = errorData.error;
-        const message = detail ? `${summary}: ${detail}` : summary;
-        return Err({ type: 'unknown', message });
+    // When responseType is 'arraybuffer', parse the response body
+    if (!errorData.error) {
+      try {
+        const text = new TextDecoder().decode(errorData);
+        errorData = JSON.parse(text);
+      } catch {
+        return Err({ type: 'unknown', message: getExceptionMessage(error) });
       }
     }
-    return Err({ type: 'unknown', message: getExceptionMessage(error) });
-  };
+
+    if (errorData.error?.code === '403157') {
+      return Err({ type: 'feature-disabled' });
+    }
+
+    // Extract the actual error details from Tableau Server response
+    if (errorData.error) {
+      const { summary, detail } = errorData.error;
+      const message = detail ? `${summary}: ${detail}` : summary;
+      return Err({ type: 'unknown', message });
+    }
+  }
+
+  return Err({ type: 'unknown', message: getExceptionMessage(error) });
 }

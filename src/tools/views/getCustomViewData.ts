@@ -28,7 +28,7 @@ export const getGetCustomViewDataTool = (server: Server): Tool<typeof paramsSche
     description: [
       "Retrieves comma-separated value (CSV) data for a Tableau Custom View (saved/personalized view state), including the user's filters.",
       'Requires the custom view LUID from the content URL (not the published view id).',
-      'For published views without a custom view, use the tool to get view data by view id instead.',
+      'For published views, use the tool to get view data by view id instead.',
     ].join(' '),
     paramsSchema,
     annotations: {

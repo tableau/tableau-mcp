@@ -59,7 +59,7 @@ describe('getCustomViewDataTool', () => {
   });
 
   it('should successfully get custom view data', async () => {
-    const result = await getToolResult(mockCustomView.id);
+    const result = await getToolResult({ customViewId: mockCustomView.id });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Country/Region');
@@ -71,9 +71,7 @@ describe('getCustomViewDataTool', () => {
   });
 
   it('should pass viewFilters to the REST layer', async () => {
-    await getToolResult(mockCustomView.id, {
-      viewFilters: { Year: '2024' },
-    });
+    await getToolResult({ customViewId: mockCustomView.id, viewFilters: { Year: '2024' } });
     expect(mocks.mockGetCustomViewData).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       customViewId: mockCustomView.id,
@@ -84,7 +82,7 @@ describe('getCustomViewDataTool', () => {
   it('should handle API errors when fetching data', async () => {
     const errorMessage = 'API Error';
     mocks.mockGetCustomViewData.mockRejectedValue(new Error(errorMessage));
-    const result = await getToolResult(mockCustomView.id);
+    const result = await getToolResult({ customViewId: mockCustomView.id });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
@@ -92,7 +90,7 @@ describe('getCustomViewDataTool', () => {
 
   it('should return not allowed when underlying view fails bounded context', async () => {
     vi.stubEnv('INCLUDE_WORKBOOK_IDS', 'some-other-workbook-id');
-    const result = await getToolResult(mockCustomView.id);
+    const result = await getToolResult({ customViewId: mockCustomView.id });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('does not belong to an allowed workbook');
@@ -100,16 +98,19 @@ describe('getCustomViewDataTool', () => {
   });
 });
 
-async function getToolResult(
-  customViewId: string,
-  options: { viewFilters?: Record<string, string> } = {},
-): Promise<CallToolResult> {
+async function getToolResult({
+  customViewId,
+  viewFilters,
+}: {
+  customViewId: string;
+  viewFilters?: Record<string, string>;
+}): Promise<CallToolResult> {
   const tool = getGetCustomViewDataTool(new Server());
   const callback = await Provider.from(tool.callback);
   return await callback(
     {
       customViewId,
-      viewFilters: options.viewFilters,
+      viewFilters,
     },
     getMockRequestHandlerExtra(),
   );

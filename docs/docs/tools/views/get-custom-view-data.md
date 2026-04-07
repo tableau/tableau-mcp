@@ -21,9 +21,9 @@ state of a published sheet, including the user's filters). For the default publi
 
 ### `customViewId`
 
-The LUID of the custom view. This appears in the Tableau URL for a saved view (e.g. the UUID in
-`/views/WorkbookUrl/SheetUrl/<customViewId>/<customViewName>`), not the published view id returned
-by List Views for the sheet alone.
+The LUID of the custom view. This appears in the Tableau URL for a saved view (e.g. the
+`<customViewId>` in `/views/WorkbookUrl/SheetUrl/<customViewId>/<customViewName>`), not the
+published view id returned by List Views for the sheet alone.
 
 Example: `f69e71d6-8a91-4f46-bea7-dc7d2e124ab7`
 
