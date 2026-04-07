@@ -15,6 +15,7 @@ const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedFor
 const encodedPngData =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 const mockPngData = Buffer.from(encodedPngData, 'base64').toString('latin1');
+const base64PngData = Buffer.from(mockPngData).toString('base64');
 
 const mocks = vi.hoisted(() => ({
   mockGetCustomView: vi.fn(),
@@ -66,7 +67,7 @@ describe('getCustomViewImageTool', () => {
     expect(result.content).toHaveLength(1);
     expect(result.content[0]).toMatchObject({
       type: 'image',
-      data: encodedPngData,
+      data: base64PngData,
       mimeType: 'image/png',
     });
     expect(mocks.mockGetCustomViewImage).toHaveBeenCalledWith({

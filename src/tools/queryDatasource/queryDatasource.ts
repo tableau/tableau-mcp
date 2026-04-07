@@ -51,15 +51,15 @@ type QueryDatasourceResult = QueryOutput & {
 
 export const getQueryDatasourceTool = (
   server: Server,
-  tableauServerVersion: ProductVersion,
+  productVersion: ProductVersion,
 ): Tool<typeof paramsSchema> => {
-  const rules = getQueryDatasourceRules(tableauServerVersion);
+  const rules = getQueryDatasourceRules(productVersion);
   const queryDatasourceTool = new Tool({
     server,
     name: 'query-datasource',
     description: new Provider(() =>
       getResultForTableauVersion({
-        productVersion: tableauServerVersion,
+        productVersion,
         mappings: {
           '2026.1.0': queryDatasourceToolDescription20261,
           '2025.3.0': queryDatasourceToolDescription20253,
@@ -202,9 +202,9 @@ export const getQueryDatasourceTool = (
   return queryDatasourceTool;
 };
 
-function getQueryDatasourceRules(tableauServerVersion: ProductVersion): ToolRules {
+function getQueryDatasourceRules(productVersion: ProductVersion): ToolRules {
   return getResultForTableauVersion({
-    productVersion: tableauServerVersion,
+    productVersion,
     mappings: {
       '2026.1.0': {},
       default: {

@@ -3,8 +3,11 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import dotenv from 'dotenv';
 
 import { getConfig } from './config.js';
-import { isLoggingLevel, log, setLogLevel, setServerLogger, writeToStderr } from './logging/log.js';
-import { ServerLogger } from './logging/serverLogger.js';
+import { getTableauServerInfo } from './getTableauServerInfo.js';
+import { FileLogger, setFileLogger } from './logging/fileLogger.js';
+import { writeToStderr } from './logging/logger.js';
+import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
+import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, serverName, serverVersion } from './server.js';
 import { startExpressServer } from './server/express.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
@@ -12,10 +15,13 @@ import { getExceptionMessage } from './utils/getExceptionMessage.js';
 async function startServer(): Promise<void> {
   dotenv.config();
   const config = getConfig();
-
-  const logLevel = isLoggingLevel(config.defaultLogLevel) ? config.defaultLogLevel : 'debug';
-  if (config.enableServerLogging) {
-    setServerLogger(new ServerLogger({ logDirectory: config.serverLogDirectory }));
+  // Initializing REST API host then getting server info for the first time
+  // which will cache the server info and initialize our REST API version for subsequent requests
+  RestApi.host = config.server;
+  await getTableauServerInfo(config.server);
+  const logLevel = isNotificationLevel(config.defaultLogLevel) ? config.defaultLogLevel : 'debug';
+  if (config.loggers.has('fileLogger')) {
+    setFileLogger(new FileLogger({ logDirectory: config.fileLoggerDirectory }));
   }
 
   switch (config.transport) {
@@ -27,8 +33,8 @@ async function startServer(): Promise<void> {
       const transport = new StdioServerTransport();
       await server.connect(transport);
 
-      setLogLevel(server, logLevel);
-      log.info(server, `${server.name} v${server.version} running on stdio`);
+      setNotificationLevel(server, logLevel);
+      notifier.info(server, `${server.name} v${server.version} running on stdio`);
       break;
     }
     case 'http': {

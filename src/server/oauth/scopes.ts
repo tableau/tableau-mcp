@@ -141,6 +141,12 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:content:read'],
     api: new Set(['tableau:content:read']),
   },
+  // Token lifecycle: no Tableau REST API calls, no content scope required.
+  // Any authenticated user may revoke their own token regardless of granted scopes.
+  'revoke-access-token': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
 };
 
 const supportedMcpScopes = Array.from(

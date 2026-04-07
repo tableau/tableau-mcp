@@ -3,12 +3,12 @@ import {
   ResponseInterceptorConfig,
 } from '../sdks/tableau/interceptors.js';
 import { Server } from '../server.js';
-import { setLogLevel } from './log.js';
+import { setNotificationLevel } from './notification.js';
 import { maskRequest, maskResponse } from './secretMask.js';
 
 describe('secretMask', () => {
   beforeEach(() => {
-    setLogLevel(new Server(), 'debug', { silent: true });
+    setNotificationLevel(new Server(), 'debug', { silent: true });
   });
 
   it('should mask secrets in requests', () => {
@@ -111,7 +111,7 @@ describe('secretMask', () => {
   });
 
   it('should not include headers and data in the request if the log level is not debug', () => {
-    setLogLevel(new Server(), 'info', { silent: true });
+    setNotificationLevel(new Server(), 'info', { silent: true });
 
     const maskedRequest = maskRequest({
       method: 'POST',
@@ -134,7 +134,7 @@ describe('secretMask', () => {
   });
 
   it('should not include headers and data in the response if the log level is not debug', () => {
-    setLogLevel(new Server(), 'info', { silent: true });
+    setNotificationLevel(new Server(), 'info', { silent: true });
 
     const maskedResponse = maskResponse({
       status: 200,
@@ -214,7 +214,7 @@ describe('secretMask', () => {
   });
 
   it('should not include params in the request if the log level is not debug', () => {
-    setLogLevel(new Server(), 'info', { silent: true });
+    setNotificationLevel(new Server(), 'info', { silent: true });
 
     const maskedRequest = maskRequest({
       method: 'POST',

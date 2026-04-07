@@ -1,6 +1,8 @@
 import { Zodios } from '@zodios/core';
+import { Err, Ok, Result } from 'ts-results-es';
 
-import { AxiosRequestConfig } from '../../../utils/axios.js';
+import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
+import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { viewsApis } from '../apis/viewsApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import type { CustomView } from '../types/customView.js';
@@ -181,6 +183,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     width,
     height,
     resolution,
+    format,
     viewFilters,
   }: {
     viewId: string;
@@ -188,8 +191,11 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     width?: number;
     height?: number;
     resolution?: 'high';
+    format?: 'PNG' | 'SVG';
     viewFilters?: Record<string, string>;
-  }): Promise<string> => {
+  }): Promise<
+    Result<string, { type: 'feature-disabled' } | { type: 'unknown'; message: string }>
+  > => {
     const extraParams: Record<string, string> = {};
     if (viewFilters) {
       for (const [key, value] of Object.entries(viewFilters)) {
@@ -198,16 +204,47 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       }
     }
 
-    return await this._apiClient.queryViewImage({
-      params: { siteId, viewId, ...extraParams },
-      queries: {
-        ...(width !== undefined ? { vizWidth: width } : {}),
-        ...(height !== undefined ? { vizHeight: height } : {}),
-        ...(resolution !== undefined ? { resolution } : {}),
-      },
-      ...this.authHeader,
-      responseType: 'arraybuffer',
-    });
+    try {
+      const response = await this._apiClient.queryViewImage({
+        params: { siteId, viewId },
+        queries: {
+          ...(width !== undefined ? { vizWidth: width } : {}),
+          ...(height !== undefined ? { vizHeight: height } : {}),
+          ...(resolution !== undefined ? { resolution } : {}),
+          ...(format !== undefined ? { format } : {}),
+        },
+        ...this.authHeader,
+        responseType: 'arraybuffer',
+      });
+      return Ok(response);
+    } catch (error) {
+      // Handle Axios errors with response data
+      if (isAxiosError(error) && error.response?.data) {
+        let errorData = error.response.data;
+
+        // When responseType is 'arraybuffer', parse the response body
+        if (!errorData.error) {
+          try {
+            const text = new TextDecoder().decode(errorData);
+            errorData = JSON.parse(text);
+          } catch {
+            return Err({ type: 'unknown', message: getExceptionMessage(error) });
+          }
+        }
+
+        if (errorData.error?.code === '403157') {
+          return Err({ type: 'feature-disabled' });
+        }
+
+        // Extract the actual error details from Tableau Server response
+        if (errorData.error) {
+          const { summary, detail } = errorData.error;
+          const message = detail ? `${summary}: ${detail}` : summary;
+          return Err({ type: 'unknown', message });
+        }
+      }
+      return Err({ type: 'unknown', message: getExceptionMessage(error) });
+    }
   };
 
   /**

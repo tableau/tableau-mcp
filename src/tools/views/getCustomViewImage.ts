@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { CustomViewNotAllowedError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
-import { convertPngDataToToolResult } from '../convertPngDataToToolResult.js';
+import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
@@ -79,7 +79,7 @@ export const getGetCustomViewImageTool = (server: Server): Tool<typeof paramsSch
             result: imageData,
           };
         },
-        getSuccessResult: convertPngDataToToolResult,
+        getSuccessResult: (imageData) => convertViewImageToToolResult(imageData, 'PNG'),
       });
     },
   });

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getConfig } from './config.js';
-import { log } from './logging/log.js';
+import { notifier } from './logging/notification.js';
 import {
   getRequestErrorInterceptor,
   getRequestInterceptor,
@@ -12,17 +12,21 @@ import {
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
 
-vi.mock('./logging/log.js', () => ({
-  log: {
+vi.mock('./logging/notification.js', () => ({
+  notifier: {
     info: vi.fn(),
     error: vi.fn(),
   },
-  shouldLogWhenLevelIsAtLeast: vi.fn().mockReturnValue(true),
+  shouldNotifyWhenLevelIsAtLeast: vi.fn().mockReturnValue(true),
 }));
 
 describe('restApiInstance', () => {
   const mockHost = 'https://my-tableau-server.com';
   const mockRequestId = 'test-request-id';
+
+  beforeAll(() => {
+    RestApi.host = mockHost;
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -47,7 +51,7 @@ describe('restApiInstance', () => {
         callback: (restApi) => Promise.resolve(restApi),
       });
 
-      expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
+      expect(RestApi.host).toBe(mockHost);
       expect(restApi.signIn).toHaveBeenCalledWith({
         type: 'pat',
         patName: 'sponge',
@@ -74,7 +78,7 @@ describe('restApiInstance', () => {
         callback: (restApi) => Promise.resolve(restApi),
       });
 
-      expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
+      expect(RestApi.host).toBe(mockHost);
       expect(restApi.signIn).toHaveBeenCalledWith({
         type: 'direct-trust',
         siteName: 'tc25',
@@ -107,7 +111,7 @@ describe('restApiInstance', () => {
         callback: (restApi) => Promise.resolve(restApi),
       });
 
-      expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
+      expect(RestApi.host).toBe(mockHost);
       expect(restApi.signIn).toHaveBeenCalledWith({
         type: 'uat',
         siteName: 'tc25',
@@ -144,7 +148,7 @@ describe('restApiInstance', () => {
         callback: (restApi) => Promise.resolve(restApi),
       });
 
-      expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
+      expect(RestApi.host).toBe(mockHost);
       expect(restApi.setBearerToken).toHaveBeenCalledWith('abc123|xyz789|site-luid');
       expect(restApi.signIn).not.toHaveBeenCalled();
       expect(restApi.signOut).not.toHaveBeenCalled();
@@ -172,7 +176,7 @@ describe('restApiInstance', () => {
         callback: (restApi) => Promise.resolve(restApi),
       });
 
-      expect(RestApi).toHaveBeenCalledWith(mockHost, expect.any(Object));
+      expect(RestApi.host).toBe(mockHost);
       expect(restApi.setCredentials).toHaveBeenCalledWith(
         'abc123|xyz789|site-luid',
         'user-luid-123',
@@ -225,7 +229,7 @@ describe('restApiInstance', () => {
       interceptor(mockRequest);
 
       expect(mockRequest.headers['User-Agent']).toBe(userAgent);
-      expect(log.info).toHaveBeenCalledWith(
+      expect(notifier.info).toHaveBeenCalledWith(
         server,
         expect.objectContaining({
           type: 'request',
@@ -234,7 +238,7 @@ describe('restApiInstance', () => {
           url: expect.any(String),
         }),
         expect.objectContaining({
-          logger: 'rest-api',
+          notifier: 'rest-api',
           requestId: mockRequestId,
         }),
       );
@@ -257,7 +261,7 @@ describe('restApiInstance', () => {
       const result = interceptor(mockResponse);
 
       expect(result).toBe(mockResponse);
-      expect(log.info).toHaveBeenCalledWith(
+      expect(notifier.info).toHaveBeenCalledWith(
         server,
         expect.objectContaining({
           type: 'response',
@@ -266,7 +270,7 @@ describe('restApiInstance', () => {
           url: expect.any(String),
         }),
         expect.objectContaining({
-          logger: 'rest-api',
+          notifier: 'rest-api',
           requestId: mockRequestId,
         }),
       );
@@ -288,11 +292,11 @@ describe('restApiInstance', () => {
 
       errorInterceptor(mockError, mockHost);
 
-      expect(log.error).toHaveBeenCalledWith(
+      expect(notifier.error).toHaveBeenCalledWith(
         server,
         `Request ${mockRequestId} failed with error: ${JSON.stringify(mockError)}`,
         expect.objectContaining({
-          logger: 'rest-api',
+          notifier: 'rest-api',
           requestId: mockRequestId,
         }),
       );
@@ -313,9 +317,9 @@ describe('restApiInstance', () => {
 
       errorInterceptor(mockError, mockHost);
 
-      expect(log.info).toHaveBeenCalled();
+      expect(notifier.info).toHaveBeenCalled();
 
-      expect(log.info).toHaveBeenCalledWith(
+      expect(notifier.info).toHaveBeenCalledWith(
         server,
         expect.objectContaining({
           type: 'request',
@@ -324,7 +328,7 @@ describe('restApiInstance', () => {
           url: expect.any(String),
         }),
         expect.objectContaining({
-          logger: 'rest-api',
+          notifier: 'rest-api',
           requestId: mockRequestId,
         }),
       );
@@ -345,11 +349,11 @@ describe('restApiInstance', () => {
 
       errorInterceptor(mockError, mockHost);
 
-      expect(log.error).toHaveBeenCalledWith(
+      expect(notifier.error).toHaveBeenCalledWith(
         server,
         `Response from request ${mockRequestId} failed with error: ${JSON.stringify(mockError)}`,
         expect.objectContaining({
-          logger: 'rest-api',
+          notifier: 'rest-api',
           requestId: mockRequestId,
         }),
       );
@@ -372,7 +376,7 @@ describe('restApiInstance', () => {
 
       errorInterceptor(mockError, mockHost);
 
-      expect(log.info).toHaveBeenCalledWith(
+      expect(notifier.info).toHaveBeenCalledWith(
         server,
         expect.objectContaining({
           type: 'response',
@@ -381,7 +385,7 @@ describe('restApiInstance', () => {
           status: 500,
         }),
         expect.objectContaining({
-          logger: 'rest-api',
+          notifier: 'rest-api',
           requestId: mockRequestId,
         }),
       );
