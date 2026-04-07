@@ -3,7 +3,6 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
-  ArgsValidationError,
   FeatureDisabledError,
   UnknownError,
   ViewNotAllowedError,
@@ -11,11 +10,10 @@ import {
 import { useRestApi } from '../../restApiInstance.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
-import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
-import { MIN_VERSION_FOR_SVG } from './constants.js';
+import { getImageFormatForVersion } from './getImageFormatForVersion.js';
 
 const paramsSchema = {
   viewId: z.string(),
@@ -56,24 +54,10 @@ export const getGetViewImageTool = (
         extra,
         args: { viewId, width, height, format, viewFilters },
         callback: async () => {
-          // Version check for format parameter
-          const supportsFormat = getResultForTableauVersion({
-            productVersion: tableauServerVersion,
-            mappings: {
-              [MIN_VERSION_FOR_SVG]: true,
-              default: false,
-            },
-          });
-
-          // If SVG is requested but version is too old, return an error
-          if (format === 'SVG' && !supportsFormat) {
-            return new ArgsValidationError(
-              `SVG format requires Tableau Server ${MIN_VERSION_FOR_SVG} or later. Current version: ${tableauServerVersion.value}`,
-            ).toErr();
+          const formatResult = getImageFormatForVersion(format, tableauServerVersion);
+          if (formatResult.isErr()) {
+            return formatResult;
           }
-
-          // If PNG is requested but version is too old, omit format parameter (PNG is default)
-          const formatToUse = format === 'PNG' && !supportsFormat ? undefined : format;
 
           const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
             viewId,
@@ -94,7 +78,7 @@ export const getGetViewImageTool = (
                 width,
                 height,
                 resolution: 'high',
-                format: formatToUse,
+                format: formatResult.value,
                 viewFilters,
               });
 
