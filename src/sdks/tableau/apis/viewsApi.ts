@@ -84,6 +84,18 @@ const getCustomViewImageEndpoint = makeEndpoint({
     },
   ],
   response: z.string(),
+  errors: [
+    {
+      status: 400,
+      schema: z.object({
+        error: z.object({
+          code: z.string(),
+          summary: z.string(),
+          detail: z.string(),
+        }),
+      }),
+    },
+  ],
 });
 
 const queryViewImageEndpoint = makeEndpoint({

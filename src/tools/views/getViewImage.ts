@@ -15,6 +15,7 @@ import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.
 import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
+import { MIN_VERSION_FOR_SVG } from './constants.js';
 
 const paramsSchema = {
   viewId: z.string(),
@@ -31,8 +32,6 @@ const paramsSchema = {
     .optional()
     .describe('Optional map of view filter field names to values.'),
 };
-
-const MIN_VERSION_FOR_SVG = '2026.2.0';
 
 export const getGetViewImageTool = (
   server: Server,
@@ -55,7 +54,7 @@ export const getGetViewImageTool = (
     ): Promise<CallToolResult> => {
       return await getViewImageTool.logAndExecute<string>({
         extra,
-        args: { viewId, width, height, viewFilters },
+        args: { viewId, width, height, format, viewFilters },
         callback: async () => {
           // Version check for format parameter
           const supportsFormat = getResultForTableauVersion({

@@ -10,6 +10,8 @@ import { Pagination } from '../types/pagination.js';
 import { View } from '../types/view.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
+type QueryImageError = { type: 'feature-disabled' } | { type: 'unknown'; message: string };
+
 /**
  * Views methods of the Tableau Server REST API
  *
@@ -101,6 +103,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     resolution = 'high',
     width,
     height,
+    format,
     viewFilters,
   }: {
     customViewId: string;
@@ -108,13 +111,15 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     resolution?: 'high';
     width?: number;
     height?: number;
+    format?: 'PNG' | 'SVG';
     /** Map of field name to filter value; keys are prefixed with `vf_` unless already present. */
     viewFilters?: Record<string, string>;
-  }): Promise<string> => {
+  }): Promise<Result<string, QueryImageError>> => {
     const queries: Record<string, string | number> = {
       ...(width !== undefined ? { vizWidth: width } : {}),
       ...(height !== undefined ? { vizHeight: height } : {}),
       ...(resolution !== undefined ? { resolution } : {}),
+      ...(format !== undefined ? { format } : {}),
     };
 
     if (viewFilters) {
@@ -124,12 +129,17 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       }
     }
 
-    return await this._apiClient.getCustomViewImage({
-      params: { siteId, customViewId },
-      queries,
-      ...this.authHeader,
-      responseType: 'arraybuffer',
-    });
+    try {
+      const response = await this._apiClient.getCustomViewImage({
+        params: { siteId, customViewId },
+        queries,
+        ...this.authHeader,
+        responseType: 'arraybuffer',
+      });
+      return Ok(response);
+    } catch (error) {
+      return this.handleQueryImageError(error);
+    }
   };
 
   /**
@@ -193,57 +203,31 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     resolution?: 'high';
     format?: 'PNG' | 'SVG';
     viewFilters?: Record<string, string>;
-  }): Promise<
-    Result<string, { type: 'feature-disabled' } | { type: 'unknown'; message: string }>
-  > => {
-    const extraParams: Record<string, string> = {};
+  }): Promise<Result<string, QueryImageError>> => {
+    const queries: Record<string, string | number> = {
+      ...(width !== undefined ? { vizWidth: width } : {}),
+      ...(height !== undefined ? { vizHeight: height } : {}),
+      ...(resolution !== undefined ? { resolution } : {}),
+      ...(format !== undefined ? { format } : {}),
+    };
+
     if (viewFilters) {
       for (const [key, value] of Object.entries(viewFilters)) {
         const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
-        extraParams[paramName] = value;
+        queries[paramName] = value;
       }
     }
 
     try {
       const response = await this._apiClient.queryViewImage({
         params: { siteId, viewId },
-        queries: {
-          ...(width !== undefined ? { vizWidth: width } : {}),
-          ...(height !== undefined ? { vizHeight: height } : {}),
-          ...(resolution !== undefined ? { resolution } : {}),
-          ...(format !== undefined ? { format } : {}),
-        },
+        queries,
         ...this.authHeader,
         responseType: 'arraybuffer',
       });
       return Ok(response);
     } catch (error) {
-      // Handle Axios errors with response data
-      if (isAxiosError(error) && error.response?.data) {
-        let errorData = error.response.data;
-
-        // When responseType is 'arraybuffer', parse the response body
-        if (!errorData.error) {
-          try {
-            const text = new TextDecoder().decode(errorData);
-            errorData = JSON.parse(text);
-          } catch {
-            return Err({ type: 'unknown', message: getExceptionMessage(error) });
-          }
-        }
-
-        if (errorData.error?.code === '403157') {
-          return Err({ type: 'feature-disabled' });
-        }
-
-        // Extract the actual error details from Tableau Server response
-        if (errorData.error) {
-          const { summary, detail } = errorData.error;
-          const message = detail ? `${summary}: ${detail}` : summary;
-          return Err({ type: 'unknown', message });
-        }
-      }
-      return Err({ type: 'unknown', message: getExceptionMessage(error) });
+      return this.handleQueryImageError(error);
     }
   };
 
@@ -309,5 +293,34 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       pagination: response.pagination,
       views: response.views.view ?? [],
     };
+  };
+
+  private handleQueryImageError = (error: unknown): Result<string, QueryImageError> => {
+    // Handle Axios errors with response data
+    if (isAxiosError(error) && error.response?.data) {
+      let errorData = error.response.data;
+
+      // When responseType is 'arraybuffer', parse the response body
+      if (!errorData.error) {
+        try {
+          const text = new TextDecoder().decode(errorData);
+          errorData = JSON.parse(text);
+        } catch {
+          return Err({ type: 'unknown', message: getExceptionMessage(error) });
+        }
+      }
+
+      if (errorData.error?.code === '403157') {
+        return Err({ type: 'feature-disabled' });
+      }
+
+      // Extract the actual error details from Tableau Server response
+      if (errorData.error) {
+        const { summary, detail } = errorData.error;
+        const message = detail ? `${summary}: ${detail}` : summary;
+        return Err({ type: 'unknown', message });
+      }
+    }
+    return Err({ type: 'unknown', message: getExceptionMessage(error) });
   };
 }
