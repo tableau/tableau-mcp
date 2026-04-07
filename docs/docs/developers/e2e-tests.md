@@ -17,8 +17,7 @@ The E2E tests can only be run:
 
 To run them locally:
 
-1. Ensure you do not have a `.env` file in the root of the project.
-2. Create a `tests/.env` file with contents:
+1. Update your .env file to:
 
 ```
 SERVER=https://10ax.online.tableau.com
@@ -30,10 +29,7 @@ CONNECTED_APP_SECRET_ID=<redacted>
 CONNECTED_APP_SECRET_VALUE=<redacted>
 ```
 
-3. Create a `tests/.env.reset` file with the same contents except all the env var values are empty.
-   (Environment variables get set at the beginning of each test and cleared at the end of each
-   test.)
-4. Run `npm run test:e2e` or select the `vitest.config.e2e.ts` config in the [Vitest
+2. Run `npm run test:e2e` or select the `vitest.config.e2e.ts` config in the [Vitest
    extension][vitest.explorer] and run them from your IDE.
 
 ## Running the E2E tests against a different site
@@ -46,7 +42,7 @@ To run the E2E tests locally against a different site, you need to:
 3. Create a Pulse Metric Definition named `Tableau MCP`. Its details don't matter.
 4. Update the `environmentData` object in `tests/constants.ts` with the new site details.
 5. Follow the steps in the [Running](#running) section, providing these new site details in the
-   `tests/.env` file.
+   `.env` file.
 
 ## Debugging
 

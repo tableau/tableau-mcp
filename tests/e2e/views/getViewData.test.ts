@@ -1,18 +1,15 @@
 import z from 'zod';
 
-import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
+import { getSuperstoreWorkbook, setEnv } from '../../testEnv.js';
 import { callTool } from '../client.js';
 
 describe('get-view-data', () => {
   beforeAll(setEnv);
-  afterAll(resetEnv);
 
   it('should get view data', async () => {
-    const env = getDefaultEnv();
-    const superstore = getSuperstoreWorkbook(env);
+    const superstore = getSuperstoreWorkbook();
 
     const data = await callTool('get-view-data', {
-      env,
       schema: z.string(),
       toolArgs: { viewId: superstore.defaultViewId },
     });
