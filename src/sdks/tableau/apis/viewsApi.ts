@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { customViewSchema } from '../types/customView.js';
 import { paginationSchema } from '../types/pagination.js';
 import { viewSchema } from '../types/view.js';
 import { paginationParameters } from './paginationParameters.js';
@@ -11,6 +12,28 @@ const getViewEndpoint = makeEndpoint({
   alias: 'getView',
   description: 'Gets the details of a specific view.',
   response: z.object({ view: viewSchema }),
+});
+
+const listCustomViewsEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/customviews',
+  alias: 'listCustomViews',
+  description:
+    'Gets a list of custom views on a site. The list includes details of each custom view.',
+  parameters: [
+    ...paginationParameters,
+    {
+      name: 'filter',
+      type: 'Query',
+      schema: z.string().optional(),
+      description:
+        'An expression that lets you specify a subset of views to return. You can filter on predefined fields such as name, tags, and createdAt. You can include multiple filter expressions.',
+    },
+  ],
+  response: z.object({
+    pagination: paginationSchema,
+    customViews: z.object({ customView: z.array(customViewSchema).optional() }),
+  }),
 });
 
 const queryViewDataEndpoint = makeEndpoint({
@@ -117,6 +140,7 @@ const queryViewsForSiteEndpoint = makeEndpoint({
 
 const viewsApi = makeApi([
   getViewEndpoint,
+  listCustomViewsEndpoint,
   queryViewDataEndpoint,
   queryViewImageEndpoint,
   queryViewsForWorkbookEndpoint,
