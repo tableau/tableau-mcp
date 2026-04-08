@@ -153,6 +153,29 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     }
   };
 
+  listCustomViews = async ({
+    siteId,
+    filter,
+    pageSize,
+    pageNumber,
+  }: {
+    siteId: string;
+    filter?: string;
+    pageSize?: number;
+    pageNumber?: number;
+  }): Promise<{ pagination: Pagination; customViews: CustomView[] }> => {
+    const response = await this._apiClient.listCustomViews({
+      params: { siteId },
+      queries: { filter, pageSize, pageNumber },
+      ...this.authHeader,
+    });
+
+    return {
+      pagination: response.pagination,
+      customViews: response.customViews.customView ?? [],
+    };
+  };
+
   /**
    * Returns a specified view rendered as data in comma separated value (CSV) format.
    *

@@ -98,6 +98,28 @@ const getCustomViewImageEndpoint = makeEndpoint({
   ],
 });
 
+const listCustomViewsEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/customviews',
+  alias: 'listCustomViews',
+  description:
+    'Gets a list of custom views on a site. The list includes details of each custom view.',
+  parameters: [
+    ...paginationParameters,
+    {
+      name: 'filter',
+      type: 'Query',
+      schema: z.string().optional(),
+      description:
+        'An expression that lets you specify a subset of views to return. You can filter on predefined fields such as name, tags, and createdAt. You can include multiple filter expressions.',
+    },
+  ],
+  response: z.object({
+    pagination: paginationSchema,
+    customViews: z.object({ customView: z.array(customViewSchema).optional() }),
+  }),
+});
+
 const queryViewImageEndpoint = makeEndpoint({
   method: 'get',
   path: '/sites/:siteId/views/:viewId/image',
@@ -197,6 +219,7 @@ const viewsApi = makeApi([
   getCustomViewEndpoint,
   getCustomViewDataEndpoint,
   getCustomViewImageEndpoint,
+  listCustomViewsEndpoint,
   queryViewDataEndpoint,
   queryViewImageEndpoint,
   queryViewsForWorkbookEndpoint,

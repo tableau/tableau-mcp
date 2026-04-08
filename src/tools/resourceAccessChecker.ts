@@ -1,5 +1,6 @@
 import { BoundedContext } from '../overridableConfig.js';
 import { useRestApi } from '../restApiInstance.js';
+import { CustomView } from '../sdks/tableau/types/customView.js';
 import { DataSource } from '../sdks/tableau/types/dataSource.js';
 import { View } from '../sdks/tableau/types/view.js';
 import { Workbook } from '../sdks/tableau/types/workbook.js';
@@ -470,13 +471,18 @@ class ResourceAccessChecker {
   /**
    * Resolves a custom view to its underlying published view, then applies the same rules as {@link isViewAllowed}.
    */
-  async isCustomViewAllowed({
-    customViewId,
-    extra,
-  }: {
-    customViewId: string;
-    extra: TableauRequestHandlerExtra;
-  }): Promise<AllowedResult> {
+  async isCustomViewAllowed(
+    args: (
+      | {
+          customViewId: string;
+        }
+      | { customView: CustomView }
+    ) & {
+      extra: TableauRequestHandlerExtra;
+    },
+  ): Promise<AllowedResult> {
+    const { extra } = args;
+    const customViewId = 'customViewId' in args ? args.customViewId : args.customView.id;
     const cachedResult = this._cachedCustomViewIds.get(customViewId);
     if (cachedResult) {
       return cachedResult;
@@ -491,28 +497,30 @@ class ResourceAccessChecker {
       return { allowed: true };
     }
 
-    let underlyingViewId: string | undefined;
-    try {
-      const customView = await useRestApi({
-        ...extra,
-        jwtScopes: RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
-        callback: async (restApi) =>
-          await restApi.viewsMethods.getCustomView({
-            siteId: restApi.siteId,
-            customViewId,
-          }),
-      });
-      underlyingViewId = customView.view.id;
-    } catch (error) {
-      return {
-        allowed: false,
-        message: [
-          'The set of allowed views that can be queried is limited by the server configuration.',
-          `An error occurred while checking if the custom view with LUID ${customViewId} belongs to an allowed view.`,
-          'Please verify that the custom view LUID is correct and you have access to it.',
-          getExceptionMessage(error),
-        ].join(' '),
-      };
+    let underlyingViewId = 'customView' in args ? args.customView.view.id : undefined;
+    if (!underlyingViewId) {
+      try {
+        const customView = await useRestApi({
+          ...extra,
+          jwtScopes: RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+          callback: async (restApi) =>
+            await restApi.viewsMethods.getCustomView({
+              siteId: restApi.siteId,
+              customViewId,
+            }),
+        });
+        underlyingViewId = customView.view.id;
+      } catch (error) {
+        return {
+          allowed: false,
+          message: [
+            'The set of allowed views that can be queried is limited by the server configuration.',
+            `An error occurred while checking if the custom view with LUID ${customViewId} belongs to an allowed view.`,
+            'Please verify that the custom view LUID is correct and you have access to it.',
+            getExceptionMessage(error),
+          ].join(' '),
+        };
+      }
     }
 
     // The custom view is allowed if the underlying view that contains it is allowed.
