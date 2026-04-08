@@ -6,7 +6,6 @@ import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { CustomView } from '../../sdks/tableau/types/customView.js';
 import { Server } from '../../server.js';
-import { getConfigWithOverrides } from '../../utils/mcpSiteSettings.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
