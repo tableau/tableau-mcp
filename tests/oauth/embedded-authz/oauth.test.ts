@@ -302,7 +302,7 @@ describe('OAuth', () => {
     expect(data).toMatchObject({ result: { tools: expect.any(Array) } });
   });
 
-  it.skip('should pass the current request X-Tableau-Auth through extra.authInfo', async () => {
+  it('should pass the current request X-Tableau-Auth through extra.authInfo', async () => {
     vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
 
     const { app } = await startServer();
@@ -716,7 +716,7 @@ describe('OAuth', () => {
   // of what this implementation provides.
   // -------------------------------------------------------------------------
 
-  it.skip('should revoke a valid refresh token and prevent subsequent refresh grants', async () => {
+  it('should revoke a valid refresh token and prevent subsequent refresh grants', async () => {
     const { app } = await startServer();
 
     mocks.mockGetTokenResult.mockResolvedValue({
