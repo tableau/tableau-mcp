@@ -10,8 +10,11 @@ import { getListPulseMetricsFromMetricIdsTool } from './pulse/listMetricsFromMet
 import { getListPulseMetricSubscriptionsTool } from './pulse/listMetricSubscriptions/listPulseMetricSubscriptions.js';
 import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
+import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
+import { getGetCustomViewImageTool } from './views/getCustomViewImage.js';
 import { getGetViewDataTool } from './views/getViewData.js';
 import { getGetViewImageTool } from './views/getViewImage.js';
+import { getListCustomViewsTool } from './views/listCustomViews.js';
 import { getListViewsTool } from './views/listViews.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
@@ -29,9 +32,12 @@ export const toolFactories = [
   getGeneratePulseInsightBriefTool,
   getGetWorkbookTool,
   getGetViewDataTool,
+  getGetCustomViewDataTool,
+  getGetCustomViewImageTool,
   getGetViewImageTool,
   getListWorkbooksTool,
   getListViewsTool,
+  getListCustomViewsTool,
   getSearchContentTool,
   getRevokeAccessTokenTool,
 ];

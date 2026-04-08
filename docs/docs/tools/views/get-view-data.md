@@ -21,6 +21,13 @@ The ID of the view, potentially retrieved by the [List Views](list-views.md) or
 
 Example: `9460abfe-a6b2-49d1-b998-39e1ebcc55ce`
 
+## Optional arguments
+
+### `viewFilters`
+
+Optional map of field names to values, sent as `vf_<fieldname>` query parameters per
+[filter query views](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_filtering_and_sorting.htm#Filter-query-views).
+
 ## Example result
 
 ```

@@ -8,15 +8,14 @@ import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getGetViewImageTool } from './getViewImage.js';
+import { getGetCustomViewImageTool } from './getCustomViewImage.js';
+import { mockCustomView } from './mockCustomView.js';
 import { mockView } from './mockView.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
 
-// 1x1 png image
 const encodedPngData =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
-/** Binary string (latin1) as returned by {@link ViewsMethods.queryViewImage}. */
 const mockPngData = Buffer.from(encodedPngData, 'base64').toString('latin1');
 const base64PngData = Buffer.from(mockPngData).toString('base64');
 
@@ -33,28 +32,33 @@ const testProductVersionWithSvg: ProductVersion = {
 const testProductVersionWithoutSvg: ProductVersion = testProductVersion; // 2026.1.0
 
 const mocks = vi.hoisted(() => ({
+  mockGetCustomView: vi.fn(),
   mockGetView: vi.fn(),
-  mockQueryViewImage: vi.fn(),
+  mockGetCustomViewImage: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
   useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
     callback({
       viewsMethods: {
+        getCustomView: mocks.mockGetCustomView,
         getView: mocks.mockGetView,
-        queryViewImage: mocks.mockQueryViewImage,
+        getCustomViewImage: mocks.mockGetCustomViewImage,
       },
       siteId: 'test-site-id',
     }),
   ),
 }));
 
-describe('getViewImageTool', () => {
+describe('getCustomViewImageTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
+    mocks.mockGetCustomView.mockResolvedValue(mockCustomView);
+    mocks.mockGetView.mockResolvedValue(mockView);
+    mocks.mockGetCustomViewImage.mockResolvedValue(mockPngData);
   });
 
   afterEach(() => {
@@ -62,17 +66,18 @@ describe('getViewImageTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const getViewImageTool = getGetViewImageTool(new Server(), testProductVersionWithSvg);
-    expect(getViewImageTool.name).toBe('get-view-image');
-    expect(getViewImageTool.description).toContain(
-      'Retrieves an image of the specified view in a Tableau workbook.',
-    );
-    expect(getViewImageTool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
+    const tool = getGetCustomViewImageTool(new Server(), testProductVersionWithSvg);
+    expect(tool.name).toBe('get-custom-view-image');
+    expect(tool.description).toContain('custom view');
+    expect(tool.paramsSchema).toMatchObject({
+      customViewId: expect.any(Object),
+      viewFilters: expect.any(Object),
+    });
   });
 
-  it('should successfully get view image as PNG when format is omitted', async () => {
-    mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
-    const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
+  it('should successfully get custom view image as PNG when format is omitted', async () => {
+    mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
+    const result = await getToolResult({ customViewId: mockCustomView.id });
     expect(result.isError).toBe(false);
     expect(result.content).toHaveLength(1);
     expect(result.content[0]).toMatchObject({
@@ -80,22 +85,20 @@ describe('getViewImageTool', () => {
       data: base64PngData,
       mimeType: 'image/png',
     });
-    expect(mocks.mockQueryViewImage).toHaveBeenCalledWith({
+    expect(mocks.mockGetCustomViewImage).toHaveBeenCalledWith({
       siteId: 'test-site-id',
-      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      customViewId: mockCustomView.id,
       width: undefined,
       height: undefined,
       resolution: 'high',
       format: undefined,
+      viewFilters: undefined,
     });
   });
 
   it('should call queryViewImage with format SVG and return both text and image content', async () => {
-    mocks.mockQueryViewImage.mockResolvedValue(Ok(mockSvgData));
-    const result = await getToolResult({
-      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
-      format: 'SVG',
-    });
+    mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockSvgData));
+    const result = await getToolResult({ customViewId: mockCustomView.id, format: 'SVG' });
     expect(result.isError).toBe(false);
     expect(result.content).toHaveLength(2);
     expect(result.content[0]).toMatchObject({ type: 'text', text: mockSvgData });
@@ -104,23 +107,21 @@ describe('getViewImageTool', () => {
       data: Buffer.from(mockSvgData).toString('base64'),
       mimeType: 'image/svg+xml',
     });
-    expect(mocks.mockQueryViewImage).toHaveBeenCalledWith({
+    expect(mocks.mockGetCustomViewImage).toHaveBeenCalledWith({
       siteId: 'test-site-id',
-      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      customViewId: mockCustomView.id,
       width: undefined,
       height: undefined,
       resolution: 'high',
       format: 'SVG',
+      viewFilters: undefined,
     });
   });
 
   it('should return both text and image content with SVG decoded from a Buffer', async () => {
     const svgBuffer = Buffer.from(mockSvgData, 'utf-8');
-    mocks.mockQueryViewImage.mockResolvedValue(Ok(svgBuffer));
-    const result = await getToolResult({
-      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
-      format: 'SVG',
-    });
+    mocks.mockGetCustomViewImage.mockResolvedValue(Ok(svgBuffer));
+    const result = await getToolResult({ customViewId: mockCustomView.id, format: 'SVG' });
     expect(result.isError).toBe(false);
     expect(result.content).toHaveLength(2);
     expect(result.content[0]).toMatchObject({ type: 'text', text: mockSvgData });
@@ -131,40 +132,42 @@ describe('getViewImageTool', () => {
     });
   });
 
+  it('should pass viewFilters to the REST layer', async () => {
+    await getToolResult({
+      customViewId: mockCustomView.id,
+      viewFilters: { Region: 'West' },
+    });
+    expect(mocks.mockGetCustomViewImage).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      customViewId: mockCustomView.id,
+      width: undefined,
+      height: undefined,
+      resolution: 'high',
+      viewFilters: { Region: 'West' },
+    });
+  });
+
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
-    mocks.mockQueryViewImage.mockResolvedValue(
-      Err({
-        type: 'unknown',
-        message: errorMessage,
-      }),
-    );
-    const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
+    mocks.mockGetCustomViewImage.mockRejectedValue(new Error(errorMessage));
+    const result = await getToolResult({ customViewId: mockCustomView.id });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
   });
 
-  it('should return view not allowed error when view is not allowed', async () => {
+  it('should return not allowed when underlying view fails bounded context', async () => {
     vi.stubEnv('INCLUDE_WORKBOOK_IDS', 'some-other-workbook-id');
-    mocks.mockGetView.mockResolvedValue(mockView);
-
-    const result = await getToolResult({ viewId: mockView.id });
+    const result = await getToolResult({ customViewId: mockCustomView.id });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(
-      [
-        'The set of allowed views that can be queried is limited by the server configuration.',
-        'The view with LUID 4d18c547-bbb1-4187-ae5a-7f78b35adf2d cannot be queried because it does not belong to an allowed workbook.',
-      ].join(' '),
-    );
-
-    expect(mocks.mockQueryViewImage).not.toHaveBeenCalled();
+    expect(result.content[0].text).toContain('does not belong to an allowed workbook');
+    expect(mocks.mockGetCustomViewImage).not.toHaveBeenCalled();
   });
 
   it('should return error when SVG format is requested on old Tableau version', async () => {
     const result = await getToolResult({
-      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      customViewId: mockCustomView.id,
       format: 'SVG',
       productVersion: testProductVersionWithoutSvg,
     });
@@ -174,38 +177,39 @@ describe('getViewImageTool', () => {
       'SVG format requires Tableau Server 2026.2.0 or later',
     );
     expect(result.content[0].text).toContain('2026.1.0');
-    expect(mocks.mockQueryViewImage).not.toHaveBeenCalled();
+    expect(mocks.mockGetCustomViewImage).not.toHaveBeenCalled();
   });
 
   it('should omit format parameter when PNG is requested on old Tableau version', async () => {
-    mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
+    mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
     const result = await getToolResult({
-      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      customViewId: mockCustomView.id,
       format: 'PNG',
       productVersion: testProductVersionWithoutSvg,
     });
     expect(result.isError).toBe(false);
-    expect(mocks.mockQueryViewImage).toHaveBeenCalledWith({
+    expect(mocks.mockGetCustomViewImage).toHaveBeenCalledWith({
       siteId: 'test-site-id',
-      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      customViewId: mockCustomView.id,
       width: undefined,
       height: undefined,
       resolution: 'high',
       format: undefined,
+      viewFilters: undefined,
     });
   });
 
   it('should include format parameter when PNG is requested on new Tableau version', async () => {
-    mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
+    mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
     const result = await getToolResult({
-      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      customViewId: mockCustomView.id,
       format: 'PNG',
       productVersion: testProductVersionWithSvg,
     });
     expect(result.isError).toBe(false);
-    expect(mocks.mockQueryViewImage).toHaveBeenCalledWith({
+    expect(mocks.mockGetCustomViewImage).toHaveBeenCalledWith({
       siteId: 'test-site-id',
-      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      customViewId: mockCustomView.id,
       width: undefined,
       height: undefined,
       resolution: 'high',
@@ -214,16 +218,16 @@ describe('getViewImageTool', () => {
   });
 
   it('should allow SVG format on new Tableau version', async () => {
-    mocks.mockQueryViewImage.mockResolvedValue(Ok(mockSvgData));
+    mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockSvgData));
     const result = await getToolResult({
-      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      customViewId: mockCustomView.id,
       format: 'SVG',
       productVersion: testProductVersionWithSvg,
     });
     expect(result.isError).toBe(false);
-    expect(mocks.mockQueryViewImage).toHaveBeenCalledWith({
+    expect(mocks.mockGetCustomViewImage).toHaveBeenCalledWith({
       siteId: 'test-site-id',
-      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      customViewId: mockCustomView.id,
       width: undefined,
       height: undefined,
       resolution: 'high',
@@ -232,13 +236,13 @@ describe('getViewImageTool', () => {
   });
 
   it('should handle 403157 FEATURE_DISABLED error', async () => {
-    mocks.mockQueryViewImage.mockResolvedValue(
+    mocks.mockGetCustomViewImage.mockResolvedValue(
       Err({
         type: 'feature-disabled',
       }),
     );
     const result = await getToolResult({
-      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      customViewId: mockCustomView.id,
       format: 'SVG',
       productVersion: testProductVersionWithSvg,
     });
@@ -251,22 +255,24 @@ describe('getViewImageTool', () => {
 });
 
 async function getToolResult(params: {
-  viewId: string;
+  customViewId: string;
   format?: 'PNG' | 'SVG';
   productVersion?: ProductVersion;
+  viewFilters?: Record<string, string>;
 }): Promise<CallToolResult> {
-  const getViewImageTool = getGetViewImageTool(
+  const tool = getGetCustomViewImageTool(
     new Server(),
     params.productVersion ?? testProductVersionWithSvg,
   );
-  const callback = await Provider.from(getViewImageTool.callback);
+
+  const callback = await Provider.from(tool.callback);
   return await callback(
     {
-      viewId: params.viewId,
+      customViewId: params.customViewId,
       width: undefined,
       height: undefined,
       format: params.format,
-      viewFilters: undefined,
+      viewFilters: params.viewFilters,
     },
     getMockRequestHandlerExtra(),
   );

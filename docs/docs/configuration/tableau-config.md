@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Configuring Tableau
 
-Tableau MCP works with both Tableau Server and Tableau Cloud data with these prerequisites:
+Tableau MCP works with both Tableau Server 2024.2+ and Tableau Cloud data with these prerequisites:
 
 - Only published data sources are supported.
 - VDS (VizQL Data Service) must be enabled (Tableau Server users may need to [enable it][vds]).

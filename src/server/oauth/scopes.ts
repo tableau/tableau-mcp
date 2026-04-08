@@ -75,6 +75,10 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:view:read'],
     api: new Set(['tableau:content:read']),
   },
+  'list-custom-views': {
+    mcp: ['tableau:mcp:view:read'],
+    api: new Set(['tableau:content:read']),
+  },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set(['tableau:viz_data_service:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
@@ -92,6 +96,14 @@ const toolScopeMap: Record<
     api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
   'get-view-data': {
+    mcp: ['tableau:mcp:view:download'],
+    api: new Set(['tableau:views:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  'get-custom-view-data': {
+    mcp: ['tableau:mcp:view:download'],
+    api: new Set(['tableau:views:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  'get-custom-view-image': {
     mcp: ['tableau:mcp:view:download'],
     api: new Set(['tableau:views:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },

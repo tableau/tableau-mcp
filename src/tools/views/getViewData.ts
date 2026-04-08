@@ -10,24 +10,31 @@ import { Tool } from '../tool.js';
 
 const paramsSchema = {
   viewId: z.string(),
+  viewFilters: z
+    .record(z.string())
+    .optional()
+    .describe('Optional map of view filter field names to values.'),
 };
 
 export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> => {
   const getViewDataTool = new Tool({
     server,
     name: 'get-view-data',
-    description:
+    description: [
       'Retrieves data in comma separated value (CSV) format for the specified view in a Tableau workbook.',
+      'Optional view field names and values can be provided to filter the view.',
+      'For custom views, use the tool to get customview data by custom view id instead.',
+    ].join(' '),
     paramsSchema,
     annotations: {
       title: 'Get View Data',
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ viewId }, extra): Promise<CallToolResult> => {
+    callback: async ({ viewId, viewFilters }, extra): Promise<CallToolResult> => {
       return await getViewDataTool.logAndExecute<string>({
         extra,
-        args: { viewId },
+        args: { viewId, viewFilters },
         callback: async () => {
           const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
             viewId,
@@ -46,6 +53,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
                 return await restApi.viewsMethods.queryViewData({
                   viewId,
                   siteId: restApi.siteId,
+                  viewFilters,
                 });
               },
             }),

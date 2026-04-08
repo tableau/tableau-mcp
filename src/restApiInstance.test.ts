@@ -251,6 +251,7 @@ describe('restApiInstance', () => {
       const interceptor = getResponseInterceptor(server, mockRequestId);
       const mockResponse = {
         status: 200,
+        params: { foo: 'bar' },
         url: '/api/test',
         baseUrl: mockHost,
         headers: {},
