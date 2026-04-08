@@ -2,18 +2,17 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { BoundedContext } from '../../overridableConfig.js';
+import { WorkbookNotAllowedError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
-import { CustomView } from '../../sdks/tableau/types/customView.js';
 import { Server } from '../../server.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { ConstrainedResult, Tool } from '../tool.js';
-import { TableauRequestHandlerExtra } from '../toolContext.js';
+import { Tool } from '../tool.js';
 import { parseAndValidateCustomViewsFilterString } from './customViewsFilterUtils.js';
 
 const paramsSchema = {
+  workbookId: z.string().min(1),
   filter: z.string().optional(),
   pageSize: z.number().gt(0).optional(),
   limit: z.number().gt(0).optional(),
@@ -24,7 +23,7 @@ export const getListCustomViewsTool = (server: Server): Tool<typeof paramsSchema
     server,
     name: 'list-custom-views',
     description: `
-  Retrieves a list of custom views on a Tableau site including their metadata such as name, owner, and the view and workbook they are found in. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Overview) for precise and flexible view discovery. Use this tool when a user requests to list, search, or filter Tableau customviews on a site.
+  Retrieves a list of custom views for a Tableau workbook including their metadata such as name, owner, and the view they are found in. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Overview) for precise and flexible view discovery. Use this tool when a user requests to list, search, or filter Tableau custom views for a workbook.
 
   **Supported Filter Fields and Operators**
   | Field               | Operators            |
@@ -36,7 +35,6 @@ export const getListCustomViewsTool = (server: Server): Tool<typeof paramsSchema
   | shared              | eq                   |
   | updatedAt           | eq, gt, gte, lt, lte |
   | viewId              | eq                   |
-  | workbookId          | eq                   |
 
   ${genericFilterDescription}
 
@@ -56,14 +54,28 @@ export const getListCustomViewsTool = (server: Server): Tool<typeof paramsSchema
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
+    callback: async ({ workbookId, filter, pageSize, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
-      const validatedFilter = filter ? parseAndValidateCustomViewsFilterString(filter) : undefined;
+
+      const filterString = filter
+        ? `workbookId:eq:${workbookId},${filter}`
+        : `workbookId:eq:${workbookId}`;
+
+      const validatedFilter = parseAndValidateCustomViewsFilterString(filterString);
 
       return await listCustomViewsTool.logAndExecute({
         extra,
-        args: {},
+        args: { workbookId },
         callback: async () => {
+          const isWorkbookAllowedResult = await resourceAccessChecker.isWorkbookAllowed({
+            workbookId,
+            extra,
+          });
+
+          if (!isWorkbookAllowedResult.allowed) {
+            return new WorkbookNotAllowedError(isWorkbookAllowedResult.message).toErr();
+          }
+
           return new Ok(
             await useRestApi({
               ...extra,
@@ -98,79 +110,15 @@ export const getListCustomViewsTool = (server: Server): Tool<typeof paramsSchema
             }),
           );
         },
-        constrainSuccessResult: async (customViews) =>
-          await constrainCustomViews({
-            customViews,
-            boundedContext: configWithOverrides.boundedContext,
-            extra,
-          }),
+        constrainSuccessResult: async (customViews) => {
+          return {
+            type: 'success',
+            result: customViews,
+          };
+        },
       });
     },
   });
 
   return listCustomViewsTool;
 };
-
-export async function constrainCustomViews({
-  customViews,
-  boundedContext,
-  extra,
-}: {
-  customViews: Array<CustomView>;
-  boundedContext: BoundedContext;
-  extra: TableauRequestHandlerExtra;
-}): Promise<ConstrainedResult<Array<CustomView>>> {
-  if (customViews.length === 0) {
-    return {
-      type: 'empty',
-      message:
-        'No custom views were found. Either none exist or you do not have permission to view them.',
-    };
-  }
-
-  const { workbookIds, projectIds, tags } = boundedContext;
-  if (workbookIds) {
-    customViews = customViews.filter((customView) =>
-      customView.workbook?.id ? workbookIds.has(customView.workbook.id) : false,
-    );
-  }
-
-  if (!projectIds && !tags) {
-    // If project and tag filtering are not enabled, there's no need to iterate over the custom views
-    // to determine whether each one is allowed.
-    return {
-      type: 'success',
-      result: customViews,
-    };
-  }
-
-  // TODO: Remove this once the tool requires a workbook id
-  const filteredCustomViews: Array<CustomView> = [];
-  // The list of custom views could be very large and determining whether each one is allowed requires
-  // querying for the underlying view's metadata.
-  for (const customView of customViews) {
-    const { allowed } = await resourceAccessChecker.isCustomViewAllowed({
-      customView,
-      extra,
-    });
-
-    if (allowed) {
-      filteredCustomViews.push(customView);
-    }
-  }
-
-  if (filteredCustomViews.length === 0) {
-    return {
-      type: 'empty',
-      message: [
-        'The set of allowed views that can be queried is limited by the server configuration.',
-        'While views were found, they were all filtered out by the server configuration.',
-      ].join(' '),
-    };
-  }
-
-  return {
-    type: 'success',
-    result: filteredCustomViews,
-  };
-}
