@@ -26,10 +26,20 @@ Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
 
 A
 [filter expression](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_filtering_and_sorting.htm)
-as defined in the
-[Tableau REST API Custom Views filter fields](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_filtering_and_sorting.htm#custom-views).
+using only these supported Tableau REST API Custom Views filter fields:
+
+- `viewId:eq:<viewId>`
+- `ownerId:eq:<ownerId>`
 
 Example: `viewId:eq:9460abfe-a6b2-49d1-b998-39e1ebcc55ce`
+
+:::warning
+
+The tool always includes `workbookId` in the filter expression based on the required
+[`workbookId`](#workbookid) argument. Including the `workbookId` field in the filter will be
+ignored.
+
+:::
 
 <hr />
 

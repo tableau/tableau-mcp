@@ -111,6 +111,25 @@ describe('listCustomViewsTool', () => {
     );
   });
 
+  it('should ignore the workbookId filter if it is provided', async () => {
+    mocks.mockListCustomViews.mockResolvedValue(mockCustomViews);
+    mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
+    const result = await getToolResult({
+      workbookId: mockWorkbook.id,
+      filter: `workbookId:eq:some-other-workbook-id,viewId:eq:${mockCustomView.view.id}`,
+    });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(`${result.content[0].text}`)).toMatchObject(mockCustomViews.customViews);
+    expect(mocks.mockListCustomViews).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      filter: `workbookId:eq:${mockWorkbook.id},viewId:eq:${mockCustomView.view.id}`,
+      pageNumber: undefined,
+      pageSize: undefined,
+    });
+  });
+
   it('should return a custom view not allowed error if its workbook is not allowed due to tool scoping', async () => {
     vi.stubEnv('INCLUDE_WORKBOOK_IDS', 'some-other-workbook-id');
 

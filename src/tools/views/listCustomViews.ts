@@ -25,7 +25,7 @@ export const getListCustomViewsTool = (server: Server): Tool<typeof paramsSchema
     name: 'list-custom-views',
     // workbookId intentionally omitted from the filter field table since it originates from the workbookId parameter
     description: `
-  Retrieves a list of custom views for a Tableau workbook including their metadata such as name, owner, and the view they are found in. Supports optional filtering via field:operator:value expressions (e.g., name:eq:Overview) for precise and flexible view discovery. Use this tool when a user requests to list, search, or filter Tableau custom views for a workbook.
+  Retrieves a list of custom views for a Tableau workbook including their metadata such as name, owner, and the view they are found in. Supports optional filtering via field:operator:value expressions (e.g., viewId:eq:<view_id>) for precise and flexible custom view discovery. The tool always includes the workbookId in the final filter expression based on the required workbookId argument. Including the workbookId field in the filter will be ignored. Use this tool when a user requests to list, search, or filter Tableau custom views for a workbook.
 
   **Supported Filter Fields and Operators**
   | Field               | Operators            |
@@ -36,10 +36,13 @@ export const getListCustomViewsTool = (server: Server): Tool<typeof paramsSchema
   ${genericFilterDescription}
 
   **Example Usage:**
-  - List all custom views on a site
+  - List all custom views for a given workbook:
+      workbookId: "222ea993-9391-4910-a167-56b3d19b4e3b"
   - List custom views from the view with viewId "9460abfe-a6b2-49d1-b998-39e1ebcc55ce":
+      workbookId: "222ea993-9391-4910-a167-56b3d19b4e3b"
       filter: "viewId:eq:9460abfe-a6b2-49d1-b998-39e1ebcc55ce"
   - List custom views for the owner with ownerId "bbdee366-4a50-4c2c-a5c8-746da5b64483":
+      workbookId: "222ea993-9391-4910-a167-56b3d19b4e3b"
       filter: "ownerId:eq:bbdee366-4a50-4c2c-a5c8-746da5b64483"`,
     paramsSchema,
     annotations: {
@@ -49,6 +52,14 @@ export const getListCustomViewsTool = (server: Server): Tool<typeof paramsSchema
     },
     callback: async ({ workbookId, filter, pageSize, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
+
+      if (filter?.includes('workbookId:eq:')) {
+        // Remove any workbookId filter since the source of truth comes from the workbookId argument.
+        filter = filter
+          .split(',')
+          .filter((f) => !f.startsWith('workbookId:'))
+          .join(',');
+      }
 
       const filters = [`workbookId:eq:${workbookId}`, ...(filter ? [filter] : [])].join(',');
       const validatedFilter = parseAndValidateCustomViewsFilterString(filters);
