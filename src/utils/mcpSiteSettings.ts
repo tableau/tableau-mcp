@@ -6,7 +6,7 @@ import {
 } from '../overridableConfig.js';
 import { RestApiArgs, useRestApi } from '../restApiInstance.js';
 import { RestApi } from '../sdks/tableau/restApi.js';
-import { McpSiteSettings } from '../sdks/tableau/types/mcpSiteSettings.js';
+import { McpSiteSettings, McpSiteSettingsResult } from '../sdks/tableau/types/mcpSiteSettings.js';
 import { ExpiringMap } from './expiringMap.js';
 import { getSiteLuidFromAccessToken } from './getSiteLuidFromAccessToken.js';
 import { DistributiveOmit } from './types.js';
@@ -44,7 +44,7 @@ async function getMcpSiteSettings({
 
   const mcpSiteSettings: McpSiteSettings = {};
   try {
-    const result = await useRestApi({
+    const result: McpSiteSettingsResult = await useRestApi({
       ...restApiArgs,
       jwtScopes: ['tableau:mcp_site_settings:read'],
       callback: async (restApi) =>
@@ -77,9 +77,9 @@ export async function getConfigWithOverrides({
   const config = restApiArgs.config ?? getConfig();
   const signal = restApiArgs.signal ?? AbortSignal.timeout(config.maxRequestTimeoutMs);
 
-  const overrides = await getMcpSiteSettings({
+  const siteOverrides = await getMcpSiteSettings({
     restApiArgs: { ...restApiArgs, config, signal },
   });
 
-  return getOverridableConfig(overrides);
+  return getOverridableConfig(siteOverrides);
 }
