@@ -27,7 +27,7 @@ const listCustomViewsEndpoint = makeEndpoint({
       type: 'Query',
       schema: z.string().optional(),
       description:
-        'An expression that lets you specify a subset of views to return. You can filter on predefined fields such as name, tags, and createdAt. You can include multiple filter expressions.',
+        'An expression that lets you specify a subset of custom views to return. You can filter on viewId, ownerId, and workbookId. You can include multiple filter expressions.',
     },
   ],
   response: z.object({

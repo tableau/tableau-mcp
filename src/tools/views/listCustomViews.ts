@@ -95,12 +95,6 @@ export const getListCustomViewsTool = (server: Server): Tool<typeof paramsSchema
                 }
               }
 
-              if (!workbook) {
-                return new WorkbookNotFoundError(
-                  `The workbook with LUID ${workbookId} was not found.`,
-                ).toErr();
-              }
-
               const maxResultLimit = configWithOverrides.getMaxResultLimit(
                 listCustomViewsTool.name,
               );

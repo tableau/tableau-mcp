@@ -70,14 +70,14 @@ describe('listCustomViewsTool', () => {
     mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
     const result = await getToolResult({
       workbookId: mockWorkbook.id,
-      filter: `name:eq:${mockCustomView.name}`,
+      filter: `viewId:eq:${mockCustomView.view.id}`,
     });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(JSON.parse(`${result.content[0].text}`)).toMatchObject(mockCustomViews.customViews);
     expect(mocks.mockListCustomViews).toHaveBeenCalledWith({
       siteId: 'test-site-id',
-      filter: `workbookId:eq:${mockWorkbook.id},name:eq:${mockCustomView.name}`,
+      filter: `workbookId:eq:${mockWorkbook.id},viewId:eq:${mockCustomView.view.id}`,
       pageNumber: undefined,
       pageSize: undefined,
     });
@@ -89,7 +89,7 @@ describe('listCustomViewsTool', () => {
     mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
     const result = await getToolResult({
       workbookId: mockWorkbook.id,
-      filter: `name:eq:${mockCustomView.name}`,
+      filter: `viewId:eq:${mockCustomView.view.id}`,
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -102,7 +102,7 @@ describe('listCustomViewsTool', () => {
     );
     const result = await getToolResult({
       workbookId: mockWorkbook.id,
-      filter: `name:eq:${mockCustomView.name}`,
+      filter: `viewId:eq:${mockCustomView.view.id}`,
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -118,7 +118,7 @@ describe('listCustomViewsTool', () => {
     mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
     const result = await getToolResult({
       workbookId: mockWorkbook.id,
-      filter: `name:eq:${mockCustomView.name}`,
+      filter: `viewId:eq:${mockCustomView.view.id}`,
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
