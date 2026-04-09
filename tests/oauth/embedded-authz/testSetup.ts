@@ -1,6 +1,7 @@
 import { Ok } from 'ts-results-es';
 
 import { testProductVersion } from '../../../src/testShared.js';
+import { mockDatasources } from '../../../src/tools/listDatasources/mockDatasources.js';
 
 vi.mock('../../../src/sdks/tableau/restApi.js', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -22,6 +23,9 @@ vi.mock('../../../src/sdks/tableau/restApi.js', async (importOriginal) => ({
           },
         }),
       ),
+    },
+    datasourcesMethods: {
+      listDatasources: vi.fn().mockResolvedValue(mockDatasources),
     },
     serverMethods: {
       getServerInfo: vi.fn().mockResolvedValue({

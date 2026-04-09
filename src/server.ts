@@ -11,6 +11,7 @@ import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { getTableauServerInfo } from './getTableauServerInfo';
 import { setNotificationLevel } from './logging/notification.js';
+import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { Tool } from './tools/tool.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
@@ -81,17 +82,27 @@ export class Server extends McpServer {
           ...extra,
           config,
           server: this,
-          tableauAuthInfo,
-          _userLuid: tableauAuthInfo?.userId,
-          _siteLuid: tableauAuthInfo?.siteId,
+          get tableauAuthInfo() {
+            return getTableauAuthInfo(extra.authInfo);
+          },
+          _userLuid: undefined,
+          _siteLuid: undefined,
           getUserLuid() {
-            return tableauRequestHandlerExtra._userLuid ?? '';
+            return (
+              tableauRequestHandlerExtra._userLuid ??
+              getTableauAuthInfo(extra.authInfo)?.userId ??
+              ''
+            );
           },
           setUserLuid(userLuid: string) {
             tableauRequestHandlerExtra._userLuid = userLuid;
           },
           getSiteLuid() {
-            return tableauRequestHandlerExtra._siteLuid ?? '';
+            return (
+              tableauRequestHandlerExtra._siteLuid ??
+              getTableauAuthInfo(extra.authInfo)?.siteId ??
+              ''
+            );
           },
           setSiteLuid(siteLuid: string) {
             tableauRequestHandlerExtra._siteLuid = siteLuid;
