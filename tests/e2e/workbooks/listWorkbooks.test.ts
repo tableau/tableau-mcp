@@ -23,7 +23,7 @@ describe('list-workbooks', () => {
     expect(workbook).toMatchObject({
       id: superstore.id,
       name: 'Superstore',
-      defaultViewId: superstore.defaultViewId,
+      defaultViewId: superstore.defaultView.id,
     });
   });
 
@@ -43,7 +43,7 @@ describe('list-workbooks', () => {
     expect(workbook).toMatchObject({
       id: superstore.id,
       name: 'Superstore',
-      defaultViewId: superstore.defaultViewId,
+      defaultViewId: superstore.defaultView.id,
     });
   });
 });

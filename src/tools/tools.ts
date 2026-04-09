@@ -12,6 +12,7 @@ import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
 import { getGetViewDataTool } from './views/getViewData.js';
 import { getGetViewImageTool } from './views/getViewImage.js';
+import { getListCustomViewsTool } from './views/listCustomViews.js';
 import { getListViewsTool } from './views/listViews.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
@@ -32,6 +33,7 @@ export const toolFactories = [
   getGetViewImageTool,
   getListWorkbooksTool,
   getListViewsTool,
+  getListCustomViewsTool,
   getSearchContentTool,
   getRevokeAccessTokenTool,
 ];

@@ -5,6 +5,7 @@ import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { viewsApis } from '../apis/viewsApi.js';
 import { RestApiCredentials } from '../restApi.js';
+import { CustomView } from '../types/customView.js';
 import { Pagination } from '../types/pagination.js';
 import { View } from '../types/view.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
@@ -32,6 +33,40 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
    */
   getView = async ({ viewId, siteId }: { viewId: string; siteId: string }): Promise<View> => {
     return (await this._apiClient.getView({ params: { siteId, viewId }, ...this.authHeader })).view;
+  };
+
+  /**
+   * Gets a list of custom views on a site. The list includes details of each custom view.
+   *
+   * Required scopes: `tableau:content:read`
+   *
+   * @param {string} siteId - The Tableau site ID
+   * @param {string} filter - (Optional) Fields and operators that you can use to filter results
+   * @param {number} pageSize - (Optional) The number of items to return in one response. The minimum is 1. The maximum is 1000. The default is 100.
+   * @param {number} pageNumber - (Optional) The offset for paging. The default is 1.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#list_custom_views
+   */
+  listCustomViews = async ({
+    siteId,
+    filter,
+    pageSize,
+    pageNumber,
+  }: {
+    siteId: string;
+    filter?: string;
+    pageSize?: number;
+    pageNumber?: number;
+  }): Promise<{ pagination: Pagination; customViews: CustomView[] }> => {
+    const response = await this._apiClient.listCustomViews({
+      params: { siteId },
+      queries: { filter, pageSize, pageNumber },
+      ...this.authHeader,
+    });
+
+    return {
+      pagination: response.pagination,
+      customViews: response.customViews.customView ?? [],
+    };
   };
 
   /**
