@@ -27,6 +27,13 @@ export const graphqlResponse = z.object({
               .nullable(),
             fullyQualifiedName: z.string(),
             __typename: z.string(),
+            upstreamTables: z
+              .array(
+                z.object({
+                  name: z.string().nullable(),
+                }),
+              )
+              .nullish(),
             // Common field properties (optional since they depend on field type)
             dataCategory: z.string().nullish(),
             role: z.string().nullish(),

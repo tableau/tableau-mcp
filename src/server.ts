@@ -15,7 +15,8 @@ import {
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
-import { setLogLevel } from './logging/log.js';
+import { getTableauServerInfo } from './getTableauServerInfo';
+import { setNotificationLevel } from './logging/notification.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { Tool } from './tools/tool.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
@@ -82,6 +83,20 @@ export class Server extends McpServer {
           config,
           server: this,
           tableauAuthInfo,
+          _userLuid: tableauAuthInfo?.userId,
+          _siteLuid: tableauAuthInfo?.siteId,
+          getUserLuid() {
+            return tableauRequestHandlerExtra._userLuid ?? '';
+          },
+          setUserLuid(userLuid: string) {
+            tableauRequestHandlerExtra._userLuid = userLuid;
+          },
+          getSiteLuid() {
+            return tableauRequestHandlerExtra._siteLuid ?? '';
+          },
+          setSiteLuid(siteLuid: string) {
+            tableauRequestHandlerExtra._siteLuid = siteLuid;
+          },
           getConfigWithOverrides: async () =>
             getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra }),
         };
@@ -102,7 +117,7 @@ export class Server extends McpServer {
 
   registerRequestHandlers = (): void => {
     this.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
-      setLogLevel(this, request.params.level);
+      setNotificationLevel(this, request.params.level);
       return {};
     });
   };
@@ -110,7 +125,8 @@ export class Server extends McpServer {
   private _getToolsToRegister = async (
     tableauAuthInfo?: TableauAuthInfo,
   ): Promise<Array<Tool<any>>> => {
-    const config = await getConfigWithOverrides({
+    const config = getConfig();
+    const configOverrides = await getConfigWithOverrides({
       restApiArgs: {
         server: this,
         tableauAuthInfo,
@@ -118,20 +134,20 @@ export class Server extends McpServer {
       },
     });
 
-    const { includeTools, excludeTools } = config;
+    const tableauServerInfo = await getTableauServerInfo(config.server || tableauAuthInfo?.server);
 
-    const tools = toolFactories.map((toolFactory) => toolFactory(this, tableauAuthInfo));
-    const toolsToRegister = tools.filter((tool) => {
-      if (includeTools.length > 0) {
-        return includeTools.includes(tool.name);
-      }
+    const { includeTools, excludeTools } = configOverrides;
 
-      if (excludeTools.length > 0) {
-        return !excludeTools.includes(tool.name);
-      }
-
-      return true;
-    });
+    const allTools = toolFactories.map((toolFactory) =>
+      toolFactory(this, tableauServerInfo.productVersion),
+    );
+    const toolsToRegister: typeof allTools = [];
+    for (const tool of allTools) {
+      if (await Provider.from(tool.disabled)) continue;
+      if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
+      if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
+      toolsToRegister.push(tool);
+    }
 
     if (toolsToRegister.length === 0) {
       throw new Error(`

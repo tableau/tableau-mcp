@@ -1,5 +1,6 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Request, RequestHandler, Response } from 'express';
 import fs, { existsSync } from 'fs';
@@ -7,14 +8,16 @@ import http from 'http';
 import https from 'https';
 
 import { Config } from '../config.js';
-import { setLogLevel } from '../logging/log.js';
+import { setNotificationLevel } from '../logging/notification.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
-import { handlePingRequest, validateProtocolVersion } from './middleware.js';
+import { latencyMiddleware } from './latencyMiddleware.js';
+import { handlePingRequest } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
-import { OAuthProvider } from './oauth/provider.js';
+import { EmbeddedOAuthProvider, TableauOAuthProvider } from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
+import { passthroughAuthMiddleware, X_TABLEAU_AUTH_HEADER } from './passthroughAuthMiddleware.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
 
@@ -31,6 +34,10 @@ export async function startExpressServer({
 
   app.use(express.json());
   app.use(express.urlencoded());
+  if (config.enablePassthroughAuth) {
+    // cookie-parser is used to parse the workgroup_session_id cookie for passthrough auth
+    app.use(cookieParser());
+  }
 
   app.use(
     cors({
@@ -42,23 +49,26 @@ export async function startExpressServer({
         'Cache-Control',
         'Accept',
         'MCP-Protocol-Version',
+        X_TABLEAU_AUTH_HEADER,
       ],
       exposedHeaders: [SESSION_ID_HEADER, 'x-session-id'],
     }),
   );
 
-  if (config.trustProxyConfig !== null) {
-    // https://expressjs.com/en/guide/behind-proxies.html
-    app.set('trust proxy', config.trustProxyConfig);
+  const middleware: Array<RequestHandler> = [handlePingRequest];
+  if (config.enablePassthroughAuth) {
+    middleware.push(passthroughAuthMiddleware());
   }
 
-  const middleware: Array<RequestHandler> = [handlePingRequest];
   if (config.oauth.enabled) {
-    const oauthProvider = new OAuthProvider();
+    const oauthProvider = config.oauth.embeddedAuthzServer
+      ? new EmbeddedOAuthProvider()
+      : new TableauOAuthProvider();
+
     oauthProvider.setupRoutes(app);
     middleware.push(oauthProvider.authMiddleware);
-    middleware.push(validateProtocolVersion);
   }
+  middleware.push(latencyMiddleware());
 
   const path = `/${basePath}`;
   app.post(path, ...middleware, createMcpServer);
@@ -174,7 +184,7 @@ async function connect(
   server.registerRequestHandlers();
 
   await server.connect(transport);
-  setLogLevel(server, logLevel);
+  setNotificationLevel(server, logLevel);
 }
 
 async function methodNotAllowed(_req: Request, res: Response): Promise<void> {

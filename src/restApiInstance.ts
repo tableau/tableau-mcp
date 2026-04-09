@@ -1,7 +1,7 @@
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { Config, getConfig } from './config.js';
-import { log, shouldLogWhenLevelIsAtLeast } from './logging/log.js';
+import { notifier, shouldNotifyWhenLevelIsAtLeast } from './logging/notification.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
 import {
   AxiosResponseInterceptorConfig,
@@ -34,7 +34,7 @@ type JwtScopes =
 
 export type RestApiArgs = Pick<
   TableauRequestHandlerExtra,
-  'config' | 'server' | 'signal' | 'tableauAuthInfo'
+  'config' | 'server' | 'signal' | 'tableauAuthInfo' | 'setSiteLuid' | 'setUserLuid'
 > &
   (
     | {
@@ -50,22 +50,31 @@ const getNewRestApiInstanceAsync = async (
   args: RestApiArgs & {
     jwtScopes: Set<JwtScopes>;
   },
-): Promise<RestApi> => {
-  const { config, server, jwtScopes, signal, tableauAuthInfo, disableLogging } = args;
+): Promise<{ restApi: RestApi; signOutWhenCompleted: boolean }> => {
+  const {
+    config,
+    server,
+    jwtScopes,
+    signal,
+    tableauAuthInfo,
+    disableLogging,
+    setSiteLuid,
+    setUserLuid,
+  } = args;
 
   if (!disableLogging) {
     const { requestId } = args;
     signal.addEventListener(
       'abort',
       () => {
-        log.info(
+        notifier.info(
           server,
           {
             type: 'request-cancelled',
             requestId,
             reason: signal.reason,
           },
-          { logger: server.name, requestId },
+          { notifier: server.name, requestId },
         );
       },
       { once: true },
@@ -75,7 +84,7 @@ const getNewRestApiInstanceAsync = async (
   const tableauServer = config.server || tableauAuthInfo?.server;
   invariant(tableauServer, 'Tableau server could not be determined');
 
-  const restApi = new RestApi(tableauServer, {
+  const restApi = new RestApi({
     maxRequestTimeoutMs: config.maxRequestTimeoutMs,
     signal,
     requestInterceptor: disableLogging
@@ -92,66 +101,90 @@ const getNewRestApiInstanceAsync = async (
         ],
   });
 
-  if (config.auth === 'pat') {
-    await restApi.signIn({
-      type: 'pat',
-      patName: config.patName,
-      patValue: config.patValue,
-      siteName: config.siteName,
-    });
-  } else if (config.auth === 'direct-trust') {
-    await restApi.signIn({
-      type: 'direct-trust',
-      siteName: config.siteName,
-      username: getJwtUsername(config, tableauAuthInfo),
-      clientId: config.connectedAppClientId,
-      secretId: config.connectedAppSecretId,
-      secretValue: config.connectedAppSecretValue,
-      scopes: jwtScopes,
-      additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
-    });
-  } else if (config.auth === 'uat') {
-    await restApi.signIn({
-      type: 'uat',
-      siteName: config.siteName,
-      username: getJwtUsername(config, tableauAuthInfo),
-      tenantId: config.uatTenantId,
-      issuer: config.uatIssuer,
-      usernameClaimName: config.uatUsernameClaimName,
-      privateKey: config.uatPrivateKey,
-      keyId: config.uatKeyId,
-      scopes: jwtScopes,
-      additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
-    });
-  } else {
-    if (!tableauAuthInfo?.accessToken || !tableauAuthInfo?.userId) {
+  let signOutWhenCompleted = true;
+  if (tableauAuthInfo?.type === 'Passthrough') {
+    if (!tableauAuthInfo.raw || !tableauAuthInfo.userId) {
       throw new Error('Auth info is required when not signing in first.');
     }
 
-    restApi.setCredentials(tableauAuthInfo.accessToken, tableauAuthInfo.userId);
+    signOutWhenCompleted = false;
+    restApi.setCredentials(tableauAuthInfo.raw, tableauAuthInfo.userId);
+  } else {
+    if (config.auth === 'pat') {
+      await restApi.signIn({
+        type: 'pat',
+        patName: config.patName,
+        patValue: config.patValue,
+        siteName: config.siteName,
+      });
+      setSiteLuid?.(restApi.siteId);
+      setUserLuid?.(restApi.userId);
+    } else if (config.auth === 'direct-trust') {
+      await restApi.signIn({
+        type: 'direct-trust',
+        siteName: config.siteName,
+        username: getJwtUsername(config, tableauAuthInfo),
+        clientId: config.connectedAppClientId,
+        secretId: config.connectedAppSecretId,
+        secretValue: config.connectedAppSecretValue,
+        scopes: jwtScopes,
+        additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
+      });
+      setSiteLuid?.(restApi.siteId);
+      setUserLuid?.(restApi.userId);
+    } else if (config.auth === 'uat') {
+      await restApi.signIn({
+        type: 'uat',
+        siteName: config.siteName,
+        username: getJwtUsername(config, tableauAuthInfo),
+        tenantId: config.uatTenantId,
+        issuer: config.uatIssuer,
+        usernameClaimName: config.uatUsernameClaimName,
+        privateKey: config.uatPrivateKey,
+        keyId: config.uatKeyId,
+        scopes: jwtScopes,
+        additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
+      });
+      setSiteLuid?.(restApi.siteId);
+      setUserLuid?.(restApi.userId);
+    } else if (config.auth === 'oauth') {
+      invariant(tableauAuthInfo, 'Tableau auth info not provided.');
+
+      signOutWhenCompleted = false;
+      if (tableauAuthInfo?.type === 'Bearer') {
+        restApi.setBearerToken(tableauAuthInfo.raw);
+      } else if (tableauAuthInfo?.type === 'X-Tableau-Auth') {
+        if (!tableauAuthInfo?.accessToken || !tableauAuthInfo?.userId) {
+          throw new Error('Auth info is required when not signing in first.');
+        }
+
+        restApi.setCredentials(tableauAuthInfo.accessToken, tableauAuthInfo.userId);
+      } else {
+        throw new Error('Auth info is required when not signing in first.');
+      }
+    }
   }
 
-  return restApi;
+  return { restApi, signOutWhenCompleted };
 };
 
 export const useRestApi = async <T>(
   args: RestApiArgs & {
-    jwtScopes: Array<JwtScopes>;
+    jwtScopes: ReadonlyArray<JwtScopes>;
     callback: (restApi: RestApi) => Promise<T>;
   },
 ): Promise<T> => {
   const { callback, ...remaining } = args;
-  const { config } = remaining;
-  const restApi = await getNewRestApiInstanceAsync({
+  const { restApi, signOutWhenCompleted } = await getNewRestApiInstanceAsync({
     ...remaining,
     jwtScopes: new Set(args.jwtScopes),
   });
   try {
     return await callback(restApi);
   } finally {
-    if (config.auth !== 'oauth') {
+    if (signOutWhenCompleted) {
       // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.
-      // Sessions for 'oauth' are not. Signing out would invalidate the session,
+      // Sessions for 'oauth' and 'passthrough' are not. Signing out would invalidate the session,
       // preventing the access token from being reused for subsequent requests.
       await restApi.signOut();
     }
@@ -170,10 +203,14 @@ export const getRequestErrorInterceptor =
   (server: Server, requestId: RequestId): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.request) {
-      log.error(server, `Request ${requestId} failed with error: ${getExceptionMessage(error)}`, {
-        logger: 'rest-api',
-        requestId,
-      });
+      notifier.error(
+        server,
+        `Request ${requestId} failed with error: ${getExceptionMessage(error)}`,
+        {
+          notifier: 'rest-api',
+          requestId,
+        },
+      );
       return;
     }
 
@@ -199,10 +236,10 @@ export const getResponseErrorInterceptor =
   (server: Server, requestId: RequestId): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.response) {
-      log.error(
+      notifier.error(
         server,
         `Response from request ${requestId} failed with error: ${getExceptionMessage(error)}`,
-        { logger: 'rest-api', requestId },
+        { notifier: 'rest-api', requestId },
       );
       return;
     }
@@ -234,14 +271,14 @@ function logRequest(server: Server, request: RequestInterceptorConfig, requestId
     requestId,
     method: maskedRequest.method,
     url: url.toString(),
-    ...(shouldLogWhenLevelIsAtLeast('debug') && {
+    ...(shouldNotifyWhenLevelIsAtLeast('debug') && {
       headers: maskedRequest.headers,
       data: maskedRequest.data,
       params: maskedRequest.params,
     }),
   } as const;
 
-  log.info(server, messageObj, { logger: 'rest-api', requestId });
+  notifier.info(server, messageObj, { notifier: 'rest-api', requestId });
 }
 
 function logResponse(
@@ -262,13 +299,13 @@ function logResponse(
     requestId,
     url: url.toString(),
     status: maskedResponse.status,
-    ...(shouldLogWhenLevelIsAtLeast('debug') && {
+    ...(shouldNotifyWhenLevelIsAtLeast('debug') && {
       headers: maskedResponse.headers,
       data: maskedResponse.data,
     }),
   } as const;
 
-  log.info(server, messageObj, { logger: 'rest-api', requestId });
+  notifier.info(server, messageObj, { notifier: 'rest-api', requestId });
 }
 
 function getUserAgent(server: Server): string {

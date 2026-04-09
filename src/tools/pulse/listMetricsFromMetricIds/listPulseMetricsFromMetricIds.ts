@@ -5,7 +5,6 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
-import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
   metricIds: z.array(z.string().length(36)),
@@ -43,7 +42,7 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
         callback: async () => {
           return await useRestApi({
             ...extra,
-            jwtScopes: ['tableau:insight_metrics:read'],
+            jwtScopes: listPulseMetricsFromMetricIdsTool.requiredApiScopes,
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricsFromMetricIds(metricIds);
             },
@@ -57,7 +56,6 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
             boundedContext: configWithOverrides.boundedContext,
           });
         },
-        getErrorText: getPulseDisabledError,
       });
     },
   });

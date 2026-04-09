@@ -12,18 +12,35 @@ export interface TelemetryProvider {
   /**
    * Record a custom metric with the given name and attributes.
    *
-   * @param name - The metric name (e.g., 'mcp.tool.calls')
+   * @param name - The metric name (e.g., 'apm_mcp_tool_calls')
    * @param value - The metric value (default: 1 for counters)
    * @param attributes - Dimensions/tags for the metric
    *
    * @example
    * ```typescript
-   * telemetry.recordMetric('mcp.tool.calls', 1, {
+   * telemetry.recordMetric('apm_mcp_tool_calls', 1, {
    *   tool_name: 'list-pulse-metric-subscriptions',
    * });
    * ```
    */
   recordMetric(name: string, value: number, attributes: TelemetryAttributes): void;
+
+  /**
+   * Record a histogram observation (e.g., latency) with the given name and attributes.
+   *
+   * @param name - The metric name (e.g., 'http_server_request_duration')
+   * @param value - The observed value (e.g., duration in milliseconds)
+   * @param attributes - Dimensions/tags for the metric
+   *
+   * @example
+   * ```typescript
+   * telemetry.recordHistogram('apm_mcp_tool_duration', 142.5, {
+   *   tool_name: 'get-datasource-metadata',
+   *   success: true,
+   * });
+   * ```
+   */
+  recordHistogram(name: string, value: number, attributes: TelemetryAttributes): void;
 }
 
 /**

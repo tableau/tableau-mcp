@@ -1,3 +1,5 @@
+import { fromError } from 'zod-validation-error/v3';
+
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import { AuthConfig } from './authConfig.js';
 import {
@@ -20,8 +22,13 @@ import { AuthenticatedServerMethods, ServerMethods } from './methods/serverMetho
 import ViewsMethods from './methods/viewsMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
 import WorkbooksMethods from './methods/workbooksMethods.js';
+import { BearerToken, bearerTokenSchema } from './types/bearerToken.js';
 import { Credentials } from './types/credentials.js';
 import { McpSiteSettings } from './types/mcpSiteSettings.js';
+
+export type RestApiCredentials =
+  | ({ type: 'X-Tableau-Auth' } & Credentials)
+  | { type: 'Bearer'; token: string };
 
 /**
  * Interface for the Tableau REST APIs
@@ -30,47 +37,61 @@ import { McpSiteSettings } from './types/mcpSiteSettings.js';
  * @class RestApi
  */
 export class RestApi {
-  private _creds?: Credentials;
-  private readonly _host: string;
-  private readonly _baseUrl: string;
-  private readonly _baseUrlWithoutVersion: string;
-
-  private _authenticationMethods?: AuthenticationMethods;
-  private _authenticatedAuthenticationMethods?: AuthenticatedAuthenticationMethods;
-  private _authenticatedServerMethods?: AuthenticatedServerMethods;
-  private _contentExplorationMethods?: ContentExplorationMethods;
-  private _datasourcesMethods?: DatasourcesMethods;
-  private _metadataMethods?: MetadataMethods;
-  private _pulseMethods?: PulseMethods;
-  private _serverMethods?: ServerMethods;
-  private _vizqlDataServiceMethods?: VizqlDataServiceMethods;
-  private _viewsMethods?: ViewsMethods;
-  private _workbooksMethods?: WorkbooksMethods;
+  private static _host: string;
   private static _version = '3.24';
 
+  private _creds?: RestApiCredentials;
   private _maxRequestTimeoutMs: number;
   private _signal?: AbortSignal;
   private _requestInterceptor?: [RequestInterceptor, ErrorInterceptor?];
   private _responseInterceptor?: [ResponseInterceptor, ErrorInterceptor?];
 
   constructor(
-    host: string,
     options: { maxRequestTimeoutMs: number } & Partial<{
       signal: AbortSignal;
       requestInterceptor: [RequestInterceptor, ErrorInterceptor?];
       responseInterceptor: [ResponseInterceptor, ErrorInterceptor?];
     }>,
   ) {
-    this._host = host;
-    this._baseUrl = `${this._host}/api/${RestApi._version}`;
-    this._baseUrlWithoutVersion = `${this._host}/api/-`;
     this._maxRequestTimeoutMs = options.maxRequestTimeoutMs;
     this._signal = options.signal;
     this._requestInterceptor = options.requestInterceptor;
     this._responseInterceptor = options.responseInterceptor;
   }
 
-  private get creds(): Credentials {
+  public static get isHostSet(): boolean {
+    return !!RestApi._host;
+  }
+
+  public static set host(host: string) {
+    RestApi._host = host;
+  }
+
+  public static get host(): string {
+    if (!RestApi._host) {
+      throw new Error('Rest API host not set');
+    }
+
+    return RestApi._host;
+  }
+
+  public static get version(): string {
+    return RestApi._version;
+  }
+
+  public static set version(version: string) {
+    RestApi._version = version;
+  }
+
+  private static get baseUrl(): string {
+    return `${RestApi.host}/api/${RestApi._version}`;
+  }
+
+  private static get baseUrlWithoutVersion(): string {
+    return `${RestApi.host}/api/-`;
+  }
+
+  private get creds(): RestApiCredentials {
     if (!this._creds) {
       throw new Error('No credentials found. Authenticate by calling signIn() first.');
     }
@@ -79,112 +100,100 @@ export class RestApi {
   }
 
   get siteId(): string {
-    return this.creds.site.id;
+    if (this.creds.type === 'X-Tableau-Auth') {
+      return this.creds.site.id;
+    }
+
+    return getBearerTokenPayload(this.creds.token)['https://tableau.com/siteId'];
+  }
+
+  get userId(): string {
+    if (this.creds.type === 'X-Tableau-Auth') {
+      return this.creds.user.id;
+    }
+
+    return getBearerTokenPayload(this.creds.token)['https://tableau.com/userId'] ?? '';
   }
 
   private get authenticationMethods(): AuthenticationMethods {
-    if (!this._authenticationMethods) {
-      this._authenticationMethods = new AuthenticationMethods(this._baseUrl, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(this._baseUrl, this._authenticationMethods.interceptors);
-    }
-    return this._authenticationMethods;
+    const authenticationMethods = new AuthenticationMethods(RestApi.baseUrl, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, authenticationMethods.interceptors);
+    return authenticationMethods;
   }
 
   private get authenticatedAuthenticationMethods(): AuthenticatedAuthenticationMethods {
-    if (!this._authenticatedAuthenticationMethods) {
-      this._authenticatedAuthenticationMethods = new AuthenticatedAuthenticationMethods(
-        this._baseUrl,
-        this.creds,
-        {
-          timeout: this._maxRequestTimeoutMs,
-          signal: this._signal,
-        },
-      );
-      this._addInterceptors(this._baseUrl, this._authenticatedAuthenticationMethods.interceptors);
-    }
-    return this._authenticatedAuthenticationMethods;
+    const authenticatedAuthenticationMethods = new AuthenticatedAuthenticationMethods(
+      RestApi.baseUrl,
+      this.creds,
+      {
+        timeout: this._maxRequestTimeoutMs,
+        signal: this._signal,
+      },
+    );
+    this._addInterceptors(RestApi.baseUrl, authenticatedAuthenticationMethods.interceptors);
+    return authenticatedAuthenticationMethods;
   }
 
   get authenticatedServerMethods(): AuthenticatedServerMethods {
-    if (!this._authenticatedServerMethods) {
-      this._authenticatedServerMethods = new AuthenticatedServerMethods(this._baseUrl, this.creds, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(this._baseUrl, this._authenticatedServerMethods.interceptors);
-    }
-    return this._authenticatedServerMethods;
+    const authenticatedServerMethods = new AuthenticatedServerMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, authenticatedServerMethods.interceptors);
+    return authenticatedServerMethods;
   }
 
   get contentExplorationMethods(): ContentExplorationMethods {
-    if (!this._contentExplorationMethods) {
-      this._contentExplorationMethods = new ContentExplorationMethods(
-        this._baseUrlWithoutVersion,
-        this.creds,
-        {
-          timeout: this._maxRequestTimeoutMs,
-          signal: this._signal,
-        },
-      );
-      this._addInterceptors(
-        this._baseUrlWithoutVersion,
-        this._contentExplorationMethods.interceptors,
-      );
-    }
-
-    return this._contentExplorationMethods;
+    const contentExplorationMethods = new ContentExplorationMethods(
+      RestApi.baseUrlWithoutVersion,
+      this.creds,
+      {
+        timeout: this._maxRequestTimeoutMs,
+        signal: this._signal,
+      },
+    );
+    this._addInterceptors(RestApi.baseUrlWithoutVersion, contentExplorationMethods.interceptors);
+    return contentExplorationMethods;
   }
 
   get datasourcesMethods(): DatasourcesMethods {
-    if (!this._datasourcesMethods) {
-      this._datasourcesMethods = new DatasourcesMethods(this._baseUrl, this.creds, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(this._baseUrl, this._datasourcesMethods.interceptors);
-    }
-
-    return this._datasourcesMethods;
+    const datasourcesMethods = new DatasourcesMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, datasourcesMethods.interceptors);
+    return datasourcesMethods;
   }
 
   get metadataMethods(): MetadataMethods {
-    if (!this._metadataMethods) {
-      const baseUrl = `${this._host}/api/metadata`;
-      this._metadataMethods = new MetadataMethods(baseUrl, this.creds, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(baseUrl, this._metadataMethods.interceptors);
-    }
-
-    return this._metadataMethods;
+    const baseUrl = `${RestApi.host}/api/metadata`;
+    const metadataMethods = new MetadataMethods(baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(baseUrl, metadataMethods.interceptors);
+    return metadataMethods;
   }
 
   get pulseMethods(): PulseMethods {
-    if (!this._pulseMethods) {
-      this._pulseMethods = new PulseMethods(this._baseUrlWithoutVersion, this.creds, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(this._baseUrlWithoutVersion, this._pulseMethods.interceptors);
-    }
-
-    return this._pulseMethods;
+    const pulseMethods = new PulseMethods(RestApi.baseUrlWithoutVersion, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrlWithoutVersion, pulseMethods.interceptors);
+    return pulseMethods;
   }
 
   get serverMethods(): ServerMethods {
-    if (!this._serverMethods) {
-      this._serverMethods = new ServerMethods(this._baseUrl, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(this._baseUrl, this._serverMethods.interceptors);
-    }
-
-    return this._serverMethods;
+    const serverMethods = new ServerMethods(RestApi.baseUrl, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, serverMethods.interceptors);
+    return serverMethods;
   }
 
   get siteMethods(): { getMcpSettings: () => Promise<McpSiteSettings> } {
@@ -201,49 +210,51 @@ export class RestApi {
   }
 
   get vizqlDataServiceMethods(): VizqlDataServiceMethods {
-    if (!this._vizqlDataServiceMethods) {
-      const baseUrl = `${this._host}/api/v1/vizql-data-service`;
-      this._vizqlDataServiceMethods = new VizqlDataServiceMethods(baseUrl, this.creds, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(baseUrl, this._vizqlDataServiceMethods.interceptors);
-    }
+    const baseUrl = `${RestApi.host}/api/v1/vizql-data-service`;
+    const vizqlDataServiceMethods = new VizqlDataServiceMethods(baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(baseUrl, vizqlDataServiceMethods.interceptors);
 
-    return this._vizqlDataServiceMethods;
+    return vizqlDataServiceMethods;
   }
 
   get viewsMethods(): ViewsMethods {
-    if (!this._viewsMethods) {
-      this._viewsMethods = new ViewsMethods(this._baseUrl, this.creds, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(this._baseUrl, this._viewsMethods.interceptors);
-    }
-
-    return this._viewsMethods;
+    const viewsMethods = new ViewsMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, viewsMethods.interceptors);
+    return viewsMethods;
   }
 
   get workbooksMethods(): WorkbooksMethods {
-    if (!this._workbooksMethods) {
-      this._workbooksMethods = new WorkbooksMethods(this._baseUrl, this.creds, {
-        timeout: this._maxRequestTimeoutMs,
-        signal: this._signal,
-      });
-      this._addInterceptors(this._baseUrl, this._workbooksMethods.interceptors);
-    }
-
-    return this._workbooksMethods;
+    const workbooksMethods = new WorkbooksMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, workbooksMethods.interceptors);
+    return workbooksMethods;
   }
 
   signIn = async (authConfig: AuthConfig): Promise<void> => {
-    this._creds = await this.authenticationMethods.signIn(authConfig);
+    this._creds = {
+      type: 'X-Tableau-Auth',
+      ...(await this.authenticationMethods.signIn(authConfig)),
+    };
   };
 
   signOut = async (): Promise<void> => {
     await this.authenticatedAuthenticationMethods.signOut();
     this._creds = undefined;
+  };
+
+  setBearerToken = (token: string): void => {
+    this._creds = {
+      type: 'Bearer',
+      token,
+    };
   };
 
   setCredentials = (accessToken: string, userId: string): void => {
@@ -253,6 +264,7 @@ export class RestApi {
     }
 
     this._creds = {
+      type: 'X-Tableau-Auth',
       site: {
         id: siteId,
       },
@@ -292,4 +304,15 @@ export class RestApi {
       },
     );
   };
+}
+
+function getBearerTokenPayload(token: string): BearerToken {
+  const [_header, payload, _signature] = token.split('.');
+  const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
+  const bearerToken = bearerTokenSchema.safeParse(decoded);
+  if (!bearerToken.success) {
+    throw new Error(`Invalid bearer token: ${fromError(bearerToken.error).toString()}`);
+  }
+
+  return bearerToken.data;
 }

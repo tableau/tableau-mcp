@@ -3,7 +3,7 @@ import express from 'express';
 import { isIP } from 'net';
 import { isSSRFSafeURL } from 'ssrfcheck';
 import { Err, Ok, Result } from 'ts-results-es';
-import { fromError } from 'zod-validation-error';
+import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
 import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
@@ -16,6 +16,7 @@ import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
+import { getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
 import { PendingAuthorization } from './types.js';
 
 /**
@@ -31,7 +32,7 @@ export function authorize(
 ): void {
   const config = getConfig();
 
-  app.get('/oauth/authorize', async (req, res) => {
+  app.get('/oauth2/authorize', async (req, res) => {
     const result = mcpAuthorizeSchema.safeParse(req.query);
 
     if (!result.success) {
@@ -42,9 +43,17 @@ export function authorize(
       return;
     }
 
-    const { client_id, redirect_uri, response_type, code_challenge, code_challenge_method, state } =
-      result.data;
+    const {
+      client_id,
+      redirect_uri,
+      response_type,
+      code_challenge,
+      code_challenge_method,
+      state,
+      scope,
+    } = result.data;
 
+    let clientName: string | undefined;
     const clientIdUrl = parseUrl(client_id);
     if (clientIdUrl) {
       // Client ID is a URL, so we need to attempt to fetch the client metadata from the URL
@@ -54,7 +63,8 @@ export function authorize(
         return;
       }
 
-      const { redirect_uris, response_types } = clientResult.value;
+      const { redirect_uris, response_types, client_name } = clientResult.value;
+      clientName = client_name;
 
       if (response_types && !response_types.find((type) => type === response_type)) {
         res.status(400).json({
@@ -97,6 +107,28 @@ export function authorize(
       return;
     }
 
+    const { enforceScopes, advertiseApiScopes } = config.oauth;
+    const requestedScopes = parseScopes(scope);
+    const { valid: validScopes, invalid: invalidScopes } = validateScopes(
+      requestedScopes,
+      getSupportedScopes({ includeApiScopes: advertiseApiScopes }),
+    );
+
+    if (invalidScopes.length > 0) {
+      res.status(400).json({
+        error: 'invalid_scope',
+        error_description: `Unsupported scopes: ${invalidScopes.join(', ')}`,
+      });
+      return;
+    }
+
+    const scopesToGrant =
+      validScopes.length > 0
+        ? validScopes
+        : enforceScopes
+          ? getSupportedScopes({ includeApiScopes: advertiseApiScopes })
+          : [];
+
     // Generate Tableau state and store pending authorization
     const tableauState = randomBytes(32).toString('hex');
     const authKey = randomBytes(32).toString('hex');
@@ -114,6 +146,7 @@ export function authorize(
       tableauState,
       tableauClientId,
       tableauCodeVerifier,
+      scopes: scopesToGrant,
     });
 
     // Clean up expired authorizations
@@ -130,7 +163,7 @@ export function authorize(
     oauthUrl.searchParams.set('state', `${authKey}:${tableauState}`);
     oauthUrl.searchParams.set('device_id', randomUUID());
     oauthUrl.searchParams.set('target_site', config.siteName);
-    oauthUrl.searchParams.set('device_name', getDeviceName(redirect_uri, state ?? ''));
+    oauthUrl.searchParams.set('device_name', getDeviceName(redirect_uri, state ?? '', clientName));
     oauthUrl.searchParams.set('client_type', 'tableau-mcp');
 
     if (config.oauth.lockSite) {
@@ -321,7 +354,11 @@ async function getClientFromMetadataDoc(
   return Ok(clientMetadataResult.data);
 }
 
-function getDeviceName(redirectUri: string, state: string): string {
+function getDeviceName(redirectUri: string, state: string, clientName: string | undefined): string {
+  if (clientName) {
+    return `tableau-mcp (${clientName})`;
+  }
+
   const defaultDeviceName = 'tableau-mcp (Unknown agent)';
 
   try {
@@ -343,3 +380,5 @@ function getDeviceName(redirectUri: string, state: string): string {
     return defaultDeviceName;
   }
 }
+
+export const exportedForTesting = { getDeviceName };

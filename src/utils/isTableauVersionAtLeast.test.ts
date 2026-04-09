@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { testProductVersion } from '../testShared.js';
 import { exportedForTesting, getResultForTableauVersion } from './isTableauVersionAtLeast.js';
 
 const { isTableauVersionAtLeast } = exportedForTesting;
@@ -11,7 +12,7 @@ describe('getResultForTableauVersion', () => {
         '2025.3.0': 'result for 2025.3.0',
         default: 'default result',
       },
-      server: 'https://test-server.com',
+      productVersion: testProductVersion,
     });
     expect(result).toBe('result for 2025.3.0');
   });
@@ -22,7 +23,7 @@ describe('getResultForTableauVersion', () => {
         '2058.1.0': 'result for 2058.1.0',
         default: 'default result',
       },
-      server: 'https://test-server.com',
+      productVersion: testProductVersion,
     });
     expect(result).toBe('default result');
   });

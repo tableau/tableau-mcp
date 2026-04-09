@@ -21,6 +21,7 @@ export type PendingAuthorization = {
   tableauState: string;
   tableauClientId: string;
   tableauCodeVerifier: string;
+  scopes: string[];
 };
 
 export type ClientCredentials = {
@@ -33,6 +34,8 @@ export type UserAndTokens = {
   clientId: string;
   server: string;
   tokens: Tokens;
+  scopes: string[];
+  siteContentUrl: string;
 };
 
 export type AuthorizationCode = UserAndTokens & {

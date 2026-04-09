@@ -2,12 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { useRestApi } from '../../../restApiInstance.js';
-import { PulseDisabledError } from '../../../sdks/tableau/methods/pulseMethods.js';
 import { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
-import { getPulseDisabledError } from '../getPulseDisabledError.js';
 
 const paramsSchema = {
   pulseMetricDefinitionID: z.string().length(36),
@@ -35,16 +33,13 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
       openWorldHint: false,
     },
     callback: async ({ pulseMetricDefinitionID }, extra): Promise<CallToolResult> => {
-      return await listPulseMetricsFromMetricDefinitionIdTool.logAndExecute<
-        Array<PulseMetric>,
-        PulseDisabledError
-      >({
+      return await listPulseMetricsFromMetricDefinitionIdTool.logAndExecute<Array<PulseMetric>>({
         extra,
         args: { pulseMetricDefinitionID },
         callback: async () => {
           return await useRestApi({
             ...extra,
-            jwtScopes: ['tableau:insight_definitions_metrics:read'],
+            jwtScopes: listPulseMetricsFromMetricDefinitionIdTool.requiredApiScopes,
             callback: async (restApi) => {
               return await restApi.pulseMethods.listPulseMetricsFromMetricDefinitionId(
                 pulseMetricDefinitionID,
@@ -60,7 +55,6 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
             boundedContext: configWithOverrides.boundedContext,
           });
         },
-        getErrorText: getPulseDisabledError,
       });
     },
   });

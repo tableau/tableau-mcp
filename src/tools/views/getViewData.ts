@@ -1,7 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { ViewNotAllowedError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -9,11 +10,6 @@ import { Tool } from '../tool.js';
 
 const paramsSchema = {
   viewId: z.string(),
-};
-
-export type GetViewDataError = {
-  type: 'view-not-allowed';
-  message: string;
 };
 
 export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -29,7 +25,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
       openWorldHint: false,
     },
     callback: async ({ viewId }, extra): Promise<CallToolResult> => {
-      return await getViewDataTool.logAndExecute<string, GetViewDataError>({
+      return await getViewDataTool.logAndExecute<string>({
         extra,
         args: { viewId },
         callback: async () => {
@@ -39,16 +35,13 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
           });
 
           if (!isViewAllowedResult.allowed) {
-            return new Err({
-              type: 'view-not-allowed',
-              message: isViewAllowedResult.message,
-            });
+            return new ViewNotAllowedError(isViewAllowedResult.message).toErr();
           }
 
           return new Ok(
             await useRestApi({
               ...extra,
-              jwtScopes: ['tableau:views:download'],
+              jwtScopes: getViewDataTool.requiredApiScopes,
               callback: async (restApi) => {
                 return await restApi.viewsMethods.queryViewData({
                   viewId,
@@ -63,12 +56,6 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
             type: 'success',
             result: viewData,
           };
-        },
-        getErrorText: (error: GetViewDataError) => {
-          switch (error.type) {
-            case 'view-not-allowed':
-              return error.message;
-          }
         },
       });
     },

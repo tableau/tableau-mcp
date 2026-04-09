@@ -1,19 +1,19 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import {
+  ArgsValidationError,
+  DatasourceNotAllowedError,
+  FeatureDisabledError,
+} from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { Server } from '../../server.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
-import { validateDatasourceLuid } from '../validateDatasourceLuid.js';
-import {
-  combineFields,
-  FieldsResult,
-  simplifyReadMetadataResult,
-} from './datasourceMetadataUtils.js';
+import { combineFields, simplifyReadMetadataResult } from './datasourceMetadataUtils.js';
 
 export const getGraphqlQuery = (datasourceLuid: string): string => `
   query datasourceFieldInfo {
@@ -33,6 +33,9 @@ export const getGraphqlQuery = (datasourceLuid: string): string => `
         }
         fullyQualifiedName
         __typename
+        upstreamTables {
+          name
+        }
         ... on AnalyticsField {
           __typename
         }
@@ -107,17 +110,16 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
       readOnlyHint: true,
       openWorldHint: false,
     },
-    argsValidator: validateDatasourceLuid,
     callback: async ({ datasourceLuid }, extra): Promise<CallToolResult> => {
       const query = getGraphqlQuery(datasourceLuid);
 
-      return await getDatasourceMetadataTool.logAndExecute<
-        FieldsResult,
-        GetDatasourceMetadataError
-      >({
+      return await getDatasourceMetadataTool.logAndExecute({
         extra,
         args: { datasourceLuid },
         callback: async () => {
+          if (!datasourceLuid) {
+            return new ArgsValidationError('datasourceLuid must be a non-empty string.').toErr();
+          }
           const configWithOverrides = await extra.getConfigWithOverrides();
 
           const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
@@ -126,15 +128,12 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
           });
 
           if (!isDatasourceAllowedResult.allowed) {
-            return new Err({
-              type: 'datasource-not-allowed',
-              message: isDatasourceAllowedResult.message,
-            });
+            return new DatasourceNotAllowedError(isDatasourceAllowedResult.message).toErr();
           }
 
           return await useRestApi({
             ...extra,
-            jwtScopes: ['tableau:content:read', 'tableau:viz_data_service:read'],
+            jwtScopes: getDatasourceMetadataTool.requiredApiScopes,
             callback: async (restApi) => {
               // Fetching metadata from VizQL Data Service API.
               const readMetadataResult = await restApi.vizqlDataServiceMethods.readMetadata({
@@ -144,7 +143,7 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
               });
 
               if (readMetadataResult.isErr()) {
-                return Err({ type: 'feature-disabled' });
+                return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
               }
 
               if (configWithOverrides.disableMetadataApiRequests) {
@@ -172,14 +171,6 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
             type: 'success',
             result: fields,
           };
-        },
-        getErrorText: (error: GetDatasourceMetadataError) => {
-          switch (error.type) {
-            case 'feature-disabled':
-              return getVizqlDataServiceDisabledError();
-            case 'datasource-not-allowed':
-              return error.message;
-          }
         },
       });
     },

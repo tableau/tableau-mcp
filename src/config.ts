@@ -2,10 +2,12 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
+import { LoggerType, parseLoggerTypes } from './logging/logger.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
+import { parseNumber } from './utils/parseNumber.js';
 
 const __dirname = getDirname();
 
@@ -30,7 +32,6 @@ export class Config {
   sslCert: string;
   httpPort: number;
   corsOriginConfig: CorsOptions['origin'];
-  trustProxyConfig: boolean | number | string | null;
   siteName: string;
   patName: string;
   patValue: string;
@@ -49,15 +50,19 @@ export class Config {
   disableLogMasking: boolean;
   maxRequestTimeoutMs: number;
   disableSessionManagement: boolean;
-  enableServerLogging: boolean;
-  serverLogDirectory: string;
+  loggers: Set<LoggerType>;
+  fileLoggerDirectory: string;
   tableauServerVersionCheckIntervalInHours: number;
+  passthroughAuthUserSessionCheckIntervalInMinutes: number;
   mcpSiteSettingsCheckIntervalInMinutes: number;
   enableMcpSiteSettings: boolean;
+  enablePassthroughAuth: boolean;
   oauth: {
     enabled: boolean;
+    embeddedAuthzServer: boolean;
     issuer: string;
     redirectUri: string;
+    resourceUri: string;
     lockSite: boolean;
     jwePrivateKey: string;
     jwePrivateKeyPath: string;
@@ -67,8 +72,11 @@ export class Config {
     refreshTokenTimeoutMs: number;
     clientIdSecretPairs: Record<string, string> | null;
     dnsServers: string[];
+    enforceScopes: boolean;
+    advertiseApiScopes: boolean;
   };
   telemetry: TelemetryConfig;
+  latencyMetricName: string;
   productTelemetryEndpoint: string;
   productTelemetryEnabled: boolean;
   isHyperforce: boolean;
@@ -84,7 +92,6 @@ export class Config {
       SSL_CERT: sslCert,
       HTTP_PORT_ENV_VAR_NAME: httpPortEnvVarName,
       CORS_ORIGIN_CONFIG: corsOriginConfig,
-      TRUST_PROXY_CONFIG: trustProxyConfig,
       PAT_NAME: patName,
       PAT_VALUE: patValue,
       JWT_SUB_CLAIM: jwtSubClaim,
@@ -104,25 +111,33 @@ export class Config {
       DISABLE_LOG_MASKING: disableLogMasking,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
-      ENABLE_SERVER_LOGGING: enableServerLogging,
-      SERVER_LOG_DIRECTORY: serverLogDirectory,
+      ENABLED_LOGGERS: logging,
+      FILE_LOGGER_DIRECTORY: fileLoggerDirectory,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
+      PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES:
+        passthroughAuthUserSessionCheckIntervalInMinutes,
       MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: mcpSiteSettingsCheckIntervalInMinutes,
       ENABLE_MCP_SITE_SETTINGS: enableMcpSiteSettings,
+      ENABLE_PASSTHROUGH_AUTH: enablePassthroughAuth,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
+      OAUTH_EMBEDDED_AUTHZ_SERVER: oauthEmbeddedAuthzServer,
       OAUTH_ISSUER: oauthIssuer,
       OAUTH_LOCK_SITE: oauthLockSite,
       OAUTH_JWE_PRIVATE_KEY: oauthJwePrivateKey,
       OAUTH_JWE_PRIVATE_KEY_PATH: oauthJwePrivateKeyPath,
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
+      OAUTH_RESOURCE_URI: oauthResourceUri,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
       OAUTH_CIMD_DNS_SERVERS: dnsServers,
+      ADVERTISE_API_SCOPES: advertiseApiScopes,
       OAUTH_AUTHORIZATION_CODE_TIMEOUT_MS: authzCodeTimeoutMs,
       OAUTH_ACCESS_TOKEN_TIMEOUT_MS: accessTokenTimeoutMs,
       OAUTH_REFRESH_TOKEN_TIMEOUT_MS: refreshTokenTimeoutMs,
+      OAUTH_DISABLE_SCOPES: oauthDisableScopes,
       TELEMETRY_PROVIDER: telemetryProvider,
       TELEMETRY_PROVIDER_CONFIG: telemetryProviderConfig,
+      LATENCY_METRIC_NAME: latencyMetricName,
       PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
       IS_HYPERFORCE: isHyperforce,
@@ -140,13 +155,12 @@ export class Config {
       maxValue: 65535,
     });
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
-    this.trustProxyConfig = getTrustProxyConfig(trustProxyConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
     this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableSessionManagement = disableSessionManagement === 'true';
-    this.enableServerLogging = enableServerLogging === 'true';
-    this.serverLogDirectory = serverLogDirectory || join(__dirname, 'logs');
+    this.loggers = parseLoggerTypes(logging);
+    this.fileLoggerDirectory = fileLoggerDirectory || join(__dirname, 'logs');
 
     this.tableauServerVersionCheckIntervalInHours = parseNumber(
       tableauServerVersionCheckIntervalInHours,
@@ -154,6 +168,15 @@ export class Config {
         defaultValue: 1,
         minValue: 1,
         maxValue: 24 * 7, // 7 days
+      },
+    );
+
+    this.passthroughAuthUserSessionCheckIntervalInMinutes = parseNumber(
+      passthroughAuthUserSessionCheckIntervalInMinutes,
+      {
+        defaultValue: 10,
+        minValue: 0,
+        maxValue: 60 * 24, // 24 hours
       },
     );
 
@@ -167,10 +190,17 @@ export class Config {
     );
 
     this.enableMcpSiteSettings = enableMcpSiteSettings === 'true';
+    this.enablePassthroughAuth = enablePassthroughAuth === 'true';
     const disableOauthOverride = disableOauth === 'true';
+    const disableScopes = oauthDisableScopes === 'true';
+    const enforceScopes = !disableScopes;
+    const embeddedAuthzServer = oauthEmbeddedAuthzServer !== 'false';
+
     this.oauth = {
       enabled: disableOauthOverride ? false : !!oauthIssuer,
+      embeddedAuthzServer,
       issuer: oauthIssuer ?? '',
+      resourceUri: oauthResourceUri ?? `http://127.0.0.1:${this.httpPort}`,
       redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
       lockSite: oauthLockSite !== 'false', // Site locking is enabled by default
       jwePrivateKey: oauthJwePrivateKey ?? '',
@@ -203,7 +233,18 @@ export class Config {
             return acc;
           }, {})
         : null,
+      enforceScopes,
+      advertiseApiScopes: advertiseApiScopes === 'true',
     };
+
+    if (
+      this.oauth.clientIdSecretPairs &&
+      Object.keys(this.oauth.clientIdSecretPairs).length === 0
+    ) {
+      throw new Error(
+        `OAUTH_CLIENT_ID_SECRET_PAIRS is in an invalid format: ${oauthClientIdSecretPairs}. Should be in the format: clientId:secret`,
+      );
+    }
 
     const parsedProvider = isTelemetryProvider(telemetryProvider) ? telemetryProvider : 'noop';
     if (parsedProvider === 'custom') {
@@ -222,6 +263,7 @@ export class Config {
       };
     }
 
+    this.latencyMetricName = latencyMetricName || 'http_server_1agg1_request_duration';
     this.productTelemetryEndpoint =
       productTelemetryEndpoint || 'https://prod.telemetry.tableausoftware.com';
     this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
@@ -250,28 +292,30 @@ export class Config {
     }
 
     if (this.oauth.enabled) {
-      invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
+      if (this.oauth.embeddedAuthzServer) {
+        invariant(this.oauth.redirectUri, 'The environment variable OAUTH_REDIRECT_URI is not set');
 
-      if (!this.oauth.jwePrivateKey && !this.oauth.jwePrivateKeyPath) {
-        throw new Error(
-          'One of the environment variables: OAUTH_JWE_PRIVATE_KEY_PATH or OAUTH_JWE_PRIVATE_KEY must be set',
-        );
-      }
+        if (!this.oauth.jwePrivateKey && !this.oauth.jwePrivateKeyPath) {
+          throw new Error(
+            'One of the environment variables: OAUTH_JWE_PRIVATE_KEY_PATH or OAUTH_JWE_PRIVATE_KEY must be set',
+          );
+        }
 
-      if (this.oauth.jwePrivateKey && this.oauth.jwePrivateKeyPath) {
-        throw new Error(
-          'Only one of the environment variables: OAUTH_JWE_PRIVATE_KEY or OAUTH_JWE_PRIVATE_KEY_PATH must be set',
-        );
-      }
+        if (this.oauth.jwePrivateKey && this.oauth.jwePrivateKeyPath) {
+          throw new Error(
+            'Only one of the environment variables: OAUTH_JWE_PRIVATE_KEY or OAUTH_JWE_PRIVATE_KEY_PATH must be set',
+          );
+        }
 
-      if (
-        this.oauth.jwePrivateKeyPath &&
-        process.env.TABLEAU_MCP_TEST !== 'true' &&
-        !existsSync(this.oauth.jwePrivateKeyPath)
-      ) {
-        throw new Error(
-          `OAuth JWE private key path does not exist: ${this.oauth.jwePrivateKeyPath}`,
-        );
+        if (
+          this.oauth.jwePrivateKeyPath &&
+          process.env.TABLEAU_MCP_TEST !== 'true' &&
+          !existsSync(this.oauth.jwePrivateKeyPath)
+        ) {
+          throw new Error(
+            `OAuth JWE private key path does not exist: ${this.oauth.jwePrivateKeyPath}`,
+          );
+        }
       }
 
       if (this.transport === 'stdio') {
@@ -395,22 +439,6 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
   }
 }
 
-function getTrustProxyConfig(trustProxyConfig: string): boolean | number | string | null {
-  if (!trustProxyConfig) {
-    return null;
-  }
-
-  if (trustProxyConfig.match(/^true|false$/i)) {
-    return trustProxyConfig.toLowerCase() === 'true';
-  }
-
-  if (trustProxyConfig.match(/^\d+$/)) {
-    return parseInt(trustProxyConfig, 10);
-  }
-
-  return trustProxyConfig;
-}
-
 // When the user does not provide a site name in the Claude MCP Bundle configuration,
 // Claude doesn't replace its value and sets the site name to "${user_config.site_name}".
 export function removeClaudeMcpBundleUserConfigTemplates(
@@ -426,33 +454,8 @@ export function removeClaudeMcpBundleUserConfigTemplates(
   }, {});
 }
 
-function parseNumber(
-  value: string | undefined,
-  {
-    defaultValue,
-    minValue,
-    maxValue,
-  }: { defaultValue: number; minValue?: number; maxValue?: number } = {
-    defaultValue: 0,
-    minValue: Number.NEGATIVE_INFINITY,
-    maxValue: Number.POSITIVE_INFINITY,
-  },
-): number {
-  if (!value) {
-    return defaultValue;
-  }
-
-  const number = parseFloat(value);
-  return isNaN(number) ||
-    (minValue !== undefined && number < minValue) ||
-    (maxValue !== undefined && number > maxValue)
-    ? defaultValue
-    : number;
-}
-
 export const getConfig = (): Config => new Config();
 
 export const exportedForTesting = {
   Config,
-  parseNumber,
 };

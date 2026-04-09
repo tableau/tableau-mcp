@@ -5,7 +5,8 @@ import {
   ResponseInterceptorConfig,
 } from '../sdks/tableau/interceptors.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
-import { shouldLogWhenLevelIsAtLeast, writeToStderr } from './log.js';
+import { writeToStderr } from './logger.js';
+import { shouldNotifyWhenLevelIsAtLeast } from './notification.js';
 
 type MaskedKeys = 'data' | 'headers';
 type Optional<T, K extends keyof T> = Pick<Partial<T>, K> & Omit<T, K>;
@@ -19,7 +20,7 @@ export const maskRequest = (config: RequestInterceptorConfig): MaskedRequest => 
   }
 
   const maskedData = result.value;
-  if (shouldLogWhenLevelIsAtLeast('debug')) {
+  if (shouldNotifyWhenLevelIsAtLeast('debug')) {
     if (maskedData.data?.credentials) {
       maskedData.data.credentials = '<redacted>';
     }
@@ -41,6 +42,10 @@ export const maskRequest = (config: RequestInterceptorConfig): MaskedRequest => 
       maskedData.headers['X-Tableau-Auth'] = '<redacted>';
     }
 
+    if (maskedData.headers?.['Authorization']) {
+      maskedData.headers['Authorization'] = '<redacted>';
+    }
+
     if (maskedData.params?.['user_id']) {
       maskedData.params['user_id'] = '<redacted>';
     }
@@ -60,7 +65,7 @@ export const maskResponse = (response: ResponseInterceptorConfig): MaskedRespons
   }
 
   const maskedData = result.value;
-  if (shouldLogWhenLevelIsAtLeast('debug')) {
+  if (shouldNotifyWhenLevelIsAtLeast('debug')) {
     if (maskedData.data?.credentials) {
       maskedData.data.credentials = '<redacted>';
     }

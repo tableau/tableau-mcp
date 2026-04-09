@@ -18,9 +18,10 @@ The URL of the Tableau server.
 
 ## `SITE_NAME`
 
-The name of the Tableau site to use.
+The Content URL of the Tableau site to use. This may differ from the site's display name (e.g.,
+Content URL `Internal` vs display name `[INTERNAL] My Company`).
 
-- For Tableau Cloud, specify your site name.
+- For Tableau Cloud, specify your site's Content URL.
 - For Tableau Server, you may leave this value blank to use the default site.
 - Required unless [`AUTH`](#auth) is `oauth`.
 
@@ -48,23 +49,21 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 <hr />
 
-## `ENABLE_SERVER_LOGGING`
+## `ENABLED_LOGGERS`
 
-When `true`, the server will continue sending notifications to MCP clients, but will now also write
-them to local files in the directory specified in the
-[`SERVER_LOG_DIRECTORY`](#server_log_directory) environment variable. Notifications include tool
-calls and their arguments as well as HTTP traces for the requests and responses to the Tableau REST
-APIs.
+A comma-separated list of loggers to enable.
 
-- Default: `false`
+- Default: `appLogger`
+- Possible values (may be combined): `fileLogger`, `appLogger`
+  - `fileLogger` — writes log entries and MCP notifications normally only sent to clients to hourly rotating files in the directory specified by[`FILE_LOGGER_DIRECTORY`](#file_logger_directory).
+  Notifications include tool calls and their arguments as well as HTTP traces for the requests and responses to the Tableau REST APIs.
+  - `appLogger` — writes log entries to stdout as JSON. Enabled by default when transport is `http`.
 - The log file names are in the format `YYYY-MM-DDTHH-00-00-000Z.log` e.g.
   `2025-10-15T22-00-00-000Z.log` meaning this log file contains all log messages for hour 22 of
   2025-10-15 in UTC time. All log entries for a given hour of the day are appended to the same file.
-- Each line in the log file is a JSON object with the following properties:
+- Each line in the log file is a JSON object with a timestamp and additional properties:
 
   - `timestamp`: The timestamp of the log message in UTC time.
-  - `username`: For tool calls, the username of the user who made the call. This is only present
-    when OAuth is enabled and has the user context.
   - `level`: The logging level of the log message.
   - `logger`: The logger of the log message. This is typically `rest-api` for HTTP traces or
     `tableau-mcp` for tool calls.
@@ -78,10 +77,10 @@ APIs.
 
 <hr />
 
-## `SERVER_LOG_DIRECTORY`
+## `FILE_LOGGER_DIRECTORY`
 
-The directory server logs are written to when [`ENABLE_SERVER_LOGGING`](#enable_server_logging) is
-`true`.
+The directory server logs are written to when [`ENABLED_LOGGERS`](#enabled_loggers) includes
+`fileLogger`.
 
 - Default: `[build directory]/logs` i.e. `build/logs`.
 - The server will attempt to create the directory if it does not exist.
@@ -342,6 +341,22 @@ interface TelemetryProvider {
 
 <hr />
 
+## `LATENCY_METRIC_NAME`
+
+The name of the histogram metric used to record HTTP request latency for tool calls.
+
+- Default: `http_server_1agg1_request_duration`
+- Only recorded for requests that contain a tool call (non-tool requests such as `initialize` are
+  not tracked).
+
+**Example:**
+
+```bash
+LATENCY_METRIC_NAME=http_server_1agg1_request_duration
+```
+
+<hr />
+
 ## `PRODUCT_TELEMETRY_ENABLED`
 
 Enables product telemetry for tool usage tracking.
@@ -349,7 +364,9 @@ Enables product telemetry for tool usage tracking.
 - Default: `true`
 - When `true`, the server will send telemetry events to Tableau's telemetry endpoint for each tool
   call, including tool name, request ID, session ID, and site name.
-- Set to `false` to disable product telemetry. Read https://help.tableau.com/current/server/en-us/usage_data_basic_product_data.htm for more information
+- Set to `false` to disable product telemetry. Read
+  https://help.tableau.com/current/server/en-us/usage_data_basic_product_data.htm for more
+  information
 
 [mcp-transport]: https://modelcontextprotocol.io/docs/concepts/transports
 [tab-ds-connections]:

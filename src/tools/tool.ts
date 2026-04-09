@@ -1,28 +1,26 @@
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
-import { ZodiosError } from '@zodios/core';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
-import { fromError, isZodErrorLike } from 'zod-validation-error';
 
 import { AppName } from '../apps/appName.js';
 import { HostSandboxCapabilities } from '../apps/types.js';
-import { getToolLogMessage, log } from '../logging/log.js';
+import { McpToolError, ZodiosValidationError } from '../errors/mcpToolError.js';
+import { log } from '../logging/logger.js';
+import { getNotificationMessageForTool, notifier } from '../logging/notification.js';
 import { Server } from '../server.js';
+import { getRequiredApiScopesForTool, TableauApiScope } from '../server/oauth/scopes.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
 import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder.js';
 import { getDirname } from '../utils/getDirname.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../utils/getHttpStatus.js';
-import { getSiteLuidFromAccessToken } from '../utils/getSiteLuidFromAccessToken.js';
-import { Provider, TypeOrProvider } from '../utils/provider.js';
+import { TypeOrProvider } from '../utils/provider.js';
 import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
 import { ToolName } from './toolName.js';
 
-type ArgsValidator<Args extends ZodRawShape | undefined = undefined> = Args extends ZodRawShape
-  ? (args: z.objectOutputType<Args, ZodTypeAny>) => void
-  : never;
+export type ToolRules = Record<string, boolean | undefined>;
 
 type AppDetails = {
   name: AppName;
@@ -68,21 +66,20 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   // Details of the app that the tool can optionally return
   app?: AppDetails;
 
-  // A function that validates the tool's arguments provided by the client
-  argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
-
   // The implementation of the tool itself
   callback: TypeOrProvider<TableauToolCallback<Args>>;
+
+  // When true, the tool is not registered with the MCP server (model never sees it)
+  disabled?: TypeOrProvider<boolean>;
 };
 
 /**
  * The parameters the logAndExecute method
  *
  * @typeParam T - The type of the result the tool's implementation returns
- * @typeParam E - The type of the error the tool's implementation can return
  * @typeParam Args - The schema of the tool's parameters
  */
-type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined> = {
+type LogAndExecuteParams<T, Args extends ZodRawShape | undefined = undefined> = {
   // The extra data provided to request handlers
   extra: TableauRequestHandlerExtra;
 
@@ -90,14 +87,10 @@ type LogAndExecuteParams<T, E, Args extends ZodRawShape | undefined = undefined>
   args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
 
   // A function that contains the business logic of the tool to be logged and executed
-  callback: () => Promise<Result<T, E | ZodiosError>>;
+  callback: () => Promise<Result<T, McpToolError>>;
 
   // A function that can transform a successful result of the callback into a CallToolResult
   getSuccessResult?: (result: T) => CallToolResult;
-
-  // A function that can transform an error result of the callback into a string.
-  // Required if the callback can return an error result.
-  getErrorText?: (error: E) => string;
 
   // A function that constrains the success result of the tool
   constrainSuccessResult: (result: T) => ConstrainedResult<T> | Promise<ConstrainedResult<T>>;
@@ -114,12 +107,14 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   description: TypeOrProvider<string>;
   paramsSchema: TypeOrProvider<Args>;
   annotations: TypeOrProvider<ToolAnnotations>;
-  argsValidator?: TypeOrProvider<ArgsValidator<Args>>;
   callback: TypeOrProvider<TableauToolCallback<Args>>;
   app?: AppDetails & {
     resourceUri: `ui://tableau-mcp/${AppName}.html`;
     html: string;
   };
+  disabled: TypeOrProvider<boolean>;
+
+  requiredApiScopes: ReadonlyArray<TableauApiScope>;
 
   constructor({
     server,
@@ -128,15 +123,14 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     paramsSchema,
     annotations,
     app,
-    argsValidator,
     callback,
+    disabled,
   }: ToolParams<Args>) {
     this.server = server;
     this.name = name;
     this.description = description;
     this.paramsSchema = paramsSchema;
     this.annotations = annotations;
-    this.argsValidator = argsValidator;
     this.callback = callback;
 
     if (app) {
@@ -160,6 +154,9 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
           : readFileSync(htmlPath, 'utf-8'),
       };
     }
+    this.disabled = disabled ?? false;
+
+    this.requiredApiScopes = getRequiredApiScopesForTool(name);
   }
 
   logInvocation({
@@ -171,9 +168,9 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     args: unknown;
     username?: string;
   }): void {
-    log.debug(
+    notifier.debug(
       this.server,
-      getToolLogMessage({
+      getNotificationMessageForTool({
         requestId,
         toolName: this.name,
         args,
@@ -182,41 +179,17 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     );
   }
 
-  // Overload for E = undefined (getErrorText omitted)
-  async logAndExecute<T>(
-    params: Omit<LogAndExecuteParams<T, undefined, Args>, 'getErrorText'>,
-  ): Promise<CallToolResult>;
-
-  // Overload for E != undefined (getSuccessResult omitted)
-  async logAndExecute<T, E>(
-    params: Required<Omit<LogAndExecuteParams<T, E, Args>, 'getSuccessResult'>>,
-  ): Promise<CallToolResult>;
-
-  // Overload for E != undefined (getErrorText required)
-  async logAndExecute<T, E>(
-    params: Required<LogAndExecuteParams<T, E, Args>>,
-  ): Promise<CallToolResult>;
-
-  // Implementation
-  async logAndExecute<T, E>({
+  async logAndExecute<T>({
     extra,
     args,
     callback,
     getSuccessResult,
-    getErrorText,
     constrainSuccessResult,
-  }: LogAndExecuteParams<T, E, Args>): Promise<CallToolResult> {
+  }: LogAndExecuteParams<T, Args>): Promise<CallToolResult> {
     const { config, requestId, sessionId, tableauAuthInfo } = extra;
     const username = tableauAuthInfo?.username;
 
     this.logInvocation({ requestId, args, username });
-
-    // Record custom metric for this tool call
-    const telemetry = getTelemetryProvider();
-    telemetry.recordMetric('mcp.tool.calls', 1, {
-      tool_name: this.name,
-      request_id: requestId.toString(),
-    });
 
     const productTelemetryForwarder = getProductTelemetry(
       config.productTelemetryEndpoint,
@@ -229,18 +202,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     let toolResult: CallToolResult;
 
     try {
-      if (args) {
-        try {
-          (await Provider.from(this.argsValidator))?.(args);
-        } catch (error) {
-          errorCode = '400'; // Validation errors are client errors
-          toolResult = getErrorResult(requestId, error);
-          return toolResult;
-        }
-      }
-
       const result = await callback();
-
       if (result.isOk()) {
         const constrainedResult = await constrainSuccessResult(result.value);
 
@@ -248,8 +210,9 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
           // Constrained result is either 'empty' or 'error'
           const isError = constrainedResult.type === 'error';
           success = !isError;
-          errorCode =
-            isError && constrainedResult.error ? getHttpStatus(constrainedResult.error) : '';
+          if (isError && constrainedResult.error) {
+            errorCode = getHttpStatus(constrainedResult.error);
+          }
           toolResult = {
             isError,
             content: [{ type: 'text', text: constrainedResult.message }],
@@ -268,35 +231,49 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
       }
 
       // Handle error result - extract actual HTTP status if available
-      if (result.error instanceof Error) {
-        errorCode = getHttpStatus(result.error);
-      }
+      errorCode = getHttpStatus(result.error);
 
-      if (result.error instanceof ZodiosError) {
+      if (result.error instanceof ZodiosValidationError) {
         toolResult = getErrorResult(requestId, result.error);
         return toolResult;
       }
 
-      toolResult = getErrorText
-        ? { isError: true, content: [{ type: 'text', text: getErrorText(result.error) }] }
-        : getErrorResult(requestId, result.error);
+      toolResult = {
+        isError: true,
+        content: [{ type: 'text', text: result.error.getErrorText() }],
+      };
       return toolResult;
     } catch (error) {
       if (error instanceof Error) {
-        errorCode = getHttpStatus(error);
+        errorCode = getHttpStatus(error); // Default to 500 if no HTTP status can be determined
       }
+      if (!errorCode) {
+        errorCode = '500'; // Default to 500 if no HTTP status can be determined
+      }
+      log({
+        message: error,
+        level: 'error',
+        logger: 'tool',
+      });
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     } finally {
-      // Single telemetry call - always executed
       productTelemetryForwarder.send('tool_call', {
         tool_name: this.name,
         request_id: requestId.toString(),
         session_id: sessionId ?? '',
-        site_luid: getSiteLuidFromAccessToken(tableauAuthInfo?.accessToken),
+        site_luid: extra.getSiteLuid(),
+        user_luid: extra.getUserLuid(),
         podname: config.server,
         is_hyperforce: config.isHyperforce,
         success,
+        error_code: errorCode,
+      });
+      // Record custom metric for this tool call
+      const telemetry = getTelemetryProvider();
+      telemetry.recordMetric('mcp.tool.calls', 1, {
+        tool_name: this.name,
+        request_id: requestId.toString(),
         error_code: errorCode,
       });
     }
@@ -304,22 +281,21 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
 }
 
 function getErrorResult(requestId: RequestId, error: unknown): CallToolResult {
-  if (error instanceof ZodiosError && isZodErrorLike(error.cause)) {
+  if (error instanceof ZodiosValidationError) {
     // Schema validation errors on otherwise successful API calls will not return an "error" result to the MCP client.
     // We instead return the full response from the API with a data quality warning message
     // that mentions why the schema validation failed.
     // This should make it so users don't get "stuck" when our schemas are too strict or wrong.
     // The only con is that the full response from the API might be larger than normal
     // since a successful schema validation "trims" the response down to the shape of the schema.
-    const validationError = fromError(error.cause);
     return {
       isError: false,
       content: [
         {
           type: 'text',
           text: JSON.stringify({
-            data: error.data,
-            warning: validationError.toString(),
+            data: error.internalError,
+            warning: error.internalErrorDetails,
           }),
         },
       ],
