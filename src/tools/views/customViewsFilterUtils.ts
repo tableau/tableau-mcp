@@ -6,26 +6,15 @@ import {
   parseAndValidateFilterString,
 } from '../../utils/parseAndValidateFilterString.js';
 
-const FilterFieldSchema = z.enum([
-  'createdAt',
-  'id',
-  'name',
-  'ownerId',
-  'shared',
-  'updatedAt',
-  'viewId',
-  'workbookId',
-]);
+const FilterFieldSchema = z.enum(['ownerId', 'viewId', 'workbookId']);
 
 type FilterField = z.infer<typeof FilterFieldSchema>;
 
+// Note that this set is based off the requirement of the List Custom Views REST API, which states:
+// "The supported filters for custom views use the eq (equals) operator, with the resources: viewId, ownerId, and workbookId."
+// This is a subset of the custom view filter fields listed in the table at https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_filtering_and_sorting.htm#custom-views
 const allowedOperatorsByField: Record<FilterField, FilterOperator[]> = {
-  createdAt: ['eq', 'gt', 'gte', 'lt', 'lte'],
-  id: ['eq', 'in'],
-  name: ['eq', 'in'],
   ownerId: ['eq'],
-  shared: ['eq'],
-  updatedAt: ['eq', 'gt', 'gte', 'lt', 'lte'],
   viewId: ['eq'],
   workbookId: ['eq'],
 };

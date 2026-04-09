@@ -30,26 +30,17 @@ export const getListCustomViewsTool = (server: Server): Tool<typeof paramsSchema
   **Supported Filter Fields and Operators**
   | Field               | Operators            |
   |---------------------|----------------------|
-  | createdAt           | eq, gt, gte, lt, lte |
-  | id                  | eq, in               |
-  | name                | eq, in               |
   | ownerId             | eq                   |
-  | shared              | eq                   |
-  | updatedAt           | eq, gt, gte, lt, lte |
   | viewId              | eq                   |
 
   ${genericFilterDescription}
 
   **Example Usage:**
   - List all custom views on a site
-  - List custom views with the name "Overview":
-      filter: "name:eq:Overview"
-  - List custom views in the view with a specific ID:
-      filter: "viewId:eq:4d18c547-bbb1-4187-ae5a-7f78b35adf2d"
-  - List custom views created after January 1, 2023:
-      filter: "createdAt:gt:2023-01-01T00:00:00Z"
-  - List custom views with the name "Overview" and created after January 1, 2023:
-      filter: "name:eq:Overview,createdAt:gt:2023-01-01T00:00:00Z"`,
+  - List custom views from the view with viewId "9460abfe-a6b2-49d1-b998-39e1ebcc55ce":
+      filter: "viewId:eq:9460abfe-a6b2-49d1-b998-39e1ebcc55ce"
+  - List custom views for the owner with ownerId "bbdee366-4a50-4c2c-a5c8-746da5b64483":
+      filter: "ownerId:eq:bbdee366-4a50-4c2c-a5c8-746da5b64483"`,
     paramsSchema,
     annotations: {
       title: 'List Custom Views',
