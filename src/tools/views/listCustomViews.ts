@@ -53,7 +53,7 @@ export const getListCustomViewsTool = (server: Server): Tool<typeof paramsSchema
     callback: async ({ workbookId, filter, pageSize, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 
-      if (filter?.includes('workbookId:eq:')) {
+      if (filter?.includes('workbookId:')) {
         // Remove any workbookId filter since the source of truth comes from the workbookId argument.
         filter = filter
           .split(',')
