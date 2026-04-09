@@ -78,7 +78,7 @@ export const getListCustomViewsTool = (server: Server): Tool<typeof paramsSchema
               [
                 `The custom views from the workbook with LUID ${workbookId} are not allowed to be queried.`,
                 isWorkbookAllowedResult.message,
-              ].join('. '),
+              ].join(' '),
             ).toErr();
           }
 
