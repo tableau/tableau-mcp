@@ -20,14 +20,6 @@ export function isOverridableVariable(variable: unknown): variable is Overridabl
   return overridableVariables.some((v) => v === variable);
 }
 
-function filterEnvVarsToOverridable(
-  environmentVariables: Record<string, string | undefined>,
-): Record<OverridableVariable, string | undefined> {
-  return Object.fromEntries(
-    Object.entries(environmentVariables).filter(([key]) => isOverridableVariable(key)),
-  ) as Record<OverridableVariable, string | undefined>;
-}
-
 export type BoundedContext = {
   projectIds: Set<string> | null;
   datasourceIds: Set<string> | null;
