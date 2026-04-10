@@ -1,7 +1,10 @@
 import { z } from 'zod';
 
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
-import { MetadataResponse } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import {
+  DatasourceModelResponse,
+  MetadataResponse,
+} from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 
 export const fieldSchema = z
   .object({
@@ -56,8 +59,51 @@ export const parameterSchema = z
   })
   .partial();
 
+export const datasourceModelSchema = z.object({
+  logicalTables: z.array(
+    z
+      .object({
+        logicalTableId: z.string(),
+        caption: z.string().nullable(),
+        description: z.string().nullable(),
+      })
+      .partial(),
+  ),
+  logicalTableRelationships: z.array(
+    z
+      .object({
+        fromLogicalTable: z
+          .object({
+            logicalTableId: z.string(),
+          })
+          .partial(),
+        toLogicalTable: z
+          .object({
+            logicalTableId: z.string(),
+          })
+          .partial(),
+        expression: z
+          .object({
+            op: z.string(),
+            relationships: z.array(
+              z
+                .object({
+                  operator: z.string(),
+                  fromField: z.string(),
+                  toField: z.string(),
+                })
+                .partial(),
+            ),
+          })
+          .partial(),
+      })
+      .partial(),
+  ),
+});
+
 export const fieldsResultSchema = z.object({
   datasourceDescription: z.string(),
+  datasourceModel: datasourceModelSchema,
   fieldGroups: z.array(logicalTableGroupSchema),
   parameters: z.array(parameterSchema),
 });
@@ -67,9 +113,13 @@ type Field = z.infer<typeof fieldSchema>;
 type LogicalTableGroup = z.infer<typeof logicalTableGroupSchema>;
 export type FieldsResult = z.infer<typeof fieldsResultSchema>;
 
-export function simplifyReadMetadataResult(readMetadataResult: MetadataResponse): FieldsResult {
+export function simplifyReadMetadataResult(
+  readMetadataResult: MetadataResponse,
+  datasourceModelResult: DatasourceModelResponse,
+): FieldsResult {
   const simplifiedResponse: FieldsResult = {
     datasourceDescription: '',
+    datasourceModel: getSimplifiedDatasourceModel(datasourceModelResult),
     fieldGroups: [],
     parameters: [],
   };
@@ -135,12 +185,14 @@ export function simplifyReadMetadataResult(readMetadataResult: MetadataResponse)
 export function combineFields(
   readMetadataResult: MetadataResponse,
   listFieldsResult: GraphQLResponse,
+  datasourceModelResult: DatasourceModelResponse,
 ): FieldsResult {
   // Create a response object that combines field data from
   // readMetadata (VizQL Data Service API) and listFields (GraphQL Metadata API) results
   // to optimize for LLM accuracy and reduce tokens in response.
   const combinedFields: FieldsResult = {
     datasourceDescription: listFieldsResult.data.publishedDatasources[0]?.description ?? '',
+    datasourceModel: getSimplifiedDatasourceModel(datasourceModelResult),
     fieldGroups: [],
     parameters: [],
   };
@@ -293,4 +345,13 @@ function normalizeLogicalTableId(logicalTableId?: string | null): string | null 
 
   const normalizedLogicalTableId = logicalTableId.trim();
   return normalizedLogicalTableId.length > 0 ? normalizedLogicalTableId : null;
+}
+
+function getSimplifiedDatasourceModel(
+  datasourceModelResult: DatasourceModelResponse,
+): z.infer<typeof datasourceModelSchema> {
+  return {
+    logicalTables: datasourceModelResult.logicalTables ?? [],
+    logicalTableRelationships: datasourceModelResult.logicalTableRelationships ?? [],
+  };
 }
