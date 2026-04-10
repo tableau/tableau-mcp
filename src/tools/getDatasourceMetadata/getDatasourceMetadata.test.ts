@@ -1,9 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
-import { stubDefaultEnvVars, testProductVersion } from '../../testShared.js';
+import { stubDefaultEnvVars } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
@@ -12,10 +11,6 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
-const testProductVersion2025_2 = {
-  value: '2025.2.0',
-  build: '20252.25.0101.0001',
-} satisfies ProductVersion;
 
 const mockReadMetadataResponses = vi.hoisted(() => ({
   success: {
@@ -265,10 +260,7 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const getDatasourceMetadataTool = getGetDatasourceMetadataTool(
-      new Server(),
-      testProductVersion,
-    );
+    const getDatasourceMetadataTool = getGetDatasourceMetadataTool(new Server());
     expect(getDatasourceMetadataTool.name).toBe('get-datasource-metadata');
     expect(getDatasourceMetadataTool.description).toEqual(expect.any(String));
     expect(getDatasourceMetadataTool.paramsSchema).toMatchObject({
@@ -791,10 +783,7 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should return error when datasourceLuid is empty', async () => {
-    const getDatasourceMetadataTool = getGetDatasourceMetadataTool(
-      new Server(),
-      testProductVersion,
-    );
+    const getDatasourceMetadataTool = getGetDatasourceMetadataTool(new Server());
     const callback = await Provider.from(getDatasourceMetadataTool.callback);
 
     const result = await callback({ datasourceLuid: '' }, getMockRequestHandlerExtra());
@@ -828,20 +817,6 @@ describe('getDatasourceMetadataTool', () => {
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
 
-  it('should skip datasource model for Tableau versions older than 2025.3', async () => {
-    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
-    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
-
-    const result = await getToolResult({ productVersion: testProductVersion2025_2 });
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const responseData = JSON.parse(result.content[0].text);
-    expect(responseData).not.toHaveProperty('datasourceModel');
-    expect(flattenResponseFields(responseData)).toHaveLength(3);
-    expect(mocks.mockGetDatasourceModel).not.toHaveBeenCalled();
-  });
-
   it('should return data source not allowed error when datasource is not allowed', async () => {
     vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
 
@@ -860,13 +835,8 @@ describe('getDatasourceMetadataTool', () => {
   });
 });
 
-async function getToolResult(
-  params: { productVersion?: ProductVersion } = {},
-): Promise<CallToolResult> {
-  const getDatasourceMetadataTool = getGetDatasourceMetadataTool(
-    new Server(),
-    params.productVersion ?? testProductVersion,
-  );
+async function getToolResult(): Promise<CallToolResult> {
+  const getDatasourceMetadataTool = getGetDatasourceMetadataTool(new Server());
   const callback = await Provider.from(getDatasourceMetadataTool.callback);
   return await callback({ datasourceLuid: 'test-luid' }, getMockRequestHandlerExtra());
 }
