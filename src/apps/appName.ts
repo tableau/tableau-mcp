@@ -1,1 +1,1 @@
-export type AppName = 'pulse-renderer';
+export type AppName = 'pulse-renderer' | 'embed-tableau-viz';

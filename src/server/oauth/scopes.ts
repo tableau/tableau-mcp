@@ -133,6 +133,11 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:content:read'],
     api: new Set(['tableau:content:read']),
   },
+  // No Tableau REST API calls — purely passes the URL through to the MCP App for rendering.
+  'embed-tableau-viz': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
   // Token lifecycle: no Tableau REST API calls, no content scope required.
   // Any authenticated user may revoke their own token regardless of granted scopes.
   'revoke-access-token': {
