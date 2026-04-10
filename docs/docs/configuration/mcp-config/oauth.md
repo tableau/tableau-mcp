@@ -510,3 +510,4 @@ The MCP server supports three OAuth 2.1 grant types:
 - `/oauth2/authorize`: Authorization endpoint with PKCE (authorization code only)
 - `/Callback`: OAuth callback handler (authorization code only)
 - `/oauth2/token`: Token exchange and refresh (all grant types)
+- `/oauth2/revoke`: Token revocation

@@ -27,6 +27,7 @@ export function oauthAuthorizationServer(app: express.Application): void {
       authorization_endpoint: `${issuer}/oauth2/authorize`,
       token_endpoint: `${issuer}/oauth2/token`,
       registration_endpoint: `${issuer}/oauth2/register`,
+      revocation_endpoint: `${issuer}/oauth2/revoke`,
       response_types_supported: ['code'],
       grant_types_supported,
       code_challenge_methods_supported: ['S256'],
