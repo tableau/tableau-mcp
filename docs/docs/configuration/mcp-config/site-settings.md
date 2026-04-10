@@ -4,7 +4,7 @@ sidebar_position: 6
 
 # Site Settings
 
-Tableau MCP supports configuration on a per-site basis via [REST API](coming_soon). When a Tableau MCP user is authenticated to a given site, the site's configuration is fetched and applied to their session such that each setting will override any current value set by the Tableau MCP server.
+Tableau MCP supports configuration on a per-site basis via REST API. When a Tableau MCP user is authenticated to a given site, the site's configuration is fetched and applied to their session such that each setting will override any current value set by the Tableau MCP server.
 
 In order to use site settings:
 - Only available in Tableau versions 2026.2 or higher.
@@ -15,7 +15,7 @@ In order to use site settings:
 Only site and server administrators are able to configure Tableau MCP site settings.
 Not every Tableau MCP configuration variable is overridable with site settings, only the ones listed as [Site Overridable Variables](#site-overridable-variables).
 
-When creating or updating site settings via [REST API](coming_soon):
+When creating or updating site settings via REST API:
 - To use a variable's default value or clear limits and bounds set by the Tableau MCP server, you can provide an empty string as the override value.
 - To remove an override variable from the list of site settings and restore its value back to what is set by the Tableau MCP server,
   you can `POST` the current list of site settings minus the variable you want to remove or include the variable in a `PUT` request with a null value or omit the value property entirely.
