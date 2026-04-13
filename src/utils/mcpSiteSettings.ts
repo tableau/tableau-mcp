@@ -22,7 +22,10 @@ async function getMcpSiteSettings({
   restApiArgs: RestApiArgs;
 }): Promise<McpSiteSettings | undefined> {
   const { config, tableauAuthInfo } = restApiArgs;
-  if (!config.enableMcpSiteSettings || RestApi.version < MCP_SITE_SETTINGS_MIN_REST_API_VERSION) {
+  if (
+    !config.enableMcpSiteSettings ||
+    !RestApi.versionIsAtLeast(MCP_SITE_SETTINGS_MIN_REST_API_VERSION)
+  ) {
     return;
   }
 

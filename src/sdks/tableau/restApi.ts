@@ -234,6 +234,12 @@ export class RestApi {
     return workbooksMethods;
   }
 
+  public static versionIsAtLeast = (version: `${number}.${number}`): boolean => {
+    const [currentMajor, currentMinor] = RestApi._version.split('.').map(Number);
+    const [major, minor] = version.split('.').map(Number);
+    return currentMajor > major || (currentMajor === major && currentMinor >= minor);
+  };
+
   signIn = async (authConfig: AuthConfig): Promise<void> => {
     this._creds = {
       type: 'X-Tableau-Auth',
