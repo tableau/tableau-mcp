@@ -2,6 +2,15 @@ import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 
 stubDefaultEnvVars();
 
+vi.mock('./sdks/tableau/methods/serverMethods.js', () => ({
+  ServerMethods: vi.fn().mockImplementation(() => ({
+    getServerInfo: vi.fn().mockResolvedValue({
+      productVersion: testProductVersion,
+      restApiVersion: '3.27',
+    }),
+  })),
+}));
+
 vi.mock('./server.js', async (importOriginal) => ({
   ...(await importOriginal()),
   Server: vi.fn().mockImplementation(() => ({
