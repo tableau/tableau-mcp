@@ -502,11 +502,6 @@ The MCP server supports three OAuth 2.1 grant types:
 3. **MCP Access Token**: JWE-encrypted token containing Tableau credentials or client info
 4. **MCP Refresh Token**: For obtaining new access tokens (authorization code only)
 
-#### Tableau AS Bearer Token Claims (External Authorization Server Mode)
-
-When `OAUTH_EMBEDDED_AUTHZ_SERVER=false`, the OAuth `client_id` for token revocation is read
-from the `client_id` JWT claim if present, with `aud` as a compatibility fallback.
-
 #### Endpoints
 
 - `/.well-known/oauth-protected-resource`: Resource metadata discovery
