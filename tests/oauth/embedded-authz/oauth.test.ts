@@ -6,6 +6,11 @@ import { getConfig } from '../../../src/config.js';
 import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { generateCodeChallenge } from '../../../src/server/oauth/generateCodeChallenge.js';
+import * as getTableauAuthInfoModule from '../../../src/server/oauth/getTableauAuthInfo.js';
+import {
+  PassthroughAuthInfo,
+  passthroughAuthInfoSchema,
+} from '../../../src/server/passthroughAuthMiddleware.js';
 import { AwaitableWritableStream } from './awaitableWritableStream.js';
 import { exchangeAuthzCodeForAccessToken } from './exchangeAuthzCodeForAccessToken.js';
 import { resetEnv, setEnv } from './testEnv.js';
@@ -295,6 +300,90 @@ describe('OAuth', () => {
     expect(lines[0]).toBe('event: message');
     const data = JSON.parse(lines[1].substring(lines[1].indexOf('data: ') + 6));
     expect(data).toMatchObject({ result: { tools: expect.any(Array) } });
+  });
+
+  it('should pass the current request X-Tableau-Auth through extra.authInfo', async () => {
+    vi.stubEnv('ENABLE_PASSTHROUGH_AUTH', 'true');
+
+    const { app } = await startServer();
+
+    const getTableauAuthInfoSpy = vi.spyOn(getTableauAuthInfoModule, 'getTableauAuthInfo');
+
+    const awaitableWritableStream = new AwaitableWritableStream();
+
+    try {
+      const response = await request(app)
+        .post(`/${serverName}`)
+        .set('X-Tableau-Auth', 'valid-access-token-1')
+        .set('Content-Type', 'application/json')
+        .set('Accept', 'application/json, text/event-stream')
+        .send({
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-06-18',
+            capabilities: {
+              elicitation: {},
+            },
+            clientInfo: {
+              name: 'tableau-mcp-tests',
+              version: '1.0.0',
+            },
+          },
+          jsonrpc: '2.0',
+          id: 0,
+        })
+        .expect(200);
+
+      const sessionId = response.headers['mcp-session-id'];
+
+      request(app)
+        .post(`/${serverName}`)
+        .set('X-Tableau-Auth', 'valid-access-token-2')
+        .set('Content-Type', 'application/json')
+        .set('Accept', 'application/json, text/event-stream')
+        .set('mcp-session-id', sessionId)
+        .send({
+          method: 'tools/call',
+          params: {
+            name: 'list-datasources',
+            arguments: {},
+          },
+          jsonrpc: '2.0',
+          id: 1,
+        })
+        .pipe(awaitableWritableStream.stream);
+
+      const messages = await awaitableWritableStream.getChunks((chunk) =>
+        Buffer.from(chunk).toString('utf-8'),
+      );
+
+      expect(messages.length).toBeGreaterThan(0);
+      const message = messages.join('');
+      const lines = message.split('\n').filter(Boolean);
+      expect(lines.length).toBeGreaterThan(1);
+      expect(lines[0]).toBe('event: message');
+      const data = JSON.parse(lines[1].substring(lines[1].indexOf('data: ') + 6));
+      expect(data.error).toBeUndefined();
+      expect(data.result).toMatchObject({ content: expect.any(Array) });
+
+      const passthroughRawFromAuthInfo = getTableauAuthInfoSpy.mock.calls
+        .map(([authInfo]) => authInfo?.extra)
+        .filter(
+          (extra): extra is PassthroughAuthInfo =>
+            passthroughAuthInfoSchema.safeParse(extra).success,
+        )
+        .map((extra) => extra.raw);
+
+      expect(passthroughRawFromAuthInfo.length).toBeGreaterThan(1);
+
+      // Initialization request used the first header
+      expect(passthroughRawFromAuthInfo[0]).toBe('valid-access-token-1');
+
+      // Tool call used the second header
+      expect(passthroughRawFromAuthInfo[1]).toBe('valid-access-token-2');
+    } finally {
+      getTableauAuthInfoSpy.mockRestore();
+    }
   });
 
   it('should allow authenticated requests using the workgroup_session_id cookie', async () => {

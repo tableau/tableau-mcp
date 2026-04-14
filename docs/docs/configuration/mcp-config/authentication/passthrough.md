@@ -17,6 +17,10 @@ When a request is made to the MCP server, the `X-Tableau-Auth` header is read.
   environment variable. This allows clients that do not provide the `X-Tableau-Auth` header to still
   authenticate to the MCP server.
 
+## Warnings
+
+### Credential Lifecycle
+
 :::warning
 
 When using passthrough authentication, the calling application is responsible for creating the
@@ -25,13 +29,35 @@ automatically terminate the Tableau session associated with the credential after
 refresh it after it expires. Providing an invalid or expired credential will result in downstream
 authentication failures.
 
-Additionally, if [`OAuth`](oauth.md) is enabled, all requests to the MCP server must include the
+:::
+
+### JWT Scopes
+
+:::warning
+
+If you
+[use a JWT to create the auth token](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_auth.htm#make-a-sign-in-request-with-jwt),
+it must contain the Tableau scopes needed by the underlying REST APIs called by the MCP tools. For
+the full list of scopes and which are used by each individual tool, please refer to
+[scopes.ts](https://github.com/tableau/tableau-mcp/blob/main/src/server/oauth/scopes.ts).
+
+In versions of Tableau older than 2026.2, the JWT must also contain the `tableau:*:*` scope.
+
+:::
+
+### OAuth
+
+:::warning
+
+If [`OAuth`](oauth.md) is enabled, **all** requests to the MCP server must include the
 `X-Tableau-Auth` header, otherwise the client will be considered unauthorized and will be forced to
 authenticate using OAuth. This even includes MCP lifecycle requests like the
 [Initialization request](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#initialization),
 even though it does not make any downstream Tableau REST API calls.
 
 :::
+
+### Personal Access Tokens
 
 :::danger
 
@@ -44,7 +70,9 @@ for more details.
 
 :::
 
-## ENABLE_PASSTHROUGH_AUTH
+## Environment Variables
+
+### ENABLE_PASSTHROUGH_AUTH
 
 - Default: `false`
 - When `true`, passthrough authentication is enabled.
@@ -52,7 +80,7 @@ for more details.
 
 <hr />
 
-## PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES
+### PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES
 
 - Default: `10` minutes
 - How often the server re-checks that a passthrough auth token is still valid. Between checks,
