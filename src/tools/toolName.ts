@@ -16,6 +16,14 @@ export const toolNames = [
   'generate-pulse-insight-brief',
   'search-content',
   'revoke-access-token',
+  'admin-users',
+  'admin-groups',
+  'content-permissions',
+  'content-projects',
+  'content-workbooks',
+  'content-views',
+  'site-jobs',
+  'tableau-operations',
 ] as const;
 export type ToolName = (typeof toolNames)[number];
 
@@ -26,6 +34,9 @@ export const toolGroupNames = [
   'pulse',
   'content-exploration',
   'token-management',
+  'admin',
+  'content',
+  'operations',
 ] as const;
 export type ToolGroupName = (typeof toolGroupNames)[number];
 
@@ -44,6 +55,9 @@ export const toolGroups = {
   ],
   'content-exploration': ['search-content'],
   'token-management': ['revoke-access-token'],
+  admin: ['admin-users', 'admin-groups'],
+  content: ['content-projects', 'content-workbooks', 'content-views'],
+  operations: ['content-permissions', 'site-jobs', 'tableau-operations'],
 } as const satisfies Record<ToolGroupName, Array<ToolName>>;
 
 export function isToolName(value: unknown): value is ToolName {

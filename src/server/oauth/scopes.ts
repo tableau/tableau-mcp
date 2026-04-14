@@ -21,17 +21,38 @@ export type McpScope =
   | 'tableau:mcp:view:read'
   | 'tableau:mcp:view:download'
   | 'tableau:mcp:pulse:read'
-  | 'tableau:mcp:insight:create';
+  | 'tableau:mcp:insight:create'
+  | 'tableau:mcp:admin:users'
+  | 'tableau:mcp:admin:groups'
+  | 'tableau:mcp:admin:permissions'
+  | 'tableau:mcp:admin:jobs'
+  | 'tableau:mcp:admin:operations';
 
 export type TableauApiScope =
   | 'tableau:content:read'
+  | 'tableau:content:update'
+  | 'tableau:content:delete'
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
   | 'tableau:insight_definitions_metrics:read'
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
   | 'tableau:insights:read'
-  | 'tableau:insight_brief:create';
+  | 'tableau:insight_brief:create'
+  | 'tableau:users:read'
+  | 'tableau:users:create'
+  | 'tableau:users:update'
+  | 'tableau:users:delete'
+  | 'tableau:groups:read'
+  | 'tableau:groups:create'
+  | 'tableau:groups:update'
+  | 'tableau:groups:delete'
+  | 'tableau:permissions:read'
+  | 'tableau:permissions:update'
+  | 'tableau:jobs:read'
+  | 'tableau:jobs:update'
+  | 'tableau:oauth_credentials:download'
+  | 'tableau:oauth_credentials:upload';
 
 /**
  * Default scopes supported by the MCP server
@@ -46,6 +67,11 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:view:download',
   'tableau:mcp:pulse:read',
   'tableau:mcp:insight:create',
+  'tableau:mcp:admin:users',
+  'tableau:mcp:admin:groups',
+  'tableau:mcp:admin:permissions',
+  'tableau:mcp:admin:jobs',
+  'tableau:mcp:admin:operations',
 ];
 
 export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauApiScope> = [
@@ -138,6 +164,71 @@ const toolScopeMap: Record<
   'revoke-access-token': {
     mcp: [],
     api: new Set<TableauApiScope>(),
+  },
+  'admin-users': {
+    mcp: ['tableau:mcp:admin:users'],
+    api: new Set<TableauApiScope>([
+      'tableau:users:read',
+      'tableau:users:create',
+      'tableau:users:update',
+      'tableau:users:delete',
+      'tableau:oauth_credentials:download',
+      'tableau:oauth_credentials:upload',
+    ]),
+  },
+  'admin-groups': {
+    mcp: ['tableau:mcp:admin:groups'],
+    api: new Set<TableauApiScope>([
+      'tableau:groups:read',
+      'tableau:groups:create',
+      'tableau:groups:update',
+      'tableau:groups:delete',
+      'tableau:users:read',
+    ]),
+  },
+  'content-permissions': {
+    mcp: ['tableau:mcp:admin:permissions'],
+    api: new Set<TableauApiScope>([
+      'tableau:permissions:read',
+      'tableau:permissions:update',
+      'tableau:content:read',
+    ]),
+  },
+  'content-projects': {
+    mcp: ['tableau:mcp:content:read'],
+    api: new Set<TableauApiScope>([
+      'tableau:content:read',
+      'tableau:content:update',
+      'tableau:content:delete',
+    ]),
+  },
+  'content-workbooks': {
+    mcp: ['tableau:mcp:workbook:read'],
+    api: new Set<TableauApiScope>([
+      'tableau:content:read',
+      'tableau:content:update',
+      'tableau:content:delete',
+      'tableau:views:download',
+    ]),
+  },
+  'content-views': {
+    mcp: ['tableau:mcp:view:read'],
+    api: new Set<TableauApiScope>(['tableau:content:read', 'tableau:views:download']),
+  },
+  'site-jobs': {
+    mcp: ['tableau:mcp:admin:jobs'],
+    api: new Set<TableauApiScope>(['tableau:jobs:read']),
+  },
+  'tableau-operations': {
+    mcp: ['tableau:mcp:admin:operations'],
+    api: new Set<TableauApiScope>([
+      'tableau:jobs:read',
+      'tableau:jobs:update',
+      'tableau:content:read',
+      'tableau:permissions:read',
+      'tableau:users:read',
+      'tableau:groups:read',
+    ]),
   },
 };
 
