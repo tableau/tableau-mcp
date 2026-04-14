@@ -38,7 +38,7 @@ export type RestApiCredentials =
  */
 export class RestApi {
   private static _host: string;
-  private static _version: string | undefined;
+  private static _version = '3.24';
 
   private _creds?: RestApiCredentials;
   private _maxRequestTimeoutMs: number;
@@ -76,9 +76,6 @@ export class RestApi {
   }
 
   public static get version(): string {
-    if (!RestApi._version) {
-      throw new Error('REST API version not initialized');
-    }
     return RestApi._version;
   }
 
@@ -87,7 +84,7 @@ export class RestApi {
   }
 
   private static get baseUrl(): string {
-    return `${RestApi.host}/api/${RestApi.version}`;
+    return `${RestApi.host}/api/${RestApi._version}`;
   }
 
   private static get baseUrlWithoutVersion(): string {

@@ -3,15 +3,6 @@ import { Ok } from 'ts-results-es';
 import { testProductVersion } from '../../../src/testShared.js';
 import { mockDatasources } from '../../../src/tools/listDatasources/mockDatasources.js';
 
-vi.mock('../../../src/sdks/tableau/methods/serverMethods.js', () => ({
-  ServerMethods: vi.fn().mockImplementation(() => ({
-    getServerInfo: vi.fn().mockResolvedValue({
-      productVersion: testProductVersion,
-      restApiVersion: '3.27',
-    }),
-  })),
-}));
-
 vi.mock('../../../src/sdks/tableau/restApi.js', async (importOriginal) => ({
   ...(await importOriginal()),
   RestApi: vi.fn().mockImplementation(() => ({
