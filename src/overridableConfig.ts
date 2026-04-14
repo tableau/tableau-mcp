@@ -175,10 +175,10 @@ export class OverridableConfig {
    * 1. Initialize the value of a given variable using the ENVIRONMENT (process.env). Throw if any issues with ENVIORNMENT values / unallowed behavior.
    * 2. Using the Object.hasOwn() method, check if the given variable exists as a property in the siteOverrides object.
    *    Only when the variable is a property in the siteOverrides object, apply the following logic:
-   *      a. If the site override value is empty string or undefined, that means the variable is being overriden to clear its value
-   *         (e.g. remove bounds, remove limits, revert to default behavior of boolean variables).
+   *      a. If the site override value is an empty string or undefined, we generally revert the variable to its default value / behavior
+   *         (each variable is different, so consider what makes the most sense for this case).
    *      b. If the site override value is invalid, do not throw. Either fallback to the value of the ENVIRONMENT or
-   *         clear the value of the variable (similar to the empty string / undefined case).
+   *         revert the value of the variable to its default value / behavior (similar to the empty string / undefined case).
    *      c. If the site override value is valid, replace the value of the given variable with its value from the site override.
    */
   constructor(siteOverrides: Record<string, string | undefined> = {}) {

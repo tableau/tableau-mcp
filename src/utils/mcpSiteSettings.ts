@@ -7,6 +7,7 @@ import {
 import { RestApiArgs, useRestApi } from '../restApiInstance.js';
 import { RestApi } from '../sdks/tableau/restApi.js';
 import { McpSiteSettings, McpSiteSettingsResult } from '../sdks/tableau/types/mcpSiteSettings.js';
+import { isAxiosError } from './axios.js';
 import { ExpiringMap } from './expiringMap.js';
 import { getSiteLuidFromAccessToken } from './getSiteLuidFromAccessToken.js';
 import { DistributiveOmit } from './types.js';
@@ -58,10 +59,18 @@ async function getMcpSiteSettings({
         mcpSiteSettings[setting.key] = setting.value;
       }
     }
-  } catch {
-    // getting mcpSiteSettings fails when the `MCPSettingsEnabled` feature is disabled on a site
-    // we should still cache the result to avoid repeated requests
-    // TODO: should we log here? there's also an internal server error if the settings are in a bad state and need to be overwritten. maybe log that one?
+  } catch (error) {
+    if (isAxiosError(error)) {
+      if (error.response?.status === 500) {
+        throw new Error(
+          'Internal Server Error: The MCP settings are in a bad state and need to be overwritten.',
+        );
+      } else if (error.response?.status !== 403) {
+        throw new Error('An unexpected error occurred while getting MCP settings for site.');
+      }
+      // else: (403 status code) MCP settings feature flag was disabled on this site,
+      // continue and cache with empty settings.
+    }
   }
 
   mcpSiteSettingsCache.set(cacheKey, mcpSiteSettings);
