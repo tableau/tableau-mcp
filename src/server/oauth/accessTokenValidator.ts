@@ -127,6 +127,7 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
         aud,
         exp,
         scope,
+        client_id,
         'https://tableau.com/siteId': siteId,
         'https://tableau.com/userId': userId,
         'https://tableau.com/targetUrl': targetUrl,
@@ -136,6 +137,12 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
         return new Err('Invalid or expired access token');
       }
 
+      // Prefer the explicit client_id claim introduced in the new Tableau AS token contract.
+      // Fall back to aud during the compatibility window when client_id is absent (legacy tokens).
+      // TODO(cleanup): once George's AS rollout is complete and client_id is confirmed live in all
+      // environments, remove the aud fallback and update the schema to require client_id.
+      const oauthClientId = client_id ?? aud;
+
       const tableauAuthInfo: TableauAuthInfo = {
         type: 'Bearer',
         username: sub,
@@ -143,14 +150,12 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
         siteId,
         userId,
         raw: token,
-        clientId: aud,
+        clientId: oauthClientId,
       };
 
       return Ok({
         token,
-        // AuthInfo.clientId is mapped to the issuer here (iss claim).
-        // tableauAuthInfo.clientId carries the OAuth client_id (aud claim) for revocation.
-        clientId: iss,
+        clientId: oauthClientId,
         scopes: parseScopes(scope),
         expiresAt: exp,
         extra: tableauAuthInfo,

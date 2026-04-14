@@ -89,7 +89,7 @@ This tool requires no input — it operates on the token already associated with
 
           let response: Response;
           if (tableauAuthInfo.type === 'Bearer') {
-            const clientId = tableauAuthInfo.clientId ?? extra.authInfo?.clientId;
+            const clientId = tableauAuthInfo.clientId;
             if (!clientId) {
               return new Err(
                 new McpToolError({
