@@ -155,10 +155,7 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
 
       return Ok({
         token,
-        // AuthInfo.clientId is set to iss (issuer URL) as a structural requirement of the
-        // MCP SDK's AuthInfo type. It does NOT represent the OAuth client_id. For the actual
-        // OAuth client_id, use tableauAuthInfo.clientId.
-        clientId: iss,
+        clientId: oauthClientId,
         scopes: parseScopes(scope),
         expiresAt: exp,
         extra: tableauAuthInfo,

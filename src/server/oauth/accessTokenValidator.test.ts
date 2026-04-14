@@ -84,14 +84,22 @@ describe('TableauAccessTokenValidator', () => {
   });
 
   describe('standard validation', () => {
-    it('returns AuthInfo with iss as AuthInfo.clientId (SDK structural requirement)', async () => {
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+    it('returns AuthInfo.clientId as the resolved OAuth client_id', async () => {
+      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID, aud: MOCK_RESOURCE_URL }));
       const result = await validator.validate(token);
 
       expect(result.isOk()).toBe(true);
       if (!result.isOk()) return;
-      // AuthInfo.clientId must be iss, not the OAuth client_id
-      expect(result.value.clientId).toBe(MOCK_ISSUER);
+      expect(result.value.clientId).toBe(MOCK_CLIENT_ID);
+    });
+
+    it('returns AuthInfo.clientId as aud when client_id claim is absent (legacy compat)', async () => {
+      const token = makeBearer(basePayload());
+      const result = await validator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+      expect(result.value.clientId).toBe(MOCK_AUD_LEGACY);
     });
 
     it('rejects token with wrong issuer', async () => {
