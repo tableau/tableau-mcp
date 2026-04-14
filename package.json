@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "Helping agents see and understand data.",
-  "version": "1.18.3",
+  "version": "1.18.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -54,6 +54,7 @@
     "docs:start": "npm run start --prefix docs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1030.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@zodios/core": "^10.9.6",
     "cookie-parser": "^1.4.7",
