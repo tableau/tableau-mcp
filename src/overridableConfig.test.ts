@@ -227,23 +227,84 @@ describe('OverridableConfig', () => {
 
   describe('Override behavior', () => {
     it('should override INCLUDE_TOOLS', () => {
+      // positive override case
       vi.stubEnv('INCLUDE_TOOLS', 'list-views');
-
       const config = new OverridableConfig({
         INCLUDE_TOOLS: 'query-datasource',
       });
-
       expect(config.includeTools).toEqual(['query-datasource']);
+      expect(config.excludeTools).toEqual([]);
+
+      // clear tool scopes with empty string
+      const config2 = new OverridableConfig({
+        INCLUDE_TOOLS: '',
+      });
+      expect(config2.includeTools).toEqual([]);
+
+      // should fall back to environment variable if both INCLUDE_TOOLS and EXCLUDE_TOOLS are set
+      const config3 = new OverridableConfig({
+        INCLUDE_TOOLS: 'query-datasource',
+        EXCLUDE_TOOLS: 'list-views',
+      });
+      expect(config3.includeTools).toEqual(['list-views']);
+      expect(config3.excludeTools).toEqual([]);
+
+      // invalid overrides are ignored / treated same as empty string
+      const config4 = new OverridableConfig({
+        INCLUDE_TOOLS: 'invalid',
+      });
+      expect(config4.includeTools).toEqual([]);
+      expect(config4.excludeTools).toEqual([]);
+
+      // global EXCLUDE_TOOLS and site overrides INCLUDE_TOOLS should not conflict
+      vi.unstubAllEnvs();
+      vi.stubEnv('EXCLUDE_TOOLS', 'list-views');
+      const config5 = new OverridableConfig({
+        INCLUDE_TOOLS: 'query-datasource',
+      });
+      expect(config5.includeTools).toEqual(['query-datasource']);
+      expect(config5.excludeTools).toEqual([]);
     });
 
     it('should override EXCLUDE_TOOLS', () => {
+      // positive override case
       vi.stubEnv('EXCLUDE_TOOLS', 'list-views');
-
       const config = new OverridableConfig({
-        EXCLUDE_TOOLS: 'get-datasource-metadata',
+        EXCLUDE_TOOLS: 'query-datasource',
       });
+      expect(config.excludeTools).toEqual(['query-datasource']);
+      expect(config.includeTools).toEqual([]);
 
-      expect(config.excludeTools).toEqual(['get-datasource-metadata']);
+      // clear tool scopes with empty string
+      const config2 = new OverridableConfig({
+        EXCLUDE_TOOLS: '',
+      });
+      expect(config2.excludeTools).toEqual([]);
+      expect(config2.includeTools).toEqual([]);
+
+      // should fall back to environment variable if both INCLUDE_TOOLS and EXCLUDE_TOOLS are set
+      const config3 = new OverridableConfig({
+        INCLUDE_TOOLS: 'query-datasource',
+        EXCLUDE_TOOLS: 'list-views',
+      });
+      expect(config3.excludeTools).toEqual(['list-views']);
+      expect(config3.includeTools).toEqual([]);
+
+      // invalid overrides are ignored / treated same as empty string
+      const config4 = new OverridableConfig({
+        EXCLUDE_TOOLS: 'invalid',
+      });
+      expect(config4.excludeTools).toEqual([]);
+      expect(config4.includeTools).toEqual([]);
+
+      // global EXCLUDE_TOOLS and site overrides INCLUDE_TOOLS should not conflict
+      vi.unstubAllEnvs();
+      vi.stubEnv('INCLUDE_TOOLS', 'list-views');
+      const config5 = new OverridableConfig({
+        EXCLUDE_TOOLS: 'query-datasource',
+      });
+      expect(config5.excludeTools).toEqual(['query-datasource']);
+      expect(config5.includeTools).toEqual([]);
     });
 
     it('should override INCLUDE_PROJECT_IDS', () => {
@@ -254,6 +315,18 @@ describe('OverridableConfig', () => {
       });
 
       expect(config.boundedContext.projectIds).toEqual(new Set(['123', '456']));
+
+      // should clear project IDs with empty string
+      const config2 = new OverridableConfig({
+        INCLUDE_PROJECT_IDS: '',
+      });
+      expect(config2.boundedContext.projectIds).toEqual(null);
+
+      // should fall back to environment variable resulting override set is empty
+      const config3 = new OverridableConfig({
+        INCLUDE_PROJECT_IDS: ',,,,,,,',
+      });
+      expect(config3.boundedContext.projectIds).toEqual(new Set(['999']));
     });
 
     it('should override INCLUDE_DATASOURCE_IDS', () => {
@@ -264,6 +337,18 @@ describe('OverridableConfig', () => {
       });
 
       expect(config.boundedContext.datasourceIds).toEqual(new Set(['123', '456']));
+
+      // should clear project IDs with empty string
+      const config2 = new OverridableConfig({
+        INCLUDE_DATASOURCE_IDS: '',
+      });
+      expect(config2.boundedContext.datasourceIds).toEqual(null);
+
+      // should fall back to environment variable resulting override set is empty
+      const config3 = new OverridableConfig({
+        INCLUDE_DATASOURCE_IDS: ',,,,,,,',
+      });
+      expect(config3.boundedContext.datasourceIds).toEqual(new Set(['999']));
     });
 
     it('should override INCLUDE_WORKBOOK_IDS', () => {
@@ -274,6 +359,18 @@ describe('OverridableConfig', () => {
       });
 
       expect(config.boundedContext.workbookIds).toEqual(new Set(['123', '456']));
+
+      // should clear workbook IDs with empty string
+      const config2 = new OverridableConfig({
+        INCLUDE_WORKBOOK_IDS: '',
+      });
+      expect(config2.boundedContext.workbookIds).toEqual(null);
+
+      // should fall back to environment variable resulting override set is empty
+      const config3 = new OverridableConfig({
+        INCLUDE_WORKBOOK_IDS: ',,,,,,,',
+      });
+      expect(config3.boundedContext.workbookIds).toEqual(new Set(['999']));
     });
 
     it('should override INCLUDE_TAGS', () => {
@@ -284,6 +381,18 @@ describe('OverridableConfig', () => {
       });
 
       expect(config.boundedContext.tags).toEqual(new Set(['123', '456']));
+
+      // should clear tags with empty string
+      const config2 = new OverridableConfig({
+        INCLUDE_TAGS: '',
+      });
+      expect(config2.boundedContext.tags).toEqual(null);
+
+      // should fall back to environment variable resulting override set is empty
+      const config3 = new OverridableConfig({
+        INCLUDE_TAGS: ',,,,,,,',
+      });
+      expect(config3.boundedContext.tags).toEqual(new Set(['999']));
     });
 
     it('should override MAX_RESULT_LIMIT', () => {
@@ -294,6 +403,16 @@ describe('OverridableConfig', () => {
       });
 
       expect(config.getMaxResultLimit('query-datasource')).toEqual(99);
+
+      const config2 = new OverridableConfig({
+        MAX_RESULT_LIMIT: '',
+      });
+      expect(config2.getMaxResultLimit('query-datasource')).toEqual(null);
+
+      const config3 = new OverridableConfig({
+        MAX_RESULT_LIMIT: '-1',
+      });
+      expect(config3.getMaxResultLimit('query-datasource')).toEqual(null);
     });
 
     it('should override MAX_RESULT_LIMITS', () => {
@@ -307,6 +426,19 @@ describe('OverridableConfig', () => {
 
       expect(config.getMaxResultLimit('list-datasources')).toEqual(99);
       expect(config.getMaxResultLimit('query-datasource')).toEqual(999);
+
+      // should fall back to environment variable if MAX_RESULT_LIMITS is invalid
+      const config2 = new OverridableConfig({
+        MAX_RESULT_LIMIT: '99',
+        MAX_RESULT_LIMITS: 'invalid',
+      });
+      expect(config2.getMaxResultLimit('query-datasource')).toEqual(99);
+
+      const config3 = new OverridableConfig({
+        MAX_RESULT_LIMIT: '99',
+        MAX_RESULT_LIMITS: 'query-datasource:invalid',
+      });
+      expect(config3.getMaxResultLimit('query-datasource')).toEqual(99);
     });
 
     it('should override DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS', () => {

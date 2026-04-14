@@ -16,6 +16,7 @@ import {
 } from './methods/authenticationMethods.js';
 import ContentExplorationMethods from './methods/contentExplorationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
+import McpSettingsMethods from './methods/mcpSettingsMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import PulseMethods from './methods/pulseMethods.js';
 import { AuthenticatedServerMethods, ServerMethods } from './methods/serverMethods.js';
@@ -24,7 +25,6 @@ import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
 import WorkbooksMethods from './methods/workbooksMethods.js';
 import { BearerToken, bearerTokenSchema } from './types/bearerToken.js';
 import { Credentials } from './types/credentials.js';
-import { McpSiteSettings } from './types/mcpSiteSettings.js';
 
 export type RestApiCredentials =
   | ({ type: 'X-Tableau-Auth' } & Credentials)
@@ -196,17 +196,13 @@ export class RestApi {
     return serverMethods;
   }
 
-  get siteMethods(): { getMcpSettings: () => Promise<McpSiteSettings> } {
-    return {
-      getMcpSettings: async (): Promise<McpSiteSettings> => {
-        // When the "Get MCP Site Settings" REST API is available:
-        //   1. Remove this comment.
-        //   2. Default enableMcpSiteSettings to enabled.
-        //   3. Add documentation for ENABLE_MCP_SITE_SETTINGS.
-        //   4. Add documentation for MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES.
-        return {};
-      },
-    };
+  get mcpSettingsMethods(): McpSettingsMethods {
+    const mcpSettingsMethods = new McpSettingsMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, mcpSettingsMethods.interceptors);
+    return mcpSettingsMethods;
   }
 
   get vizqlDataServiceMethods(): VizqlDataServiceMethods {
@@ -237,6 +233,12 @@ export class RestApi {
     this._addInterceptors(RestApi.baseUrl, workbooksMethods.interceptors);
     return workbooksMethods;
   }
+
+  public static versionIsAtLeast = (version: `${number}.${number}`): boolean => {
+    const [currentMajor, currentMinor] = RestApi._version.split('.').map(Number);
+    const [major, minor] = version.split('.').map(Number);
+    return currentMajor > major || (currentMajor === major && currentMinor >= minor);
+  };
 
   signIn = async (authConfig: AuthConfig): Promise<void> => {
     this._creds = {

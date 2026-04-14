@@ -9,8 +9,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../restApiInstance.js', () => ({
   useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
     callback({
-      siteMethods: {
-        getMcpSettings: mocks.mockGetMcpSiteSettings,
+      mcpSettingsMethods: {
+        getMcpSiteSettings: mocks.mockGetMcpSiteSettings,
       },
     }),
   ),
@@ -54,15 +54,17 @@ describe('mcpSiteSettings', () => {
   it('should override settings when enableMcpSiteSettings is true', async () => {
     vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'true');
     mocks.mockGetMcpSiteSettings.mockResolvedValue({
-      INCLUDE_TOOLS: 'list-views,list-datasources',
-      INCLUDE_PROJECT_IDS: 'project1,project2',
-      INCLUDE_DATASOURCE_IDS: 'datasource1,datasource2',
-      INCLUDE_WORKBOOK_IDS: 'workbook1,workbook2',
-      INCLUDE_TAGS: 'tag1,tag2',
-      MAX_RESULT_LIMIT: '100',
-      MAX_RESULT_LIMITS: 'query-datasource:100,list-datasources:20',
-      DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: 'true',
-      DISABLE_METADATA_API_REQUESTS: 'true',
+      settings: [
+        { key: 'INCLUDE_TOOLS', value: 'list-views,list-datasources' },
+        { key: 'INCLUDE_PROJECT_IDS', value: 'project1,project2' },
+        { key: 'INCLUDE_DATASOURCE_IDS', value: 'datasource1,datasource2' },
+        { key: 'INCLUDE_WORKBOOK_IDS', value: 'workbook1,workbook2' },
+        { key: 'INCLUDE_TAGS', value: 'tag1,tag2' },
+        { key: 'MAX_RESULT_LIMIT', value: '100' },
+        { key: 'MAX_RESULT_LIMITS', value: 'query-datasource:100,list-datasources:20' },
+        { key: 'DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS', value: 'true' },
+        { key: 'DISABLE_METADATA_API_REQUESTS', value: 'true' },
+      ],
     });
 
     let config = await getConfigWithOverrides({
