@@ -139,6 +139,12 @@ const toolScopeMap: Record<
     mcp: [],
     api: new Set<TableauApiScope>(),
   },
+  // Consent lifecycle: no Tableau REST API calls. Bearer-only (Tableau authZ server).
+  // Any authenticated user may reset their own consent regardless of granted scopes.
+  'reset-consent': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
 };
 
 const supportedMcpScopes = Array.from(

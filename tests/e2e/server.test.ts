@@ -17,10 +17,14 @@ describe('server', () => {
 
   it('should list tools', async () => {
     const names = await listTools();
+    const oauthOnlyTools: ReadonlyArray<(typeof toolNames)[number]> = [
+      'revoke-access-token',
+      'reset-consent',
+    ];
     const expectedToolNames =
       process.env.AUTH === 'oauth'
         ? [...toolNames]
-        : toolNames.filter((name) => name !== 'revoke-access-token');
+        : toolNames.filter((name) => !oauthOnlyTools.includes(name));
     expect(names).toEqual(expect.arrayContaining(expectedToolNames));
     expect(names).toHaveLength(expectedToolNames.length);
   });

@@ -9,6 +9,7 @@ import { getListPulseMetricsFromMetricDefinitionIdTool } from './pulse/listMetri
 import { getListPulseMetricsFromMetricIdsTool } from './pulse/listMetricsFromMetricIds/listPulseMetricsFromMetricIds.js';
 import { getListPulseMetricSubscriptionsTool } from './pulse/listMetricSubscriptions/listPulseMetricSubscriptions.js';
 import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
+import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
 import { getGetViewDataTool } from './views/getViewData.js';
 import { getGetViewImageTool } from './views/getViewImage.js';
@@ -34,4 +35,5 @@ export const toolFactories = [
   getListViewsTool,
   getSearchContentTool,
   getRevokeAccessTokenTool,
+  getResetConsentTool,
 ];
