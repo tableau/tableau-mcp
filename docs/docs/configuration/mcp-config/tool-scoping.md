@@ -4,10 +4,44 @@ sidebar_position: 6
 
 # Tool Scoping
 
-The Tableau MCP server can be configured to limit the scope of its tools to a set of data sources,
-workbooks, projects, or tags.
+The Tableau MCP server can be configured to limit both which tools are available and the scope of data those tools can access.
 
-Enabling tool scoping can cause:
+## Tool Filtering
+
+You can control which tools are available using the `INCLUDE_TOOLS` and `EXCLUDE_TOOLS` environment variables. These variables accept either individual tool names or tool group names.
+
+### `INCLUDE_TOOLS`
+
+A comma-separated list of tool names or tool group names to include. When set, only the specified tools will be available.
+
+**Tool Groups:**
+- `datasource` - Data source tools (list-datasources, get-datasource-metadata, query-datasource)
+- `workbook` - Workbook tools (list-workbooks, get-workbook)
+- `view` - View tools (list-views, get-view-data, get-view-image)
+- `pulse` - Pulse/metrics tools
+- `content-exploration` - Content search tools
+- `token-management` - Token management tools
+- `admin` - Admin tools for users and groups (admin-users, admin-groups)
+- `content` - Content management tools (content-projects, content-workbooks, content-views)
+- `operations` - Operational tools (content-permissions, site-jobs, tableau-operations)
+
+Example: `INCLUDE_TOOLS=datasource,workbook,admin` (enables all datasource, workbook, and admin tools)
+
+### `EXCLUDE_TOOLS`
+
+A comma-separated list of tool names or tool group names to exclude. When set, all tools except the specified ones will be available.
+
+Example: `EXCLUDE_TOOLS=pulse,operations` (disables all pulse and operations tools)
+
+:::warning
+You cannot use both `INCLUDE_TOOLS` and `EXCLUDE_TOOLS` simultaneously. The server will throw an error if both are specified.
+:::
+
+## Content Scoping
+
+The Tableau MCP server can also be configured to limit the scope of content accessed by tools to a set of data sources, workbooks, projects, or tags.
+
+Enabling content scoping can cause:
 
 1. Tools to return an error if they are called with arguments that are not within the allowed scope.
 2. Tools to respond with results that have been filtered to only include content from the allowed
