@@ -34,14 +34,14 @@ export const getResetConsentTool = (server: Server): Tool<typeof paramsSchema> =
     name: 'reset-consent',
     description: `Resets saved OAuth consent for the current user on the Tableau authorization server.
 
-After resetting consent, the current MCP session remains valid. The next OAuth authorization flow will re-prompt the user for consent.
+After resetting consent, the current session remains valid. The next OAuth authorization flow will re-prompt the user for consent.
 
 This tool requires no input — it operates on the token already associated with the current session and never exposes the raw token value.
 
 **Important:** Call this tool before revoking the access token. Revocation invalidates the token required to authenticate the consent reset request.
 
 **When to use:**
-- Clearing previously granted consent as part of session teardown
+- Clearing previously granted OAuth consent as part of session teardown
 - Resetting consent state during testing or development
 - Cleaning up OAuth grants when a user's access should be fully removed`,
     paramsSchema,
