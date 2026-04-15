@@ -20,7 +20,7 @@ async function startServer(): Promise<void> {
 
   // Start fetching server info immediately but don't block the port from opening.
   // Any failure here is fatal and logged explicitly -- no silent failures.
-  // For http transport, the port opens first so K8s health checks can succeed,
+  // For http transport, the port opens first so health checks can succeed,
   // then we await this before declaring the server ready.
   // For stdio transport, there are no health checks, but we still await before serving.
   const serverInfoReady = getTableauServerInfo(config.server).catch((error) => {
