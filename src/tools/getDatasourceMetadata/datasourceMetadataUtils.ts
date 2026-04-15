@@ -63,8 +63,8 @@ export const datasourceModelSchema = z.object({
   logicalTables: z.array(
     z.object({
       logicalTableId: z.string(),
-      caption: z.string().nullable(),
-      description: z.string().nullable(),
+      caption: z.string().nullable().optional(),
+      description: z.string().nullable().optional(),
     }),
   ),
   logicalTableRelationships: z.array(
@@ -76,7 +76,7 @@ export const datasourceModelSchema = z.object({
         logicalTableId: z.string(),
       }),
       expression: z.object({
-        op: z.string(),
+        op: z.string().optional(),
         relationships: z.array(
           z.object({
             operator: z.string(),

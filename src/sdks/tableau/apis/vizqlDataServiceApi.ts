@@ -346,8 +346,8 @@ export const metadataOutputSchema = z
 const logicalTableSchema = z
   .object({
     logicalTableId: z.string(),
-    caption: z.string(),
-    description: z.string(),
+    caption: z.string().optional(),
+    description: z.string().optional(),
   })
   .passthrough();
 
@@ -373,7 +373,7 @@ const logicalTableRelationshipSchema = z
       .passthrough(),
     expression: z
       .object({
-        op: z.string(),
+        op: z.string().optional(),
         relationships: z.array(relationshipClauseSchema),
       })
       .passthrough(),
