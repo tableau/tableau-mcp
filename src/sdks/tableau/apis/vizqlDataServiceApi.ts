@@ -349,7 +349,6 @@ const logicalTableSchema = z
     caption: z.string(),
     description: z.string(),
   })
-  .partial()
   .passthrough();
 
 const relationshipClauseSchema = z
@@ -358,7 +357,6 @@ const relationshipClauseSchema = z
     fromField: z.string(),
     toField: z.string(),
   })
-  .partial()
   .passthrough();
 
 const logicalTableRelationshipSchema = z
@@ -367,23 +365,19 @@ const logicalTableRelationshipSchema = z
       .object({
         logicalTableId: z.string(),
       })
-      .partial()
       .passthrough(),
     toLogicalTable: z
       .object({
         logicalTableId: z.string(),
       })
-      .partial()
       .passthrough(),
     expression: z
       .object({
         op: z.string(),
         relationships: z.array(relationshipClauseSchema),
       })
-      .partial()
       .passthrough(),
   })
-  .partial()
   .passthrough();
 
 export const datasourceModelResponseSchema = z
@@ -391,7 +385,6 @@ export const datasourceModelResponseSchema = z
     logicalTables: z.array(logicalTableSchema),
     logicalTableRelationships: z.array(logicalTableRelationshipSchema),
   })
-  .partial()
   .passthrough();
 
 export const tableauErrorSchema = z
