@@ -65,12 +65,8 @@ describe('revokeAccessTokenTool', () => {
   });
 
   describe('Bearer auth (Tableau authZ server mode)', () => {
-    function makeBearerExtra(): ReturnType<typeof getMockRequestHandlerExtra> & {
-      authInfo?: AuthInfo;
-    } {
-      const extra = getMockRequestHandlerExtra() as ReturnType<
-        typeof getMockRequestHandlerExtra
-      > & { authInfo?: AuthInfo };
+    function makeBearerExtra(): ReturnType<typeof getMockRequestHandlerExtra> {
+      const extra = getMockRequestHandlerExtra();
       extra.config.oauth.issuer = MOCK_ISSUER;
       extra.tableauAuthInfo = {
         type: 'Bearer',
@@ -78,12 +74,7 @@ describe('revokeAccessTokenTool', () => {
         username: 'test@example.com',
         server: MOCK_ISSUER,
         siteId: 'test-site-id',
-      };
-      extra.authInfo = {
-        token: MOCK_TOKEN,
-        clientId: MOCK_CLIENT_ID,
-        scopes: [],
-        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+        clientId: MOCK_CLIENT_ID, // OAuth client_id resolved from the Tableau JWT (client_id claim, or aud during compatibility window)
       };
       return extra;
     }
@@ -110,12 +101,10 @@ describe('revokeAccessTokenTool', () => {
       );
     });
 
-    it('should prefer tableauAuthInfo.clientId (JWT aud claim) over authInfo.clientId when both are set', async () => {
+    it('should use tableauAuthInfo.clientId as the client_id in the revocation request', async () => {
       const TABLEAU_DERIVED_CLIENT_ID = 'https://tableau-client-from-jwt.example.com';
       mockFetch.mockResolvedValue(new Response('{}', { status: 200 }));
 
-      // Simulate accessTokenValidator populating clientId from the Tableau JWT aud claim.
-      // authInfo.clientId carries the issuer (iss), not the real OAuth client_id.
       const extra = makeBearerExtra();
       extra.tableauAuthInfo = {
         type: 'Bearer',
@@ -138,10 +127,8 @@ describe('revokeAccessTokenTool', () => {
       );
     });
 
-    it('should return an error when no client_id can be determined from either source', async () => {
-      const extra = getMockRequestHandlerExtra() as ReturnType<
-        typeof getMockRequestHandlerExtra
-      > & { authInfo?: AuthInfo };
+    it('should return an error when tableauAuthInfo.clientId is missing', async () => {
+      const extra = getMockRequestHandlerExtra();
       extra.config.oauth.issuer = MOCK_ISSUER;
       extra.tableauAuthInfo = {
         type: 'Bearer',
@@ -149,9 +136,8 @@ describe('revokeAccessTokenTool', () => {
         username: 'test@example.com',
         server: MOCK_ISSUER,
         siteId: 'test-site-id',
-        // clientId absent: no aud claim extracted from the JWT
+        // clientId absent: no OAuth client_id could be resolved from the JWT
       };
-      // authInfo absent: no fallback client_id available
 
       const result = await getToolResult(extra);
 

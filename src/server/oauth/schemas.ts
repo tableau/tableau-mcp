@@ -113,6 +113,10 @@ export const tableauBearerTokenSchema = z.object({
   exp: z.number().int().nonnegative(),
   sub: requiredString('sub'),
   scope: requiredString('scope'),
+  // Incoming token contract from Tableau AS: explicit client_id claim carries the OAuth client ID.
+  // During the compatibility window, this field is optional; the validator falls back to aud.
+  // After AS rollout completes, client_id will be required and aud will carry the resource server URL.
+  client_id: z.string().optional(),
   'https://tableau.com/siteId': requiredString('https://tableau.com/siteId'),
   'https://tableau.com/userId': z.string().optional(), // Unavailable for users without MFA
   'https://tableau.com/targetUrl': requiredString('https://tableau.com/targetUrl'),
