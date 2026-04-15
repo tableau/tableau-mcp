@@ -57,12 +57,21 @@ jobs:
           CONNECTED_APP_SECRET_ID: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_ID }}
           CONNECTED_APP_SECRET_VALUE: ${{ secrets.E2E_TEST_CONNECTED_APP_SECRET_VALUE }}
 
-      - name: OAuth Tests
+      - name: OAuth Embedded Authorization Tests
         if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
         uses: ./.github/actions/run-oauth-embedded-authz-tests
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}
           SITE_NAME: ${{ secrets.E2E_TEST_SITE_NAME }}
+          OAUTH_JWE_PRIVATE_KEY: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY }}
+          OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY_PASSPHRASE }}
+
+      - name: OAuth Tableau Authorization Tests
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+        uses: ./.github/actions/run-oauth-tableau-authz-tests
+        env:
+          SERVER: https://dataplane1.tableau.sfdc-3vx9f4.svc.sfdcfc.net
+          SITE_NAME: mcp-test-dev
           OAUTH_JWE_PRIVATE_KEY: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY }}
           OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY_PASSPHRASE }}
 

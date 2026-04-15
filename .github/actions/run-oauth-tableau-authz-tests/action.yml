@@ -1,0 +1,12 @@
+name: 'Run OAuth Tableau Authorization Tests'
+description: 'Runs OAuth tests with Tableau authorization with required secrets'
+runs:
+  using: 'composite'
+  steps:
+    - name: OAuth Tableau Authorization Tests
+      shell: bash
+      run: npm run test:oauth:tableau
+      env:
+        OAUTH_ISSUER: https://sso.online.dev.tabint.net
+        OAUTH_EMBEDDED_AUTHZ_SERVER: false
+        ADVERTISE_API_SCOPES: true
