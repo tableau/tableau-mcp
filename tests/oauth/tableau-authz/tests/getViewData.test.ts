@@ -10,7 +10,7 @@ test.describe('get-view-data', () => {
     const viewData = await client.callTool('get-view-data', {
       schema: z.string(),
       toolArgs: {
-        viewId: superstore.defaultViewId,
+        viewId: superstore.defaultView.id,
       },
     });
 

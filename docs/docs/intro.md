@@ -4,8 +4,7 @@ sidebar_position: 1
 
 # Introduction
 
-Tableau MCP is a suite of developer primitives, including tools, resources and prompts, that will
-make it easier for developers to build AI applications that integrate with Tableau.
+Tableau's official MCP Server. Helping Agents see and understand data.
 
 ## Key Features
 
@@ -24,6 +23,7 @@ make it easier for developers to build AI applications that integrate with Table
 | [list-datasources](tools/data-qna/list-datasources.md)                                                                | Retrieves a list of published data sources from a specified Tableau site ([REST API][query])          |
 | [list-workbooks](tools/workbooks/list-workbooks.md)                                                                   | Retrieves a list of workbooks from a specified Tableau site ([REST API][list-workbooks])              |
 | [list-views](tools/views/list-views.md)                                                                               | Retrieves a list of views from a specified Tableau site ([REST API][list-views])                      |
+| [list-custom-views](tools/views/list-custom-views.md)                                                                 | Retrieves a list of custom views for a specified Tableau workbook ([REST API][list-custom-views])     |
 | [get-datasource-metadata](tools/data-qna/get-datasource-metadata.md)                                                  | Fetches field metadata for the specified datasource ([Metadata API][meta] & [VDS API][vds])           |
 | [get-workbook](tools/workbooks/get-workbook.md)                                                                       | Retrieves information on a workbook from a specified Tableau site ([REST API][get-workbook])          |
 | [get-view-data](tools/views/get-view-data.md)                                                                         | Retrieves data in CSV format for the specified view in a Tableau workbook ([REST API][get-view-data]) |
@@ -35,7 +35,7 @@ make it easier for developers to build AI applications that integrate with Table
 | [list-pulse-metrics-from-metric-ids](tools/pulse/list-pulse-metrics-from-metric-ids.md)                               | List Pulse Metrics from Metric IDs ([Pulse API][pulse])                                               |
 | [list-pulse-metric-subscriptions](tools/pulse/list-pulse-metric-subscriptions.md)                                     | List Pulse Metric Subscriptions for Current User ([Pulse API][pulse])                                 |
 | [generate-pulse-metric-value-insight-bundle](tools/pulse/generate-pulse-metric-value-insight-bundle.md)               | Generate Pulse Metric Value Insight Bundle ([Pulse API][pulse])                                       |
-| [generate-pulse-insight-brief](tools/pulse/generate-pulse-insight-brief.md)                                           | Generate AI-powered Pulse Insight Brief (Discover) ([Pulse API][pulse])                                          |
+| [generate-pulse-insight-brief](tools/pulse/generate-pulse-insight-brief.md)                                           | Generate AI-powered Pulse Insight Brief (Discover) ([Pulse API][pulse])                               |
 | [search-content](tools/content-exploration/search-content.md)                                                         | Searches for content in a Tableau site ([Content Exploration API][content-exploration])               |
 
 [query]:
@@ -44,6 +44,8 @@ make it easier for developers to build AI applications that integrate with Table
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbooks_for_site
 [list-views]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_views_for_site
+[list-custom-views]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#list_custom_views
 [get-workbook]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook
 [get-view-data]:
@@ -53,4 +55,5 @@ make it easier for developers to build AI applications that integrate with Table
 [meta]: https://help.tableau.com/current/api/metadata_api/en-us/index.html
 [vds]: https://help.tableau.com/current/api/vizql-data-service/en-us/index.html
 [pulse]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm
-[content-exploration]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_content_exploration.htm
+[content-exploration]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_content_exploration.htm

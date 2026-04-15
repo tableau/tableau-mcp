@@ -14,7 +14,7 @@ describe('get-view-data', () => {
     const data = await callTool('get-view-data', {
       env,
       schema: z.string(),
-      toolArgs: { viewId: superstore.defaultViewId },
+      toolArgs: { viewId: superstore.defaultView.id },
     });
 
     const lines = data.split('\n');
