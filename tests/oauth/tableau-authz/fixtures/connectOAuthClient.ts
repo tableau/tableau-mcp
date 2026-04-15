@@ -32,20 +32,20 @@ export const getOAuthClientFixture: WorkerFixture<OAuthClient, { browser: Browse
   // reset-consent is best-effort; revoking the token is asserted so failures are surfaced.
   try {
     const resetConsentResult = await client.callTool('reset-consent', {
-      schema: z.object({ message: z.string() }),
+      schema: z.string(),
       toolArgs: {},
     });
-    expect(resetConsentResult.message).toContain('consent');
+    expect(resetConsentResult).toContain('consent');
   } catch {
     // best-effort: do not prevent revocation if consent reset fails
   }
 
   try {
     const revokeResult = await client.callTool('revoke-access-token', {
-      schema: z.object({ message: z.string() }),
+      schema: z.string(),
       toolArgs: {},
     });
-    expect(revokeResult.message).toContain('revocation');
+    expect(revokeResult).toContain('revocation');
   } finally {
     await client.close();
   }
