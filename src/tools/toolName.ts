@@ -17,6 +17,7 @@ export const toolNames = [
   'generate-pulse-insight-brief',
   'search-content',
   'revoke-access-token',
+  'embed-tableau-viz',
 ] as const;
 export type ToolName = (typeof toolNames)[number];
 

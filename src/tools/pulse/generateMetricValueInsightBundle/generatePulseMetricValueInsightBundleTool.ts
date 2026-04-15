@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
 import z from 'zod';
 
 import { DatasourceNotAllowedError } from '../../../errors/mcpToolError.js';
@@ -6,6 +7,7 @@ import { useRestApi } from '../../../restApiInstance.js';
 import {
   pulseBundleRequestSchema,
   PulseBundleResponse,
+  PulseInsightBundleType,
   pulseInsightBundleTypeEnum,
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
@@ -22,6 +24,9 @@ export const getGeneratePulseMetricValueInsightBundleTool = (
   const generatePulseMetricValueInsightBundleTool = new Tool({
     server,
     name: 'generate-pulse-metric-value-insight-bundle',
+    app: {
+      name: 'pulse-renderer',
+    },
     description: `
 Generate an insight bundle for the current aggregated value for Pulse Metric using Tableau REST API.  You need the full information of the Pulse Metric and Pulse Metric Definition to use this tool.
 
@@ -137,7 +142,10 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
       openWorldHint: false,
     },
     callback: async ({ bundleRequest, bundleType }, extra): Promise<CallToolResult> => {
-      return await generatePulseMetricValueInsightBundleTool.logAndExecute<PulseBundleResponse>({
+      return await generatePulseMetricValueInsightBundleTool.logAndExecute<{
+        bundle: PulseBundleResponse;
+        bundleType: PulseInsightBundleType;
+      }>({
         extra,
         args: { bundleRequest, bundleType },
         callback: async () => {
@@ -165,7 +173,14 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
               ),
           });
 
-          return result;
+          if (result.isErr()) {
+            return result;
+          }
+
+          return new Ok({
+            bundle: result.value,
+            bundleType: bundleType ?? 'ban',
+          });
         },
         constrainSuccessResult: (insightBundle) => {
           return {

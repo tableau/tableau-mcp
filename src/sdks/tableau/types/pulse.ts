@@ -448,6 +448,12 @@ export const popcBanInsightGroupSchema = z.object({
   ),
 });
 
+export const pulseInsightBundleSchema = z.object({
+  insight_groups: z.array(popcBanInsightGroupSchema),
+  has_errors: z.boolean(),
+  characterization: z.string(),
+});
+
 export const pulseBundleResponseSchema = z.object({
   bundle_response: z.object({
     result: z.object({
@@ -475,7 +481,14 @@ export const pulseInsightBriefResponseSchema = z.object({
 export type PulseBundleResponse = z.infer<typeof pulseBundleResponseSchema>;
 export type PulseInsightBriefResponse = z.infer<typeof pulseInsightBriefResponseSchema>;
 
-export const pulseInsightBundleTypeEnum = ['ban', 'springboard', 'basic', 'detail'] as const;
+export const pulseInsightBundleTypeEnum = [
+  'ban',
+  'springboard',
+  'basic',
+  'detail',
+  'exploration',
+  'breakdown',
+] as const;
 export type PulseInsightBundleType = (typeof pulseInsightBundleTypeEnum)[number];
 
 export const pulseMetricDefinitionViewEnum = [
@@ -488,3 +501,4 @@ export type PulseMetricDefinitionView = (typeof pulseMetricDefinitionViewEnum)[n
 export type PulseMetricDefinition = z.infer<typeof pulseMetricDefinitionSchema>;
 export type PulseMetric = z.infer<typeof pulseMetricSchema>;
 export type PulseMetricSubscription = z.infer<typeof pulseMetricSubscriptionSchema>;
+export type PulseInsight = z.infer<typeof insightSchema>;

@@ -1,4 +1,9 @@
-import { pulseBundleResponseSchema } from '../../../src/sdks/tableau/types/pulse.js';
+import z from 'zod';
+
+import {
+  pulseBundleResponseSchema,
+  pulseInsightBundleTypeEnum,
+} from '../../../src/sdks/tableau/types/pulse.js';
 import { getPulseDefinition } from '../../constants.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../../testEnv.js';
 import { callTool } from '../client.js';
@@ -85,9 +90,12 @@ describe('generate-pulse-metric-value-insight-bundle', () => {
       },
     };
 
-    const bundle = await callTool('generate-pulse-metric-value-insight-bundle', {
+    const { bundle, bundleType } = await callTool('generate-pulse-metric-value-insight-bundle', {
       env,
-      schema: pulseBundleResponseSchema,
+      schema: z.object({
+        bundle: pulseBundleResponseSchema,
+        bundleType: z.enum(pulseInsightBundleTypeEnum),
+      }),
       toolArgs: {
         bundleRequest,
         bundleType: 'ban',
@@ -95,5 +103,6 @@ describe('generate-pulse-metric-value-insight-bundle', () => {
     });
 
     expect(bundle.bundle_response.result.insight_groups.length).toBeGreaterThan(0);
+    expect(bundleType).toBe('ban');
   });
 });

@@ -1,7 +1,11 @@
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
 
+import { AppName } from '../apps/appName.js';
+import { HostSandboxCapabilities } from '../apps/types.js';
 import { McpToolError, ZodiosValidationError } from '../errors/mcpToolError.js';
 import { log } from '../logging/logger.js';
 import { getNotificationMessageForTool, notifier } from '../logging/notification.js';
@@ -9,6 +13,7 @@ import { Server } from '../server.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../server/oauth/scopes.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
 import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder.js';
+import { getDirname } from '../utils/getDirname.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../utils/getHttpStatus.js';
 import { TypeOrProvider } from '../utils/provider.js';
@@ -16,6 +21,11 @@ import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.j
 import { ToolName } from './toolName.js';
 
 export type ToolRules = Record<string, boolean | undefined>;
+
+type AppDetails = {
+  name: AppName;
+  sandboxCapabilities?: HostSandboxCapabilities;
+};
 
 export type ConstrainedResult<T> =
   | {
@@ -52,6 +62,9 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
 
   // The annotations of the tool
   annotations: TypeOrProvider<ToolAnnotations>;
+
+  // Details of the app that the tool can optionally return
+  app?: AppDetails;
 
   // The implementation of the tool itself
   callback: TypeOrProvider<TableauToolCallback<Args>>;
@@ -95,6 +108,10 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
   paramsSchema: TypeOrProvider<Args>;
   annotations: TypeOrProvider<ToolAnnotations>;
   callback: TypeOrProvider<TableauToolCallback<Args>>;
+  app?: AppDetails & {
+    resourceUri: `ui://tableau-mcp/${AppName}.html`;
+    html: string;
+  };
   disabled: TypeOrProvider<boolean>;
 
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
@@ -105,6 +122,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     description,
     paramsSchema,
     annotations,
+    app,
     callback,
     disabled,
   }: ToolParams<Args>) {
@@ -114,6 +132,28 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.paramsSchema = paramsSchema;
     this.annotations = annotations;
     this.callback = callback;
+
+    if (app) {
+      const htmlPaths = [
+        join(getDirname(), 'web', `${app.name}.html`),
+
+        // When creating the server as part of the E2E/OAuth tests, getDirname() will return "src/utils"
+        join(process.cwd(), 'build', 'web', `${app.name}.html`),
+      ];
+
+      const htmlPath = htmlPaths.find((path) => existsSync(path));
+      if (!htmlPath) {
+        throw new Error(`HTML file not found. Checked: ${htmlPaths.join(', ')}`);
+      }
+
+      this.app = {
+        ...app,
+        resourceUri: `ui://tableau-mcp/${app.name}.html`,
+        html: process.env.TABLEAU_MCP_TEST
+          ? `<html><body><p>${app.name}</p></body></html>`
+          : readFileSync(htmlPath, 'utf-8'),
+      };
+    }
     this.disabled = disabled ?? false;
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name);
