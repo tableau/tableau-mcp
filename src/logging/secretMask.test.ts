@@ -101,6 +101,7 @@ describe('secretMask', () => {
       status: 200,
       baseUrl: 'https://example.com',
       url: '/api/v1/users',
+      params: {},
       headers: { 'Some-Header': 'hamburgers' },
       data: {
         credentials: '<redacted>',
@@ -151,6 +152,7 @@ describe('secretMask', () => {
       status: 200,
       baseUrl: 'https://example.com',
       url: '/api/v1/users',
+      params: {},
     });
   });
 

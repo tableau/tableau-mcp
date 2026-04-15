@@ -47,7 +47,7 @@ describe('getViewDataTool', () => {
     const getViewDataTool = getGetViewDataTool(new Server());
     expect(getViewDataTool.name).toBe('get-view-data');
     expect(getViewDataTool.description).toContain(
-      'Retrieves data in comma separated value (CSV) format for the specified view in a Tableau workbook.',
+      "Retrieves comma-separated value (CSV) data for the specified view in a Tableau workbook, including the user's filters.",
     );
     expect(getViewDataTool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
   });
