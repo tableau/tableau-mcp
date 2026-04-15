@@ -26,6 +26,10 @@ const paramsSchema = {
     .describe(
       'The image format to return. Use "PNG" (default) when the image will be analyzed or interpreted. Use "SVG" when the image will be displayed to the user — SVG is scalable and produces smaller file sizes.',
     ),
+  viewFilters: z
+    .record(z.string())
+    .optional()
+    .describe('Optional map of view filter field names to values.'),
 };
 
 const MIN_VERSION_FOR_SVG = '2026.2.0';
@@ -37,18 +41,25 @@ export const getGetViewImageTool = (
   const getViewImageTool = new Tool({
     server,
     name: 'get-view-image',
-    description:
-      'Retrieves an image of the specified view in a Tableau workbook. The width and height in pixels can be provided. The default width and height are both 800 pixels.',
+    description: [
+      'Retrieves an image of the specified view in a Tableau workbook.',
+      'Optional width and height in pixels control render size.',
+      'Optional view field names and values can be provided to filter the view.',
+      'For custom views, use the tool to get view custom view image by custom view id instead.',
+    ].join(' '),
     paramsSchema,
     annotations: {
       title: 'Get View Image',
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ viewId, width, height, format }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { viewId, width, height, format, viewFilters },
+      extra,
+    ): Promise<CallToolResult> => {
       return await getViewImageTool.logAndExecute<string>({
         extra,
-        args: { viewId },
+        args: { viewId, width, height, format, viewFilters },
         callback: async () => {
           // Version check for format parameter
           const supportsFormat = getResultForTableauVersion({
@@ -89,6 +100,7 @@ export const getGetViewImageTool = (
                 height,
                 resolution: 'high',
                 format: formatToUse,
+                viewFilters,
               });
 
               if (result.isErr()) {

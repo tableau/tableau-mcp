@@ -10,6 +10,10 @@ import { Tool } from '../tool.js';
 
 const paramsSchema = {
   viewId: z.string(),
+  viewFilters: z
+    .record(z.string())
+    .optional()
+    .describe('Optional map of view filter field names to values.'),
 };
 
 export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> => {

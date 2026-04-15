@@ -20,7 +20,9 @@ export type ResponseInterceptorConfig = {
   url: string;
   headers: Record<string, any>;
   // AxiosHeaders is a complex class, overwrite it for simplicity.
-} & Omit<AxiosResponseInterceptorConfig, 'headers' | 'statusText' | 'config'>;
+} & Omit<AxiosResponseInterceptorConfig, 'headers' | 'statusText' | 'config'> & {
+    params: AxiosResponseInterceptorConfig['config']['params'];
+  };
 
 export function getRequestInterceptorConfig(
   config: AxiosRequestInterceptorConfig,
@@ -39,6 +41,7 @@ export function getResponseInterceptorConfig(
 ): Omit<ResponseInterceptorConfig, 'baseUrl'> {
   return {
     url: response.config.url ?? 'UNKNOWN URL',
+    params: response.config.params,
     status: response.status,
     headers: response.headers,
     data: response.data,
