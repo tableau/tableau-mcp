@@ -61,49 +61,37 @@ export const parameterSchema = z
 
 export const datasourceModelSchema = z.object({
   logicalTables: z.array(
-    z
-      .object({
-        logicalTableId: z.string(),
-        caption: z.string().nullable(),
-        description: z.string().nullable(),
-      })
-      .partial(),
+    z.object({
+      logicalTableId: z.string(),
+      caption: z.string().nullable(),
+      description: z.string().nullable(),
+    }),
   ),
   logicalTableRelationships: z.array(
-    z
-      .object({
-        fromLogicalTable: z
-          .object({
-            logicalTableId: z.string(),
-          })
-          .partial(),
-        toLogicalTable: z
-          .object({
-            logicalTableId: z.string(),
-          })
-          .partial(),
-        expression: z
-          .object({
-            op: z.string(),
-            relationships: z.array(
-              z
-                .object({
-                  operator: z.string(),
-                  fromField: z.string(),
-                  toField: z.string(),
-                })
-                .partial(),
-            ),
-          })
-          .partial(),
-      })
-      .partial(),
+    z.object({
+      fromLogicalTable: z.object({
+        logicalTableId: z.string(),
+      }),
+      toLogicalTable: z.object({
+        logicalTableId: z.string(),
+      }),
+      expression: z.object({
+        op: z.string(),
+        relationships: z.array(
+          z.object({
+            operator: z.string(),
+            fromField: z.string(),
+            toField: z.string(),
+          }),
+        ),
+      }),
+    }),
   ),
 });
 
 export const fieldsResultSchema = z.object({
   datasourceDescription: z.string(),
-  datasourceModel: datasourceModelSchema,
+  datasourceModel: datasourceModelSchema.optional(),
   fieldGroups: z.array(logicalTableGroupSchema),
   parameters: z.array(parameterSchema),
 });
@@ -115,14 +103,18 @@ export type FieldsResult = z.infer<typeof fieldsResultSchema>;
 
 export function simplifyReadMetadataResult(
   readMetadataResult: MetadataResponse,
-  datasourceModelResult: DatasourceModelResponse,
+  datasourceModelResult?: DatasourceModelResponse,
 ): FieldsResult {
-  const simplifiedResponse: FieldsResult = {
+  const simplifiedResponse: Omit<FieldsResult, 'datasourceModel'> & {
+    datasourceModel?: FieldsResult['datasourceModel'];
+  } = {
     datasourceDescription: '',
-    datasourceModel: getSimplifiedDatasourceModel(datasourceModelResult),
     fieldGroups: [],
     parameters: [],
   };
+  if (datasourceModelResult) {
+    simplifiedResponse.datasourceModel = getSimplifiedDatasourceModel(datasourceModelResult);
+  }
 
   if (!readMetadataResult.data) {
     return simplifiedResponse;
@@ -185,17 +177,21 @@ export function simplifyReadMetadataResult(
 export function combineFields(
   readMetadataResult: MetadataResponse,
   listFieldsResult: GraphQLResponse,
-  datasourceModelResult: DatasourceModelResponse,
+  datasourceModelResult?: DatasourceModelResponse,
 ): FieldsResult {
   // Create a response object that combines field data from
   // readMetadata (VizQL Data Service API) and listFields (GraphQL Metadata API) results
   // to optimize for LLM accuracy and reduce tokens in response.
-  const combinedFields: FieldsResult = {
+  const combinedFields: Omit<FieldsResult, 'datasourceModel'> & {
+    datasourceModel?: FieldsResult['datasourceModel'];
+  } = {
     datasourceDescription: listFieldsResult.data.publishedDatasources[0]?.description ?? '',
-    datasourceModel: getSimplifiedDatasourceModel(datasourceModelResult),
     fieldGroups: [],
     parameters: [],
   };
+  if (datasourceModelResult) {
+    combinedFields.datasourceModel = getSimplifiedDatasourceModel(datasourceModelResult);
+  }
   const fields: Field[] = [];
 
   if (!readMetadataResult.data) {
@@ -351,7 +347,7 @@ function getSimplifiedDatasourceModel(
   datasourceModelResult: DatasourceModelResponse,
 ): z.infer<typeof datasourceModelSchema> {
   return {
-    logicalTables: datasourceModelResult.logicalTables ?? [],
-    logicalTableRelationships: datasourceModelResult.logicalTableRelationships ?? [],
+    logicalTables: datasourceModelResult.logicalTables,
+    logicalTableRelationships: datasourceModelResult.logicalTableRelationships,
   };
 }
