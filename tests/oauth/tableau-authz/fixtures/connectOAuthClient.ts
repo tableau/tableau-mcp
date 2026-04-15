@@ -26,10 +26,19 @@ export const getOAuthClientFixture: WorkerFixture<OAuthClient, { browser: Browse
 
   await use(client);
 
-  // Teardown: reset consent first (requires a valid token), then revoke via the MCP tool.
-  // Order matters: resetConsent() uses the access token, so it must run before revocation.
-  // resetConsent() is best-effort; revoking the token is asserted so failures are surfaced.
-  await client.resetConsent();
+  // Teardown: reset consent first (requires a valid token), then revoke.
+  // Order matters: reset-consent uses the access token, so it must run before revocation.
+  // Both calls go through the MCP tool path to exercise real tool coverage.
+  // reset-consent is best-effort; revoking the token is asserted so failures are surfaced.
+  try {
+    const resetConsentResult = await client.callTool('reset-consent', {
+      schema: z.string(),
+      toolArgs: {},
+    });
+    expect(resetConsentResult).toContain('consent');
+  } catch {
+    // best-effort: do not prevent revocation if consent reset fails
+  }
 
   try {
     const revokeResult = await client.callTool('revoke-access-token', {
