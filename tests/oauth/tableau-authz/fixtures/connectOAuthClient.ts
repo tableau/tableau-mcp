@@ -33,10 +33,10 @@ export const getOAuthClientFixture: WorkerFixture<OAuthClient, { browser: Browse
 
   try {
     const revokeResult = await client.callTool('revoke-access-token', {
-      schema: z.object({ message: z.string() }),
+      schema: z.string(),
       toolArgs: {},
     });
-    expect(revokeResult.message).toContain('revocation');
+    expect(revokeResult).toContain('revocation');
   } finally {
     await client.close();
   }

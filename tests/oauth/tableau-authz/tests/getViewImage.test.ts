@@ -11,7 +11,7 @@ test.describe('get-view-image', () => {
       schema: z.string(),
       contentType: 'image',
       toolArgs: {
-        viewId: superstore.defaultViewId,
+        viewId: superstore.defaultView.id,
       },
     });
 
