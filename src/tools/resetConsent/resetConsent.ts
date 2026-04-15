@@ -19,9 +19,10 @@ const paramsSchema = {};
  *   - Bearer (Tableau authZ server mode): posts to `${config.oauth.issuer}/oauth2/resetConsent`
  *     with the access token in the Authorization header. The current session remains valid.
  *
+ * Disabled when the embedded authorization server is active (no consent model).
+ *
  * Not supported (returns runtime error):
- *   - X-Tableau-Auth (embedded authZ): the embedded authorization server has no consent model.
- *   - Passthrough: session credentials are managed externally.
+ *   - Passthrough or other non-Bearer auth: session credentials are managed externally.
  *
  * Important: call this tool BEFORE revoking the access token, since revocation
  * invalidates the token required to authenticate the reset consent request.
@@ -52,7 +53,7 @@ This tool requires no input — it operates on the token already associated with
       idempotentHint: true,
       openWorldHint: false,
     },
-    disabled: config.auth !== 'oauth',
+    disabled: !config.oauth.enabled || config.oauth.embeddedAuthzServer,
     callback: async (_args, extra): Promise<CallToolResult> => {
       return resetConsentTool.logAndExecute<string>({
         extra,
@@ -88,24 +89,12 @@ This tool requires no input — it operates on the token already associated with
             );
           }
 
-          if (tableauAuthInfo.type === 'X-Tableau-Auth') {
-            return new Err(
-              new McpToolError({
-                type: 'not-supported',
-                message:
-                  'Consent reset is not available for the embedded authorization server. ' +
-                  'The embedded authorization server does not maintain a consent model.',
-                statusCode: 400,
-              }),
-            );
-          }
-
-          // Passthrough or any other auth type
+          // Passthrough or any other non-Bearer auth type
           return new Err(
             new McpToolError({
               type: 'not-supported',
               message:
-                'Consent reset is not available for Passthrough authentication. ' +
+                'Consent reset is only available for Bearer authentication. ' +
                 'Session credentials are managed externally.',
               statusCode: 400,
             }),

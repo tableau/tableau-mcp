@@ -34,26 +34,25 @@ describe('resetConsentTool', () => {
   });
 
   describe('disabled property', () => {
-    let savedEnv: NodeJS.ProcessEnv;
-
-    beforeEach(() => {
-      savedEnv = { ...process.env };
-    });
-
-    afterEach(() => {
-      process.env = savedEnv;
-    });
-
-    it('should be disabled when AUTH is not oauth (default PAT mode)', async () => {
-      delete process.env.OAUTH_ISSUER;
+    it('should be disabled when OAuth is not enabled (no OAUTH_ISSUER)', async () => {
+      vi.stubEnv('OAUTH_ISSUER', '');
       const tool = getResetConsentTool(new Server());
       expect(await Provider.from(tool.disabled)).toBe(true);
     });
 
-    it('should be enabled when AUTH=oauth', async () => {
-      process.env.AUTH = 'oauth';
-      process.env.OAUTH_ISSUER = MOCK_ISSUER;
-      process.env.OAUTH_EMBEDDED_AUTHZ_SERVER = 'false';
+    it('should be disabled when the embedded authorization server is active', async () => {
+      // TABLEAU_MCP_TEST=true (set by testSetup) bypasses the JWE key file existence check.
+      vi.stubEnv('OAUTH_ISSUER', MOCK_ISSUER);
+      vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'true');
+      vi.stubEnv('OAUTH_REDIRECT_URI', `${MOCK_ISSUER}/Callback`);
+      vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', '/placeholder/key.pem');
+      const tool = getResetConsentTool(new Server());
+      expect(await Provider.from(tool.disabled)).toBe(true);
+    });
+
+    it('should be enabled when OAuth is enabled and the Tableau authorization server is active', async () => {
+      vi.stubEnv('OAUTH_ISSUER', MOCK_ISSUER);
+      vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
       const tool = getResetConsentTool(new Server());
       expect(await Provider.from(tool.disabled)).toBe(false);
     });
@@ -133,27 +132,6 @@ describe('resetConsentTool', () => {
     });
   });
 
-  describe('X-Tableau-Auth (embedded authZ mode -- not supported)', () => {
-    it('should return an error and make no fetch call for X-Tableau-Auth', async () => {
-      const extra = getMockRequestHandlerExtra();
-      extra.config.oauth.issuer = MOCK_ISSUER;
-      extra.tableauAuthInfo = {
-        type: 'X-Tableau-Auth',
-        username: 'test-user',
-        server: MOCK_SERVER,
-        siteId: 'site-id',
-        accessToken: 'tableau-access-token',
-        refreshToken: 'tableau-refresh-token',
-      };
-      const result = await getToolResult(extra);
-
-      expect(result.isError).toBe(true);
-      expect(mockFetch).not.toHaveBeenCalled();
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('embedded');
-    });
-  });
-
   describe('Passthrough auth (not supported)', () => {
     it('should return an error and make no fetch call for Passthrough auth', async () => {
       const extra = getMockRequestHandlerExtra();
@@ -170,7 +148,7 @@ describe('resetConsentTool', () => {
       expect(result.isError).toBe(true);
       expect(mockFetch).not.toHaveBeenCalled();
       invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('Passthrough');
+      expect(result.content[0].text).toContain('Bearer');
     });
   });
 });
