@@ -512,7 +512,6 @@ class ResourceAccessChecker {
     const allowedTags = await this.getAllowedTags({ extra });
     if (!allowedWorkbookIds && !allowedProjectIds && !allowedTags) {
       // If no filtering is enabled, there's no need to resolve the view the custom view belongs to.
-      this._cachedCustomViewIds.set(customViewId, { allowed: true });
       return { allowed: true };
     }
 
