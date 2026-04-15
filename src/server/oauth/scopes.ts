@@ -75,6 +75,10 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:view:read'],
     api: new Set(['tableau:content:read']),
   },
+  'list-custom-views': {
+    mcp: ['tableau:mcp:view:read'],
+    api: new Set(['tableau:content:read']),
+  },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set(['tableau:viz_data_service:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),

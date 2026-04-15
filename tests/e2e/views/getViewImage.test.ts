@@ -13,7 +13,7 @@ describe('get-view-image', () => {
     const pngData = await callTool('get-view-image', {
       env,
       schema: z.string(),
-      toolArgs: { viewId: superstore.defaultViewId },
+      toolArgs: { viewId: superstore.defaultView.id },
       contentType: 'image',
     });
 

@@ -15,10 +15,19 @@ import { getExceptionMessage } from './utils/getExceptionMessage.js';
 async function startServer(): Promise<void> {
   dotenv.config();
   const config = getConfig();
-  // Initializing REST API host then getting server info for the first time
-  // which will cache the server info and initialize our REST API version for subsequent requests
+
   RestApi.host = config.server;
-  await getTableauServerInfo(config.server);
+
+  // Start fetching server info immediately but don't block the port from opening.
+  // Any failure here is fatal and logged explicitly -- no silent failures.
+  // For http transport, the port opens first so health checks can succeed,
+  // then we await this before declaring the server ready.
+  // For stdio transport, there are no health checks, but we still await before serving.
+  const serverInfoReady = getTableauServerInfo(config.server).catch((error) => {
+    writeToStderr(`Fatal error initializing server info: ${getExceptionMessage(error)}`);
+    process.exit(1);
+  });
+
   const logLevel = isNotificationLevel(config.defaultLogLevel) ? config.defaultLogLevel : 'debug';
   if (config.loggers.has('fileLogger')) {
     setFileLogger(new FileLogger({ logDirectory: config.fileLoggerDirectory }));
@@ -26,6 +35,8 @@ async function startServer(): Promise<void> {
 
   switch (config.transport) {
     case 'stdio': {
+      await serverInfoReady;
+
       const server = new Server();
       await server.registerTools();
       server.registerRequestHandlers();
@@ -39,6 +50,9 @@ async function startServer(): Promise<void> {
     }
     case 'http': {
       const { url } = await startExpressServer({ basePath: serverName, config, logLevel });
+
+      // Port is now open. Wait for server info before logging the ready message.
+      await serverInfoReady;
 
       if (!config.oauth.enabled) {
         console.warn(
