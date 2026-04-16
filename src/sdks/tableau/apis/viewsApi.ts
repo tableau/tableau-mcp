@@ -36,11 +36,44 @@ const listCustomViewsEndpoint = makeEndpoint({
   }),
 });
 
+const getCustomViewEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/customviews/:customViewId',
+  alias: 'getCustomView',
+  description: 'Gets the details of a specified custom view.',
+  response: z.object({ customView: customViewSchema }),
+});
+
+const getCustomViewDataEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/customviews/:customViewId/data',
+  alias: 'getCustomViewData',
+  description:
+    'Returns a specified custom view rendered as data in comma separated value (CSV) format.',
+  parameters: [
+    {
+      name: 'dummy',
+      type: 'Query',
+      schema: z.never().optional(),
+      description: 'Dummy parameter to allow arbitrary filter parameters to be provided',
+    },
+  ],
+  response: z.string(),
+});
+
 const queryViewDataEndpoint = makeEndpoint({
   method: 'get',
   path: '/sites/:siteId/views/:viewId/data',
   alias: 'queryViewData',
   description: 'Returns a specified view rendered as data in comma separated value (CSV) format.',
+  parameters: [
+    {
+      name: 'dummy',
+      type: 'Query',
+      schema: z.never().optional(),
+      description: 'Dummy parameter to allow arbitrary filter parameters to be provided',
+    },
+  ],
   response: z.string(),
 });
 
@@ -141,6 +174,8 @@ const queryViewsForSiteEndpoint = makeEndpoint({
 const viewsApi = makeApi([
   getViewEndpoint,
   listCustomViewsEndpoint,
+  getCustomViewEndpoint,
+  getCustomViewDataEndpoint,
   queryViewDataEndpoint,
   queryViewImageEndpoint,
   queryViewsForWorkbookEndpoint,
