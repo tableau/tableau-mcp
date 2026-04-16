@@ -45,7 +45,6 @@ export const getGetViewImageTool = (
       'Retrieves an image of the specified view in a Tableau workbook.',
       'Optional width and height in pixels control render size.',
       'Optional view field names and values can be provided to filter the view.',
-      'For custom views, use the tool to get view custom view image by custom view id instead.',
     ].join(' '),
     paramsSchema,
     annotations: {
