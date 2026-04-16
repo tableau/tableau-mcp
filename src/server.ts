@@ -9,7 +9,7 @@ import {
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
-import { ServiceUnavailableError } from './errors/mcpToolError';
+import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { getTableauServerInfo } from './getTableauServerInfo';
 import { setNotificationLevel } from './logging/notification.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
