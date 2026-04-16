@@ -73,6 +73,10 @@ async function getMcpSiteSettings({
     }
   }
 
+  if (!config.allowSitesToConfigureRequestOverrides) {
+    delete mcpSiteSettings.ALLOWED_REQUEST_OVERRIDES;
+  }
+
   mcpSiteSettingsCache.set(cacheKey, mcpSiteSettings);
   return mcpSiteSettings;
 }

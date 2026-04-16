@@ -56,6 +56,7 @@ export class Config {
   passthroughAuthUserSessionCheckIntervalInMinutes: number;
   mcpSiteSettingsCheckIntervalInMinutes: number;
   enableMcpSiteSettings: boolean;
+  allowSitesToConfigureRequestOverrides: boolean;
   enablePassthroughAuth: boolean;
   oauth: {
     enabled: boolean;
@@ -118,6 +119,7 @@ export class Config {
         passthroughAuthUserSessionCheckIntervalInMinutes,
       MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: mcpSiteSettingsCheckIntervalInMinutes,
       ENABLE_MCP_SITE_SETTINGS: enableMcpSiteSettings,
+      ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES: allowSitesToConfigureRequestOverrides,
       ENABLE_PASSTHROUGH_AUTH: enablePassthroughAuth,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_EMBEDDED_AUTHZ_SERVER: oauthEmbeddedAuthzServer,
@@ -190,11 +192,18 @@ export class Config {
     );
 
     this.enableMcpSiteSettings = enableMcpSiteSettings !== 'false';
+    this.allowSitesToConfigureRequestOverrides = allowSitesToConfigureRequestOverrides === 'true';
     this.enablePassthroughAuth = enablePassthroughAuth === 'true';
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';
     const enforceScopes = !disableScopes;
     const embeddedAuthzServer = oauthEmbeddedAuthzServer !== 'false';
+
+    if (this.allowSitesToConfigureRequestOverrides && !this.enableMcpSiteSettings) {
+      throw new Error(
+        'ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES is "true", but MCP site settings are not enabled.',
+      );
+    }
 
     this.oauth = {
       enabled: disableOauthOverride ? false : !!oauthIssuer,

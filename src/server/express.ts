@@ -9,6 +9,7 @@ import https from 'https';
 
 import { Config } from '../config.js';
 import { setNotificationLevel } from '../logging/notification.js';
+import { getOverridableConfig } from '../overridableConfig.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
 import { latencyMiddleware } from './latencyMiddleware.js';
@@ -18,6 +19,7 @@ import { EmbeddedOAuthProvider, TableauOAuthProvider } from './oauth/provider.js
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 import { passthroughAuthMiddleware, X_TABLEAU_AUTH_HEADER } from './passthroughAuthMiddleware.js';
+import { requestOverrideMiddleware } from './requestOverrideMiddleware.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
 
@@ -30,6 +32,10 @@ export async function startExpressServer({
   config: Config;
   logLevel: LoggingLevel;
 }): Promise<{ url: string; app: express.Application; server: http.Server }> {
+  // getting overridable config, but we intentionally omit site and request overrides
+  // since we are only interested in the values set by the ENVIRONMENT variables.
+  const configWithoutOverrides = getOverridableConfig();
+
   const app = express();
 
   app.use(express.json());
@@ -58,6 +64,13 @@ export async function startExpressServer({
   const middleware: Array<RequestHandler> = [handlePingRequest];
   if (config.enablePassthroughAuth) {
     middleware.push(passthroughAuthMiddleware());
+  }
+
+  if (
+    configWithoutOverrides.allowedRequestOverrides.size !== 0 ||
+    config.allowSitesToConfigureRequestOverrides
+  ) {
+    middleware.push(requestOverrideMiddleware());
   }
 
   if (config.oauth.enabled) {

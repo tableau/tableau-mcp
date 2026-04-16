@@ -3,6 +3,7 @@ import { removeClaudeMcpBundleUserConfigTemplates } from './config.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 
 const overridableVariables = [
+  'ALLOWED_REQUEST_OVERRIDES',
   'INCLUDE_TOOLS',
   'EXCLUDE_TOOLS',
   'INCLUDE_PROJECT_IDS',
@@ -15,9 +16,21 @@ const overridableVariables = [
   'DISABLE_METADATA_API_REQUESTS',
 ] as const satisfies ReadonlyArray<keyof ProcessEnvEx>;
 
+const requestOverridableVariables = overridableVariables.filter(
+  (v) => v !== 'ALLOWED_REQUEST_OVERRIDES' && v !== 'INCLUDE_TOOLS' && v !== 'EXCLUDE_TOOLS',
+);
+
 type OverridableVariable = (typeof overridableVariables)[number];
+type RequestOverridableVariable = (typeof requestOverridableVariables)[number];
+
 export function isOverridableVariable(variable: unknown): variable is OverridableVariable {
   return overridableVariables.some((v) => v === variable);
+}
+
+export function isRequestOverridableVariable(
+  variable: unknown,
+): variable is RequestOverridableVariable {
+  return requestOverridableVariables.some((v) => v === variable);
 }
 
 export type BoundedContext = {
@@ -27,17 +40,153 @@ export type BoundedContext = {
   tags: Set<string> | null;
 };
 
+type RequestOverrideRestrictionType = 'restricted' | 'unrestricted';
+
 export class OverridableConfig {
   private maxResultLimit: number | null;
   private maxResultLimits: Map<ToolName, number | null> | null;
 
+  allowedRequestOverrides: Map<RequestOverridableVariable, RequestOverrideRestrictionType>;
   includeTools: Array<ToolName>;
   excludeTools: Array<ToolName>;
+
+  boundedContext: BoundedContext;
 
   disableQueryDatasourceValidationRequests: boolean;
   disableMetadataApiRequests: boolean;
 
-  boundedContext: BoundedContext;
+  /**
+   * General pattern for overriding variables:
+   * 1. Initialize the value of a given variable using the ENVIRONMENT (process.env). Throw if any issues with ENVIORNMENT values / unallowed behavior.
+   * 2. Using the Object.hasOwn() method, check if the given variable exists as a property in the siteOverrides object.
+   *    Only when the variable is a property in the siteOverrides object, apply the following logic:
+   *      a. If the site override value is an empty string or undefined, we generally revert the variable to its default value / behavior
+   *         (each variable is different, so consider what makes the most sense for this case).
+   *      b. If the site override value is invalid, do not throw. Either fallback to the value of the ENVIRONMENT or
+   *         revert the value of the variable to its default value / behavior (similar to the empty string / undefined case).
+   *      c. If the site override value is valid, replace the value of the given variable with its value from the site override.
+   * TODO: update this
+   */
+  constructor(
+    siteOverrides: Record<string, string | undefined> = {}, // TODO: make this Record<string, string> instead
+    requestOverrides: Record<string, string> = {},
+  ) {
+    const envVariables = removeClaudeMcpBundleUserConfigTemplates({ ...process.env });
+
+    // ALLOWED_REQUEST_OVERRIDES
+    this.allowedRequestOverrides = this.getAllowedRequestOverrides(envVariables, requestOverrides);
+
+    // INCLUDE_TOOLS, EXCLUDE_TOOLS
+    const { includeTools, excludeTools } = this.getToolsWithOverrides(envVariables, siteOverrides);
+    this.includeTools = includeTools;
+    this.excludeTools = excludeTools;
+
+    // INCLUDE_PROJECT_IDS, INCLUDE_DATASOURCE_IDS, INCLUDE_WORKBOOK_IDS, INCLUDE_TAGS
+    this.boundedContext = this.getBoundedContextWithOverrides(envVariables, siteOverrides);
+
+    // DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS
+    this.disableQueryDatasourceValidationRequests =
+      envVariables.DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS === 'true';
+    if (Object.hasOwn(siteOverrides, 'DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS')) {
+      this.disableQueryDatasourceValidationRequests =
+        siteOverrides.DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS === 'true';
+    }
+
+    // DISABLE_METADATA_API_REQUESTS
+    this.disableMetadataApiRequests = envVariables.DISABLE_METADATA_API_REQUESTS === 'true';
+    if (Object.hasOwn(siteOverrides, 'DISABLE_METADATA_API_REQUESTS')) {
+      this.disableMetadataApiRequests = siteOverrides.DISABLE_METADATA_API_REQUESTS === 'true';
+    }
+
+    // MAX_RESULT_LIMIT
+    let maxResultLimitNumber = envVariables.MAX_RESULT_LIMIT
+      ? parseInt(envVariables.MAX_RESULT_LIMIT)
+      : NaN;
+    if (Object.hasOwn(siteOverrides, 'MAX_RESULT_LIMIT')) {
+      maxResultLimitNumber = siteOverrides.MAX_RESULT_LIMIT
+        ? parseInt(siteOverrides.MAX_RESULT_LIMIT)
+        : NaN;
+    }
+    this.maxResultLimit =
+      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
+
+    // MAX_RESULT_LIMITS
+    this.maxResultLimits = envVariables.MAX_RESULT_LIMITS
+      ? getMaxResultLimits(envVariables.MAX_RESULT_LIMITS)
+      : null;
+    if (Object.hasOwn(siteOverrides, 'MAX_RESULT_LIMITS')) {
+      this.maxResultLimits = siteOverrides.MAX_RESULT_LIMITS
+        ? getMaxResultLimits(siteOverrides.MAX_RESULT_LIMITS)
+        : null;
+    }
+  }
+
+  getAllowedRequestOverrides(
+    envVariables: Record<string, string | undefined>,
+    siteOverrides: Record<string, string | undefined> = {},
+  ): Map<RequestOverridableVariable, RequestOverrideRestrictionType> {
+    let allowedRequestOverrides: Map<RequestOverridableVariable, RequestOverrideRestrictionType> =
+      new Map();
+
+    if (envVariables.ALLOWED_REQUEST_OVERRIDES) {
+      envVariables.ALLOWED_REQUEST_OVERRIDES.split(',').forEach((entry) => {
+        const [variable, restrictionType = 'restricted'] = entry.split(':');
+        if (restrictionType !== 'restricted' && restrictionType !== 'unrestricted') {
+          throw new Error(
+            `ALLOWED_REQUEST_OVERRIDES provides invalid restriction type: ${restrictionType}`,
+          );
+        }
+
+        if (variable === '*') {
+          requestOverridableVariables.forEach((v) => {
+            allowedRequestOverrides.set(v, restrictionType);
+          });
+        } else if (isRequestOverridableVariable(variable)) {
+          allowedRequestOverrides.set(variable, restrictionType);
+        } else {
+          throw new Error(
+            `ALLOWED_REQUEST_OVERRIDES contains a request override variable that is not recognized: ${variable}`,
+          );
+        }
+      });
+    }
+
+    if (
+      envVariables.ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES &&
+      Object.hasOwn(siteOverrides, 'ALLOWED_REQUEST_OVERRIDES')
+    ) {
+      const siteAllowedRequestOverrides: Map<
+        RequestOverridableVariable,
+        RequestOverrideRestrictionType
+      > = new Map();
+      let isValid = true;
+      if (siteOverrides.ALLOWED_REQUEST_OVERRIDES) {
+        siteOverrides.ALLOWED_REQUEST_OVERRIDES.split(',').forEach((entry) => {
+          const [variable, restrictionType = 'restricted'] = entry.split(':');
+          if (restrictionType !== 'restricted' && restrictionType !== 'unrestricted') {
+            isValid = false;
+            return;
+          }
+          if (variable === '*') {
+            requestOverridableVariables.forEach((v) => {
+              siteAllowedRequestOverrides.set(v, restrictionType);
+            });
+          } else if (isRequestOverridableVariable(variable)) {
+            siteAllowedRequestOverrides.set(variable, restrictionType);
+          } else {
+            isValid = false;
+            return;
+          }
+        });
+      }
+
+      if (isValid) {
+        allowedRequestOverrides = siteAllowedRequestOverrides;
+      }
+    }
+
+    return allowedRequestOverrides;
+  }
 
   getMaxResultLimit(toolName: ToolName): number | null {
     return this.maxResultLimits?.get(toolName) ?? this.maxResultLimit;
@@ -169,65 +318,6 @@ export class OverridableConfig {
 
     return { projectIds, datasourceIds, workbookIds, tags };
   }
-
-  /**
-   * General pattern for overriding variables:
-   * 1. Initialize the value of a given variable using the ENVIRONMENT (process.env). Throw if any issues with ENVIORNMENT values / unallowed behavior.
-   * 2. Using the Object.hasOwn() method, check if the given variable exists as a property in the siteOverrides object.
-   *    Only when the variable is a property in the siteOverrides object, apply the following logic:
-   *      a. If the site override value is an empty string or undefined, we generally revert the variable to its default value / behavior
-   *         (each variable is different, so consider what makes the most sense for this case).
-   *      b. If the site override value is invalid, do not throw. Either fallback to the value of the ENVIRONMENT or
-   *         revert the value of the variable to its default value / behavior (similar to the empty string / undefined case).
-   *      c. If the site override value is valid, replace the value of the given variable with its value from the site override.
-   */
-  constructor(siteOverrides: Record<string, string | undefined> = {}) {
-    const envVariables = removeClaudeMcpBundleUserConfigTemplates({ ...process.env });
-
-    // INCLUDE_TOOLS, EXCLUDE_TOOLS
-    const { includeTools, excludeTools } = this.getToolsWithOverrides(envVariables, siteOverrides);
-    this.includeTools = includeTools;
-    this.excludeTools = excludeTools;
-
-    // INCLUDE_PROJECT_IDS, INCLUDE_DATASOURCE_IDS, INCLUDE_WORKBOOK_IDS, INCLUDE_TAGS
-    this.boundedContext = this.getBoundedContextWithOverrides(envVariables, siteOverrides);
-
-    // DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS
-    this.disableQueryDatasourceValidationRequests =
-      envVariables.DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS === 'true';
-    if (Object.hasOwn(siteOverrides, 'DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS')) {
-      this.disableQueryDatasourceValidationRequests =
-        siteOverrides.DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS === 'true';
-    }
-
-    // DISABLE_METADATA_API_REQUESTS
-    this.disableMetadataApiRequests = envVariables.DISABLE_METADATA_API_REQUESTS === 'true';
-    if (Object.hasOwn(siteOverrides, 'DISABLE_METADATA_API_REQUESTS')) {
-      this.disableMetadataApiRequests = siteOverrides.DISABLE_METADATA_API_REQUESTS === 'true';
-    }
-
-    // MAX_RESULT_LIMIT
-    let maxResultLimitNumber = envVariables.MAX_RESULT_LIMIT
-      ? parseInt(envVariables.MAX_RESULT_LIMIT)
-      : NaN;
-    if (Object.hasOwn(siteOverrides, 'MAX_RESULT_LIMIT')) {
-      maxResultLimitNumber = siteOverrides.MAX_RESULT_LIMIT
-        ? parseInt(siteOverrides.MAX_RESULT_LIMIT)
-        : NaN;
-    }
-    this.maxResultLimit =
-      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
-
-    // MAX_RESULT_LIMITS
-    this.maxResultLimits = envVariables.MAX_RESULT_LIMITS
-      ? getMaxResultLimits(envVariables.MAX_RESULT_LIMITS)
-      : null;
-    if (Object.hasOwn(siteOverrides, 'MAX_RESULT_LIMITS')) {
-      this.maxResultLimits = siteOverrides.MAX_RESULT_LIMITS
-        ? getMaxResultLimits(siteOverrides.MAX_RESULT_LIMITS)
-        : null;
-    }
-  }
 }
 
 // Creates a set from a comma-separated string of values.
@@ -273,8 +363,9 @@ function getMaxResultLimits(maxResultLimits: string): Map<ToolName, number | nul
 }
 
 export const getOverridableConfig = (
-  siteOverrides: Record<string, string> | undefined,
-): OverridableConfig => new OverridableConfig(siteOverrides);
+  siteOverrides: Record<string, string> = {},
+  requestOverrides: Record<string, string> = {},
+): OverridableConfig => new OverridableConfig(siteOverrides, requestOverrides);
 
 export const exportedForTesting = {
   OverridableConfig: OverridableConfig,

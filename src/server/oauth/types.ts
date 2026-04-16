@@ -5,6 +5,7 @@ import { User } from '../../sdks/tableau/types/user.js';
 
 export type AuthenticatedRequest = express.Request & {
   auth?: AuthInfo;
+  overrides?: Record<string, string>;
 };
 
 export type Tokens = {
