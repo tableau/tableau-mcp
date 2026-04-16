@@ -429,8 +429,7 @@ By default, Tableau MCP sends notifications to MCP clients containing the reques
 traces for each request Tableau MCP tools make to the Tableau REST APIs. Many clients will save
 these notifications to their own log files, but if you need a way to gather and audit these traces,
 server-level logging can be enabled. See
-[ENABLED_LOGGERS](../configuration/mcp-config/env-vars#enabled_loggers) for more
-information.
+[ENABLED_LOGGERS](../configuration/mcp-config/env-vars#enabled_loggers) for more information.
 
 ```
 ENABLED_LOGGERS=fileLogger
@@ -673,3 +672,9 @@ For more information and precautions, see
 ```
 ENABLE_PASSTHROUGH_AUTH=true
 ```
+
+### Disable service temporarily
+
+If you need to temporarily disable the service for any reason, you can set
+[BREAK_GLASS_DISABLE_GLOBALLY](../configuration/mcp-config/env-vars.md#break_glass_disable_globally)
+to `true`. The MCP server will continue to handle requests but all tool calls will return an error.
