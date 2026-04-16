@@ -105,13 +105,12 @@ export function simplifyReadMetadataResult(
   readMetadataResult: MetadataResponse,
   datasourceModelResult?: DatasourceModelResponse,
 ): FieldsResult {
-  const simplifiedResponse: Omit<FieldsResult, 'datasourceModel'> & {
-    datasourceModel?: FieldsResult['datasourceModel'];
-  } = {
+  const simplifiedResponse: FieldsResult = {
     datasourceDescription: '',
     fieldGroups: [],
     parameters: [],
   };
+
   if (datasourceModelResult) {
     simplifiedResponse.datasourceModel = getSimplifiedDatasourceModel(datasourceModelResult);
   }
@@ -182,13 +181,12 @@ export function combineFields(
   // Create a response object that combines field data from
   // readMetadata (VizQL Data Service API) and listFields (GraphQL Metadata API) results
   // to optimize for LLM accuracy and reduce tokens in response.
-  const combinedFields: Omit<FieldsResult, 'datasourceModel'> & {
-    datasourceModel?: FieldsResult['datasourceModel'];
-  } = {
+  const combinedFields: FieldsResult = {
     datasourceDescription: listFieldsResult.data.publishedDatasources[0]?.description ?? '',
     fieldGroups: [],
     parameters: [],
   };
+
   if (datasourceModelResult) {
     combinedFields.datasourceModel = getSimplifiedDatasourceModel(datasourceModelResult);
   }
