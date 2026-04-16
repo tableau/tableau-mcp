@@ -110,6 +110,7 @@ function EmbedTableauViz({
     if (!container || !parsed) return;
 
     const { url: workbookUrl, token } = parsed;
+    if (!token) return;
     const iframe = createIframeForEmbeddedContainer(
       getEmbeddingApiUrl(workbookUrl),
       `<div id="component-container"><tableau-viz src="${workbookUrl}" token="${token}" width="100%" height="600"></tableau-viz></div>`,

@@ -55,6 +55,8 @@ export const getEmbedTableauVizTool = (server: Server): Tool<typeof paramsSchema
               },
               scopes: new Set(['tableau:views:embed']),
             });
+          } else if (tableauAuthInfo?.type === 'Bearer' && tableauAuthInfo.raw) {
+            token = tableauAuthInfo.raw;
           }
 
           return new Ok({ url: workbookUrl, token });

@@ -24,6 +24,7 @@ export type McpScope =
   | 'tableau:mcp:insight:create';
 
 export type TableauApiScope =
+  | 'tableau:views:embed'
   | 'tableau:content:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
@@ -135,7 +136,7 @@ const toolScopeMap: Record<
   },
   // No Tableau REST API calls — purely passes the URL through to the MCP App for rendering.
   'embed-tableau-viz': {
-    mcp: [],
+    mcp: ['tableau:views:embed'],
     api: new Set<TableauApiScope>(),
   },
   // Token lifecycle: no Tableau REST API calls, no content scope required.
