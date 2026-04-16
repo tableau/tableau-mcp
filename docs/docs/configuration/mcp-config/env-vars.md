@@ -383,6 +383,9 @@ Enables product telemetry for tool usage tracking.
 Can be used to force all MCP tools to return a "service unavailable" error message. Use with
 discretion.
 
+- Default: `false`
+- When `true`, all tools will return the below result:
+
 ```json
 {
   "content": [
