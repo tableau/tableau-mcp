@@ -61,6 +61,55 @@ const getCustomViewDataEndpoint = makeEndpoint({
   response: z.string(),
 });
 
+const getCustomViewImageEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/customviews/:customViewId/image',
+  alias: 'getCustomViewImage',
+  description: 'Returns an image of the specified custom view.',
+  parameters: [
+    {
+      name: 'vizWidth',
+      type: 'Query',
+      schema: z.number().optional(),
+      description:
+        'The width of the rendered image in pixels that, along with the value of vizHeight determine its resolution and aspect ratio.',
+    },
+    {
+      name: 'vizHeight',
+      type: 'Query',
+      schema: z.number().optional(),
+      description:
+        'The height of the rendered image in pixels that, along with the value of vizWidth determine its resolution and aspect ratio.',
+    },
+    {
+      name: 'resolution',
+      type: 'Query',
+      schema: z.literal('high').optional(),
+      description:
+        'The resolution of the image. Image width and actual pixel density are determined by the display context of the image. Aspect ratio is always preserved. Set the value to high to ensure maximum pixel density.',
+    },
+    {
+      name: 'format',
+      type: 'Query',
+      schema: z.enum(['PNG', 'SVG']).optional(),
+      description: 'The format of the image. PNG (default) or SVG.',
+    },
+  ],
+  response: z.string(),
+  errors: [
+    {
+      status: 400,
+      schema: z.object({
+        error: z.object({
+          code: z.string(),
+          summary: z.string(),
+          detail: z.string(),
+        }),
+      }),
+    },
+  ],
+});
+
 const queryViewDataEndpoint = makeEndpoint({
   method: 'get',
   path: '/sites/:siteId/views/:viewId/data',
@@ -176,6 +225,7 @@ const viewsApi = makeApi([
   listCustomViewsEndpoint,
   getCustomViewEndpoint,
   getCustomViewDataEndpoint,
+  getCustomViewImageEndpoint,
   queryViewDataEndpoint,
   queryViewImageEndpoint,
   queryViewsForWorkbookEndpoint,

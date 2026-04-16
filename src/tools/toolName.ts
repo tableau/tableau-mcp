@@ -9,6 +9,7 @@ export const toolNames = [
   'get-view-data',
   'get-view-image',
   'get-custom-view-data',
+  'get-custom-view-image',
   'list-all-pulse-metric-definitions',
   'list-pulse-metric-definitions-from-definition-ids',
   'list-pulse-metrics-from-metric-definition-id',
@@ -41,6 +42,7 @@ export const toolGroups = {
     'get-view-data',
     'get-view-image',
     'get-custom-view-data',
+    'get-custom-view-image',
   ],
   pulse: [
     'list-all-pulse-metric-definitions',

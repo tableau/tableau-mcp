@@ -1,25 +1,29 @@
 ---
-sidebar_position: 2
+sidebar_position: 6
 ---
 
-# Get View Image
+# Get Custom View Image
 
-Retrieves an image of the specified view in a Tableau workbook.
+Retrieves an image for a **custom view** (a saved or personalized state of a published sheet,
+including the user's filters). For a published view without a custom view, use
+[Get View Image](get-view-image.md) with the view id.
 
 ## APIs called
 
-- [Query View Image](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_view_image)
+- [Get Custom View Image](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view_image)
+- [Get Custom View](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view)
+  (to resolve the underlying sheet for
+  [tool scoping](../../configuration/mcp-config/tool-scoping.md))
 - [Get View](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_view)
-  (if applicable [tool scoping](../../configuration/mcp-config/tool-scoping.md) is enabled)
+  (if applicable tool scoping is enabled)
 
 ## Required arguments
 
-### `viewId`
+### `customViewId`
 
-The ID of the view, potentially retrieved by the [List Views](list-views.md) or
-[Get Workbook](../workbooks/get-workbook.md) tool.
-
-Example: `9460abfe-a6b2-49d1-b998-39e1ebcc55ce`
+The LUID of the custom view. This appears in the Tableau URL for a saved view (e.g. the
+`<customViewId>` in `/views/WorkbookUrl/SheetUrl/<customViewId>/<customViewName>`), not the
+published view id returned by List Views for the sheet alone.
 
 ## Optional arguments
 
@@ -38,8 +42,6 @@ The height of the rendered image in pixels that, along with the value of `width`
 resolution and aspect ratio.
 
 Example: `1200`
-
-<hr />
 
 ### `format`
 
@@ -62,10 +64,8 @@ Example: `SVG`
 
 ### `viewFilters`
 
-Map of view filter field names to values. `vf_` prefix for field names is optional and will be added
-automatically when building the view filter query.
-
-Example: `{ "year": "2017" }`
+Map of filter field names to values; sent as `vf_<fieldname>` query parameters per
+[filter query views](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_filtering_and_sorting.htm#Filter-query-views).
 
 ## Example result
 
@@ -74,4 +74,4 @@ Example: `{ "year": "2017" }`
 - When `format` is `SVG`, the MCP result will contain both the SVG XML (`type=text`) and the SVG
   image content (`type=image` and `mimeType=image/svg+xml`)
 
-![Superstore View Image](./superstore.png)
+![Superstore View Image](./superstore-custom-view.png)
