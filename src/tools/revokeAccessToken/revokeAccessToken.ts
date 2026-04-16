@@ -32,7 +32,7 @@ export const getRevokeAccessTokenTool = (server: Server): Tool<typeof paramsSche
   const revokeAccessTokenTool = new Tool({
     server,
     name: 'revoke-access-token',
-    description: `Revokes the access token used to authenticate the current MCP session.
+    description: `Revokes the access token used to authenticate the current session.
 
 After revocation the session is invalidated. Subsequent Tableau API calls within this session may fail. Clients should disconnect from the MCP server after calling this tool.
 
@@ -89,7 +89,7 @@ This tool requires no input — it operates on the token already associated with
 
           let response: Response;
           if (tableauAuthInfo.type === 'Bearer') {
-            const clientId = tableauAuthInfo.clientId ?? extra.authInfo?.clientId;
+            const clientId = tableauAuthInfo.clientId;
             if (!clientId) {
               return new Err(
                 new McpToolError({

@@ -252,6 +252,7 @@ describe('getViewImageTool', () => {
 async function getToolResult(params: {
   viewId: string;
   format?: 'PNG' | 'SVG';
+  viewFilters?: Record<string, string>;
   productVersion?: ProductVersion;
 }): Promise<CallToolResult> {
   const getViewImageTool = getGetViewImageTool(
@@ -260,7 +261,13 @@ async function getToolResult(params: {
   );
   const callback = await Provider.from(getViewImageTool.callback);
   return await callback(
-    { viewId: params.viewId, width: undefined, height: undefined, format: params.format },
+    {
+      viewId: params.viewId,
+      width: undefined,
+      height: undefined,
+      format: params.format,
+      viewFilters: params.viewFilters,
+    },
     getMockRequestHandlerExtra(),
   );
 }

@@ -21,6 +21,15 @@ The ID of the view, potentially retrieved by the [List Views](list-views.md) or
 
 Example: `9460abfe-a6b2-49d1-b998-39e1ebcc55ce`
 
+## Optional arguments
+
+### `viewFilters`
+
+Map of view filter field names to values. `vf_` prefix for field names is optional and will be added
+automatically when building the view filter query.
+
+Example: `{ "year": "2017" }`
+
 ## Example result
 
 ```

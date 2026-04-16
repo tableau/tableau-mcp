@@ -19,11 +19,11 @@ describe('list-views', () => {
     });
 
     expect(views.length).greaterThan(0);
-    const view = views.find((view) => view.id === superstore.defaultViewId);
+    const view = views.find((view) => view.id === superstore.defaultView.id);
     invariant(view, 'Default view for Superstore workbook not found');
 
     expect(view).toMatchObject({
-      id: superstore.defaultViewId,
+      id: superstore.defaultView.id,
       name: 'Overview',
       workbook: {
         id: superstore.id,
@@ -43,7 +43,7 @@ describe('list-views', () => {
 
     expect(views).toHaveLength(1);
     expect(views[0]).toMatchObject({
-      id: superstore.defaultViewId,
+      id: superstore.defaultView.id,
       name: 'Overview',
       workbook: {
         id: superstore.id,

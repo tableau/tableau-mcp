@@ -253,6 +253,7 @@ describe('restApiInstance', () => {
         status: 200,
         url: '/api/test',
         baseUrl: mockHost,
+        params: {},
         headers: {},
         data: {},
       };

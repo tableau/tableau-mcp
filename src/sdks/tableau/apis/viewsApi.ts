@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { customViewSchema } from '../types/customView.js';
 import { paginationSchema } from '../types/pagination.js';
 import { viewSchema } from '../types/view.js';
 import { paginationParameters } from './paginationParameters.js';
@@ -13,11 +14,66 @@ const getViewEndpoint = makeEndpoint({
   response: z.object({ view: viewSchema }),
 });
 
+const listCustomViewsEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/customviews',
+  alias: 'listCustomViews',
+  description:
+    'Gets a list of custom views on a site. The list includes details of each custom view.',
+  parameters: [
+    ...paginationParameters,
+    {
+      name: 'filter',
+      type: 'Query',
+      schema: z.string().optional(),
+      description:
+        'An expression that lets you specify a subset of custom views to return. You can filter on viewId, ownerId, and workbookId. You can include multiple filter expressions.',
+    },
+  ],
+  response: z.object({
+    pagination: paginationSchema,
+    customViews: z.object({ customView: z.array(customViewSchema).optional() }),
+  }),
+});
+
+const getCustomViewEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/customviews/:customViewId',
+  alias: 'getCustomView',
+  description: 'Gets the details of a specified custom view.',
+  response: z.object({ customView: customViewSchema }),
+});
+
+const getCustomViewDataEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/sites/:siteId/customviews/:customViewId/data',
+  alias: 'getCustomViewData',
+  description:
+    'Returns a specified custom view rendered as data in comma separated value (CSV) format.',
+  parameters: [
+    {
+      name: 'dummy',
+      type: 'Query',
+      schema: z.never().optional(),
+      description: 'Dummy parameter to allow arbitrary filter parameters to be provided',
+    },
+  ],
+  response: z.string(),
+});
+
 const queryViewDataEndpoint = makeEndpoint({
   method: 'get',
   path: '/sites/:siteId/views/:viewId/data',
   alias: 'queryViewData',
   description: 'Returns a specified view rendered as data in comma separated value (CSV) format.',
+  parameters: [
+    {
+      name: 'dummy',
+      type: 'Query',
+      schema: z.never().optional(),
+      description: 'Dummy parameter to allow arbitrary filter parameters to be provided',
+    },
+  ],
   response: z.string(),
 });
 
@@ -117,6 +173,9 @@ const queryViewsForSiteEndpoint = makeEndpoint({
 
 const viewsApi = makeApi([
   getViewEndpoint,
+  listCustomViewsEndpoint,
+  getCustomViewEndpoint,
+  getCustomViewDataEndpoint,
   queryViewDataEndpoint,
   queryViewImageEndpoint,
   queryViewsForWorkbookEndpoint,

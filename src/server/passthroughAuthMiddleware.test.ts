@@ -15,6 +15,9 @@ const TOOLS_WITHOUT_API_SCOPES_WITH_PASSTHROUGH_GUARD: ReadonlyArray<ToolName> =
   // Token lifecycle tool: no Tableau REST API call. The tool callback explicitly returns an error
   // for Passthrough auth and undefined tableauAuthInfo, so passthrough callers are rejected.
   'revoke-access-token',
+  // Consent lifecycle tool: no Tableau REST API call. The tool callback explicitly returns an error
+  // for non-Bearer auth types, so passthrough callers are rejected.
+  'reset-consent',
 ];
 
 describe('passthroughAuthMiddleware', () => {

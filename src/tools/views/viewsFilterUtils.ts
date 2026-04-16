@@ -67,7 +67,3 @@ export function parseAndValidateViewsFilterString(filterString: string): string 
     filterFieldSchema: FilterFieldSchema,
   });
 }
-
-export const exportedForTesting = {
-  FilterFieldSchema,
-};

@@ -75,6 +75,10 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:view:read'],
     api: new Set(['tableau:content:read']),
   },
+  'list-custom-views': {
+    mcp: ['tableau:mcp:view:read'],
+    api: new Set(['tableau:content:read']),
+  },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set(['tableau:viz_data_service:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
@@ -96,6 +100,10 @@ const toolScopeMap: Record<
     api: new Set(['tableau:views:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
   'get-view-image': {
+    mcp: ['tableau:mcp:view:download'],
+    api: new Set(['tableau:views:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
+  'get-custom-view-data': {
     mcp: ['tableau:mcp:view:download'],
     api: new Set(['tableau:views:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
@@ -136,6 +144,12 @@ const toolScopeMap: Record<
   // Token lifecycle: no Tableau REST API calls, no content scope required.
   // Any authenticated user may revoke their own token regardless of granted scopes.
   'revoke-access-token': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  // Consent lifecycle: no Tableau REST API calls. Bearer-only (Tableau authZ server).
+  // Any authenticated user may reset their own consent regardless of granted scopes.
+  'reset-consent': {
     mcp: [],
     api: new Set<TableauApiScope>(),
   },
