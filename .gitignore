@@ -19,6 +19,7 @@ tableau-mcp.mcpb
 *.tgz
 *.tar.gz
 *.zip
+/.idea/
 
 # Playwright
 /test-results/

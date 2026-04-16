@@ -1,4 +1,5 @@
 import { getSearchContentTool } from './contentExploration/searchContent.js';
+import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
@@ -20,6 +21,7 @@ import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 export const toolFactories = [
   getGetDatasourceMetadataTool,
   getListDatasourcesTool,
+  getListExtractRefreshTasksTool,
   getQueryDatasourceTool,
   getListAllPulseMetricDefinitionsTool,
   getListPulseMetricDefinitionsFromDefinitionIdsTool,

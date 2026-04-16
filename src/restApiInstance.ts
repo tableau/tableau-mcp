@@ -30,7 +30,8 @@ type JwtScopes =
   | 'tableau:insights:read'
   | 'tableau:views:download'
   | 'tableau:insight_brief:create'
-  | 'tableau:mcp_site_settings:read';
+  | 'tableau:mcp_site_settings:read'
+  | 'tableau:tasks:read';
 
 export type RestApiArgs = Pick<
   TableauRequestHandlerExtra,
@@ -45,6 +46,27 @@ export type RestApiArgs = Pick<
         disableLogging: true;
       }
   );
+
+/**
+ * REST requests must use the same Tableau origin the session or token was issued for
+ * (e.g. the user's Cloud pod). Using {@link Config.server} when it differs from that origin
+ * causes Tableau to return 401 for otherwise valid credentials.
+ */
+export function resolveTableauRestApiOrigin(
+  config: Config,
+  tableauAuthInfo: TableauAuthInfo | undefined,
+): string {
+  if (
+    tableauAuthInfo?.server &&
+    (config.auth === 'oauth' ||
+      tableauAuthInfo.type === 'Bearer' ||
+      tableauAuthInfo.type === 'Passthrough')
+  ) {
+    return tableauAuthInfo.server;
+  }
+
+  return config.server || tableauAuthInfo?.server || '';
+}
 
 const getNewRestApiInstanceAsync = async (
   args: RestApiArgs & {
@@ -81,8 +103,10 @@ const getNewRestApiInstanceAsync = async (
     );
   }
 
-  const tableauServer = config.server || tableauAuthInfo?.server;
+  const tableauServer = resolveTableauRestApiOrigin(config, tableauAuthInfo);
   invariant(tableauServer, 'Tableau server could not be determined');
+
+  RestApi.host = tableauServer;
 
   const restApi = new RestApi({
     maxRequestTimeoutMs: config.maxRequestTimeoutMs,
@@ -174,19 +198,26 @@ export const useRestApi = async <T>(
     callback: (restApi: RestApi) => Promise<T>;
   },
 ): Promise<T> => {
-  const { callback, ...remaining } = args;
-  const { restApi, signOutWhenCompleted } = await getNewRestApiInstanceAsync({
-    ...remaining,
-    jwtScopes: new Set(args.jwtScopes),
-  });
+  const previousRestApiHost = RestApi.isHostSet ? RestApi.host : null;
   try {
-    return await callback(restApi);
+    const { callback, ...remaining } = args;
+    const { restApi, signOutWhenCompleted } = await getNewRestApiInstanceAsync({
+      ...remaining,
+      jwtScopes: new Set(args.jwtScopes),
+    });
+    try {
+      return await callback(restApi);
+    } finally {
+      if (signOutWhenCompleted) {
+        // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.
+        // Sessions for 'oauth' and 'passthrough' are not. Signing out would invalidate the session,
+        // preventing the access token from being reused for subsequent requests.
+        await restApi.signOut();
+      }
+    }
   } finally {
-    if (signOutWhenCompleted) {
-      // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.
-      // Sessions for 'oauth' and 'passthrough' are not. Signing out would invalidate the session,
-      // preventing the access token from being reused for subsequent requests.
-      await restApi.signOut();
+    if (previousRestApiHost !== null) {
+      RestApi.host = previousRestApiHost;
     }
   }
 };

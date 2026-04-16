@@ -1,5 +1,6 @@
 export const toolNames = [
   'list-datasources',
+  'list-extract-refresh-tasks',
   'list-workbooks',
   'list-views',
   'list-custom-views',
@@ -26,6 +27,7 @@ export const toolGroupNames = [
   'view',
   'pulse',
   'content-exploration',
+  'tasks',
   'token-management',
 ] as const;
 export type ToolGroupName = (typeof toolGroupNames)[number];
@@ -44,6 +46,7 @@ export const toolGroups = {
     'generate-pulse-insight-brief',
   ],
   'content-exploration': ['search-content'],
+  tasks: ['list-extract-refresh-tasks'],
   'token-management': ['revoke-access-token'],
 } as const satisfies Record<ToolGroupName, Array<ToolName>>;
 
