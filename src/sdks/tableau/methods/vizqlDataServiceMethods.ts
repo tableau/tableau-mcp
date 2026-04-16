@@ -3,6 +3,8 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import {
+  DatasourceModelResponse,
+  GetDatasourceModelRequest,
   MetadataResponse,
   QueryOutput,
   QueryRequest,
@@ -82,6 +84,35 @@ export default class VizqlDataServiceMethods extends AuthenticatedMethods<
     } catch (error) {
       if (
         isErrorFromAlias(this._apiClient.api, 'readMetadata', error) &&
+        error.response.status === 404
+      ) {
+        return Err('feature-disabled');
+      }
+
+      throw error;
+    }
+  };
+
+  /**
+   * Requests the data model for a specific data source, including logical tables and relationships.
+   *
+   * Required scopes: `tableau:viz_data_service:read`
+   *
+   * @param {GetDatasourceModelRequest} getDatasourceModelRequest
+   * @link https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/GetDatasourceModel
+   */
+  getDatasourceModel = async (
+    getDatasourceModelRequest: GetDatasourceModelRequest,
+  ): Promise<Result<DatasourceModelResponse, 'feature-disabled'>> => {
+    try {
+      return Ok(
+        await this._apiClient.getDatasourceModel(getDatasourceModelRequest, {
+          ...this.authHeader,
+        }),
+      );
+    } catch (error) {
+      if (
+        isErrorFromAlias(this._apiClient.api, 'getDatasourceModel', error) &&
         error.response.status === 404
       ) {
         return Err('feature-disabled');

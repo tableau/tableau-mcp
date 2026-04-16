@@ -326,6 +326,13 @@ export const readMetadataRequestSchema = z
   })
   .passthrough();
 
+export const getDatasourceModelRequestSchema = z
+  .object({
+    datasource: datasourceSchema,
+    options: queryOptionsSchema.optional(),
+  })
+  .passthrough();
+
 export const metadataOutputSchema = z
   .object({
     data: z.array(fieldMetadataSchema),
@@ -334,6 +341,50 @@ export const metadataOutputSchema = z
     }),
   })
   .partial()
+  .passthrough();
+
+const logicalTableSchema = z
+  .object({
+    logicalTableId: z.string(),
+    caption: z.string().optional(),
+    description: z.string().optional(),
+  })
+  .passthrough();
+
+const relationshipClauseSchema = z
+  .object({
+    operator: z.string(),
+    fromField: z.string(),
+    toField: z.string(),
+  })
+  .passthrough();
+
+const logicalTableRelationshipSchema = z
+  .object({
+    fromLogicalTable: z
+      .object({
+        logicalTableId: z.string(),
+      })
+      .passthrough(),
+    toLogicalTable: z
+      .object({
+        logicalTableId: z.string(),
+      })
+      .passthrough(),
+    expression: z
+      .object({
+        op: z.string().optional(),
+        relationships: z.array(relationshipClauseSchema),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
+export const datasourceModelResponseSchema = z
+  .object({
+    logicalTables: z.array(logicalTableSchema),
+    logicalTableRelationships: z.array(logicalTableRelationshipSchema),
+  })
   .passthrough();
 
 export const tableauErrorSchema = z
@@ -400,6 +451,8 @@ export type QueryRequest = z.infer<typeof queryRequestSchema>;
 export type QueryParameter = z.infer<typeof queryParameterSchema>;
 
 export type ReadMetadataRequest = z.infer<typeof readMetadataRequestSchema>;
+export type GetDatasourceModelRequest = z.infer<typeof getDatasourceModelRequestSchema>;
+export type DatasourceModelResponse = z.infer<typeof datasourceModelResponseSchema>;
 
 export type TableauError = z.infer<typeof tableauErrorSchema>;
 
@@ -453,6 +506,29 @@ const readMetadataEndpoint = makeEndpoint({
   ],
 });
 
+const getDatasourceModelEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/get-datasource-model',
+  alias: 'getDatasourceModel',
+  description:
+    'Requests the data model for a specific data source, including logical tables and relationships.',
+  requestFormat: 'json',
+  parameters: [
+    {
+      name: 'body',
+      type: 'Body',
+      schema: getDatasourceModelRequestSchema,
+    },
+  ],
+  response: datasourceModelResponseSchema,
+  errors: [
+    {
+      status: 404,
+      schema: z.any(),
+    },
+  ],
+});
+
 const simpleRequestEndpoint = makeEndpoint({
   method: 'get',
   path: '/simple-request',
@@ -465,6 +541,7 @@ const simpleRequestEndpoint = makeEndpoint({
 const vizqlDataServiceApi = makeApi([
   queryDatasourceEndpoint,
   readMetadataEndpoint,
+  getDatasourceModelEndpoint,
   simpleRequestEndpoint,
 ]);
 
