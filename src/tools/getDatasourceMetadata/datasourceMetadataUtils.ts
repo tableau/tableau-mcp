@@ -107,13 +107,12 @@ export function simplifyReadMetadataResult(
 ): FieldsResult {
   const simplifiedResponse: FieldsResult = {
     datasourceDescription: '',
+    ...(datasourceModelResult
+      ? { datasourceModel: getSimplifiedDatasourceModel(datasourceModelResult) }
+      : {}),
     fieldGroups: [],
     parameters: [],
   };
-
-  if (datasourceModelResult) {
-    simplifiedResponse.datasourceModel = getSimplifiedDatasourceModel(datasourceModelResult);
-  }
 
   if (!readMetadataResult.data) {
     return simplifiedResponse;
@@ -183,13 +182,12 @@ export function combineFields(
   // to optimize for LLM accuracy and reduce tokens in response.
   const combinedFields: FieldsResult = {
     datasourceDescription: listFieldsResult.data.publishedDatasources[0]?.description ?? '',
+    ...(datasourceModelResult
+      ? { datasourceModel: getSimplifiedDatasourceModel(datasourceModelResult) }
+      : {}),
     fieldGroups: [],
     parameters: [],
   };
-
-  if (datasourceModelResult) {
-    combinedFields.datasourceModel = getSimplifiedDatasourceModel(datasourceModelResult);
-  }
   const fields: Field[] = [];
 
   if (!readMetadataResult.data) {
