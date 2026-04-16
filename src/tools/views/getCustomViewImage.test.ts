@@ -58,7 +58,7 @@ describe('getCustomViewImageTool', () => {
     resetResourceAccessCheckerSingleton();
     mocks.mockGetCustomView.mockResolvedValue(mockCustomView);
     mocks.mockGetView.mockResolvedValue(mockView);
-    mocks.mockGetCustomViewImage.mockResolvedValue(mockPngData);
+    mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
   });
 
   afterEach(() => {

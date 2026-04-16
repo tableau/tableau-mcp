@@ -1,8 +1,8 @@
 import { Ok, Result } from 'ts-results-es';
 
-import { ArgsValidationError } from '../../errors/mcpToolError';
-import { ProductVersion } from '../../sdks/tableau/types/serverInfo';
-import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast';
+import { ArgsValidationError } from '../../errors/mcpToolError.js';
+import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
+import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 
 const MIN_VERSION_FOR_SVG = '2026.2.0';
 
