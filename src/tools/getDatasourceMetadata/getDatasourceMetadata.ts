@@ -152,6 +152,7 @@ export const getGetDatasourceMetadataTool = (
                 return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
               }
 
+              // Fetching datasource model from VizQL Data Service API.
               const datasourceModelResult = !rules.datasourceModelIsUnavailable
                 ? await restApi.vizqlDataServiceMethods.getDatasourceModel({
                     datasource: {
@@ -160,17 +161,18 @@ export const getGetDatasourceMetadataTool = (
                   })
                 : undefined;
 
-              if (datasourceModelResult?.isErr()) {
+              if (datasourceModelResult && datasourceModelResult.isErr()) {
                 return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
               }
-              const datasourceModel =
-                datasourceModelResult && datasourceModelResult.isOk()
-                  ? datasourceModelResult.value
-                  : undefined;
 
               if (configWithOverrides.disableMetadataApiRequests) {
                 // Exit early since requests to the Tableau Metadata API are disabled.
-                return Ok(simplifyReadMetadataResult(readMetadataResult.value, datasourceModel));
+                return Ok(
+                  simplifyReadMetadataResult(
+                    readMetadataResult.value,
+                    datasourceModelResult?.value,
+                  ),
+                );
               }
 
               let listFieldsResult: GraphQLResponse;
@@ -180,11 +182,22 @@ export const getGetDatasourceMetadataTool = (
                 // Using try-catch here since requests could fail if the service is not enabled.
                 listFieldsResult = await restApi.metadataMethods.graphql(query);
               } catch {
-                return Ok(simplifyReadMetadataResult(readMetadataResult.value, datasourceModel));
+                return Ok(
+                  simplifyReadMetadataResult(
+                    readMetadataResult.value,
+                    datasourceModelResult?.value,
+                  ),
+                );
               }
 
               // Combine the results from the VizQL Data Service API and the Tableau Metadata API.
-              return Ok(combineFields(readMetadataResult.value, listFieldsResult, datasourceModel));
+              return Ok(
+                combineFields(
+                  readMetadataResult.value,
+                  listFieldsResult,
+                  datasourceModelResult?.value,
+                ),
+              );
             },
           });
         },
