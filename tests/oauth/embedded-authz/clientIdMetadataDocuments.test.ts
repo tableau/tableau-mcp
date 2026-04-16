@@ -395,6 +395,168 @@ describe('clientIdMetadataDocuments', () => {
     });
   });
 
+  it('should accept loopback IPv4 redirect URI with a different port (RFC 8252 §7.3)', async () => {
+    const { app } = await startServer();
+
+    mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
+    mockAxios.get.mockResolvedValue({
+      ...mocks.MOCK_AXIOS_GET_RESPONSE,
+      data: {
+        ...mocks.MOCK_AXIOS_GET_RESPONSE.data,
+        redirect_uris: ['http://127.0.0.1/callback'],
+      },
+    });
+
+    const response = await request(app).get('/oauth2/authorize').query({
+      response_type: 'code',
+      client_id: constants.FAKE_CLIENT_METADATA_URL,
+      redirect_uri: 'http://127.0.0.1:54321/callback',
+      code_challenge: 'fake-code-challenge',
+      code_challenge_method: 'S256',
+      state: 'fake-state',
+      resource: 'http://127.0.0.1:3927/tableau-mcp',
+    });
+
+    expect(response.status).toBe(302);
+  });
+
+  it('should accept loopback localhost redirect URI with a different port (RFC 8252 §7.3)', async () => {
+    const { app } = await startServer();
+
+    mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
+    mockAxios.get.mockResolvedValue({
+      ...mocks.MOCK_AXIOS_GET_RESPONSE,
+      data: {
+        ...mocks.MOCK_AXIOS_GET_RESPONSE.data,
+        redirect_uris: ['http://localhost/callback'],
+      },
+    });
+
+    const response = await request(app).get('/oauth2/authorize').query({
+      response_type: 'code',
+      client_id: constants.FAKE_CLIENT_METADATA_URL,
+      redirect_uri: 'http://localhost:54321/callback',
+      code_challenge: 'fake-code-challenge',
+      code_challenge_method: 'S256',
+      state: 'fake-state',
+      resource: 'http://127.0.0.1:3927/tableau-mcp',
+    });
+
+    expect(response.status).toBe(302);
+  });
+
+  it('should accept loopback IPv6 redirect URI with a different port (RFC 8252 §7.3)', async () => {
+    const { app } = await startServer();
+
+    mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
+    mockAxios.get.mockResolvedValue({
+      ...mocks.MOCK_AXIOS_GET_RESPONSE,
+      data: {
+        ...mocks.MOCK_AXIOS_GET_RESPONSE.data,
+        redirect_uris: ['http://[::1]/callback'],
+      },
+    });
+
+    const response = await request(app).get('/oauth2/authorize').query({
+      response_type: 'code',
+      client_id: constants.FAKE_CLIENT_METADATA_URL,
+      redirect_uri: 'http://[::1]:54321/callback',
+      code_challenge: 'fake-code-challenge',
+      code_challenge_method: 'S256',
+      state: 'fake-state',
+      resource: 'http://127.0.0.1:3927/tableau-mcp',
+    });
+
+    expect(response.status).toBe(302);
+  });
+
+  it('should reject a loopback path mismatch even when ports differ', async () => {
+    const { app } = await startServer();
+
+    mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
+    mockAxios.get.mockResolvedValue({
+      ...mocks.MOCK_AXIOS_GET_RESPONSE,
+      data: {
+        ...mocks.MOCK_AXIOS_GET_RESPONSE.data,
+        redirect_uris: ['http://127.0.0.1/callback'],
+      },
+    });
+
+    const response = await request(app).get('/oauth2/authorize').query({
+      response_type: 'code',
+      client_id: constants.FAKE_CLIENT_METADATA_URL,
+      redirect_uri: 'http://127.0.0.1:54321/evil',
+      code_challenge: 'fake-code-challenge',
+      code_challenge_method: 'S256',
+      state: 'fake-state',
+      resource: 'http://127.0.0.1:3927/tableau-mcp',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: 'invalid_request',
+      error_description: 'Invalid redirect URI: http://127.0.0.1:54321/evil',
+    });
+  });
+
+  it('should reject cross-host loopback: request localhost against registered 127.0.0.1', async () => {
+    const { app } = await startServer();
+
+    mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
+    mockAxios.get.mockResolvedValue({
+      ...mocks.MOCK_AXIOS_GET_RESPONSE,
+      data: {
+        ...mocks.MOCK_AXIOS_GET_RESPONSE.data,
+        redirect_uris: ['http://127.0.0.1/callback'],
+      },
+    });
+
+    const response = await request(app).get('/oauth2/authorize').query({
+      response_type: 'code',
+      client_id: constants.FAKE_CLIENT_METADATA_URL,
+      redirect_uri: 'http://localhost:54321/callback',
+      code_challenge: 'fake-code-challenge',
+      code_challenge_method: 'S256',
+      state: 'fake-state',
+      resource: 'http://127.0.0.1:3927/tableau-mcp',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: 'invalid_request',
+      error_description: 'Invalid redirect URI: http://localhost:54321/callback',
+    });
+  });
+
+  it('should reject non-loopback port mismatch (https)', async () => {
+    const { app } = await startServer();
+
+    mocks.dnsResolver.mockReturnValue({ resolve4: () => ['1.2.3.4'] });
+    mockAxios.get.mockResolvedValue({
+      ...mocks.MOCK_AXIOS_GET_RESPONSE,
+      data: {
+        ...mocks.MOCK_AXIOS_GET_RESPONSE.data,
+        redirect_uris: ['https://example.com/cb'],
+      },
+    });
+
+    const response = await request(app).get('/oauth2/authorize').query({
+      response_type: 'code',
+      client_id: constants.FAKE_CLIENT_METADATA_URL,
+      redirect_uri: 'https://example.com:8443/cb',
+      code_challenge: 'fake-code-challenge',
+      code_challenge_method: 'S256',
+      state: 'fake-state',
+      resource: 'http://127.0.0.1:3927/tableau-mcp',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: 'invalid_request',
+      error_description: 'Invalid redirect URI: https://example.com:8443/cb',
+    });
+  });
+
   it('should reject authorize requests if the CIMD request fails', async () => {
     const { app } = await startServer();
 

@@ -14,6 +14,7 @@ import { clientMetadataCache } from './clientMetadataCache.js';
 import { getDnsResolver } from './dnsResolver.js';
 import { generateCodeChallenge } from './generateCodeChallenge.js';
 import { isValidRedirectUri } from './isValidRedirectUri.js';
+import { matchesRegisteredRedirectUri } from './matchesRegisteredRedirectUri.js';
 import { TABLEAU_CLOUD_SERVER_URL } from './provider.js';
 import { cimdMetadataSchema, ClientMetadata, mcpAuthorizeSchema } from './schemas.js';
 import { getSupportedScopes, parseScopes, validateScopes } from './scopes.js';
@@ -74,7 +75,10 @@ export function authorize(
         return;
       }
 
-      if (redirect_uris && !redirect_uris.includes(redirect_uri)) {
+      if (
+        redirect_uris &&
+        !redirect_uris.some((uri) => matchesRegisteredRedirectUri(redirect_uri, uri))
+      ) {
         res.status(400).json({
           error: 'invalid_request',
           error_description: `Invalid redirect URI: ${redirect_uri}`,
