@@ -1,16 +1,35 @@
+import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
 import { ZodRawShape } from 'zod';
 
 import { ZodiosValidationError } from '../errors/mcpToolError';
 import { log } from '../logging/logger';
+import { WebMcpServer } from '../server.web';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../server/oauth/scopes';
 import { getTelemetryProvider } from '../telemetry/init';
 import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder';
 import { getExceptionMessage } from '../utils/getExceptionMessage';
 import { getHttpStatus } from '../utils/getHttpStatus';
-import { ConstrainedResult, LogAndExecuteParams, Tool, ToolParams } from './tool';
-import { TableauWebRequestHandlerExtra } from './webToolContext';
+import { LogAndExecuteParams, Tool, ToolParams } from './tool';
+import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './webToolContext';
 import { ToolName } from './webToolName';
+
+export type ToolRules = Record<string, boolean | undefined>;
+
+export type ConstrainedResult<T> =
+  | {
+      type: 'success';
+      result: T;
+    }
+  | {
+      type: 'empty';
+      message: string;
+    }
+  | {
+      type: 'error';
+      message: string;
+      error?: Error;
+    };
 
 /**
  * The parameters the logAndExecute method
@@ -20,13 +39,18 @@ import { ToolName } from './webToolName';
  */
 export type WebToolLogAndExecuteParams<
   T,
-  Args extends ZodRawShape | undefined = undefined,
-> = LogAndExecuteParams<T, TableauWebRequestHandlerExtra, Args> & {
+  Args extends undefined | ZodRawShapeCompat | AnySchema,
+> = LogAndExecuteParams<T, WebMcpServer, TableauWebRequestHandlerExtra, Args> & {
   // A function that constrains the success result of the tool
   constrainSuccessResult: (result: T) => ConstrainedResult<T> | Promise<ConstrainedResult<T>>;
 };
 
-export class WebTool<Args extends ZodRawShape | undefined = undefined> extends Tool<Args> {
+export class WebTool<Args extends ZodRawShape | undefined = undefined> extends Tool<
+  WebMcpServer,
+  TableauWebRequestHandlerExtra,
+  TableauWebToolCallback<Args>,
+  Args
+> {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
 
   constructor({
@@ -37,7 +61,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     annotations,
     callback,
     disabled,
-  }: ToolParams<Args>) {
+  }: ToolParams<WebMcpServer, TableauWebRequestHandlerExtra, TableauWebToolCallback<Args>, Args>) {
     super({ server, name, description, paramsSchema, annotations, callback, disabled });
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name as ToolName);

@@ -8,7 +8,8 @@ import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { writeToStderr } from './logging/logger.js';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
 import { RestApi } from './sdks/tableau/restApi.js';
-import { Server, serverName, serverVersion } from './server.js';
+import { serverName, serverVersion } from './server.js';
+import { WebMcpServer } from './server.web.js';
 import { startExpressServer } from './server/express.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
@@ -37,7 +38,7 @@ async function startServer(): Promise<void> {
     case 'stdio': {
       await serverInfoReady;
 
-      const server = new Server();
+      const server = new WebMcpServer();
       await server.registerTools();
       server.registerRequestHandlers();
 

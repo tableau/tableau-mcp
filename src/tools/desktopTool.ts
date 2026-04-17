@@ -1,13 +1,18 @@
+import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
 import { ZodRawShape } from 'zod';
 
 import { ZodiosValidationError } from '../errors/mcpToolError';
 import { log } from '../logging/logger';
+import { DesktopMcpServer } from '../server.desktop';
 import { getTelemetryProvider } from '../telemetry/init';
 import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder';
 import { getExceptionMessage } from '../utils/getExceptionMessage';
 import { getHttpStatus } from '../utils/getHttpStatus';
-import { TableauDesktopRequestHandlerExtra } from './destkopToolContext';
+import {
+  TableauDesktopRequestHandlerExtra,
+  TableauDesktopToolCallback,
+} from './desktopToolContext';
 import { LogAndExecuteParams, Tool } from './tool';
 
 /**
@@ -18,10 +23,15 @@ import { LogAndExecuteParams, Tool } from './tool';
  */
 export type DesktopToolLogAndExecuteParams<
   T,
-  Args extends ZodRawShape | undefined = undefined,
-> = LogAndExecuteParams<T, TableauDesktopRequestHandlerExtra, Args>;
+  Args extends undefined | ZodRawShapeCompat | AnySchema,
+> = LogAndExecuteParams<T, DesktopMcpServer, TableauDesktopRequestHandlerExtra, Args>;
 
-export class DesktopTool<Args extends ZodRawShape | undefined = undefined> extends Tool<Args> {
+export class DesktopTool<Args extends ZodRawShape | undefined = undefined> extends Tool<
+  DesktopMcpServer,
+  TableauDesktopRequestHandlerExtra,
+  TableauDesktopToolCallback<Args>,
+  Args
+> {
   async logAndExecute<T>({
     extra,
     args,
@@ -87,8 +97,6 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         tool_name: this.name,
         request_id: requestId.toString(),
         session_id: sessionId ?? '',
-        podname: config.server,
-        is_hyperforce: config.isHyperforce,
         success,
         error_code: errorCode,
       });
@@ -104,27 +112,6 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
 }
 
 function getErrorResult(requestId: RequestId, error: unknown): CallToolResult {
-  if (error instanceof ZodiosValidationError) {
-    // Schema validation errors on otherwise successful API calls will not return an "error" result to the MCP client.
-    // We instead return the full response from the API with a data quality warning message
-    // that mentions why the schema validation failed.
-    // This should make it so users don't get "stuck" when our schemas are too strict or wrong.
-    // The only con is that the full response from the API might be larger than normal
-    // since a successful schema validation "trims" the response down to the shape of the schema.
-    return {
-      isError: false,
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            data: error.internalError,
-            warning: error.internalErrorDetails,
-          }),
-        },
-      ],
-    };
-  }
-
   return {
     isError: true,
     content: [

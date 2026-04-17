@@ -17,12 +17,14 @@ export const globalIdentifiers: ReadonlyArray<GlobalIdentifier> = [
     action: (value: string): BuildOptions | undefined => {
       if (value === 'default') {
         return {
+          entryPoints: ['./src/index.js'],
           outfile: './build/index.js',
         };
       }
 
       return {
-        outfile: `./build/index-${value}.js`,
+        entryPoints: [`./src/index.${value}.js`],
+        outfile: `./build/index.${value}.js`,
       };
     },
   },

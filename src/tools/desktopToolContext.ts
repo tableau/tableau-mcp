@@ -7,10 +7,11 @@ import {
   ServerRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 
+import { DesktopMcpServer } from '../server.desktop.js';
 import { TableauToolContext } from './toolContext.js';
 
 // Additional context available to all desktop tool callbacks
-export type TableauDesktopToolContext = TableauToolContext;
+export type TableauDesktopToolContext = TableauToolContext<DesktopMcpServer>;
 
 // An extension of the RequestHandlerExtra type that includes the TableauDesktopToolContext
 export type TableauDesktopRequestHandlerExtra = TableauDesktopToolContext &

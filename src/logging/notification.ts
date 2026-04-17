@@ -28,8 +28,8 @@ export function isNotificationLevel(level: unknown): level is LoggingLevel {
   return !!notificationLevels.find((l) => l === level);
 }
 
-export const setNotificationLevel = (
-  server: Server,
+export const setNotificationLevel = <TServer extends Server>(
+  server: TServer,
   level: LoggingLevel,
   { silent = false }: { silent?: boolean } = {},
 ): void => {

@@ -1,3 +1,4 @@
+import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { Result } from 'ts-results-es';
 import { z, ZodRawShape, ZodTypeAny } from 'zod';
@@ -6,35 +7,22 @@ import { McpToolError } from '../errors/mcpToolError.js';
 import { getNotificationMessageForTool, notifier } from '../logging/notification.js';
 import { Server } from '../server.js';
 import { TypeOrProvider } from '../utils/provider.js';
-import { TableauRequestHandlerExtra } from './toolContext.js';
+import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
 import { ToolName } from './toolName.js';
-import { TableauWebToolCallback } from './webToolContext.js';
-
-export type ToolRules = Record<string, boolean | undefined>;
-
-export type ConstrainedResult<T> =
-  | {
-      type: 'success';
-      result: T;
-    }
-  | {
-      type: 'empty';
-      message: string;
-    }
-  | {
-      type: 'error';
-      message: string;
-      error?: Error;
-    };
 
 /**
  * The parameters for creating a tool instance
  *
  * @typeParam Args - The schema of the tool's parameters
  */
-export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
+export type ToolParams<
+  TServer extends Server,
+  TExtra extends TableauRequestHandlerExtra<TServer>,
+  TCallback extends TableauToolCallback<TServer, TExtra, Args>,
+  Args extends undefined | ZodRawShapeCompat | AnySchema,
+> = {
   // The MCP server instance
-  server: Server;
+  server: TServer;
 
   // The name of the tool
   name: ToolName;
@@ -49,7 +37,7 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   annotations: TypeOrProvider<ToolAnnotations>;
 
   // The implementation of the tool itself
-  callback: TypeOrProvider<TableauWebToolCallback<Args>>;
+  callback: TypeOrProvider<TCallback>;
 
   // When true, the tool is not registered with the MCP server (model never sees it)
   disabled?: TypeOrProvider<boolean>;
@@ -64,8 +52,9 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
  */
 export type LogAndExecuteParams<
   T,
-  TExtra extends TableauRequestHandlerExtra,
-  Args extends ZodRawShape | undefined = undefined,
+  TServer extends Server,
+  TExtra extends TableauRequestHandlerExtra<TServer>,
+  Args extends undefined | ZodRawShapeCompat | AnySchema,
 > = {
   // The extra data provided to request handlers
   extra: TExtra;
@@ -85,13 +74,18 @@ export type LogAndExecuteParams<
  *
  * @template Args - The schema of the tool's parameters or undefined if the tool has no parameters
  */
-export class Tool<Args extends ZodRawShape | undefined = undefined> {
-  server: Server;
+export class Tool<
+  TServer extends Server,
+  TExtra extends TableauRequestHandlerExtra<TServer>,
+  TCallback extends TableauToolCallback<TServer, TExtra, Args>,
+  Args extends ZodRawShape | undefined = undefined,
+> {
+  server: TServer;
   name: ToolName;
   description: TypeOrProvider<string>;
   paramsSchema: TypeOrProvider<Args>;
   annotations: TypeOrProvider<ToolAnnotations>;
-  callback: TypeOrProvider<TableauWebToolCallback<Args>>;
+  callback: TypeOrProvider<TCallback>;
   disabled: TypeOrProvider<boolean>;
 
   constructor({
@@ -102,7 +96,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     annotations,
     callback,
     disabled,
-  }: ToolParams<Args>) {
+  }: ToolParams<TServer, TExtra, TCallback, Args>) {
     this.server = server;
     this.name = name;
     this.description = description;

@@ -10,6 +10,7 @@ import https from 'https';
 import { Config } from '../config.js';
 import { setNotificationLevel } from '../logging/notification.js';
 import { Server } from '../server.js';
+import { WebMcpServer } from '../server.web.js';
 import { createSession, getSession, Session } from '../sessions.js';
 import { latencyMiddleware } from './latencyMiddleware.js';
 import { handlePingRequest } from './middleware.js';
@@ -120,7 +121,7 @@ export async function startExpressServer({
       let transport: StreamableHTTPServerTransport;
 
       if (config.disableSessionManagement) {
-        const server = new Server();
+        const server = new WebMcpServer();
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: undefined,
         });
@@ -141,7 +142,7 @@ export async function startExpressServer({
           const clientInfo = req.body.params.clientInfo;
           transport = createSession({ clientInfo });
 
-          const server = new Server({ clientInfo });
+          const server = new WebMcpServer({ clientInfo });
           await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
         } else {
           // Invalid request

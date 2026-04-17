@@ -6,7 +6,7 @@ import {
   isToolName,
   toolGroups,
   ToolName,
-} from './tools/toolName.js';
+} from './tools/webToolName.js';
 
 const overridableVariables = [
   'INCLUDE_TOOLS',

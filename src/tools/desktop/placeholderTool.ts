@@ -1,12 +1,12 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
-import { Server } from '../../server.js';
+import { DesktopMcpServer } from '../../server.desktop.js';
 import { DesktopTool } from '../desktopTool.js';
 
 const paramsSchema = {};
 
-export const getPlaceholderTool = (server: Server): DesktopTool<typeof paramsSchema> => {
+export const getPlaceholderTool = (server: DesktopMcpServer): DesktopTool<typeof paramsSchema> => {
   const placeholderTool = new DesktopTool({
     server,
     name: 'placeholder-desktop-tool',
