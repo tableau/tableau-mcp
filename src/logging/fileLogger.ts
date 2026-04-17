@@ -1,15 +1,13 @@
 import { appendFile } from 'node:fs/promises';
 
-import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
-import { writeToStderr } from './logger.js';
 
 export type LogEntry = {
   message: unknown;
-  level: LoggingLevel;
+  level: string;
   logger: string | undefined;
 };
 
@@ -49,7 +47,9 @@ export class FileLogger {
         // appendFile will create the file if it doesn't exist
         await appendFile(logFilePath, JSON.stringify({ timestamp, ...entry }) + '\n');
       } catch (error) {
-        writeToStderr(`Failed to write to log file ${logFilePath}: ${getExceptionMessage(error)}`);
+        process.stderr.write(
+          `Failed to write to log file ${logFilePath}: ${getExceptionMessage(error)}\n`,
+        );
       }
     });
 
