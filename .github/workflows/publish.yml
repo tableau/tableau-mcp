@@ -5,13 +5,6 @@ on:
 jobs:
   publish-npm:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - mode: default
-            npm_tag:
-          - mode: desktop
-            npm_tag: desktop
     permissions:
       contents: read
       id-token: write # Needed for OIDC authentication
@@ -26,15 +19,14 @@ jobs:
           git checkout -b publish ${{ github.event.release.tag_name }}
           npm install -g npm@latest
           npm ci
-      - name: Build and publish
+      - name: Build and publish default package
         run: |
-          if [ "${{ matrix.mode }}" = "default" ]; then
-            npm run build
-            npm publish
-          else
-            npm run build -- --mode "${{ matrix.mode }}"
-            npm publish --tag "${{ matrix.npm_tag }}"
-          fi
+          npm run build
+          npm publish
+      - name: Build and publish desktop package
+        run: |
+          npm run build -- --mode desktop
+          npm publish --tag desktop
   upload-mcpb:
     runs-on: ubuntu-latest
     permissions:
