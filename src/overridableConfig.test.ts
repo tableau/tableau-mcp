@@ -409,10 +409,11 @@ describe('OverridableConfig', () => {
       });
       expect(config2.getMaxResultLimit('query-datasource')).toEqual(null);
 
+      // should fall back to environment variable if MAX_RESULT_LIMIT is invalid
       const config3 = new OverridableConfig({
         MAX_RESULT_LIMIT: '-1',
       });
-      expect(config3.getMaxResultLimit('query-datasource')).toEqual(null);
+      expect(config3.getMaxResultLimit('query-datasource')).toEqual(10);
     });
 
     it('should override MAX_RESULT_LIMITS', () => {

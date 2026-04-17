@@ -119,16 +119,11 @@ export class OverridableConfig {
     );
 
     // MAX_RESULT_LIMIT
-    let maxResultLimitNumber = envVariables.MAX_RESULT_LIMIT
-      ? parseInt(envVariables.MAX_RESULT_LIMIT)
-      : NaN;
-    if (Object.hasOwn(siteOverrides, 'MAX_RESULT_LIMIT')) {
-      maxResultLimitNumber = siteOverrides.MAX_RESULT_LIMIT
-        ? parseInt(siteOverrides.MAX_RESULT_LIMIT)
-        : NaN;
-    }
-    this.maxResultLimit =
-      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
+    this.maxResultLimit = this.getMaxResultLimitWithOverrides(
+      envVariables,
+      siteOverrides,
+      requestOverrides,
+    );
 
     // MAX_RESULT_LIMITS
     this.maxResultLimits = envVariables.MAX_RESULT_LIMITS
@@ -563,6 +558,60 @@ export class OverridableConfig {
       }
     }
     return toReturn;
+  }
+
+  getMaxResultLimitWithOverrides(
+    envVariables: Record<string, string | undefined>,
+    siteOverrides: Record<string, string | undefined> = {},
+    requestOverrides: Record<string, string> = {},
+  ): number | null {
+    // Initializing max result limit from environment variables
+    const maxResultLimitNumber = envVariables.MAX_RESULT_LIMIT
+      ? parseInt(envVariables.MAX_RESULT_LIMIT)
+      : NaN;
+    let maxResultLimit =
+      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
+    // Applying site overrides
+    if (Object.hasOwn(siteOverrides, 'MAX_RESULT_LIMIT')) {
+      const maxResultLimitOverride = siteOverrides.MAX_RESULT_LIMIT
+        ? parseInt(siteOverrides.MAX_RESULT_LIMIT)
+        : NaN;
+      if (!siteOverrides.MAX_RESULT_LIMIT) {
+        maxResultLimit = null; // default to no limits
+      } else if (!isNaN(maxResultLimitOverride) && maxResultLimitOverride > 0) {
+        maxResultLimit = maxResultLimitOverride;
+      }
+    }
+    // Applying request overrides
+    if (Object.hasOwn(requestOverrides, 'MAX_RESULT_LIMIT')) {
+      if (!this.allowedRequestOverrides.has('MAX_RESULT_LIMIT')) {
+        throw new Error('MAX_RESULT_LIMIT is not an allowed request override');
+      }
+      const restrictionType = this.allowedRequestOverrides.get('MAX_RESULT_LIMIT');
+      const maxResultLimitOverride = requestOverrides.MAX_RESULT_LIMIT
+        ? parseInt(requestOverrides.MAX_RESULT_LIMIT)
+        : NaN;
+      if (!requestOverrides.MAX_RESULT_LIMIT) {
+        if (restrictionType === 'restricted' && maxResultLimit !== null) {
+          throw new Error('MAX_RESULT_LIMIT is restricted and cannot be cleared');
+        }
+        maxResultLimit = null; // default to no limits
+      } else if (!isNaN(maxResultLimitOverride) && maxResultLimitOverride > 0) {
+        if (
+          restrictionType === 'restricted' &&
+          maxResultLimit !== null &&
+          maxResultLimitOverride > maxResultLimit
+        ) {
+          throw new Error(
+            `MAX_RESULT_LIMIT is restricted and can only be overriden to values less than ${maxResultLimit}`,
+          );
+        }
+        maxResultLimit = maxResultLimitOverride;
+      } else {
+        throw new Error('MAX_RESULT_LIMIT was provided an invalid request override value');
+      }
+    }
+    return maxResultLimit;
   }
 }
 
