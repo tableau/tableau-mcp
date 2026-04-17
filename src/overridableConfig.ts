@@ -578,7 +578,7 @@ export class OverridableConfig {
         : NaN;
       if (!siteOverrides.MAX_RESULT_LIMIT) {
         maxResultLimit = null; // default to no limits
-      } else if (!isNaN(maxResultLimitOverride) && maxResultLimitOverride > 0) {
+      } else if (maxResultLimitOverride > 0) {
         maxResultLimit = maxResultLimitOverride;
       }
     }
@@ -596,7 +596,7 @@ export class OverridableConfig {
           throw new Error('MAX_RESULT_LIMIT is restricted and cannot be cleared');
         }
         maxResultLimit = null; // default to no limits
-      } else if (!isNaN(maxResultLimitOverride) && maxResultLimitOverride > 0) {
+      } else if (maxResultLimitOverride > 0) {
         if (
           restrictionType === 'restricted' &&
           maxResultLimit !== null &&
