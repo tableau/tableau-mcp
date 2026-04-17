@@ -7,20 +7,16 @@ import {
   ServerRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { Config } from '../config.js';
-import { Server } from '../server.js';
+import { TableauToolContext } from './toolContext.js';
 
-// Additional context available to all tool callbacks
-export type TableauToolContext = {
-  config: Config;
-  server: Server;
-};
+// Additional context available to all desktop tool callbacks
+export type TableauDesktopToolContext = TableauToolContext;
 
-// An extension of the RequestHandlerExtra type that includes the TableauToolContext
-export type TableauRequestHandlerExtra = TableauToolContext &
+// An extension of the RequestHandlerExtra type that includes the TableauDesktopToolContext
+export type TableauDesktopRequestHandlerExtra = TableauDesktopToolContext &
   RequestHandlerExtra<ServerRequest, ServerNotification>;
 
 // An extension of ToolCallback that includes additional context in the extra parameter
-export type TableauToolCallback<
+export type TableauDesktopToolCallback<
   Args extends undefined | ZodRawShapeCompat | AnySchema = undefined,
-> = BaseToolCallback<CallToolResult, TableauRequestHandlerExtra, Args>;
+> = BaseToolCallback<CallToolResult, TableauDesktopRequestHandlerExtra, Args>;

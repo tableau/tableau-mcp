@@ -1,4 +1,4 @@
-import { ToolName, toolNames } from '../tools/toolName';
+import { ToolName, toolNames } from '../tools/webToolName';
 import { getRequiredApiScopesForTool } from './oauth/scopes';
 
 /**

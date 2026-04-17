@@ -6,7 +6,7 @@ import { Workbook } from '../sdks/tableau/types/workbook.js';
 import { RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES } from '../server/oauth/scopes.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getConfigWithOverrides } from '../utils/mcpSiteSettings.js';
-import { TableauRequestHandlerExtra } from './toolContext.js';
+import { TableauWebRequestHandlerExtra } from './webToolContext.js';
 
 type AllowedResult<T = unknown> =
   | { allowed: true; content?: T }
@@ -52,7 +52,7 @@ class ResourceAccessChecker {
   private async getAllowedProjectIds({
     extra,
   }: {
-    extra: TableauRequestHandlerExtra;
+    extra: TableauWebRequestHandlerExtra;
   }): Promise<Set<string> | null> {
     return (
       this._testOverrides.projectIds ??
@@ -67,7 +67,7 @@ class ResourceAccessChecker {
   private async getAllowedDatasourceIds({
     extra,
   }: {
-    extra: TableauRequestHandlerExtra;
+    extra: TableauWebRequestHandlerExtra;
   }): Promise<Set<string> | null> {
     return (
       this._testOverrides.datasourceIds ??
@@ -82,7 +82,7 @@ class ResourceAccessChecker {
   private async getAllowedWorkbookIds({
     extra,
   }: {
-    extra: TableauRequestHandlerExtra;
+    extra: TableauWebRequestHandlerExtra;
   }): Promise<Set<string> | null> {
     return (
       this._testOverrides.workbookIds ??
@@ -97,7 +97,7 @@ class ResourceAccessChecker {
   private async getAllowedTags({
     extra,
   }: {
-    extra: TableauRequestHandlerExtra;
+    extra: TableauWebRequestHandlerExtra;
   }): Promise<Set<string> | null> {
     return (
       this._testOverrides.tags ??
@@ -114,7 +114,7 @@ class ResourceAccessChecker {
     extra,
   }: {
     datasourceLuid: string;
-    extra: TableauRequestHandlerExtra;
+    extra: TableauWebRequestHandlerExtra;
   }): Promise<AllowedResult> {
     const result = await this._isDatasourceAllowed({
       datasourceLuid,
@@ -137,7 +137,7 @@ class ResourceAccessChecker {
     extra,
   }: {
     workbookId: string;
-    extra: TableauRequestHandlerExtra;
+    extra: TableauWebRequestHandlerExtra;
   }): Promise<AllowedResult<Workbook>> {
     const result = await this._isWorkbookAllowed({
       workbookId,
@@ -160,7 +160,7 @@ class ResourceAccessChecker {
     extra,
   }: {
     viewId: string;
-    extra: TableauRequestHandlerExtra;
+    extra: TableauWebRequestHandlerExtra;
   }): Promise<AllowedResult> {
     const result = await this._isViewAllowed({
       viewId,
@@ -186,7 +186,7 @@ class ResourceAccessChecker {
     extra,
   }: {
     customViewId: string;
-    extra: TableauRequestHandlerExtra;
+    extra: TableauWebRequestHandlerExtra;
   }): Promise<AllowedResult> {
     const result = await this._isCustomViewAllowed({
       customViewId,
@@ -211,7 +211,7 @@ class ResourceAccessChecker {
     extra,
   }: {
     datasourceLuid: string;
-    extra: TableauRequestHandlerExtra;
+    extra: TableauWebRequestHandlerExtra;
   }): Promise<AllowedResult> {
     const cachedResult = this._cachedDatasourceIds.get(datasourceLuid);
     if (cachedResult) {
@@ -302,7 +302,7 @@ class ResourceAccessChecker {
     extra,
   }: {
     workbookId: string;
-    extra: TableauRequestHandlerExtra;
+    extra: TableauWebRequestHandlerExtra;
   }): Promise<AllowedResult<Workbook>> {
     const cachedResult = this._cachedWorkbookIds.get(workbookId);
     if (cachedResult) {
@@ -393,7 +393,7 @@ class ResourceAccessChecker {
     extra,
   }: {
     viewId: string;
-    extra: TableauRequestHandlerExtra;
+    extra: TableauWebRequestHandlerExtra;
   }): Promise<AllowedResult> {
     const cachedResult = this._cachedViewIds.get(viewId);
     if (cachedResult) {
@@ -500,7 +500,7 @@ class ResourceAccessChecker {
     extra,
   }: {
     customViewId: string;
-    extra: TableauRequestHandlerExtra;
+    extra: TableauWebRequestHandlerExtra;
   }): Promise<AllowedResult> {
     const cachedResult = this._cachedCustomViewIds.get(customViewId);
     if (cachedResult) {

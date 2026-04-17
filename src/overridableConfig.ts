@@ -1,6 +1,12 @@
 import { ProcessEnvEx } from '../types/process-env.js';
 import { removeClaudeMcpBundleUserConfigTemplates } from './config.js';
-import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
+import {
+  getToolsFromValue,
+  isToolGroupName,
+  isToolName,
+  toolGroups,
+  ToolName,
+} from './tools/toolName.js';
 
 const overridableVariables = [
   'INCLUDE_TOOLS',
@@ -112,17 +118,11 @@ export class OverridableConfig {
     this.maxResultLimits = maxResultLimits ? getMaxResultLimits(maxResultLimits) : null;
 
     this.includeTools = includeTools
-      ? includeTools.split(',').flatMap((s) => {
-          const v = s.trim();
-          return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
-        })
+      ? includeTools.split(',').flatMap((s) => getToolsFromValue(s.trim()))
       : [];
 
     this.excludeTools = excludeTools
-      ? excludeTools.split(',').flatMap((s) => {
-          const v = s.trim();
-          return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
-        })
+      ? excludeTools.split(',').flatMap((s) => getToolsFromValue(s.trim()))
       : [];
 
     if (this.includeTools.length > 0 && this.excludeTools.length > 0) {
@@ -161,7 +161,7 @@ function getMaxResultLimits(maxResultLimits: string): Map<ToolName, number | nul
     if (isToolName(toolName)) {
       map.set(toolName, actualLimit);
     } else if (isToolGroupName(toolName)) {
-      toolGroups[toolName].forEach((toolName) => {
+      (toolGroups[toolName as keyof typeof toolGroups] as Array<ToolName>).forEach((toolName) => {
         if (!map.has(toolName)) {
           // Tool names take precedence over group names
           map.set(toolName, actualLimit);

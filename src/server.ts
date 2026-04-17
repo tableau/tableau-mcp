@@ -14,9 +14,9 @@ import { setNotificationLevel } from './logging/notification.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { Tool } from './tools/tool.js';
-import { TableauRequestHandlerExtra } from './tools/toolContext.js';
 import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
+import { TableauWebRequestHandlerExtra } from './tools/webToolContext.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings';
 import { Provider } from './utils/provider.js';
 
@@ -78,7 +78,7 @@ export class Server extends McpServer {
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
       ) => {
         const tableauToolCallback = await Provider.from(callback);
-        const tableauRequestHandlerExtra: TableauRequestHandlerExtra = {
+        const tableauRequestHandlerExtra: TableauWebRequestHandlerExtra = {
           ...extra,
           config,
           server: this,

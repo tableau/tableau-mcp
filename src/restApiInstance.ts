@@ -16,7 +16,7 @@ import {
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
-import { TableauRequestHandlerExtra } from './tools/toolContext.js';
+import { TableauWebRequestHandlerExtra } from './tools/webToolContext.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
@@ -33,7 +33,7 @@ type JwtScopes =
   | 'tableau:mcp_site_settings:read';
 
 export type RestApiArgs = Pick<
-  TableauRequestHandlerExtra,
+  TableauWebRequestHandlerExtra,
   'config' | 'server' | 'signal' | 'tableauAuthInfo' | 'setSiteLuid' | 'setUserLuid'
 > &
   (
