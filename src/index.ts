@@ -32,6 +32,12 @@ async function startServer(): Promise<void> {
     process.exit(1);
   });
 
+  log({
+    message: `Config resolved: transport=${config.transport}, auth=${config.auth}, server=${config.server}`,
+    level: 'info',
+    logger: 'startup',
+  });
+
   const notificationLevel = isNotificationLevel(config.defaultNotificationLevel)
     ? config.defaultNotificationLevel
     : 'debug';

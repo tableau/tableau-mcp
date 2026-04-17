@@ -4,6 +4,7 @@ import { compactDecrypt } from 'jose';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error/v3';
 
+import { log } from '../../logging/logger.js';
 import { mcpAccessTokenSchema, mcpAccessTokenUserOnlySchema } from './schemas.js';
 import { RefreshTokenData } from './types.js';
 
@@ -148,8 +149,12 @@ async function tryRevokeAccessToken(
           method: 'POST',
           headers: { 'X-Tableau-Auth': tableauAccessToken },
         });
-      } catch {
-        // Signout is best-effort: network errors or already-invalid sessions are ignored
+      } catch (error) {
+        log({
+          message: `Best-effort Tableau signout failed during token revocation: ${error}`,
+          level: 'debug',
+          logger: 'oauth',
+        });
       }
     }
   }
