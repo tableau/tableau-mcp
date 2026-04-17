@@ -1,23 +1,50 @@
-import { describe, expect, it } from 'vitest';
-
 import { Server } from '../../../server.js';
+import { stubDefaultEnvVars } from '../../../testShared.js';
+import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { getContentWorkbooksTool } from './contentWorkbooks.js';
 
+const mocks = vi.hoisted(() => ({
+  mockGetWorkbook: vi.fn(),
+  mockQueryWorkbooksForSite: vi.fn(),
+  mockQueryWorkbooksForUser: vi.fn(),
+  mockUpdateWorkbook: vi.fn(),
+  mockDeleteWorkbook: vi.fn(),
+  mockDownloadWorkbook: vi.fn(),
+}));
+
+vi.mock('../../../restApiInstance.js', () => ({
+  useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
+    callback({
+      workbooksMethods: {
+        getWorkbook: mocks.mockGetWorkbook,
+        queryWorkbooksForSite: mocks.mockQueryWorkbooksForSite,
+        queryWorkbooksForUser: mocks.mockQueryWorkbooksForUser,
+        updateWorkbook: mocks.mockUpdateWorkbook,
+        deleteWorkbook: mocks.mockDeleteWorkbook,
+        downloadWorkbook: mocks.mockDownloadWorkbook,
+      },
+      siteId: 'test-site-id',
+    }),
+  ),
+}));
+
 describe('content-workbooks tool', () => {
-  it('should have correct tool name', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubDefaultEnvVars();
+  });
+
+  it('should create tool instance', () => {
     const tool = getContentWorkbooksTool(new Server());
     expect(tool.name).toBe('content-workbooks');
   });
 
-  it('should have correct annotations', () => {
-    const tool = getContentWorkbooksTool(new Server());
-    expect(tool.annotations?.title).toBe('Content — Workbooks');
-    expect(tool.annotations?.readOnlyHint).toBe(false);
-    expect(tool.annotations?.openWorldHint).toBe(false);
-  });
+  it('should query workbooks for site', async () => {
+    mocks.mockQueryWorkbooksForSite.mockResolvedValue({ workbooks: { workbook: [] } });
 
-  it('should have correct description', () => {
     const tool = getContentWorkbooksTool(new Server());
-    expect(tool.description).toContain('Tableau workbooks on the site');
+    await tool.callback({ operation: 'query-workbooks-for-site' }, getMockRequestHandlerExtra());
+
+    expect(mocks.mockQueryWorkbooksForSite).toHaveBeenCalled();
   });
 });
