@@ -79,6 +79,9 @@ export class OverridableConfig {
     requestOverrides: Record<string, string> = {},
   ) {
     const envVariables = removeClaudeMcpBundleUserConfigTemplates({ ...process.env });
+    if (envVariables.ENABLE_MCP_SITE_SETTINGS === 'false') {
+      siteOverrides = {};
+    }
 
     // ALLOWED_REQUEST_OVERRIDES
     this.allowedRequestOverrides = this.getAllowedRequestOverrides(envVariables, requestOverrides);
@@ -96,18 +99,24 @@ export class OverridableConfig {
     );
 
     // DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS
-    this.disableQueryDatasourceValidationRequests =
-      envVariables.DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS === 'true';
-    if (Object.hasOwn(siteOverrides, 'DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS')) {
-      this.disableQueryDatasourceValidationRequests =
-        siteOverrides.DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS === 'true';
-    }
+    this.disableQueryDatasourceValidationRequests = this.getBooleanVariableWithOverrides(
+      'DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS',
+      envVariables,
+      siteOverrides,
+      requestOverrides,
+      false, // default value
+      true, // allowed value when restricted
+    );
 
     // DISABLE_METADATA_API_REQUESTS
-    this.disableMetadataApiRequests = envVariables.DISABLE_METADATA_API_REQUESTS === 'true';
-    if (Object.hasOwn(siteOverrides, 'DISABLE_METADATA_API_REQUESTS')) {
-      this.disableMetadataApiRequests = siteOverrides.DISABLE_METADATA_API_REQUESTS === 'true';
-    }
+    this.disableMetadataApiRequests = this.getBooleanVariableWithOverrides(
+      'DISABLE_METADATA_API_REQUESTS',
+      envVariables,
+      siteOverrides,
+      requestOverrides,
+      false, // default value
+      true, // allowed value when restricted
+    );
 
     // MAX_RESULT_LIMIT
     let maxResultLimitNumber = envVariables.MAX_RESULT_LIMIT
@@ -330,10 +339,10 @@ export class OverridableConfig {
       }
     }
 
-    // Applying any request overrides that are allowed
+    // Applying request overrides
     if (Object.hasOwn(requestOverrides, 'INCLUDE_PROJECT_IDS')) {
       if (!this.allowedRequestOverrides.has('INCLUDE_PROJECT_IDS')) {
-        throw new Error('INCLUDE_PROJECT_IDS is not permitted as a request override');
+        throw new Error('INCLUDE_PROJECT_IDS is not an allowed request override');
       }
       const restrictionType = this.allowedRequestOverrides.get('INCLUDE_PROJECT_IDS');
       if (projectIds === null) {
@@ -374,7 +383,7 @@ export class OverridableConfig {
     }
     if (Object.hasOwn(requestOverrides, 'INCLUDE_DATASOURCE_IDS')) {
       if (!this.allowedRequestOverrides.has('INCLUDE_DATASOURCE_IDS')) {
-        throw new Error('INCLUDE_DATASOURCE_IDS is not permitted as a request override');
+        throw new Error('INCLUDE_DATASOURCE_IDS is not an allowed request override');
       }
       const restrictionType = this.allowedRequestOverrides.get('INCLUDE_DATASOURCE_IDS');
       if (datasourceIds === null) {
@@ -417,7 +426,7 @@ export class OverridableConfig {
     }
     if (Object.hasOwn(requestOverrides, 'INCLUDE_TAGS')) {
       if (!this.allowedRequestOverrides.has('INCLUDE_TAGS')) {
-        throw new Error('INCLUDE_TAGS is not permitted as a request override');
+        throw new Error('INCLUDE_TAGS is not an allowed request override');
       }
       const restrictionType = this.allowedRequestOverrides.get('INCLUDE_TAGS');
       if (workbookIds === null) {
@@ -454,7 +463,7 @@ export class OverridableConfig {
     }
     if (Object.hasOwn(requestOverrides, 'INCLUDE_WORKBOOK_IDS')) {
       if (!this.allowedRequestOverrides.has('INCLUDE_WORKBOOK_IDS')) {
-        throw new Error('INCLUDE_WORKBOOK_IDS is not permitted as a request override');
+        throw new Error('INCLUDE_WORKBOOK_IDS is not an allowed request override');
       }
       const restrictionType = this.allowedRequestOverrides.get('INCLUDE_WORKBOOK_IDS');
       if (workbookIds === null) {
@@ -495,6 +504,65 @@ export class OverridableConfig {
     }
 
     return { projectIds, datasourceIds, workbookIds, tags };
+  }
+
+  getBooleanVariableWithOverrides(
+    variableName: OverridableVariable,
+    envVariables: Record<string, string | undefined>,
+    siteOverrides: Record<string, string | undefined> = {},
+    requestOverrides: Record<string, string> = {},
+    defaultValue: boolean,
+    allowedValueWhenRestricted: boolean,
+  ): boolean {
+    // Initializing boolean from environment variables
+    let toReturn = defaultValue;
+    if (envVariables[variableName] === 'true') {
+      toReturn = true;
+    } else if (envVariables[variableName] === 'false') {
+      toReturn = false;
+    }
+    // Applying site overrides
+    if (Object.hasOwn(siteOverrides, variableName)) {
+      if (!siteOverrides[variableName]) {
+        toReturn = defaultValue;
+      } else if (siteOverrides[variableName] === 'false') {
+        toReturn = false;
+      } else if (siteOverrides[variableName] === 'true') {
+        toReturn = true;
+      }
+    }
+    // Applying request overrides
+    if (
+      isRequestOverridableVariable(variableName) &&
+      Object.hasOwn(requestOverrides, variableName)
+    ) {
+      if (!this.allowedRequestOverrides.has(variableName)) {
+        throw new Error(`${variableName} is not an allowed request override`);
+      }
+      const restrictionType = this.allowedRequestOverrides.get(variableName);
+      if (!requestOverrides[variableName]) {
+        // empty string means revert to default value, check if the default value is allowed when restricted
+        if (restrictionType === 'restricted' && defaultValue !== allowedValueWhenRestricted) {
+          throw new Error(
+            `${variableName} is restricted and can only be overridden to ${allowedValueWhenRestricted}`,
+          );
+        }
+        toReturn = defaultValue;
+      } else if (requestOverrides[variableName] === 'false') {
+        if (restrictionType === 'restricted' && allowedValueWhenRestricted !== false) {
+          throw new Error(`${variableName} is restricted and can only be overridden to true`);
+        }
+        toReturn = false;
+      } else if (requestOverrides[variableName] === 'true') {
+        if (restrictionType === 'restricted' && allowedValueWhenRestricted !== true) {
+          throw new Error(`${variableName} is restricted and can only be overridden to false`);
+        }
+        toReturn = true;
+      } else {
+        throw new Error(`${variableName} was provided an invalid request override value`);
+      }
+    }
+    return toReturn;
   }
 }
 
