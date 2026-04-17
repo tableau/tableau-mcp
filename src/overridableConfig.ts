@@ -65,7 +65,14 @@ export class OverridableConfig {
    *      b. If the site override value is invalid, do not throw. Either fallback to the value of the ENVIRONMENT or
    *         revert the value of the variable to its default value / behavior (similar to the empty string / undefined case).
    *      c. If the site override value is valid, replace the value of the given variable with its value from the site override.
-   * TODO: update this
+   * 3. Using the Object.hasOwn() method, check if the given variable exists as a property in the requestOverrides object.
+   *    Only when the variable is a property in the requestOverrides object, apply the following logic:
+   *      a. If the request override variable is not listed as an allowed request override, throw an error.
+   *      b. If the request override value is an empty string, we generally revert the variable to its default value / behavior;
+   *         however, determine if the override behavior conforms to any restrictions imposed on it and throw if it does not.
+   *      c. If the request override value is invalid, throw an error.
+   *      d. If the request override value is valid, determine if the override conforms to any restrictions imposed on it and throw if it does not.
+   *         Replace the value of the given variable with its value from the request override if it does not violate any restrictions.
    */
   constructor(
     siteOverrides: Record<string, string | undefined> = {}, // TODO: make this Record<string, string> instead
@@ -82,7 +89,11 @@ export class OverridableConfig {
     this.excludeTools = excludeTools;
 
     // INCLUDE_PROJECT_IDS, INCLUDE_DATASOURCE_IDS, INCLUDE_WORKBOOK_IDS, INCLUDE_TAGS
-    this.boundedContext = this.getBoundedContextWithOverrides(envVariables, siteOverrides);
+    this.boundedContext = this.getBoundedContextWithOverrides(
+      envVariables,
+      siteOverrides,
+      requestOverrides,
+    );
 
     // DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS
     this.disableQueryDatasourceValidationRequests =
@@ -241,7 +252,9 @@ export class OverridableConfig {
   getBoundedContextWithOverrides(
     envVariables: Record<string, string | undefined>,
     siteOverrides: Record<string, string | undefined> = {},
+    requestOverrides: Record<string, string> = {},
   ): BoundedContext {
+    // Initializing bounded context from environment variables
     let projectIds = createSetFromCommaSeparatedString(envVariables.INCLUDE_PROJECT_IDS);
     let datasourceIds = createSetFromCommaSeparatedString(envVariables.INCLUDE_DATASOURCE_IDS);
     let workbookIds = createSetFromCommaSeparatedString(envVariables.INCLUDE_WORKBOOK_IDS);
@@ -265,6 +278,7 @@ export class OverridableConfig {
       );
     }
 
+    // Applying site overrides
     if (Object.hasOwn(siteOverrides, 'INCLUDE_PROJECT_IDS')) {
       if (!siteOverrides.INCLUDE_PROJECT_IDS) {
         // overriding with empty string clears current bounds
@@ -313,6 +327,170 @@ export class OverridableConfig {
         if (tagsOverrides?.size !== 0) {
           tags = tagsOverrides;
         }
+      }
+    }
+
+    // Applying any request overrides that are allowed
+    if (Object.hasOwn(requestOverrides, 'INCLUDE_PROJECT_IDS')) {
+      if (!this.allowedRequestOverrides.has('INCLUDE_PROJECT_IDS')) {
+        throw new Error('INCLUDE_PROJECT_IDS is not permitted as a request override');
+      }
+      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_PROJECT_IDS');
+      if (projectIds === null) {
+        // no bounds currently set, accept any request override that results in a valid set of project IDs
+        if (requestOverrides.INCLUDE_PROJECT_IDS) {
+          const projectIdsOverrides = createSetFromCommaSeparatedString(
+            requestOverrides.INCLUDE_PROJECT_IDS,
+          );
+          if (projectIdsOverrides!.size === 0) {
+            throw new Error('INCLUDE_PROJECT_IDS was provided an invalid request override value');
+          }
+          projectIds = projectIdsOverrides;
+        }
+      } else if (requestOverrides.INCLUDE_PROJECT_IDS) {
+        const projectIdsOverrides = createSetFromCommaSeparatedString(
+          requestOverrides.INCLUDE_PROJECT_IDS,
+        );
+        if (projectIdsOverrides!.size === 0) {
+          throw new Error('INCLUDE_PROJECT_IDS was provided an invalid request override value');
+        } else if (restrictionType === 'restricted') {
+          // when restricted, request overrides must be a subset of the current bounds
+          projectIdsOverrides!.forEach((projectId) => {
+            if (!projectIds!.has(projectId)) {
+              throw new Error(
+                'INCLUDE_PROJECT_IDS can only be overridden to a subset of the current bounds',
+              );
+            }
+          });
+        }
+        projectIds = projectIdsOverrides;
+      } else {
+        // overriding with empty string clears current bounds, but only if the restriction type is unrestricted
+        if (restrictionType === 'restricted') {
+          throw new Error('INCLUDE_PROJECT_IDS is restricted and cannot be cleared');
+        }
+        projectIds = null;
+      }
+    }
+    if (Object.hasOwn(requestOverrides, 'INCLUDE_DATASOURCE_IDS')) {
+      if (!this.allowedRequestOverrides.has('INCLUDE_DATASOURCE_IDS')) {
+        throw new Error('INCLUDE_DATASOURCE_IDS is not permitted as a request override');
+      }
+      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_DATASOURCE_IDS');
+      if (datasourceIds === null) {
+        // no bounds currently set, accept any request override that results in a valid set of datasource IDs
+        if (requestOverrides.INCLUDE_DATASOURCE_IDS) {
+          const datasourceIdsOverrides = createSetFromCommaSeparatedString(
+            requestOverrides.INCLUDE_DATASOURCE_IDS,
+          );
+          if (datasourceIdsOverrides!.size === 0) {
+            throw new Error(
+              'INCLUDE_DATASOURCE_IDS was provided an invalid request override value',
+            );
+          }
+          datasourceIds = datasourceIdsOverrides;
+        }
+      } else if (requestOverrides.INCLUDE_DATASOURCE_IDS) {
+        const datasourceIdsOverrides = createSetFromCommaSeparatedString(
+          requestOverrides.INCLUDE_DATASOURCE_IDS,
+        );
+        if (datasourceIdsOverrides!.size === 0) {
+          throw new Error('INCLUDE_DATASOURCE_IDS was provided an invalid request override value');
+        } else if (restrictionType === 'restricted') {
+          // when restricted, request overrides must be a subset of the current bounds
+          datasourceIdsOverrides!.forEach((datasourceId) => {
+            if (!datasourceIds!.has(datasourceId)) {
+              throw new Error(
+                'INCLUDE_DATASOURCE_IDS can only be overridden to a subset of the current bounds',
+              );
+            }
+          });
+        }
+        datasourceIds = datasourceIdsOverrides;
+      } else {
+        // overriding with empty string clears current bounds, but only if the restriction type is unrestricted
+        if (restrictionType === 'restricted') {
+          throw new Error('INCLUDE_DATASOURCE_IDS is restricted and cannot be cleared');
+        }
+        datasourceIds = null;
+      }
+    }
+    if (Object.hasOwn(requestOverrides, 'INCLUDE_TAGS')) {
+      if (!this.allowedRequestOverrides.has('INCLUDE_TAGS')) {
+        throw new Error('INCLUDE_TAGS is not permitted as a request override');
+      }
+      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_TAGS');
+      if (workbookIds === null) {
+        // no bounds currently set, accept any request override that results in a valid set of tags
+        if (requestOverrides.INCLUDE_TAGS) {
+          const tagsOverrides = createSetFromCommaSeparatedString(requestOverrides.INCLUDE_TAGS);
+          if (tagsOverrides!.size === 0) {
+            throw new Error('INCLUDE_TAGS was provided an invalid request override value');
+          }
+          tags = tagsOverrides;
+        }
+      } else if (requestOverrides.INCLUDE_TAGS) {
+        const tagsOverrides = createSetFromCommaSeparatedString(requestOverrides.INCLUDE_TAGS);
+        if (tagsOverrides!.size === 0) {
+          throw new Error('INCLUDE_TAGS was provided an invalid request override value');
+        } else if (restrictionType === 'restricted') {
+          // when restricted, request overrides must be a subset of the current bounds
+          tagsOverrides!.forEach((tag) => {
+            if (!tags!.has(tag)) {
+              throw new Error(
+                'INCLUDE_TAGS can only be overridden to a subset of the current bounds',
+              );
+            }
+          });
+        }
+        tags = tagsOverrides;
+      } else {
+        // overriding with empty string clears current bounds, but only if the restriction type is unrestricted
+        if (restrictionType === 'restricted') {
+          throw new Error('INCLUDE_TAGS is restricted and cannot be cleared');
+        }
+        tags = null;
+      }
+    }
+    if (Object.hasOwn(requestOverrides, 'INCLUDE_WORKBOOK_IDS')) {
+      if (!this.allowedRequestOverrides.has('INCLUDE_WORKBOOK_IDS')) {
+        throw new Error('INCLUDE_WORKBOOK_IDS is not permitted as a request override');
+      }
+      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_WORKBOOK_IDS');
+      if (workbookIds === null) {
+        // no bounds currently set, accept any request override that results in a valid set of workbook IDs
+        if (requestOverrides.INCLUDE_WORKBOOK_IDS) {
+          const workbookIdsOverrides = createSetFromCommaSeparatedString(
+            requestOverrides.INCLUDE_WORKBOOK_IDS,
+          );
+          if (workbookIdsOverrides!.size === 0) {
+            throw new Error('INCLUDE_WORKBOOK_IDS was provided an invalid request override value');
+          }
+          workbookIds = workbookIdsOverrides;
+        }
+      } else if (requestOverrides.INCLUDE_WORKBOOK_IDS) {
+        const workbookIdsOverrides = createSetFromCommaSeparatedString(
+          requestOverrides.INCLUDE_WORKBOOK_IDS,
+        );
+        if (workbookIdsOverrides!.size === 0) {
+          throw new Error('INCLUDE_WORKBOOK_IDS was provided an invalid request override value');
+        } else if (restrictionType === 'restricted') {
+          // when restricted, request overrides must be a subset of the current bounds
+          workbookIdsOverrides!.forEach((workbookId) => {
+            if (!workbookIds!.has(workbookId)) {
+              throw new Error(
+                'INCLUDE_WORKBOOK_IDS can only be overridden to a subset of the current bounds',
+              );
+            }
+          });
+        }
+        workbookIds = workbookIdsOverrides;
+      } else {
+        // overriding with empty string clears current bounds, but only if the restriction type is unrestricted
+        if (restrictionType === 'restricted') {
+          throw new Error('INCLUDE_WORKBOOK_IDS is restricted and cannot be cleared');
+        }
+        workbookIds = null;
       }
     }
 
