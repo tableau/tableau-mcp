@@ -75,7 +75,7 @@ export class OverridableConfig {
    *         Replace the value of the given variable with its value from the request override if it does not violate any restrictions.
    */
   constructor(
-    siteOverrides: Record<string, string | undefined> = {}, // TODO: make this Record<string, string> instead
+    siteOverrides: Record<string, string> = {},
     requestOverrides: Record<string, string> = {},
   ) {
     const envVariables = removeClaudeMcpBundleUserConfigTemplates({ ...process.env });
@@ -135,11 +135,11 @@ export class OverridableConfig {
 
   getAllowedRequestOverrides(
     envVariables: Record<string, string | undefined>,
-    siteOverrides: Record<string, string | undefined> = {},
+    siteOverrides: Record<string, string> = {},
   ): Map<RequestOverridableVariable, RequestOverrideRestrictionType> {
     let allowedRequestOverrides: Map<RequestOverridableVariable, RequestOverrideRestrictionType> =
       new Map();
-
+    // Initializing allowed request overrides from environment variables
     if (envVariables.ALLOWED_REQUEST_OVERRIDES) {
       envVariables.ALLOWED_REQUEST_OVERRIDES.split(',').forEach((entry) => {
         const [variable, restrictionType = 'restricted'] = entry.split(':');
@@ -148,7 +148,6 @@ export class OverridableConfig {
             `ALLOWED_REQUEST_OVERRIDES provides invalid restriction type: ${restrictionType}`,
           );
         }
-
         if (variable === '*') {
           requestOverridableVariables.forEach((v) => {
             allowedRequestOverrides.set(v, restrictionType);
@@ -162,7 +161,7 @@ export class OverridableConfig {
         }
       });
     }
-
+    // Applying site overrides
     if (
       envVariables.ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES &&
       Object.hasOwn(siteOverrides, 'ALLOWED_REQUEST_OVERRIDES')
@@ -191,7 +190,6 @@ export class OverridableConfig {
           }
         });
       }
-
       if (isValid) {
         allowedRequestOverrides = siteAllowedRequestOverrides;
       }
@@ -202,7 +200,7 @@ export class OverridableConfig {
 
   getToolsWithOverrides(
     envVariables: Record<string, string | undefined>,
-    siteOverrides: Record<string, string | undefined> = {},
+    siteOverrides: Record<string, string> = {},
   ): { includeTools: Array<ToolName>; excludeTools: Array<ToolName> } {
     let includeTools: Array<ToolName> = [];
     let excludeTools: Array<ToolName> = [];
@@ -248,7 +246,7 @@ export class OverridableConfig {
 
   getBoundedContextWithOverrides(
     envVariables: Record<string, string | undefined>,
-    siteOverrides: Record<string, string | undefined> = {},
+    siteOverrides: Record<string, string> = {},
     requestOverrides: Record<string, string> = {},
   ): BoundedContext {
     // Initializing bounded context from environment variables
@@ -497,7 +495,7 @@ export class OverridableConfig {
   getBooleanVariableWithOverrides(
     variableName: OverridableVariable,
     envVariables: Record<string, string | undefined>,
-    siteOverrides: Record<string, string | undefined> = {},
+    siteOverrides: Record<string, string> = {},
     requestOverrides: Record<string, string> = {},
     defaultValue: boolean,
     allowedValueWhenRestricted: boolean,
@@ -555,7 +553,7 @@ export class OverridableConfig {
 
   getMaxResultLimitWithOverrides(
     envVariables: Record<string, string | undefined>,
-    siteOverrides: Record<string, string | undefined> = {},
+    siteOverrides: Record<string, string> = {},
     requestOverrides: Record<string, string> = {},
   ): number | null {
     // Initializing max result limit from environment variables
@@ -564,7 +562,7 @@ export class OverridableConfig {
       isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
     // Applying site overrides
     if (Object.hasOwn(siteOverrides, 'MAX_RESULT_LIMIT')) {
-      const maxResultLimitOverride = parseInt(siteOverrides.MAX_RESULT_LIMIT ?? '');
+      const maxResultLimitOverride = parseInt(siteOverrides.MAX_RESULT_LIMIT);
       if (!siteOverrides.MAX_RESULT_LIMIT) {
         maxResultLimit = null; // default to no limits
       } else if (maxResultLimitOverride > 0) {
@@ -577,7 +575,7 @@ export class OverridableConfig {
         throw new Error('MAX_RESULT_LIMIT is not an allowed request override');
       }
       const restrictionType = this.allowedRequestOverrides.get('MAX_RESULT_LIMIT')!;
-      const maxResultLimitOverride = parseInt(requestOverrides.MAX_RESULT_LIMIT ?? '');
+      const maxResultLimitOverride = parseInt(requestOverrides.MAX_RESULT_LIMIT);
       if (!requestOverrides.MAX_RESULT_LIMIT) {
         if (restrictionType === 'restricted' && maxResultLimit !== null) {
           throw new Error('MAX_RESULT_LIMIT is restricted and cannot be cleared');
@@ -604,14 +602,14 @@ export class OverridableConfig {
   // NOTE: this.maxResultLimit must be initialized via getMaxResultLimitWithOverrides before calling this method.
   getMaxResultLimitsWithOverrides(
     envVariables: Record<string, string | undefined>,
-    siteOverrides: Record<string, string | undefined> = {},
+    siteOverrides: Record<string, string> = {},
     requestOverrides: Record<string, string> = {},
   ): Map<ToolName, number | null> {
     // Initializing tool specific limits from environment variables
     let maxResultLimits = getMaxResultLimits(envVariables.MAX_RESULT_LIMITS ?? '');
     // Applying site overrides
     if (Object.hasOwn(siteOverrides, 'MAX_RESULT_LIMITS')) {
-      const maxResultLimitsOverride = getMaxResultLimits(siteOverrides.MAX_RESULT_LIMITS ?? '');
+      const maxResultLimitsOverride = getMaxResultLimits(siteOverrides.MAX_RESULT_LIMITS);
       // Only override if the map is non empty or the default value is provided.
       if (maxResultLimitsOverride.size > 0 || !siteOverrides.MAX_RESULT_LIMITS) {
         maxResultLimits = maxResultLimitsOverride;
