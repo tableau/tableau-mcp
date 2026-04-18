@@ -1,0 +1,55 @@
+name: Version Bump Check
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    # Skip for dependabot - dependency updates don't require version bumps
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check version bump
+        run: |
+          set -euo pipefail
+
+          # Get version from PR head (current checkout)
+          PR_VERSION=$(jq -r '.version' package.json)
+          if [[ -z "$PR_VERSION" || "$PR_VERSION" == "null" ]]; then
+            echo "::error::Could not read version from package.json"
+            exit 1
+          fi
+
+          # Get version from base branch
+          BASE_REF="${{ github.base_ref }}"
+          git fetch origin "$BASE_REF" --depth=1
+          BASE_VERSION=$(git show "origin/$BASE_REF:package.json" | jq -r '.version')
+          if [[ -z "$BASE_VERSION" || "$BASE_VERSION" == "null" ]]; then
+            echo "::error::Could not read version from base branch package.json"
+            exit 1
+          fi
+
+          echo "PR version:   $PR_VERSION"
+          echo "Base version: $BASE_VERSION"
+
+          if [[ "$PR_VERSION" == "$BASE_VERSION" ]]; then
+            echo ""
+            echo "::error::Version in package.json ($PR_VERSION) has not been bumped."
+            echo ""
+            echo "Please bump the version before merging:"
+            echo "  npm run version:patch   # for bug fixes"
+            echo "  npm run version:minor   # for new features"
+            echo "  npm run version:major   # for breaking changes"
+            exit 1
+          fi
+
+          echo ""
+          echo "Version bumped from $BASE_VERSION to $PR_VERSION"
