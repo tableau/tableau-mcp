@@ -44,7 +44,7 @@ type RequestOverrideRestrictionType = 'restricted' | 'unrestricted';
 
 export class OverridableConfig {
   private maxResultLimit: number | null;
-  private maxResultLimits: Map<ToolName, number | null> | null;
+  private maxResultLimits: Map<ToolName, number | null>;
 
   allowedRequestOverrides: Map<RequestOverridableVariable, RequestOverrideRestrictionType>;
   includeTools: Array<ToolName>;
@@ -126,14 +126,11 @@ export class OverridableConfig {
     );
 
     // MAX_RESULT_LIMITS
-    this.maxResultLimits = envVariables.MAX_RESULT_LIMITS
-      ? getMaxResultLimits(envVariables.MAX_RESULT_LIMITS)
-      : null;
-    if (Object.hasOwn(siteOverrides, 'MAX_RESULT_LIMITS')) {
-      this.maxResultLimits = siteOverrides.MAX_RESULT_LIMITS
-        ? getMaxResultLimits(siteOverrides.MAX_RESULT_LIMITS)
-        : null;
-    }
+    this.maxResultLimits = this.getMaxResultLimitsWithOverrides(
+      envVariables,
+      siteOverrides,
+      requestOverrides,
+    );
   }
 
   getAllowedRequestOverrides(
@@ -201,10 +198,6 @@ export class OverridableConfig {
     }
 
     return allowedRequestOverrides;
-  }
-
-  getMaxResultLimit(toolName: ToolName): number | null {
-    return this.maxResultLimits?.get(toolName) ?? this.maxResultLimit;
   }
 
   getToolsWithOverrides(
@@ -339,7 +332,7 @@ export class OverridableConfig {
       if (!this.allowedRequestOverrides.has('INCLUDE_PROJECT_IDS')) {
         throw new Error('INCLUDE_PROJECT_IDS is not an allowed request override');
       }
-      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_PROJECT_IDS');
+      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_PROJECT_IDS')!;
       if (projectIds === null) {
         // no bounds currently set, accept any request override that results in a valid set of project IDs
         if (requestOverrides.INCLUDE_PROJECT_IDS) {
@@ -380,7 +373,7 @@ export class OverridableConfig {
       if (!this.allowedRequestOverrides.has('INCLUDE_DATASOURCE_IDS')) {
         throw new Error('INCLUDE_DATASOURCE_IDS is not an allowed request override');
       }
-      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_DATASOURCE_IDS');
+      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_DATASOURCE_IDS')!;
       if (datasourceIds === null) {
         // no bounds currently set, accept any request override that results in a valid set of datasource IDs
         if (requestOverrides.INCLUDE_DATASOURCE_IDS) {
@@ -423,7 +416,7 @@ export class OverridableConfig {
       if (!this.allowedRequestOverrides.has('INCLUDE_TAGS')) {
         throw new Error('INCLUDE_TAGS is not an allowed request override');
       }
-      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_TAGS');
+      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_TAGS')!;
       if (workbookIds === null) {
         // no bounds currently set, accept any request override that results in a valid set of tags
         if (requestOverrides.INCLUDE_TAGS) {
@@ -460,7 +453,7 @@ export class OverridableConfig {
       if (!this.allowedRequestOverrides.has('INCLUDE_WORKBOOK_IDS')) {
         throw new Error('INCLUDE_WORKBOOK_IDS is not an allowed request override');
       }
-      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_WORKBOOK_IDS');
+      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_WORKBOOK_IDS')!;
       if (workbookIds === null) {
         // no bounds currently set, accept any request override that results in a valid set of workbook IDs
         if (requestOverrides.INCLUDE_WORKBOOK_IDS) {
@@ -534,7 +527,7 @@ export class OverridableConfig {
       if (!this.allowedRequestOverrides.has(variableName)) {
         throw new Error(`${variableName} is not an allowed request override`);
       }
-      const restrictionType = this.allowedRequestOverrides.get(variableName);
+      const restrictionType = this.allowedRequestOverrides.get(variableName)!;
       if (!requestOverrides[variableName]) {
         // empty string means revert to default value, check if the default value is allowed when restricted
         if (restrictionType === 'restricted' && defaultValue !== allowedValueWhenRestricted) {
@@ -566,16 +559,12 @@ export class OverridableConfig {
     requestOverrides: Record<string, string> = {},
   ): number | null {
     // Initializing max result limit from environment variables
-    const maxResultLimitNumber = envVariables.MAX_RESULT_LIMIT
-      ? parseInt(envVariables.MAX_RESULT_LIMIT)
-      : NaN;
+    const maxResultLimitNumber = parseInt(envVariables.MAX_RESULT_LIMIT ?? '');
     let maxResultLimit =
       isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
     // Applying site overrides
     if (Object.hasOwn(siteOverrides, 'MAX_RESULT_LIMIT')) {
-      const maxResultLimitOverride = siteOverrides.MAX_RESULT_LIMIT
-        ? parseInt(siteOverrides.MAX_RESULT_LIMIT)
-        : NaN;
+      const maxResultLimitOverride = parseInt(siteOverrides.MAX_RESULT_LIMIT ?? '');
       if (!siteOverrides.MAX_RESULT_LIMIT) {
         maxResultLimit = null; // default to no limits
       } else if (maxResultLimitOverride > 0) {
@@ -587,10 +576,8 @@ export class OverridableConfig {
       if (!this.allowedRequestOverrides.has('MAX_RESULT_LIMIT')) {
         throw new Error('MAX_RESULT_LIMIT is not an allowed request override');
       }
-      const restrictionType = this.allowedRequestOverrides.get('MAX_RESULT_LIMIT');
-      const maxResultLimitOverride = requestOverrides.MAX_RESULT_LIMIT
-        ? parseInt(requestOverrides.MAX_RESULT_LIMIT)
-        : NaN;
+      const restrictionType = this.allowedRequestOverrides.get('MAX_RESULT_LIMIT')!;
+      const maxResultLimitOverride = parseInt(requestOverrides.MAX_RESULT_LIMIT ?? '');
       if (!requestOverrides.MAX_RESULT_LIMIT) {
         if (restrictionType === 'restricted' && maxResultLimit !== null) {
           throw new Error('MAX_RESULT_LIMIT is restricted and cannot be cleared');
@@ -612,6 +599,88 @@ export class OverridableConfig {
       }
     }
     return maxResultLimit;
+  }
+
+  // NOTE: this.maxResultLimit must be initialized via getMaxResultLimitWithOverrides before calling this method.
+  getMaxResultLimitsWithOverrides(
+    envVariables: Record<string, string | undefined>,
+    siteOverrides: Record<string, string | undefined> = {},
+    requestOverrides: Record<string, string> = {},
+  ): Map<ToolName, number | null> {
+    // Initializing tool specific limits from environment variables
+    let maxResultLimits = getMaxResultLimits(envVariables.MAX_RESULT_LIMITS ?? '');
+    // Applying site overrides
+    if (Object.hasOwn(siteOverrides, 'MAX_RESULT_LIMITS')) {
+      const maxResultLimitsOverride = getMaxResultLimits(siteOverrides.MAX_RESULT_LIMITS ?? '');
+      // Only override if the map is non empty or the default value is provided.
+      if (maxResultLimitsOverride.size > 0 || !siteOverrides.MAX_RESULT_LIMITS) {
+        maxResultLimits = maxResultLimitsOverride;
+      }
+    }
+    // Applying request overrides
+    if (Object.hasOwn(requestOverrides, 'MAX_RESULT_LIMITS')) {
+      if (!this.allowedRequestOverrides.has('MAX_RESULT_LIMITS')) {
+        throw new Error('MAX_RESULT_LIMITS is not an allowed request override');
+      }
+      const restrictionType = this.allowedRequestOverrides.get('MAX_RESULT_LIMITS')!;
+      const maxResultLimitsOverride = getMaxResultLimits(requestOverrides.MAX_RESULT_LIMITS);
+      // Accept any valid request override when unrestricted.
+      if (restrictionType === 'unrestricted') {
+        // Only override if the map is non empty or the default value is provided.
+        if (maxResultLimitsOverride.size === 0 && requestOverrides.MAX_RESULT_LIMITS) {
+          throw new Error('MAX_RESULT_LIMITS was provided an invalid request override value');
+        }
+        return maxResultLimitsOverride;
+      }
+      // By now this.maxResultLimit has had all override logic applied to it, and
+      // maxResultLimits has had site overrides applied to it. We must consider
+      // both of these values in conjunction when applying request override restrictions.
+      // 1. For all tool specific limits that are currently set, check if the request overrides are below it.
+      maxResultLimits.forEach((limit, toolName) => {
+        if (limit === null) {
+          // Tool is unbounded, any limit from the request override is allowed.
+          return;
+        }
+        const limitOverride = maxResultLimitsOverride.get(toolName);
+        if (limitOverride === undefined) {
+          // No tool specific limit in request override means we'll fallback to global max result limit.
+          // This is okay if the global max result limit is less than the current tool specific limit.
+          if (this.maxResultLimit === null || this.maxResultLimit > limit) {
+            throw new Error(
+              `MAX_RESULT_LIMITS request override must include a limit for ${toolName} that is less than or equal to ${limit}`,
+            );
+          }
+        } else if (limitOverride === null || limitOverride > limit) {
+          // Tool specific limit in request override is unbounded or greater than the current limit. This is not allowed.
+          throw new Error(
+            `MAX_RESULT_LIMITS request override must include a limit for ${toolName} that is less than or equal to ${limit}`,
+          );
+        }
+      });
+      // 2. For any new tool specific limits, check if the request override is below the global max result limit.
+      if (this.maxResultLimit !== null) {
+        maxResultLimitsOverride.forEach((limit, toolName) => {
+          if (maxResultLimits.has(toolName)) {
+            // not a new tool specific limit, skip
+            return;
+          }
+          if (limit === null || limit > this.maxResultLimit!) {
+            throw new Error(
+              `MAX_RESULT_LIMITS request override must include a limit for ${toolName} that is less than or equal to ${this.maxResultLimit}`,
+            );
+          }
+        });
+      }
+      maxResultLimits = maxResultLimitsOverride;
+    }
+    return maxResultLimits;
+  }
+
+  getMaxResultLimit(toolName: ToolName): number | null {
+    const maxResultLimit = this.maxResultLimits.get(toolName);
+    return maxResultLimit !== undefined
+      ? maxResultLimit // tool was explicitly set to a limit or unbounded (null)
+      : this.maxResultLimit; // tool specific limit was not set, fallback to overall max result limit
   }
 }
 

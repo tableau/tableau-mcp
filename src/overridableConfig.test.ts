@@ -428,18 +428,19 @@ describe('OverridableConfig', () => {
       expect(config.getMaxResultLimit('list-datasources')).toEqual(99);
       expect(config.getMaxResultLimit('query-datasource')).toEqual(999);
 
-      // should fall back to environment variable if MAX_RESULT_LIMITS is invalid
+      // should fall back to MAX_RESULT_LIMITS enviroment variable is invalid
       const config2 = new OverridableConfig({
         MAX_RESULT_LIMIT: '99',
         MAX_RESULT_LIMITS: 'invalid',
       });
-      expect(config2.getMaxResultLimit('query-datasource')).toEqual(99);
+      expect(config2.getMaxResultLimit('query-datasource')).toEqual(100);
 
+      // should allow unbounded tool specific limits
       const config3 = new OverridableConfig({
         MAX_RESULT_LIMIT: '99',
-        MAX_RESULT_LIMITS: 'query-datasource:invalid',
+        MAX_RESULT_LIMITS: 'query-datasource:*',
       });
-      expect(config3.getMaxResultLimit('query-datasource')).toEqual(99);
+      expect(config3.getMaxResultLimit('query-datasource')).toEqual(null);
     });
 
     it('should override DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS', () => {
