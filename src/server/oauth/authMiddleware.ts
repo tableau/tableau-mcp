@@ -2,6 +2,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
+import { log } from '../../logging/logger.js';
 import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
@@ -86,6 +87,11 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         return;
       }
 
+      log({
+        message: `Access token validation failed: ${result.error}`,
+        level: 'info',
+        logger: 'oauth',
+      });
       res.status(401).json({
         error: 'invalid_token',
         error_description: result.error,
@@ -107,6 +113,11 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       const missingScopes = [...missingMcpScopes, ...missingApiScopes];
 
       if (missingScopes.length > 0) {
+        log({
+          message: `Insufficient scopes: missing [${missingScopes.join(', ')}]`,
+          level: 'info',
+          logger: 'oauth',
+        });
         const { resourceUri } = getConfig().oauth;
         const baseUrl = new URL(resourceUri).origin;
         const requiredScopesForChallenge = [

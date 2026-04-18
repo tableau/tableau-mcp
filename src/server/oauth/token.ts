@@ -5,6 +5,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
+import { log } from '../../logging/logger.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
@@ -209,8 +210,12 @@ export function token(
           );
 
           if (tokensResult.isErr()) {
-            // If the refresh token exchange fails, reuse the existing Tableau access token
-            // which may or may not be expired.
+            log({
+              message:
+                'Tableau refresh token exchange failed, reusing existing (possibly expired) access token',
+              level: 'error',
+              logger: 'oauth',
+            });
             accessToken = await createAccessToken(
               {
                 user: tokenData.user,
@@ -276,7 +281,7 @@ export function token(
         }
       }
     } catch (error) {
-      console.error('Token endpoint error:', error);
+      log({ message: `Token endpoint error: ${error}`, level: 'error', logger: 'oauth' });
       res.status(500).json({
         error: 'server_error',
         error_description: 'Internal server error',
@@ -368,7 +373,8 @@ async function exchangeRefreshToken(
     );
 
     return Ok(result);
-  } catch {
+  } catch (error) {
+    log({ message: `Failed to exchange refresh token: ${error}`, level: 'error', logger: 'oauth' });
     return Err('Failed to exchange refresh token');
   }
 }

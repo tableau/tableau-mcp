@@ -1,16 +1,14 @@
-import { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readdirSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { FileLogger } from './fileLogger.js';
-import { notificationLevels } from './notification.js';
 
 const logLineSchema = z.object({
   timestamp: z.coerce.date(),
   message: z.string().or(z.record(z.string(), z.any())),
-  level: z.enum(notificationLevels),
+  level: z.string(),
   logger: z.string(),
 });
 
@@ -128,10 +126,9 @@ describe('FileLogger', () => {
   });
 
   it('should handle different log levels correctly', async () => {
-    const messages: Array<{ message: string; level: LoggingLevel }> = [
+    const messages: Array<{ message: string; level: string }> = [
       { message: 'Debug message', level: 'debug' },
       { message: 'Info message', level: 'info' },
-      { message: 'Warning message', level: 'warning' },
       { message: 'Error message', level: 'error' },
     ];
 

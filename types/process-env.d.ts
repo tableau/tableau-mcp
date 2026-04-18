@@ -22,7 +22,7 @@ export interface ProcessEnvEx {
   UAT_KEY_ID: string | undefined;
   JWT_ADDITIONAL_PAYLOAD: string | undefined;
   DATASOURCE_CREDENTIALS: string | undefined;
-  DEFAULT_LOG_LEVEL: string | undefined;
+  DEFAULT_NOTIFICATION_LEVEL: string | undefined;
   DISABLE_LOG_MASKING: string | undefined;
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;

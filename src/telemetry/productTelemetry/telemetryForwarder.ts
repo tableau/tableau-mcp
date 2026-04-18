@@ -90,7 +90,11 @@ async function sendTelemetryRequest(req: Request): Promise<void> {
     const res = await fetch(req);
     const body = await res.text();
     if (!res.ok) {
-      console.error(`[Telemetry] Failed: ${res.status} ${res.statusText}`, body);
+      log({
+        message: `Telemetry request failed: ${res.status} ${res.statusText} - ${body}`,
+        level: 'error',
+        logger: 'telemetry',
+      });
     }
   } catch (error) {
     log({
