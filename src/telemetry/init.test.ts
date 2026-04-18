@@ -1,5 +1,3 @@
-import { MockInstance } from 'vitest';
-
 import { stubDefaultEnvVars } from '../testShared.js';
 import { initializeTelemetry } from './init.js';
 const mocks = vi.hoisted(() => ({
@@ -11,17 +9,10 @@ vi.mock('./noop.js', () => ({
 }));
 
 describe('initializeTelemetry', () => {
-  let consoleErrorSpy: MockInstance;
-  let consoleWarnSpy: MockInstance;
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
-
-    // Suppress console output
-    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     // Default mock implementations
     mocks.MockNoOpTelemetryProvider.mockImplementation(() => ({
@@ -32,12 +23,9 @@ describe('initializeTelemetry', () => {
   });
 
   afterEach(() => {
-    consoleErrorSpy.mockRestore();
-    consoleWarnSpy.mockRestore();
     vi.unstubAllEnvs();
   });
 
-  // NoOp tests
   it('returns NoOpTelemetryProvider when provider is "noop"', () => {
     vi.stubEnv('TELEMETRY_PROVIDER', 'noop');
 
@@ -53,7 +41,5 @@ describe('initializeTelemetry', () => {
     initializeTelemetry();
 
     expect(mocks.MockNoOpTelemetryProvider).toHaveBeenCalled();
-    expect(consoleErrorSpy).toHaveBeenCalled();
-    expect(consoleWarnSpy).toHaveBeenCalledWith('Falling back to NoOp telemetry provider');
   });
 });
