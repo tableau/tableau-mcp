@@ -79,7 +79,7 @@ const toolScopeMap: Record<
   },
   'list-custom-views': {
     mcp: ['tableau:mcp:view:read'],
-    api: new Set(['tableau:content:read']),
+    api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
