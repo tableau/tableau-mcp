@@ -13,7 +13,7 @@ export const getPlaceholderTool = (server: DesktopMcpServer): DesktopTool<typeof
     description: 'This is a placeholder tool for the desktop.',
     paramsSchema,
     annotations: {
-      title: 'List Datasources',
+      title: 'Placeholder Desktop Tool',
       readOnlyHint: true,
       openWorldHint: false,
     },

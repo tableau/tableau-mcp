@@ -2,6 +2,7 @@ import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/z
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
 
+import { Config } from '../config.web.js';
 import { OverridableConfig } from '../overridableConfig.js';
 import { WebMcpServer } from '../server.web.js';
 import { TableauAuthInfo } from '../server/oauth/schemas.js';
@@ -21,8 +22,9 @@ export type TableauWebToolContext = TableauToolContext<WebMcpServer> & {
 };
 
 // An extension of the RequestHandlerExtra type that includes the TableauWebToolContext
-export type TableauWebRequestHandlerExtra = TableauWebToolContext &
-  RequestHandlerExtra<ServerRequest, ServerNotification>;
+export type TableauWebRequestHandlerExtra = TableauWebToolContext & {
+  config: Config;
+} & RequestHandlerExtra<ServerRequest, ServerNotification>;
 
 // An extension of ToolCallback that includes additional context in the extra parameter
 export type TableauWebToolCallback<

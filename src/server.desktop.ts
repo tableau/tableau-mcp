@@ -6,7 +6,7 @@ import {
   SetLevelRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { getConfig } from './config.web.js';
+import { getDesktopConfig } from './config.desktop.js';
 import { setNotificationLevel } from './logging/notification.js';
 import { Server } from './server';
 import { DesktopTool } from './tools/tool.desktop.js';
@@ -16,7 +16,7 @@ import { Provider } from './utils/provider.js';
 
 export class DesktopMcpServer extends Server {
   registerTools = async (): Promise<void> => {
-    const config = getConfig();
+    const config = getDesktopConfig();
 
     for (const {
       name,
