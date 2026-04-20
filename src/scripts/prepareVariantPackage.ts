@@ -33,12 +33,14 @@ const variantPackageJsonOverrides = {
   },
 } satisfies Record<PackageVariant, PackageJson>;
 
-const packageJsonSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  bin: z.record(z.string()),
-  exports: z.record(z.string()),
-});
+const packageJsonSchema = z
+  .object({
+    name: z.string(),
+    description: z.string(),
+    bin: z.record(z.string()),
+    exports: z.record(z.string()),
+  })
+  .passthrough();
 
 type PackageJson = z.infer<typeof packageJsonSchema>;
 
