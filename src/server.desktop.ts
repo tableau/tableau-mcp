@@ -9,9 +9,9 @@ import {
 import { getConfig } from './config.js';
 import { setNotificationLevel } from './logging/notification.js';
 import { Server } from './server';
-import { DesktopTool } from './tools/desktopTool.js';
-import { TableauDesktopRequestHandlerExtra } from './tools/desktopToolContext.js';
-import { toolFactories } from './tools/desktopTools.js';
+import { DesktopTool } from './tools/tool.desktop.js';
+import { TableauDesktopRequestHandlerExtra } from './tools/toolContext.desktop.js';
+import { toolFactories } from './tools/tools.desktop.js';
 import { Provider } from './utils/provider.js';
 
 export class DesktopMcpServer extends Server {
@@ -63,7 +63,3 @@ export class DesktopMcpServer extends Server {
     return allTools;
   };
 }
-
-export const exportedForTesting = {
-  DesktopMcpServer,
-};

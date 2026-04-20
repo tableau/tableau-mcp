@@ -6,7 +6,7 @@
  */
 
 import { getConfig } from '../../config.js';
-import type { ToolName } from '../../tools/webToolName.js';
+import type { ToolName } from '../../tools/toolName.web.js';
 
 /**
  * MCP Scopes supported by the Tableau MCP server

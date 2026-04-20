@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
 import { DesktopMcpServer } from '../../server.desktop.js';
-import { DesktopTool } from '../desktopTool.js';
+import { DesktopTool } from '../tool.desktop.js';
 
 const paramsSchema = {};
 

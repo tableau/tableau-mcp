@@ -11,8 +11,8 @@ import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForw
 import { getExceptionMessage } from '../utils/getExceptionMessage';
 import { getHttpStatus } from '../utils/getHttpStatus';
 import { LogAndExecuteParams, Tool, ToolParams } from './tool';
-import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './webToolContext';
-import { ToolName } from './webToolName';
+import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './toolContext.web';
+import { ToolName } from './toolName.web';
 
 export type ToolRules = Record<string, boolean | undefined>;
 

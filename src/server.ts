@@ -5,7 +5,8 @@ import pkg from '../package.json';
 import { setNotificationLevel } from './logging/notification.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 
-export const serverName = 'tableau-mcp';
+export const serverName =
+  import.meta.env.BUILD_MODE === 'desktop' ? 'tableau-mcp-desktop' : 'tableau-mcp';
 export const serverVersion = pkg.version;
 export const userAgent = `${serverName}/${serverVersion}`;
 

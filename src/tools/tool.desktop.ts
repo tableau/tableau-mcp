@@ -9,11 +9,11 @@ import { getTelemetryProvider } from '../telemetry/init';
 import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder';
 import { getExceptionMessage } from '../utils/getExceptionMessage';
 import { getHttpStatus } from '../utils/getHttpStatus';
+import { LogAndExecuteParams, Tool } from './tool';
 import {
   TableauDesktopRequestHandlerExtra,
   TableauDesktopToolCallback,
-} from './desktopToolContext';
-import { LogAndExecuteParams, Tool } from './tool';
+} from './toolContext.desktop';
 
 /**
  * The parameters the logAndExecute method

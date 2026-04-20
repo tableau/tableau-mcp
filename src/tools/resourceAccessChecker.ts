@@ -6,7 +6,7 @@ import { Workbook } from '../sdks/tableau/types/workbook.js';
 import { RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES } from '../server/oauth/scopes.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getConfigWithOverrides } from '../utils/mcpSiteSettings.js';
-import { TableauWebRequestHandlerExtra } from './webToolContext.js';
+import { TableauWebRequestHandlerExtra } from './toolContext.web.js';
 
 type AllowedResult<T = unknown> =
   | { allowed: true; content?: T }

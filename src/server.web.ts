@@ -12,10 +12,10 @@ import { setNotificationLevel } from './logging/notification.js';
 import { Server } from './server';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
-import { WebTool } from './tools/webTool';
-import { TableauWebRequestHandlerExtra } from './tools/webToolContext.js';
-import { toolNames } from './tools/webToolName.js';
-import { toolFactories } from './tools/webTools.js';
+import { WebTool } from './tools/tool.web.js';
+import { TableauWebRequestHandlerExtra } from './tools/toolContext.web.js';
+import { toolNames } from './tools/toolName.web.js';
+import { toolFactories } from './tools/tools.web.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings';
 import { Provider } from './utils/provider.js';
 
@@ -129,7 +129,3 @@ export class WebMcpServer extends Server {
     return toolsToRegister;
   };
 }
-
-export const exportedForTesting = {
-  WebMcpServer,
-};

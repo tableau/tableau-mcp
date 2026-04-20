@@ -16,7 +16,7 @@ import {
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, userAgent } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
-import { TableauWebRequestHandlerExtra } from './tools/webToolContext.js';
+import { TableauWebRequestHandlerExtra } from './tools/toolContext.web.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';

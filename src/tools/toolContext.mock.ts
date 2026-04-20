@@ -1,7 +1,7 @@
 import { getConfig } from '../config.js';
 import { OverridableConfig } from '../overridableConfig.js';
 import { Server } from '../server.js';
-import { TableauWebRequestHandlerExtra } from './webToolContext.js';
+import { TableauWebRequestHandlerExtra } from './toolContext.web.js';
 
 export function getMockRequestHandlerExtra(): TableauWebRequestHandlerExtra {
   return {
