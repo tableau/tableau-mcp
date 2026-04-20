@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { stubDefaultEnvVars } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
@@ -52,7 +52,7 @@ describe('listCustomViewsTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const listCustomViewsTool = getListCustomViewsTool(new Server());
+    const listCustomViewsTool = getListCustomViewsTool(new WebMcpServer());
     expect(listCustomViewsTool.name).toBe('list-custom-views');
     expect(listCustomViewsTool.description).toContain(
       'Retrieves a list of custom views for a Tableau workbook including their metadata such as name, owner, and the view they are found in.',
@@ -155,7 +155,7 @@ async function getToolResult(params: {
   workbookId: string;
   filter: string;
 }): Promise<CallToolResult> {
-  const listCustomViewsTool = getListCustomViewsTool(new Server());
+  const listCustomViewsTool = getListCustomViewsTool(new WebMcpServer());
   const callback = await Provider.from(listCustomViewsTool.callback);
   return await callback(
     { workbookId: params.workbookId, filter: params.filter, pageSize: undefined, limit: undefined },

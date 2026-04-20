@@ -3,16 +3,18 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { RestApiArgs, useRestApi } from '../../../restApiInstance.js';
 import { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
-import { Server } from '../../../server.js';
+import { WebMcpServer } from '../../../server.web.js';
 import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { ConstrainedResult, Tool } from '../../tool.js';
+import { ConstrainedResult, WebTool } from '../../tool.web.js';
 
 const toolName = 'list-pulse-metric-subscriptions';
 const paramsSchema = {};
 
-export const getListPulseMetricSubscriptionsTool = (server: Server): Tool<typeof paramsSchema> => {
-  const listPulseMetricSubscriptionsTool = new Tool({
+export const getListPulseMetricSubscriptionsTool = (
+  server: WebMcpServer,
+): WebTool<typeof paramsSchema> => {
+  const listPulseMetricSubscriptionsTool = new WebTool({
     server,
     name: toolName,
     description: `

@@ -12,7 +12,7 @@ import { getExceptionMessage } from '../utils/getExceptionMessage';
 import { getHttpStatus } from '../utils/getHttpStatus';
 import { LogAndExecuteParams, Tool, ToolParams } from './tool';
 import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './toolContext.web';
-import { ToolName } from './toolName.web';
+import { WebToolName } from './toolName.web';
 
 export type ToolRules = Record<string, boolean | undefined>;
 
@@ -47,6 +47,7 @@ export type WebToolLogAndExecuteParams<
 
 export class WebTool<Args extends ZodRawShape | undefined = undefined> extends Tool<
   WebMcpServer,
+  WebToolName,
   TableauWebRequestHandlerExtra,
   TableauWebToolCallback<Args>,
   Args
@@ -61,10 +62,16 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     annotations,
     callback,
     disabled,
-  }: ToolParams<WebMcpServer, TableauWebRequestHandlerExtra, TableauWebToolCallback<Args>, Args>) {
+  }: ToolParams<
+    WebMcpServer,
+    WebToolName,
+    TableauWebRequestHandlerExtra,
+    TableauWebToolCallback<Args>,
+    Args
+  >) {
     super({ server, name, description, paramsSchema, annotations, callback, disabled });
 
-    this.requiredApiScopes = getRequiredApiScopesForTool(name as ToolName);
+    this.requiredApiScopes = getRequiredApiScopesForTool(name as WebToolName);
   }
 
   async logAndExecute<T>({

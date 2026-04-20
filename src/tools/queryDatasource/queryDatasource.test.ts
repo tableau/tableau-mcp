@@ -5,7 +5,7 @@ import { Err, Ok } from 'ts-results-es';
 import { McpToolError } from '../../errors/mcpToolError.js';
 import { queryOutputSchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import {
   stubDefaultEnvVars,
   testProductVersion,
@@ -81,14 +81,14 @@ describe('queryDatasourceTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+    const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
     expect(queryDatasourceTool.name).toBe('query-datasource');
     expect(queryDatasourceTool.description).toBeInstanceOf(Provider);
     expect(queryDatasourceTool.paramsSchema).not.toBeUndefined();
   });
 
   it('should return error when query args fail validation', async () => {
-    const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+    const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
     const callback = await Provider.from(queryDatasourceTool.callback);
 
     const result = await callback(
@@ -338,7 +338,7 @@ describe('queryDatasourceTool', () => {
             ],
           }),
         );
-      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
       const callback = await Provider.from(queryDatasourceTool.callback);
       const result = await callback(
         {
@@ -385,7 +385,7 @@ describe('queryDatasourceTool', () => {
             ],
           }),
         );
-      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
       const callback = await Provider.from(queryDatasourceTool.callback);
       const result = await callback(
         {
@@ -425,7 +425,7 @@ describe('queryDatasourceTool', () => {
       // Mock main query only
       mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
 
-      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
       const callback = await Provider.from(queryDatasourceTool.callback);
       const result = await callback(
         {
@@ -464,7 +464,7 @@ describe('queryDatasourceTool', () => {
       // Mock main query only
       mocks.mockQueryDatasource.mockResolvedValueOnce(new Ok(mockMainQueryResult));
 
-      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
       const callback = await Provider.from(queryDatasourceTool.callback);
       const result = await callback(
         {
@@ -518,7 +518,7 @@ describe('queryDatasourceTool', () => {
           }),
         );
 
-      const queryDatasourceTool = getQueryDatasourceTool(new Server(), testProductVersion);
+      const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
       const callback = await Provider.from(queryDatasourceTool.callback);
       const result = await callback(
         {
@@ -590,7 +590,7 @@ async function getToolResult({
   productVersion?: ProductVersion;
 } = {}): Promise<CallToolResult> {
   const queryDatasourceTool = getQueryDatasourceTool(
-    new Server(),
+    new WebMcpServer(),
     productVersion ?? testProductVersion,
   );
   const callback = await Provider.from(queryDatasourceTool.callback);

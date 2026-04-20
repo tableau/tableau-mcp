@@ -10,11 +10,11 @@ import {
 } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { Tool } from '../tool.js';
+import { WebTool } from '../tool.web.js';
 
 const paramsSchema = {
   viewId: z.string(),
@@ -35,10 +35,10 @@ const paramsSchema = {
 const MIN_VERSION_FOR_SVG = '2026.2.0';
 
 export const getGetViewImageTool = (
-  server: Server,
+  server: WebMcpServer,
   tableauServerVersion: ProductVersion,
-): Tool<typeof paramsSchema> => {
-  const getViewImageTool = new Tool({
+): WebTool<typeof paramsSchema> => {
+  const getViewImageTool = new WebTool({
     server,
     name: 'get-view-image',
     description: [

@@ -17,6 +17,7 @@ import { ToolName } from './toolName.js';
  */
 export type ToolParams<
   TServer extends Server,
+  TToolName extends ToolName,
   TExtra extends TableauRequestHandlerExtra<TServer>,
   TCallback extends TableauToolCallback<TServer, TExtra, Args>,
   Args extends undefined | ZodRawShapeCompat | AnySchema,
@@ -25,7 +26,7 @@ export type ToolParams<
   server: TServer;
 
   // The name of the tool
-  name: ToolName;
+  name: TToolName;
 
   // The description of the tool
   description: TypeOrProvider<string>;
@@ -74,14 +75,15 @@ export type LogAndExecuteParams<
  *
  * @template Args - The schema of the tool's parameters or undefined if the tool has no parameters
  */
-export class Tool<
+export abstract class Tool<
   TServer extends Server,
+  TToolName extends ToolName,
   TExtra extends TableauRequestHandlerExtra<TServer>,
   TCallback extends TableauToolCallback<TServer, TExtra, Args>,
   Args extends ZodRawShape | undefined = undefined,
 > {
   server: TServer;
-  name: ToolName;
+  name: TToolName;
   description: TypeOrProvider<string>;
   paramsSchema: TypeOrProvider<Args>;
   annotations: TypeOrProvider<ToolAnnotations>;
@@ -96,7 +98,7 @@ export class Tool<
     annotations,
     callback,
     disabled,
-  }: ToolParams<TServer, TExtra, TCallback, Args>) {
+  }: ToolParams<TServer, TToolName, TExtra, TCallback, Args>) {
     this.server = server;
     this.name = name;
     this.description = description;

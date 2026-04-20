@@ -20,7 +20,7 @@ export const toolNames = [
   'revoke-access-token',
   'reset-consent',
 ] as const;
-export type ToolName = (typeof toolNames)[number];
+export type WebToolName = (typeof toolNames)[number];
 
 export const toolGroupNames = [
   'datasource',
@@ -53,9 +53,9 @@ export const toolGroups = {
   ],
   'content-exploration': ['search-content'],
   'token-management': ['revoke-access-token', 'reset-consent'],
-} as const satisfies Record<ToolGroupName, Array<ToolName>>;
+} as const satisfies Record<ToolGroupName, Array<WebToolName>>;
 
-export function isToolName(value: unknown): value is ToolName {
+export function isToolName(value: unknown): value is WebToolName {
   return !!toolNames.find((name) => name === value);
 }
 
@@ -63,7 +63,7 @@ export function isToolGroupName(value: unknown): value is ToolGroupName {
   return !!toolGroupNames.find((name) => name === value);
 }
 
-export function getToolsFromValue(value: string): Array<ToolName> {
+export function getToolsFromValue(value: string): Array<WebToolName> {
   if (isToolName(value)) {
     return [value];
   }

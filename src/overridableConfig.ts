@@ -5,7 +5,7 @@ import {
   isToolGroupName,
   isToolName,
   toolGroups,
-  ToolName,
+  WebToolName,
 } from './tools/toolName.web.js';
 
 const overridableVariables = [
@@ -43,17 +43,17 @@ export type BoundedContext = {
 
 export class OverridableConfig {
   private maxResultLimit: number | null;
-  private maxResultLimits: Map<ToolName, number | null> | null;
+  private maxResultLimits: Map<WebToolName, number | null> | null;
 
-  includeTools: Array<ToolName>;
-  excludeTools: Array<ToolName>;
+  includeTools: Array<WebToolName>;
+  excludeTools: Array<WebToolName>;
 
   disableQueryDatasourceValidationRequests: boolean;
   disableMetadataApiRequests: boolean;
 
   boundedContext: BoundedContext;
 
-  getMaxResultLimit(toolName: ToolName): number | null {
+  getMaxResultLimit(toolName: WebToolName): number | null {
     return this.maxResultLimits?.get(toolName) ?? this.maxResultLimit;
   }
 
@@ -147,8 +147,8 @@ function createSetFromCommaSeparatedString(value: string | undefined): Set<strin
   );
 }
 
-function getMaxResultLimits(maxResultLimits: string): Map<ToolName, number | null> {
-  const map = new Map<ToolName, number | null>();
+function getMaxResultLimits(maxResultLimits: string): Map<WebToolName, number | null> {
+  const map = new Map<WebToolName, number | null>();
   if (!maxResultLimits) {
     return map;
   }
@@ -161,12 +161,14 @@ function getMaxResultLimits(maxResultLimits: string): Map<ToolName, number | nul
     if (isToolName(toolName)) {
       map.set(toolName, actualLimit);
     } else if (isToolGroupName(toolName)) {
-      (toolGroups[toolName as keyof typeof toolGroups] as Array<ToolName>).forEach((toolName) => {
-        if (!map.has(toolName)) {
-          // Tool names take precedence over group names
-          map.set(toolName, actualLimit);
-        }
-      });
+      (toolGroups[toolName as keyof typeof toolGroups] as Array<WebToolName>).forEach(
+        (toolName) => {
+          if (!map.has(toolName)) {
+            // Tool names take precedence over group names
+            map.set(toolName, actualLimit);
+          }
+        },
+      );
     }
   });
 

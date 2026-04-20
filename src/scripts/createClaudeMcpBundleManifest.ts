@@ -9,7 +9,7 @@ import { z } from 'zod';
 
 import packageJson from '../../package.json';
 import { ProcessEnvEx } from '../../types/process-env.js';
-import { toolNames } from '../tools/toolName.js';
+import { toolNames } from '../tools/toolName.web.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

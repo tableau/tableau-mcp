@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { stubDefaultEnvVars, testProductVersion } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
@@ -61,7 +61,7 @@ describe('getViewImageTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const getViewImageTool = getGetViewImageTool(new Server(), testProductVersionWithSvg);
+    const getViewImageTool = getGetViewImageTool(new WebMcpServer(), testProductVersionWithSvg);
     expect(getViewImageTool.name).toBe('get-view-image');
     expect(getViewImageTool.description).toContain(
       'Retrieves an image of the specified view in a Tableau workbook.',
@@ -256,7 +256,7 @@ async function getToolResult(params: {
   productVersion?: ProductVersion;
 }): Promise<CallToolResult> {
   const getViewImageTool = getGetViewImageTool(
-    new Server(),
+    new WebMcpServer(),
     params.productVersion ?? testProductVersionWithSvg,
   );
   const callback = await Provider.from(getViewImageTool.callback);

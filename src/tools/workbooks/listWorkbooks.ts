@@ -5,10 +5,10 @@ import { z } from 'zod';
 import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
-import { ConstrainedResult, Tool } from '../tool.js';
+import { ConstrainedResult, WebTool } from '../tool.web.js';
 import { parseAndValidateWorkbooksFilterString } from './workbooksFilterUtils.js';
 
 const paramsSchema = {
@@ -17,8 +17,8 @@ const paramsSchema = {
   limit: z.number().gt(0).optional(),
 };
 
-export const getListWorkbooksTool = (server: Server): Tool<typeof paramsSchema> => {
-  const listWorkbooksTool = new Tool({
+export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+  const listWorkbooksTool = new WebTool({
     server,
     name: 'list-workbooks',
     description: `

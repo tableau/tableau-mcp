@@ -3,7 +3,7 @@ import { Ok } from 'ts-results-es';
 
 import { PulseDisabledError, PulseNotAvailableError } from '../../../errors/mcpToolError.js';
 import { PulseInsightBundleType } from '../../../sdks/tableau/types/pulse.js';
-import { Server } from '../../../server.js';
+import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -170,7 +170,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   );
 
   it('should have correct tool properties', () => {
-    const tool = getGeneratePulseMetricValueInsightBundleTool(new Server());
+    const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
     expect(tool.name).toBe('generate-pulse-metric-value-insight-bundle');
     expect(tool.description).toContain(
       'Generate an insight bundle for the current aggregated value',
@@ -231,7 +231,7 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   async function getToolResult(bundleType?: PulseInsightBundleType): Promise<CallToolResult> {
-    const tool = getGeneratePulseMetricValueInsightBundleTool(new Server());
+    const tool = getGeneratePulseMetricValueInsightBundleTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
     return await callback({ bundleRequest, bundleType }, getMockRequestHandlerExtra());
   }

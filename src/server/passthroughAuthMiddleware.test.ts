@@ -1,4 +1,4 @@
-import { ToolName, toolNames } from '../tools/toolName.web';
+import { toolNames, WebToolName } from '../tools/toolName.web';
 import { getRequiredApiScopesForTool } from './oauth/scopes';
 
 /**
@@ -11,7 +11,7 @@ import { getRequiredApiScopesForTool } from './oauth/scopes';
  *
  * See: https://github.com/tableau/tableau-mcp/pull/241/changes#r2942474421
  */
-const TOOLS_WITHOUT_API_SCOPES_WITH_PASSTHROUGH_GUARD: ReadonlyArray<ToolName> = [
+const TOOLS_WITHOUT_API_SCOPES_WITH_PASSTHROUGH_GUARD: ReadonlyArray<WebToolName> = [
   // Token lifecycle tool: no Tableau REST API call. The tool callback explicitly returns an error
   // for Passthrough auth and undefined tableauAuthInfo, so passthrough callers are rejected.
   'revoke-access-token',

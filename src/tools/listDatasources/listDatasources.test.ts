@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
@@ -29,7 +29,7 @@ describe('listDatasourcesTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const listDatasourcesTool = getListDatasourcesTool(new Server());
+    const listDatasourcesTool = getListDatasourcesTool(new WebMcpServer());
     expect(listDatasourcesTool.name).toBe('list-datasources');
     expect(listDatasourcesTool.description).toContain('Retrieves a list of published data sources');
     expect(listDatasourcesTool.paramsSchema).toMatchObject({ filter: expect.any(Object) });
@@ -123,7 +123,7 @@ describe('listDatasourcesTool', () => {
 });
 
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
-  const listDatasourcesTool = getListDatasourcesTool(new Server());
+  const listDatasourcesTool = getListDatasourcesTool(new WebMcpServer());
   const callback = await Provider.from(listDatasourcesTool.callback);
   return await callback(
     { filter: params.filter, pageSize: undefined, limit: undefined },

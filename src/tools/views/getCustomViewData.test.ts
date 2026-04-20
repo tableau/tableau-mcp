@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { stubDefaultEnvVars } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
@@ -49,7 +49,7 @@ describe('getCustomViewDataTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const tool = getGetCustomViewDataTool(new Server());
+    const tool = getGetCustomViewDataTool(new WebMcpServer());
     expect(tool.name).toBe('get-custom-view-data');
     expect(tool.description).toContain('custom view');
     expect(tool.paramsSchema).toMatchObject({
@@ -105,7 +105,7 @@ async function getToolResult({
   customViewId: string;
   viewFilters?: Record<string, string>;
 }): Promise<CallToolResult> {
-  const tool = getGetCustomViewDataTool(new Server());
+  const tool = getGetCustomViewDataTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
     {

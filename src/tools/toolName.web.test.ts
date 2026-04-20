@@ -6,9 +6,9 @@ import {
   ToolGroupName,
   toolGroupNames,
   toolGroups,
-  ToolName,
   toolNames,
-} from './toolName.js';
+  WebToolName,
+} from './toolName.web.js';
 
 describe('toolName', () => {
   it('should validate each tool belongs to a group', () => {
@@ -25,7 +25,7 @@ describe('toolName', () => {
         }
         return acc;
       },
-      {} as Record<ToolName, Set<ToolGroupName>>,
+      {} as Record<WebToolName, Set<ToolGroupName>>,
     );
 
     for (const toolName of toolNames) {

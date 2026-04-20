@@ -6,7 +6,7 @@
  */
 
 import { getConfig } from '../../config.js';
-import type { ToolName } from '../../tools/toolName.web.js';
+import type { WebToolName } from '../../tools/toolName.web.js';
 
 /**
  * MCP Scopes supported by the Tableau MCP server
@@ -60,7 +60,7 @@ export function isValidScope(scope: string): scope is McpScope {
 }
 
 const toolScopeMap: Record<
-  ToolName,
+  WebToolName,
   { mcp: ReadonlyArray<McpScope>; api: ReadonlySet<TableauApiScope> }
 > = {
   'list-datasources': {
@@ -226,7 +226,7 @@ export function validateScopes(
  * @param endpoint - The MCP endpoint or tool name
  * @returns Array of required scopes for the endpoint
  */
-export function getRequiredScopesForTool(toolName: ToolName): ReadonlyArray<McpScope> {
+export function getRequiredScopesForTool(toolName: WebToolName): ReadonlyArray<McpScope> {
   const oauthConfig = getConfig().oauth;
   if (!oauthConfig || !oauthConfig.enforceScopes) {
     return [];
@@ -235,7 +235,7 @@ export function getRequiredScopesForTool(toolName: ToolName): ReadonlyArray<McpS
   return toolScopeMap[toolName].mcp;
 }
 
-export function getRequiredApiScopesForTool(toolName: ToolName): ReadonlyArray<TableauApiScope> {
+export function getRequiredApiScopesForTool(toolName: WebToolName): ReadonlyArray<TableauApiScope> {
   return Array.from(toolScopeMap[toolName].api);
 }
 

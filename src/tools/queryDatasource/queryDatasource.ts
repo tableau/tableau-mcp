@@ -17,13 +17,13 @@ import {
   querySchema,
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { Tool, ToolRules } from '../tool.js';
+import { ToolRules, WebTool } from '../tool.web.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { queryDatasourceToolDescription20253 } from './descriptions/queryDescription.2025.3.js';
 import { queryDatasourceToolDescription20261 } from './descriptions/queryDescription.2026.1.js';
@@ -50,11 +50,11 @@ type QueryDatasourceResult = QueryOutput & {
 };
 
 export const getQueryDatasourceTool = (
-  server: Server,
+  server: WebMcpServer,
   productVersion: ProductVersion,
-): Tool<typeof paramsSchema> => {
+): WebTool<typeof paramsSchema> => {
   const rules = getQueryDatasourceRules(productVersion);
-  const queryDatasourceTool = new Tool({
+  const queryDatasourceTool = new WebTool({
     server,
     name: 'query-datasource',
     description: new Provider(() =>

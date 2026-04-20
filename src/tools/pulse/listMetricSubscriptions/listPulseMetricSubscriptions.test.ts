@@ -4,7 +4,7 @@ import { Ok } from 'ts-results-es';
 import { getConfig } from '../../../config.js';
 import { PulseDisabledError, PulseNotAvailableError } from '../../../errors/mcpToolError.js';
 import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
-import { Server } from '../../../server.js';
+import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
@@ -45,7 +45,9 @@ describe('listPulseMetricSubscriptionsTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const listPulseMetricSubscriptionsTool = getListPulseMetricSubscriptionsTool(new Server());
+    const listPulseMetricSubscriptionsTool = getListPulseMetricSubscriptionsTool(
+      new WebMcpServer(),
+    );
     expect(listPulseMetricSubscriptionsTool.name).toBe('list-pulse-metric-subscriptions');
     expect(listPulseMetricSubscriptionsTool.description).toContain(
       'Retrieves a list of published Pulse Metric Subscriptions for the current user',
@@ -179,13 +181,13 @@ describe('listPulseMetricSubscriptionsTool', () => {
 });
 
 async function getToolResult(): Promise<CallToolResult> {
-  const listPulseMetricSubscriptionsTool = getListPulseMetricSubscriptionsTool(new Server());
+  const listPulseMetricSubscriptionsTool = getListPulseMetricSubscriptionsTool(new WebMcpServer());
   const callback = await Provider.from(listPulseMetricSubscriptionsTool.callback);
   return await callback({}, getMockRequestHandlerExtra());
 }
 
-function getServer(): InstanceType<typeof Server> {
-  const server = new Server();
+function getServer(): InstanceType<typeof WebMcpServer> {
+  const server = new WebMcpServer();
   server.tool = vi.fn();
   return server;
 }

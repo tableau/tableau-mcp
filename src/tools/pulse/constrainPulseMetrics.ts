@@ -1,6 +1,6 @@
 import { BoundedContext } from '../../overridableConfig.js';
 import { PulseMetric } from '../../sdks/tableau/types/pulse.js';
-import { ConstrainedResult } from '../tool.js';
+import { ConstrainedResult } from '../tool.web.js';
 
 export function constrainPulseMetrics({
   metrics,

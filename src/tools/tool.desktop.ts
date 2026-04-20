@@ -14,6 +14,7 @@ import {
   TableauDesktopRequestHandlerExtra,
   TableauDesktopToolCallback,
 } from './toolContext.desktop';
+import { DesktopToolName } from './toolName.desktop';
 
 /**
  * The parameters the logAndExecute method
@@ -28,6 +29,7 @@ export type DesktopToolLogAndExecuteParams<
 
 export class DesktopTool<Args extends ZodRawShape | undefined = undefined> extends Tool<
   DesktopMcpServer,
+  DesktopToolName,
   TableauDesktopRequestHandlerExtra,
   TableauDesktopToolCallback<Args>,
   Args
