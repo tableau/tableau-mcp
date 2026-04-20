@@ -28,6 +28,7 @@ jobs:
           npm run build -- --variant desktop
           npm run prepare:desktop-publish
           npm publish
+          git restore package.json README.md
   upload-mcpb:
     runs-on: ubuntu-latest
     permissions:
