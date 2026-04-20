@@ -2,7 +2,7 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import dotenv from 'dotenv';
 
-import { getConfig } from './config.web.js';
+import { getDesktopConfig } from './config.desktop.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { writeToStderr } from './logging/logger.js';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
@@ -11,7 +11,7 @@ import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 async function startServer(): Promise<void> {
   dotenv.config();
-  const config = getConfig();
+  const config = getDesktopConfig();
 
   const logLevel = isNotificationLevel(config.defaultLogLevel) ? config.defaultLogLevel : 'debug';
   if (config.loggers.has('fileLogger')) {
@@ -31,10 +31,6 @@ async function startServer(): Promise<void> {
 
   setNotificationLevel(server, logLevel);
   notifier.info(server, `${server.name} v${server.version} running on stdio`);
-
-  if (config.disableLogMasking) {
-    writeToStderr('⚠️ Log masking is disabled!');
-  }
 }
 
 startServer().catch((error) => {
