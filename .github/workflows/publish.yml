@@ -25,8 +25,9 @@ jobs:
           npm publish
       - name: Build and publish desktop package
         run: |
-          npm run build -- --mode desktop
-          npm publish --tag desktop
+          npm run build -- --variant desktop
+          npm run prepare:desktop-publish
+          npm publish
   upload-mcpb:
     runs-on: ubuntu-latest
     permissions:

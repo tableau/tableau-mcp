@@ -1,8 +1,8 @@
 import { BuildOptions } from 'esbuild';
 
-import { BuildMode } from './buildModes';
+import { Variant } from './variants';
 
-export type GlobalIdentifierName = 'BUILD_MODE';
+export type GlobalIdentifierName = 'BUILD_VARIANT';
 
 type GlobalIdentifier = {
   name: GlobalIdentifierName;
@@ -12,8 +12,8 @@ type GlobalIdentifier = {
 
 export const globalIdentifiers: ReadonlyArray<GlobalIdentifier> = [
   {
-    name: 'BUILD_MODE',
-    defaultValue: 'default' satisfies BuildMode,
+    name: 'BUILD_VARIANT',
+    defaultValue: 'default' satisfies Variant,
     action: (value: string): BuildOptions | undefined => {
       if (value === 'default') {
         return {

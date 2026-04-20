@@ -1,5 +1,5 @@
 interface ImportMeta {
   readonly env: {
-    readonly BUILD_MODE: string;
+    readonly BUILD_VARIANT: string;
   };
 }

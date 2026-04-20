@@ -3,22 +3,22 @@
 import { build, BuildOptions, BuildResult } from 'esbuild';
 import { chmod, mkdir, rm } from 'fs/promises';
 
-import { buildModes, isBuildMode } from './buildModes';
 import { GlobalIdentifierName, globalIdentifiers } from './globalIndentifiers';
+import { isVariant, variants } from './variants';
 
 const dev = process.argv.includes('--dev');
-const mode = process.argv.includes('--mode')
-  ? process.argv[process.argv.indexOf('--mode') + 1]
+const variant = process.argv.includes('--variant')
+  ? process.argv[process.argv.indexOf('--variant') + 1]
   : 'default';
 
-if (!isBuildMode(mode)) {
-  throw new Error(`Invalid build mode: ${mode}. Expected one of: ${buildModes.join(', ')}`);
+if (!isVariant(variant)) {
+  throw new Error(`Invalid variant: ${variant}. Expected one of: ${variants.join(', ')}`);
 }
 
 (async () => {
   await rm('./build', { recursive: true, force: true });
 
-  const result = await buildForMode(mode);
+  const result = await buildForVariant(variant);
 
   for (const error of result.errors) {
     console.log(`❌ ${error.text}`);
@@ -50,11 +50,11 @@ if (!isBuildMode(mode)) {
   }
 })();
 
-async function buildForMode(mode: string): Promise<BuildResult<BuildOptions>> {
-  console.log(`🏗️ Building ${mode}...`);
+async function buildForVariant(variant: string): Promise<BuildResult<BuildOptions>> {
+  console.log(`🏗️ Building ${variant}...`);
 
   const env: Record<GlobalIdentifierName, string> = {
-    BUILD_MODE: mode,
+    BUILD_VARIANT: variant,
   };
 
   const buildOptions: BuildOptions = {
@@ -71,7 +71,7 @@ async function buildForMode(mode: string): Promise<BuildResult<BuildOptions>> {
     },
     outfile: './build/index.js',
     define: {
-      // 'import.meta.env.BUILD_MODE': JSON.stringify(env.BUILD_MODE),
+      // 'import.meta.env.BUILD_VARIANT': JSON.stringify(env.BUILD_VARIANT),
       ...globalIdentifiers.reduce<Record<`import.meta.env.${string}`, string>>(
         (acc, { name, defaultValue }) => {
           acc[`import.meta.env.${name}`] = JSON.stringify(env[name] ?? defaultValue);
