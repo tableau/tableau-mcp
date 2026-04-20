@@ -4,7 +4,7 @@ import { compactDecrypt } from 'jose';
 import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
-import { getConfig } from '../../config.js';
+import { getConfig } from '../../config.web.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import {
   mcpAccessTokenSchema,

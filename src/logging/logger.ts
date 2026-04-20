@@ -1,4 +1,4 @@
-import { getConfig } from '../config.js';
+import { getConfig } from '../config.web.js';
 import { getFileLogger, LogEntry } from './fileLogger.js';
 
 export const loggerTypes = ['fileLogger', 'appLogger'] as const;

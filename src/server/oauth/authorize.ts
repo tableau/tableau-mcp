@@ -5,7 +5,7 @@ import { isSSRFSafeURL } from 'ssrfcheck';
 import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
-import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
+import { getConfig, ONE_DAY_IN_MS } from '../../config.web.js';
 import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
 import { parseUrl } from '../../utils/parseUrl.js';
 import { retry } from '../../utils/retry.js';

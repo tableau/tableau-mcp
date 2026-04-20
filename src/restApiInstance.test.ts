@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getConfig } from './config.js';
+import { getConfig } from './config.web.js';
 import { notifier } from './logging/notification.js';
 import {
   getRequestErrorInterceptor,

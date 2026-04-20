@@ -5,7 +5,7 @@
  * for scope validation and management.
  */
 
-import { getConfig } from '../../config.js';
+import { getConfig } from '../../config.web.js';
 import type { WebToolName } from '../../tools/toolName.web.js';
 
 /**

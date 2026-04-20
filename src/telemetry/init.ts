@@ -4,7 +4,7 @@
 
 import { resolve } from 'path';
 
-import { getConfig } from '../config.js';
+import { getConfig } from '../config.web.js';
 import { NoOpTelemetryProvider } from './noop.js';
 import { TelemetryProvider } from './types.js';
 

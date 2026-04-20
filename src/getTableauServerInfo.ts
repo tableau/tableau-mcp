@@ -1,7 +1,7 @@
 import { ZodiosError } from '@zodios/core';
 import { fromError, isZodErrorLike } from 'zod-validation-error/v3';
 
-import { getConfig } from './config.js';
+import { getConfig } from './config.web.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { ServerInfo } from './sdks/tableau/types/serverInfo.js';
 import { ExpiringMap } from './utils/expiringMap.js';

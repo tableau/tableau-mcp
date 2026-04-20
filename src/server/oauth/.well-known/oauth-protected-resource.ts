@@ -1,6 +1,6 @@
 import express from 'express';
 
-import { getConfig } from '../../../config.js';
+import { getConfig } from '../../../config.web.js';
 import { serverName } from '../../../server.js';
 import { getSupportedScopes } from '../scopes.js';
 

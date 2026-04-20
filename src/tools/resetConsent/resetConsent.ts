@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { getConfig } from '../../config.js';
+import { getConfig } from '../../config.web.js';
 import { McpToolError } from '../../errors/mcpToolError.js';
 import { WebMcpServer } from '../../server.web.js';
 import invariant from '../../utils/invariant.js';

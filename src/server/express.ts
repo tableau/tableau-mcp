@@ -7,7 +7,7 @@ import fs, { existsSync } from 'fs';
 import http from 'http';
 import https from 'https';
 
-import { Config } from '../config.js';
+import { Config } from '../config.web.js';
 import { setNotificationLevel } from '../logging/notification.js';
 import { Server } from '../server.js';
 import { WebMcpServer } from '../server.web.js';

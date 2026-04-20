@@ -1,5 +1,5 @@
 import { ProcessEnvEx } from '../types/process-env.js';
-import { removeClaudeMcpBundleUserConfigTemplates } from './config.js';
+import { removeClaudeMcpBundleUserConfigTemplates } from './config.web.js';
 import {
   getToolsFromValue,
   isToolGroupName,
@@ -161,14 +161,12 @@ function getMaxResultLimits(maxResultLimits: string): Map<WebToolName, number | 
     if (isToolName(toolName)) {
       map.set(toolName, actualLimit);
     } else if (isToolGroupName(toolName)) {
-      (toolGroups[toolName as keyof typeof toolGroups] as Array<WebToolName>).forEach(
-        (toolName) => {
-          if (!map.has(toolName)) {
-            // Tool names take precedence over group names
-            map.set(toolName, actualLimit);
-          }
-        },
-      );
+      toolGroups[toolName].forEach((toolName) => {
+        if (!map.has(toolName)) {
+          // Tool names take precedence over group names
+          map.set(toolName, actualLimit);
+        }
+      });
     }
   });
 

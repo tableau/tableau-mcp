@@ -3,7 +3,7 @@ import http from 'http';
 import request from 'supertest';
 import { Ok } from 'ts-results-es';
 
-import { getConfig } from '../../../src/config.js';
+import { getConfig } from '../../../src/config.web.js';
 import { RestApi } from '../../../src/sdks/tableau/restApi.js';
 import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';

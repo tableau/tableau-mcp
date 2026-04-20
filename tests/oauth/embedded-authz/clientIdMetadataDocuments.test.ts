@@ -3,7 +3,7 @@ import http from 'http';
 import request from 'supertest';
 import { MockedFunction, vi } from 'vitest';
 
-import { getConfig, ONE_DAY_IN_MS } from '../../../src/config.js';
+import { getConfig, ONE_DAY_IN_MS } from '../../../src/config.web.js';
 import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { clientMetadataCache } from '../../../src/server/oauth/clientMetadataCache.js';

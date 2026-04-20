@@ -2,7 +2,7 @@ import express from 'express';
 import http from 'http';
 import request from 'supertest';
 
-import { getConfig } from '../../../src/config.js';
+import { getConfig } from '../../../src/config.web.js';
 import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { resetEnv, setEnv } from './testEnv.js';

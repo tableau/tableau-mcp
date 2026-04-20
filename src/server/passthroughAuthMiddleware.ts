@@ -1,7 +1,7 @@
 import { NextFunction, RequestHandler, Response } from 'express';
 import { z } from 'zod';
 
-import { getConfig } from '../config';
+import { getConfig } from '../config.web';
 import { RestApi } from '../sdks/tableau/restApi';
 import { ExpiringMap } from '../utils/expiringMap';
 import { AuthenticatedRequest } from './oauth/types';

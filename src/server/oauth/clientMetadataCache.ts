@@ -1,4 +1,4 @@
-import { TEN_MINUTES_IN_MS } from '../../config.js';
+import { TEN_MINUTES_IN_MS } from '../../config.web.js';
 import { ExpiringMap } from '../../utils/expiringMap.js';
 import { ClientMetadata } from './schemas.js';
 

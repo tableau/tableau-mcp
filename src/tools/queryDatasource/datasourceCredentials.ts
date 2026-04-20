@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { getConfig } from '../../config.js';
+import { getConfig } from '../../config.web.js';
 
 const schema = z.record(
   z.string().nonempty(),

@@ -1,6 +1,6 @@
 import { Resolver } from 'dns/promises';
 
-import { getConfig } from '../../config.js';
+import { getConfig } from '../../config.web.js';
 
 let dnsResolver: Resolver | null = null;
 

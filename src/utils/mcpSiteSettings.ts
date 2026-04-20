@@ -1,4 +1,4 @@
-import { Config, getConfig } from '../config.js';
+import { Config, getConfig } from '../config.web.js';
 import { getOverridableConfig, OverridableConfig } from '../overridableConfig.js';
 import { RestApiArgs, useRestApi } from '../restApiInstance.js';
 import { McpSiteSettings } from '../sdks/tableau/types/mcpSiteSettings.js';

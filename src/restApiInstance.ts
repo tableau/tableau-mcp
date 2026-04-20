@@ -1,6 +1,6 @@
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 
-import { Config, getConfig } from './config.js';
+import { Config, getConfig } from './config.web.js';
 import { notifier, shouldNotifyWhenLevelIsAtLeast } from './logging/notification.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
 import {

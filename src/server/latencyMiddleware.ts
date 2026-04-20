@@ -1,7 +1,7 @@
 import express from 'express';
 import { performance } from 'perf_hooks';
 
-import { getConfig } from '../config.js';
+import { getConfig } from '../config.web.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
 import { NoOpTelemetryProvider } from '../telemetry/noop.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';

@@ -1,4 +1,4 @@
-import { exportedForTesting, ONE_HOUR_IN_MS, TEN_MINUTES_IN_MS } from './config.js';
+import { exportedForTesting, ONE_HOUR_IN_MS, TEN_MINUTES_IN_MS } from './config.web.js';
 import { stubDefaultEnvVars } from './testShared.js';
 
 describe('Config', () => {

@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
-import { getConfig } from '../../../config.js';
+import { getConfig } from '../../../config.web.js';
 import { PulseDisabledError, PulseNotAvailableError } from '../../../errors/mcpToolError.js';
 import type { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../server.web.js';

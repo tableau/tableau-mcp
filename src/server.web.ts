@@ -6,7 +6,7 @@ import {
   SetLevelRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { getConfig } from './config.js';
+import { getConfig } from './config.web.js';
 import { getTableauServerInfo } from './getTableauServerInfo';
 import { setNotificationLevel } from './logging/notification.js';
 import { Server } from './server';

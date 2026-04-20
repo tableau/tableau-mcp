@@ -7,7 +7,7 @@ import {
   ServerRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { Config } from '../config.js';
+import { Config } from '../config.web.js';
 import { Server } from '../server.js';
 
 // Additional context available to all tool callbacks

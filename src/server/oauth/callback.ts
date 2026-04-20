@@ -3,7 +3,7 @@ import express from 'express';
 import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
-import { getConfig } from '../../config.js';
+import { getConfig } from '../../config.web.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';

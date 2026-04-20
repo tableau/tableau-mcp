@@ -2,7 +2,7 @@ import { createPrivateKey, createPublicKey, KeyObject } from 'crypto';
 import express, { RequestHandler } from 'express';
 import { readFileSync } from 'fs';
 
-import { getConfig } from '../../config.js';
+import { getConfig } from '../../config.web.js';
 import { oauthAuthorizationServer } from './.well-known/oauth-authorization-server.js';
 import { oauthProtectedResource } from './.well-known/oauth-protected-resource.js';
 import {

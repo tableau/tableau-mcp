@@ -1,4 +1,4 @@
-import { getConfig } from '../config.js';
+import { getConfig } from '../config.web.js';
 import { OverridableConfig } from '../overridableConfig.js';
 import { WebMcpServer } from '../server.web.js';
 import { TableauWebRequestHandlerExtra } from './toolContext.web.js';
