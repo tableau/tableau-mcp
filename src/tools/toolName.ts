@@ -2,11 +2,13 @@ export const toolNames = [
   'list-datasources',
   'list-workbooks',
   'list-views',
+  'list-custom-views',
   'query-datasource',
   'get-datasource-metadata',
   'get-workbook',
   'get-view-data',
   'get-view-image',
+  'get-custom-view-data',
   'list-all-pulse-metric-definitions',
   'list-pulse-metric-definitions-from-definition-ids',
   'list-pulse-metrics-from-metric-definition-id',
@@ -16,6 +18,7 @@ export const toolNames = [
   'generate-pulse-insight-brief',
   'search-content',
   'revoke-access-token',
+  'reset-consent',
 ] as const;
 export type ToolName = (typeof toolNames)[number];
 
@@ -32,7 +35,13 @@ export type ToolGroupName = (typeof toolGroupNames)[number];
 export const toolGroups = {
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
   workbook: ['list-workbooks', 'get-workbook'],
-  view: ['list-views', 'get-view-data', 'get-view-image'],
+  view: [
+    'list-views',
+    'list-custom-views',
+    'get-view-data',
+    'get-view-image',
+    'get-custom-view-data',
+  ],
   pulse: [
     'list-all-pulse-metric-definitions',
     'list-pulse-metric-definitions-from-definition-ids',
@@ -43,7 +52,7 @@ export const toolGroups = {
     'generate-pulse-insight-brief',
   ],
   'content-exploration': ['search-content'],
-  'token-management': ['revoke-access-token'],
+  'token-management': ['revoke-access-token', 'reset-consent'],
 } as const satisfies Record<ToolGroupName, Array<ToolName>>;
 
 export function isToolName(value: unknown): value is ToolName {

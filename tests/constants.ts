@@ -1,7 +1,7 @@
 import invariant from '../src/utils/invariant.js';
 
 export type Datasource = { id: string };
-export type Workbook = { id: string; defaultViewId: string };
+export type Workbook = { id: string; defaultView: { id: string; customViewId: string } };
 
 export type PulseDefinition = { id: string; metrics: Array<PulseMetric> };
 export type PulseMetric = { id: string };
@@ -39,7 +39,10 @@ const environmentData: EnvironmentData = {
           workbooks: {
             Superstore: {
               id: '222ea993-9391-4910-a167-56b3d19b4e3b',
-              defaultViewId: '9460abfe-a6b2-49d1-b998-39e1ebcc55ce',
+              defaultView: {
+                id: '9460abfe-a6b2-49d1-b998-39e1ebcc55ce',
+                customViewId: '1db3a121-51ac-4435-b533-3053e698dfc8',
+              },
             },
           },
           pulse: {
@@ -62,7 +65,10 @@ const environmentData: EnvironmentData = {
           workbooks: {
             Superstore: {
               id: 'c1beaa20-0b98-43d8-a5de-0bff82bf6a8f',
-              defaultViewId: '6e341026-2d87-4a80-b238-86dafa75c2f6',
+              defaultView: {
+                id: '6e341026-2d87-4a80-b238-86dafa75c2f6',
+                customViewId: '33052443-3d7e-458b-a725-52b0e5ee6ef0',
+              },
             },
           },
           pulse: {
@@ -85,7 +91,10 @@ const environmentData: EnvironmentData = {
           workbooks: {
             Superstore: {
               id: '44bb9110-456f-4b26-a82f-4d9d9271f1af',
-              defaultViewId: 'f19c1ed1-7294-45e8-818e-dbc6814bb19c',
+              defaultView: {
+                id: 'f19c1ed1-7294-45e8-818e-dbc6814bb19c',
+                customViewId: 'e55e08c2-72d1-4627-be48-614d02f17bd8',
+              },
             },
           },
           pulse: {
