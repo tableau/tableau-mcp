@@ -6,7 +6,6 @@ import { ZodiosValidationError } from '../errors/mcpToolError';
 import { log } from '../logging/logger';
 import { DesktopMcpServer } from '../server.desktop';
 import { getTelemetryProvider } from '../telemetry/init';
-import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder';
 import { getExceptionMessage } from '../utils/getExceptionMessage';
 import { getHttpStatus } from '../utils/getHttpStatus';
 import { LogAndExecuteParams, Tool } from './tool';
@@ -40,24 +39,16 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
     callback,
     getSuccessResult,
   }: DesktopToolLogAndExecuteParams<T, Args>): Promise<CallToolResult> {
-    const { config, requestId, sessionId } = extra;
+    const { requestId } = extra;
 
     this.logInvocation({ requestId, args });
 
-    const productTelemetryForwarder = getProductTelemetry(
-      config.productTelemetryEndpoint,
-      config.productTelemetryEnabled,
-      config.server,
-    );
-
-    let success = false;
     let errorCode = ''; // HTTP status category: "4xx", "5xx", or empty for successful calls
     let toolResult: CallToolResult;
 
     try {
       const result = await callback();
       if (result.isOk()) {
-        success = true;
         toolResult = getSuccessResult
           ? getSuccessResult(result.value)
           : {
@@ -95,13 +86,6 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     } finally {
-      productTelemetryForwarder.send('tool_call', {
-        tool_name: this.name,
-        request_id: requestId.toString(),
-        session_id: sessionId ?? '',
-        success,
-        error_code: errorCode,
-      });
       // Record custom metric for this tool call
       const telemetry = getTelemetryProvider();
       telemetry.recordMetric('mcp.tool.calls', 1, {

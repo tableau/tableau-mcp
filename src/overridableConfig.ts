@@ -1,5 +1,5 @@
 import { ProcessEnvEx } from '../types/process-env.js';
-import { removeClaudeMcpBundleUserConfigTemplates } from './config.web.js';
+import { removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import {
   getToolsFromValue,
   isToolGroupName,
