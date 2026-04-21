@@ -150,10 +150,19 @@ data source][tab-connect-ds].
 
 <hr />
 
+## `ENABLE_MCP_SITE_SETTINGS`
+
+When `true`, the Tableau MCP server will fetch and apply site settings overrides for any user session, see [Site Settings](site-settings.md).
+
+- Default: `true`
+- When `false`, Tableau MCP server will not fetch or apply site settings overrides.
+
+<hr />
+
 ## `INCLUDE_TOOLS`
 
 A comma-separated list of tool or tool group names to include in the server. Only these tools will
-be available.
+be available. This variable is site overridable, see [Site Settings](site-settings.md).
 
 - Default: Empty string (_all_ are included)
 - For a list of available tools and groups, see
@@ -165,7 +174,7 @@ be available.
 ## `EXCLUDE_TOOLS`
 
 A comma-separated list of tool or tool group names to exclude from the server. All other tools will
-be available.
+be available. This variable is site overridable, see [Site Settings](site-settings.md).
 
 - Default: Empty string (_none_ are excluded)
 - Cannot be provided with `INCLUDE_TOOLS`.
@@ -184,13 +193,13 @@ The maximum timeout for requests to the Tableau Server REST API.
 ## `MAX_RESULT_LIMIT`
 
 The maximum number of results that every tool with a `limit` parameter can return when no
-tool-specific max result limit is set in the [`MAX_RESULT_LIMITS`](#max_result_limits) environment
-variable.
+tool-specific max result limit is set in the [`MAX_RESULT_LIMITS`](#max_result_limits)
+variable. This variable is site overridable, see [Site Settings](site-settings.md).
 
 :::warning
 
-Take care when setting this value and be sure to set appropriate tool-specific limits in the
-[`MAX_RESULT_LIMITS`](#max_result_limits) environment variable.
+Take care when setting this value and be sure to set appropriate tool-specific limits using the
+[`MAX_RESULT_LIMITS`](#max_result_limits) variable.
 
 :::
 
@@ -202,7 +211,7 @@ Take care when setting this value and be sure to set appropriate tool-specific l
 ## `MAX_RESULT_LIMITS`
 
 A comma-separated list of tool names (or tool group names) and the maximum number of results that
-each tool (or tools in the group) can return.
+each tool (or tools in the group) can return. This variable is site overridable, see [Site Settings](site-settings.md).
 
 :::info
 
@@ -229,7 +238,7 @@ This means that:
   means that the `list-datasources` tool can return up to 20 data sources but the `query-datasource`
   tool can only return up to 1000 results.
 - If a tool-specific limit is not set, the global limit specified by the
-  [`MAX_RESULT_LIMIT`](#max_result_limit) environment variable will be used instead.
+  [`MAX_RESULT_LIMIT`](#max_result_limit) variable will be used instead.
 - Each limit must be a positive number.
 
 <hr />
@@ -238,7 +247,7 @@ This means that:
 
 Disables requests that are made to the VizQl Data Service for validating queries in the
 [`query-datasource`](../../tools/data-qna/query-datasource.md) tool. Does not disable the ability to
-query the datasource.
+query the datasource. This variable is site overridable, see [Site Settings](site-settings.md).
 
 - Default: `false`
 - When `true`, skips validation of queries against metadata results and validation of SET and MATCH
@@ -263,6 +272,7 @@ Disable validation of SET and MATCH filter values in the
 
 Disables `graphql` requests to the Tableau Metadata API in the
 [`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool.
+This variable is site overridable, see [Site Settings](site-settings.md).
 
 - Default: `false`
 - When `true`, skips requests to the `graphql` endpoint that provides additional context to field
@@ -299,6 +309,17 @@ variable.
 
 - Default: `1` hour
 - Must be a positive number between `1` and `168` (7 days).
+
+<hr />
+
+## `MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES`
+
+When site settings are enabled by the Tableau MCP server, settings will be fetched for the given site and applied to each session.
+Rather than fetching site settings with every request, the MCP server will cache the settings and only check it again after the interval
+specified by this environment variable.
+
+- Default: `10` minutes
+- Must be a positive number between `1` and `1440` (1 day).
 
 <hr />
 
