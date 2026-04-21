@@ -10,7 +10,7 @@ import {
   webToolNames,
 } from './toolName.web.js';
 
-describe('toolName', () => {
+describe('WebToolName', () => {
   it('should validate each tool belongs to a group', () => {
     const toolNamesToGroups = Object.entries(webToolGroups).reduce(
       (acc, [group, tools]) => {
