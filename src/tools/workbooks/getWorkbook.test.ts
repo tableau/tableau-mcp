@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { stubDefaultEnvVars } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
@@ -44,7 +44,7 @@ describe('getWorkbookTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const getWorkbookTool = getGetWorkbookTool(new Server());
+    const getWorkbookTool = getGetWorkbookTool(new WebMcpServer());
     expect(getWorkbookTool.name).toBe('get-workbook');
     expect(getWorkbookTool.description).toContain(
       'Retrieves information about the specified workbook',
@@ -140,7 +140,7 @@ describe('getWorkbookTool', () => {
 });
 
 async function getToolResult(params: { workbookId: string }): Promise<CallToolResult> {
-  const getWorkbookTool = getGetWorkbookTool(new Server());
+  const getWorkbookTool = getGetWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(getWorkbookTool.callback);
   return await callback(params, getMockRequestHandlerExtra());
 }

@@ -1,7 +1,7 @@
 import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -26,7 +26,7 @@ describe('revokeAccessTokenTool', () => {
   });
 
   it('should create a tool instance with correct properties', async () => {
-    const tool = getRevokeAccessTokenTool(new Server());
+    const tool = getRevokeAccessTokenTool(new WebMcpServer());
     const annotations = await Provider.from(tool.annotations);
     expect(tool.name).toBe('revoke-access-token');
     expect(tool.paramsSchema).toEqual({});
@@ -50,7 +50,7 @@ describe('revokeAccessTokenTool', () => {
     it('should be disabled when AUTH is not oauth (default PAT mode)', async () => {
       // Default test env uses PAT auth, not oauth
       delete process.env.OAUTH_ISSUER;
-      const tool = getRevokeAccessTokenTool(new Server());
+      const tool = getRevokeAccessTokenTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(true);
     });
 
@@ -59,7 +59,7 @@ describe('revokeAccessTokenTool', () => {
       process.env.AUTH = 'oauth';
       process.env.OAUTH_ISSUER = MOCK_ISSUER;
       process.env.OAUTH_EMBEDDED_AUTHZ_SERVER = 'false';
-      const tool = getRevokeAccessTokenTool(new Server());
+      const tool = getRevokeAccessTokenTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(false);
     });
   });
@@ -277,7 +277,7 @@ describe('revokeAccessTokenTool', () => {
 async function getToolResult(
   extra: ReturnType<typeof getMockRequestHandlerExtra>,
 ): Promise<CallToolResult> {
-  const tool = getRevokeAccessTokenTool(new Server());
+  const tool = getRevokeAccessTokenTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback({}, extra);
 }

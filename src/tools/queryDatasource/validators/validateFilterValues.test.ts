@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Query } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
-import { Server } from '../../../server.js';
+import { WebMcpServer } from '../../../server.web.js';
 import { getFuzzyMatches, validateFilterValues } from './validateFilterValues.js';
 
 // Mock the VizqlDataServiceMethods
@@ -26,7 +26,7 @@ describe('validateFilterValues', () => {
     };
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,
@@ -49,7 +49,7 @@ describe('validateFilterValues', () => {
     };
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,
@@ -85,7 +85,7 @@ describe('validateFilterValues', () => {
     );
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,
@@ -122,7 +122,7 @@ describe('validateFilterValues', () => {
     );
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,
@@ -171,7 +171,7 @@ describe('validateFilterValues', () => {
     );
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,
@@ -219,7 +219,7 @@ describe('validateFilterValues', () => {
     );
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,
@@ -256,7 +256,7 @@ describe('validateFilterValues', () => {
     );
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,
@@ -307,7 +307,7 @@ describe('validateFilterValues', () => {
     );
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,
@@ -356,7 +356,7 @@ describe('validateFilterValues', () => {
       );
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,
@@ -390,7 +390,7 @@ describe('validateFilterValues', () => {
     ).mockResolvedValue(new Err({ errorCode: '404934', message: 'Field not found' }));
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,
@@ -413,7 +413,7 @@ describe('validateFilterValues', () => {
     };
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,
@@ -450,7 +450,7 @@ describe('validateFilterValues', () => {
     );
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,
@@ -493,7 +493,7 @@ describe('validateFilterValues', () => {
     );
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,
@@ -599,7 +599,7 @@ describe('validateFilterValues', () => {
     );
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,
@@ -660,7 +660,7 @@ describe('validateFilterValues', () => {
     );
 
     const result = await validateFilterValues(
-      new Server(),
+      new WebMcpServer(),
       query,
       mockVizqlDataServiceMethods,
       mockDatasource,

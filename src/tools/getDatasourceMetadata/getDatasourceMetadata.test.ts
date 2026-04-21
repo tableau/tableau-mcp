@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { stubDefaultEnvVars, testProductVersion } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
@@ -266,7 +266,7 @@ describe('getDatasourceMetadataTool', () => {
 
   it('should create a tool instance with correct properties', () => {
     const getDatasourceMetadataTool = getGetDatasourceMetadataTool(
-      new Server(),
+      new WebMcpServer(),
       testProductVersion,
     );
     expect(getDatasourceMetadataTool.name).toBe('get-datasource-metadata');
@@ -792,7 +792,7 @@ describe('getDatasourceMetadataTool', () => {
 
   it('should return error when datasourceLuid is empty', async () => {
     const getDatasourceMetadataTool = getGetDatasourceMetadataTool(
-      new Server(),
+      new WebMcpServer(),
       testProductVersion,
     );
     const callback = await Provider.from(getDatasourceMetadataTool.callback);
@@ -864,7 +864,7 @@ async function getToolResult(
   params: { productVersion?: ProductVersion } = {},
 ): Promise<CallToolResult> {
   const getDatasourceMetadataTool = getGetDatasourceMetadataTool(
-    new Server(),
+    new WebMcpServer(),
     params.productVersion ?? testProductVersion,
   );
   const callback = await Provider.from(getDatasourceMetadataTool.callback);

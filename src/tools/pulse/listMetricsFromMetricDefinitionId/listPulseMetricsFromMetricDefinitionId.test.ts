@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
 import { PulseDisabledError, PulseNotAvailableError } from '../../../errors/mcpToolError.js';
-import { Server } from '../../../server.js';
+import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
@@ -33,7 +33,7 @@ describe('listPulseMetricsFromMetricDefinitionIdTool', () => {
 
   it('should create a tool instance with correct properties', () => {
     const listPulseMetricsFromMetricDefinitionIdTool =
-      getListPulseMetricsFromMetricDefinitionIdTool(new Server());
+      getListPulseMetricsFromMetricDefinitionIdTool(new WebMcpServer());
     expect(listPulseMetricsFromMetricDefinitionIdTool.name).toBe(
       'list-pulse-metrics-from-metric-definition-id',
     );
@@ -111,7 +111,7 @@ describe('listPulseMetricsFromMetricDefinitionIdTool', () => {
 
 async function getToolResult(params: { pulseMetricDefinitionID: string }): Promise<CallToolResult> {
   const listPulseMetricsFromMetricDefinitionIdTool = getListPulseMetricsFromMetricDefinitionIdTool(
-    new Server(),
+    new WebMcpServer(),
   );
   const callback = await Provider.from(listPulseMetricsFromMetricDefinitionIdTool.callback);
   return await callback(params, getMockRequestHandlerExtra());

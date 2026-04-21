@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
@@ -38,7 +38,7 @@ describe('listViewsTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const listViewsTool = getListViewsTool(new Server());
+    const listViewsTool = getListViewsTool(new WebMcpServer());
     expect(listViewsTool.name).toBe('list-views');
     expect(listViewsTool.description).toContain(
       'Retrieves a list of views on a Tableau site including their metadata such as name, owner, and the workbook they are found in.',
@@ -135,7 +135,7 @@ describe('listViewsTool', () => {
 });
 
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
-  const listViewsTool = getListViewsTool(new Server());
+  const listViewsTool = getListViewsTool(new WebMcpServer());
   const callback = await Provider.from(listViewsTool.callback);
   return await callback(
     { filter: params.filter, pageSize: undefined, limit: undefined },

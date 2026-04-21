@@ -1,12 +1,12 @@
 import { getConfig } from '../config.js';
 import { OverridableConfig } from '../overridableConfig.js';
-import { Server } from '../server.js';
+import { WebMcpServer } from '../server.web.js';
 import { TableauRequestHandlerExtra } from './toolContext.js';
 
 export function getMockRequestHandlerExtra(): TableauRequestHandlerExtra {
   return {
     config: getConfig(),
-    server: new Server(),
+    server: new WebMcpServer(),
     tableauAuthInfo: undefined,
     _siteLuid: 'test-site-luid',
     _userLuid: 'test-user-luid',
