@@ -25,7 +25,6 @@
   "scripts": {
     "build": "tsx src/scripts/build.ts",
     "build:desktop": "tsx src/scripts/build.ts --variant desktop",
-    "prepare:desktop-publish": "tsx src/scripts/prepareVariantPackage.ts --variant desktop",
     "build:dev": "tsx src/scripts/build.ts --dev",
     "build:docker": "docker build -t tableau-mcp .",
     ":build:mcpb": "npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb",

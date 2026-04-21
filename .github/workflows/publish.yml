@@ -26,7 +26,13 @@ jobs:
       - name: Build and publish desktop package
         run: |
           npm run build -- --variant desktop
-          npm run prepare:desktop-publish
+          npx tsx src/scripts/prepareVariantPackage.ts --variant desktop
+          npm publish
+          git restore package.json README.md
+      - name: Build and publish combined package
+        run: |
+          npm run build -- --variant combined
+          npx tsx src/scripts/prepareVariantPackage.ts --variant combined
           npm publish
           git restore package.json README.md
   upload-mcpb:
