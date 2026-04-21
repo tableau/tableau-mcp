@@ -6,13 +6,14 @@ import { setNotificationLevel } from './logging/notification.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 
 export const serverName =
-  import.meta.env.BUILD_MODE === 'desktop' ? 'tableau-mcp-desktop' : 'tableau-mcp';
+  import.meta.env.BUILD_VARIANT === 'desktop' ? 'tableau-mcp-desktop' : 'tableau-mcp';
 export const serverVersion = pkg.version;
 export const userAgent = `${serverName}/${serverVersion}`;
 
 export type ClientInfo = InitializeRequest['params']['clientInfo'];
 
-export abstract class Server extends McpServer {
+export abstract class Server {
+  readonly mcpServer: McpServer;
   readonly name: string;
   readonly version: string;
 
@@ -27,22 +28,24 @@ export abstract class Server extends McpServer {
   private readonly _clientInfo: ClientInfo | undefined;
 
   get clientInfo(): ClientInfo | undefined {
-    return this._clientInfo ?? this.server.getClientVersion();
+    return this._clientInfo ?? this.mcpServer.server.getClientVersion();
   }
 
-  constructor({ clientInfo }: { clientInfo?: ClientInfo } = {}) {
-    super(
-      {
-        name: serverName,
-        version: serverVersion,
-      },
-      {
-        capabilities: {
-          logging: {},
-          tools: {},
+  constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
+    this.mcpServer =
+      mcpServer ??
+      new McpServer(
+        {
+          name: serverName,
+          version: serverVersion,
         },
-      },
-    );
+        {
+          capabilities: {
+            logging: {},
+            tools: {},
+          },
+        },
+      );
 
     this.name = serverName;
     this.version = serverVersion;
@@ -52,7 +55,7 @@ export abstract class Server extends McpServer {
   abstract registerTools: (tableauAuthInfo?: TableauAuthInfo) => Promise<void>;
 
   registerRequestHandlers = (): void => {
-    this.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
+    this.mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
       setNotificationLevel(this, request.params.level);
       return {};
     });

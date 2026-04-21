@@ -128,7 +128,7 @@ export async function startExpressServer({
 
         res.on('close', () => {
           transport.close();
-          server.close();
+          server.mcpServer.close();
         });
 
         await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
@@ -184,7 +184,7 @@ async function connect(
   await server.registerTools(authInfo);
   server.registerRequestHandlers();
 
-  await server.connect(transport);
+  await server.mcpServer.connect(transport);
   setNotificationLevel(server, logLevel);
 }
 

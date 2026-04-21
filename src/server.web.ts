@@ -71,7 +71,7 @@ export class WebMcpServer extends Server {
         return tableauToolCallback(args, tableauRequestHandlerExtra);
       };
 
-      this.registerTool(
+      this.mcpServer.registerTool(
         name,
         {
           description: await Provider.from(description),
@@ -84,7 +84,7 @@ export class WebMcpServer extends Server {
   };
 
   registerRequestHandlers = (): void => {
-    this.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
+    this.mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
       setNotificationLevel(this, request.params.level);
       return {};
     });

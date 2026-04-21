@@ -188,6 +188,6 @@ async function getToolResult(): Promise<CallToolResult> {
 
 function getServer(): InstanceType<typeof WebMcpServer> {
   const server = new WebMcpServer();
-  server.tool = vi.fn();
+  server.mcpServer.registerTool = vi.fn();
   return server;
 }
