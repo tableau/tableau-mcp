@@ -155,7 +155,7 @@ describe('notification', () => {
           method: 'notifications/message',
           params: {
             level: 'info',
-            notifier: 'test-server',
+            notifier: 'tableau-mcp',
             data: expect.stringContaining('test message'),
           },
         },
