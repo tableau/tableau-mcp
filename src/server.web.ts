@@ -1,14 +1,9 @@
 import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import {
-  ServerNotification,
-  ServerRequest,
-  SetLevelRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
 
 import { getConfig } from './config.js';
 import { getTableauServerInfo } from './getTableauServerInfo';
-import { setNotificationLevel } from './logging/notification.js';
 import { Server } from './server';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
@@ -81,13 +76,6 @@ export class WebMcpServer extends Server {
         toolCallback,
       );
     }
-  };
-
-  registerRequestHandlers = (): void => {
-    this.mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
-      setNotificationLevel(this, request.params.level);
-      return {};
-    });
   };
 
   protected _getToolsToRegister = async (
