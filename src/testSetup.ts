@@ -2,17 +2,21 @@ import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 
 stubDefaultEnvVars();
 
-vi.mock('./server.js', async (importOriginal) => ({
-  ...(await importOriginal()),
-  Server: vi.fn().mockImplementation(() => ({
-    name: 'test-server',
-    mcpServer: {
+vi.mock('@modelcontextprotocol/sdk/server/mcp.js', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    McpServer: vi.fn().mockImplementation(() => ({
       server: {
         notification: vi.fn(),
+        setRequestHandler: vi.fn(),
+        getClientVersion: vi.fn(),
       },
-    },
-  })),
-}));
+      registerTool: vi.fn(),
+      connect: vi.fn(),
+      close: vi.fn(),
+    })),
+  };
+});
 
 vi.mock('./sdks/tableau/restApi.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('./sdks/tableau/restApi.js')>();
