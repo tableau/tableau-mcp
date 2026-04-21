@@ -42,7 +42,7 @@ async function startServer(): Promise<void> {
       server.registerRequestHandlers();
 
       const transport = new StdioServerTransport();
-      await server.connect(transport);
+      await server.mcpServer.connect(transport);
 
       setNotificationLevel(server, logLevel);
       notifier.info(server, `${server.name} v${server.version} running on stdio`);

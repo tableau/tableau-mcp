@@ -6,8 +6,10 @@ vi.mock('./server.js', async (importOriginal) => ({
   ...(await importOriginal()),
   Server: vi.fn().mockImplementation(() => ({
     name: 'test-server',
-    server: {
-      notification: vi.fn(),
+    mcpServer: {
+      server: {
+        notification: vi.fn(),
+      },
     },
   })),
 }));
