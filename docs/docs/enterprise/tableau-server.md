@@ -343,7 +343,7 @@ Tableau MCP has a lot of tools, some of which may not be necessary for your desi
 Only one of these environment variables can be specified at a time. Their values are a
 comma-separated list of tool names, or tool group names. A tool group is a collection of tools. For
 the list of tools and their groupings, see
-[toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.ts).
+[toolName.web.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.web.ts).
 
 Examples:
 
@@ -429,8 +429,7 @@ By default, Tableau MCP sends notifications to MCP clients containing the reques
 traces for each request Tableau MCP tools make to the Tableau REST APIs. Many clients will save
 these notifications to their own log files, but if you need a way to gather and audit these traces,
 server-level logging can be enabled. See
-[ENABLED_LOGGERS](../configuration/mcp-config/env-vars#enabled_loggers) for more
-information.
+[ENABLED_LOGGERS](../configuration/mcp-config/env-vars#enabled_loggers) for more information.
 
 ```
 ENABLED_LOGGERS=fileLogger
