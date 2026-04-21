@@ -19,7 +19,7 @@ describe('get-workbook', () => {
     expect(workbook).toMatchObject({
       id: superstore.id,
       name: 'Superstore',
-      defaultViewId: superstore.defaultViewId,
+      defaultViewId: superstore.defaultView.id,
     });
   });
 });

@@ -23,6 +23,7 @@ class ResourceAccessChecker {
   private readonly _cachedDatasourceIds: Map<string, AllowedResult>;
   private readonly _cachedWorkbookIds: Map<string, AllowedResult<Workbook>>;
   private readonly _cachedViewIds: Map<string, AllowedResult>;
+  private readonly _cachedCustomViewIds: Map<string, AllowedResult>;
 
   static create(): ResourceAccessChecker {
     return new ResourceAccessChecker();
@@ -45,6 +46,7 @@ class ResourceAccessChecker {
     this._cachedDatasourceIds = new Map();
     this._cachedWorkbookIds = new Map();
     this._cachedViewIds = new Map();
+    this._cachedCustomViewIds = new Map();
   }
 
   private async getAllowedProjectIds({
@@ -171,6 +173,34 @@ class ResourceAccessChecker {
       // If project filtering is enabled, we cannot cache the result since the workbook containing the view may be moved between projects.
       // If tag filtering is enabled, we cannot cache the result since the view tags can change over time.
       this._cachedViewIds.set(viewId, result);
+    }
+
+    return result;
+  }
+
+  /**
+   * Resolves a custom view to its underlying published view, then applies the same rules as {@link isViewAllowed}.
+   */
+  async isCustomViewAllowed({
+    customViewId,
+    extra,
+  }: {
+    customViewId: string;
+    extra: TableauRequestHandlerExtra;
+  }): Promise<AllowedResult> {
+    const result = await this._isCustomViewAllowed({
+      customViewId,
+      extra,
+    });
+
+    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
+    const allowedTags = await this.getAllowedTags({ extra });
+    if (!allowedProjectIds && !allowedTags) {
+      // If project filtering is enabled, we cannot cache the result since the workbook containing the view
+      // that contains the custom view may be moved between projects.
+      // If tag filtering is enabled, we cannot cache the result since the tags on the view
+      // that contains the custom view can change over time.
+      this._cachedCustomViewIds.set(customViewId, result);
     }
 
     return result;
@@ -463,6 +493,59 @@ class ResourceAccessChecker {
     }
 
     return { allowed: true };
+  }
+
+  private async _isCustomViewAllowed({
+    customViewId,
+    extra,
+  }: {
+    customViewId: string;
+    extra: TableauRequestHandlerExtra;
+  }): Promise<AllowedResult> {
+    const cachedResult = this._cachedCustomViewIds.get(customViewId);
+    if (cachedResult) {
+      return cachedResult;
+    }
+
+    const allowedWorkbookIds = await this.getAllowedWorkbookIds({ extra });
+    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
+    const allowedTags = await this.getAllowedTags({ extra });
+    if (!allowedWorkbookIds && !allowedProjectIds && !allowedTags) {
+      // If no filtering is enabled, there's no need to resolve the view the custom view belongs to.
+      return { allowed: true };
+    }
+
+    let underlyingViewId: string | undefined;
+    try {
+      const customView = await useRestApi({
+        ...extra,
+        jwtScopes: RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+        callback: async (restApi) =>
+          await restApi.viewsMethods.getCustomView({
+            siteId: restApi.siteId,
+            customViewId,
+          }),
+      });
+      underlyingViewId = customView.view.id;
+    } catch (error) {
+      return {
+        allowed: false,
+        message: [
+          'The set of allowed views that can be queried is limited by the server configuration.',
+          `An error occurred while checking if the custom view with LUID ${customViewId} belongs to an allowed view.`,
+          'Please verify that the custom view LUID is correct and you have access to it.',
+          getExceptionMessage(error),
+        ].join(' '),
+      };
+    }
+
+    // The custom view is allowed if the underlying view that contains it is allowed.
+    const isCustomViewAllowed = await this.isViewAllowed({
+      viewId: underlyingViewId,
+      extra,
+    });
+
+    return isCustomViewAllowed;
   }
 }
 

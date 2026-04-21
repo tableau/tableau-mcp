@@ -1,8 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
+import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
-import { stubDefaultEnvVars } from '../../testShared.js';
+import { stubDefaultEnvVars, testProductVersion } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
@@ -11,6 +12,10 @@ import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
+const testProductVersion2025_2 = {
+  value: '2025.2.0',
+  build: '20252.25.0101.0001',
+} satisfies ProductVersion;
 
 const mockReadMetadataResponses = vi.hoisted(() => ({
   success: {
@@ -87,6 +92,39 @@ const mockReadMetadataResponses = vi.hoisted(() => ({
   },
   nullData: {
     data: null,
+  },
+}));
+
+const mockDatasourceModelResponses = vi.hoisted(() => ({
+  success: {
+    logicalTables: [
+      {
+        logicalTableId: 'Orders_123456789',
+        caption: 'Orders',
+        description: 'Orders logical table',
+      },
+      {
+        logicalTableId: 'Returns_987654321',
+        caption: 'Returns',
+        description: 'Returns logical table',
+      },
+    ],
+    logicalTableRelationships: [
+      {
+        fromLogicalTable: { logicalTableId: 'Orders_123456789' },
+        toLogicalTable: { logicalTableId: 'Returns_987654321' },
+        expression: {
+          op: 'and',
+          relationships: [
+            {
+              operator: '=',
+              fromField: 'Order ID',
+              toField: 'Order ID',
+            },
+          ],
+        },
+      },
+    ],
   },
 }));
 
@@ -195,6 +233,7 @@ const mockListFieldsResponses = vi.hoisted(() => ({
 
 const mocks = vi.hoisted(() => ({
   mockReadMetadata: vi.fn(),
+  mockGetDatasourceModel: vi.fn(),
   mockGraphql: vi.fn(),
 }));
 
@@ -203,6 +242,7 @@ vi.mock('../../restApiInstance.js', () => ({
     callback({
       vizqlDataServiceMethods: {
         readMetadata: mocks.mockReadMetadata,
+        getDatasourceModel: mocks.mockGetDatasourceModel,
       },
       metadataMethods: {
         graphql: mocks.mockGraphql,
@@ -217,6 +257,7 @@ describe('getDatasourceMetadataTool', () => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
+    mocks.mockGetDatasourceModel.mockResolvedValue(new Ok(mockDatasourceModelResponses.success));
   });
 
   afterEach(() => {
@@ -224,7 +265,10 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const getDatasourceMetadataTool = getGetDatasourceMetadataTool(new Server());
+    const getDatasourceMetadataTool = getGetDatasourceMetadataTool(
+      new Server(),
+      testProductVersion,
+    );
     expect(getDatasourceMetadataTool.name).toBe('get-datasource-metadata');
     expect(getDatasourceMetadataTool.description).toEqual(expect.any(String));
     expect(getDatasourceMetadataTool.paramsSchema).toMatchObject({
@@ -248,6 +292,7 @@ describe('getDatasourceMetadataTool', () => {
     const responseData = JSON.parse(result.content[0].text);
 
     expect(responseData.datasourceDescription).toBe('Test Description');
+    expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
     expect(flattenResponseFields(responseData)).toMatchObject([
       {
         name: 'Profit Ratio',
@@ -340,6 +385,11 @@ describe('getDatasourceMetadataTool', () => {
         datasourceLuid: 'test-luid',
       },
     });
+    expect(mocks.mockGetDatasourceModel).toHaveBeenCalledWith({
+      datasource: {
+        datasourceLuid: 'test-luid',
+      },
+    });
     expect(mocks.mockGraphql).toHaveBeenCalledWith(expect.stringContaining('datasourceFieldInfo'));
   });
 
@@ -354,6 +404,7 @@ describe('getDatasourceMetadataTool', () => {
     const responseData = JSON.parse(result.content[0].text);
     expect(responseData).toEqual({
       datasourceDescription: 'Test Description',
+      datasourceModel: mockDatasourceModelResponses.success,
       fieldGroups: [],
       parameters: [],
     });
@@ -369,6 +420,7 @@ describe('getDatasourceMetadataTool', () => {
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
     expect(responseData.datasourceDescription).toBe('Test Description');
+    expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
     expect(flattenResponseFields(responseData)).toMatchObject([
       {
         dataCategory: 'QUANTITATIVE',
@@ -441,6 +493,7 @@ describe('getDatasourceMetadataTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
 
     // Should have basic fields from readMetadata without enrichment
     expect(flattenResponseFields(responseData)).toMatchObject([
@@ -510,6 +563,7 @@ describe('getDatasourceMetadataTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
 
     // Should have basic fields from readMetadata without enrichment
     expect(flattenResponseFields(responseData)).toHaveLength(3);
@@ -560,6 +614,7 @@ describe('getDatasourceMetadataTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
 
     const flattenedFields = flattenResponseFields(responseData);
     expect(flattenedFields).toHaveLength(2);
@@ -601,6 +656,7 @@ describe('getDatasourceMetadataTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
 
     expect(flattenResponseFields(responseData)[0]).toMatchObject({
       name: 'Binned Field',
@@ -629,6 +685,7 @@ describe('getDatasourceMetadataTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
     expect(flattenResponseFields(responseData)).toMatchObject([
       {
         name: 'Profit Ratio',
@@ -672,6 +729,7 @@ describe('getDatasourceMetadataTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const responseData = JSON.parse(result.content[0].text);
+    expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.success);
 
     // Should only have basic fields from readMetadata without enrichment
     expect(flattenResponseFields(responseData)).toMatchObject([
@@ -702,6 +760,11 @@ describe('getDatasourceMetadataTool', () => {
         datasourceLuid: 'test-luid',
       },
     });
+    expect(mocks.mockGetDatasourceModel).toHaveBeenCalledWith({
+      datasource: {
+        datasourceLuid: 'test-luid',
+      },
+    });
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
 
@@ -728,7 +791,10 @@ describe('getDatasourceMetadataTool', () => {
   });
 
   it('should return error when datasourceLuid is empty', async () => {
-    const getDatasourceMetadataTool = getGetDatasourceMetadataTool(new Server());
+    const getDatasourceMetadataTool = getGetDatasourceMetadataTool(
+      new Server(),
+      testProductVersion,
+    );
     const callback = await Provider.from(getDatasourceMetadataTool.callback);
 
     const result = await callback({ datasourceLuid: '' }, getMockRequestHandlerExtra());
@@ -747,7 +813,33 @@ describe('getDatasourceMetadataTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
+    expect(mocks.mockGetDatasourceModel).not.toHaveBeenCalled();
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
+  });
+
+  it('should show feature-disabled error when datasource model endpoint is disabled', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGetDatasourceModel.mockResolvedValue(Err('feature-disabled'));
+
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(getVizqlDataServiceDisabledError());
+    expect(mocks.mockGraphql).not.toHaveBeenCalled();
+  });
+
+  it('should skip datasource model for Tableau versions older than 2025.3', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+
+    const result = await getToolResult({ productVersion: testProductVersion2025_2 });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    expect(responseData).not.toHaveProperty('datasourceModel');
+    expect(flattenResponseFields(responseData)).toHaveLength(3);
+    expect(mocks.mockGetDatasourceModel).not.toHaveBeenCalled();
   });
 
   it('should return data source not allowed error when datasource is not allowed', async () => {
@@ -768,8 +860,13 @@ describe('getDatasourceMetadataTool', () => {
   });
 });
 
-async function getToolResult(): Promise<CallToolResult> {
-  const getDatasourceMetadataTool = getGetDatasourceMetadataTool(new Server());
+async function getToolResult(
+  params: { productVersion?: ProductVersion } = {},
+): Promise<CallToolResult> {
+  const getDatasourceMetadataTool = getGetDatasourceMetadataTool(
+    new Server(),
+    params.productVersion ?? testProductVersion,
+  );
   const callback = await Provider.from(getDatasourceMetadataTool.callback);
   return await callback({ datasourceLuid: 'test-luid' }, getMockRequestHandlerExtra());
 }
