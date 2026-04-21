@@ -13,7 +13,7 @@ import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../utils/getHttpStatus.js';
 import { TypeOrProvider } from '../utils/provider.js';
 import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
-import { ToolName } from './toolName.js';
+import { ToolName } from './toolName.web.js';
 
 export type ToolRules = Record<string, boolean | undefined>;
 

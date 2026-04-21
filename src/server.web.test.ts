@@ -1,7 +1,7 @@
 import { WebMcpServer } from './server.web.js';
 import { testProductVersion } from './testShared.js';
 import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
-import { toolNames } from './tools/toolName.js';
+import { toolNames } from './tools/toolName.web.js';
 import { toolFactories } from './tools/tools.js';
 import { Provider } from './utils/provider.js';
 

@@ -13,7 +13,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import z from 'zod';
 
-import { ToolName } from '../../../src/tools/toolName.js';
+import { ToolName } from '../../../src/tools/toolName.web.js';
 import invariant from '../../../src/utils/invariant.js';
 import { Deferred } from '../embedded-authz/deferred.js';
 import { expect } from './tests/base.js';

@@ -8,7 +8,7 @@ import {
   toolGroups,
   ToolName,
   toolNames,
-} from './toolName.js';
+} from './toolName.web.js';
 
 describe('toolName', () => {
   it('should validate each tool belongs to a group', () => {

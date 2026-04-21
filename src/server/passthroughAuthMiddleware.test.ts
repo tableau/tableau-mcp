@@ -1,5 +1,5 @@
-import { ToolName, toolNames } from '../tools/toolName';
-import { getRequiredApiScopesForTool } from './oauth/scopes';
+import { ToolName, toolNames } from '../tools/toolName.web.js';
+import { getRequiredApiScopesForTool } from './oauth/scopes.js';
 
 /**
  * Tools that intentionally have no Tableau REST API scopes, but have been reviewed and verified
