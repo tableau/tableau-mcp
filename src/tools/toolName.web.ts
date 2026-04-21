@@ -1,4 +1,4 @@
-export const toolNames = [
+export const webToolNames = [
   'list-datasources',
   'list-workbooks',
   'list-views',
@@ -20,9 +20,9 @@ export const toolNames = [
   'revoke-access-token',
   'reset-consent',
 ] as const;
-export type ToolName = (typeof toolNames)[number];
+export type WebToolName = (typeof webToolNames)[number];
 
-export const toolGroupNames = [
+export const webToolGroupNames = [
   'datasource',
   'workbook',
   'view',
@@ -30,9 +30,9 @@ export const toolGroupNames = [
   'content-exploration',
   'token-management',
 ] as const;
-export type ToolGroupName = (typeof toolGroupNames)[number];
+export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
-export const toolGroups = {
+export const webToolGroups = {
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
   workbook: ['list-workbooks', 'get-workbook'],
   view: [
@@ -53,12 +53,12 @@ export const toolGroups = {
   ],
   'content-exploration': ['search-content'],
   'token-management': ['revoke-access-token', 'reset-consent'],
-} as const satisfies Record<ToolGroupName, Array<ToolName>>;
+} as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 
-export function isToolName(value: unknown): value is ToolName {
-  return !!toolNames.find((name) => name === value);
+export function isWebToolName(value: unknown): value is WebToolName {
+  return !!webToolNames.find((name) => name === value);
 }
 
-export function isToolGroupName(value: unknown): value is ToolGroupName {
-  return !!toolGroupNames.find((name) => name === value);
+export function isWebToolGroupName(value: unknown): value is WebToolGroupName {
+  return !!webToolGroupNames.find((name) => name === value);
 }

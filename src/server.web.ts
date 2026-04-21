@@ -9,7 +9,7 @@ import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { Tool } from './tools/tool.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
-import { toolNames } from './tools/toolName.web.js';
+import { webToolNames } from './tools/toolName.web.js';
 import { toolFactories } from './tools/tools.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings';
 import { Provider } from './utils/provider.js';
@@ -108,7 +108,7 @@ export class WebMcpServer extends Server {
     if (toolsToRegister.length === 0) {
       throw new Error(`
           No tools to register.
-          Tools available = [${toolNames.join(', ')}].
+          Tools available = [${webToolNames.join(', ')}].
           EXCLUDE_TOOLS = [${excludeTools.join(', ')}].
           INCLUDE_TOOLS = [${includeTools.join(', ')}]
         `);

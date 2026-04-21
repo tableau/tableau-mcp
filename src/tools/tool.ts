@@ -13,7 +13,7 @@ import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../utils/getHttpStatus.js';
 import { TypeOrProvider } from '../utils/provider.js';
 import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
-import { ToolName } from './toolName.web.js';
+import { WebToolName } from './toolName.web.js';
 
 export type ToolRules = Record<string, boolean | undefined>;
 
@@ -42,7 +42,7 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   server: Server;
 
   // The name of the tool
-  name: ToolName;
+  name: WebToolName;
 
   // The description of the tool
   description: TypeOrProvider<string>;
@@ -90,7 +90,7 @@ type LogAndExecuteParams<T, Args extends ZodRawShape | undefined = undefined> = 
  */
 export class Tool<Args extends ZodRawShape | undefined = undefined> {
   server: Server;
-  name: ToolName;
+  name: WebToolName;
   description: TypeOrProvider<string>;
   paramsSchema: TypeOrProvider<Args>;
   annotations: TypeOrProvider<ToolAnnotations>;

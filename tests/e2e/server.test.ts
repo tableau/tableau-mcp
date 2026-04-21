@@ -1,5 +1,5 @@
 import { serverName, serverVersion } from '../../src/server.js';
-import { ToolName, toolNames } from '../../src/tools/toolName.web.js';
+import { WebToolName, webToolNames } from '../../src/tools/toolName.web.js';
 import { resetEnv, setEnv } from '../testEnv.js';
 import { getClient, listTools } from './client.js';
 
@@ -17,11 +17,11 @@ describe('server', () => {
 
   it('should list tools', async () => {
     const names = await listTools();
-    const oauthOnlyTools: ReadonlyArray<ToolName> = ['revoke-access-token', 'reset-consent'];
+    const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
     const expectedToolNames =
       process.env.AUTH === 'oauth'
-        ? [...toolNames]
-        : toolNames.filter((name) => !oauthOnlyTools.includes(name));
+        ? [...webToolNames]
+        : webToolNames.filter((name) => !oauthOnlyTools.includes(name));
     expect(names).toEqual(expect.arrayContaining(expectedToolNames));
     expect(names).toHaveLength(expectedToolNames.length);
   });
