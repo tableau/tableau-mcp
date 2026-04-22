@@ -26,7 +26,8 @@ export const userAgent = `${serverName}/${serverVersion}`;
 
 export type ClientInfo = InitializeRequest['params']['clientInfo'];
 
-export class Server extends McpServer {
+export class Server {
+  readonly mcpServer: McpServer;
   readonly name: string;
   readonly version: string;
 
@@ -41,22 +42,24 @@ export class Server extends McpServer {
   private readonly _clientInfo: ClientInfo | undefined;
 
   get clientInfo(): ClientInfo | undefined {
-    return this._clientInfo ?? this.server.getClientVersion();
+    return this._clientInfo ?? this.mcpServer.server.getClientVersion();
   }
 
-  constructor({ clientInfo }: { clientInfo?: ClientInfo } = {}) {
-    super(
-      {
-        name: serverName,
-        version: serverVersion,
-      },
-      {
-        capabilities: {
-          logging: {},
-          tools: {},
+  constructor({ clientInfo, mcpServer }: { clientInfo?: ClientInfo; mcpServer?: McpServer } = {}) {
+    this.mcpServer =
+      mcpServer ??
+      new McpServer(
+        {
+          name: serverName,
+          version: serverVersion,
         },
-      },
-    );
+        {
+          capabilities: {
+            logging: {},
+            tools: {},
+          },
+        },
+      );
 
     this.name = serverName;
     this.version = serverVersion;
@@ -114,7 +117,7 @@ export class Server extends McpServer {
         return tableauToolCallback(args, tableauRequestHandlerExtra);
       };
 
-      this.registerTool(
+      this.mcpServer.registerTool(
         name,
         {
           description: await Provider.from(description),
@@ -127,7 +130,7 @@ export class Server extends McpServer {
   };
 
   registerRequestHandlers = (): void => {
-    this.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
+    this.mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
       setNotificationLevel(this, request.params.level);
       return {};
     });

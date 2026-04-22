@@ -44,7 +44,7 @@ describe('notification', () => {
       const server = new Server();
       setNotificationLevel(server, 'debug', { silent: true });
       setNotificationLevel(server, 'debug', { silent: true });
-      expect(server.server.notification).not.toHaveBeenCalled();
+      expect(server.mcpServer.server.notification).not.toHaveBeenCalled();
     });
   });
 
@@ -120,7 +120,7 @@ describe('notification', () => {
 
       await notifier.info(server, 'test message', { notifier: 'test-logger' });
 
-      expect(server.server.notification).toHaveBeenCalledWith(
+      expect(server.mcpServer.server.notification).toHaveBeenCalledWith(
         {
           method: 'notifications/message',
           params: {
@@ -141,7 +141,7 @@ describe('notification', () => {
 
       await notifier.debug(server, 'test message', { notifier: 'test-logger' });
 
-      expect(server.server.notification).not.toHaveBeenCalled();
+      expect(server.mcpServer.server.notification).not.toHaveBeenCalled();
     });
 
     it('should use server name as default logger', async () => {
@@ -150,7 +150,7 @@ describe('notification', () => {
 
       await notifier.info(server, 'test message');
 
-      expect(server.server.notification).toHaveBeenCalledWith(
+      expect(server.mcpServer.server.notification).toHaveBeenCalledWith(
         {
           method: 'notifications/message',
           params: {
@@ -176,7 +176,7 @@ describe('notification', () => {
 
       await notifier.info(server, logMessage, { notifier: 'test-logger' });
 
-      expect(server.server.notification).toHaveBeenCalledWith(
+      expect(server.mcpServer.server.notification).toHaveBeenCalledWith(
         {
           method: 'notifications/message',
           params: {

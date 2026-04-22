@@ -30,7 +30,7 @@ describe('server', () => {
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
     const tools = allTools.filter((_, i) => !disabledFlags[i]);
     for (const tool of tools) {
-      expect(server.registerTool).toHaveBeenCalledWith(
+      expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
         tool.name,
         {
           description: await Provider.from(tool.description),
@@ -54,7 +54,7 @@ describe('server', () => {
     );
     const disabledTools = allDisabledTools.filter((_, i) => disabledToolFlags[i]);
     for (const tool of disabledTools) {
-      expect(server.registerTool).not.toHaveBeenCalledWith(
+      expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
         tool.name,
         expect.anything(),
         expect.anything(),
@@ -68,7 +68,7 @@ describe('server', () => {
     await server.registerTools();
 
     const tool = getQueryDatasourceTool(server, testProductVersion);
-    expect(server.registerTool).toHaveBeenCalledWith(
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
       tool.name,
       {
         description: await Provider.from(tool.description),
@@ -90,13 +90,13 @@ describe('server', () => {
     );
     for (const [i, tool] of tools.entries()) {
       if (tool.name === 'query-datasource' || excludeDisabledFlags[i]) {
-        expect(server.registerTool).not.toHaveBeenCalledWith(
+        expect(server.mcpServer.registerTool).not.toHaveBeenCalledWith(
           tool.name,
           expect.anything(),
           expect.anything(),
         );
       } else {
-        expect(server.registerTool).toHaveBeenCalledWith(
+        expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
           tool.name,
           {
             description: await Provider.from(tool.description),
@@ -128,15 +128,15 @@ describe('server', () => {
 
   it('should register request handlers', async () => {
     const server = getServer();
-    server.server.setRequestHandler = vi.fn();
+    server.mcpServer.server.setRequestHandler = vi.fn();
     server.registerRequestHandlers();
 
-    expect(server.server.setRequestHandler).toHaveBeenCalled();
+    expect(server.mcpServer.server.setRequestHandler).toHaveBeenCalled();
   });
 });
 
 function getServer(): InstanceType<typeof Server> {
   const server = new Server();
-  server.registerTool = vi.fn();
+  server.mcpServer.registerTool = vi.fn();
   return server;
 }

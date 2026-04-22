@@ -105,7 +105,7 @@ function getSendNotificationMessageFn(level: LoggingLevel) {
 
     // server.sendNotification doesn't provide a way to provide the relatedRequestId
     // so we're using server.notification directly.
-    return server.server.notification(
+    return server.mcpServer.server.notification(
       {
         method: 'notifications/message',
         params: {

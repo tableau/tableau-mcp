@@ -186,6 +186,6 @@ async function getToolResult(): Promise<CallToolResult> {
 
 function getServer(): InstanceType<typeof Server> {
   const server = new Server();
-  server.tool = vi.fn();
+  server.mcpServer.registerTool = vi.fn();
   return server;
 }
