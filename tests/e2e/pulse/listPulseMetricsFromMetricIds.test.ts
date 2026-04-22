@@ -4,18 +4,28 @@ import { pulseMetricSchema } from '../../../src/sdks/tableau/types/pulse.js';
 import invariant from '../../../src/utils/invariant.js';
 import { getPulseDefinition } from '../../constants.js';
 import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
-import { callTool } from '../client.js';
+import { McpClient } from '../mcpClient.js';
 
 describe('list-pulse-metrics-from-metric-ids', () => {
+  let client: McpClient;
+
   beforeAll(setEnv);
   afterAll(resetEnv);
+
+  beforeAll(async () => {
+    client = new McpClient();
+    await client.connect();
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
 
   it('should list all pulse metrics from a list of metric ids', async () => {
     const env = getDefaultEnv();
     const tableauMcpDefinition = getPulseDefinition(env.SERVER, env.SITE_NAME, 'Tableau MCP');
 
-    const metrics = await callTool('list-pulse-metrics-from-metric-ids', {
-      env,
+    const metrics = await client.callTool('list-pulse-metrics-from-metric-ids', {
       schema: z.array(pulseMetricSchema),
       toolArgs: {
         metricIds: [tableauMcpDefinition.metrics[0].id],
