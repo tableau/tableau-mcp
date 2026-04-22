@@ -244,251 +244,105 @@ export class OverridableConfig {
     return { includeTools, excludeTools };
   }
 
+  getBoundedVariableWithOverrides(
+    variableName: OverridableVariable,
+    envVariables: Record<string, string | undefined>,
+    siteOverrides: Record<string, string> = {},
+    requestOverrides: Record<string, string> = {},
+  ): Set<string> | null {
+    // Initializing bounded context from environment variables
+    let bounds = createSetFromCommaSeparatedString(envVariables[variableName]);
+    if (bounds?.size === 0) {
+      throw new Error(
+        `When set, the environment variable ${variableName} must have at least one value`,
+      );
+    }
+    // Applying site overrides
+    if (Object.hasOwn(siteOverrides, variableName)) {
+      if (!siteOverrides[variableName]) {
+        // Overriding with empty string clears current bounds
+        bounds = null;
+      } else {
+        const boundsOverrides = createSetFromCommaSeparatedString(siteOverrides[variableName]);
+        // Only override if the set is non empty. An empty set means the override value was invalid
+        if (boundsOverrides?.size !== 0) {
+          bounds = boundsOverrides;
+        }
+      }
+    }
+    // Applying request overrides
+    if (
+      isRequestOverridableVariable(variableName) &&
+      Object.hasOwn(requestOverrides, variableName)
+    ) {
+      if (!this.allowedRequestOverrides.has(variableName)) {
+        throw new Error(`${variableName} is not an allowed request override`);
+      }
+      const restrictionType = this.allowedRequestOverrides.get(variableName)!;
+      if (bounds === null) {
+        // no bounds currently set, accept any request override that results in a valid set
+        if (requestOverrides[variableName]) {
+          const boundsOverrides = createSetFromCommaSeparatedString(requestOverrides[variableName]);
+          if (boundsOverrides!.size === 0) {
+            throw new Error(`${variableName} was provided an invalid request override value`);
+          }
+          bounds = boundsOverrides;
+        }
+      } else if (requestOverrides[variableName]) {
+        const boundsOverrides = createSetFromCommaSeparatedString(requestOverrides[variableName]);
+        if (boundsOverrides!.size === 0) {
+          throw new Error(`${variableName} was provided an invalid request override value`);
+        } else if (restrictionType === 'restricted') {
+          // when restricted, request overrides must result in a subset of the current bounds
+          boundsOverrides!.forEach((bound) => {
+            if (!bounds!.has(bound)) {
+              throw new Error(
+                `${variableName} can only be overridden to a subset of the current bounds`,
+              );
+            }
+          });
+        }
+        bounds = boundsOverrides;
+      } else {
+        // overriding with empty string clears current bounds, but only if the restriction type is unrestricted
+        if (restrictionType === 'restricted') {
+          throw new Error(`${variableName} is restricted and cannot be cleared`);
+        }
+        bounds = null;
+      }
+    }
+    return bounds;
+  }
+
   getBoundedContextWithOverrides(
     envVariables: Record<string, string | undefined>,
     siteOverrides: Record<string, string> = {},
     requestOverrides: Record<string, string> = {},
   ): BoundedContext {
-    // Initializing bounded context from environment variables
-    let projectIds = createSetFromCommaSeparatedString(envVariables.INCLUDE_PROJECT_IDS);
-    let datasourceIds = createSetFromCommaSeparatedString(envVariables.INCLUDE_DATASOURCE_IDS);
-    let workbookIds = createSetFromCommaSeparatedString(envVariables.INCLUDE_WORKBOOK_IDS);
-    let tags = createSetFromCommaSeparatedString(envVariables.INCLUDE_TAGS);
-
-    if (projectIds?.size === 0) {
-      throw new Error(
-        'When set, the environment variable INCLUDE_PROJECT_IDS must have at least one value',
-      );
-    } else if (datasourceIds?.size === 0) {
-      throw new Error(
-        'When set, the environment variable INCLUDE_DATASOURCE_IDS must have at least one value',
-      );
-    } else if (workbookIds?.size === 0) {
-      throw new Error(
-        'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
-      );
-    } else if (tags?.size === 0) {
-      throw new Error(
-        'When set, the environment variable INCLUDE_TAGS must have at least one value',
-      );
-    }
-
-    // Applying site overrides
-    if (Object.hasOwn(siteOverrides, 'INCLUDE_PROJECT_IDS')) {
-      if (!siteOverrides.INCLUDE_PROJECT_IDS) {
-        // overriding with empty string clears current bounds
-        projectIds = null;
-      } else {
-        const projectIdsOverrides = createSetFromCommaSeparatedString(
-          siteOverrides.INCLUDE_PROJECT_IDS,
-        );
-        if (projectIdsOverrides?.size !== 0) {
-          projectIds = projectIdsOverrides;
-        }
-      }
-    }
-    if (Object.hasOwn(siteOverrides, 'INCLUDE_DATASOURCE_IDS')) {
-      if (!siteOverrides.INCLUDE_DATASOURCE_IDS) {
-        // overriding with empty string clears current bounds
-        datasourceIds = null;
-      } else {
-        const datasourceIdsOverrides = createSetFromCommaSeparatedString(
-          siteOverrides.INCLUDE_DATASOURCE_IDS,
-        );
-        if (datasourceIdsOverrides?.size !== 0) {
-          datasourceIds = datasourceIdsOverrides;
-        }
-      }
-    }
-    if (Object.hasOwn(siteOverrides, 'INCLUDE_WORKBOOK_IDS')) {
-      if (!siteOverrides.INCLUDE_WORKBOOK_IDS) {
-        // overriding with empty string clears current bounds
-        workbookIds = null;
-      } else {
-        const workbookIdsOverrides = createSetFromCommaSeparatedString(
-          siteOverrides.INCLUDE_WORKBOOK_IDS,
-        );
-        if (workbookIdsOverrides?.size !== 0) {
-          workbookIds = workbookIdsOverrides;
-        }
-      }
-    }
-    if (Object.hasOwn(siteOverrides, 'INCLUDE_TAGS')) {
-      if (!siteOverrides.INCLUDE_TAGS) {
-        // overriding with empty string clears current bounds
-        tags = null;
-      } else {
-        const tagsOverrides = createSetFromCommaSeparatedString(siteOverrides.INCLUDE_TAGS);
-        if (tagsOverrides?.size !== 0) {
-          tags = tagsOverrides;
-        }
-      }
-    }
-
-    // Applying request overrides
-    if (Object.hasOwn(requestOverrides, 'INCLUDE_PROJECT_IDS')) {
-      if (!this.allowedRequestOverrides.has('INCLUDE_PROJECT_IDS')) {
-        throw new Error('INCLUDE_PROJECT_IDS is not an allowed request override');
-      }
-      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_PROJECT_IDS')!;
-      if (projectIds === null) {
-        // no bounds currently set, accept any request override that results in a valid set of project IDs
-        if (requestOverrides.INCLUDE_PROJECT_IDS) {
-          const projectIdsOverrides = createSetFromCommaSeparatedString(
-            requestOverrides.INCLUDE_PROJECT_IDS,
-          );
-          if (projectIdsOverrides!.size === 0) {
-            throw new Error('INCLUDE_PROJECT_IDS was provided an invalid request override value');
-          }
-          projectIds = projectIdsOverrides;
-        }
-      } else if (requestOverrides.INCLUDE_PROJECT_IDS) {
-        const projectIdsOverrides = createSetFromCommaSeparatedString(
-          requestOverrides.INCLUDE_PROJECT_IDS,
-        );
-        if (projectIdsOverrides!.size === 0) {
-          throw new Error('INCLUDE_PROJECT_IDS was provided an invalid request override value');
-        } else if (restrictionType === 'restricted') {
-          // when restricted, request overrides must be a subset of the current bounds
-          projectIdsOverrides!.forEach((projectId) => {
-            if (!projectIds!.has(projectId)) {
-              throw new Error(
-                'INCLUDE_PROJECT_IDS can only be overridden to a subset of the current bounds',
-              );
-            }
-          });
-        }
-        projectIds = projectIdsOverrides;
-      } else {
-        // overriding with empty string clears current bounds, but only if the restriction type is unrestricted
-        if (restrictionType === 'restricted') {
-          throw new Error('INCLUDE_PROJECT_IDS is restricted and cannot be cleared');
-        }
-        projectIds = null;
-      }
-    }
-    if (Object.hasOwn(requestOverrides, 'INCLUDE_DATASOURCE_IDS')) {
-      if (!this.allowedRequestOverrides.has('INCLUDE_DATASOURCE_IDS')) {
-        throw new Error('INCLUDE_DATASOURCE_IDS is not an allowed request override');
-      }
-      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_DATASOURCE_IDS')!;
-      if (datasourceIds === null) {
-        // no bounds currently set, accept any request override that results in a valid set of datasource IDs
-        if (requestOverrides.INCLUDE_DATASOURCE_IDS) {
-          const datasourceIdsOverrides = createSetFromCommaSeparatedString(
-            requestOverrides.INCLUDE_DATASOURCE_IDS,
-          );
-          if (datasourceIdsOverrides!.size === 0) {
-            throw new Error(
-              'INCLUDE_DATASOURCE_IDS was provided an invalid request override value',
-            );
-          }
-          datasourceIds = datasourceIdsOverrides;
-        }
-      } else if (requestOverrides.INCLUDE_DATASOURCE_IDS) {
-        const datasourceIdsOverrides = createSetFromCommaSeparatedString(
-          requestOverrides.INCLUDE_DATASOURCE_IDS,
-        );
-        if (datasourceIdsOverrides!.size === 0) {
-          throw new Error('INCLUDE_DATASOURCE_IDS was provided an invalid request override value');
-        } else if (restrictionType === 'restricted') {
-          // when restricted, request overrides must be a subset of the current bounds
-          datasourceIdsOverrides!.forEach((datasourceId) => {
-            if (!datasourceIds!.has(datasourceId)) {
-              throw new Error(
-                'INCLUDE_DATASOURCE_IDS can only be overridden to a subset of the current bounds',
-              );
-            }
-          });
-        }
-        datasourceIds = datasourceIdsOverrides;
-      } else {
-        // overriding with empty string clears current bounds, but only if the restriction type is unrestricted
-        if (restrictionType === 'restricted') {
-          throw new Error('INCLUDE_DATASOURCE_IDS is restricted and cannot be cleared');
-        }
-        datasourceIds = null;
-      }
-    }
-    if (Object.hasOwn(requestOverrides, 'INCLUDE_TAGS')) {
-      if (!this.allowedRequestOverrides.has('INCLUDE_TAGS')) {
-        throw new Error('INCLUDE_TAGS is not an allowed request override');
-      }
-      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_TAGS')!;
-      if (workbookIds === null) {
-        // no bounds currently set, accept any request override that results in a valid set of tags
-        if (requestOverrides.INCLUDE_TAGS) {
-          const tagsOverrides = createSetFromCommaSeparatedString(requestOverrides.INCLUDE_TAGS);
-          if (tagsOverrides!.size === 0) {
-            throw new Error('INCLUDE_TAGS was provided an invalid request override value');
-          }
-          tags = tagsOverrides;
-        }
-      } else if (requestOverrides.INCLUDE_TAGS) {
-        const tagsOverrides = createSetFromCommaSeparatedString(requestOverrides.INCLUDE_TAGS);
-        if (tagsOverrides!.size === 0) {
-          throw new Error('INCLUDE_TAGS was provided an invalid request override value');
-        } else if (restrictionType === 'restricted') {
-          // when restricted, request overrides must be a subset of the current bounds
-          tagsOverrides!.forEach((tag) => {
-            if (!tags!.has(tag)) {
-              throw new Error(
-                'INCLUDE_TAGS can only be overridden to a subset of the current bounds',
-              );
-            }
-          });
-        }
-        tags = tagsOverrides;
-      } else {
-        // overriding with empty string clears current bounds, but only if the restriction type is unrestricted
-        if (restrictionType === 'restricted') {
-          throw new Error('INCLUDE_TAGS is restricted and cannot be cleared');
-        }
-        tags = null;
-      }
-    }
-    if (Object.hasOwn(requestOverrides, 'INCLUDE_WORKBOOK_IDS')) {
-      if (!this.allowedRequestOverrides.has('INCLUDE_WORKBOOK_IDS')) {
-        throw new Error('INCLUDE_WORKBOOK_IDS is not an allowed request override');
-      }
-      const restrictionType = this.allowedRequestOverrides.get('INCLUDE_WORKBOOK_IDS')!;
-      if (workbookIds === null) {
-        // no bounds currently set, accept any request override that results in a valid set of workbook IDs
-        if (requestOverrides.INCLUDE_WORKBOOK_IDS) {
-          const workbookIdsOverrides = createSetFromCommaSeparatedString(
-            requestOverrides.INCLUDE_WORKBOOK_IDS,
-          );
-          if (workbookIdsOverrides!.size === 0) {
-            throw new Error('INCLUDE_WORKBOOK_IDS was provided an invalid request override value');
-          }
-          workbookIds = workbookIdsOverrides;
-        }
-      } else if (requestOverrides.INCLUDE_WORKBOOK_IDS) {
-        const workbookIdsOverrides = createSetFromCommaSeparatedString(
-          requestOverrides.INCLUDE_WORKBOOK_IDS,
-        );
-        if (workbookIdsOverrides!.size === 0) {
-          throw new Error('INCLUDE_WORKBOOK_IDS was provided an invalid request override value');
-        } else if (restrictionType === 'restricted') {
-          // when restricted, request overrides must be a subset of the current bounds
-          workbookIdsOverrides!.forEach((workbookId) => {
-            if (!workbookIds!.has(workbookId)) {
-              throw new Error(
-                'INCLUDE_WORKBOOK_IDS can only be overridden to a subset of the current bounds',
-              );
-            }
-          });
-        }
-        workbookIds = workbookIdsOverrides;
-      } else {
-        // overriding with empty string clears current bounds, but only if the restriction type is unrestricted
-        if (restrictionType === 'restricted') {
-          throw new Error('INCLUDE_WORKBOOK_IDS is restricted and cannot be cleared');
-        }
-        workbookIds = null;
-      }
-    }
-
+    const projectIds = this.getBoundedVariableWithOverrides(
+      'INCLUDE_PROJECT_IDS',
+      envVariables,
+      siteOverrides,
+      requestOverrides,
+    );
+    const datasourceIds = this.getBoundedVariableWithOverrides(
+      'INCLUDE_DATASOURCE_IDS',
+      envVariables,
+      siteOverrides,
+      requestOverrides,
+    );
+    const workbookIds = this.getBoundedVariableWithOverrides(
+      'INCLUDE_WORKBOOK_IDS',
+      envVariables,
+      siteOverrides,
+      requestOverrides,
+    );
+    const tags = this.getBoundedVariableWithOverrides(
+      'INCLUDE_TAGS',
+      envVariables,
+      siteOverrides,
+      requestOverrides,
+    );
     return { projectIds, datasourceIds, workbookIds, tags };
   }
 
