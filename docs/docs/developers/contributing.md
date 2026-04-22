@@ -229,11 +229,11 @@ Here is the step-by-step process for adding a tool to the codebase.
 
 ### Step 1: Register the Tool Name
 
-Add your tool name to the `webToolNames` array in `src/tools/toolName.web.ts` and assign it to a
+Add your tool name to the `webToolNames` array in `src/tools/web/toolName.ts` and assign it to a
 group in `webToolGroups`.
 
 ```typescript
-// In src/tools/toolName.web.ts
+// In src/tools/web/toolName.ts
 
 // Add to the webToolNames array:
 export const webToolNames = [
@@ -466,7 +466,7 @@ AI's context window is finite, so every token counts.
 
 ## Checklist Before Submitting Your PR
 
-- [ ] Tool name added to `webToolNames` in `src/tools/toolName.web.ts`
+- [ ] Tool name added to `webToolNames` in `src/tools/web/toolName.ts`
 - [ ] Tool assigned to a group in `toolGroups`
 - [ ] OAuth scope mapping added in `src/server/oauth/scopes.ts`
 - [ ] Tool factory registered in `src/tools/tools.ts`

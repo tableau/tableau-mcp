@@ -1,7 +1,7 @@
 import { Ok } from 'ts-results-es';
 
 import { testProductVersion } from '../../../src/testShared.js';
-import { mockDatasources } from '../../../src/tools/listDatasources/mockDatasources.js';
+import { mockDatasources } from '../../../src/tools/web/listDatasources/mockDatasources.js';
 
 vi.mock('../../../src/sdks/tableau/restApi.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../../src/sdks/tableau/restApi.js')>();

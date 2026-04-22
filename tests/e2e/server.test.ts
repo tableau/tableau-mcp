@@ -1,5 +1,5 @@
 import { serverName, serverVersion } from '../../src/server.js';
-import { WebToolName, webToolNames } from '../../src/tools/toolName.web.js';
+import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
 import { resetEnv, setEnv } from '../testEnv.js';
 import { getClient, listTools } from './client.js';
 

@@ -1,4 +1,4 @@
-import { fieldsResultSchema } from '../../../../src/tools/getDatasourceMetadata/datasourceMetadataUtils.js';
+import { fieldsResultSchema } from '../../../../src/tools/web/getDatasourceMetadata/datasourceMetadataUtils.js';
 import invariant from '../../../../src/utils/invariant.js';
 import { expect, test } from './base.js';
 import { getSuperstoreDatasource } from './testEnv.js';

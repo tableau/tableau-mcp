@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { z } from 'zod';
 
-import { WebToolName } from '../../src/tools/toolName.web.js';
+import { WebToolName } from '../../src/tools/web/toolName.js';
 import invariant from '../../src/utils/invariant.js';
 import { getDefaultEnv } from '../testEnv.js';
 

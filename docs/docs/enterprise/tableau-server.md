@@ -343,7 +343,7 @@ Tableau MCP has a lot of tools, some of which may not be necessary for your desi
 Only one of these environment variables can be specified at a time. Their values are a
 comma-separated list of tool names, or tool group names. A tool group is a collection of tools. For
 the list of tools and their groupings, see
-[toolName.web.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.web.ts).
+[toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/web/toolName.ts).
 
 Examples:
 

@@ -1,4 +1,4 @@
-import { WebToolName, webToolNames } from '../tools/toolName.web.js';
+import { WebToolName, webToolNames } from '../tools/web/toolName.js';
 import { getRequiredApiScopesForTool } from './oauth/scopes.js';
 
 /**

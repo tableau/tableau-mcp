@@ -1,6 +1,6 @@
 import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
-import { isWebToolName, WebToolName } from '../tools/toolName.web.js';
+import { isWebToolName, WebToolName } from '../tools/web/toolName.js';
 
 /**
  * Extract tool name from a JSON-RPC request body.
