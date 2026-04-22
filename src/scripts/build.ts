@@ -36,6 +36,7 @@ const globalValues: Record<GlobalIdentifierName, string> = {
       'empty-import-meta': 'silent',
     },
     outfile: './build/index.js',
+    // https://esbuild.github.io/api/#define
     define: {
       // 'import.meta.env.BUILD_VARIANT': JSON.stringify(env.BUILD_VARIANT),
       ...globalIdentifiers.reduce<Record<`import.meta.env.${string}`, string>>(
