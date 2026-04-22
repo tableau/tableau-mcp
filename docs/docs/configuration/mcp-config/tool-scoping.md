@@ -1,5 +1,5 @@
 ---
-sidebar_position: 6
+sidebar_position: 5
 ---
 
 # Tool Scoping
@@ -30,9 +30,10 @@ The following optional environment variables can be used to configure the tool s
 
 A comma-separated list of project IDs by which to constrain tool arguments and results. Only data
 sources and workbooks (or views from those workbooks) that are members of the provided projects can
-be queried or will be included in the results of the tools.
+be queried or will be included in the results of the tools. This variable is site overridable, see [Site Settings](site-settings.md).
 
-- When set, cannot be empty.
+- When set by the Tableau MCP server, cannot be empty.
+- When overriden by site settings, can be empty to clear any bounds set by the Tableau MCP server.
 - Project IDs can be determined using the
   [Query Projects](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_projects.htm#query_projects)
   REST API or by the [List Data Sources](../../tools/data-qna/list-datasources.md),
@@ -59,9 +60,10 @@ Example: `d87d843b-4326-4ce3-bc50-a68c1e6c9ca5,861566`
 
 A comma-separated list of data source IDs by which to constrain tool arguments and results. Only
 data sources or Pulse metrics and definitions derived from those data sources can be queried or will
-be included in the results of the tools.
+be included in the results of the tools. This variable is site overridable, see [Site Settings](site-settings.md).
 
 - When set, cannot be empty.
+- When overriden by site settings, can be empty to clear any bounds set by the Tableau MCP server.
 - Data source IDs can be determined using the
   [Query Data Sources](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources)
   REST API or the [List Data Sources](../../tools/data-qna/list-datasources.md) tool (assuming tool
@@ -76,9 +78,10 @@ Example: `2d935df8-fe7e-4fd8-bb14-35eb4ba31d4`
 
 A comma-separated list of workbook IDs by which to constrain tool arguments and results. Only
 workbooks or views from those workbooks can be queried or will be included in the results of the
-tools.
+tools. This variable is site overridable, see [Site Settings](site-settings.md).
 
 - When set, cannot be empty.
+- When overriden by site settings, can be empty to clear any bounds set by the Tableau MCP server.
 - Workbook IDs can be determined using the
   [Query Workbooks](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbooks)
   REST API or the [List Workbooks](../../tools/workbooks/list-workbooks.md) tool (assuming tool
@@ -94,9 +97,10 @@ Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
 
 A comma-separated list of case-sensitive tags by which to constrain tool arguments and results. Only
 data sources, workbooks, or views with the provided tags can be queried or will be included in the
-results of the tools.
+results of the tools. This variable is site overridable, see [Site Settings](site-settings.md).
 
 - When set, cannot be empty.
+- When overriden by site settings, can be empty to clear any bounds set by the Tableau MCP server.
 - Tags can be determined using the
   [Tableau product](https://help.tableau.com/current/pro/desktop/en-us/tags.htm) or the REST APIs
   for querying
