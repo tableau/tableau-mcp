@@ -84,11 +84,11 @@ type LogAndExecuteParams<T, Args extends ZodRawShape | undefined = undefined> = 
 };
 
 /**
- * Represents an MCP tool
+ * Represents a Web MCP tool
  *
  * @template Args - The schema of the tool's parameters or undefined if the tool has no parameters
  */
-export class Tool<Args extends ZodRawShape | undefined = undefined> {
+export class WebTool<Args extends ZodRawShape | undefined = undefined> {
   server: Server;
   name: WebToolName;
   description: TypeOrProvider<string>;

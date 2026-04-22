@@ -23,7 +23,7 @@ import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { Tool, ToolRules } from '../tool.js';
+import { ToolRules, WebTool } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { queryDatasourceToolDescription20253 } from './descriptions/queryDescription.2025.3.js';
 import { queryDatasourceToolDescription20261 } from './descriptions/queryDescription.2026.1.js';
@@ -52,9 +52,9 @@ type QueryDatasourceResult = QueryOutput & {
 export const getQueryDatasourceTool = (
   server: Server,
   productVersion: ProductVersion,
-): Tool<typeof paramsSchema> => {
+): WebTool<typeof paramsSchema> => {
   const rules = getQueryDatasourceRules(productVersion);
-  const queryDatasourceTool = new Tool({
+  const queryDatasourceTool = new WebTool({
     server,
     name: 'query-datasource',
     description: new Provider(() =>

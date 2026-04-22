@@ -5,7 +5,7 @@ import { getConfig } from '../../config.js';
 import { McpToolError } from '../../errors/mcpToolError.js';
 import { Server } from '../../server.js';
 import invariant from '../../utils/invariant.js';
-import { Tool } from '../tool.js';
+import { WebTool } from '../tool.js';
 
 const paramsSchema = {};
 
@@ -27,10 +27,10 @@ const paramsSchema = {};
  * Important: call this tool BEFORE revoking the access token, since revocation
  * invalidates the token required to authenticate the reset consent request.
  */
-export const getResetConsentTool = (server: Server): Tool<typeof paramsSchema> => {
+export const getResetConsentTool = (server: Server): WebTool<typeof paramsSchema> => {
   const config = getConfig();
 
-  const resetConsentTool = new Tool({
+  const resetConsentTool = new WebTool({
     server,
     name: 'reset-consent',
     description: `Resets saved OAuth consent for the current user on the Tableau authorization server.

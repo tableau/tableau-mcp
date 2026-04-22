@@ -8,7 +8,7 @@ import {
   searchContentFilterSchema,
 } from '../../sdks/tableau/types/contentExploration.js';
 import { Server } from '../../server.js';
-import { Tool } from '../tool.js';
+import { WebTool } from '../tool.js';
 import {
   buildFilterString,
   buildOrderByString,
@@ -24,8 +24,8 @@ const paramsSchema = {
   filter: searchContentFilterSchema.optional(),
 };
 
-export const getSearchContentTool = (server: Server): Tool<typeof paramsSchema> => {
-  const searchContentTool = new Tool({
+export const getSearchContentTool = (server: Server): WebTool<typeof paramsSchema> => {
+  const searchContentTool = new WebTool({
     server,
     name: 'search-content',
     description: `

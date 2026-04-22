@@ -7,7 +7,7 @@ import { DatasourceNotAllowedError, ZodiosValidationError } from '../errors/mcpT
 import { notifier } from '../logging/notification.js';
 import { WebMcpServer } from '../server.web.js';
 import invariant from '../utils/invariant.js';
-import { Tool } from './tool.js';
+import { WebTool } from './tool.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
 
 // Mock for product telemetry - tracks calls to send()
@@ -47,7 +47,7 @@ describe('Tool', () => {
   } as const;
 
   it('should create a tool instance with correct properties', () => {
-    const tool = new Tool(mockParams);
+    const tool = new WebTool(mockParams);
 
     expect(tool.name).toBe(mockParams.name);
     expect(tool.description).toBe(mockParams.description);
@@ -58,7 +58,7 @@ describe('Tool', () => {
   it('should log invocation with provided args', () => {
     const spy = vi.spyOn(notifier, 'debug');
 
-    const tool = new Tool(mockParams);
+    const tool = new WebTool(mockParams);
     const testArgs = { param1: 'test' };
 
     tool.logInvocation({ requestId: '2', args: testArgs, username: 'test-user' });
@@ -76,7 +76,7 @@ describe('Tool', () => {
   });
 
   it('should return successful result when callback succeeds', async () => {
-    const tool = new Tool(mockParams);
+    const tool = new WebTool(mockParams);
     const successResult = { data: 'success' };
     const callback = vi
       .fn()
@@ -108,7 +108,7 @@ describe('Tool', () => {
   });
 
   it('should return error result when callback throws', async () => {
-    const tool = new Tool(mockParams);
+    const tool = new WebTool(mockParams);
     const errorMessage = 'Test error';
     const callback = vi.fn().mockImplementation(async (_requestId: string) => {
       throw new Error(errorMessage);
@@ -132,7 +132,7 @@ describe('Tool', () => {
   });
 
   it('should constrain the success result', async () => {
-    const tool = new Tool(mockParams);
+    const tool = new WebTool(mockParams);
     const successResult = { data: 'success' };
 
     const result = await tool.logAndExecute({
@@ -159,7 +159,7 @@ describe('Tool', () => {
   });
 
   it('should return empty result when the constrained result is empty', async () => {
-    const tool = new Tool(mockParams);
+    const tool = new WebTool(mockParams);
     const successResult = { data: 'success' };
 
     const result = await tool.logAndExecute({
@@ -180,7 +180,7 @@ describe('Tool', () => {
   });
 
   it('should return error result when the constrained result is error', async () => {
-    const tool = new Tool(mockParams);
+    const tool = new WebTool(mockParams);
     const successResult = { data: 'success' };
 
     const result = await tool.logAndExecute({
@@ -206,7 +206,7 @@ describe('Tool', () => {
     });
 
     it('should send telemetry with success=true and empty error_code on success', async () => {
-      const tool = new Tool(mockParams);
+      const tool = new WebTool(mockParams);
 
       await tool.logAndExecute({
         extra: mockExtra,
@@ -232,7 +232,7 @@ describe('Tool', () => {
     });
 
     it('should send telemetry with success=false on callback error', async () => {
-      const tool = new Tool(mockParams);
+      const tool = new WebTool(mockParams);
 
       await tool.logAndExecute({
         extra: mockExtra,
@@ -254,7 +254,7 @@ describe('Tool', () => {
     });
 
     it('should send telemetry with actual HTTP status code on API error', async () => {
-      const tool = new Tool(mockParams);
+      const tool = new WebTool(mockParams);
       const axiosError = new AxiosError('Unauthorized');
       axiosError.response = { status: 401 } as AxiosError['response'];
 
@@ -278,7 +278,7 @@ describe('Tool', () => {
     });
 
     it('should send telemetry with success=false and empty error_code on constrained error', async () => {
-      const tool = new Tool(mockParams);
+      const tool = new WebTool(mockParams);
 
       await tool.logAndExecute({
         extra: mockExtra,
@@ -298,7 +298,7 @@ describe('Tool', () => {
     });
 
     it('should send telemetry with success=true on constrained empty result', async () => {
-      const tool = new Tool(mockParams);
+      const tool = new WebTool(mockParams);
 
       await tool.logAndExecute({
         extra: mockExtra,
@@ -324,7 +324,7 @@ describe('Tool', () => {
     });
 
     it('should record no error on success', async () => {
-      const tool = new Tool(mockParams);
+      const tool = new WebTool(mockParams);
 
       await tool.logAndExecute({
         extra: mockExtra,
@@ -341,7 +341,7 @@ describe('Tool', () => {
     });
 
     it('should record tableau_api category when callback throws AxiosError', async () => {
-      const tool = new Tool(mockParams);
+      const tool = new WebTool(mockParams);
       const axiosError = new AxiosError('Forbidden');
       axiosError.response = { status: 403 } as AxiosError['response'];
 
@@ -362,7 +362,7 @@ describe('Tool', () => {
     });
 
     it('should record error_code of 500 when callback throws a plain Error with no HTTP status', async () => {
-      const tool = new Tool(mockParams);
+      const tool = new WebTool(mockParams);
 
       await tool.logAndExecute({
         extra: mockExtra,
@@ -381,7 +381,7 @@ describe('Tool', () => {
     });
 
     it('should record business_logic category when callback returns typed Err object', async () => {
-      const tool = new Tool(mockParams);
+      const tool = new WebTool(mockParams);
 
       await tool.logAndExecute({
         extra: mockExtra,
@@ -398,7 +398,7 @@ describe('Tool', () => {
     });
 
     it('should record no error on empty constrained result', async () => {
-      const tool = new Tool(mockParams);
+      const tool = new WebTool(mockParams);
 
       await tool.logAndExecute({
         extra: mockExtra,
@@ -417,7 +417,7 @@ describe('Tool', () => {
 
   describe('ZodiosError handling', () => {
     it('should return isError: false with data and validation warning for ZodiosError with valid ZodError cause', async () => {
-      const tool = new Tool(mockParams);
+      const tool = new WebTool(mockParams);
       const rawApiData = { fields: [], parameters: [{ unexpected: 'data' }] };
       const zodError = new ZodError([
         {
@@ -451,7 +451,7 @@ describe('Tool', () => {
     });
 
     it('should return isError: false with validation warning for discriminatedUnion schema errors', async () => {
-      const tool = new Tool(mockParams);
+      const tool = new WebTool(mockParams);
       const rawApiData = {
         parameters: [{ parameterType: 'LIST', members: [{ value: '5', alias: 'Top 5' }] }],
       };

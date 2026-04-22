@@ -8,14 +8,14 @@ import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { ConstrainedResult, Tool } from '../tool.js';
+import { ConstrainedResult, WebTool } from '../tool.js';
 
 const paramsSchema = {
   workbookId: z.string(),
 };
 
-export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> => {
-  const getWorkbookTool = new Tool({
+export const getGetWorkbookTool = (server: Server): WebTool<typeof paramsSchema> => {
+  const getWorkbookTool = new WebTool({
     server,
     name: 'get-workbook',
     description:

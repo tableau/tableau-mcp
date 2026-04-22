@@ -9,7 +9,7 @@ import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { Tool } from '../tool.js';
+import { WebTool } from '../tool.js';
 import { parseAndValidateCustomViewsFilterString } from './customViewsFilterUtils.js';
 
 const paramsSchema = {
@@ -19,8 +19,8 @@ const paramsSchema = {
   limit: z.number().gt(0).optional(),
 };
 
-export const getListCustomViewsTool = (server: Server): Tool<typeof paramsSchema> => {
-  const listCustomViewsTool = new Tool({
+export const getListCustomViewsTool = (server: Server): WebTool<typeof paramsSchema> => {
+  const listCustomViewsTool = new WebTool({
     server,
     name: 'list-custom-views',
     // workbookId intentionally omitted from the filter field table since it originates from the workbookId parameter

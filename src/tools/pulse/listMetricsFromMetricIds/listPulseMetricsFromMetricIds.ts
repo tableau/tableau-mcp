@@ -3,15 +3,17 @@ import { z } from 'zod';
 
 import { useRestApi } from '../../../restApiInstance.js';
 import { Server } from '../../../server.js';
-import { Tool } from '../../tool.js';
+import { WebTool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 
 const paramsSchema = {
   metricIds: z.array(z.string().length(36)),
 };
 
-export const getListPulseMetricsFromMetricIdsTool = (server: Server): Tool<typeof paramsSchema> => {
-  const listPulseMetricsFromMetricIdsTool = new Tool({
+export const getListPulseMetricsFromMetricIdsTool = (
+  server: Server,
+): WebTool<typeof paramsSchema> => {
+  const listPulseMetricsFromMetricIdsTool = new WebTool({
     server,
     name: 'list-pulse-metrics-from-metric-ids',
     description: `

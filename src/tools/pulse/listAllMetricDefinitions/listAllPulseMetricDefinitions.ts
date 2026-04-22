@@ -9,7 +9,7 @@ import {
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { pulsePaginate } from '../../../utils/paginate.js';
-import { Tool } from '../../tool.js';
+import { WebTool } from '../../tool.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
 
 const paramsSchema = {
@@ -18,8 +18,10 @@ const paramsSchema = {
   pageSize: z.coerce.number().gt(0).optional(),
 };
 
-export const getListAllPulseMetricDefinitionsTool = (server: Server): Tool<typeof paramsSchema> => {
-  const listAllPulseMetricDefinitionsTool = new Tool({
+export const getListAllPulseMetricDefinitionsTool = (
+  server: Server,
+): WebTool<typeof paramsSchema> => {
+  const listAllPulseMetricDefinitionsTool = new WebTool({
     server,
     name: 'list-all-pulse-metric-definitions',
     description: `
