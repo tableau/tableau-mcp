@@ -10,7 +10,7 @@ import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { webToolNames } from './tools/web/toolName.js';
-import { toolFactories } from './tools/web/tools.js';
+import { webToolFactories } from './tools/web/tools.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings';
 import { Provider } from './utils/provider.js';
 
@@ -94,7 +94,7 @@ export class WebMcpServer extends Server {
 
     const { includeTools, excludeTools } = configOverrides;
 
-    const allTools = toolFactories.map((toolFactory) =>
+    const allTools = webToolFactories.map((toolFactory) =>
       toolFactory(this, tableauServerInfo.productVersion),
     );
     const toolsToRegister: typeof allTools = [];

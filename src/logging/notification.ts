@@ -1,7 +1,7 @@
 import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../server.js';
-import { WebToolName } from '../tools/web/toolName.js';
+import { ToolName } from '../tools/toolName.js';
 import { getFileLogger } from './fileLogger.js';
 
 type NotificationName = 'rest-api' | (string & {});
@@ -74,7 +74,7 @@ export const getNotificationMessageForTool = ({
   username,
 }: {
   requestId: RequestId;
-  toolName: WebToolName;
+  toolName: ToolName;
   args: unknown;
   username?: string;
 }): NotificationMessage => {

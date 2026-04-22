@@ -2,7 +2,7 @@ import { WebMcpServer } from './server.web.js';
 import { testProductVersion } from './testShared.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
 import { webToolNames } from './tools/web/toolName.js';
-import { toolFactories } from './tools/web/tools.js';
+import { webToolFactories } from './tools/web/tools.js';
 import { Provider } from './utils/provider.js';
 
 describe('WebMcpServer', () => {
@@ -24,7 +24,7 @@ describe('WebMcpServer', () => {
     const server = getServer();
     await server.registerTools();
 
-    const allTools = toolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
+    const allTools = webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
     const tools = allTools.filter((_, i) => !disabledFlags[i]);
     for (const tool of tools) {
@@ -44,7 +44,7 @@ describe('WebMcpServer', () => {
     const server = getServer();
     await server.registerTools();
 
-    const allDisabledTools = toolFactories.map((toolFactory) =>
+    const allDisabledTools = webToolFactories.map((toolFactory) =>
       toolFactory(server, testProductVersion),
     );
     const disabledToolFlags = await Promise.all(
@@ -82,7 +82,7 @@ describe('WebMcpServer', () => {
     const server = getServer();
     await server.registerTools();
 
-    const tools = toolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
+    const tools = webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
     const excludeDisabledFlags = await Promise.all(
       tools.map((tool) => Provider.from(tool.disabled)),
     );
