@@ -1,19 +1,18 @@
-import { CallToolResult, RequestId, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
-import { Result } from 'ts-results-es';
-import { z, ZodRawShape, ZodTypeAny } from 'zod';
+import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
+import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
+import { ZodRawShape } from 'zod';
 
-import { McpToolError, ZodiosValidationError } from '../errors/mcpToolError.js';
-import { log } from '../logging/logger.js';
-import { getNotificationMessageForTool, notifier } from '../logging/notification.js';
-import { Server } from '../server.js';
-import { getRequiredApiScopesForTool, TableauApiScope } from '../server/oauth/scopes.js';
-import { getTelemetryProvider } from '../telemetry/init.js';
-import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder.js';
-import { getExceptionMessage } from '../utils/getExceptionMessage.js';
-import { getHttpStatus } from '../utils/getHttpStatus.js';
-import { TypeOrProvider } from '../utils/provider.js';
-import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './toolContext.web.js';
-import { WebToolName } from './toolName.web.js';
+import { ZodiosValidationError } from '../errors/mcpToolError';
+import { log } from '../logging/logger';
+import { WebMcpServer } from '../server.web';
+import { getRequiredApiScopesForTool, TableauApiScope } from '../server/oauth/scopes';
+import { getTelemetryProvider } from '../telemetry/init';
+import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder';
+import { getExceptionMessage } from '../utils/getExceptionMessage';
+import { getHttpStatus } from '../utils/getHttpStatus';
+import { LogAndExecuteParams, Tool, ToolParams } from './tool';
+import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './toolContext.web';
+import { WebToolName } from './toolName.web';
 
 export type ToolRules = Record<string, boolean | undefined>;
 
@@ -33,70 +32,26 @@ export type ConstrainedResult<T> =
     };
 
 /**
- * The parameters for creating a tool instance
- *
- * @typeParam Args - The schema of the tool's parameters
- */
-export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
-  // The MCP server instance
-  server: Server;
-
-  // The name of the tool
-  name: WebToolName;
-
-  // The description of the tool
-  description: TypeOrProvider<string>;
-
-  // The schema of the tool's parameters
-  paramsSchema: TypeOrProvider<Args>;
-
-  // The annotations of the tool
-  annotations: TypeOrProvider<ToolAnnotations>;
-
-  // The implementation of the tool itself
-  callback: TypeOrProvider<TableauWebToolCallback<Args>>;
-
-  // When true, the tool is not registered with the MCP server (model never sees it)
-  disabled?: TypeOrProvider<boolean>;
-};
-
-/**
  * The parameters the logAndExecute method
  *
  * @typeParam T - The type of the result the tool's implementation returns
  * @typeParam Args - The schema of the tool's parameters
  */
-type LogAndExecuteParams<T, Args extends ZodRawShape | undefined = undefined> = {
-  // The extra data provided to request handlers
-  extra: TableauWebRequestHandlerExtra;
-
-  // The arguments of the tool call
-  args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
-
-  // A function that contains the business logic of the tool to be logged and executed
-  callback: () => Promise<Result<T, McpToolError>>;
-
-  // A function that can transform a successful result of the callback into a CallToolResult
-  getSuccessResult?: (result: T) => CallToolResult;
-
+export type WebToolLogAndExecuteParams<
+  T,
+  Args extends undefined | ZodRawShapeCompat | AnySchema,
+> = LogAndExecuteParams<T, WebMcpServer, TableauWebRequestHandlerExtra, Args> & {
   // A function that constrains the success result of the tool
   constrainSuccessResult: (result: T) => ConstrainedResult<T> | Promise<ConstrainedResult<T>>;
 };
 
-/**
- * Represents a Web MCP tool
- *
- * @template Args - The schema of the tool's parameters or undefined if the tool has no parameters
- */
-export class WebTool<Args extends ZodRawShape | undefined = undefined> {
-  server: Server;
-  name: WebToolName;
-  description: TypeOrProvider<string>;
-  paramsSchema: TypeOrProvider<Args>;
-  annotations: TypeOrProvider<ToolAnnotations>;
-  callback: TypeOrProvider<TableauWebToolCallback<Args>>;
-  disabled: TypeOrProvider<boolean>;
-
+export class WebTool<Args extends ZodRawShape | undefined = undefined> extends Tool<
+  WebMcpServer,
+  WebToolName,
+  TableauWebRequestHandlerExtra,
+  TableauWebToolCallback<Args>,
+  Args
+> {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
 
   constructor({
@@ -107,36 +62,16 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> {
     annotations,
     callback,
     disabled,
-  }: ToolParams<Args>) {
-    this.server = server;
-    this.name = name;
-    this.description = description;
-    this.paramsSchema = paramsSchema;
-    this.annotations = annotations;
-    this.callback = callback;
-    this.disabled = disabled ?? false;
+  }: ToolParams<
+    WebMcpServer,
+    WebToolName,
+    TableauWebRequestHandlerExtra,
+    TableauWebToolCallback<Args>,
+    Args
+  >) {
+    super({ server, name, description, paramsSchema, annotations, callback, disabled });
 
-    this.requiredApiScopes = getRequiredApiScopesForTool(name);
-  }
-
-  logInvocation({
-    requestId,
-    args,
-    username,
-  }: {
-    requestId: RequestId;
-    args: unknown;
-    username?: string;
-  }): void {
-    notifier.debug(
-      this.server,
-      getNotificationMessageForTool({
-        requestId,
-        toolName: this.name,
-        args,
-        username,
-      }),
-    );
+    this.requiredApiScopes = getRequiredApiScopesForTool(name as WebToolName);
   }
 
   async logAndExecute<T>({
@@ -145,7 +80,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> {
     callback,
     getSuccessResult,
     constrainSuccessResult,
-  }: LogAndExecuteParams<T, Args>): Promise<CallToolResult> {
+  }: WebToolLogAndExecuteParams<T, Args>): Promise<CallToolResult> {
     const { config, requestId, sessionId, tableauAuthInfo } = extra;
     const username = tableauAuthInfo?.username;
 

@@ -6,14 +6,16 @@ import {
   pulseInsightBriefRequestSchema,
   PulseInsightBriefResponse,
 } from '../../../sdks/tableau/types/pulse.js';
-import { Server } from '../../../server.js';
+import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../../tool.web.js';
 
 const paramsSchema = {
   briefRequest: pulseInsightBriefRequestSchema,
 };
 
-export const getGeneratePulseInsightBriefTool = (server: Server): WebTool<typeof paramsSchema> => {
+export const getGeneratePulseInsightBriefTool = (
+  server: WebMcpServer,
+): WebTool<typeof paramsSchema> => {
   const generatePulseInsightBriefTool = new WebTool({
     server,
     name: 'generate-pulse-insight-brief',

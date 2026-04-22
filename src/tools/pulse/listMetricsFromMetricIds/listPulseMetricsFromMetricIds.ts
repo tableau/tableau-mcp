@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { useRestApi } from '../../../restApiInstance.js';
-import { Server } from '../../../server.js';
+import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../../tool.web.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 
@@ -11,7 +11,7 @@ const paramsSchema = {
 };
 
 export const getListPulseMetricsFromMetricIdsTool = (
-  server: Server,
+  server: WebMcpServer,
 ): WebTool<typeof paramsSchema> => {
   const listPulseMetricsFromMetricIdsTool = new WebTool({
     server,

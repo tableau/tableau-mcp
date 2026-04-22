@@ -7,7 +7,7 @@ import {
   PulseMetricDefinition,
   pulseMetricDefinitionViewEnum,
 } from '../../../sdks/tableau/types/pulse.js';
-import { Server } from '../../../server.js';
+import { WebMcpServer } from '../../../server.web.js';
 import { pulsePaginate } from '../../../utils/paginate.js';
 import { WebTool } from '../../tool.web.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
@@ -19,7 +19,7 @@ const paramsSchema = {
 };
 
 export const getListAllPulseMetricDefinitionsTool = (
-  server: Server,
+  server: WebMcpServer,
 ): WebTool<typeof paramsSchema> => {
   const listAllPulseMetricDefinitionsTool = new WebTool({
     server,
