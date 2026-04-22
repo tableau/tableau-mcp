@@ -3,10 +3,16 @@ import { InitializeRequest, SetLevelRequestSchema } from '@modelcontextprotocol/
 
 import pkg from '../package.json';
 import { setNotificationLevel } from './logging/notification.js';
+import { Variant } from './scripts/variants';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 
-export const serverName =
-  import.meta.env.BUILD_VARIANT === 'desktop' ? 'tableau-desktop-mcp' : 'tableau-mcp';
+const serverNames: Record<Variant, string> = {
+  desktop: 'tableau-desktop-mcp',
+  combined: 'tableau-combined-mcp',
+  default: 'tableau-mcp',
+};
+
+export const serverName = serverNames[import.meta.env.BUILD_VARIANT as Variant];
 export const serverVersion = pkg.version;
 export const userAgent = `${serverName}/${serverVersion}`;
 

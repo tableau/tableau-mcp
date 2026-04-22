@@ -35,6 +35,15 @@ const variantPackageJsonOverrides = {
       '.': './build/index-desktop.js',
     },
   },
+  combined: {
+    name: '@tableau/combined-mcp-server',
+    bin: {
+      'tableau-combined-mcp-server': './build/index-combined.js',
+    },
+    exports: {
+      '.': './build/index-combined.js',
+    },
+  },
 } satisfies Record<PackageVariant, Partial<PackageJson>>;
 
 const packageJsonSchema = z
