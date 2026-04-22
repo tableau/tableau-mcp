@@ -9,8 +9,8 @@ import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { WebTool } from './tools/tool.web.js';
 import { TableauWebRequestHandlerExtra } from './tools/toolContext.web.js';
-import { webToolNames } from './tools/toolName.web.js';
-import { toolFactories } from './tools/tools.js';
+import { webToolNames } from './tools/toolName.web';
+import { toolFactories } from './tools/tools';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings';
 import { Provider } from './utils/provider.js';
 

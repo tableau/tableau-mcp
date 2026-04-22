@@ -7,7 +7,7 @@ import {
   ServerRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../server';
+import { Server } from '../server.js';
 
 // Additional context available to all tool callbacks
 export type TableauToolContext<TServer extends Server> = {
