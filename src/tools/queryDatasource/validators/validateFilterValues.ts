@@ -10,7 +10,7 @@ import {
   SetFilter,
 } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import VizqlDataServiceMethods from '../../../sdks/tableau/methods/vizqlDataServiceMethods.js';
-import { Server } from '../../../server.js';
+import { WebMcpServer } from '../../../server.web.js';
 
 interface FilterValidationError {
   field: string;
@@ -24,7 +24,7 @@ interface FilterValidationError {
  * Returns fuzzy matched sample values from the field if validation fails.
  */
 export async function validateFilterValues(
-  server: Server,
+  server: WebMcpServer,
   query: Query,
   vizqlDataServiceMethods: VizqlDataServiceMethods,
   datasource: Datasource,

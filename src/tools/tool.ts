@@ -5,7 +5,7 @@ import { z, ZodRawShape, ZodTypeAny } from 'zod';
 
 import { McpToolError } from '../errors/mcpToolError.js';
 import { getNotificationMessageForTool, notifier } from '../logging/notification.js';
-import { Server } from '../server.js';
+import { WebMcpServer } from '../server.web.js';
 import { TypeOrProvider } from '../utils/provider.js';
 import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
 import { ToolName } from './toolName.js';
