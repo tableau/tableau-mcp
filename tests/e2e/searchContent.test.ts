@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
+import { resetEnv, setEnv } from '../testEnv.js';
 import { McpClient } from './mcpClient.js';
 
 describe('search-content', () => {
@@ -19,8 +19,6 @@ describe('search-content', () => {
   });
 
   it('should search content', async () => {
-    const env = getDefaultEnv();
-
     const searchResults = await client.callTool('search-content', {
       schema: z.array(z.record(z.string(), z.unknown())),
       toolArgs: {
