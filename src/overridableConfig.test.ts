@@ -810,6 +810,74 @@ describe('OverridableConfig', () => {
           'MAX_RESULT_LIMIT was provided an invalid request override value',
         );
       });
+
+      it('should allow unrestricted MAX_RESULT_LIMIT override to exceed current limit', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMIT:unrestricted');
+        vi.stubEnv('MAX_RESULT_LIMIT', '100');
+
+        const config = new OverridableConfig({}, { MAX_RESULT_LIMIT: '200' });
+        expect(config.getMaxResultLimit('query-datasource')).toBe(200);
+      });
+
+      it('should allow unrestricted MAX_RESULT_LIMIT override to clear the limit', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMIT:unrestricted');
+        vi.stubEnv('MAX_RESULT_LIMIT', '100');
+
+        const config = new OverridableConfig({}, { MAX_RESULT_LIMIT: '' });
+        expect(config.getMaxResultLimit('query-datasource')).toBeNull();
+      });
+
+      it('should allow restricted MAX_RESULT_LIMIT override equal to current limit', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMIT');
+        vi.stubEnv('MAX_RESULT_LIMIT', '100');
+
+        const config = new OverridableConfig({}, { MAX_RESULT_LIMIT: '100' });
+        expect(config.getMaxResultLimit('query-datasource')).toBe(100);
+      });
+
+      it('should allow restricted MAX_RESULT_LIMIT override when no current limit is set', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMIT');
+
+        const config = new OverridableConfig({}, { MAX_RESULT_LIMIT: '50' });
+        expect(config.getMaxResultLimit('query-datasource')).toBe(50);
+      });
+
+      it('should allow restricted MAX_RESULT_LIMIT to clear when no current limit is set', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMIT');
+
+        const config = new OverridableConfig({}, { MAX_RESULT_LIMIT: '' });
+        expect(config.getMaxResultLimit('query-datasource')).toBeNull();
+      });
+
+      it('should throw when MAX_RESULT_LIMIT override is zero', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMIT:unrestricted');
+
+        expect(() => new OverridableConfig({}, { MAX_RESULT_LIMIT: '0' })).toThrow(
+          'MAX_RESULT_LIMIT was provided an invalid request override value',
+        );
+      });
+
+      it('should apply MAX_RESULT_LIMIT request override on top of site override', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMIT');
+        vi.stubEnv('MAX_RESULT_LIMIT', '200');
+
+        const config = new OverridableConfig(
+          { MAX_RESULT_LIMIT: '100' },
+          { MAX_RESULT_LIMIT: '50' },
+        );
+        expect(config.getMaxResultLimit('query-datasource')).toBe(50);
+      });
+
+      it('should throw when restricted MAX_RESULT_LIMIT override exceeds site override limit', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMIT');
+        vi.stubEnv('MAX_RESULT_LIMIT', '200');
+
+        expect(
+          () => new OverridableConfig({ MAX_RESULT_LIMIT: '100' }, { MAX_RESULT_LIMIT: '150' }),
+        ).toThrow(
+          'MAX_RESULT_LIMIT is restricted and can only be overriden to values less than 100',
+        );
+      });
     });
 
     describe('MAX_RESULT_LIMITS', () => {
@@ -848,6 +916,123 @@ describe('OverridableConfig', () => {
 
         expect(
           () => new OverridableConfig({}, { MAX_RESULT_LIMITS: 'query-datasource:200' }),
+        ).toThrow(
+          'MAX_RESULT_LIMITS request override must include a limit for query-datasource that is less than or equal to 100',
+        );
+      });
+
+      it('should throw when restricted override tries to unbind a bounded tool', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMITS');
+        vi.stubEnv('MAX_RESULT_LIMITS', 'query-datasource:100');
+
+        expect(
+          () => new OverridableConfig({}, { MAX_RESULT_LIMITS: 'query-datasource:*' }),
+        ).toThrow(
+          'MAX_RESULT_LIMITS request override must include a limit for query-datasource that is less than or equal to 100',
+        );
+      });
+
+      it('should allow restricted override when current tool is unbounded', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMITS');
+        vi.stubEnv('MAX_RESULT_LIMITS', 'query-datasource:*');
+
+        const config = new OverridableConfig({}, { MAX_RESULT_LIMITS: 'query-datasource:50' });
+        expect(config.getMaxResultLimit('query-datasource')).toBe(50);
+      });
+
+      it('should throw when restricted override omits a bounded tool and global limit is too high', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMIT,MAX_RESULT_LIMITS');
+        vi.stubEnv('MAX_RESULT_LIMIT', '200');
+        vi.stubEnv('MAX_RESULT_LIMITS', 'query-datasource:100');
+
+        expect(() => new OverridableConfig({}, { MAX_RESULT_LIMITS: '' })).toThrow(
+          'MAX_RESULT_LIMITS request override must include a limit for query-datasource that is less than or equal to 100',
+        );
+      });
+
+      it('should allow restricted override to omit a bounded tool when global limit covers it', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMIT,MAX_RESULT_LIMITS');
+        vi.stubEnv('MAX_RESULT_LIMIT', '50');
+        vi.stubEnv('MAX_RESULT_LIMITS', 'query-datasource:100');
+
+        const config = new OverridableConfig({}, { MAX_RESULT_LIMITS: '' });
+        expect(config.getMaxResultLimit('query-datasource')).toBe(50);
+      });
+
+      it('should throw when restricted override adds a new tool limit exceeding global limit', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMITS');
+        vi.stubEnv('MAX_RESULT_LIMIT', '50');
+
+        expect(
+          () => new OverridableConfig({}, { MAX_RESULT_LIMITS: 'query-datasource:100' }),
+        ).toThrow(
+          'MAX_RESULT_LIMITS request override must include a limit for query-datasource that is less than or equal to 50',
+        );
+      });
+
+      it('should allow restricted override to add a new tool limit within global limit', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMITS');
+        vi.stubEnv('MAX_RESULT_LIMIT', '100');
+
+        const config = new OverridableConfig({}, { MAX_RESULT_LIMITS: 'query-datasource:50' });
+        expect(config.getMaxResultLimit('query-datasource')).toBe(50);
+      });
+
+      it('should throw when restricted override adds an unbounded new tool and global limit exists', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMITS');
+        vi.stubEnv('MAX_RESULT_LIMIT', '100');
+
+        expect(
+          () => new OverridableConfig({}, { MAX_RESULT_LIMITS: 'query-datasource:*' }),
+        ).toThrow(
+          'MAX_RESULT_LIMITS request override must include a limit for query-datasource that is less than or equal to 100',
+        );
+      });
+
+      it('should allow restricted override to add any new tool limit when no global limit exists', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMITS');
+
+        const config = new OverridableConfig({}, { MAX_RESULT_LIMITS: 'query-datasource:999' });
+        expect(config.getMaxResultLimit('query-datasource')).toBe(999);
+      });
+
+      it('should allow unrestricted override to clear all tool limits with empty string', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMITS:unrestricted');
+        vi.stubEnv('MAX_RESULT_LIMITS', 'query-datasource:100');
+
+        const config = new OverridableConfig({}, { MAX_RESULT_LIMITS: '' });
+        expect(config.getMaxResultLimit('query-datasource')).toBeNull();
+      });
+
+      it('should allow unrestricted override to exceed current tool limits', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMITS:unrestricted');
+        vi.stubEnv('MAX_RESULT_LIMITS', 'query-datasource:100');
+
+        const config = new OverridableConfig({}, { MAX_RESULT_LIMITS: 'query-datasource:500' });
+        expect(config.getMaxResultLimit('query-datasource')).toBe(500);
+      });
+
+      it('should apply MAX_RESULT_LIMITS request override on top of site override', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMITS');
+        vi.stubEnv('MAX_RESULT_LIMITS', 'query-datasource:200');
+
+        const config = new OverridableConfig(
+          { MAX_RESULT_LIMITS: 'query-datasource:100' },
+          { MAX_RESULT_LIMITS: 'query-datasource:50' },
+        );
+        expect(config.getMaxResultLimit('query-datasource')).toBe(50);
+      });
+
+      it('should throw when restricted override exceeds site-overridden tool limit', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'MAX_RESULT_LIMITS');
+        vi.stubEnv('MAX_RESULT_LIMITS', 'query-datasource:200');
+
+        expect(
+          () =>
+            new OverridableConfig(
+              { MAX_RESULT_LIMITS: 'query-datasource:100' },
+              { MAX_RESULT_LIMITS: 'query-datasource:150' },
+            ),
         ).toThrow(
           'MAX_RESULT_LIMITS request override must include a limit for query-datasource that is less than or equal to 100',
         );

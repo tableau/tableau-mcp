@@ -2,7 +2,7 @@ import { ProcessEnvEx } from '../types/process-env.js';
 import { removeClaudeMcpBundleUserConfigTemplates } from './config.js';
 import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
 
-const overridableVariables = [
+export const overridableVariables = [
   'ALLOWED_REQUEST_OVERRIDES',
   'INCLUDE_TOOLS',
   'EXCLUDE_TOOLS',
@@ -16,7 +16,7 @@ const overridableVariables = [
   'DISABLE_METADATA_API_REQUESTS',
 ] as const satisfies ReadonlyArray<keyof ProcessEnvEx>;
 
-const requestOverridableVariables = overridableVariables.filter(
+export const requestOverridableVariables = overridableVariables.filter(
   (v) => v !== 'ALLOWED_REQUEST_OVERRIDES' && v !== 'INCLUDE_TOOLS' && v !== 'EXCLUDE_TOOLS',
 );
 
@@ -84,7 +84,7 @@ export class OverridableConfig {
     }
 
     // ALLOWED_REQUEST_OVERRIDES
-    this.allowedRequestOverrides = this.getAllowedRequestOverrides(envVariables, requestOverrides);
+    this.allowedRequestOverrides = this.getAllowedRequestOverrides(envVariables, siteOverrides);
 
     // INCLUDE_TOOLS, EXCLUDE_TOOLS
     const { includeTools, excludeTools } = this.getToolsWithOverrides(envVariables, siteOverrides);
@@ -163,7 +163,7 @@ export class OverridableConfig {
     }
     // Applying site overrides
     if (
-      envVariables.ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES &&
+      envVariables.ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES === 'true' &&
       Object.hasOwn(siteOverrides, 'ALLOWED_REQUEST_OVERRIDES')
     ) {
       const siteAllowedRequestOverrides: Map<
@@ -412,8 +412,7 @@ export class OverridableConfig {
   ): number | null {
     // Initializing max result limit from environment variables
     const maxResultLimitNumber = parseInt(envVariables.MAX_RESULT_LIMIT ?? '');
-    let maxResultLimit =
-      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
+    let maxResultLimit = maxResultLimitNumber > 0 ? maxResultLimitNumber : null;
     // Applying site overrides
     if (Object.hasOwn(siteOverrides, 'MAX_RESULT_LIMIT')) {
       const maxResultLimitOverride = parseInt(siteOverrides.MAX_RESULT_LIMIT);
@@ -561,8 +560,7 @@ function getMaxResultLimits(maxResultLimits: string): Map<ToolName, number | nul
   maxResultLimits.split(',').forEach((curr) => {
     const [toolName, maxResultLimit] = curr.split(':');
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
-    const actualLimit =
-      isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
+    const actualLimit = maxResultLimitNumber > 0 ? maxResultLimitNumber : null;
     if (isToolName(toolName)) {
       map.set(toolName, actualLimit);
     } else if (isToolGroupName(toolName)) {
