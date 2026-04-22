@@ -12,7 +12,7 @@ import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForw
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../utils/getHttpStatus.js';
 import { TypeOrProvider } from '../utils/provider.js';
-import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
+import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './toolContext.web.js';
 import { WebToolName } from './toolName.web.js';
 
 export type ToolRules = Record<string, boolean | undefined>;
@@ -54,7 +54,7 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   annotations: TypeOrProvider<ToolAnnotations>;
 
   // The implementation of the tool itself
-  callback: TypeOrProvider<TableauToolCallback<Args>>;
+  callback: TypeOrProvider<TableauWebToolCallback<Args>>;
 
   // When true, the tool is not registered with the MCP server (model never sees it)
   disabled?: TypeOrProvider<boolean>;
@@ -68,7 +68,7 @@ export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
  */
 type LogAndExecuteParams<T, Args extends ZodRawShape | undefined = undefined> = {
   // The extra data provided to request handlers
-  extra: TableauRequestHandlerExtra;
+  extra: TableauWebRequestHandlerExtra;
 
   // The arguments of the tool call
   args: Args extends ZodRawShape ? z.objectOutputType<Args, ZodTypeAny> : undefined;
@@ -94,7 +94,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> {
   description: TypeOrProvider<string>;
   paramsSchema: TypeOrProvider<Args>;
   annotations: TypeOrProvider<ToolAnnotations>;
-  callback: TypeOrProvider<TableauToolCallback<Args>>;
+  callback: TypeOrProvider<TableauWebToolCallback<Args>>;
   disabled: TypeOrProvider<boolean>;
 
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
