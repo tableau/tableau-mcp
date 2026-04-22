@@ -8,7 +8,7 @@ import { Server } from './server';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { WebTool } from './tools/tool.web.js';
-import { TableauWebRequestHandlerExtra } from './tools/toolContext.web.js';
+import { TableauRequestHandlerExtra } from './tools/toolContext.js';
 import { webToolNames } from './tools/toolName.web.js';
 import { toolFactories } from './tools/tools.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings';
@@ -30,7 +30,7 @@ export class WebMcpServer extends Server {
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
       ) => {
         const tableauToolCallback = await Provider.from(callback);
-        const tableauRequestHandlerExtra: TableauWebRequestHandlerExtra = {
+        const tableauRequestHandlerExtra: TableauRequestHandlerExtra = {
           ...extra,
           config,
           server: this,

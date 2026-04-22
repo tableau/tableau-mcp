@@ -5,7 +5,7 @@ import { z, ZodRawShape, ZodTypeAny } from 'zod';
 
 import { McpToolError } from '../errors/mcpToolError.js';
 import { getNotificationMessageForTool, notifier } from '../logging/notification.js';
-import { WebMcpServer } from '../server.web.js';
+import { Server } from '../server.js';
 import { TypeOrProvider } from '../utils/provider.js';
 import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext.js';
 import { ToolName } from './toolName.js';
@@ -18,8 +18,7 @@ import { ToolName } from './toolName.js';
 export type ToolParams<
   TServer extends Server,
   TToolName extends ToolName,
-  TExtra extends TableauRequestHandlerExtra<TServer>,
-  TCallback extends TableauToolCallback<TServer, TExtra, Args>,
+  TCallback extends TableauToolCallback<Args>,
   Args extends undefined | ZodRawShapeCompat | AnySchema,
 > = {
   // The MCP server instance
@@ -53,8 +52,7 @@ export type ToolParams<
  */
 export type LogAndExecuteParams<
   T,
-  TServer extends Server,
-  TExtra extends TableauRequestHandlerExtra<TServer>,
+  TExtra extends TableauRequestHandlerExtra,
   Args extends undefined | ZodRawShapeCompat | AnySchema,
 > = {
   // The extra data provided to request handlers
@@ -78,8 +76,7 @@ export type LogAndExecuteParams<
 export abstract class Tool<
   TServer extends Server,
   TToolName extends ToolName,
-  TExtra extends TableauRequestHandlerExtra<TServer>,
-  TCallback extends TableauToolCallback<TServer, TExtra, Args>,
+  TCallback extends TableauToolCallback<Args>,
   Args extends ZodRawShape | undefined = undefined,
 > {
   server: TServer;
@@ -98,7 +95,7 @@ export abstract class Tool<
     annotations,
     callback,
     disabled,
-  }: ToolParams<TServer, TToolName, TExtra, TCallback, Args>) {
+  }: ToolParams<TServer, TToolName, TCallback, Args>) {
     this.server = server;
     this.name = name;
     this.description = description;

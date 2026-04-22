@@ -5,7 +5,7 @@ import { PulseDisabledError, PulseNotAvailableError } from '../../../errors/mcpT
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
-import { getMockRequestHandlerExtra } from '../../toolContext.web.mock.js';
+import { getMockRequestHandlerExtra } from '../../toolContext.mock.js';
 import { mockPulseMetricDefinitions } from '../mockPulseMetricDefinitions.js';
 import { getListPulseMetricsFromMetricIdsTool } from './listPulseMetricsFromMetricIds.js';
 
