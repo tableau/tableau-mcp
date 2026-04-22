@@ -143,7 +143,7 @@ export async function startExpressServer({
           server.close();
         });
 
-        await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
+        await connect(server, transport, logLevel, getTableauAuthInfo(req.auth), req.overrides);
       } else {
         const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
 
@@ -155,7 +155,7 @@ export async function startExpressServer({
           transport = createSession({ clientInfo });
 
           const server = new Server({ clientInfo });
-          await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
+          await connect(server, transport, logLevel, getTableauAuthInfo(req.auth), req.overrides);
         } else {
           // Invalid request
           res.status(400).json({
@@ -192,8 +192,9 @@ async function connect(
   transport: StreamableHTTPServerTransport,
   logLevel: LoggingLevel,
   authInfo: TableauAuthInfo | undefined,
+  requestOverrides: Record<string, string> | undefined,
 ): Promise<void> {
-  await server.registerTools(authInfo);
+  await server.registerTools(authInfo, requestOverrides);
   server.registerRequestHandlers();
 
   await server.connect(transport);

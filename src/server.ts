@@ -63,7 +63,10 @@ export class Server extends McpServer {
     this._clientInfo = clientInfo;
   }
 
-  registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
+  registerTools = async (
+    tableauAuthInfo?: TableauAuthInfo,
+    requestOverrides?: Record<string, string>,
+  ): Promise<void> => {
     const config = getConfig();
 
     for (const {
@@ -72,7 +75,7 @@ export class Server extends McpServer {
       paramsSchema,
       annotations,
       callback,
-    } of await this._getToolsToRegister(tableauAuthInfo)) {
+    } of await this._getToolsToRegister(tableauAuthInfo, requestOverrides)) {
       const toolCallback: ToolCallback<typeof paramsSchema> = async (
         args: typeof paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
@@ -108,7 +111,7 @@ export class Server extends McpServer {
             tableauRequestHandlerExtra._siteLuid = siteLuid;
           },
           getConfigWithOverrides: async () =>
-            getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra }),
+            getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra, requestOverrides }),
         };
 
         return tableauToolCallback(args, tableauRequestHandlerExtra);
@@ -135,6 +138,7 @@ export class Server extends McpServer {
 
   private _getToolsToRegister = async (
     tableauAuthInfo?: TableauAuthInfo,
+    requestOverrides?: Record<string, string>,
   ): Promise<Array<Tool<any>>> => {
     const config = getConfig();
     const configOverrides = await getConfigWithOverrides({
@@ -143,6 +147,7 @@ export class Server extends McpServer {
         tableauAuthInfo,
         disableLogging: true, // MCP server is not connected yet so we can't send logging notifications
       },
+      requestOverrides,
     });
 
     const tableauServerInfo = await getTableauServerInfo(config.server || tableauAuthInfo?.server);
