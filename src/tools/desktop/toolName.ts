@@ -1,28 +1,28 @@
-export const toolNames = ['placeholder-desktop-tool'] as const;
-export type DesktopToolName = (typeof toolNames)[number];
+export const desktopToolNames = ['placeholder-desktop-tool'] as const;
+export type DesktopToolName = (typeof desktopToolNames)[number];
 
-export const toolGroupNames = ['placeholder'] as const;
-export type ToolGroupName = (typeof toolGroupNames)[number];
+export const desktopToolGroupNames = ['placeholder'] as const;
+export type DesktopToolGroupName = (typeof desktopToolGroupNames)[number];
 
-export const toolGroups = {
+export const desktopToolGroups = {
   placeholder: ['placeholder-desktop-tool'],
-} as const satisfies Record<ToolGroupName, Array<DesktopToolName>>;
+} as const satisfies Record<DesktopToolGroupName, Array<DesktopToolName>>;
 
-export function isToolName(value: unknown): value is DesktopToolName {
-  return !!toolNames.find((name) => name === value);
+export function isDesktopToolName(value: unknown): value is DesktopToolName {
+  return !!desktopToolNames.find((name) => name === value);
 }
 
-export function isToolGroupName(value: unknown): value is ToolGroupName {
-  return !!toolGroupNames.find((name) => name === value);
+export function isDesktopToolGroupName(value: unknown): value is DesktopToolGroupName {
+  return !!desktopToolGroupNames.find((name) => name === value);
 }
 
 export function getToolsFromValue(value: string): Array<DesktopToolName> {
-  if (isToolName(value)) {
+  if (isDesktopToolName(value)) {
     return [value];
   }
 
-  if (isToolGroupName(value)) {
-    return toolGroups[value] ?? [];
+  if (isDesktopToolGroupName(value)) {
+    return desktopToolGroups[value] ?? [];
   }
 
   return [];
