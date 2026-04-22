@@ -10,7 +10,7 @@ import {
 } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -35,7 +35,7 @@ const paramsSchema = {
 const MIN_VERSION_FOR_SVG = '2026.2.0';
 
 export const getGetViewImageTool = (
-  server: Server,
+  server: WebMcpServer,
   tableauServerVersion: ProductVersion,
 ): Tool<typeof paramsSchema> => {
   const getViewImageTool = new Tool({

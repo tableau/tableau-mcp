@@ -10,7 +10,7 @@ import {
 import { useRestApi } from '../../restApiInstance.js';
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
@@ -97,7 +97,7 @@ export type GetDatasourceMetadataError =
     };
 
 export const getGetDatasourceMetadataTool = (
-  server: Server,
+  server: WebMcpServer,
   productVersion: ProductVersion,
 ): Tool<typeof paramsSchema> => {
   const rules = getDatasourceMetadataRules(productVersion);

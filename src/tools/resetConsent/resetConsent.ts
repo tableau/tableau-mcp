@@ -3,7 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { getConfig } from '../../config.js';
 import { McpToolError } from '../../errors/mcpToolError.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import invariant from '../../utils/invariant.js';
 import { Tool } from '../tool.js';
 
@@ -27,7 +27,7 @@ const paramsSchema = {};
  * Important: call this tool BEFORE revoking the access token, since revocation
  * invalidates the token required to authenticate the reset consent request.
  */
-export const getResetConsentTool = (server: Server): Tool<typeof paramsSchema> => {
+export const getResetConsentTool = (server: WebMcpServer): Tool<typeof paramsSchema> => {
   const config = getConfig();
 
   const resetConsentTool = new Tool({

@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { useRestApi } from '../../../restApiInstance.js';
 import { PulseMetric } from '../../../sdks/tableau/types/pulse.js';
-import { Server } from '../../../server.js';
+import { WebMcpServer } from '../../../server.web.js';
 import { Tool } from '../../tool.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 
@@ -12,7 +12,7 @@ const paramsSchema = {
 };
 
 export const getListPulseMetricsFromMetricDefinitionIdTool = (
-  server: Server,
+  server: WebMcpServer,
 ): Tool<typeof paramsSchema> => {
   const listPulseMetricsFromMetricDefinitionIdTool = new Tool({
     server,

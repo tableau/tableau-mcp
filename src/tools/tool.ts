@@ -5,7 +5,7 @@ import { z, ZodRawShape, ZodTypeAny } from 'zod';
 import { McpToolError, ZodiosValidationError } from '../errors/mcpToolError.js';
 import { log } from '../logging/logger.js';
 import { getNotificationMessageForTool, notifier } from '../logging/notification.js';
-import { Server } from '../server.js';
+import { WebMcpServer } from '../server.web.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../server/oauth/scopes.js';
 import { getTelemetryProvider } from '../telemetry/init.js';
 import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForwarder.js';
@@ -39,7 +39,7 @@ export type ConstrainedResult<T> =
  */
 export type ToolParams<Args extends ZodRawShape | undefined = undefined> = {
   // The MCP server instance
-  server: Server;
+  server: WebMcpServer;
 
   // The name of the tool
   name: WebToolName;
@@ -89,7 +89,7 @@ type LogAndExecuteParams<T, Args extends ZodRawShape | undefined = undefined> = 
  * @template Args - The schema of the tool's parameters or undefined if the tool has no parameters
  */
 export class Tool<Args extends ZodRawShape | undefined = undefined> {
-  server: Server;
+  server: WebMcpServer;
   name: WebToolName;
   description: TypeOrProvider<string>;
   paramsSchema: TypeOrProvider<Args>;
