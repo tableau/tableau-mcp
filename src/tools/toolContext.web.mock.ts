@@ -1,9 +1,9 @@
 import { getConfig } from '../config.js';
 import { OverridableConfig } from '../overridableConfig.js';
 import { WebMcpServer } from '../server.web.js';
-import { TableauRequestHandlerExtra } from './toolContext.js';
+import { TableauWebRequestHandlerExtra } from './toolContext.web.js';
 
-export function getMockRequestHandlerExtra(): TableauRequestHandlerExtra {
+export function getMockRequestHandlerExtra(): TableauWebRequestHandlerExtra {
   return {
     config: getConfig(),
     server: new WebMcpServer(),

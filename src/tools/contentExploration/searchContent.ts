@@ -7,7 +7,7 @@ import {
   orderBySchema,
   searchContentFilterSchema,
 } from '../../sdks/tableau/types/contentExploration.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { WebTool } from '../tool.web.js';
 import {
   buildFilterString,
@@ -24,7 +24,7 @@ const paramsSchema = {
   filter: searchContentFilterSchema.optional(),
 };
 
-export const getSearchContentTool = (server: Server): WebTool<typeof paramsSchema> => {
+export const getSearchContentTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const searchContentTool = new WebTool({
     server,
     name: 'search-content',

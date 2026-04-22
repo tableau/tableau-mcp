@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { DataSource } from '../../sdks/tableau/types/dataSource.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.web.js';
@@ -17,7 +17,7 @@ const paramsSchema = {
   limit: z.number().gt(0).optional(),
 };
 
-export const getListDatasourcesTool = (server: Server): WebTool<typeof paramsSchema> => {
+export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const listDatasourcesTool = new WebTool({
     server,
     name: 'list-datasources',

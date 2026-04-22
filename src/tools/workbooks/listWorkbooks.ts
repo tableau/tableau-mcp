@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.web.js';
@@ -17,7 +17,7 @@ const paramsSchema = {
   limit: z.number().gt(0).optional(),
 };
 
-export const getListWorkbooksTool = (server: Server): WebTool<typeof paramsSchema> => {
+export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const listWorkbooksTool = new WebTool({
     server,
     name: 'list-workbooks',

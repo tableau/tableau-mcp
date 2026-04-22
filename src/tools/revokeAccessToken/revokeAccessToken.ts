@@ -3,7 +3,7 @@ import { Err, Ok } from 'ts-results-es';
 
 import { getConfig } from '../../config.js';
 import { McpToolError } from '../../errors/mcpToolError.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import invariant from '../../utils/invariant.js';
 import { WebTool } from '../tool.web.js';
 
@@ -26,7 +26,7 @@ const paramsSchema = {};
  * Not supported (returns runtime error):
  *   - Passthrough: session credentials are managed externally.
  */
-export const getRevokeAccessTokenTool = (server: Server): WebTool<typeof paramsSchema> => {
+export const getRevokeAccessTokenTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const config = getConfig();
 
   const revokeAccessTokenTool = new WebTool({

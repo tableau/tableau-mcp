@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { View } from '../../sdks/tableau/types/view.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.web.js';
@@ -17,7 +17,7 @@ const paramsSchema = {
   limit: z.number().gt(0).optional(),
 };
 
-export const getListViewsTool = (server: Server): WebTool<typeof paramsSchema> => {
+export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const listViewsTool = new WebTool({
     server,
     name: 'list-views',

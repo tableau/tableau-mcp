@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { CustomViewNotAllowedError, WorkbookNotFoundError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
@@ -19,7 +19,7 @@ const paramsSchema = {
   limit: z.number().gt(0).optional(),
 };
 
-export const getListCustomViewsTool = (server: Server): WebTool<typeof paramsSchema> => {
+export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const listCustomViewsTool = new WebTool({
     server,
     name: 'list-custom-views',
