@@ -17,7 +17,7 @@ import {
   querySchema,
 } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../utils/provider.js';
@@ -50,7 +50,7 @@ type QueryDatasourceResult = QueryOutput & {
 };
 
 export const getQueryDatasourceTool = (
-  server: Server,
+  server: WebMcpServer,
   productVersion: ProductVersion,
 ): Tool<typeof paramsSchema> => {
   const rules = getQueryDatasourceRules(productVersion);

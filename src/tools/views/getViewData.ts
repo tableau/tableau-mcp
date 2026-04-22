@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { ViewNotAllowedError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
@@ -16,7 +16,7 @@ const paramsSchema = {
     .describe('Optional map of view filter field names to values.'),
 };
 
-export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> => {
+export const getGetViewDataTool = (server: WebMcpServer): Tool<typeof paramsSchema> => {
   const getViewDataTool = new Tool({
     server,
     name: 'get-view-data',
