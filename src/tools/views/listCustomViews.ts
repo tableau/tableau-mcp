@@ -9,7 +9,7 @@ import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { WebTool } from '../tool.js';
+import { WebTool } from '../tool.web.js';
 import { parseAndValidateCustomViewsFilterString } from './customViewsFilterUtils.js';
 
 const paramsSchema = {

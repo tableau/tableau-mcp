@@ -8,7 +8,7 @@ import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { ConstrainedResult, WebTool } from '../tool.js';
+import { ConstrainedResult, WebTool } from '../tool.web.js';
 
 const paramsSchema = {
   workbookId: z.string(),

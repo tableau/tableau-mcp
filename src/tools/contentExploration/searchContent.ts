@@ -8,7 +8,7 @@ import {
   searchContentFilterSchema,
 } from '../../sdks/tableau/types/contentExploration.js';
 import { Server } from '../../server.js';
-import { WebTool } from '../tool.js';
+import { WebTool } from '../tool.web.js';
 import {
   buildFilterString,
   buildOrderByString,

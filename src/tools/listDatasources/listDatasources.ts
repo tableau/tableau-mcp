@@ -8,7 +8,7 @@ import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { Server } from '../../server.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
-import { ConstrainedResult, WebTool } from '../tool.js';
+import { ConstrainedResult, WebTool } from '../tool.web.js';
 import { parseAndValidateDatasourcesFilterString } from './datasourcesFilterUtils.js';
 
 const paramsSchema = {

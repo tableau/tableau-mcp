@@ -5,7 +5,7 @@ import { getConfig } from '../../config.js';
 import { McpToolError } from '../../errors/mcpToolError.js';
 import { Server } from '../../server.js';
 import invariant from '../../utils/invariant.js';
-import { WebTool } from '../tool.js';
+import { WebTool } from '../tool.web.js';
 
 const paramsSchema = {};
 

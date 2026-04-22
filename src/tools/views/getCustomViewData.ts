@@ -6,7 +6,7 @@ import { CustomViewNotAllowedError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { WebTool } from '../tool.js';
+import { WebTool } from '../tool.web.js';
 
 const paramsSchema = {
   customViewId: z.string(),

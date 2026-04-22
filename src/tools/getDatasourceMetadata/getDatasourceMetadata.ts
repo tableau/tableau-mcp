@@ -14,7 +14,7 @@ import { Server } from '../../server.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { ToolRules, WebTool } from '../tool.js';
+import { ToolRules, WebTool } from '../tool.web.js';
 import { combineFields, simplifyReadMetadataResult } from './datasourceMetadataUtils.js';
 
 export const getGraphqlQuery = (datasourceLuid: string): string => `

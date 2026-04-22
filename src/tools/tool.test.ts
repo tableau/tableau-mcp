@@ -7,7 +7,7 @@ import { DatasourceNotAllowedError, ZodiosValidationError } from '../errors/mcpT
 import { notifier } from '../logging/notification.js';
 import { WebMcpServer } from '../server.web.js';
 import invariant from '../utils/invariant.js';
-import { WebTool } from './tool.js';
+import { WebTool } from './tool.web.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
 
 // Mock for product telemetry - tracks calls to send()

@@ -6,7 +6,7 @@ import { PulseMetricSubscription } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { getRequiredApiScopesForTool } from '../../../server/oauth/scopes.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { ConstrainedResult, WebTool } from '../../tool.js';
+import { ConstrainedResult, WebTool } from '../../tool.web.js';
 
 const toolName = 'list-pulse-metric-subscriptions';
 const paramsSchema = {};

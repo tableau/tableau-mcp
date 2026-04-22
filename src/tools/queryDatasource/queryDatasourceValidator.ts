@@ -1,5 +1,5 @@
 import { Query, querySchema } from '../../sdks/tableau/apis/vizqlDataServiceApi.js';
-import { ToolRules } from '../tool.js';
+import { ToolRules } from '../tool.web.js';
 import { validateDatasourceLuid } from '../validateDatasourceLuid.js';
 import { validateFields } from './validators/validateFields.js';
 import { validateFilters } from './validators/validateFilters.js';

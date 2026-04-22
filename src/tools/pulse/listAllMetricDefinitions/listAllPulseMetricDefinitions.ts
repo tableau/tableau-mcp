@@ -9,7 +9,7 @@ import {
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
 import { pulsePaginate } from '../../../utils/paginate.js';
-import { WebTool } from '../../tool.js';
+import { WebTool } from '../../tool.web.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
 
 const paramsSchema = {

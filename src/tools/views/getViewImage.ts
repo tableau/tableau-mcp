@@ -14,7 +14,7 @@ import { Server } from '../../server.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { WebTool } from '../tool.js';
+import { WebTool } from '../tool.web.js';
 
 const paramsSchema = {
   viewId: z.string(),

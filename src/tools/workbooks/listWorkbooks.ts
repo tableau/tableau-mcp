@@ -8,7 +8,7 @@ import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
-import { ConstrainedResult, WebTool } from '../tool.js';
+import { ConstrainedResult, WebTool } from '../tool.web.js';
 import { parseAndValidateWorkbooksFilterString } from './workbooksFilterUtils.js';
 
 const paramsSchema = {

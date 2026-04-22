@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { useRestApi } from '../../../restApiInstance.js';
 import { pulseMetricDefinitionViewEnum } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { WebTool } from '../../tool.js';
+import { WebTool } from '../../tool.web.js';
 import { constrainPulseDefinitions } from '../constrainPulseDefinitions.js';
 
 const paramsSchema = {

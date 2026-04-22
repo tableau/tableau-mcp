@@ -1,7 +1,7 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
 import { Filter, FilterField } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
-import { ToolRules } from '../../tool.js';
+import { ToolRules } from '../../tool.web.js';
 import { hasFieldCaptionAndCalculation, hasFunctionAndCalculation } from './validateFields.js';
 
 export function validateFilters(filters: Filter[] | undefined, rules: ToolRules): void {

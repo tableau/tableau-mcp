@@ -8,7 +8,7 @@ import { View } from '../../sdks/tableau/types/view.js';
 import { Server } from '../../server.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
-import { ConstrainedResult, WebTool } from '../tool.js';
+import { ConstrainedResult, WebTool } from '../tool.web.js';
 import { parseAndValidateViewsFilterString } from './viewsFilterUtils.js';
 
 const paramsSchema = {

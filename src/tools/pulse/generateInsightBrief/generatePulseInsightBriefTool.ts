@@ -7,7 +7,7 @@ import {
   PulseInsightBriefResponse,
 } from '../../../sdks/tableau/types/pulse.js';
 import { Server } from '../../../server.js';
-import { WebTool } from '../../tool.js';
+import { WebTool } from '../../tool.web.js';
 
 const paramsSchema = {
   briefRequest: pulseInsightBriefRequestSchema,
