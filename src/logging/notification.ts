@@ -1,7 +1,7 @@
 import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { Server } from '../server.js';
-import { WebToolName } from '../tools/toolName.web.js';
+import { WebToolName } from '../tools/web/toolName.js';
 import { getFileLogger } from './fileLogger.js';
 
 type NotificationName = 'rest-api' | (string & {});

@@ -1,8 +1,8 @@
 import { WebMcpServer } from './server.web.js';
 import { testProductVersion } from './testShared.js';
-import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
-import { webToolNames } from './tools/toolName.web.js';
-import { toolFactories } from './tools/tools.js';
+import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
+import { webToolNames } from './tools/web/toolName.js';
+import { toolFactories } from './tools/web/tools.js';
 import { Provider } from './utils/provider.js';
 
 describe('WebMcpServer', () => {

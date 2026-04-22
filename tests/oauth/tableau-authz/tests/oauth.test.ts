@@ -1,4 +1,4 @@
-import { webToolNames } from '../../../../src/tools/toolName.web.js';
+import { webToolNames } from '../../../../src/tools/web/toolName.js';
 import { expect, test } from './base.js';
 
 test.describe('oauth', () => {

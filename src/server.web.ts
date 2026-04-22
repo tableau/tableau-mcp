@@ -7,10 +7,10 @@ import { getTableauServerInfo } from './getTableauServerInfo';
 import { Server } from './server';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
-import { WebTool } from './tools/tool.web.js';
-import { TableauWebRequestHandlerExtra } from './tools/toolContext.web.js';
-import { webToolNames } from './tools/toolName.web';
-import { toolFactories } from './tools/tools';
+import { WebTool } from './tools/web/tool.js';
+import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
+import { webToolNames } from './tools/web/toolName.js';
+import { toolFactories } from './tools/web/tools.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings';
 import { Provider } from './utils/provider.js';
 
