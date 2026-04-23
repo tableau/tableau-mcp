@@ -232,6 +232,34 @@ describe('Config', () => {
     expect(config.enableMcpSiteSettings).toBe(false);
   });
 
+  it('should set allowSitesToConfigureRequestOverrides to false by default', () => {
+    const config = new Config();
+    expect(config.allowSitesToConfigureRequestOverrides).toBe(false);
+  });
+
+  it('should set allowSitesToConfigureRequestOverrides to true when specified', () => {
+    vi.stubEnv('ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES', 'true');
+
+    const config = new Config();
+    expect(config.allowSitesToConfigureRequestOverrides).toBe(true);
+  });
+
+  it('should set allowSitesToConfigureRequestOverrides to false when set to an invalid value', () => {
+    vi.stubEnv('ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES', 'yes');
+
+    const config = new Config();
+    expect(config.allowSitesToConfigureRequestOverrides).toBe(false);
+  });
+
+  it('should throw error when ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES is true but ENABLE_MCP_SITE_SETTINGS is false', () => {
+    vi.stubEnv('ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES', 'true');
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
+
+    expect(() => new Config()).toThrow(
+      'ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES is "true", but MCP site settings are not enabled.',
+    );
+  });
+
   it('should set enablePassthroughAuth to false by default', () => {
     const config = new Config();
     expect(config.enablePassthroughAuth).toBe(false);
