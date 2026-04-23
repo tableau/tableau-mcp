@@ -3,9 +3,9 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
+  CustomViewNotAllowedError,
   FeatureDisabledError,
   UnknownError,
-  ViewNotAllowedError,
 } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
@@ -16,7 +16,7 @@ import { Tool } from '../tool.js';
 import { getImageFormatForVersion } from './getImageFormatForVersion.js';
 
 const paramsSchema = {
-  viewId: z.string(),
+  customViewId: z.string(),
   width: z.number().gt(0).optional(),
   height: z.number().gt(0).optional(),
   format: z
@@ -31,53 +31,60 @@ const paramsSchema = {
     .describe('Optional map of view filter field names to values.'),
 };
 
-export const getGetViewImageTool = (
+export type GetCustomViewImageError = {
+  type: 'custom-view-not-allowed';
+  message: string;
+};
+
+export const getGetCustomViewImageTool = (
   server: Server,
   tableauServerVersion: ProductVersion,
 ): Tool<typeof paramsSchema> => {
-  const getViewImageTool = new Tool({
+  const getCustomViewImageTool = new Tool({
     server,
-    name: 'get-view-image',
+    name: 'get-custom-view-image',
     description: [
-      'Retrieves an image of the specified view in a Tableau workbook.',
+      'Retrieves an image of the specified custom view in a published viz.',
+      'A custom view is a shortcut to a specific state of interaction, such as filter selections and sorting, for a published viz.',
+      'Requires the custom view LUID from the content URL (not the published view id).',
       'Optional width and height in pixels control render size.',
-      'Optional view field names and values can be provided to filter the view.',
-      'For custom views, use the tool to get view custom view image by custom view id instead.',
+      'Optional view field names and values can be provided to filter the custom view.',
+      'For published views, use the tool to get view image by view id instead.',
     ].join(' '),
     paramsSchema,
     annotations: {
-      title: 'Get View Image',
+      title: 'Get Custom View Image',
       readOnlyHint: true,
       openWorldHint: false,
     },
     callback: async (
-      { viewId, width, height, format, viewFilters },
+      { customViewId, width, height, format, viewFilters },
       extra,
     ): Promise<CallToolResult> => {
-      return await getViewImageTool.logAndExecute<string>({
+      return await getCustomViewImageTool.logAndExecute<string>({
         extra,
-        args: { viewId, width, height, format, viewFilters },
+        args: { customViewId, width, height, format, viewFilters },
         callback: async () => {
           const formatResult = getImageFormatForVersion(format, tableauServerVersion);
           if (formatResult.isErr()) {
             return formatResult;
           }
 
-          const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
-            viewId,
+          const isAllowedResult = await resourceAccessChecker.isCustomViewAllowed({
+            customViewId,
             extra,
           });
 
-          if (!isViewAllowedResult.allowed) {
-            return new ViewNotAllowedError(isViewAllowedResult.message).toErr();
+          if (!isAllowedResult.allowed) {
+            return new CustomViewNotAllowedError(isAllowedResult.message).toErr();
           }
 
-          return await useRestApi({
+          const result = await useRestApi({
             ...extra,
-            jwtScopes: getViewImageTool.requiredApiScopes,
+            jwtScopes: getCustomViewImageTool.requiredApiScopes,
             callback: async (restApi) => {
-              const result = await restApi.viewsMethods.queryViewImage({
-                viewId,
+              return await restApi.viewsMethods.getCustomViewImage({
+                customViewId,
                 siteId: restApi.siteId,
                 width,
                 height,
@@ -85,24 +92,24 @@ export const getGetViewImageTool = (
                 format: formatResult.value,
                 viewFilters,
               });
-
-              if (result.isErr()) {
-                if (result.error.type === 'feature-disabled') {
-                  return new FeatureDisabledError(
-                    'The image format feature is disabled on this Tableau Server.',
-                  ).toErr();
-                }
-                return new UnknownError(result.error.message, 400).toErr();
-              }
-
-              return new Ok(result.value);
             },
           });
+
+          if (result.isErr()) {
+            if (result.error.type === 'feature-disabled') {
+              return new FeatureDisabledError(
+                'The image format feature is disabled on this Tableau Server.',
+              ).toErr();
+            }
+            return new UnknownError(result.error.message, 400).toErr();
+          }
+
+          return new Ok(result.value);
         },
-        constrainSuccessResult: (viewImage) => {
+        constrainSuccessResult: (imageData) => {
           return {
             type: 'success',
-            result: viewImage,
+            result: imageData,
           };
         },
         getSuccessResult: (imageData) => convertViewImageToToolResult(imageData, format),
@@ -110,5 +117,5 @@ export const getGetViewImageTool = (
     },
   });
 
-  return getViewImageTool;
+  return getCustomViewImageTool;
 };

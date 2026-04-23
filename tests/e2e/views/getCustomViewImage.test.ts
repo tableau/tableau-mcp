@@ -1,0 +1,29 @@
+import z from 'zod';
+
+import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
+import { callTool } from '../client.js';
+
+describe('get-custom-view-image', () => {
+  beforeAll(setEnv);
+  afterAll(resetEnv);
+
+  it('should get custom view image', async () => {
+    const env = getDefaultEnv();
+    const superstore = getSuperstoreWorkbook(env);
+    const pngData = await callTool('get-custom-view-image', {
+      env,
+      schema: z.string(),
+      toolArgs: { customViewId: superstore.defaultView.customViewId },
+      contentType: 'image',
+    });
+
+    // Assert the PNG data starts with the eight-byte PNG signature.
+    // https://en.wikipedia.org/wiki/PNG#File_header
+    const decoded = Buffer.from(pngData, 'base64').toString('latin1');
+    expect(
+      [...decoded.substring(0, 8)]
+        .map((c) => c.charCodeAt(0).toString(16).padStart(2, '0').toUpperCase())
+        .join(''),
+    ).toBe('89504E470D0A1A0A');
+  });
+});
