@@ -191,7 +191,7 @@ export class Config {
       },
     );
 
-    this.enableMcpSiteSettings = enableMcpSiteSettings === 'true';
+    this.enableMcpSiteSettings = enableMcpSiteSettings !== 'false';
     this.enablePassthroughAuth = enablePassthroughAuth === 'true';
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';

@@ -9,10 +9,12 @@ import {
 } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { GraphQLResponse } from '../../sdks/tableau/apis/metadataApi.js';
+import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
+import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { Tool } from '../tool.js';
+import { Tool, ToolRules } from '../tool.js';
 import { combineFields, simplifyReadMetadataResult } from './datasourceMetadataUtils.js';
 
 export const getGraphqlQuery = (datasourceLuid: string): string => `
@@ -94,13 +96,17 @@ export type GetDatasourceMetadataError =
       message: string;
     };
 
-export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof paramsSchema> => {
+export const getGetDatasourceMetadataTool = (
+  server: Server,
+  productVersion: ProductVersion,
+): Tool<typeof paramsSchema> => {
+  const rules = getDatasourceMetadataRules(productVersion);
   const getDatasourceMetadataTool = new Tool({
     server,
     name: 'get-datasource-metadata',
     description: `
     This tool retrieves metadata for a specified datasource by taking the basic, high level, metadata results from Tableau's VizQL Data Service and enriches them with additional context provided by Tableau's Metadata API.
-    The metadata provided by this tool consists of the fields and parameters that belong to the datasource.
+    The metadata provided by this tool consists of the datasource model, fields, and parameters that belong to the datasource.
     Fields will contain properties such as name and dataType, but may also expose richer context such as descriptions, dataCategories, roles, etc.
     This tool should be used for getting the metadata to ground the use of a tool that queries Tableau published data sources.
     `,
@@ -146,9 +152,27 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
                 return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
               }
 
+              // Fetching datasource model from VizQL Data Service API.
+              const datasourceModelResult = !rules.datasourceModelIsUnavailable
+                ? await restApi.vizqlDataServiceMethods.getDatasourceModel({
+                    datasource: {
+                      datasourceLuid,
+                    },
+                  })
+                : undefined;
+
+              if (datasourceModelResult && datasourceModelResult.isErr()) {
+                return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
+              }
+
               if (configWithOverrides.disableMetadataApiRequests) {
                 // Exit early since requests to the Tableau Metadata API are disabled.
-                return Ok(simplifyReadMetadataResult(readMetadataResult.value));
+                return Ok(
+                  simplifyReadMetadataResult(
+                    readMetadataResult.value,
+                    datasourceModelResult?.value,
+                  ),
+                );
               }
 
               let listFieldsResult: GraphQLResponse;
@@ -158,11 +182,22 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
                 // Using try-catch here since requests could fail if the service is not enabled.
                 listFieldsResult = await restApi.metadataMethods.graphql(query);
               } catch {
-                return Ok(simplifyReadMetadataResult(readMetadataResult.value));
+                return Ok(
+                  simplifyReadMetadataResult(
+                    readMetadataResult.value,
+                    datasourceModelResult?.value,
+                  ),
+                );
               }
 
               // Combine the results from the VizQL Data Service API and the Tableau Metadata API.
-              return Ok(combineFields(readMetadataResult.value, listFieldsResult));
+              return Ok(
+                combineFields(
+                  readMetadataResult.value,
+                  listFieldsResult,
+                  datasourceModelResult?.value,
+                ),
+              );
             },
           });
         },
@@ -178,3 +213,15 @@ export const getGetDatasourceMetadataTool = (server: Server): Tool<typeof params
 
   return getDatasourceMetadataTool;
 };
+
+function getDatasourceMetadataRules(productVersion: ProductVersion): ToolRules {
+  return getResultForTableauVersion({
+    productVersion,
+    mappings: {
+      '2025.3.0': {},
+      default: {
+        datasourceModelIsUnavailable: true,
+      },
+    },
+  });
+}

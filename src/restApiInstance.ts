@@ -291,8 +291,8 @@ function logResponse(
   const url = new URL(
     `${maskedResponse.baseUrl.replace(/\/$/, '')}/${maskedResponse.url?.replace(/^\//, '') ?? ''}`,
   );
-  if (response.request?.params && Object.keys(response.request.params).length > 0) {
-    url.search = new URLSearchParams(response.request.params).toString();
+  if (response.params && Object.keys(response.params).length > 0) {
+    url.search = new URLSearchParams(response.params).toString();
   }
   const messageObj = {
     type: 'response',

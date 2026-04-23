@@ -88,6 +88,7 @@ describe('secretMask', () => {
     const maskedResponse = maskResponse({
       status: 200,
       baseUrl: 'https://example.com',
+      params: {},
       url: '/api/v1/users',
       headers: { 'Some-Header': 'hamburgers' },
       data: {
@@ -100,6 +101,7 @@ describe('secretMask', () => {
       status: 200,
       baseUrl: 'https://example.com',
       url: '/api/v1/users',
+      params: {},
       headers: { 'Some-Header': 'hamburgers' },
       data: {
         credentials: '<redacted>',
@@ -137,6 +139,7 @@ describe('secretMask', () => {
     const maskedResponse = maskResponse({
       status: 200,
       baseUrl: 'https://example.com',
+      params: {},
       url: '/api/v1/users',
       headers: { 'Some-Header': 'hamburgers' },
       data: {
@@ -149,6 +152,7 @@ describe('secretMask', () => {
       status: 200,
       baseUrl: 'https://example.com',
       url: '/api/v1/users',
+      params: {},
     });
   });
 
@@ -172,6 +176,7 @@ describe('secretMask', () => {
     const response: ResponseInterceptorConfig = {
       status: 200,
       baseUrl: 'https://example.com',
+      params: {},
       url: '/api/v1/users',
       headers: { 'Some-Header': 'hamburgers' },
       // Functions can't be cloned by the structured clone algorithm.

@@ -31,7 +31,8 @@ export type TableauApiScope =
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
   | 'tableau:insights:read'
-  | 'tableau:insight_brief:create';
+  | 'tableau:insight_brief:create'
+  | 'tableau:mcp_site_settings:read';
 
 /**
  * Default scopes supported by the MCP server
@@ -50,6 +51,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
 
 export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:content:read',
+  'tableau:mcp_site_settings:read',
 ];
 
 /**
@@ -65,19 +67,19 @@ const toolScopeMap: Record<
 > = {
   'list-datasources': {
     mcp: ['tableau:mcp:datasource:read'],
-    api: new Set(['tableau:content:read']),
+    api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],
-    api: new Set(['tableau:content:read']),
+    api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
   'list-views': {
     mcp: ['tableau:mcp:view:read'],
-    api: new Set(['tableau:content:read']),
+    api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
   'list-custom-views': {
     mcp: ['tableau:mcp:view:read'],
-    api: new Set(['tableau:content:read']),
+    api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
@@ -103,39 +105,47 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:view:download'],
     api: new Set(['tableau:views:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
   },
+  'get-custom-view-data': {
+    mcp: ['tableau:mcp:view:download'],
+    api: new Set(['tableau:views:download', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),
+  },
   'list-all-pulse-metric-definitions': {
     mcp: ['tableau:mcp:pulse:read'],
-    api: new Set(['tableau:insight_definitions_metrics:read']),
+    api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
   },
   'list-pulse-metric-definitions-from-definition-ids': {
     mcp: ['tableau:mcp:pulse:read'],
-    api: new Set(['tableau:insight_definitions_metrics:read']),
+    api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
   },
   'list-pulse-metrics-from-metric-definition-id': {
     mcp: ['tableau:mcp:pulse:read'],
-    api: new Set(['tableau:insight_definitions_metrics:read']),
+    api: new Set(['tableau:insight_definitions_metrics:read', 'tableau:mcp_site_settings:read']),
   },
   'list-pulse-metrics-from-metric-ids': {
     mcp: ['tableau:mcp:pulse:read'],
-    api: new Set(['tableau:insight_metrics:read']),
+    api: new Set(['tableau:insight_metrics:read', 'tableau:mcp_site_settings:read']),
   },
   'list-pulse-metric-subscriptions': {
     mcp: ['tableau:mcp:pulse:read'],
     // 'tableau:insight_metrics:read' is only required if datasource scoping is enabled.
     // Since we don't have an easy way to determine if datasource scoping is enabled, we include it in all cases.
-    api: new Set(['tableau:metric_subscriptions:read', 'tableau:insight_metrics:read']),
+    api: new Set([
+      'tableau:metric_subscriptions:read',
+      'tableau:insight_metrics:read',
+      'tableau:mcp_site_settings:read',
+    ]),
   },
   'generate-pulse-metric-value-insight-bundle': {
     mcp: ['tableau:mcp:insight:create'],
-    api: new Set(['tableau:insights:read']),
+    api: new Set(['tableau:insights:read', 'tableau:mcp_site_settings:read']),
   },
   'generate-pulse-insight-brief': {
     mcp: ['tableau:mcp:insight:create'],
-    api: new Set(['tableau:insight_brief:create']),
+    api: new Set(['tableau:insight_brief:create', 'tableau:mcp_site_settings:read']),
   },
   'search-content': {
     mcp: ['tableau:mcp:content:read'],
-    api: new Set(['tableau:content:read']),
+    api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
   // Token lifecycle: no Tableau REST API calls, no content scope required.
   // Any authenticated user may revoke their own token regardless of granted scopes.

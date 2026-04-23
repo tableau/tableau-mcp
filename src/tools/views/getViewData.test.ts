@@ -47,14 +47,14 @@ describe('getViewDataTool', () => {
     const getViewDataTool = getGetViewDataTool(new Server());
     expect(getViewDataTool.name).toBe('get-view-data');
     expect(getViewDataTool.description).toContain(
-      'Retrieves data in comma separated value (CSV) format for the specified view in a Tableau workbook.',
+      "Retrieves comma-separated value (CSV) data for the specified view in a Tableau workbook, including the user's filters.",
     );
     expect(getViewDataTool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
   });
 
   it('should successfully get view data', async () => {
     mocks.mockQueryViewData.mockResolvedValue(mockViewData);
-    const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
+    const result = await getToolResult({ viewId: mockView.id });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(
@@ -63,14 +63,27 @@ describe('getViewDataTool', () => {
     expect(result.content[0].text).toContain('Canada,Alberta,19.5%,53.41,-114.42');
     expect(mocks.mockQueryViewData).toHaveBeenCalledWith({
       siteId: 'test-site-id',
-      viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
+      viewId: mockView.id,
+    });
+  });
+
+  it('should pass viewFilters to the REST layer', async () => {
+    await getToolResult({
+      viewId: mockView.id,
+      viewFilters: { Year: '2024' },
+    });
+
+    expect(mocks.mockQueryViewData).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      viewId: mockView.id,
+      viewFilters: { Year: '2024' },
     });
   });
 
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'API Error';
     mocks.mockQueryViewData.mockRejectedValue(new Error(errorMessage));
-    const result = await getToolResult({ viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d' });
+    const result = await getToolResult({ viewId: mockView.id });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
@@ -86,7 +99,7 @@ describe('getViewDataTool', () => {
     expect(result.content[0].text).toBe(
       [
         'The set of allowed views that can be queried is limited by the server configuration.',
-        'The view with LUID 4d18c547-bbb1-4187-ae5a-7f78b35adf2d cannot be queried because it does not belong to an allowed workbook.',
+        `The view with LUID ${mockView.id} cannot be queried because it does not belong to an allowed workbook.`,
       ].join(' '),
     );
 
@@ -94,8 +107,14 @@ describe('getViewDataTool', () => {
   });
 });
 
-async function getToolResult(params: { viewId: string }): Promise<CallToolResult> {
+async function getToolResult({
+  viewId,
+  viewFilters,
+}: {
+  viewId: string;
+  viewFilters?: Record<string, string>;
+}): Promise<CallToolResult> {
   const getViewDataTool = getGetViewDataTool(new Server());
   const callback = await Provider.from(getViewDataTool.callback);
-  return await callback(params, getMockRequestHandlerExtra());
+  return await callback({ viewId, viewFilters }, getMockRequestHandlerExtra());
 }
