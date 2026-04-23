@@ -478,10 +478,10 @@ export class OverridableConfig {
       // Accept any valid request override when unrestricted.
       if (restrictionType === 'unrestricted') {
         // Only override if the map is non empty or the default value is provided.
-        if (maxResultLimitsOverride.size === 0 && requestOverrides.MAX_RESULT_LIMITS) {
-          throw new Error('MAX_RESULT_LIMITS was provided an invalid request override value');
+        if (maxResultLimitsOverride.size > 0 || !requestOverrides.MAX_RESULT_LIMITS) {
+          return maxResultLimitsOverride;
         }
-        return maxResultLimitsOverride;
+        throw new Error('MAX_RESULT_LIMITS was provided an invalid request override value');
       }
       // By now this.maxResultLimit has had all override logic applied to it, and
       // maxResultLimits has had site overrides applied to it. We must consider
@@ -528,10 +528,12 @@ export class OverridableConfig {
   }
 
   getMaxResultLimit(toolName: ToolName): number | null {
-    const maxResultLimit = this.maxResultLimits.get(toolName);
-    return maxResultLimit !== undefined
-      ? maxResultLimit // tool was explicitly set to a limit or unbounded (null)
-      : this.maxResultLimit; // tool specific limit was not set, fallback to overall max result limit
+    if (this.maxResultLimits.has(toolName)) {
+      // either number or null (i.e. tool specific limit set to unbounded)
+      return this.maxResultLimits.get(toolName)!;
+    }
+    // fallback to overall max result limit
+    return this.maxResultLimit;
   }
 }
 
