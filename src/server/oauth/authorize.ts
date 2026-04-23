@@ -6,6 +6,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
+import { log } from '../../logging/logger.js';
 import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
 import { parseUrl } from '../../utils/parseUrl.js';
 import { retry } from '../../utils/retry.js';
@@ -207,7 +208,12 @@ async function getOAuthRedirectUrl(
         return locationUrl;
       }
     }
-  } catch {
+  } catch (error) {
+    log({
+      message: `Failed to follow Tableau OAuth redirect for site picker: ${error}`,
+      level: 'debug',
+      logger: 'oauth',
+    });
     return initialOAuthUrl;
   }
 
@@ -243,7 +249,12 @@ async function getClientFromMetadataDoc(
       }
       // Replace the hostname with the resolved IP Address
       clientMetadataUrl.hostname = ipAddress;
-    } catch {
+    } catch (error) {
+      log({
+        message: `DNS resolution failed for client metadata URL ${clientMetadataUrl.hostname}: ${error}`,
+        level: 'info',
+        logger: 'oauth',
+      });
       return Err({
         error: 'invalid_request',
         error_description: 'IP address of Client Metadata URL could not be resolved',
@@ -292,7 +303,12 @@ async function getClientFromMetadataDoc(
         },
       },
     );
-  } catch {
+  } catch (error) {
+    log({
+      message: `Failed to fetch client metadata from ${originalUrl}: ${error}`,
+      level: 'info',
+      logger: 'oauth',
+    });
     return Err({
       error: 'invalid_request',
       error_description: 'Unable to fetch client metadata',

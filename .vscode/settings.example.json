@@ -11,7 +11,7 @@
   "tableau.mcp.CONNECTED_APP_SECRET_VALUE": "",
   "tableau.mcp.JWT_ADDITIONAL_PAYLOAD": "",
   "tableau.mcp.DATASOURCE_CREDENTIALS": "",
-  "tableau.mcp.DEFAULT_LOG_LEVEL": "debug",
+  "tableau.mcp.DEFAULT_NOTIFICATION_LEVEL": "debug",
   "tableau.mcp.INCLUDE_TOOLS": "",
   "tableau.mcp.EXCLUDE_TOOLS": "",
   "tableau.mcp.DISABLE_LOG_MASKING": "false",

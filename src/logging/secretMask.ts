@@ -5,7 +5,7 @@ import {
   ResponseInterceptorConfig,
 } from '../sdks/tableau/interceptors.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
-import { writeToStderr } from './logger.js';
+import { log } from './logger.js';
 import { shouldNotifyWhenLevelIsAtLeast } from './notification.js';
 
 type MaskedKeys = 'data' | 'headers';
@@ -86,7 +86,11 @@ function clone<T>(obj: T): Result<T, Error> {
     }
 
     const message = getExceptionMessage(error);
-    writeToStderr(`Could not clone object, notification may not be sanitized! Error: ${message}`);
+    log({
+      message: `Could not clone object, notification may not be sanitized! Error: ${message}`,
+      level: 'error',
+      logger: 'secretMask',
+    });
     return Err(new Error(message));
   }
 }

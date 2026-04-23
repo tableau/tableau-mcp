@@ -3,6 +3,7 @@ import express, { RequestHandler } from 'express';
 import { readFileSync } from 'fs';
 
 import { getConfig } from '../../config.js';
+import { log } from '../../logging/logger.js';
 import { oauthAuthorizationServer } from './.well-known/oauth-authorization-server.js';
 import { oauthProtectedResource } from './.well-known/oauth-protected-resource.js';
 import {
@@ -96,7 +97,12 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
     if (!privateKeyContents) {
       try {
         privateKeyContents = readFileSync(this.config.oauth.jwePrivateKeyPath, 'utf8');
-      } catch {
+      } catch (error) {
+        log({
+          message: `Failed to read JWE private key file: ${error}`,
+          level: 'error',
+          logger: 'oauth',
+        });
         throw new Error('Failed to read private key file');
       }
     }
@@ -107,7 +113,12 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
         format: 'pem',
         passphrase: this.config.oauth.jwePrivateKeyPassphrase,
       });
-    } catch {
+    } catch (error) {
+      log({
+        message: `Failed to create JWE private key: ${error}`,
+        level: 'error',
+        logger: 'oauth',
+      });
       throw new Error('Failed to create private key');
     }
   }

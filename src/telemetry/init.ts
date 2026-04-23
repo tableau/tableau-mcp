@@ -5,6 +5,7 @@
 import { resolve } from 'path';
 
 import { getConfig } from '../config.js';
+import { log } from '../logging/logger.js';
 import { NoOpTelemetryProvider } from './noop.js';
 import { TelemetryProvider } from './types.js';
 
@@ -96,8 +97,12 @@ export function initializeTelemetry(): TelemetryProvider {
     global.__telemetryProvider = provider;
     return provider;
   } catch (error) {
-    console.error('Failed to initialize telemetry provider:', error);
-    console.warn('Falling back to NoOp telemetry provider');
+    log({
+      message: `Failed to initialize telemetry provider: ${error}`,
+      level: 'error',
+      logger: 'telemetry',
+    });
+    log({ message: 'Falling back to NoOp telemetry provider', level: 'info', logger: 'telemetry' });
 
     // Fallback to NoOp on error - telemetry failures shouldn't break the application
     const fallbackProvider = new NoOpTelemetryProvider();

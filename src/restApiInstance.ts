@@ -1,6 +1,7 @@
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { Config, getConfig } from './config.js';
+import { log } from './logging/logger.js';
 import { notifier, shouldNotifyWhenLevelIsAtLeast } from './logging/notification.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
 import {
@@ -165,6 +166,12 @@ const getNewRestApiInstanceAsync = async (
     }
   }
 
+  log({
+    message: `Auth established via ${config.auth}`,
+    level: 'info',
+    logger: 'auth',
+  });
+
   return { restApi, signOutWhenCompleted };
 };
 
@@ -187,6 +194,7 @@ export const useRestApi = async <T>(
       // Sessions for 'oauth' and 'passthrough' are not. Signing out would invalidate the session,
       // preventing the access token from being reused for subsequent requests.
       await restApi.signOut();
+      log({ message: 'Signed out of Tableau REST API', level: 'debug', logger: 'auth' });
     }
   }
 };
@@ -203,6 +211,11 @@ export const getRequestErrorInterceptor =
   (server: Server, requestId: RequestId): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.request) {
+      log({
+        message: `Request ${requestId} failed with error: ${getExceptionMessage(error)}`,
+        level: 'error',
+        logger: 'rest-api',
+      });
       notifier.error(
         server,
         `Request ${requestId} failed with error: ${getExceptionMessage(error)}`,
@@ -236,6 +249,11 @@ export const getResponseErrorInterceptor =
   (server: Server, requestId: RequestId): ErrorInterceptor =>
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.response) {
+      log({
+        message: `Response from request ${requestId} failed with error: ${getExceptionMessage(error)}`,
+        level: 'error',
+        logger: 'rest-api',
+      });
       notifier.error(
         server,
         `Response from request ${requestId} failed with error: ${getExceptionMessage(error)}`,

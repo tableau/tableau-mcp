@@ -150,6 +150,11 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     const username = tableauAuthInfo?.username;
 
     this.logInvocation({ requestId, args, username });
+    log({
+      message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
+      level: 'debug',
+      logger: 'tool',
+    });
 
     const productTelemetryForwarder = getProductTelemetry(
       config.productTelemetryEndpoint,

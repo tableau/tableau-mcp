@@ -69,16 +69,16 @@ describe('Config', () => {
     expect(config.siteName).toBe('tc25');
   });
 
-  it('should set default log level to debug when not specified', () => {
+  it('should set default notification level to debug when not specified', () => {
     const config = new Config();
-    expect(config.defaultLogLevel).toBe('debug');
+    expect(config.defaultNotificationLevel).toBe('debug');
   });
 
-  it('should set custom log level when specified', () => {
-    vi.stubEnv('DEFAULT_LOG_LEVEL', 'info');
+  it('should set custom notification level when specified', () => {
+    vi.stubEnv('DEFAULT_NOTIFICATION_LEVEL', 'info');
 
     const config = new Config();
-    expect(config.defaultLogLevel).toBe('info');
+    expect(config.defaultNotificationLevel).toBe('info');
   });
 
   it('should set disableLogMasking to false by default', () => {
