@@ -5,6 +5,7 @@ import { getConfig } from '../config';
 import { RestApi } from '../sdks/tableau/restApi';
 import { ExpiringMap } from '../utils/expiringMap';
 import { AuthenticatedRequest } from './oauth/types';
+import { getCookie, getHeader } from './requestUtils';
 
 export const X_TABLEAU_AUTH_HEADER = 'x-tableau-auth';
 const PASSTHROUGH_AUTH_CACHE_MAX_ENTRIES = 1000;
@@ -94,14 +95,4 @@ export function passthroughAuthMiddleware(): RequestHandler {
 
     next();
   };
-}
-
-function getCookie(req: AuthenticatedRequest, cookieName: string): string {
-  const cookieValue = req.cookies?.[cookieName];
-  return cookieValue?.toString() ?? '';
-}
-
-function getHeader(req: AuthenticatedRequest, headerName: string): string {
-  const headerValue = req.headers[headerName];
-  return headerValue?.toString() ?? '';
 }

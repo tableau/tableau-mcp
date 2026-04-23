@@ -5,7 +5,6 @@ import { View } from '../sdks/tableau/types/view.js';
 import { Workbook } from '../sdks/tableau/types/workbook.js';
 import { RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES } from '../server/oauth/scopes.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
-import { getConfigWithOverrides } from '../utils/mcpSiteSettings.js';
 import { TableauRequestHandlerExtra } from './toolContext.js';
 
 type AllowedResult<T = unknown> =
@@ -56,11 +55,7 @@ class ResourceAccessChecker {
   }): Promise<Set<string> | null> {
     return (
       this._testOverrides.projectIds ??
-      (
-        await getConfigWithOverrides({
-          restApiArgs: { ...extra },
-        })
-      ).boundedContext.projectIds
+      (await extra.getConfigWithOverrides()).boundedContext.projectIds
     );
   }
 
@@ -71,11 +66,7 @@ class ResourceAccessChecker {
   }): Promise<Set<string> | null> {
     return (
       this._testOverrides.datasourceIds ??
-      (
-        await getConfigWithOverrides({
-          restApiArgs: { ...extra },
-        })
-      ).boundedContext.datasourceIds
+      (await extra.getConfigWithOverrides()).boundedContext.datasourceIds
     );
   }
 
@@ -86,11 +77,7 @@ class ResourceAccessChecker {
   }): Promise<Set<string> | null> {
     return (
       this._testOverrides.workbookIds ??
-      (
-        await getConfigWithOverrides({
-          restApiArgs: { ...extra },
-        })
-      ).boundedContext.workbookIds
+      (await extra.getConfigWithOverrides()).boundedContext.workbookIds
     );
   }
 
@@ -99,14 +86,7 @@ class ResourceAccessChecker {
   }: {
     extra: TableauRequestHandlerExtra;
   }): Promise<Set<string> | null> {
-    return (
-      this._testOverrides.tags ??
-      (
-        await getConfigWithOverrides({
-          restApiArgs: { ...extra },
-        })
-      ).boundedContext.tags
-    );
+    return this._testOverrides.tags ?? (await extra.getConfigWithOverrides()).boundedContext.tags;
   }
 
   async isDatasourceAllowed({

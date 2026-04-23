@@ -9,6 +9,7 @@ import https from 'https';
 
 import { Config } from '../config.js';
 import { setNotificationLevel } from '../logging/notification.js';
+import { getOverridableConfig } from '../overridableConfig.js';
 import { Server } from '../server.js';
 import { createSession, getSession, Session } from '../sessions.js';
 import { latencyMiddleware } from './latencyMiddleware.js';
@@ -18,6 +19,7 @@ import { EmbeddedOAuthProvider, TableauOAuthProvider } from './oauth/provider.js
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 import { passthroughAuthMiddleware, X_TABLEAU_AUTH_HEADER } from './passthroughAuthMiddleware.js';
+import { requestOverrideMiddleware } from './requestOverrideMiddleware.js';
 
 const SESSION_ID_HEADER = 'mcp-session-id';
 
@@ -30,6 +32,10 @@ export async function startExpressServer({
   config: Config;
   logLevel: LoggingLevel;
 }): Promise<{ url: string; app: express.Application; server: http.Server }> {
+  // getting overridable config, but we intentionally omit site and request overrides
+  // since we are only interested in the values set by the ENVIRONMENT variables.
+  const configWithoutOverrides = getOverridableConfig();
+
   const app = express();
 
   app.use(express.json());
@@ -58,6 +64,13 @@ export async function startExpressServer({
   const middleware: Array<RequestHandler> = [handlePingRequest];
   if (config.enablePassthroughAuth) {
     middleware.push(passthroughAuthMiddleware());
+  }
+
+  if (
+    configWithoutOverrides.allowedRequestOverrides.size !== 0 ||
+    config.allowSitesToConfigureRequestOverrides
+  ) {
+    middleware.push(requestOverrideMiddleware());
   }
 
   if (config.oauth.enabled) {
@@ -130,7 +143,7 @@ export async function startExpressServer({
           server.close();
         });
 
-        await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
+        await connect(server, transport, logLevel, getTableauAuthInfo(req.auth), req.overrides);
       } else {
         const sessionId = req.headers[SESSION_ID_HEADER] as string | undefined;
 
@@ -142,7 +155,7 @@ export async function startExpressServer({
           transport = createSession({ clientInfo });
 
           const server = new Server({ clientInfo });
-          await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
+          await connect(server, transport, logLevel, getTableauAuthInfo(req.auth), req.overrides);
         } else {
           // Invalid request
           res.status(400).json({
@@ -179,8 +192,9 @@ async function connect(
   transport: StreamableHTTPServerTransport,
   logLevel: LoggingLevel,
   authInfo: TableauAuthInfo | undefined,
+  requestOverrides: Record<string, string> | undefined,
 ): Promise<void> {
-  await server.registerTools(authInfo);
+  await server.registerTools(authInfo, requestOverrides);
   server.registerRequestHandlers();
 
   await server.connect(transport);
