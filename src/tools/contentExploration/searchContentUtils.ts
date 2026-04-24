@@ -4,7 +4,7 @@ import {
   SearchContentFilter,
   SearchContentResponse,
 } from '../../sdks/tableau/types/contentExploration.js';
-import { ConstrainedResult } from '../tool.js';
+import { ConstrainedResult } from '../tool.web.js';
 
 export type ReducedSearchContentResponse = Partial<Record<SearchItemContent, unknown>>;
 

@@ -30,7 +30,9 @@ describe('listAllPulseMetricDefinitionsTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const listAllPulseMetricDefinitionsTool = getListAllPulseMetricDefinitionsTool(new WebMcpServer());
+    const listAllPulseMetricDefinitionsTool = getListAllPulseMetricDefinitionsTool(
+      new WebMcpServer(),
+    );
     expect(listAllPulseMetricDefinitionsTool.name).toBe('list-all-pulse-metric-definitions');
     expect(listAllPulseMetricDefinitionsTool.description).toContain(
       'Retrieves a list of all published Pulse Metric Definitions',
@@ -131,7 +133,9 @@ describe('listAllPulseMetricDefinitionsTool', () => {
 async function getToolResult(params: {
   view?: 'DEFINITION_VIEW_BASIC' | 'DEFINITION_VIEW_FULL' | 'DEFINITION_VIEW_DEFAULT';
 }): Promise<CallToolResult> {
-  const listAllPulseMetricDefinitionsTool = getListAllPulseMetricDefinitionsTool(new WebMcpServer());
+  const listAllPulseMetricDefinitionsTool = getListAllPulseMetricDefinitionsTool(
+    new WebMcpServer(),
+  );
   const callback = await Provider.from(listAllPulseMetricDefinitionsTool.callback);
   return await callback(
     { view: params.view, limit: undefined, pageSize: undefined },

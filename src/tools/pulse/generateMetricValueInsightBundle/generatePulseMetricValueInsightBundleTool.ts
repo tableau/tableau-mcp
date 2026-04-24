@@ -9,7 +9,7 @@ import {
   pulseInsightBundleTypeEnum,
 } from '../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { Tool } from '../../tool.js';
+import { WebTool } from '../../tool.web.js';
 
 const paramsSchema = {
   bundleRequest: pulseBundleRequestSchema,
@@ -18,8 +18,8 @@ const paramsSchema = {
 
 export const getGeneratePulseMetricValueInsightBundleTool = (
   server: WebMcpServer,
-): Tool<typeof paramsSchema> => {
-  const generatePulseMetricValueInsightBundleTool = new Tool({
+): WebTool<typeof paramsSchema> => {
+  const generatePulseMetricValueInsightBundleTool = new WebTool({
     server,
     name: 'generate-pulse-metric-value-insight-bundle',
     description: `

@@ -7,7 +7,7 @@ import { getTableauServerInfo } from './getTableauServerInfo';
 import { Server } from './server';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
-import { Tool } from './tools/tool.js';
+import { WebTool } from './tools/tool.web.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
 import { webToolNames } from './tools/toolName.web.js';
 import { toolFactories } from './tools/tools.js';
@@ -80,7 +80,7 @@ export class WebMcpServer extends Server {
 
   protected _getToolsToRegister = async (
     tableauAuthInfo?: TableauAuthInfo,
-  ): Promise<Array<Tool<any>>> => {
+  ): Promise<Array<WebTool<any>>> => {
     const config = getConfig();
     const configOverrides = await getConfigWithOverrides({
       restApiArgs: {

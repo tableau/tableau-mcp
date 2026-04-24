@@ -14,7 +14,7 @@ import { WebMcpServer } from '../../server.web.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { Tool, ToolRules } from '../tool.js';
+import { ToolRules, WebTool } from '../tool.web.js';
 import { combineFields, simplifyReadMetadataResult } from './datasourceMetadataUtils.js';
 
 export const getGraphqlQuery = (datasourceLuid: string): string => `
@@ -99,9 +99,9 @@ export type GetDatasourceMetadataError =
 export const getGetDatasourceMetadataTool = (
   server: WebMcpServer,
   productVersion: ProductVersion,
-): Tool<typeof paramsSchema> => {
+): WebTool<typeof paramsSchema> => {
   const rules = getDatasourceMetadataRules(productVersion);
-  const getDatasourceMetadataTool = new Tool({
+  const getDatasourceMetadataTool = new WebTool({
     server,
     name: 'get-datasource-metadata',
     description: `

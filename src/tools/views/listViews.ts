@@ -8,7 +8,7 @@ import { View } from '../../sdks/tableau/types/view.js';
 import { WebMcpServer } from '../../server.web.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
-import { ConstrainedResult, Tool } from '../tool.js';
+import { ConstrainedResult, WebTool } from '../tool.web.js';
 import { parseAndValidateViewsFilterString } from './viewsFilterUtils.js';
 
 const paramsSchema = {
@@ -17,8 +17,8 @@ const paramsSchema = {
   limit: z.number().gt(0).optional(),
 };
 
-export const getListViewsTool = (server: WebMcpServer): Tool<typeof paramsSchema> => {
-  const listViewsTool = new Tool({
+export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+  const listViewsTool = new WebTool({
     server,
     name: 'list-views',
     description: `

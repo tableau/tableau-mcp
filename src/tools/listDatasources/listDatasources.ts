@@ -8,7 +8,7 @@ import { DataSource } from '../../sdks/tableau/types/dataSource.js';
 import { WebMcpServer } from '../../server.web.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
-import { ConstrainedResult, Tool } from '../tool.js';
+import { ConstrainedResult, WebTool } from '../tool.web.js';
 import { parseAndValidateDatasourcesFilterString } from './datasourcesFilterUtils.js';
 
 const paramsSchema = {
@@ -17,8 +17,8 @@ const paramsSchema = {
   limit: z.number().gt(0).optional(),
 };
 
-export const getListDatasourcesTool = (server: WebMcpServer): Tool<typeof paramsSchema> => {
-  const listDatasourcesTool = new Tool({
+export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+  const listDatasourcesTool = new WebTool({
     server,
     name: 'list-datasources',
     description: `

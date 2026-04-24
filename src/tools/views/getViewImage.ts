@@ -14,7 +14,7 @@ import { WebMcpServer } from '../../server.web.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { Tool } from '../tool.js';
+import { WebTool } from '../tool.web.js';
 
 const paramsSchema = {
   viewId: z.string(),
@@ -37,8 +37,8 @@ const MIN_VERSION_FOR_SVG = '2026.2.0';
 export const getGetViewImageTool = (
   server: WebMcpServer,
   tableauServerVersion: ProductVersion,
-): Tool<typeof paramsSchema> => {
-  const getViewImageTool = new Tool({
+): WebTool<typeof paramsSchema> => {
+  const getViewImageTool = new WebTool({
     server,
     name: 'get-view-image',
     description: [

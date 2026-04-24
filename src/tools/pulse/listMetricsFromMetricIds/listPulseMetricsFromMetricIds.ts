@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { Tool } from '../../tool.js';
+import { WebTool } from '../../tool.web.js';
 import { constrainPulseMetrics } from '../constrainPulseMetrics.js';
 
 const paramsSchema = {
@@ -12,8 +12,8 @@ const paramsSchema = {
 
 export const getListPulseMetricsFromMetricIdsTool = (
   server: WebMcpServer,
-): Tool<typeof paramsSchema> => {
-  const listPulseMetricsFromMetricIdsTool = new Tool({
+): WebTool<typeof paramsSchema> => {
+  const listPulseMetricsFromMetricIdsTool = new WebTool({
     server,
     name: 'list-pulse-metrics-from-metric-ids',
     description: `

@@ -32,7 +32,9 @@ describe('listPulseMetricsFromMetricIdsTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const listPulseMetricsFromMetricIdsTool = getListPulseMetricsFromMetricIdsTool(new WebMcpServer());
+    const listPulseMetricsFromMetricIdsTool = getListPulseMetricsFromMetricIdsTool(
+      new WebMcpServer(),
+    );
     expect(listPulseMetricsFromMetricIdsTool.name).toBe('list-pulse-metrics-from-metric-ids');
     expect(listPulseMetricsFromMetricIdsTool.description).toContain(
       'Retrieves a list of published Pulse Metrics from a list of metric IDs',
@@ -106,7 +108,9 @@ describe('listPulseMetricsFromMetricIdsTool', () => {
 });
 
 async function getToolResult(params: { metricIds: string[] }): Promise<CallToolResult> {
-  const listPulseMetricsFromMetricIdsTool = getListPulseMetricsFromMetricIdsTool(new WebMcpServer());
+  const listPulseMetricsFromMetricIdsTool = getListPulseMetricsFromMetricIdsTool(
+    new WebMcpServer(),
+  );
   const callback = await Provider.from(listPulseMetricsFromMetricIdsTool.callback);
   return await callback(params, getMockRequestHandlerExtra());
 }
