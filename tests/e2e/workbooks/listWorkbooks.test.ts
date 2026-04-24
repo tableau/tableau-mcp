@@ -2,18 +2,28 @@ import z from 'zod';
 
 import { workbookSchema } from '../../../src/sdks/tableau/types/workbook.js';
 import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
-import { callTool } from '../client.js';
+import { McpClient } from '../mcpClient.js';
 
 describe('list-workbooks', () => {
+  let client: McpClient;
+
   beforeAll(setEnv);
   afterAll(resetEnv);
+
+  beforeAll(async () => {
+    client = new McpClient();
+    await client.connect();
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
 
   it('should list workbooks', async () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const workbooks = await callTool('list-workbooks', {
-      env,
+    const workbooks = await client.callTool('list-workbooks', {
       schema: z.array(workbookSchema),
     });
 
@@ -31,8 +41,7 @@ describe('list-workbooks', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const workbooks = await callTool('list-workbooks', {
-      env,
+    const workbooks = await client.callTool('list-workbooks', {
       schema: z.array(workbookSchema),
       toolArgs: { filter: 'name:eq:Superstore' },
     });

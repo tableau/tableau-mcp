@@ -27,6 +27,7 @@ describe('WebMcpServer', () => {
     const allTools = webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
     const tools = allTools.filter((_, i) => !disabledFlags[i]);
+    expect(server.mcpServer.registerTool).toHaveBeenCalledTimes(tools.length);
     for (const tool of tools) {
       expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
         tool.name,
