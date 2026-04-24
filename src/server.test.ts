@@ -1,25 +1,25 @@
+import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { exportedForTesting as serverExportedForTesting } from './server.js';
-import { testProductVersion } from './testShared.js';
+import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
+import { exportedForTesting } from './tools/listDatasources/listDatasources.js';
 import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
+import { TableauToolCallback } from './tools/toolContext.js';
+import { getMockRequestHandlerExtra } from './tools/toolContext.mock.js';
 import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
+import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
 
 const { Server } = serverExportedForTesting;
 
 describe('server', () => {
-  const originalEnv = process.env;
-
   beforeEach(() => {
-    process.env = {
-      ...originalEnv,
-      INCLUDE_TOOLS: undefined,
-      EXCLUDE_TOOLS: undefined,
-    };
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
   });
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    vi.unstubAllEnvs();
   });
 
   it('should register tools', async () => {
@@ -63,7 +63,7 @@ describe('server', () => {
   });
 
   it('should register tools filtered by includeTools', async () => {
-    process.env.INCLUDE_TOOLS = 'query-datasource';
+    vi.stubEnv('INCLUDE_TOOLS', 'query-datasource');
     const server = getServer();
     await server.registerTools();
 
@@ -80,7 +80,7 @@ describe('server', () => {
   });
 
   it('should register tools filtered by excludeTools', async () => {
-    process.env.EXCLUDE_TOOLS = 'query-datasource';
+    vi.stubEnv('EXCLUDE_TOOLS', 'query-datasource');
     const server = getServer();
     await server.registerTools();
 
@@ -111,7 +111,7 @@ describe('server', () => {
 
   it('should throw error when no tools are registered', async () => {
     const sortedToolNames = [...toolNames].sort((a, b) => a.localeCompare(b)).join(', ');
-    process.env.EXCLUDE_TOOLS = sortedToolNames;
+    vi.stubEnv('EXCLUDE_TOOLS', sortedToolNames);
     const server = getServer();
 
     const sentences = [
@@ -132,6 +132,32 @@ describe('server', () => {
     server.registerRequestHandlers();
 
     expect(server.server.setRequestHandler).toHaveBeenCalled();
+  });
+
+  it('should reject tool calls with service unavailable error when BREAK_GLASS_DISABLE_GLOBALLY is true', async () => {
+    vi.stubEnv('BREAK_GLASS_DISABLE_GLOBALLY', 'true');
+
+    const server = getServer();
+    await server.registerTools();
+
+    const listDatasourcesRegistration = vi
+      .mocked(server.registerTool)
+      .mock.calls.find((call) => call[0 /* tool name */] === 'list-datasources');
+
+    invariant(listDatasourcesRegistration);
+    const listDatasourcesCallback =
+      listDatasourcesRegistration[2 /* callback */] as TableauToolCallback<
+        Partial<typeof exportedForTesting.listDatasourcesParamsSchema>
+      >;
+
+    await expect(listDatasourcesCallback({}, getMockRequestHandlerExtra())).rejects.toSatisfy(
+      (error: unknown) =>
+        error instanceof ServiceUnavailableError &&
+        error.type === 'service-unavailable' &&
+        error.statusCode === 503 &&
+        error.message ===
+          'The Tableau MCP server is temporarily unavailable. Please try again later.',
+    );
   });
 });
 

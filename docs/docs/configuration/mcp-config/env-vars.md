@@ -55,8 +55,10 @@ A comma-separated list of loggers to enable.
 
 - Default: `appLogger`
 - Possible values (may be combined): `fileLogger`, `appLogger`
-  - `fileLogger` — writes log entries and MCP notifications normally only sent to clients to hourly rotating files in the directory specified by[`FILE_LOGGER_DIRECTORY`](#file_logger_directory).
-  Notifications include tool calls and their arguments as well as HTTP traces for the requests and responses to the Tableau REST APIs.
+  - `fileLogger` — writes log entries and MCP notifications normally only sent to clients to hourly
+    rotating files in the directory specified by[`FILE_LOGGER_DIRECTORY`](#file_logger_directory).
+    Notifications include tool calls and their arguments as well as HTTP traces for the requests and
+    responses to the Tableau REST APIs.
   - `appLogger` — writes log entries to stdout as JSON. Enabled by default when transport is `http`.
 - The log file names are in the format `YYYY-MM-DDTHH-00-00-000Z.log` e.g.
   `2025-10-15T22-00-00-000Z.log` meaning this log file contains all log messages for hour 22 of
@@ -394,3 +396,25 @@ Enables product telemetry for tool usage tracking.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source_connections
 [tab-connect-ds]:
   https://help.tableau.com/current/api/vizql-data-service/en-us/docs/vds_create_queries.html#connect-to-your-data-source
+
+<hr />
+
+## `BREAK_GLASS_DISABLE_GLOBALLY`
+
+Can be used to force all MCP tools to return a "service unavailable" error message. Use with
+discretion.
+
+- Default: `false`
+- When `true`, all tools will return the below result:
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "The Tableau MCP server is temporarily unavailable. Please try again later."
+    }
+  ],
+  "isError": true
+}
+```

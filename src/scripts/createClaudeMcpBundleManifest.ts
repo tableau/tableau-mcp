@@ -570,6 +570,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  BREAK_GLASS_DISABLE_GLOBALLY: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Break Glass Disable Globally',
+    description: 'Force all MCP tools to return a "service unavailable" error message.',
+    required: false,
+    sensitive: false,
+  },
 } satisfies EnvVars;
 
 const userConfig = Object.entries(envVars).reduce<Record<string, McpbUserConfigurationOption>>(
