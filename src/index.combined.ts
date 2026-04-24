@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import dotenv from 'dotenv';
@@ -10,15 +11,20 @@ import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { writeToStderr } from './logging/logger.js';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
 import { RestApi } from './sdks/tableau/restApi.js';
+import { DesktopMcpServer } from './server.desktop.js';
 import { WebMcpServer } from './server.web.js';
-import { startExpressServer } from './server/express.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
+const serverName = 'tableau-combined-mcp';
 const serverVersion = pkg.version;
 
 async function startServer(): Promise<void> {
   dotenv.config();
   const config = getConfig();
+
+  if (config.transport !== 'stdio') {
+    throw new Error('Transport must be stdio for Desktop server');
+  }
 
   RestApi.host = config.server;
 
@@ -37,43 +43,37 @@ async function startServer(): Promise<void> {
     setFileLogger(new FileLogger({ logDirectory: config.fileLoggerDirectory }));
   }
 
-  switch (config.transport) {
-    case 'stdio': {
-      await serverInfoReady;
+  await serverInfoReady;
 
-      const server = new WebMcpServer();
-      await server.registerTools();
-      server.mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
-        setNotificationLevel(server.mcpServer, request.params.level);
-        return {};
-      });
+  const mcpServer = new McpServer(
+    {
+      name: serverName,
+      version: serverVersion,
+    },
+    {
+      capabilities: {
+        logging: {},
+        tools: {},
+      },
+    },
+  );
 
-      const transport = new StdioServerTransport();
-      await server.mcpServer.connect(transport);
+  const webMcpServer = new WebMcpServer({ mcpServer });
+  await webMcpServer.registerTools();
 
-      setNotificationLevel(server.mcpServer, logLevel);
-      notifier.info(server.mcpServer, `${server.name} v${server.version} running on stdio`);
-      break;
-    }
-    case 'http': {
-      const { url } = await startExpressServer({ basePath: 'tableau-mcp', config, logLevel });
+  const desktopMcpServer = new DesktopMcpServer({ mcpServer });
+  await desktopMcpServer.registerTools();
 
-      // Port is now open. Wait for server info before logging the ready message.
-      await serverInfoReady;
+  mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
+    setNotificationLevel(desktopMcpServer.mcpServer, request.params.level);
+    return {};
+  });
 
-      if (!config.oauth.enabled) {
-        console.warn(
-          '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access! By having explicitly disabled OAuth by setting the DANGEROUSLY_DISABLE_OAUTH environment variable to "true", you accept any and all risks associated with this decision.',
-        );
-      }
+  const transport = new StdioServerTransport();
+  await mcpServer.connect(transport);
 
-      // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
-      console.log(
-        `tableau-mcp v${serverVersion} ${config.disableSessionManagement ? 'stateless ' : ''}streamable HTTP server available at ${url}`,
-      );
-      break;
-    }
-  }
+  setNotificationLevel(mcpServer, logLevel);
+  notifier.info(mcpServer, `${serverName} v${serverVersion} running on stdio`);
 
   if (config.disableLogMasking) {
     writeToStderr('⚠️ Log masking is disabled!');

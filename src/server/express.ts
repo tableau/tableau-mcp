@@ -1,5 +1,9 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { isInitializeRequest, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import {
+  isInitializeRequest,
+  LoggingLevel,
+  SetLevelRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Request, RequestHandler, Response } from 'express';
@@ -182,10 +186,13 @@ async function connect(
   authInfo: TableauAuthInfo | undefined,
 ): Promise<void> {
   await server.registerTools(authInfo);
-  server.registerRequestHandlers();
+  server.mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
+    setNotificationLevel(server.mcpServer, request.params.level);
+    return {};
+  });
 
   await server.mcpServer.connect(transport);
-  setNotificationLevel(server, logLevel);
+  setNotificationLevel(server.mcpServer, logLevel);
 }
 
 async function methodNotAllowed(_req: Request, res: Response): Promise<void> {

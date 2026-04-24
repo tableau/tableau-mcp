@@ -30,10 +30,19 @@ const variantPackageJsonOverrides = {
     description:
       'MCP server for Tableau Desktop Agent API - enables AI agents to interact with Tableau workbooks',
     bin: {
-      'tableau-desktop-mcp-server': './build/index-desktop.js',
+      'tableau-desktop-mcp-server': './build/index.desktop.js',
     },
     exports: {
-      '.': './build/index-desktop.js',
+      '.': './build/index.desktop.js',
+    },
+  },
+  combined: {
+    name: '@tableau/combined-mcp-server',
+    bin: {
+      'tableau-combined-mcp-server': './build/index.combined.js',
+    },
+    exports: {
+      '.': './build/index.combined.js',
     },
   },
 } satisfies Record<PackageVariant, Partial<PackageJson>>;
