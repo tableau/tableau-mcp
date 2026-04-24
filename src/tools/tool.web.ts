@@ -11,7 +11,7 @@ import { getProductTelemetry } from '../telemetry/productTelemetry/telemetryForw
 import { getExceptionMessage } from '../utils/getExceptionMessage';
 import { getHttpStatus } from '../utils/getHttpStatus';
 import { LogAndExecuteParams, Tool, ToolParams } from './tool';
-import { TableauRequestHandlerExtra, TableauToolCallback } from './toolContext';
+import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './toolContext.web';
 import { WebToolName } from './toolName.web';
 
 export type ToolRules = Record<string, boolean | undefined>;
@@ -40,7 +40,7 @@ export type ConstrainedResult<T> =
 export type WebToolLogAndExecuteParams<
   T,
   Args extends undefined | ZodRawShapeCompat | AnySchema,
-> = LogAndExecuteParams<T, TableauRequestHandlerExtra, Args> & {
+> = LogAndExecuteParams<T, WebMcpServer, TableauWebRequestHandlerExtra, Args> & {
   // A function that constrains the success result of the tool
   constrainSuccessResult: (result: T) => ConstrainedResult<T> | Promise<ConstrainedResult<T>>;
 };
@@ -48,7 +48,8 @@ export type WebToolLogAndExecuteParams<
 export class WebTool<Args extends ZodRawShape | undefined = undefined> extends Tool<
   WebMcpServer,
   WebToolName,
-  TableauToolCallback<Args>,
+  TableauWebRequestHandlerExtra,
+  TableauWebToolCallback<Args>,
   Args
 > {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
@@ -61,7 +62,13 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     annotations,
     callback,
     disabled,
-  }: ToolParams<WebMcpServer, WebToolName, TableauToolCallback<Args>, Args>) {
+  }: ToolParams<
+    WebMcpServer,
+    WebToolName,
+    TableauWebRequestHandlerExtra,
+    TableauWebToolCallback<Args>,
+    Args
+  >) {
     super({ server, name, description, paramsSchema, annotations, callback, disabled });
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name as WebToolName);

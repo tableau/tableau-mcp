@@ -18,7 +18,8 @@ import { ToolName } from './toolName.js';
 export type ToolParams<
   TServer extends Server,
   TToolName extends ToolName,
-  TCallback extends TableauToolCallback<Args>,
+  TExtra extends TableauRequestHandlerExtra<TServer>,
+  TCallback extends TableauToolCallback<TServer, TExtra, Args>,
   Args extends undefined | ZodRawShapeCompat | AnySchema,
 > = {
   // The MCP server instance
@@ -52,7 +53,8 @@ export type ToolParams<
  */
 export type LogAndExecuteParams<
   T,
-  TExtra extends TableauRequestHandlerExtra,
+  TServer extends Server,
+  TExtra extends TableauRequestHandlerExtra<TServer>,
   Args extends undefined | ZodRawShapeCompat | AnySchema,
 > = {
   // The extra data provided to request handlers
@@ -76,7 +78,8 @@ export type LogAndExecuteParams<
 export abstract class Tool<
   TServer extends Server,
   TToolName extends ToolName,
-  TCallback extends TableauToolCallback<Args>,
+  TExtra extends TableauRequestHandlerExtra<TServer>,
+  TCallback extends TableauToolCallback<TServer, TExtra, Args>,
   Args extends ZodRawShape | undefined = undefined,
 > {
   server: TServer;
@@ -95,7 +98,7 @@ export abstract class Tool<
     annotations,
     callback,
     disabled,
-  }: ToolParams<TServer, TToolName, TCallback, Args>) {
+  }: ToolParams<TServer, TToolName, TExtra, TCallback, Args>) {
     this.server = server;
     this.name = name;
     this.description = description;
