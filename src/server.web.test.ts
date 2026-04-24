@@ -1,13 +1,11 @@
-import { exportedForTesting as serverExportedForTesting } from './server.js';
+import { WebMcpServer } from './server.web.js';
 import { testProductVersion } from './testShared.js';
 import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
 import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
 import { Provider } from './utils/provider.js';
 
-const { Server } = serverExportedForTesting;
-
-describe('server', () => {
+describe('WebMcpServer', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
@@ -135,8 +133,8 @@ describe('server', () => {
   });
 });
 
-function getServer(): InstanceType<typeof Server> {
-  const server = new Server();
+function getServer(): WebMcpServer {
+  const server = new WebMcpServer();
   server.mcpServer.registerTool = vi.fn();
   return server;
 }

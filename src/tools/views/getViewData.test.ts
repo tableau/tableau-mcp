@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { stubDefaultEnvVars } from '../../testShared.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
@@ -44,7 +44,7 @@ describe('getViewDataTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const getViewDataTool = getGetViewDataTool(new Server());
+    const getViewDataTool = getGetViewDataTool(new WebMcpServer());
     expect(getViewDataTool.name).toBe('get-view-data');
     expect(getViewDataTool.description).toContain(
       "Retrieves comma-separated value (CSV) data for the specified view in a Tableau workbook, including the user's filters.",
@@ -114,7 +114,7 @@ async function getToolResult({
   viewId: string;
   viewFilters?: Record<string, string>;
 }): Promise<CallToolResult> {
-  const getViewDataTool = getGetViewDataTool(new Server());
+  const getViewDataTool = getGetViewDataTool(new WebMcpServer());
   const callback = await Provider.from(getViewDataTool.callback);
   return await callback({ viewId, viewFilters }, getMockRequestHandlerExtra());
 }

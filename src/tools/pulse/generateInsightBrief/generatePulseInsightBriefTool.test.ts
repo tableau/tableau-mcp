@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
 import { PulseDisabledError, PulseNotAvailableError } from '../../../errors/mcpToolError.js';
-import { Server } from '../../../server.js';
+import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -136,12 +136,12 @@ describe('getGeneratePulseInsightBriefTool', () => {
   });
 
   it('should have correct tool name', () => {
-    const tool = getGeneratePulseInsightBriefTool(new Server());
+    const tool = getGeneratePulseInsightBriefTool(new WebMcpServer());
     expect(tool.name).toBe('generate-pulse-insight-brief');
   });
 
   it('should have correct annotations', () => {
-    const tool = getGeneratePulseInsightBriefTool(new Server());
+    const tool = getGeneratePulseInsightBriefTool(new WebMcpServer());
     expect(tool.annotations).toEqual({
       title: 'Generate Pulse Insight Brief',
       readOnlyHint: true,
@@ -150,7 +150,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
   });
 
   it('should have brief request in params schema', () => {
-    const tool = getGeneratePulseInsightBriefTool(new Server());
+    const tool = getGeneratePulseInsightBriefTool(new WebMcpServer());
     expect(tool.paramsSchema).toHaveProperty('briefRequest');
   });
 
@@ -328,7 +328,7 @@ describe('getGeneratePulseInsightBriefTool', () => {
   async function getToolResult(
     overrideBriefRequest?: typeof briefRequest,
   ): Promise<CallToolResult> {
-    const tool = getGeneratePulseInsightBriefTool(new Server());
+    const tool = getGeneratePulseInsightBriefTool(new WebMcpServer());
     const callback = await Provider.from(tool.callback);
     return await callback(
       { briefRequest: overrideBriefRequest ?? briefRequest },

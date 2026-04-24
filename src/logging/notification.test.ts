@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Server } from '../server.js';
+import { WebMcpServer } from '../server.web.js';
 import { writeToStderr } from './logger.js';
 import {
   getNotificationMessageForTool,
@@ -35,13 +35,13 @@ describe('notification', () => {
 
   describe('setLogLevel', () => {
     it('should set the log level', () => {
-      setNotificationLevel(new Server(), 'error', { silent: true });
+      setNotificationLevel(new WebMcpServer(), 'error', { silent: true });
       expect(shouldNotifyWhenLevelIsAtLeast('error')).toBe(true);
       expect(shouldNotifyWhenLevelIsAtLeast('debug')).toBe(false);
     });
 
     it('should not change level if it is the same', () => {
-      const server = new Server();
+      const server = new WebMcpServer();
       setNotificationLevel(server, 'debug', { silent: true });
       setNotificationLevel(server, 'debug', { silent: true });
       expect(server.mcpServer.server.notification).not.toHaveBeenCalled();
@@ -50,7 +50,7 @@ describe('notification', () => {
 
   describe('shouldLogWhenLevelIsAtLeast', () => {
     it('should return true for levels at or above current level', () => {
-      setNotificationLevel(new Server(), 'warning', { silent: true });
+      setNotificationLevel(new WebMcpServer(), 'warning', { silent: true });
       expect(shouldNotifyWhenLevelIsAtLeast('warning')).toBe(true);
       expect(shouldNotifyWhenLevelIsAtLeast('error')).toBe(true);
       expect(shouldNotifyWhenLevelIsAtLeast('info')).toBe(false);
@@ -115,7 +115,7 @@ describe('notification', () => {
 
   describe('log functions', () => {
     it('should send logging message when level is appropriate', async () => {
-      const server = new Server();
+      const server = new WebMcpServer();
       setNotificationLevel(server, 'info', { silent: true });
 
       await notifier.info(server, 'test message', { notifier: 'test-logger' });
@@ -136,7 +136,7 @@ describe('notification', () => {
     });
 
     it('should not send logging message when level is below current level', async () => {
-      const server = new Server();
+      const server = new WebMcpServer();
       setNotificationLevel(server, 'warning', { silent: true });
 
       await notifier.debug(server, 'test message', { notifier: 'test-logger' });
@@ -145,7 +145,7 @@ describe('notification', () => {
     });
 
     it('should use server name as default logger', async () => {
-      const server = new Server();
+      const server = new WebMcpServer();
       setNotificationLevel(server, 'info', { silent: true });
 
       await notifier.info(server, 'test message');
@@ -155,7 +155,7 @@ describe('notification', () => {
           method: 'notifications/message',
           params: {
             level: 'info',
-            notifier: 'test-server',
+            notifier: 'tableau-mcp',
             data: expect.stringContaining('test message'),
           },
         },
@@ -166,7 +166,7 @@ describe('notification', () => {
     });
 
     it('should handle LogMessage objects', async () => {
-      const server = new Server();
+      const server = new WebMcpServer();
       setNotificationLevel(server, 'info', { silent: true });
       const logMessage = {
         type: 'request',

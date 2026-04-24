@@ -9,7 +9,7 @@ import {
 
 import { Config } from '../config.js';
 import { OverridableConfig } from '../overridableConfig.js';
-import { Server } from '../server.js';
+import { WebMcpServer } from '../server.web.js';
 import { TableauAuthInfo } from '../server/oauth/schemas.js';
 
 // Additional context  available to all tool callbacks
@@ -18,7 +18,7 @@ export type TableauToolContext = {
   _siteLuid?: string;
 
   config: Config;
-  server: Server;
+  server: WebMcpServer;
   tableauAuthInfo: TableauAuthInfo | undefined;
   getConfigWithOverrides: () => Promise<OverridableConfig>;
   getSiteLuid: () => string;

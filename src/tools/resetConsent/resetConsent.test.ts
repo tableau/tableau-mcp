@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
@@ -23,7 +23,7 @@ describe('resetConsentTool', () => {
   });
 
   it('should create a tool instance with correct properties', async () => {
-    const tool = getResetConsentTool(new Server());
+    const tool = getResetConsentTool(new WebMcpServer());
     const annotations = await Provider.from(tool.annotations);
     expect(tool.name).toBe('reset-consent');
     expect(tool.paramsSchema).toEqual({});
@@ -36,7 +36,7 @@ describe('resetConsentTool', () => {
   describe('disabled property', () => {
     it('should be disabled when OAuth is not enabled (no OAUTH_ISSUER)', async () => {
       vi.stubEnv('OAUTH_ISSUER', '');
-      const tool = getResetConsentTool(new Server());
+      const tool = getResetConsentTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(true);
     });
 
@@ -46,14 +46,14 @@ describe('resetConsentTool', () => {
       vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'true');
       vi.stubEnv('OAUTH_REDIRECT_URI', `${MOCK_ISSUER}/Callback`);
       vi.stubEnv('OAUTH_JWE_PRIVATE_KEY_PATH', '/placeholder/key.pem');
-      const tool = getResetConsentTool(new Server());
+      const tool = getResetConsentTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(true);
     });
 
     it('should be enabled when OAuth is enabled and the Tableau authorization server is active', async () => {
       vi.stubEnv('OAUTH_ISSUER', MOCK_ISSUER);
       vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
-      const tool = getResetConsentTool(new Server());
+      const tool = getResetConsentTool(new WebMcpServer());
       expect(await Provider.from(tool.disabled)).toBe(false);
     });
   });
@@ -156,7 +156,7 @@ describe('resetConsentTool', () => {
 async function getToolResult(
   extra: ReturnType<typeof getMockRequestHandlerExtra>,
 ): Promise<CallToolResult> {
-  const tool = getResetConsentTool(new Server());
+  const tool = getResetConsentTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback({}, extra);
 }

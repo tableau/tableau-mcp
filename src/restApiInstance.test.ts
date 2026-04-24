@@ -10,7 +10,8 @@ import {
   useRestApi,
 } from './restApiInstance.js';
 import { RestApi } from './sdks/tableau/restApi.js';
-import { Server, userAgent } from './server.js';
+import { userAgent } from './server.js';
+import { WebMcpServer } from './server.web.js';
 
 vi.mock('./logging/notification.js', () => ({
   notifier: {
@@ -44,7 +45,7 @@ describe('restApiInstance', () => {
       const restApi = await useRestApi({
         config: getConfig(),
         requestId: mockRequestId,
-        server: new Server(),
+        server: new WebMcpServer(),
         tableauAuthInfo: undefined,
         jwtScopes: [],
         signal: new AbortController().signal,
@@ -71,7 +72,7 @@ describe('restApiInstance', () => {
       const restApi = await useRestApi({
         config: getConfig(),
         requestId: mockRequestId,
-        server: new Server(),
+        server: new WebMcpServer(),
         tableauAuthInfo: undefined,
         jwtScopes: [],
         signal: new AbortController().signal,
@@ -104,7 +105,7 @@ describe('restApiInstance', () => {
       const restApi = await useRestApi({
         config: getConfig(),
         requestId: mockRequestId,
-        server: new Server(),
+        server: new WebMcpServer(),
         tableauAuthInfo: undefined,
         jwtScopes: [],
         signal: new AbortController().signal,
@@ -135,7 +136,7 @@ describe('restApiInstance', () => {
       const restApi = await useRestApi({
         config: getConfig(),
         requestId: mockRequestId,
-        server: new Server(),
+        server: new WebMcpServer(),
         tableauAuthInfo: {
           type: 'Bearer',
           username: 'test-user',
@@ -162,7 +163,7 @@ describe('restApiInstance', () => {
       const restApi = await useRestApi({
         config: getConfig(),
         requestId: mockRequestId,
-        server: new Server(),
+        server: new WebMcpServer(),
         tableauAuthInfo: {
           type: 'X-Tableau-Auth',
           username: 'test-user',
@@ -191,7 +192,7 @@ describe('restApiInstance', () => {
       const restApi = await useRestApi({
         config: getConfig(),
         requestId: mockRequestId,
-        server: new Server(),
+        server: new WebMcpServer(),
         tableauAuthInfo: {
           type: 'Passthrough',
           username: 'test-user',
@@ -217,7 +218,7 @@ describe('restApiInstance', () => {
 
   describe('Request Interceptor', () => {
     it('should add User-Agent header and log request', () => {
-      const server = new Server();
+      const server = new WebMcpServer();
       const interceptor = getRequestInterceptor(server, mockRequestId);
       const mockRequest = {
         headers: {} as Record<string, string>,
@@ -247,7 +248,7 @@ describe('restApiInstance', () => {
 
   describe('Response Interceptor', () => {
     it('should log response', () => {
-      const server = new Server();
+      const server = new WebMcpServer();
       const interceptor = getResponseInterceptor(server, mockRequestId);
       const mockResponse = {
         status: 200,
@@ -279,7 +280,7 @@ describe('restApiInstance', () => {
 
   describe('Error Handling', () => {
     it('should handle request errors', () => {
-      const server = new Server();
+      const server = new WebMcpServer();
       const errorInterceptor = getRequestErrorInterceptor(server, mockRequestId);
       const mockError = {
         request: {
@@ -303,7 +304,7 @@ describe('restApiInstance', () => {
     });
 
     it('should handle AxiosError request errors', () => {
-      const server = new Server();
+      const server = new WebMcpServer();
       const errorInterceptor = getRequestErrorInterceptor(server, mockRequestId);
       const mockError = {
         isAxiosError: true,
@@ -335,7 +336,7 @@ describe('restApiInstance', () => {
     });
 
     it('should handle response errors', () => {
-      const server = new Server();
+      const server = new WebMcpServer();
       const errorInterceptor = getResponseErrorInterceptor(server, mockRequestId);
       const mockError = {
         response: {
@@ -360,7 +361,7 @@ describe('restApiInstance', () => {
     });
 
     it('should handle AxiosError response errors', () => {
-      const server = new Server();
+      const server = new WebMcpServer();
       const errorInterceptor = getResponseErrorInterceptor(server, mockRequestId);
       const mockError = {
         isAxiosError: true,

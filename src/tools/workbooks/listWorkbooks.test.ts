@@ -1,6 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import invariant from '../../utils/invariant.js';
 import { Provider } from '../../utils/provider.js';
@@ -38,7 +38,7 @@ describe('listWorkbooksTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const listWorkbooksTool = getListWorkbooksTool(new Server());
+    const listWorkbooksTool = getListWorkbooksTool(new WebMcpServer());
     expect(listWorkbooksTool.name).toBe('list-workbooks');
     expect(listWorkbooksTool.description).toContain(
       'Retrieves a list of workbooks on a Tableau site',
@@ -134,7 +134,7 @@ describe('listWorkbooksTool', () => {
 });
 
 async function getToolResult(params: { filter: string }): Promise<CallToolResult> {
-  const listWorkbooksTool = getListWorkbooksTool(new Server());
+  const listWorkbooksTool = getListWorkbooksTool(new WebMcpServer());
   const callback = await Provider.from(listWorkbooksTool.callback);
   return await callback(
     { filter: params.filter, pageSize: undefined, limit: undefined },

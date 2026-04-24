@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { CustomViewNotAllowedError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
-import { Server } from '../../server.js';
+import { WebMcpServer } from '../../server.web.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
@@ -21,7 +21,7 @@ export type GetCustomViewDataError = {
   message: string;
 };
 
-export const getGetCustomViewDataTool = (server: Server): Tool<typeof paramsSchema> => {
+export const getGetCustomViewDataTool = (server: WebMcpServer): Tool<typeof paramsSchema> => {
   const getCustomViewDataTool = new Tool({
     server,
     name: 'get-custom-view-data',

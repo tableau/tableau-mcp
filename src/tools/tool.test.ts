@@ -5,7 +5,7 @@ import { z, ZodError } from 'zod';
 
 import { DatasourceNotAllowedError, ZodiosValidationError } from '../errors/mcpToolError.js';
 import { notifier } from '../logging/notification.js';
-import { Server } from '../server.js';
+import { WebMcpServer } from '../server.web.js';
 import invariant from '../utils/invariant.js';
 import { Tool } from './tool.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
@@ -32,7 +32,7 @@ describe('Tool', () => {
   const mockExtra = getMockRequestHandlerExtra();
 
   const mockParams = {
-    server: new Server(),
+    server: new WebMcpServer(),
     name: 'get-datasource-metadata',
     description: 'A test tool',
     paramsSchema: {
