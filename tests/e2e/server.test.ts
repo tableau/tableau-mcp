@@ -1,4 +1,4 @@
-import { serverName, serverVersion } from '../../src/server.js';
+import pkg from '../../package.json';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
 import { resetEnv, setEnv } from '../testEnv.js';
 import { getClient, listTools } from './client.js';
@@ -10,8 +10,8 @@ describe('server', () => {
   it('should get server version', async () => {
     const client = await getClient();
     expect(client.getServerVersion()).toEqual({
-      name: serverName,
-      version: serverVersion,
+      name: 'tableau-mcp',
+      version: pkg.version,
     });
   });
 

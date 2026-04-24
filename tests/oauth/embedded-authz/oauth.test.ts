@@ -3,7 +3,6 @@ import http from 'http';
 import request from 'supertest';
 
 import { getConfig } from '../../../src/config.js';
-import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { generateCodeChallenge } from '../../../src/server/oauth/generateCodeChallenge.js';
 import * as getTableauAuthInfoModule from '../../../src/server/oauth/getTableauAuthInfo.js';
@@ -14,6 +13,8 @@ import {
 import { AwaitableWritableStream } from './awaitableWritableStream.js';
 import { exchangeAuthzCodeForAccessToken } from './exchangeAuthzCodeForAccessToken.js';
 import { resetEnv, setEnv } from './testEnv.js';
+
+const serverName = 'tableau-mcp';
 
 const mocks = vi.hoisted(() => ({
   mockGetTokenResult: vi.fn(),

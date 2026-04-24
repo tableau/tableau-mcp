@@ -1,14 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { InitializeRequest, SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
-import pkg from '../package.json';
 import { setNotificationLevel } from './logging/notification.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
-
-export const serverName =
-  import.meta.env.BUILD_VARIANT === 'desktop' ? 'tableau-desktop-mcp' : 'tableau-mcp';
-export const serverVersion = pkg.version;
-export const userAgent = `${serverName}/${serverVersion}`;
 
 export type ClientInfo = InitializeRequest['params']['clientInfo'];
 
@@ -31,7 +25,17 @@ export abstract class Server {
     return this._clientInfo ?? this.mcpServer.server.getClientVersion();
   }
 
-  constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
+  constructor({
+    mcpServer,
+    clientInfo,
+    serverName,
+    serverVersion,
+  }: {
+    mcpServer?: McpServer;
+    clientInfo?: ClientInfo;
+    serverName: string;
+    serverVersion: string;
+  }) {
     this.mcpServer =
       mcpServer ??
       new McpServer(
@@ -50,6 +54,17 @@ export abstract class Server {
     this.name = serverName;
     this.version = serverVersion;
     this._clientInfo = clientInfo;
+  }
+
+  get userAgent(): string {
+    const userAgentParts = [`${this.name}/${this.version}`];
+    if (this.clientInfo) {
+      const { name, version } = this.clientInfo;
+      if (name) {
+        userAgentParts.push(version ? `(${name} ${version})` : `(${name})`);
+      }
+    }
+    return userAgentParts.join(' ');
   }
 
   abstract registerTools: (tableauAuthInfo?: TableauAuthInfo) => Promise<void>;
