@@ -4,7 +4,6 @@ import request from 'supertest';
 import { MockedFunction, vi } from 'vitest';
 
 import { getConfig, ONE_DAY_IN_MS } from '../../../src/config.js';
-import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { clientMetadataCache } from '../../../src/server/oauth/clientMetadataCache.js';
 import { axios } from '../../../src/utils/axios.js';
@@ -100,7 +99,7 @@ describe('clientIdMetadataDocuments', () => {
 
   async function startServer(): Promise<{ app: express.Application }> {
     const { app, server } = await startExpressServer({
-      basePath: serverName,
+      basePath: 'tableau-mcp',
       config: getConfig(),
       logLevel: 'info',
     });

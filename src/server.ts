@@ -1,20 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { InitializeRequest, SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { InitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
-import pkg from '../package.json';
-import { setNotificationLevel } from './logging/notification.js';
-import { Variant } from './scripts/variants';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
-
-const serverNames: Record<Variant, string> = {
-  desktop: 'tableau-desktop-mcp',
-  combined: 'tableau-combined-mcp',
-  default: 'tableau-mcp',
-};
-
-export const serverName = serverNames[import.meta.env.BUILD_VARIANT as Variant];
-export const serverVersion = pkg.version;
-export const userAgent = `${serverName}/${serverVersion}`;
 
 export type ClientInfo = InitializeRequest['params']['clientInfo'];
 
@@ -37,7 +24,17 @@ export abstract class Server {
     return this._clientInfo ?? this.mcpServer.server.getClientVersion();
   }
 
-  constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
+  constructor({
+    mcpServer,
+    clientInfo,
+    serverName,
+    serverVersion,
+  }: {
+    mcpServer?: McpServer;
+    clientInfo?: ClientInfo;
+    serverName: string;
+    serverVersion: string;
+  }) {
     this.mcpServer =
       mcpServer ??
       new McpServer(
@@ -58,12 +55,16 @@ export abstract class Server {
     this._clientInfo = clientInfo;
   }
 
-  abstract registerTools: (tableauAuthInfo?: TableauAuthInfo) => Promise<void>;
+  get userAgent(): string {
+    const userAgentParts = [`${this.name}/${this.version}`];
+    if (this.clientInfo) {
+      const { name, version } = this.clientInfo;
+      if (name) {
+        userAgentParts.push(version ? `(${name} ${version})` : `(${name})`);
+      }
+    }
+    return userAgentParts.join(' ');
+  }
 
-  registerRequestHandlers = (): void => {
-    this.mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
-      setNotificationLevel(this, request.params.level);
-      return {};
-    });
-  };
+  abstract registerTools: (tableauAuthInfo?: TableauAuthInfo) => Promise<void>;
 }

@@ -23,14 +23,6 @@ describe('DesktopMcpServer', () => {
       );
     }
   });
-
-  it('should register request handlers', async () => {
-    const server = getServer();
-    server.mcpServer.server.setRequestHandler = vi.fn();
-    server.registerRequestHandlers();
-
-    expect(server.mcpServer.server.setRequestHandler).toHaveBeenCalled();
-  });
 });
 
 function getServer(): DesktopMcpServer {

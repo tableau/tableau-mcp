@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import dotenv from 'dotenv';
 
+import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
@@ -10,9 +12,11 @@ import { writeToStderr } from './logging/logger.js';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { DesktopMcpServer } from './server.desktop.js';
-import { serverName, serverVersion } from './server.js';
 import { WebMcpServer } from './server.web.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
+
+const serverName = 'tableau-combined-mcp';
+const serverVersion = pkg.version;
 
 async function startServer(): Promise<void> {
   dotenv.config();
@@ -56,17 +60,20 @@ async function startServer(): Promise<void> {
 
   const webMcpServer = new WebMcpServer({ mcpServer });
   await webMcpServer.registerTools();
-  webMcpServer.registerRequestHandlers();
 
   const desktopMcpServer = new DesktopMcpServer({ mcpServer });
   await desktopMcpServer.registerTools();
-  desktopMcpServer.registerRequestHandlers();
+
+  mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
+    setNotificationLevel(desktopMcpServer.mcpServer, request.params.level);
+    return {};
+  });
 
   const transport = new StdioServerTransport();
   await mcpServer.connect(transport);
 
-  setNotificationLevel(webMcpServer, logLevel);
-  notifier.info(webMcpServer, `${webMcpServer.name} v${webMcpServer.version} running on stdio`);
+  setNotificationLevel(mcpServer, logLevel);
+  notifier.info(mcpServer, `${serverName} v${serverVersion} running on stdio`);
 
   if (config.disableLogMasking) {
     writeToStderr('⚠️ Log masking is disabled!');

@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { isVariant, Variant, variants } from './variants';
 
+// @ts-expect-error - import.meta is not allowed in CommonJS output, this script is run with tsx as ESM
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..', '..');
 const packageJsonPath = join(repoRoot, 'package.json');
@@ -29,19 +30,19 @@ const variantPackageJsonOverrides = {
     description:
       'MCP server for Tableau Desktop Agent API - enables AI agents to interact with Tableau workbooks',
     bin: {
-      'tableau-desktop-mcp-server': './build/index-desktop.js',
+      'tableau-desktop-mcp-server': './build/index.desktop.js',
     },
     exports: {
-      '.': './build/index-desktop.js',
+      '.': './build/index.desktop.js',
     },
   },
   combined: {
     name: '@tableau/combined-mcp-server',
     bin: {
-      'tableau-combined-mcp-server': './build/index-combined.js',
+      'tableau-combined-mcp-server': './build/index.combined.js',
     },
     exports: {
-      '.': './build/index-combined.js',
+      '.': './build/index.combined.js',
     },
   },
 } satisfies Record<PackageVariant, Partial<PackageJson>>;

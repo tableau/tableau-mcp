@@ -14,7 +14,7 @@ import {
   ResponseInterceptorConfig,
 } from './sdks/tableau/interceptors.js';
 import { RestApi } from './sdks/tableau/restApi.js';
-import { Server, userAgent } from './server.js';
+import { Server } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { isAxiosError } from './utils/axios.js';
@@ -68,7 +68,7 @@ const getNewRestApiInstanceAsync = async (
       'abort',
       () => {
         notifier.info(
-          server,
+          server.mcpServer,
           {
             type: 'request-cancelled',
             requestId,
@@ -204,7 +204,7 @@ export const getRequestErrorInterceptor =
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.request) {
       notifier.error(
-        server,
+        server.mcpServer,
         `Request ${requestId} failed with error: ${getExceptionMessage(error)}`,
         {
           notifier: 'rest-api',
@@ -237,7 +237,7 @@ export const getResponseErrorInterceptor =
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.response) {
       notifier.error(
-        server,
+        server.mcpServer,
         `Response from request ${requestId} failed with error: ${getExceptionMessage(error)}`,
         { notifier: 'rest-api', requestId },
       );
@@ -278,7 +278,7 @@ function logRequest(server: Server, request: RequestInterceptorConfig, requestId
     }),
   } as const;
 
-  notifier.info(server, messageObj, { notifier: 'rest-api', requestId });
+  notifier.info(server.mcpServer, messageObj, { notifier: 'rest-api', requestId });
 }
 
 function logResponse(
@@ -305,11 +305,11 @@ function logResponse(
     }),
   } as const;
 
-  notifier.info(server, messageObj, { notifier: 'rest-api', requestId });
+  notifier.info(server.mcpServer, messageObj, { notifier: 'rest-api', requestId });
 }
 
 function getUserAgent(server: Server): string {
-  const userAgentParts = [userAgent];
+  const userAgentParts = [server.userAgent];
   if (server.clientInfo) {
     const { name, version } = server.clientInfo;
     if (name) {

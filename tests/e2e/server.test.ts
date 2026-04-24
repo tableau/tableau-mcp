@@ -1,9 +1,11 @@
-import { serverVersion } from '../../src/server.js';
+import pkg from '../../package.json';
 import { desktopToolNames } from '../../src/tools/desktop/toolName.js';
 import { WebToolName, webToolNames } from '../../src/tools/web/toolName.js';
 import { resetEnv, setEnv } from '../testEnv.js';
 import { buildVariant } from './build.js';
 import { McpClient } from './mcpClient.js';
+
+const serverVersion = pkg.version;
 
 describe('server', () => {
   beforeAll(setEnv);
