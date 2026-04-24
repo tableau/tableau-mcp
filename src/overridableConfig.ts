@@ -1,6 +1,11 @@
 import { ProcessEnvEx } from '../types/process-env.js';
 import { removeClaudeMcpBundleUserConfigTemplates } from './config.js';
-import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
+import {
+  isWebToolGroupName,
+  isWebToolName,
+  webToolGroups,
+  WebToolName,
+} from './tools/toolName.web.js';
 
 const overridableVariables = [
   'INCLUDE_TOOLS',
@@ -29,26 +34,26 @@ export type BoundedContext = {
 
 export class OverridableConfig {
   private maxResultLimit: number | null;
-  private maxResultLimits: Map<ToolName, number | null> | null;
+  private maxResultLimits: Map<WebToolName, number | null> | null;
 
-  includeTools: Array<ToolName>;
-  excludeTools: Array<ToolName>;
+  includeTools: Array<WebToolName>;
+  excludeTools: Array<WebToolName>;
 
   disableQueryDatasourceValidationRequests: boolean;
   disableMetadataApiRequests: boolean;
 
   boundedContext: BoundedContext;
 
-  getMaxResultLimit(toolName: ToolName): number | null {
+  getMaxResultLimit(toolName: WebToolName): number | null {
     return this.maxResultLimits?.get(toolName) ?? this.maxResultLimit;
   }
 
   getToolsWithOverrides(
     envVariables: Record<string, string | undefined>,
     siteOverrides: Record<string, string | undefined> = {},
-  ): { includeTools: Array<ToolName>; excludeTools: Array<ToolName> } {
-    let includeTools: Array<ToolName> = [];
-    let excludeTools: Array<ToolName> = [];
+  ): { includeTools: Array<WebToolName>; excludeTools: Array<WebToolName> } {
+    let includeTools: Array<WebToolName> = [];
+    let excludeTools: Array<WebToolName> = [];
 
     if (
       (!Object.hasOwn(siteOverrides, 'INCLUDE_TOOLS') &&
@@ -59,13 +64,13 @@ export class OverridableConfig {
       includeTools = envVariables.INCLUDE_TOOLS
         ? envVariables.INCLUDE_TOOLS.split(',').flatMap((s) => {
             const v = s.trim();
-            return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
+            return isWebToolName(v) ? v : isWebToolGroupName(v) ? webToolGroups[v] : [];
           })
         : [];
       excludeTools = envVariables.EXCLUDE_TOOLS
         ? envVariables.EXCLUDE_TOOLS.split(',').flatMap((s) => {
             const v = s.trim();
-            return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
+            return isWebToolName(v) ? v : isWebToolGroupName(v) ? webToolGroups[v] : [];
           })
         : [];
 
@@ -76,13 +81,13 @@ export class OverridableConfig {
       // site override set for EXCLUDE_TOOLS
       excludeTools = siteOverrides.EXCLUDE_TOOLS.split(',').flatMap((s) => {
         const v = s.trim();
-        return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
+        return isWebToolName(v) ? v : isWebToolGroupName(v) ? webToolGroups[v] : [];
       });
     } else if (siteOverrides.INCLUDE_TOOLS) {
       // site override set for INCLUDE_TOOLS
       includeTools = siteOverrides.INCLUDE_TOOLS.split(',').flatMap((s) => {
         const v = s.trim();
-        return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
+        return isWebToolName(v) ? v : isWebToolGroupName(v) ? webToolGroups[v] : [];
       });
     }
 
@@ -246,8 +251,8 @@ function createSetFromCommaSeparatedString(value: string | undefined): Set<strin
   );
 }
 
-function getMaxResultLimits(maxResultLimits: string): Map<ToolName, number | null> {
-  const map = new Map<ToolName, number | null>();
+function getMaxResultLimits(maxResultLimits: string): Map<WebToolName, number | null> {
+  const map = new Map<WebToolName, number | null>();
   if (!maxResultLimits) {
     return map;
   }
@@ -257,10 +262,10 @@ function getMaxResultLimits(maxResultLimits: string): Map<ToolName, number | nul
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     const actualLimit =
       isNaN(maxResultLimitNumber) || maxResultLimitNumber <= 0 ? null : maxResultLimitNumber;
-    if (isToolName(toolName)) {
+    if (isWebToolName(toolName)) {
       map.set(toolName, actualLimit);
-    } else if (isToolGroupName(toolName)) {
-      toolGroups[toolName].forEach((toolName) => {
+    } else if (isWebToolGroupName(toolName)) {
+      webToolGroups[toolName].forEach((toolName) => {
         if (!map.has(toolName)) {
           // Tool names take precedence over group names
           map.set(toolName, actualLimit);

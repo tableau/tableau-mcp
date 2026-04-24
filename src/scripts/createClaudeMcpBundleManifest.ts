@@ -9,7 +9,7 @@ import { z } from 'zod';
 
 import packageJson from '../../package.json';
 import { ProcessEnvEx } from '../../types/process-env.js';
-import { toolNames } from '../tools/toolName.js';
+import { webToolNames } from '../tools/toolName.web.js';
 
 // @ts-expect-error - import.meta is not allowed in CommonJS output, but this file is built using esbuild as ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -625,7 +625,7 @@ const manifest = {
       env: manifestEnvObject,
     },
   },
-  tools: toolNames.map((name) => ({ name })),
+  tools: webToolNames.map((name) => ({ name })),
   user_config: userConfig,
 } satisfies McpbManifest;
 

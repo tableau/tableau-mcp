@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { z } from 'zod';
 
-import { ToolName } from '../../src/tools/toolName.js';
+import { WebToolName } from '../../src/tools/toolName.web.js';
 import invariant from '../../src/utils/invariant.js';
 import { getDefaultEnv } from '../testEnv.js';
 
@@ -21,7 +21,7 @@ export async function listTools(): Promise<Array<string>> {
 /**
  * Calls the MCP tool with the provided arguments.
  *
- * @param {ToolName} toolName The name of the tool to call
+ * @param {WebToolName} toolName The name of the tool to call
  * @param {({
  *     schema: Z;
  *     contentType?: 'text' | 'image';
@@ -35,7 +35,7 @@ export async function listTools(): Promise<Array<string>> {
  * @returns {*}  {Promise<z.infer<Z>>} The tool call result
  */
 export async function callTool<Z extends z.ZodTypeAny = z.ZodNever>(
-  toolName: ToolName,
+  toolName: WebToolName,
   {
     schema,
     contentType,

@@ -1,7 +1,7 @@
 import { WebMcpServer } from './server.web.js';
 import { testProductVersion } from './testShared.js';
 import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
-import { toolNames } from './tools/toolName.js';
+import { webToolNames } from './tools/toolName.web.js';
 import { toolFactories } from './tools/tools.js';
 import { Provider } from './utils/provider.js';
 
@@ -108,13 +108,13 @@ describe('WebMcpServer', () => {
   });
 
   it('should throw error when no tools are registered', async () => {
-    const sortedToolNames = [...toolNames].sort((a, b) => a.localeCompare(b)).join(', ');
+    const sortedToolNames = [...webToolNames].sort((a, b) => a.localeCompare(b)).join(', ');
     process.env.EXCLUDE_TOOLS = sortedToolNames;
     const server = getServer();
 
     const sentences = [
       'No tools to register',
-      `Tools available = [${toolNames.join(', ')}]`,
+      `Tools available = [${webToolNames.join(', ')}]`,
       `EXCLUDE_TOOLS = [${sortedToolNames}]`,
       'INCLUDE_TOOLS = []',
     ];

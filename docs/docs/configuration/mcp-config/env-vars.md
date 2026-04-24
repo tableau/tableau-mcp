@@ -55,8 +55,10 @@ A comma-separated list of loggers to enable.
 
 - Default: `appLogger`
 - Possible values (may be combined): `fileLogger`, `appLogger`
-  - `fileLogger` — writes log entries and MCP notifications normally only sent to clients to hourly rotating files in the directory specified by[`FILE_LOGGER_DIRECTORY`](#file_logger_directory).
-  Notifications include tool calls and their arguments as well as HTTP traces for the requests and responses to the Tableau REST APIs.
+  - `fileLogger` — writes log entries and MCP notifications normally only sent to clients to hourly
+    rotating files in the directory specified by[`FILE_LOGGER_DIRECTORY`](#file_logger_directory).
+    Notifications include tool calls and their arguments as well as HTTP traces for the requests and
+    responses to the Tableau REST APIs.
   - `appLogger` — writes log entries to stdout as JSON. Enabled by default when transport is `http`.
 - The log file names are in the format `YYYY-MM-DDTHH-00-00-000Z.log` e.g.
   `2025-10-15T22-00-00-000Z.log` meaning this log file contains all log messages for hour 22 of
@@ -152,7 +154,8 @@ data source][tab-connect-ds].
 
 ## `ENABLE_MCP_SITE_SETTINGS`
 
-When `true`, the Tableau MCP server will fetch and apply site settings overrides for any user session, see [Site Settings](site-settings.md).
+When `true`, the Tableau MCP server will fetch and apply site settings overrides for any user
+session, see [Site Settings](site-settings.md).
 
 - Default: `true`
 - When `false`, Tableau MCP server will not fetch or apply site settings overrides.
@@ -166,7 +169,7 @@ be available. This variable is site overridable, see [Site Settings](site-settin
 
 - Default: Empty string (_all_ are included)
 - For a list of available tools and groups, see
-  [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.ts).
+  [toolName.web.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.web.ts).
 - Mixing tool names and group names is allowed.
 
 <hr />
@@ -193,8 +196,8 @@ The maximum timeout for requests to the Tableau Server REST API.
 ## `MAX_RESULT_LIMIT`
 
 The maximum number of results that every tool with a `limit` parameter can return when no
-tool-specific max result limit is set in the [`MAX_RESULT_LIMITS`](#max_result_limits)
-variable. This variable is site overridable, see [Site Settings](site-settings.md).
+tool-specific max result limit is set in the [`MAX_RESULT_LIMITS`](#max_result_limits) variable.
+This variable is site overridable, see [Site Settings](site-settings.md).
 
 :::warning
 
@@ -211,7 +214,8 @@ Take care when setting this value and be sure to set appropriate tool-specific l
 ## `MAX_RESULT_LIMITS`
 
 A comma-separated list of tool names (or tool group names) and the maximum number of results that
-each tool (or tools in the group) can return. This variable is site overridable, see [Site Settings](site-settings.md).
+each tool (or tools in the group) can return. This variable is site overridable, see
+[Site Settings](site-settings.md).
 
 :::info
 
@@ -232,7 +236,7 @@ This means that:
 
 - Default: Empty string (_no limits_)
 - For a list of available tools and groups, see
-  [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.ts).
+  [toolName.web.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.web.ts).
 - Only applies to tools that have a `limit` parameter and return an array of items.
 - Tool names take precedence over tool group names. That is, `datasource:1000,list-datasources:20`
   means that the `list-datasources` tool can return up to 20 data sources but the `query-datasource`
@@ -271,8 +275,8 @@ Disable validation of SET and MATCH filter values in the
 ## `DISABLE_METADATA_API_REQUESTS`
 
 Disables `graphql` requests to the Tableau Metadata API in the
-[`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool.
-This variable is site overridable, see [Site Settings](site-settings.md).
+[`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool. This variable is
+site overridable, see [Site Settings](site-settings.md).
 
 - Default: `false`
 - When `true`, skips requests to the `graphql` endpoint that provides additional context to field
@@ -314,9 +318,10 @@ variable.
 
 ## `MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES`
 
-When site settings are enabled by the Tableau MCP server, settings will be fetched for the given site and applied to each session.
-Rather than fetching site settings with every request, the MCP server will cache the settings and only check it again after the interval
-specified by this environment variable.
+When site settings are enabled by the Tableau MCP server, settings will be fetched for the given
+site and applied to each session. Rather than fetching site settings with every request, the MCP
+server will cache the settings and only check it again after the interval specified by this
+environment variable.
 
 - Default: `10` minutes
 - Must be a positive number between `1` and `1440` (1 day).
