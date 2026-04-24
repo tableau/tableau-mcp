@@ -4,6 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import dotenv from 'dotenv';
 
+import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
@@ -11,9 +12,11 @@ import { writeToStderr } from './logging/logger.js';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { DesktopMcpServer } from './server.desktop.js';
-import { serverName, serverVersion } from './server.js';
 import { WebMcpServer } from './server.web.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
+
+const serverName = 'tableau-combined-mcp';
+const serverVersion = pkg.version;
 
 async function startServer(): Promise<void> {
   dotenv.config();

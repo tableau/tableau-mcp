@@ -1,14 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { InitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
-import { Variant } from './scripts/variants';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 
-  combined: 'tableau-combined-mcp',
-  default: 'tableau-mcp',
-};
-
-export const serverName = serverNames[import.meta.env.BUILD_VARIANT as Variant];
 export type ClientInfo = InitializeRequest['params']['clientInfo'];
 
 export abstract class Server {
