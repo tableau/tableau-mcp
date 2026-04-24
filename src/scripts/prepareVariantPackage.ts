@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { isVariant, Variant, variants } from './variants';
 
+// @ts-expect-error - import.meta is not allowed in CommonJS output, this script is run with tsx as ESM
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..', '..');
 const packageJsonPath = join(repoRoot, 'package.json');

@@ -10,7 +10,6 @@ import {
   useRestApi,
 } from './restApiInstance.js';
 import { RestApi } from './sdks/tableau/restApi.js';
-import { userAgent } from './server.js';
 import { WebMcpServer } from './server.web.js';
 
 vi.mock('./logging/notification.js', () => ({
@@ -229,7 +228,7 @@ describe('restApiInstance', () => {
 
       interceptor(mockRequest);
 
-      expect(mockRequest.headers['User-Agent']).toBe(userAgent);
+      expect(mockRequest.headers['User-Agent']).toBe(server.userAgent);
       expect(notifier.info).toHaveBeenCalledWith(
         server.mcpServer,
         expect.objectContaining({

@@ -14,7 +14,7 @@ import {
   ResponseInterceptorConfig,
 } from './sdks/tableau/interceptors.js';
 import { RestApi } from './sdks/tableau/restApi.js';
-import { Server, userAgent } from './server.js';
+import { Server } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { isAxiosError } from './utils/axios.js';
@@ -309,7 +309,7 @@ function logResponse(
 }
 
 function getUserAgent(server: Server): string {
-  const userAgentParts = [userAgent];
+  const userAgentParts = [server.userAgent];
   if (server.clientInfo) {
     const { name, version } = server.clientInfo;
     if (name) {

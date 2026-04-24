@@ -3,16 +3,18 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import dotenv from 'dotenv';
 
+import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { writeToStderr } from './logging/logger.js';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
 import { RestApi } from './sdks/tableau/restApi.js';
-import { serverName, serverVersion } from './server.js';
 import { WebMcpServer } from './server.web.js';
 import { startExpressServer } from './server/express.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
+
+const serverVersion = pkg.version;
 
 async function startServer(): Promise<void> {
   dotenv.config();
@@ -54,7 +56,7 @@ async function startServer(): Promise<void> {
       break;
     }
     case 'http': {
-      const { url } = await startExpressServer({ basePath: serverName, config, logLevel });
+      const { url } = await startExpressServer({ basePath: 'tableau-mcp', config, logLevel });
 
       // Port is now open. Wait for server info before logging the ready message.
       await serverInfoReady;
@@ -67,7 +69,7 @@ async function startServer(): Promise<void> {
 
       // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
       console.log(
-        `${serverName} v${serverVersion} ${config.disableSessionManagement ? 'stateless ' : ''}streamable HTTP server available at ${url}`,
+        `tableau-mcp v${serverVersion} ${config.disableSessionManagement ? 'stateless ' : ''}streamable HTTP server available at ${url}`,
       );
       break;
     }

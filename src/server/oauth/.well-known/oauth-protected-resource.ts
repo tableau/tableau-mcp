@@ -1,7 +1,6 @@
 import express from 'express';
 
 import { getConfig } from '../../../config.js';
-import { serverName } from '../../../server.js';
 import { getSupportedScopes } from '../scopes.js';
 
 /**
@@ -15,7 +14,7 @@ export function oauthProtectedResource(app: express.Application): void {
   app.get('/.well-known/oauth-protected-resource', (_req, res) => {
     const { issuer, advertiseApiScopes, resourceUri, enforceScopes } = getConfig().oauth;
     res.json({
-      resource: `${resourceUri}/${serverName}`,
+      resource: `${resourceUri}/tableau-mcp`,
       authorization_servers: [issuer],
       bearer_methods_supported: ['header'],
       scopes_supported: enforceScopes

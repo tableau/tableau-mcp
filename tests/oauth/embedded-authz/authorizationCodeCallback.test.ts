@@ -5,7 +5,6 @@ import { Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../src/config.js';
 import { RestApi } from '../../../src/sdks/tableau/restApi.js';
-import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { testProductVersion } from '../../../src/testShared.js';
 import { resetEnv, setEnv } from './testEnv.js';
@@ -44,7 +43,7 @@ describe('authorization code callback', () => {
 
   async function startServer(): Promise<{ app: express.Application }> {
     const { app, server } = await startExpressServer({
-      basePath: serverName,
+      basePath: 'tableau-mcp',
       config: getConfig(),
       logLevel: 'info',
     });
