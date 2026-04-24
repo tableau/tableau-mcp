@@ -1,15 +1,29 @@
 /* eslint-disable no-console */
 
-import { build } from 'esbuild';
+import { build, BuildOptions } from 'esbuild';
 import { chmod, mkdir, rm } from 'fs/promises';
 
+import { GlobalIdentifierName, globalIdentifiers } from './globalIdentifiers';
+import { isVariant, variants } from './variants';
+
 const dev = process.argv.includes('--dev');
+const variant = process.argv.includes('--variant')
+  ? process.argv[process.argv.indexOf('--variant') + 1]
+  : 'default';
+
+if (!isVariant(variant)) {
+  throw new Error(`Invalid variant: ${variant}. Expected one of: ${variants.join(', ')}`);
+}
+
+const globalValues: Record<GlobalIdentifierName, string> = {
+  BUILD_VARIANT: variant,
+};
 
 (async () => {
   await rm('./build', { recursive: true, force: true });
 
-  console.log('🏗️ Building...');
-  const result = await build({
+  console.log(`🏗️ Building ${variant} variant...`);
+  const buildOptions: BuildOptions = {
     entryPoints: ['./src/index.ts'],
     bundle: true,
     platform: 'node',
@@ -22,7 +36,17 @@ const dev = process.argv.includes('--dev');
       'empty-import-meta': 'silent',
     },
     outfile: './build/index.js',
-  });
+    // must be last so that the action can override previous build options
+    ...globalIdentifiers.reduce((acc, { name, defaultValue, action }) => {
+      return { ...acc, ...action(globalValues[name] ?? defaultValue) };
+    }, {}),
+  };
+
+  if (!buildOptions.outfile) {
+    throw new Error('outfile build option must be specified');
+  }
+
+  const result = await build(buildOptions);
 
   for (const error of result.errors) {
     console.log(`❌ ${error.text}`);
@@ -53,5 +77,5 @@ const dev = process.argv.includes('--dev');
     console.log(`⚠️ ${warning.text}`);
   }
 
-  await chmod('./build/index.js', '755');
+  await chmod(buildOptions.outfile, '755');
 })();
