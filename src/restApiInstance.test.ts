@@ -231,7 +231,7 @@ describe('restApiInstance', () => {
 
       expect(mockRequest.headers['User-Agent']).toBe(userAgent);
       expect(notifier.info).toHaveBeenCalledWith(
-        server,
+        server.mcpServer,
         expect.objectContaining({
           type: 'request',
           requestId: mockRequestId,
@@ -263,7 +263,7 @@ describe('restApiInstance', () => {
 
       expect(result).toBe(mockResponse);
       expect(notifier.info).toHaveBeenCalledWith(
-        server,
+        server.mcpServer,
         expect.objectContaining({
           type: 'response',
           requestId: mockRequestId,
@@ -294,7 +294,7 @@ describe('restApiInstance', () => {
       errorInterceptor(mockError, mockHost);
 
       expect(notifier.error).toHaveBeenCalledWith(
-        server,
+        server.mcpServer,
         `Request ${mockRequestId} failed with error: ${JSON.stringify(mockError)}`,
         expect.objectContaining({
           notifier: 'rest-api',
@@ -321,7 +321,7 @@ describe('restApiInstance', () => {
       expect(notifier.info).toHaveBeenCalled();
 
       expect(notifier.info).toHaveBeenCalledWith(
-        server,
+        server.mcpServer,
         expect.objectContaining({
           type: 'request',
           requestId: mockRequestId,
@@ -351,7 +351,7 @@ describe('restApiInstance', () => {
       errorInterceptor(mockError, mockHost);
 
       expect(notifier.error).toHaveBeenCalledWith(
-        server,
+        server.mcpServer,
         `Response from request ${mockRequestId} failed with error: ${JSON.stringify(mockError)}`,
         expect.objectContaining({
           notifier: 'rest-api',
@@ -378,7 +378,7 @@ describe('restApiInstance', () => {
       errorInterceptor(mockError, mockHost);
 
       expect(notifier.info).toHaveBeenCalledWith(
-        server,
+        server.mcpServer,
         expect.objectContaining({
           type: 'response',
           requestId: mockRequestId,
