@@ -1,7 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { InitializeRequest, SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { InitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
-import { setNotificationLevel } from './logging/notification.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 
 export type ClientInfo = InitializeRequest['params']['clientInfo'];
@@ -68,11 +67,4 @@ export abstract class Server {
   }
 
   abstract registerTools: (tableauAuthInfo?: TableauAuthInfo) => Promise<void>;
-
-  registerRequestHandlers = (): void => {
-    this.mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
-      setNotificationLevel(this, request.params.level);
-      return {};
-    });
-  };
 }

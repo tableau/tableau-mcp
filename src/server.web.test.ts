@@ -27,6 +27,7 @@ describe('WebMcpServer', () => {
     const allTools = webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
     const tools = allTools.filter((_, i) => !disabledFlags[i]);
+    expect(server.mcpServer.registerTool).toHaveBeenCalledTimes(tools.length);
     for (const tool of tools) {
       expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
         tool.name,
@@ -122,14 +123,6 @@ describe('WebMcpServer', () => {
     for (const sentence of sentences) {
       await expect(server.registerTools).rejects.toThrow(sentence);
     }
-  });
-
-  it('should register request handlers', async () => {
-    const server = getServer();
-    server.mcpServer.server.setRequestHandler = vi.fn();
-    server.registerRequestHandlers();
-
-    expect(server.mcpServer.server.setRequestHandler).toHaveBeenCalled();
   });
 });
 

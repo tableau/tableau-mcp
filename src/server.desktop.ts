@@ -1,15 +1,23 @@
-import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
 
+import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop';
-import { Server } from './server';
+import { ClientInfo, Server } from './server';
 import { DesktopTool } from './tools/desktop/tool';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
 import { desktopToolFactories } from './tools/desktop/tools';
 import { Provider } from './utils/provider.js';
 
+const serverName = 'tableau-desktop-mcp';
+const serverVersion = pkg.version;
+
 export class DesktopMcpServer extends Server {
+  constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
+    super({ mcpServer, clientInfo, serverName, serverVersion });
+  }
+
   registerTools = async (): Promise<void> => {
     const config = getDesktopConfig();
 
