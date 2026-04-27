@@ -9,6 +9,7 @@ import {
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
+import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { getTableauServerInfo } from './getTableauServerInfo';
 import { setNotificationLevel } from './logging/notification.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
@@ -77,6 +78,12 @@ export class Server extends McpServer {
         args: typeof paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
       ) => {
+        if (config.breakGlassDisableGlobally) {
+          throw new ServiceUnavailableError(
+            'The Tableau MCP server is temporarily unavailable. Please try again later.',
+          );
+        }
+
         const tableauToolCallback = await Provider.from(callback);
         const tableauRequestHandlerExtra: TableauRequestHandlerExtra = {
           ...extra,
