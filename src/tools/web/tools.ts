@@ -19,7 +19,7 @@ import { getListViewsTool } from './views/listViews.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 
-export const toolFactories = [
+export const webToolFactories = [
   getGetDatasourceMetadataTool,
   getListDatasourcesTool,
   getQueryDatasourceTool,

@@ -7,6 +7,7 @@ import { GlobalIdentifierName, globalIdentifiers } from './globalIdentifiers';
 import { isVariant, variants } from './variants';
 
 const dev = process.argv.includes('--dev');
+const dirty = process.argv.includes('--dirty');
 const variant = process.argv.includes('--variant')
   ? process.argv[process.argv.indexOf('--variant') + 1]
   : 'default';
@@ -20,7 +21,9 @@ const globalValues: Record<GlobalIdentifierName, string> = {
 };
 
 (async () => {
-  await rm('./build', { recursive: true, force: true });
+  if (!dirty) {
+    await rm('./build', { recursive: true, force: true });
+  }
 
   console.log(`🏗️ Building ${variant} variant...`);
   const buildOptions: BuildOptions = {

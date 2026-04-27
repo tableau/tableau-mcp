@@ -118,7 +118,7 @@ export abstract class Tool<
     username?: string;
   }): void {
     notifier.debug(
-      this.server,
+      this.server.mcpServer,
       getNotificationMessageForTool({
         requestId,
         toolName: this.name,

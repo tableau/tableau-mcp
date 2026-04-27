@@ -3,18 +3,28 @@ import z from 'zod';
 import { viewSchema } from '../../../src/sdks/tableau/types/view.js';
 import invariant from '../../../src/utils/invariant.js';
 import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
-import { callTool } from '../client.js';
+import { McpClient } from '../mcpClient.js';
 
 describe('list-views', () => {
+  let client: McpClient;
+
   beforeAll(setEnv);
   afterAll(resetEnv);
+
+  beforeAll(async () => {
+    client = new McpClient();
+    await client.connect();
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
 
   it('should list views', async () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const views = await callTool('list-views', {
-      env,
+    const views = await client.callTool('list-views', {
       schema: z.array(viewSchema),
     });
 
@@ -35,8 +45,7 @@ describe('list-views', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const views = await callTool('list-views', {
-      env,
+    const views = await client.callTool('list-views', {
       schema: z.array(viewSchema),
       toolArgs: { filter: 'name:eq:Overview,workbookName:eq:Superstore' },
     });
@@ -52,7 +61,7 @@ describe('list-views', () => {
   });
 
   it('should list views with pageSize and limit', async () => {
-    const views = await callTool('list-views', {
+    const views = await client.callTool('list-views', {
       schema: z.array(viewSchema),
       toolArgs: { pageSize: 5, limit: 10 },
     });
