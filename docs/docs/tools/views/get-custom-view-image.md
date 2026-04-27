@@ -43,6 +43,8 @@ resolution and aspect ratio.
 
 Example: `1200`
 
+<hr />
+
 ### `format`
 
 The format of the image. Default: `PNG`
