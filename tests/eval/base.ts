@@ -7,7 +7,7 @@ import {
   StreamedRunResult,
   withTrace,
 } from '@openai/agents';
-import { OpenAI } from 'openai/client.js';
+import OpenAI from 'openai';
 import { Err, Ok, Result } from 'ts-results-es';
 import z from 'zod';
 

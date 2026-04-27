@@ -11,7 +11,7 @@ import packageJson from '../../package.json';
 import { ProcessEnvEx } from '../../types/process-env.js';
 import { webToolNames } from '../tools/web/toolName.js';
 
-// @ts-expect-error - import.meta is not allowed in CommonJS output, but this file is built using esbuild as ESM
+// @ts-expect-error - import.meta is not allowed in CommonJS output, this script is run with tsx as ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
