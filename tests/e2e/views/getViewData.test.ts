@@ -1,18 +1,28 @@
 import z from 'zod';
 
 import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
-import { callTool } from '../client.js';
+import { McpClient } from '../mcpClient.js';
 
 describe('get-view-data', () => {
+  let client: McpClient;
+
   beforeAll(setEnv);
   afterAll(resetEnv);
+
+  beforeAll(async () => {
+    client = new McpClient();
+    await client.connect();
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
 
   it('should get view data', async () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const data = await callTool('get-view-data', {
-      env,
+    const data = await client.callTool('get-view-data', {
       schema: z.string(),
       toolArgs: { viewId: superstore.defaultView.id },
     });

@@ -1,0 +1,120 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+
+import { WebMcpServer } from '../../../server.web.js';
+import { stubDefaultEnvVars } from '../../../testShared.js';
+import invariant from '../../../utils/invariant.js';
+import { Provider } from '../../../utils/provider.js';
+import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
+import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
+import { getGetViewDataTool as getGetViewDataTool } from './getViewData.js';
+import { mockView } from './mockView.js';
+
+const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
+
+const mockViewData =
+  '"Country/Region,State/Province,Profit Ratio,Latitude (generated),Longitude (generated)\nCanada,Alberta,19.5%,53.41,-114.42\n"';
+
+const mocks = vi.hoisted(() => ({
+  mockGetView: vi.fn(),
+  mockQueryViewData: vi.fn(),
+}));
+
+vi.mock('../../../restApiInstance.js', () => ({
+  useRestApi: vi.fn().mockImplementation(async ({ callback }) =>
+    callback({
+      viewsMethods: {
+        getView: mocks.mockGetView,
+        queryViewData: mocks.mockQueryViewData,
+      },
+      siteId: 'test-site-id',
+    }),
+  ),
+}));
+
+describe('getViewDataTool', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
+    resetResourceAccessCheckerSingleton();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('should create a tool instance with correct properties', () => {
+    const getViewDataTool = getGetViewDataTool(new WebMcpServer());
+    expect(getViewDataTool.name).toBe('get-view-data');
+    expect(getViewDataTool.description).toContain(
+      "Retrieves comma-separated value (CSV) data for the specified view in a Tableau workbook, including the user's filters.",
+    );
+    expect(getViewDataTool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
+  });
+
+  it('should successfully get view data', async () => {
+    mocks.mockQueryViewData.mockResolvedValue(mockViewData);
+    const result = await getToolResult({ viewId: mockView.id });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      'Country/Region,State/Province,Profit Ratio,Latitude (generated),Longitude (generated)',
+    );
+    expect(result.content[0].text).toContain('Canada,Alberta,19.5%,53.41,-114.42');
+    expect(mocks.mockQueryViewData).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      viewId: mockView.id,
+    });
+  });
+
+  it('should pass viewFilters to the REST layer', async () => {
+    await getToolResult({
+      viewId: mockView.id,
+      viewFilters: { Year: '2024' },
+    });
+
+    expect(mocks.mockQueryViewData).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      viewId: mockView.id,
+      viewFilters: { Year: '2024' },
+    });
+  });
+
+  it('should handle API errors gracefully', async () => {
+    const errorMessage = 'API Error';
+    mocks.mockQueryViewData.mockRejectedValue(new Error(errorMessage));
+    const result = await getToolResult({ viewId: mockView.id });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(errorMessage);
+  });
+
+  it('should return view not allowed error when view is not allowed', async () => {
+    vi.stubEnv('INCLUDE_WORKBOOK_IDS', 'some-other-workbook-id');
+    mocks.mockGetView.mockResolvedValue(mockView);
+
+    const result = await getToolResult({ viewId: mockView.id });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      [
+        'The set of allowed views that can be queried is limited by the server configuration.',
+        `The view with LUID ${mockView.id} cannot be queried because it does not belong to an allowed workbook.`,
+      ].join(' '),
+    );
+
+    expect(mocks.mockQueryViewData).not.toHaveBeenCalled();
+  });
+});
+
+async function getToolResult({
+  viewId,
+  viewFilters,
+}: {
+  viewId: string;
+  viewFilters?: Record<string, string>;
+}): Promise<CallToolResult> {
+  const getViewDataTool = getGetViewDataTool(new WebMcpServer());
+  const callback = await Provider.from(getViewDataTool.callback);
+  return await callback({ viewId, viewFilters }, getMockRequestHandlerExtra());
+}
