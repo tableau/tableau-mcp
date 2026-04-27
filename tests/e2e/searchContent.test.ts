@@ -1,17 +1,25 @@
 import { z } from 'zod';
 
-import { getDefaultEnv, resetEnv, setEnv } from '../testEnv.js';
-import { callTool } from './client.js';
+import { resetEnv, setEnv } from '../testEnv.js';
+import { McpClient } from './mcpClient.js';
 
 describe('search-content', () => {
+  let client: McpClient;
+
   beforeAll(setEnv);
   afterAll(resetEnv);
 
-  it('should search content', async () => {
-    const env = getDefaultEnv();
+  beforeAll(async () => {
+    client = new McpClient();
+    await client.connect();
+  });
 
-    const searchResults = await callTool('search-content', {
-      env,
+  afterAll(async () => {
+    await client.close();
+  });
+
+  it('should search content', async () => {
+    const searchResults = await client.callTool('search-content', {
       schema: z.array(z.record(z.string(), z.unknown())),
       toolArgs: {
         terms: 'superstore',

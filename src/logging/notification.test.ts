@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Server } from '../server.js';
+import { WebMcpServer } from '../server.web.js';
 import { writeToStderr } from './logger.js';
 import {
   getNotificationMessageForTool,
@@ -35,22 +35,22 @@ describe('notification', () => {
 
   describe('setLogLevel', () => {
     it('should set the log level', () => {
-      setNotificationLevel(new Server(), 'error', { silent: true });
+      setNotificationLevel(new WebMcpServer().mcpServer, 'error', { silent: true });
       expect(shouldNotifyWhenLevelIsAtLeast('error')).toBe(true);
       expect(shouldNotifyWhenLevelIsAtLeast('debug')).toBe(false);
     });
 
     it('should not change level if it is the same', () => {
-      const server = new Server();
-      setNotificationLevel(server, 'debug', { silent: true });
-      setNotificationLevel(server, 'debug', { silent: true });
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'debug', { silent: true });
+      setNotificationLevel(server.mcpServer, 'debug', { silent: true });
       expect(server.mcpServer.server.notification).not.toHaveBeenCalled();
     });
   });
 
   describe('shouldLogWhenLevelIsAtLeast', () => {
     it('should return true for levels at or above current level', () => {
-      setNotificationLevel(new Server(), 'warning', { silent: true });
+      setNotificationLevel(new WebMcpServer().mcpServer, 'warning', { silent: true });
       expect(shouldNotifyWhenLevelIsAtLeast('warning')).toBe(true);
       expect(shouldNotifyWhenLevelIsAtLeast('error')).toBe(true);
       expect(shouldNotifyWhenLevelIsAtLeast('info')).toBe(false);
@@ -115,10 +115,10 @@ describe('notification', () => {
 
   describe('log functions', () => {
     it('should send logging message when level is appropriate', async () => {
-      const server = new Server();
-      setNotificationLevel(server, 'info', { silent: true });
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'info', { silent: true });
 
-      await notifier.info(server, 'test message', { notifier: 'test-logger' });
+      await notifier.info(server.mcpServer, 'test message', { notifier: 'test-logger' });
 
       expect(server.mcpServer.server.notification).toHaveBeenCalledWith(
         {
@@ -136,26 +136,26 @@ describe('notification', () => {
     });
 
     it('should not send logging message when level is below current level', async () => {
-      const server = new Server();
-      setNotificationLevel(server, 'warning', { silent: true });
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'warning', { silent: true });
 
-      await notifier.debug(server, 'test message', { notifier: 'test-logger' });
+      await notifier.debug(server.mcpServer, 'test message', { notifier: 'test-logger' });
 
       expect(server.mcpServer.server.notification).not.toHaveBeenCalled();
     });
 
-    it('should use server name as default logger', async () => {
-      const server = new Server();
-      setNotificationLevel(server, 'info', { silent: true });
+    it('should use tableau-mcp as default logger', async () => {
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'info', { silent: true });
 
-      await notifier.info(server, 'test message');
+      await notifier.info(server.mcpServer, 'test message');
 
       expect(server.mcpServer.server.notification).toHaveBeenCalledWith(
         {
           method: 'notifications/message',
           params: {
             level: 'info',
-            notifier: 'test-server',
+            notifier: 'tableau-mcp',
             data: expect.stringContaining('test message'),
           },
         },
@@ -166,15 +166,15 @@ describe('notification', () => {
     });
 
     it('should handle LogMessage objects', async () => {
-      const server = new Server();
-      setNotificationLevel(server, 'info', { silent: true });
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'info', { silent: true });
       const logMessage = {
         type: 'request',
         method: 'GET',
         path: '/test',
       } as const;
 
-      await notifier.info(server, logMessage, { notifier: 'test-logger' });
+      await notifier.info(server.mcpServer, logMessage, { notifier: 'test-logger' });
 
       expect(server.mcpServer.server.notification).toHaveBeenCalledWith(
         {

@@ -3,18 +3,28 @@ import z from 'zod';
 import { customViewSchema } from '../../../src/sdks/tableau/types/customView.js';
 import invariant from '../../../src/utils/invariant.js';
 import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
-import { callTool } from '../client.js';
+import { McpClient } from '../mcpClient.js';
 
 describe('list-custom-views', () => {
+  let client: McpClient;
+
   beforeAll(setEnv);
   afterAll(resetEnv);
+
+  beforeAll(async () => {
+    client = new McpClient();
+    await client.connect();
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
 
   it('should list custom views for a workbook', async () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const customViews = await callTool('list-custom-views', {
-      env,
+    const customViews = await client.callTool('list-custom-views', {
       schema: z.array(customViewSchema),
       toolArgs: { workbookId: superstore.id },
     });
@@ -40,8 +50,7 @@ describe('list-custom-views', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const customViews = await callTool('list-custom-views', {
-      env,
+    const customViews = await client.callTool('list-custom-views', {
       schema: z.array(customViewSchema),
       toolArgs: {
         workbookId: superstore.id,
@@ -65,7 +74,7 @@ describe('list-custom-views', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const customViews = await callTool('list-custom-views', {
+    const customViews = await client.callTool('list-custom-views', {
       schema: z.array(customViewSchema),
       toolArgs: { workbookId: superstore.id, pageSize: 5, limit: 10 },
     });

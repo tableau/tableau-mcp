@@ -3,7 +3,6 @@ import http from 'http';
 import request from 'supertest';
 
 import { getConfig } from '../../../src/config.js';
-import { serverName } from '../../../src/server.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { exchangeAuthzCodeForAccessToken } from './exchangeAuthzCodeForAccessToken.js';
 import { resetEnv, setEnv } from './testEnv.js';
@@ -41,7 +40,7 @@ describe('refresh token grant type', () => {
 
   async function startServer(): Promise<{ app: express.Application }> {
     const { app, server } = await startExpressServer({
-      basePath: serverName,
+      basePath: 'tableau-mcp',
       config: getConfig(),
       logLevel: 'info',
     });

@@ -1,4 +1,4 @@
-import { Server } from '../server';
+import { WebMcpServer } from '../server.web';
 import { stubDefaultEnvVars } from '../testShared';
 import { getConfigWithOverrides } from './mcpSiteSettings';
 
@@ -30,7 +30,7 @@ describe('mcpSiteSettings', () => {
     vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
     const config = await getConfigWithOverrides({
       restApiArgs: {
-        server: new Server(),
+        server: new WebMcpServer(),
         tableauAuthInfo: undefined,
         disableLogging: true,
       },
@@ -69,7 +69,7 @@ describe('mcpSiteSettings', () => {
 
     let config = await getConfigWithOverrides({
       restApiArgs: {
-        server: new Server(),
+        server: new WebMcpServer(),
         tableauAuthInfo: undefined,
         disableLogging: true,
       },
@@ -93,7 +93,7 @@ describe('mcpSiteSettings', () => {
     // Verify cache behavior
     config = await getConfigWithOverrides({
       restApiArgs: {
-        server: new Server(),
+        server: new WebMcpServer(),
         tableauAuthInfo: undefined,
         disableLogging: true,
       },
