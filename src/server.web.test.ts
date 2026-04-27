@@ -1,8 +1,8 @@
 import { WebMcpServer } from './server.web.js';
 import { testProductVersion } from './testShared.js';
-import { getQueryDatasourceTool } from './tools/queryDatasource/queryDatasource.js';
-import { toolNames } from './tools/toolName.js';
-import { toolFactories } from './tools/tools.js';
+import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
+import { webToolNames } from './tools/web/toolName.js';
+import { webToolFactories } from './tools/web/tools.js';
 import { Provider } from './utils/provider.js';
 
 describe('WebMcpServer', () => {
@@ -24,9 +24,10 @@ describe('WebMcpServer', () => {
     const server = getServer();
     await server.registerTools();
 
-    const allTools = toolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
+    const allTools = webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
     const tools = allTools.filter((_, i) => !disabledFlags[i]);
+    expect(server.mcpServer.registerTool).toHaveBeenCalledTimes(tools.length);
     for (const tool of tools) {
       expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
         tool.name,
@@ -44,7 +45,7 @@ describe('WebMcpServer', () => {
     const server = getServer();
     await server.registerTools();
 
-    const allDisabledTools = toolFactories.map((toolFactory) =>
+    const allDisabledTools = webToolFactories.map((toolFactory) =>
       toolFactory(server, testProductVersion),
     );
     const disabledToolFlags = await Promise.all(
@@ -82,7 +83,7 @@ describe('WebMcpServer', () => {
     const server = getServer();
     await server.registerTools();
 
-    const tools = toolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
+    const tools = webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
     const excludeDisabledFlags = await Promise.all(
       tools.map((tool) => Provider.from(tool.disabled)),
     );
@@ -108,13 +109,13 @@ describe('WebMcpServer', () => {
   });
 
   it('should throw error when no tools are registered', async () => {
-    const sortedToolNames = [...toolNames].sort((a, b) => a.localeCompare(b)).join(', ');
+    const sortedToolNames = [...webToolNames].sort((a, b) => a.localeCompare(b)).join(', ');
     process.env.EXCLUDE_TOOLS = sortedToolNames;
     const server = getServer();
 
     const sentences = [
       'No tools to register',
-      `Tools available = [${toolNames.join(', ')}]`,
+      `Tools available = [${webToolNames.join(', ')}]`,
       `EXCLUDE_TOOLS = [${sortedToolNames}]`,
       'INCLUDE_TOOLS = []',
     ];
@@ -122,14 +123,6 @@ describe('WebMcpServer', () => {
     for (const sentence of sentences) {
       await expect(server.registerTools).rejects.toThrow(sentence);
     }
-  });
-
-  it('should register request handlers', async () => {
-    const server = getServer();
-    server.mcpServer.server.setRequestHandler = vi.fn();
-    server.registerRequestHandlers();
-
-    expect(server.mcpServer.server.setRequestHandler).toHaveBeenCalled();
   });
 });
 

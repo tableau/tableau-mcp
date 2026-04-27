@@ -1,20 +1,28 @@
-import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
 
+import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { getTableauServerInfo } from './getTableauServerInfo';
-import { Server } from './server';
+import { ClientInfo, Server } from './server';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
-import { Tool } from './tools/tool.js';
-import { TableauRequestHandlerExtra } from './tools/toolContext.js';
-import { toolNames } from './tools/toolName.js';
-import { toolFactories } from './tools/tools.js';
+import { WebTool } from './tools/web/tool.js';
+import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
+import { webToolNames } from './tools/web/toolName.js';
+import { webToolFactories } from './tools/web/tools.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings';
 import { Provider } from './utils/provider.js';
 
+const serverName = 'tableau-mcp';
+const serverVersion = pkg.version;
+
 export class WebMcpServer extends Server {
+  constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
+    super({ mcpServer, clientInfo, serverName, serverVersion });
+  }
+
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
     const config = getConfig();
 
@@ -30,7 +38,7 @@ export class WebMcpServer extends Server {
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
       ) => {
         const tableauToolCallback = await Provider.from(callback);
-        const tableauRequestHandlerExtra: TableauRequestHandlerExtra = {
+        const tableauRequestHandlerExtra: TableauWebRequestHandlerExtra = {
           ...extra,
           config,
           server: this,
@@ -80,7 +88,7 @@ export class WebMcpServer extends Server {
 
   protected _getToolsToRegister = async (
     tableauAuthInfo?: TableauAuthInfo,
-  ): Promise<Array<Tool<any>>> => {
+  ): Promise<Array<WebTool<any>>> => {
     const config = getConfig();
     const configOverrides = await getConfigWithOverrides({
       restApiArgs: {
@@ -94,7 +102,7 @@ export class WebMcpServer extends Server {
 
     const { includeTools, excludeTools } = configOverrides;
 
-    const allTools = toolFactories.map((toolFactory) =>
+    const allTools = webToolFactories.map((toolFactory) =>
       toolFactory(this, tableauServerInfo.productVersion),
     );
     const toolsToRegister: typeof allTools = [];
@@ -108,7 +116,7 @@ export class WebMcpServer extends Server {
     if (toolsToRegister.length === 0) {
       throw new Error(`
           No tools to register.
-          Tools available = [${toolNames.join(', ')}].
+          Tools available = [${webToolNames.join(', ')}].
           EXCLUDE_TOOLS = [${excludeTools.join(', ')}].
           INCLUDE_TOOLS = [${includeTools.join(', ')}]
         `);
