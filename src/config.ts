@@ -2,6 +2,7 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
+import { removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import { LoggerType, parseLoggerTypes } from './logging/logger.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport, TransportName } from './transports.js';
@@ -437,21 +438,6 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
       `The environment variable CORS_ORIGIN_CONFIG is not a valid URL: ${corsOriginConfig}`,
     );
   }
-}
-
-// When the user does not provide a site name in the Claude MCP Bundle configuration,
-// Claude doesn't replace its value and sets the site name to "${user_config.site_name}".
-export function removeClaudeMcpBundleUserConfigTemplates(
-  envVars: Record<string, string | undefined>,
-): Record<string, string | undefined> {
-  return Object.entries(envVars).reduce<Record<string, string | undefined>>((acc, [key, value]) => {
-    if (value?.startsWith('${user_config.')) {
-      acc[key] = '';
-    } else {
-      acc[key] = value;
-    }
-    return acc;
-  }, {});
 }
 
 export const getConfig = (): Config => new Config();
