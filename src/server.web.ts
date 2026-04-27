@@ -4,6 +4,7 @@ import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/typ
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
+import { ServiceUnavailableError } from './errors/mcpToolError';
 import { getTableauServerInfo } from './getTableauServerInfo';
 import { ClientInfo, Server } from './server';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
@@ -37,6 +38,12 @@ export class WebMcpServer extends Server {
         args: typeof paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
       ) => {
+        if (config.breakGlassDisableGlobally) {
+          throw new ServiceUnavailableError(
+            'The Tableau MCP server is temporarily unavailable. Please try again later.',
+          );
+        }
+
         const tableauToolCallback = await Provider.from(callback);
         const tableauRequestHandlerExtra: TableauWebRequestHandlerExtra = {
           ...extra,

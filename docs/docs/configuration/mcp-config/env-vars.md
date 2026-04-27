@@ -399,3 +399,25 @@ Enables product telemetry for tool usage tracking.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source_connections
 [tab-connect-ds]:
   https://help.tableau.com/current/api/vizql-data-service/en-us/docs/vds_create_queries.html#connect-to-your-data-source
+
+<hr />
+
+## `BREAK_GLASS_DISABLE_GLOBALLY`
+
+Can be used to force all MCP tools to return a "service unavailable" error message. Use with
+discretion.
+
+- Default: `false`
+- When `true`, all tools will return the below result:
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "The Tableau MCP server is temporarily unavailable. Please try again later."
+    }
+  ],
+  "isError": true
+}
+```

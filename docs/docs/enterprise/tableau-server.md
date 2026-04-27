@@ -672,3 +672,9 @@ For more information and precautions, see
 ```
 ENABLE_PASSTHROUGH_AUTH=true
 ```
+
+### Disable service temporarily
+
+If you need to temporarily disable the service for any reason, you can set
+[BREAK_GLASS_DISABLE_GLOBALLY](../configuration/mcp-config/env-vars.md#break_glass_disable_globally)
+to `true`. The MCP server will continue to handle requests but all tool calls will return an error.

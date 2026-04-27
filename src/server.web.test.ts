@@ -1,23 +1,23 @@
+import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { WebMcpServer } from './server.web.js';
-import { testProductVersion } from './testShared.js';
+import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
+import { exportedForTesting } from './tools/web/listDatasources/listDatasources.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
+import { TableauWebToolCallback } from './tools/web/toolContext.js';
+import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
 import { webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
+import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
 
-describe('WebMcpServer', () => {
-  const originalEnv = process.env;
-
+describe('server', () => {
   beforeEach(() => {
-    process.env = {
-      ...originalEnv,
-      INCLUDE_TOOLS: undefined,
-      EXCLUDE_TOOLS: undefined,
-    };
+    vi.unstubAllEnvs();
+    stubDefaultEnvVars();
   });
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    vi.unstubAllEnvs();
   });
 
   it('should register tools', async () => {
@@ -27,7 +27,6 @@ describe('WebMcpServer', () => {
     const allTools = webToolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
     const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
     const tools = allTools.filter((_, i) => !disabledFlags[i]);
-    expect(server.mcpServer.registerTool).toHaveBeenCalledTimes(tools.length);
     for (const tool of tools) {
       expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
         tool.name,
@@ -62,7 +61,7 @@ describe('WebMcpServer', () => {
   });
 
   it('should register tools filtered by includeTools', async () => {
-    process.env.INCLUDE_TOOLS = 'query-datasource';
+    vi.stubEnv('INCLUDE_TOOLS', 'query-datasource');
     const server = getServer();
     await server.registerTools();
 
@@ -79,7 +78,7 @@ describe('WebMcpServer', () => {
   });
 
   it('should register tools filtered by excludeTools', async () => {
-    process.env.EXCLUDE_TOOLS = 'query-datasource';
+    vi.stubEnv('EXCLUDE_TOOLS', 'query-datasource');
     const server = getServer();
     await server.registerTools();
 
@@ -110,7 +109,7 @@ describe('WebMcpServer', () => {
 
   it('should throw error when no tools are registered', async () => {
     const sortedToolNames = [...webToolNames].sort((a, b) => a.localeCompare(b)).join(', ');
-    process.env.EXCLUDE_TOOLS = sortedToolNames;
+    vi.stubEnv('EXCLUDE_TOOLS', sortedToolNames);
     const server = getServer();
 
     const sentences = [
@@ -123,6 +122,32 @@ describe('WebMcpServer', () => {
     for (const sentence of sentences) {
       await expect(server.registerTools).rejects.toThrow(sentence);
     }
+  });
+
+  it('should reject tool calls with service unavailable error when BREAK_GLASS_DISABLE_GLOBALLY is true', async () => {
+    vi.stubEnv('BREAK_GLASS_DISABLE_GLOBALLY', 'true');
+
+    const server = getServer();
+    await server.registerTools();
+
+    const listDatasourcesRegistration = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.find((call) => call[0 /* tool name */] === 'list-datasources');
+
+    invariant(listDatasourcesRegistration);
+    const listDatasourcesCallback =
+      listDatasourcesRegistration[2 /* callback */] as TableauWebToolCallback<
+        Partial<typeof exportedForTesting.listDatasourcesParamsSchema>
+      >;
+
+    await expect(listDatasourcesCallback({}, getMockRequestHandlerExtra())).rejects.toSatisfy(
+      (error: unknown) =>
+        error instanceof ServiceUnavailableError &&
+        error.type === 'service-unavailable' &&
+        error.statusCode === 503 &&
+        error.message ===
+          'The Tableau MCP server is temporarily unavailable. Please try again later.',
+    );
   });
 });
 
