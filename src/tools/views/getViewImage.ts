@@ -17,8 +17,8 @@ import { getImageFormatForVersion } from './getImageFormatForVersion.js';
 
 const paramsSchema = {
   viewId: z.string(),
-  width: z.number().gt(0).optional(),
-  height: z.number().gt(0).optional(),
+  width: z.number().gt(0).int().optional(),
+  height: z.number().gt(0).int().optional(),
   format: z
     .enum(['PNG', 'SVG'])
     .optional()
