@@ -70,7 +70,7 @@ export async function validateFilterValues(
       }
     } catch (error) {
       notifier.warning(
-        server,
+        server.mcpServer,
         `Filter value validation failed for field ${fieldCaption}: ${error}`,
       );
     }
