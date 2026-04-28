@@ -1,6 +1,6 @@
 import { BuildOptions } from 'esbuild';
 
-import { Variant } from './variants';
+import { Variant } from './variants.js';
 
 export type GlobalIdentifierName = 'BUILD_VARIANT';
 

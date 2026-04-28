@@ -4,16 +4,16 @@ import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/typ
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
-import { ServiceUnavailableError } from './errors/mcpToolError';
-import { getTableauServerInfo } from './getTableauServerInfo';
-import { ClientInfo, Server } from './server';
-import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
+import { ServiceUnavailableError } from './errors/mcpToolError.js';
+import { getTableauServerInfo } from './getTableauServerInfo.js';
+import { ClientInfo, Server } from './server.js';
+import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
-import { getConfigWithOverrides } from './utils/mcpSiteSettings';
+import { getConfigWithOverrides } from './utils/mcpSiteSettings.js';
 import { Provider } from './utils/provider.js';
 
 const serverName = 'tableau-mcp';

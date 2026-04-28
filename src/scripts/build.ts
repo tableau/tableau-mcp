@@ -3,8 +3,8 @@
 import { build, BuildOptions } from 'esbuild';
 import { chmod, mkdir, rm } from 'fs/promises';
 
-import { GlobalIdentifierName, globalIdentifiers } from './globalIdentifiers';
-import { isVariant, variants } from './variants';
+import { GlobalIdentifierName, globalIdentifiers } from './globalIdentifiers.js';
+import { isVariant, variants } from './variants.js';
 
 const dev = process.argv.includes('--dev');
 const dirty = process.argv.includes('--dirty');

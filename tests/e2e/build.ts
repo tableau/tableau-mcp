@@ -3,7 +3,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { promisify } from 'util';
 
-import { Variant } from '../../src/scripts/variants';
+import { Variant } from '../../src/scripts/variants.js';
 
 const execAsync = promisify(exec);
 

@@ -3,11 +3,11 @@ import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.j
 import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
 
 import pkg from '../package.json';
-import { getDesktopConfig } from './config.desktop';
-import { ClientInfo, Server } from './server';
-import { DesktopTool } from './tools/desktop/tool';
+import { getDesktopConfig } from './config.desktop.js';
+import { ClientInfo, Server } from './server.js';
+import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
-import { desktopToolFactories } from './tools/desktop/tools';
+import { desktopToolFactories } from './tools/desktop/tools.js';
 import { Provider } from './utils/provider.js';
 
 const serverName = 'tableau-desktop-mcp';

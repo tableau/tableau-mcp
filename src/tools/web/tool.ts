@@ -2,17 +2,17 @@ import { AnySchema, ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/z
 import { CallToolResult, RequestId } from '@modelcontextprotocol/sdk/types.js';
 import { ZodRawShape } from 'zod';
 
-import { ZodiosValidationError } from '../../errors/mcpToolError';
-import { log } from '../../logging/logger';
-import { WebMcpServer } from '../../server.web';
-import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes';
-import { getTelemetryProvider } from '../../telemetry/init';
-import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder';
-import { getExceptionMessage } from '../../utils/getExceptionMessage';
-import { getHttpStatus } from '../../utils/getHttpStatus';
-import { LogAndExecuteParams, Tool, ToolParams } from '../tool';
-import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './toolContext';
-import { WebToolName } from './toolName';
+import { ZodiosValidationError } from '../../errors/mcpToolError.js';
+import { log } from '../../logging/logger.js';
+import { WebMcpServer } from '../../server.web.js';
+import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes.js';
+import { getTelemetryProvider } from '../../telemetry/init.js';
+import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
+import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
+import { getHttpStatus } from '../../utils/getHttpStatus.js';
+import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
+import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './toolContext.js';
+import { WebToolName } from './toolName.js';
 
 export type ToolRules = Record<string, boolean | undefined>;
 
