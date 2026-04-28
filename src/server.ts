@@ -11,6 +11,7 @@ import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { getTableauServerInfo } from './getTableauServerInfo';
 import { setNotificationLevel } from './logging/notification.js';
+import { isRequestOverridableVariable } from './overridableConfig';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { Tool } from './tools/tool.js';
@@ -23,6 +24,8 @@ import { Provider } from './utils/provider.js';
 export const serverName = 'tableau-mcp';
 export const serverVersion = pkg.version;
 export const userAgent = `${serverName}/${serverVersion}`;
+
+const X_TABLEAU_MCP_CONFIG_HEADER = 'x-tableau-mcp-config';
 
 export type ClientInfo = InitializeRequest['params']['clientInfo'];
 
@@ -63,10 +66,7 @@ export class Server extends McpServer {
     this._clientInfo = clientInfo;
   }
 
-  registerTools = async (
-    tableauAuthInfo?: TableauAuthInfo,
-    requestOverrides?: Record<string, string>,
-  ): Promise<void> => {
+  registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
     const config = getConfig();
 
     for (const {
@@ -75,11 +75,13 @@ export class Server extends McpServer {
       paramsSchema,
       annotations,
       callback,
-    } of await this._getToolsToRegister(tableauAuthInfo, requestOverrides)) {
+    } of await this._getToolsToRegister(tableauAuthInfo)) {
       const toolCallback: ToolCallback<typeof paramsSchema> = async (
         args: typeof paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
       ) => {
+        const requestOverridesHeader = extra.requestInfo?.headers[X_TABLEAU_MCP_CONFIG_HEADER];
+        const requestOverrides = this.getRequestOverridesFromHeader(requestOverridesHeader);
         const tableauToolCallback = await Provider.from(callback);
         const tableauRequestHandlerExtra: TableauRequestHandlerExtra = {
           ...extra,
@@ -138,7 +140,6 @@ export class Server extends McpServer {
 
   private _getToolsToRegister = async (
     tableauAuthInfo?: TableauAuthInfo,
-    requestOverrides?: Record<string, string>,
   ): Promise<Array<Tool<any>>> => {
     const config = getConfig();
     const configOverrides = await getConfigWithOverrides({
@@ -147,7 +148,7 @@ export class Server extends McpServer {
         tableauAuthInfo,
         disableLogging: true, // MCP server is not connected yet so we can't send logging notifications
       },
-      requestOverrides,
+      requestOverrides: {}, // request overrides are not relevant when getting tools
     });
 
     const tableauServerInfo = await getTableauServerInfo(config.server || tableauAuthInfo?.server);
@@ -176,6 +177,36 @@ export class Server extends McpServer {
 
     return toolsToRegister;
   };
+
+  getRequestOverridesFromHeader(
+    requestOverrideString: string | string[] | undefined,
+  ): Record<string, string> {
+    if (Array.isArray(requestOverrideString)) {
+      throw new Error(`Unsupported format for '${X_TABLEAU_MCP_CONFIG_HEADER}' header`);
+    }
+
+    const requestOverrides: Record<string, string> = {};
+
+    if (!requestOverrideString) {
+      return requestOverrides;
+    }
+
+    requestOverrideString.split('&').forEach((overrideString) => {
+      const [key, value] = overrideString.split('=');
+      if (isRequestOverridableVariable(key)) {
+        if (value === undefined) {
+          throw new Error(
+            `'${X_TABLEAU_MCP_CONFIG_HEADER}' header does not provide a value for '${key}'`,
+          );
+        }
+        requestOverrides[key] = value;
+      } else {
+        throw new Error(`'${X_TABLEAU_MCP_CONFIG_HEADER}' header is invalid`);
+      }
+    });
+
+    return requestOverrides;
+  }
 }
 
 export const exportedForTesting = {
