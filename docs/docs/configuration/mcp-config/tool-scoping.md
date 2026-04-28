@@ -30,7 +30,7 @@ The following optional environment variables can be used to configure the tool s
 
 A comma-separated list of project IDs by which to constrain tool arguments and results. Only data
 sources and workbooks (or views from those workbooks) that are members of the provided projects can
-be queried or will be included in the results of the tools. This variable is site overridable, see [Site Settings](site-settings.md).
+be queried or will be included in the results of the tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set by the Tableau MCP server, cannot be empty.
 - When overriden by site settings, can be empty to clear any bounds set by the Tableau MCP server.
@@ -60,7 +60,7 @@ Example: `d87d843b-4326-4ce3-bc50-a68c1e6c9ca5,861566`
 
 A comma-separated list of data source IDs by which to constrain tool arguments and results. Only
 data sources or Pulse metrics and definitions derived from those data sources can be queried or will
-be included in the results of the tools. This variable is site overridable, see [Site Settings](site-settings.md).
+be included in the results of the tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
 - When overriden by site settings, can be empty to clear any bounds set by the Tableau MCP server.
@@ -78,7 +78,7 @@ Example: `2d935df8-fe7e-4fd8-bb14-35eb4ba31d4`
 
 A comma-separated list of workbook IDs by which to constrain tool arguments and results. Only
 workbooks or views from those workbooks can be queried or will be included in the results of the
-tools. This variable is site overridable, see [Site Settings](site-settings.md).
+tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
 - When overriden by site settings, can be empty to clear any bounds set by the Tableau MCP server.
@@ -97,7 +97,7 @@ Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
 
 A comma-separated list of case-sensitive tags by which to constrain tool arguments and results. Only
 data sources, workbooks, or views with the provided tags can be queried or will be included in the
-results of the tools. This variable is site overridable, see [Site Settings](site-settings.md).
+results of the tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
 - When overriden by site settings, can be empty to clear any bounds set by the Tableau MCP server.

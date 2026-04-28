@@ -159,6 +159,46 @@ When `true`, the Tableau MCP server will fetch and apply site settings overrides
 
 <hr />
 
+## `ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES`
+
+When `true`, sites can specify their own set of [`ALLOWED_REQUEST_OVERRIDES`](#allowed_request_overrides), see [Site Settings](site-settings.md).
+
+- Default: `false`
+- When `false`, the Tableau MCP server will not apply site configurations for [`ALLOWED_REQUEST_OVERRIDES`](#allowed_request_overrides).
+
+<hr />
+
+## `ALLOWED_REQUEST_OVERRIDES`
+
+A comma-separated list of request overridable variables and their restriction type, see [Request Overrides](request-overrides.md).
+This variable is site overridable when [`ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES`](#allow_sites_to_configure_request_overrides) is `true`.
+
+:::info
+
+Examples
+
+```
+1. ALLOWED_REQUEST_OVERRIDES=INCLUDE_DATASOURCE_IDS,INCLUDE_WORKBOOK_IDS:unrestricted
+
+2. ALLOWED_REQUEST_OVERRIDES=*:unrestricted,MAX_RESULT_LIMIT:restricted,MAX_RESULT_LIMITS:unrestricted
+
+3. ALLOW_REQUEST_OVERRIDES=*
+```
+
+Result in the following:
+1. only `INCLUDE_DATASOURCE_IDS` (restricted) and `INCLUDE_WORKBOOK_IDS` (unrestricted) are allowed as request overrides.
+2. all request overrides are allowed and unrestricted, except for `MAX_RESULT_LIMIT` and `MAX_RESULT_LIMITS` which are restricted.
+3. all request overrides are allowed and restricted.
+
+:::
+
+- Default: Empty string (request overriding is disabled)
+- For a list of [request overridable variables](request-overrides.md#request-overridable-variables) [restriction type](request-overrides.md#restriction-types)
+- Use `*` to target all request overridable variables (when used, `*` must be specified first in comma-separated list).
+- If a restriction type is not specified, the override behavior will be restricted.
+
+<hr />
+
 ## `INCLUDE_TOOLS`
 
 A comma-separated list of tool or tool group names to include in the server. Only these tools will
@@ -194,7 +234,7 @@ The maximum timeout for requests to the Tableau Server REST API.
 
 The maximum number of results that every tool with a `limit` parameter can return when no
 tool-specific max result limit is set in the [`MAX_RESULT_LIMITS`](#max_result_limits)
-variable. This variable is site overridable, see [Site Settings](site-settings.md).
+variable. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 :::warning
 
@@ -211,7 +251,7 @@ Take care when setting this value and be sure to set appropriate tool-specific l
 ## `MAX_RESULT_LIMITS`
 
 A comma-separated list of tool names (or tool group names) and the maximum number of results that
-each tool (or tools in the group) can return. This variable is site overridable, see [Site Settings](site-settings.md).
+each tool (or tools in the group) can return. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 :::info
 
@@ -247,7 +287,7 @@ This means that:
 
 Disables requests that are made to the VizQl Data Service for validating queries in the
 [`query-datasource`](../../tools/data-qna/query-datasource.md) tool. Does not disable the ability to
-query the datasource. This variable is site overridable, see [Site Settings](site-settings.md).
+query the datasource. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - Default: `false`
 - When `true`, skips validation of queries against metadata results and validation of SET and MATCH
@@ -272,7 +312,7 @@ Disable validation of SET and MATCH filter values in the
 
 Disables `graphql` requests to the Tableau Metadata API in the
 [`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool.
-This variable is site overridable, see [Site Settings](site-settings.md).
+This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - Default: `false`
 - When `true`, skips requests to the `graphql` endpoint that provides additional context to field
