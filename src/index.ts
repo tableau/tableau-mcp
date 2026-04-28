@@ -71,6 +71,12 @@ async function startServer(): Promise<void> {
   if (config.disableLogMasking) {
     writeToStderr('⚠️ Log masking is disabled!');
   }
+
+  if (config.breakGlassDisableGlobally) {
+    writeToStderr(
+      '⚠️ BREAK_GLASS_DISABLE_GLOBALLY is enabled! This means that the MCP server will be disabled globally and will return errors to all users!',
+    );
+  }
 }
 
 startServer().catch((error) => {
