@@ -220,7 +220,7 @@ operation).
 
 **Note** A tool can implement several APIs. Your are not bound to a 1:1 mapping of APIs-to-MCP
 tools. For example see the
-[getDatasourceMetadata](https://github.com/tableau/tableau-mcp/blob/main/src/tools/getDatasourceMetadata/getDatasourceMetadata.ts)
+[getDatasourceMetadata](https://github.com/tableau/tableau-mcp/blob/main/src/tools/web/getDatasourceMetadata/getDatasourceMetadata.ts)
 tool, which implements the readMetadata API and the Metadata API and joins their results.
 
 ## Implementation Walkthrough
@@ -263,10 +263,10 @@ tool requires.
 
 ### Step 3: Create the Tool Directory
 
-Create a new directory under `src/tools/` for your tool:
+Create a new directory under `src/tools/web` for your tool:
 
 ```
-src/tools/myNewTool/
+src/tools/web/myNewTool/
 ├── myNewTool.ts          # Tool implementation
 └── myNewTool.test.ts     # Unit tests
 ```
@@ -351,12 +351,12 @@ endpoint definitions in that directory for the pattern.
 
 ### Step 6: Register the Tool Factory
 
-Import and add your factory to the `toolFactories` array in `src/tools/tools.ts`:
+Import and add your factory to the `webToolFactories` array in `src/tools/web/tools.ts`:
 
 ```typescript
 import { getMyNewTool } from './myNewTool/myNewTool.js';
 
-export const toolFactories = [
+export const webToolFactories = [
   // ... existing factories ...
   getMyNewTool,
 ];
@@ -398,10 +398,10 @@ Run tests with:
 npm test
 
 # Just your tool
-npx vitest run src/tools/myNewTool/myNewTool.test.ts
+npx vitest run src/tools/web/myNewTool/myNewTool.test.ts
 
 # Watch mode during development
-npx vitest src/tools/myNewTool/myNewTool.test.ts
+npx vitest src/tools/web/myNewTool/myNewTool.test.ts
 ```
 
 ### Step 8: Build and Verify
@@ -467,9 +467,9 @@ AI's context window is finite, so every token counts.
 ## Checklist Before Submitting Your PR
 
 - [ ] Tool name added to `webToolNames` in `src/tools/web/toolName.ts`
-- [ ] Tool assigned to a group in `toolGroups`
+- [ ] Tool assigned to a group in `webToolGroups`
 - [ ] OAuth scope mapping added in `src/server/oauth/scopes.ts`
-- [ ] Tool factory registered in `src/tools/tools.ts`
+- [ ] Tool factory registered in `src/tools/web/tools.ts`
 - [ ] Tool description includes: purpose, when to use, parameters, examples, disambiguation
 - [ ] Parameters use Zod schemas with `.describe()` for each field
 - [ ] Callback uses `logAndExecute` and `useRestApi` patterns
@@ -485,5 +485,5 @@ AI's context window is finite, so every token counts.
 
 - **Slack:** `#tab-dev-mcp-project` (internal Tableau employees only) or `#tableau-ai-solutions`
   (public channel for the community)
-- **Codebase reference:** Look at `src/tools/listDatasources/` for a straightforward read-only tool,
-  or `src/tools/pulse/` for a group of related tools
+- **Codebase reference:** Look at `src/tools/web/listDatasources/` for a straightforward read-only
+  tool, or `src/tools/web/pulse/` for a group of related tools
