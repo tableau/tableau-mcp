@@ -152,15 +152,6 @@ data source][tab-connect-ds].
 
 <hr />
 
-## `ENABLE_MCP_SITE_SETTINGS`
-
-When `true`, the Tableau MCP server will fetch and apply site settings overrides for any user session, see [Site Settings](site-settings.md).
-
-- Default: `true`
-- When `false`, Tableau MCP server will not fetch or apply site settings overrides.
-
-<hr />
-
 ## `INCLUDE_TOOLS`
 
 A comma-separated list of tool or tool group names to include in the server. Only these tools will
@@ -311,17 +302,6 @@ variable.
 
 - Default: `1` hour
 - Must be a positive number between `1` and `168` (7 days).
-
-<hr />
-
-## `MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES`
-
-When site settings are enabled by the Tableau MCP server, settings will be fetched for the given site and applied to each session.
-Rather than fetching site settings with every request, the MCP server will cache the settings and only check it again after the interval
-specified by this environment variable.
-
-- Default: `10` minutes
-- Must be a positive number between `1` and `1440` (1 day).
 
 <hr />
 
