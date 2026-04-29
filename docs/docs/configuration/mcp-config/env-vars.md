@@ -161,46 +161,6 @@ When `true`, the Tableau MCP server will fetch and apply site settings overrides
 
 <hr />
 
-## `ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES`
-
-When `true`, sites can specify their own set of [`ALLOWED_REQUEST_OVERRIDES`](#allowed_request_overrides), see [Site Settings](site-settings.md).
-
-- Default: `false`
-- When `false`, the Tableau MCP server will not apply site configurations for [`ALLOWED_REQUEST_OVERRIDES`](#allowed_request_overrides).
-
-<hr />
-
-## `ALLOWED_REQUEST_OVERRIDES`
-
-A comma-separated list of request overridable variables and their restriction type, see [Request Overrides](request-overrides.md).
-This variable is site overridable when [`ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES`](#allow_sites_to_configure_request_overrides) is `true`.
-
-:::info
-
-Examples
-
-```
-1. ALLOWED_REQUEST_OVERRIDES=INCLUDE_DATASOURCE_IDS,INCLUDE_WORKBOOK_IDS:unrestricted
-
-2. ALLOWED_REQUEST_OVERRIDES=*:unrestricted,MAX_RESULT_LIMIT:restricted,MAX_RESULT_LIMITS:unrestricted
-
-3. ALLOW_REQUEST_OVERRIDES=*
-```
-
-Result in the following:
-1. only `INCLUDE_DATASOURCE_IDS` (restricted) and `INCLUDE_WORKBOOK_IDS` (unrestricted) are allowed as request overrides.
-2. all request overrides are allowed and unrestricted, except for `MAX_RESULT_LIMIT` and `MAX_RESULT_LIMITS` which are restricted.
-3. all request overrides are allowed and restricted.
-
-:::
-
-- Default: Empty string (request overriding is disabled)
-- For a list of [request overridable variables](request-overrides.md#request-overridable-variables) [restriction type](request-overrides.md#restriction-types)
-- Use `*` to target all request overridable variables (when used, `*` must be specified first in comma-separated list).
-- If a restriction type is not specified, the override behavior will be restricted.
-
-<hr />
-
 ## `INCLUDE_TOOLS`
 
 A comma-separated list of tool or tool group names to include in the server. Only these tools will
@@ -279,9 +239,9 @@ This means that:
 - Tool names take precedence over tool group names. That is, `datasource:1000,list-datasources:20`
   means that the `list-datasources` tool can return up to 20 data sources but the `query-datasource`
   tool can only return up to 1000 results.
-- If a tool-specific limit is not set, the global limit specified by the
+- If a tool is not included in the comma-separated list, the global limit specified by the
   [`MAX_RESULT_LIMIT`](#max_result_limit) variable will be used instead.
-- Each limit must be a positive number.
+- Each limit must be a positive number, or `*` to indicate unbounded results.
 
 <hr />
 

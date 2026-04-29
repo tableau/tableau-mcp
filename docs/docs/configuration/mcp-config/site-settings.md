@@ -31,7 +31,7 @@ You might not see changes take immediate effect due to caching, see [`MCP_SITE_S
 
 ## Site Overridable Variables
 
-- ### [`ALLOWED_REQUEST_OVERRIDES`](env-vars.md#allowed_request_overrides)
+- ### [`ALLOWED_REQUEST_OVERRIDES`](request-overrides.md#allowed_request_overrides)
 - ### [`DISABLE_METADATA_API_REQUESTS`](env-vars.md#disable_metadata_api_requests)
 - ### [`DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`](env-vars.md#disable_query_datasource_validation_requests)
 - ### [`EXCLUDE_TOOLS`](env-vars.md#exclude_tools)
