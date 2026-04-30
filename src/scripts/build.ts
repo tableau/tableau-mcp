@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 
 import { build, BuildOptions } from 'esbuild';
+import { cpSync } from 'fs';
 import { chmod, copyFile, mkdir, rm } from 'fs/promises';
 import { resolve } from 'path';
 import { build as viteBuild } from 'vite';
@@ -43,8 +44,8 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     },
     outfile: './build/index.js',
     // must be last so that the action can override previous build options
-    ...globalIdentifiers.reduce((acc, { name, defaultValue, action }) => {
-      return { ...acc, ...action(globalValues[name] ?? defaultValue) };
+    ...globalIdentifiers.reduce((acc, { name, defaultValue, getBuildOptions }) => {
+      return { ...acc, ...getBuildOptions(globalValues[name] ?? defaultValue) };
     }, {}),
   };
 
@@ -60,6 +61,10 @@ const globalValues: Record<GlobalIdentifierName, string> = {
 
   for (const warning of result.warnings) {
     console.log(`⚠️ ${warning.text}`);
+  }
+
+  if (variant === 'desktop' || variant === 'combined') {
+    copyDirectory('./resources/desktop', './build/resources/desktop');
   }
 
   console.log('🏗️ Building telemetry/tracing.js...');
@@ -123,3 +128,8 @@ const globalValues: Record<GlobalIdentifierName, string> = {
     process.exit(1);
   }
 })();
+
+function copyDirectory(source: string, destination: string): void {
+  console.log(`🏗️ Copying ${source} to ${destination}...`);
+  cpSync(source, destination, { recursive: true });
+}
