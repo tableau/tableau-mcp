@@ -28,7 +28,7 @@ Examples
 ```
 1. ALLOWED_REQUEST_OVERRIDES=INCLUDE_DATASOURCE_IDS,INCLUDE_WORKBOOK_IDS:unrestricted
 
-2. ALLOWED_REQUEST_OVERRIDES=*:unrestricted,MAX_RESULT_LIMIT:restricted,MAX_RESULT_LIMITS:unrestricted
+2. ALLOWED_REQUEST_OVERRIDES=*:unrestricted,MAX_RESULT_LIMIT:restricted,MAX_RESULT_LIMITS:restricted
 
 3. ALLOWED_REQUEST_OVERRIDES=*
 ```
@@ -63,7 +63,7 @@ When a variable is unrestricted, request overrides can set any valid value, incl
 
 ## Providing Request Overrides
 
-When making a [tool call](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#calling-tools) request, overrides can be specified using the `x-tableau-mcp-config` HTTP header. The header value is a URL-encoded query string of key-value pairs separated by `&`.
+When making a [tool call](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#calling-tools) request, overrides can be specified using the `x-tableau-mcp-config` HTTP header. The header value is a string of key-value pairs separated by `&`.
 
 ```
 x-tableau-mcp-config: INCLUDE_TAGS=sales,marketing&MAX_RESULT_LIMIT=50
