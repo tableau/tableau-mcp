@@ -1,5 +1,10 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { InitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import {
+  McpServer,
+  ReadResourceTemplateCallback,
+  ResourceTemplate,
+} from '@modelcontextprotocol/sdk/server/mcp.js';
+import { ErrorCode, InitializeRequest, McpError } from '@modelcontextprotocol/sdk/types.js';
+import { existsSync, readFileSync } from 'fs';
 
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 
@@ -66,5 +71,47 @@ export abstract class Server {
     return userAgentParts.join(' ');
   }
 
+  abstract registerResources: () => Promise<void>;
   abstract registerTools: (tableauAuthInfo?: TableauAuthInfo) => Promise<void>;
+
+  registerResource = (
+    args:
+      | {
+          name: string;
+          title: string;
+          description: string;
+          uri: string;
+          path: string;
+          mimeType: string;
+        }
+      | {
+          name: string;
+          title: string;
+          description: string;
+          template: ResourceTemplate;
+          readTemplateCallback: ReadResourceTemplateCallback;
+        },
+  ): void => {
+    if ('path' in args) {
+      const { name, title, description, uri, path, mimeType } = args;
+      if (!existsSync(path)) {
+        throw new McpError(ErrorCode.InternalError, `File not found: ${path}`);
+      }
+      const text = readFileSync(path, 'utf-8');
+      this.mcpServer.registerResource(name, uri, { title, description, mimeType }, (uri) => {
+        return { contents: [{ uri: uri.href, mimeType, text }] };
+      });
+    } else {
+      const { name, title, description, template, readTemplateCallback } = args;
+      this.mcpServer.registerResource(
+        name,
+        template,
+        {
+          title,
+          description,
+        },
+        readTemplateCallback,
+      );
+    }
+  };
 }

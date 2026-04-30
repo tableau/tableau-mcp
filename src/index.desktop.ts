@@ -24,6 +24,7 @@ async function startServer(): Promise<void> {
 
   const server = new DesktopMcpServer();
   await server.registerTools();
+  await server.registerResources();
   server.mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
     setNotificationLevel(server.mcpServer, request.params.level);
     return {};
