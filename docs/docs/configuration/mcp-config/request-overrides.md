@@ -129,7 +129,7 @@ Overrides per-tool maximum result limits.
 | Restriction Type | Behavior |
 |---|---|
 | `restricted` | For tools that currently have a limit, the override value must be **less than or equal to** the current tool-specific limit. New tools added in the override must have a limit less than or equal to the `MAX_RESULT_LIMIT` value (which may have its own override value). |
-| `unrestricted` | Override value can set any valid per-tool limits. Can clear all per-tool limits with an empty value. |
+| `unrestricted` | Override value can set any valid per-tool limits (either a positive number, or `*` for unbounded results). Can clear all per-tool limits with an empty value. |
 
 ### [`DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`](env-vars.md#disable_query_datasource_validation_requests)
 
