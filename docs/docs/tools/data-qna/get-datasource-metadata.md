@@ -4,11 +4,17 @@ sidebar_position: 2
 
 # Get Datasource Metadata
 
-Fetches field metadata for the specified datasource.
+Fetches datasource metadata for the specified datasource, including:
+
+- datasource description
+- datasource model relationships (when available)
+- fields grouped by `logicalTableId`
+- Tableau parameters
 
 ## APIs called
 
 - [Request data source metadata](https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/ReadMetadata)
+- [Request data source model](https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/GetDatasourceModel)
 - [Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/index.html)
 - [Query Data Source](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source)
   (if applicable [tool scoping](../../configuration/mcp-config/tool-scoping.md) is enabled)
@@ -26,196 +32,86 @@ tool.
 
 Example: `2d935df8-fe7e-4fd8-bb14-35eb4ba31d45`
 
+## Response shape
+
+Top-level keys are returned in this order:
+
+1. `datasourceDescription`
+2. `datasourceModel` (optional)
+3. `fieldGroups`
+4. `parameters`
+
+`datasourceModel` is available on Tableau versions that support the VDS `get-datasource-model`
+endpoint (2025.3+). On older versions, it is omitted.
+
 ## Example result
 
 ```json
 {
-  "fields": [
+  "datasourceDescription": "Datasource metadata and usage notes...",
+  "datasourceModel": {
+    "logicalTables": [
+      {
+        "logicalTableId": "Orders_...",
+        "caption": "Orders"
+      },
+      {
+        "logicalTableId": "Returns_...",
+        "caption": "Returns"
+      }
+    ],
+    "logicalTableRelationships": [
+      {
+        "fromLogicalTable": { "logicalTableId": "Orders_..." },
+        "toLogicalTable": { "logicalTableId": "Returns_..." },
+        "expression": {
+          "relationships": [
+            {
+              "operator": "=",
+              "fromField": "[Order ID]",
+              "toField": "[Order ID (Returns)]"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "fieldGroups": [
     {
-      "name": "Returned",
-      "dataType": "STRING",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "COUNT",
-      "dataCategory": "NOMINAL",
-      "role": "DIMENSION"
+      "logicalTableId": "Orders_...",
+      "fields": [
+        {
+          "name": "Order ID",
+          "dataType": "STRING",
+          "columnClass": "COLUMN",
+          "logicalTableId": "Orders_...",
+          "defaultAggregation": "COUNT",
+          "dataCategory": "NOMINAL",
+          "role": "DIMENSION"
+        },
+        {
+          "name": "Sales",
+          "dataType": "REAL",
+          "columnClass": "COLUMN",
+          "logicalTableId": "Orders_...",
+          "defaultAggregation": "SUM",
+          "dataCategory": "QUANTITATIVE",
+          "role": "MEASURE"
+        }
+      ]
     },
     {
-      "name": "Category",
-      "dataType": "STRING",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "COUNT",
-      "dataCategory": "NOMINAL",
-      "role": "DIMENSION"
-    },
-    {
-      "name": "Discount",
-      "dataType": "REAL",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "SUM",
-      "dataCategory": "QUANTITATIVE",
-      "role": "MEASURE"
-    },
-    {
-      "name": "Postal Code",
-      "dataType": "STRING",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "COUNT",
-      "dataCategory": "ORDINAL",
-      "role": "DIMENSION",
-      "defaultFormat": "*00000"
-    },
-    {
-      "name": "Regional Manager",
-      "dataType": "STRING",
-      "defaultAggregation": "COUNT"
-    },
-    {
-      "name": "Order ID",
-      "dataType": "STRING",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "COUNT",
-      "dataCategory": "NOMINAL",
-      "role": "DIMENSION"
-    },
-    {
-      "name": "Product Name",
-      "dataType": "STRING",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "COUNT",
-      "dataCategory": "NOMINAL",
-      "role": "DIMENSION"
-    },
-    {
-      "name": "Ship Date",
-      "dataType": "DATE",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "YEAR",
-      "dataCategory": "ORDINAL",
-      "role": "DIMENSION"
-    },
-    {
-      "name": "Quantity",
-      "dataType": "INTEGER",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "SUM",
-      "dataCategory": "QUANTITATIVE",
-      "role": "MEASURE"
-    },
-    {
-      "name": "City",
-      "dataType": "STRING",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "COUNT",
-      "dataCategory": "NOMINAL",
-      "role": "DIMENSION"
-    },
-    {
-      "name": "Sub-Category",
-      "dataType": "STRING",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "COUNT",
-      "dataCategory": "NOMINAL",
-      "role": "DIMENSION"
-    },
-    {
-      "name": "Profit (bin)",
-      "dataType": "INTEGER",
-      "columnClass": "BIN",
-      "defaultAggregation": "NONE",
-      "formula": "[Profit]",
-      "dataCategory": "ORDINAL",
-      "role": "DIMENSION"
-    },
-    {
-      "name": "Segment",
-      "dataType": "STRING",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "COUNT",
-      "dataCategory": "NOMINAL",
-      "role": "DIMENSION"
-    },
-    {
-      "name": "State/Province",
-      "dataType": "STRING",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "COUNT",
-      "dataCategory": "NOMINAL",
-      "role": "DIMENSION"
-    },
-    {
-      "name": "Sales",
-      "dataType": "REAL",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "SUM",
-      "dataCategory": "QUANTITATIVE",
-      "role": "MEASURE"
-    },
-    {
-      "name": "Manufacturer",
-      "dataType": "STRING",
-      "columnClass": "GROUP",
-      "defaultAggregation": "COUNT",
-      "dataCategory": "NOMINAL",
-      "role": "DIMENSION"
-    },
-    {
-      "name": "Region",
-      "dataType": "STRING",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "COUNT",
-      "dataCategory": "NOMINAL",
-      "role": "DIMENSION"
-    },
-    {
-      "name": "Ship Mode",
-      "dataType": "STRING",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "COUNT",
-      "dataCategory": "NOMINAL",
-      "role": "DIMENSION"
-    },
-    {
-      "name": "Order Date",
-      "dataType": "DATE",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "YEAR",
-      "dataCategory": "ORDINAL",
-      "role": "DIMENSION"
-    },
-    {
-      "name": "Profit",
-      "dataType": "REAL",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "SUM",
-      "dataCategory": "QUANTITATIVE",
-      "role": "MEASURE"
-    },
-    {
-      "name": "Country/Region",
-      "dataType": "STRING",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "COUNT",
-      "dataCategory": "NOMINAL",
-      "role": "DIMENSION"
-    },
-    {
-      "name": "Profit Ratio",
-      "dataType": "REAL",
-      "columnClass": "CALCULATION",
-      "defaultAggregation": "AGG",
-      "formula": "SUM([Profit])/SUM([Sales])",
-      "dataCategory": "QUANTITATIVE",
-      "role": "MEASURE",
-      "isAutoGenerated": false,
-      "hasUserReference": false
-    },
-    {
-      "name": "Customer Name",
-      "dataType": "STRING",
-      "columnClass": "COLUMN",
-      "defaultAggregation": "COUNT",
-      "dataCategory": "NOMINAL",
-      "role": "DIMENSION"
+      "logicalTableId": null,
+      "fields": [
+        {
+          "name": "CrossTable Calc",
+          "dataType": "REAL",
+          "columnClass": "CALCULATION",
+          "logicalTableId": null,
+          "defaultAggregation": "SUM",
+          "formula": "[Sales] / NULLIF([Quantity], 0)"
+        }
+      ]
     }
   ],
   "parameters": [
