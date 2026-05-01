@@ -1,5 +1,4 @@
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
-import { isRequestOverridableVariable } from './overridableConfig';
 import { exportedForTesting as serverExportedForTesting } from './server.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/listDatasources/listDatasources.js';
@@ -10,14 +9,6 @@ import { toolNames } from './tools/toolName.js';
 import { toolFactories } from './tools/tools.js';
 import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
-
-vi.mock('./overridableConfig', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./overridableConfig')>();
-  return {
-    ...actual,
-    isRequestOverridableVariable: vi.fn(actual.isRequestOverridableVariable),
-  };
-});
 
 const { Server } = serverExportedForTesting;
 
@@ -167,85 +158,6 @@ describe('server', () => {
         error.message ===
           'The Tableau MCP server is temporarily unavailable. Please try again later.',
     );
-  });
-});
-
-describe('getRequestOverridesFromHeader', () => {
-  beforeEach(() => {
-    vi.mocked(isRequestOverridableVariable).mockReset();
-  });
-
-  it('should return empty object when header is undefined', () => {
-    const server = new Server();
-    expect(server.getRequestOverridesFromHeader(undefined)).toEqual({});
-  });
-
-  it('should return empty object when header is an empty string', () => {
-    const server = new Server();
-    expect(server.getRequestOverridesFromHeader('')).toEqual({});
-  });
-
-  it('should throw when header is an array', () => {
-    const server = new Server();
-    expect(() => server.getRequestOverridesFromHeader(['a', 'b'])).toThrow(
-      "Unsupported format for 'x-tableau-mcp-config' header",
-    );
-  });
-
-  it('should parse a single override', () => {
-    vi.mocked(isRequestOverridableVariable).mockReturnValue(true);
-    const server = new Server();
-
-    expect(server.getRequestOverridesFromHeader('INCLUDE_PROJECT_IDS=abc')).toEqual({
-      INCLUDE_PROJECT_IDS: 'abc',
-    });
-  });
-
-  it('should parse multiple overrides separated by &', () => {
-    vi.mocked(isRequestOverridableVariable).mockReturnValue(true);
-    const server = new Server();
-
-    expect(
-      server.getRequestOverridesFromHeader('INCLUDE_PROJECT_IDS=abc&INCLUDE_TAGS=tag1'),
-    ).toEqual({ INCLUDE_PROJECT_IDS: 'abc', INCLUDE_TAGS: 'tag1' });
-  });
-
-  it('should accept an empty string value for a valid key', () => {
-    vi.mocked(isRequestOverridableVariable).mockReturnValue(true);
-    const server = new Server();
-
-    expect(server.getRequestOverridesFromHeader('INCLUDE_PROJECT_IDS=')).toEqual({
-      INCLUDE_PROJECT_IDS: '',
-    });
-  });
-
-  it('should throw when a key is not a request-overridable variable', () => {
-    vi.mocked(isRequestOverridableVariable).mockReturnValue(false);
-    const server = new Server();
-
-    expect(() => server.getRequestOverridesFromHeader('INVALID_KEY=value')).toThrow(
-      "'x-tableau-mcp-config' header is invalid",
-    );
-  });
-
-  it('should throw when a valid key has no value', () => {
-    vi.mocked(isRequestOverridableVariable).mockReturnValue(true);
-    const server = new Server();
-
-    expect(() => server.getRequestOverridesFromHeader('INCLUDE_PROJECT_IDS')).toThrow(
-      "'x-tableau-mcp-config' header does not provide a value for 'INCLUDE_PROJECT_IDS'",
-    );
-  });
-
-  it('should throw on the first invalid key in a multi-override header', () => {
-    vi.mocked(isRequestOverridableVariable).mockImplementation(
-      (key) => key === 'INCLUDE_PROJECT_IDS',
-    );
-    const server = new Server();
-
-    expect(() =>
-      server.getRequestOverridesFromHeader('INCLUDE_PROJECT_IDS=abc&BAD_KEY=val'),
-    ).toThrow("'x-tableau-mcp-config' header is invalid");
   });
 });
 

@@ -12,9 +12,9 @@ import { getConfig } from './config.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { getTableauServerInfo } from './getTableauServerInfo';
 import { setNotificationLevel } from './logging/notification.js';
-import { isRequestOverridableVariable } from './overridableConfig';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
 import { Tool } from './tools/tool.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
 import { toolNames } from './tools/toolName.js';
@@ -25,8 +25,6 @@ import { Provider } from './utils/provider.js';
 export const serverName = 'tableau-mcp';
 export const serverVersion = pkg.version;
 export const userAgent = `${serverName}/${serverVersion}`;
-
-const X_TABLEAU_MCP_CONFIG_HEADER = 'x-tableau-mcp-config';
 
 export type ClientInfo = InitializeRequest['params']['clientInfo'];
 
@@ -87,8 +85,9 @@ export class Server extends McpServer {
           );
         }
 
-        const requestOverridesHeader = extra.requestInfo?.headers[X_TABLEAU_MCP_CONFIG_HEADER];
-        const requestOverrides = this.getRequestOverridesFromHeader(requestOverridesHeader);
+        const requestOverridesHeader =
+          extra.requestInfo?.headers[X_TABLEAU_MCP_CONFIG_HEADER]?.toString() ?? '';
+        const requestOverrides = getRequestOverridesFromHeader(requestOverridesHeader);
         const tableauToolCallback = await Provider.from(callback);
         const tableauRequestHandlerExtra: TableauRequestHandlerExtra = {
           ...extra,
@@ -184,36 +183,6 @@ export class Server extends McpServer {
 
     return toolsToRegister;
   };
-
-  getRequestOverridesFromHeader(
-    requestOverrideString: string | string[] | undefined,
-  ): Record<string, string> {
-    if (Array.isArray(requestOverrideString)) {
-      throw new Error(`Unsupported format for '${X_TABLEAU_MCP_CONFIG_HEADER}' header`);
-    }
-
-    const requestOverrides: Record<string, string> = {};
-
-    if (!requestOverrideString) {
-      return requestOverrides;
-    }
-
-    requestOverrideString.split('&').forEach((overrideString) => {
-      const [key, value] = overrideString.split('=');
-      if (isRequestOverridableVariable(key)) {
-        if (value === undefined) {
-          throw new Error(
-            `'${X_TABLEAU_MCP_CONFIG_HEADER}' header does not provide a value for '${key}'`,
-          );
-        }
-        requestOverrides[key] = value;
-      } else {
-        throw new Error(`'${X_TABLEAU_MCP_CONFIG_HEADER}' header is invalid`);
-      }
-    });
-
-    return requestOverrides;
-  }
 }
 
 export const exportedForTesting = {
