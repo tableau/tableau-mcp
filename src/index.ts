@@ -71,15 +71,19 @@ async function startServer(): Promise<void> {
       await serverInfoReady;
 
       if (!config.oauth.enabled) {
-        console.warn(
-          '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access! By having explicitly disabled OAuth by setting the DANGEROUSLY_DISABLE_OAUTH environment variable to "true", you accept any and all risks associated with this decision.',
-        );
+        log({
+          message:
+            '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access! By having explicitly disabled OAuth by setting the DANGEROUSLY_DISABLE_OAUTH environment variable to "true", you accept any and all risks associated with this decision.',
+          level: 'error',
+          logger: 'startup',
+        });
       }
 
-      // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
-      console.log(
-        `${serverName} v${serverVersion} ${config.disableSessionManagement ? 'stateless ' : ''}streamable HTTP server available at ${url}`,
-      );
+      log({
+        message: `${serverName} v${serverVersion} ${config.disableSessionManagement ? 'stateless ' : ''}streamable HTTP server available at ${url}`,
+        level: 'info',
+        logger: 'startup',
+      });
       break;
     }
   }
@@ -89,9 +93,12 @@ async function startServer(): Promise<void> {
   }
 
   if (config.breakGlassDisableGlobally) {
-    writeToStderr(
-      '⚠️ BREAK_GLASS_DISABLE_GLOBALLY is enabled! This means that the MCP server will be disabled globally and will return errors to all users!',
-    );
+    log({
+      message:
+        '⚠️ BREAK_GLASS_DISABLE_GLOBALLY is enabled! This means that the MCP server will be disabled globally and will return errors to all users!',
+      level: 'info',
+      logger: 'startup',
+    });
   }
 }
 
