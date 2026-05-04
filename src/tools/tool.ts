@@ -119,7 +119,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.requiredApiScopes = getRequiredApiScopesForTool(name);
   }
 
-  logInvocation({
+  notifyInvocation({
     requestId,
     args,
     username,
@@ -149,7 +149,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     const { config, requestId, sessionId, tableauAuthInfo } = extra;
     const username = tableauAuthInfo?.username;
 
-    this.logInvocation({ requestId, args, username });
+    this.notifyInvocation({ requestId, args, username });
     log({
       message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
       level: 'debug',
