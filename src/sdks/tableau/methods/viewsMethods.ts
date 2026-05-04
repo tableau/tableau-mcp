@@ -10,6 +10,8 @@ import { Pagination } from '../types/pagination.js';
 import { View } from '../types/view.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
 
+type QueryImageError = { type: 'feature-disabled' } | { type: 'unknown'; message: string };
+
 /**
  * Views methods of the Tableau Server REST API
  *
@@ -127,6 +129,65 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
   };
 
   /**
+   * Returns an image of the specified custom view (saved view state / filters).
+   *
+   * Required scopes: `tableau:views:download`
+   *
+   * @param {string} customViewId The ID of the custom view to return an image for.
+   * @param {string} siteId - The Tableau site ID
+   * @param {number} width - (Optional) The width of the rendered image in pixels that, along with the value of vizHeight determine its resolution and aspect ratio.
+   * @param {number} height - (Optional) The height of the rendered image in pixels that, along with the value of vizWidth determine its resolution and aspect ratio.
+   * @param {string} resolution - (Optional) The resolution of the image. Image width and actual pixel density are determined by the display context of the image. Aspect ratio is always preserved. Set the value to high to ensure maximum pixel density.
+   * @param {string} format - (Optional) The format of the image. PNG (default) or SVG.
+   * @param {Record<string, string>} viewFilters - Map of field name to filter value; keys are prefixed with `vf_` unless already present.
+   *
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view_image
+   */
+  getCustomViewImage = async ({
+    customViewId,
+    siteId,
+    width,
+    height,
+    resolution = 'high',
+    format,
+    viewFilters,
+  }: {
+    customViewId: string;
+    siteId: string;
+    resolution?: 'high';
+    width?: number;
+    height?: number;
+    format?: 'PNG' | 'SVG';
+    viewFilters?: Record<string, string>;
+  }): Promise<Result<string, QueryImageError>> => {
+    const queries: Record<string, string | number> = {
+      ...(width !== undefined ? { vizWidth: width } : {}),
+      ...(height !== undefined ? { vizHeight: height } : {}),
+      ...(resolution !== undefined ? { resolution } : {}),
+      ...(format !== undefined ? { format } : {}),
+    };
+
+    if (viewFilters) {
+      for (const [key, value] of Object.entries(viewFilters)) {
+        const paramName = key.startsWith('vf_') ? key : `vf_${key}`;
+        queries[paramName] = value;
+      }
+    }
+
+    try {
+      const response = await this._apiClient.getCustomViewImage({
+        params: { siteId, customViewId },
+        queries,
+        ...this.authHeader,
+        responseType: 'arraybuffer',
+      });
+      return Ok(response);
+    } catch (error) {
+      return handleQueryImageError(error);
+    }
+  };
+
+  /**
    * Returns a specified view rendered as data in comma separated value (CSV) format.
    *
    * Required scopes: `tableau:views:download`
@@ -190,9 +251,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
     resolution?: 'high';
     format?: 'PNG' | 'SVG';
     viewFilters?: Record<string, string>;
-  }): Promise<
-    Result<string, { type: 'feature-disabled' } | { type: 'unknown'; message: string }>
-  > => {
+  }): Promise<Result<string, QueryImageError>> => {
     const queries: Record<string, string | number> = {
       ...(width !== undefined ? { vizWidth: width } : {}),
       ...(height !== undefined ? { vizHeight: height } : {}),
@@ -216,32 +275,7 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       });
       return Ok(response);
     } catch (error) {
-      // Handle Axios errors with response data
-      if (isAxiosError(error) && error.response?.data) {
-        let errorData = error.response.data;
-
-        // When responseType is 'arraybuffer', parse the response body
-        if (!errorData.error) {
-          try {
-            const text = new TextDecoder().decode(errorData);
-            errorData = JSON.parse(text);
-          } catch {
-            return Err({ type: 'unknown', message: getExceptionMessage(error) });
-          }
-        }
-
-        if (errorData.error?.code === '403157') {
-          return Err({ type: 'feature-disabled' });
-        }
-
-        // Extract the actual error details from Tableau Server response
-        if (errorData.error) {
-          const { summary, detail } = errorData.error;
-          const message = detail ? `${summary}: ${detail}` : summary;
-          return Err({ type: 'unknown', message });
-        }
-      }
-      return Err({ type: 'unknown', message: getExceptionMessage(error) });
+      return handleQueryImageError(error);
     }
   };
 
@@ -308,4 +342,34 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
       views: response.views.view ?? [],
     };
   };
+}
+
+function handleQueryImageError(error: unknown): Result<string, QueryImageError> {
+  // Handle Axios errors with response data
+  if (isAxiosError(error) && error.response?.data) {
+    let errorData = error.response.data;
+
+    // When responseType is 'arraybuffer', parse the response body
+    if (!errorData.error) {
+      try {
+        const text = new TextDecoder().decode(errorData);
+        errorData = JSON.parse(text);
+      } catch {
+        return Err({ type: 'unknown', message: getExceptionMessage(error) });
+      }
+    }
+
+    if (errorData.error?.code === '403157') {
+      return Err({ type: 'feature-disabled' });
+    }
+
+    // Extract the actual error details from Tableau Server response
+    if (errorData.error) {
+      const { summary, detail } = errorData.error;
+      const message = detail ? `${summary}: ${detail}` : summary;
+      return Err({ type: 'unknown', message });
+    }
+  }
+
+  return Err({ type: 'unknown', message: getExceptionMessage(error) });
 }

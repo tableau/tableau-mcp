@@ -244,6 +244,18 @@ describe('Config', () => {
     expect(config.enablePassthroughAuth).toBe(true);
   });
 
+  it('should set breakGlassDisableGlobally to false by default', () => {
+    const config = new Config();
+    expect(config.breakGlassDisableGlobally).toBe(false);
+  });
+
+  it('should set breakGlassDisableGlobally to true when specified', () => {
+    vi.stubEnv('BREAK_GLASS_DISABLE_GLOBALLY', 'true');
+
+    const config = new Config();
+    expect(config.breakGlassDisableGlobally).toBe(true);
+  });
+
   describe('HTTP server config parsing', () => {
     it('should set sslKey to default when SSL_KEY is not set', () => {
       const config = new Config();

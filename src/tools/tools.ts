@@ -12,6 +12,7 @@ import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
+import { getGetCustomViewImageTool } from './views/getCustomViewImage.js';
 import { getGetViewDataTool } from './views/getViewData.js';
 import { getGetViewImageTool } from './views/getViewImage.js';
 import { getListCustomViewsTool } from './views/listCustomViews.js';
@@ -37,6 +38,7 @@ export const toolFactories = [
   getListViewsTool,
   getListCustomViewsTool,
   getGetCustomViewDataTool,
+  getGetCustomViewImageTool,
   getSearchContentTool,
   getRevokeAccessTokenTool,
   getResetConsentTool,

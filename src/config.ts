@@ -81,6 +81,7 @@ export class Config {
   productTelemetryEndpoint: string;
   productTelemetryEnabled: boolean;
   isHyperforce: boolean;
+  breakGlassDisableGlobally: boolean;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -143,6 +144,7 @@ export class Config {
       PRODUCT_TELEMETRY_ENDPOINT: productTelemetryEndpoint,
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
       IS_HYPERFORCE: isHyperforce,
+      BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -271,6 +273,7 @@ export class Config {
       productTelemetryEndpoint || 'https://prod.telemetry.tableausoftware.com';
     this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
     this.isHyperforce = isHyperforce === 'true';
+    this.breakGlassDisableGlobally = breakGlassDisableGlobally === 'true';
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';

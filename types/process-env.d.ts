@@ -65,6 +65,7 @@ export interface ProcessEnvEx {
   PRODUCT_TELEMETRY_ENABLED: string | undefined;
   PRODUCT_TELEMETRY_ENDPOINT: string | undefined;
   IS_HYPERFORCE: string | undefined;
+  BREAK_GLASS_DISABLE_GLOBALLY: string | undefined;
 }
 
 declare global {
