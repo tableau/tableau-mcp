@@ -43,6 +43,7 @@ export function parseLoggerTypes(value: string | undefined): Set<LoggerType> {
 
 type LogParams = {
   message: unknown;
+  error?: unknown;
   level: LogLevel;
   logger: string | undefined;
 };
@@ -55,8 +56,13 @@ export function log(entry: LogParams): void {
   if (config.loggers.has('appLogger')) {
     const message = JSON.stringify(entry);
     if (config.transport === 'http') {
-      // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
-      console.log(message);
+      if (entry.error) {
+        // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
+        console.log(message, entry.error);
+      } else {
+        // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
+        console.log(message, entry.error);
+      }
     } else {
       process.stderr.write(message.endsWith('\n') ? message : `${message}\n`);
     }

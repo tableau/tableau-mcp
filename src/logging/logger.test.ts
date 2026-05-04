@@ -69,7 +69,23 @@ describe('log', () => {
 
     log(entry);
 
-    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(entry));
+    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(entry), undefined);
+    consoleSpy.mockRestore();
+  });
+
+  it('should write JSON and error to console.log when transport is http and appLogger is enabled', () => {
+    vi.stubEnv('TRANSPORT', 'http');
+    vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
+
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const error = new Error('boom');
+
+    log({ ...entry, level: 'error', error });
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      JSON.stringify({ ...entry, level: 'error', error }),
+      error,
+    );
     consoleSpy.mockRestore();
   });
 
