@@ -61,7 +61,7 @@ export function log(entry: LogParams): void {
         console.log(message, entry.error);
       } else {
         // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
-        console.log(message, entry.error);
+        console.log(message);
       }
     } else {
       process.stderr.write(message.endsWith('\n') ? message : `${message}\n`);

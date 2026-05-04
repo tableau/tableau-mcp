@@ -69,7 +69,7 @@ describe('log', () => {
 
     log(entry);
 
-    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(entry), undefined);
+    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(entry));
     consoleSpy.mockRestore();
   });
 
