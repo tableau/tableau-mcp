@@ -93,44 +93,50 @@ export class LocalExecutor extends ToolExecutor {
   }: ExecuteCommandArgs): Promise<Result<GetCommandStatusResponse, ExecuteCommandError>> {
     args ??= {};
 
-    const commandStatusResult = await this.agentApiClient.executeCommand({
+    const executeResult = await this.agentApiClient.executeCommand({
       namespace,
       command,
       args,
     });
 
+    if (executeResult.isErr()) {
+      log(
+        {
+          message: `Failed to execute command ${namespace}.${command}. Reason: ${getExceptionMessage(executeResult.error)}`,
+          level: 'error',
+          logger: 'LocalExecutor',
+          data: executeResult.error,
+        },
+        this.desktopConfig,
+      );
+      return Err({ type: 'unknown', error: executeResult.error });
+    }
+
+    const commandId = executeResult.value.command_id;
+    const commandStatusResult = await this.waitForCommand(commandId);
     if (commandStatusResult.isErr()) {
+      const error = commandStatusResult.error;
       log(
         {
-          message: `Failed to execute command ${namespace}.${command}`,
+          message:
+            error.type === 'command-timed-out'
+              ? `Command ${commandId} timed out`
+              : `Failed to get status of command ${commandId}. Reason: ${getExceptionMessage(error)}`,
           level: 'error',
           logger: 'LocalExecutor',
-          data: commandStatusResult.error,
+          data: error,
         },
         this.desktopConfig,
       );
-      return Err({ type: 'unknown', error: commandStatusResult.error });
+
+      return commandStatusResult;
     }
 
-    const commandId = commandStatusResult.value.command_id;
-    const result = await this.waitForCommand(commandId);
-    if (result.isErr()) {
-      log(
-        {
-          message: `Command ${commandId} timed out`,
-          level: 'error',
-          logger: 'LocalExecutor',
-        },
-        this.desktopConfig,
-      );
-      return Err({ type: 'command-timed-out' });
-    }
-
-    const commandResult = result.value;
+    const commandResult = commandStatusResult.value;
     if (commandResult.status === 'failed') {
       log(
         {
-          message: `Command ${commandId} failed`,
+          message: `Command ${commandId} failed. Reason: ${getExceptionMessage(commandResult.error)}`,
           level: 'error',
           logger: 'LocalExecutor',
           data: commandResult.error,
@@ -144,19 +150,33 @@ export class LocalExecutor extends ToolExecutor {
   }
 
   async getEvents({ sinceSequence }: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>> {
-    return await this.agentApiClient.getEvents(sinceSequence);
+    const getEventsResult = await this.agentApiClient.getEvents(sinceSequence);
+    if (getEventsResult.isErr()) {
+      const error = getEventsResult.error;
+      log(
+        {
+          message: `Failed to get events. Reason: ${getExceptionMessage(error)}`,
+          level: 'error',
+          logger: 'LocalExecutor',
+          data: error,
+        },
+        this.desktopConfig,
+      );
+    }
+
+    return getEventsResult;
   }
 
   private async waitForCommand(
     commandId: string,
-  ): Promise<Result<GetCommandStatusResponse, 'timeout'>> {
+  ): Promise<Result<GetCommandStatusResponse, ExecuteCommandError>> {
     const maxAttempts = Math.ceil(this.config.commandTimeoutMs / this.config.pollIntervalMs);
     let attempts = 0;
 
     while (attempts < maxAttempts) {
       const commandStatusResult = await this.agentApiClient.getCommandStatus(commandId);
       if (commandStatusResult.isErr()) {
-        return Err('timeout');
+        return Err({ type: 'unknown', error: commandStatusResult.error });
       }
 
       const commandStatus = commandStatusResult.value;
@@ -168,7 +188,7 @@ export class LocalExecutor extends ToolExecutor {
       attempts++;
     }
 
-    return Err('timeout');
+    return Err({ type: 'command-timed-out' });
   }
 
   private getRequestInterceptor(): RequestInterceptor {
