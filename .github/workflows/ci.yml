@@ -44,6 +44,7 @@ jobs:
 
       - name: Tests
         run: npm run coverage
+        run: npm run coverage:desktop
 
       - name: E2E Tests
         if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'

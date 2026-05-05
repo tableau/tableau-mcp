@@ -40,7 +40,7 @@ export class LocalExecutor extends ToolExecutor {
   private readonly agentApiClient: AgentApiClient;
   private readonly log: LocalExecutorConfig['log'];
 
-  constructor(config: Partial<LocalExecutorConfig>) {
+  constructor(config?: Partial<LocalExecutorConfig>) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.log = this.config.log;
@@ -94,7 +94,7 @@ export class LocalExecutor extends ToolExecutor {
 
     if (executeResult.isErr()) {
       this.log?.({
-        message: `Failed to execute command ${namespace}.${command}. Reason: ${getExceptionMessage(executeResult.error)}`,
+        message: `Failed to execute command ${namespace}:${command}. Reason: ${getExceptionMessage(executeResult.error)}`,
         level: 'error',
         logger: 'LocalExecutor',
         data: executeResult.error,
@@ -110,7 +110,7 @@ export class LocalExecutor extends ToolExecutor {
         message:
           error.type === 'command-timed-out'
             ? `Command ${commandId} timed out`
-            : `Failed to get status of command ${commandId}. Reason: ${getExceptionMessage(error)}`,
+            : `Failed to get status of command ${commandId}. Reason: ${getExceptionMessage(error.error)}`,
         level: 'error',
         logger: 'LocalExecutor',
         data: error,
@@ -122,7 +122,7 @@ export class LocalExecutor extends ToolExecutor {
     const commandResult = commandStatusResult.value;
     if (commandResult.status === 'failed') {
       this.log?.({
-        message: `Command ${commandId} failed. Reason: ${getExceptionMessage(commandResult.error)}`,
+        message: `Command ${commandId} failed. Reason: ${commandResult.error?.message || 'Unknown error'}`,
         level: 'error',
         logger: 'LocalExecutor',
         data: commandResult.error,

@@ -28,14 +28,17 @@ export const executeCommandResponseSchema = z.object({
 });
 export type ExecuteCommandResponse = z.infer<typeof executeCommandResponseSchema>;
 
-export const eventSchema = z.object({
-  sequence: z.number(),
-  type: z.string(),
-  timestamp: z.string().datetime(),
-  data: z.record(z.string(), z.any()),
-});
+export const eventSchema = z
+  .object({
+    sequence: z.number(),
+    type: z.string(),
+    timestamp: z.string().datetime(),
+  })
+  .passthrough();
 
 export const getEventsResponseSchema = z.object({
   events: z.array(eventSchema),
+  latest_sequence: z.number(),
+  count: z.number(),
 });
 export type GetEventsResponse = z.infer<typeof getEventsResponseSchema>;
