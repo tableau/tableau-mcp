@@ -3,7 +3,6 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { AgentApiClient } from '../../sdks/desktop/agentApi/client';
 import { GetCommandStatusResponse, GetEventsResponse } from '../../sdks/desktop/agentApi/types';
 import {
-  AxiosResponseInterceptorConfig,
   ErrorInterceptor,
   getRequestInterceptorConfig,
   getResponseInterceptorConfig,
@@ -218,10 +217,9 @@ export class LocalExecutor extends ToolExecutor {
         return;
       }
 
-      const { response } = error as { response: AxiosResponseInterceptorConfig };
       this.logResponse({
         baseUrl,
-        ...getResponseInterceptorConfig(response),
+        ...getResponseInterceptorConfig(error.response),
       });
     };
   }
