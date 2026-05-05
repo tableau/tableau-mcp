@@ -1,7 +1,5 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { Config, getDesktopConfig } from '../../config.desktop';
-import { log } from '../../logging/logger';
 import { AgentApiClient } from '../../sdks/desktop/agentApi/client';
 import { GetCommandStatusResponse, GetEventsResponse } from '../../sdks/desktop/agentApi/types';
 import {
@@ -28,6 +26,7 @@ type LocalExecutorConfig = {
   authToken?: string;
   commandTimeoutMs: number;
   pollIntervalMs: number;
+  log?: typeof console.log;
 };
 
 const DEFAULT_CONFIG: LocalExecutorConfig = {
@@ -38,14 +37,14 @@ const DEFAULT_CONFIG: LocalExecutorConfig = {
 
 export class LocalExecutor extends ToolExecutor {
   private readonly config: LocalExecutorConfig;
-  private readonly desktopConfig: Config;
   private readonly agentApiClient: AgentApiClient;
+  private readonly log: LocalExecutorConfig['log'];
 
   constructor(config: Partial<LocalExecutorConfig>) {
     super();
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.log = this.config.log;
 
-    this.desktopConfig = getDesktopConfig();
     this.agentApiClient = new AgentApiClient({
       baseUrl: this.config.agentApiBase,
       authToken: this.config.authToken,
@@ -58,28 +57,22 @@ export class LocalExecutor extends ToolExecutor {
   }
 
   async start(): Promise<void> {
-    log(
-      {
-        message: 'LocalExecutor starting',
-        level: 'info',
-        logger: 'LocalExecutor',
-        data: {
-          agentApiBase: this.config.agentApiBase,
-        },
+    this.log?.({
+      message: 'LocalExecutor starting',
+      level: 'info',
+      logger: 'LocalExecutor',
+      data: {
+        agentApiBase: this.config.agentApiBase,
       },
-      this.desktopConfig,
-    );
+    });
   }
 
   stop(): void {
-    log(
-      {
-        message: 'LocalExecutor stopped',
-        level: 'info',
-        logger: 'LocalExecutor',
-      },
-      this.desktopConfig,
-    );
+    this.log?.({
+      message: 'LocalExecutor stopped',
+      level: 'info',
+      logger: 'LocalExecutor',
+    });
   }
 
   isAvailable(): boolean {
@@ -100,15 +93,12 @@ export class LocalExecutor extends ToolExecutor {
     });
 
     if (executeResult.isErr()) {
-      log(
-        {
-          message: `Failed to execute command ${namespace}.${command}. Reason: ${getExceptionMessage(executeResult.error)}`,
-          level: 'error',
-          logger: 'LocalExecutor',
-          data: executeResult.error,
-        },
-        this.desktopConfig,
-      );
+      this.log?.({
+        message: `Failed to execute command ${namespace}.${command}. Reason: ${getExceptionMessage(executeResult.error)}`,
+        level: 'error',
+        logger: 'LocalExecutor',
+        data: executeResult.error,
+      });
       return Err({ type: 'unknown', error: executeResult.error });
     }
 
@@ -116,33 +106,27 @@ export class LocalExecutor extends ToolExecutor {
     const commandStatusResult = await this.waitForCommand(commandId);
     if (commandStatusResult.isErr()) {
       const error = commandStatusResult.error;
-      log(
-        {
-          message:
-            error.type === 'command-timed-out'
-              ? `Command ${commandId} timed out`
-              : `Failed to get status of command ${commandId}. Reason: ${getExceptionMessage(error)}`,
-          level: 'error',
-          logger: 'LocalExecutor',
-          data: error,
-        },
-        this.desktopConfig,
-      );
+      this.log?.({
+        message:
+          error.type === 'command-timed-out'
+            ? `Command ${commandId} timed out`
+            : `Failed to get status of command ${commandId}. Reason: ${getExceptionMessage(error)}`,
+        level: 'error',
+        logger: 'LocalExecutor',
+        data: error,
+      });
 
       return commandStatusResult;
     }
 
     const commandResult = commandStatusResult.value;
     if (commandResult.status === 'failed') {
-      log(
-        {
-          message: `Command ${commandId} failed. Reason: ${getExceptionMessage(commandResult.error)}`,
-          level: 'error',
-          logger: 'LocalExecutor',
-          data: commandResult.error,
-        },
-        this.desktopConfig,
-      );
+      this.log?.({
+        message: `Command ${commandId} failed. Reason: ${getExceptionMessage(commandResult.error)}`,
+        level: 'error',
+        logger: 'LocalExecutor',
+        data: commandResult.error,
+      });
       return Err({ type: 'command-failed', error: commandResult.error });
     }
 
@@ -153,15 +137,12 @@ export class LocalExecutor extends ToolExecutor {
     const getEventsResult = await this.agentApiClient.getEvents(sinceSequence);
     if (getEventsResult.isErr()) {
       const error = getEventsResult.error;
-      log(
-        {
-          message: `Failed to get events. Reason: ${getExceptionMessage(error)}`,
-          level: 'error',
-          logger: 'LocalExecutor',
-          data: error,
-        },
-        this.desktopConfig,
-      );
+      this.log?.({
+        message: `Failed to get events. Reason: ${getExceptionMessage(error)}`,
+        level: 'error',
+        logger: 'LocalExecutor',
+        data: error,
+      });
     }
 
     return getEventsResult;
@@ -201,15 +182,12 @@ export class LocalExecutor extends ToolExecutor {
   private getRequestErrorInterceptor(): ErrorInterceptor {
     return (error, baseUrl) => {
       if (!isAxiosError(error) || !error.request) {
-        log(
-          {
-            message: `Request failed with error: ${getExceptionMessage(error)}`,
-            level: 'error',
-            logger: 'LocalExecutor',
-            data: { error },
-          },
-          this.desktopConfig,
-        );
+        this.log?.({
+          message: `Request failed with error: ${getExceptionMessage(error)}`,
+          level: 'error',
+          logger: 'LocalExecutor',
+          data: { error },
+        });
         return;
       }
 
@@ -231,15 +209,12 @@ export class LocalExecutor extends ToolExecutor {
   private getResponseErrorInterceptor(): ErrorInterceptor {
     return (error, baseUrl) => {
       if (!isAxiosError(error) || !error.response) {
-        log(
-          {
-            message: `Response failed with error: ${getExceptionMessage(error)}`,
-            level: 'error',
-            logger: 'LocalExecutor',
-            data: { error },
-          },
-          this.desktopConfig,
-        );
+        this.log?.({
+          message: `Response failed with error: ${getExceptionMessage(error)}`,
+          level: 'error',
+          logger: 'LocalExecutor',
+          data: { error },
+        });
         return;
       }
 
@@ -259,21 +234,18 @@ export class LocalExecutor extends ToolExecutor {
       url.search = new URLSearchParams(request.params).toString();
     }
 
-    log(
-      {
-        message: 'Agent API request',
-        level: 'debug',
-        logger: 'LocalExecutor',
-        data: {
-          method: request.method,
-          url: url.toString(),
-          headers: request.headers,
-          data: request.data,
-          params: request.params,
-        },
+    this.log?.({
+      message: 'Agent API request',
+      level: 'debug',
+      logger: 'LocalExecutor',
+      data: {
+        method: request.method,
+        url: url.toString(),
+        headers: request.headers,
+        data: request.data,
+        params: request.params,
       },
-      this.desktopConfig,
-    );
+    });
   }
 
   private logResponse(response: ResponseInterceptorConfig): void {
@@ -284,19 +256,16 @@ export class LocalExecutor extends ToolExecutor {
       url.search = new URLSearchParams(response.params).toString();
     }
 
-    log(
-      {
-        message: 'Agent API response',
-        level: 'debug',
-        logger: 'LocalExecutor',
-        data: {
-          status: response.status,
-          url: url.toString(),
-          headers: response.headers,
-          data: response.data,
-        },
+    this.log?.({
+      message: 'Agent API response',
+      level: 'debug',
+      logger: 'LocalExecutor',
+      data: {
+        status: response.status,
+        url: url.toString(),
+        headers: response.headers,
+        data: response.data,
       },
-      this.desktopConfig,
-    );
+    });
   }
 }
