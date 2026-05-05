@@ -1,9 +1,9 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { Config, getDesktopConfig } from '../../../config.desktop';
-import { log } from '../../../logging/logger';
-import { isAxiosError } from '../../../utils/axios';
-import { getExceptionMessage } from '../../../utils/getExceptionMessage';
+import { Config, getDesktopConfig } from '../../config.desktop';
+import { log } from '../../logging/logger';
+import { AgentApiClient } from '../../sdks/desktop/agentApi/client';
+import { GetCommandStatusResponse, GetEventsResponse } from '../../sdks/desktop/agentApi/types';
 import {
   AxiosResponseInterceptorConfig,
   ErrorInterceptor,
@@ -13,9 +13,9 @@ import {
   RequestInterceptorConfig,
   ResponseInterceptor,
   ResponseInterceptorConfig,
-} from '../../interceptors';
-import { AgentApiClient } from '../agentApi/client';
-import { GetCommandStatusResponse, GetEventsResponse } from '../agentApi/types';
+} from '../../sdks/interceptors';
+import { isAxiosError } from '../../utils/axios';
+import { getExceptionMessage } from '../../utils/getExceptionMessage';
 import {
   ExecuteCommandArgs,
   ExecuteCommandError,

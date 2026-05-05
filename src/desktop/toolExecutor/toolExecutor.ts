@@ -4,7 +4,7 @@ import {
   ExecuteCommandResponse,
   GetCommandStatusResponse,
   GetEventsResponse,
-} from '../agentApi/types';
+} from '../../sdks/desktop/agentApi/types';
 
 export type ExecuteCommandArgs = {
   command: string;
