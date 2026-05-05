@@ -1,5 +1,6 @@
 import os from 'os';
 
+import { BaseConfig } from '../../config.shared';
 import { log } from '../../logging/logger';
 
 type ValidPropertyValueType = string | number | boolean;
@@ -34,13 +35,15 @@ class DirectTelemetryForwarder {
   private readonly endpoint: string;
   private readonly enabled: boolean;
   private readonly podName: string;
+  private readonly config: BaseConfig;
 
   /**
    * @param endpoint - The telemetry endpoint URL
    * @param enabled - Whether telemetry is enabled
    * @param podName - The pod name for telemetry events
+   * @param config - The configuration for the telemetry forwarder
    */
-  constructor(endpoint: string, enabled: boolean, podName: string) {
+  constructor(endpoint: string, enabled: boolean, podName: string, config: BaseConfig) {
     if (!endpoint) {
       throw new Error('Endpoint URL is required for DirectTelemetryForwarder');
     }
@@ -48,6 +51,7 @@ class DirectTelemetryForwarder {
     this.endpoint = endpoint;
     this.enabled = enabled;
     this.podName = podName;
+    this.config = config;
   }
 
   /**
@@ -81,11 +85,11 @@ class DirectTelemetryForwarder {
 
     const req = new Request(this.endpoint, init);
     // Intentionally not awaiting: telemetry should not block execution.
-    sendTelemetryRequest(req);
+    sendTelemetryRequest(req, this.config);
   }
 }
 
-async function sendTelemetryRequest(req: Request): Promise<void> {
+async function sendTelemetryRequest(req: Request, config: BaseConfig): Promise<void> {
   try {
     const res = await fetch(req);
     const body = await res.text();
@@ -93,11 +97,14 @@ async function sendTelemetryRequest(req: Request): Promise<void> {
       console.error(`[Telemetry] Failed: ${res.status} ${res.statusText}`, body);
     }
   } catch (error) {
-    log({
-      message: error,
-      level: 'error',
-      logger: 'telemetry',
-    });
+    log(
+      {
+        message: error,
+        level: 'error',
+        logger: 'telemetry',
+      },
+      config,
+    );
   }
 }
 
@@ -119,9 +126,10 @@ export function getProductTelemetry(
   endpoint: string,
   enabled: boolean,
   podName: string,
+  config: BaseConfig,
 ): DirectTelemetryForwarder {
   if (!productTelemetryInstance) {
-    productTelemetryInstance = new DirectTelemetryForwarder(endpoint, enabled, podName);
+    productTelemetryInstance = new DirectTelemetryForwarder(endpoint, enabled, podName, config);
   }
   return productTelemetryInstance;
 }

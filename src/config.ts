@@ -1,16 +1,11 @@
 import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
 
-import { removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
-import { LoggerType, parseLoggerTypes } from './logging/logger.js';
+import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport, TransportName } from './transports.js';
-import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
 import { parseNumber } from './utils/parseNumber.js';
-
-const __dirname = getDirname();
 
 export const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
 export const ONE_HOUR_IN_MS = 60 * 60 * 1000;
@@ -25,7 +20,7 @@ function isAuthType(auth: unknown): auth is AuthType {
   return authTypes.some((type) => type === auth);
 }
 
-export class Config {
+export class Config extends BaseConfig {
   auth: AuthType;
   server: string;
   transport: TransportName;
@@ -47,12 +42,9 @@ export class Config {
   uatKeyId: string;
   jwtAdditionalPayload: string;
   datasourceCredentials: string;
-  defaultLogLevel: string;
   disableLogMasking: boolean;
   maxRequestTimeoutMs: number;
   disableSessionManagement: boolean;
-  loggers: Set<LoggerType>;
-  fileLoggerDirectory: string;
   tableauServerVersionCheckIntervalInHours: number;
   passthroughAuthUserSessionCheckIntervalInMinutes: number;
   mcpSiteSettingsCheckIntervalInMinutes: number;
@@ -84,6 +76,8 @@ export class Config {
   breakGlassDisableGlobally: boolean;
 
   constructor() {
+    super();
+
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
     const {
       AUTH: auth,
@@ -109,12 +103,9 @@ export class Config {
       UAT_KEY_ID: uatKeyId,
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
-      DEFAULT_LOG_LEVEL: defaultLogLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
-      ENABLED_LOGGERS: logging,
-      FILE_LOGGER_DIRECTORY: fileLoggerDirectory,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES:
         passthroughAuthUserSessionCheckIntervalInMinutes,
@@ -159,11 +150,8 @@ export class Config {
     });
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
-    this.defaultLogLevel = defaultLogLevel ?? 'debug';
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableSessionManagement = disableSessionManagement === 'true';
-    this.loggers = parseLoggerTypes(logging);
-    this.fileLoggerDirectory = fileLoggerDirectory || join(__dirname, 'logs');
 
     this.tableauServerVersionCheckIntervalInHours = parseNumber(
       tableauServerVersionCheckIntervalInHours,

@@ -1,9 +1,6 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
-import {
-  RequestInterceptorConfig,
-  ResponseInterceptorConfig,
-} from '../sdks/tableau/interceptors.js';
+import { RequestInterceptorConfig, ResponseInterceptorConfig } from '../sdks/interceptors.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { writeToStderr } from './logger.js';
 import { shouldNotifyWhenLevelIsAtLeast } from './notification.js';

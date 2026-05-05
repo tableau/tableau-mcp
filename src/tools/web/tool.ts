@@ -90,6 +90,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
       config.productTelemetryEndpoint,
       config.productTelemetryEnabled,
       config.server,
+      config,
     );
 
     let success = false;
@@ -145,11 +146,14 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
       if (!errorCode) {
         errorCode = '500'; // Default to 500 if no HTTP status can be determined
       }
-      log({
-        message: error,
-        level: 'error',
-        logger: 'tool',
-      });
+      log(
+        {
+          message: error,
+          level: 'error',
+          logger: 'tool',
+        },
+        config,
+      );
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     } finally {

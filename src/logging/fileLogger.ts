@@ -11,6 +11,7 @@ export type LogEntry = {
   message: unknown;
   level: LoggingLevel;
   logger: string | undefined;
+  data?: unknown;
 };
 
 let _fileLogger: FileLogger | undefined;

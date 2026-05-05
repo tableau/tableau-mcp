@@ -1,4 +1,4 @@
-import { getConfig } from '../config.js';
+import { BaseConfig } from '../config.shared.js';
 import { getFileLogger, LogEntry } from './fileLogger.js';
 
 export const loggerTypes = ['fileLogger', 'appLogger'] as const;
@@ -27,8 +27,7 @@ export const writeToStderr = (message: string): void => {
   process.stderr.write(message);
 };
 
-export function log(entry: LogEntry): void {
-  const config = getConfig();
+export function log(entry: LogEntry, config: BaseConfig): void {
   if (config.transport === 'http' && config.loggers.has('appLogger')) {
     // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
     console.log(JSON.stringify(entry));
