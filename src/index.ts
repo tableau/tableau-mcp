@@ -74,7 +74,7 @@ async function startServer(): Promise<void> {
         log({
           message:
             '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access! By having explicitly disabled OAuth by setting the DANGEROUSLY_DISABLE_OAUTH environment variable to "true", you accept any and all risks associated with this decision.',
-          level: 'error',
+          level: 'info',
           logger: 'startup',
         });
       }
