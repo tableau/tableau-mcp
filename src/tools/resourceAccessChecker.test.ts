@@ -1,6 +1,10 @@
+import { type BoundedContext, OverridableConfig } from '../overridableConfig.js';
 import { getCombinationsOfBoundedContextInputs } from '../utils/getCombinationsOfBoundedContextInputs.js';
 import { mockDatasources } from './listDatasources/mockDatasources.js';
-import { exportedForTesting } from './resourceAccessChecker.js';
+import {
+  exportedForTesting,
+  resourceAccessChecker as singletonResourceAccessChecker,
+} from './resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
 import { mockCustomView } from './views/mockCustomView.js';
 import { mockView } from './views/mockView.js';
@@ -13,6 +17,12 @@ const mocks = vi.hoisted(() => ({
   mockGetCustomView: vi.fn(),
   mockGetWorkbook: vi.fn(),
   mockQueryDatasource: vi.fn(),
+  boundedContext: {
+    projectIds: null,
+    datasourceIds: null,
+    workbookIds: null,
+    tags: null,
+  } as BoundedContext,
 }));
 
 vi.mock('../restApiInstance.js', () => ({
@@ -38,6 +48,202 @@ describe('ResourceAccessChecker', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    exportedForTesting.resetResourceAccessCheckerSingleton();
+    mocks.boundedContext = {
+      projectIds: null,
+      datasourceIds: null,
+      workbookIds: null,
+      tags: null,
+    };
+    vi.mocked(extra.getConfigWithOverrides).mockImplementation(async () => {
+      const config = new OverridableConfig({});
+      config.boundedContext = mocks.boundedContext;
+      return config;
+    });
+  });
+
+  describe('hasActiveBoundedContext', () => {
+    it('should treat null fields as unscoped', () => {
+      expect(
+        exportedForTesting.hasActiveBoundedContext({
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          tags: null,
+        }),
+      ).toBe(false);
+    });
+
+    it.each([
+      { field: 'projectIds', boundedContext: { projectIds: new Set<string>() } },
+      { field: 'datasourceIds', boundedContext: { datasourceIds: new Set<string>() } },
+      { field: 'workbookIds', boundedContext: { workbookIds: new Set<string>() } },
+      { field: 'tags', boundedContext: { tags: new Set<string>() } },
+      { field: 'viewIds', boundedContext: { viewIds: new Set<string>() } },
+    ])('should treat non-null $field as scoped even when empty', ({ boundedContext }) => {
+      expect(
+        exportedForTesting.hasActiveBoundedContext({
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          tags: null,
+          ...boundedContext,
+        }),
+      ).toBe(true);
+    });
+  });
+
+  describe('cache isolation across bounded contexts', () => {
+    it('should evaluate the same datasource LUID independently across datasource id scopes', async () => {
+      const mockDatasource = mockDatasources.datasources[0];
+      mocks.boundedContext = {
+        projectIds: null,
+        datasourceIds: new Set([mockDatasource.id]),
+        workbookIds: null,
+        tags: null,
+      };
+
+      expect(
+        await singletonResourceAccessChecker.isDatasourceAllowed({
+          datasourceLuid: mockDatasource.id,
+          extra,
+        }),
+      ).toEqual({ allowed: true });
+
+      mocks.boundedContext = {
+        projectIds: null,
+        datasourceIds: new Set(['some-other-datasource-id']),
+        workbookIds: null,
+        tags: null,
+      };
+
+      expect(
+        await singletonResourceAccessChecker.isDatasourceAllowed({
+          datasourceLuid: mockDatasource.id,
+          extra,
+        }),
+      ).toEqual({
+        allowed: false,
+        message: [
+          'The set of allowed data sources that can be queried is limited by the server configuration.',
+          `Querying the datasource with LUID ${mockDatasource.id} is not allowed.`,
+        ].join(' '),
+      });
+    });
+
+    it('should evaluate the same workbook LUID independently across workbook id scopes', async () => {
+      mocks.boundedContext = {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: new Set([mockWorkbook.id]),
+        tags: null,
+      };
+
+      expect(
+        await singletonResourceAccessChecker.isWorkbookAllowed({
+          workbookId: mockWorkbook.id,
+          extra,
+        }),
+      ).toEqual({ allowed: true, content: undefined });
+
+      mocks.boundedContext = {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: new Set(['some-other-workbook-id']),
+        tags: null,
+      };
+
+      expect(
+        await singletonResourceAccessChecker.isWorkbookAllowed({
+          workbookId: mockWorkbook.id,
+          extra,
+        }),
+      ).toEqual({
+        allowed: false,
+        message: [
+          'The set of allowed workbooks that can be queried is limited by the server configuration.',
+          `Querying the workbook with LUID ${mockWorkbook.id} is not allowed.`,
+        ].join(' '),
+      });
+    });
+
+    it('should evaluate the same view LUID independently across workbook id scopes', async () => {
+      mocks.mockGetView.mockResolvedValue(mockView);
+      mocks.boundedContext = {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: new Set([mockView.workbook.id]),
+        tags: null,
+      };
+
+      expect(
+        await singletonResourceAccessChecker.isViewAllowed({
+          viewId: mockView.id,
+          extra,
+        }),
+      ).toEqual({ allowed: true });
+
+      mocks.boundedContext = {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: new Set(['some-other-workbook-id']),
+        tags: null,
+      };
+
+      expect(
+        await singletonResourceAccessChecker.isViewAllowed({
+          viewId: mockView.id,
+          extra,
+        }),
+      ).toEqual({
+        allowed: false,
+        message: [
+          'The set of allowed views that can be queried is limited by the server configuration.',
+          `The view with LUID ${mockView.id} cannot be queried because it does not belong to an allowed workbook.`,
+        ].join(' '),
+      });
+      expect(mocks.mockGetView).toHaveBeenCalledTimes(2);
+    });
+
+    it('should evaluate the same custom view LUID independently across workbook id scopes', async () => {
+      mocks.mockGetCustomView.mockResolvedValue(mockCustomView);
+      mocks.mockGetView.mockResolvedValue(mockView);
+      mocks.boundedContext = {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: new Set([mockView.workbook.id]),
+        tags: null,
+      };
+
+      expect(
+        await singletonResourceAccessChecker.isCustomViewAllowed({
+          customViewId: mockCustomView.id,
+          extra,
+        }),
+      ).toEqual({ allowed: true });
+
+      mocks.boundedContext = {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: new Set(['some-other-workbook-id']),
+        tags: null,
+      };
+
+      expect(
+        await singletonResourceAccessChecker.isCustomViewAllowed({
+          customViewId: mockCustomView.id,
+          extra,
+        }),
+      ).toEqual({
+        allowed: false,
+        message: [
+          'The set of allowed views that can be queried is limited by the server configuration.',
+          `The view with LUID ${mockView.id} cannot be queried because it does not belong to an allowed workbook.`,
+        ].join(' '),
+      });
+      expect(mocks.mockGetCustomView).toHaveBeenCalledTimes(2);
+      expect(mocks.mockGetView).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('isDatasourceAllowed', () => {
@@ -309,12 +515,9 @@ describe('ResourceAccessChecker', () => {
           ).toEqual({ allowed: true });
 
           let expectedNumberOfCalls = 0;
-          if (projectIds || tags) {
-            // If project or tag filtering is enabled, we cannot cache the result so we need to call the "Get View" API each time.
+          if (projectIds || workbookIds || tags) {
+            // If any bounded context is enabled, we cannot cache the result so we need to call the "Get View" API each time.
             expectedNumberOfCalls = 2;
-          } else if (workbookIds) {
-            // If only workbook filtering is enabled, we can cache the result so we only need to call the "Get View" API once.
-            expectedNumberOfCalls = 1;
           }
 
           expect(mocks.mockGetView).toHaveBeenCalledTimes(expectedNumberOfCalls);
@@ -385,12 +588,9 @@ describe('ResourceAccessChecker', () => {
           });
 
           let expectedNumberOfCalls = 0;
-          if (projectIds || tags) {
-            // If project or tag filtering is enabled, we cannot cache the result so we need to call the "Get View" API each time.
+          if (projectIds || workbookIds || tags) {
+            // If any bounded context is enabled, we cannot cache the result so we need to call the "Get View" API each time.
             expectedNumberOfCalls = 2;
-          } else if (workbookIds) {
-            // If only workbook filtering is enabled, we can cache the result so we only need to call the "Get View" API once.
-            expectedNumberOfCalls = 1;
           }
 
           expect(mocks.mockGetView).toHaveBeenCalledTimes(expectedNumberOfCalls);
