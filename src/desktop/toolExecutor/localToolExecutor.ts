@@ -127,7 +127,8 @@ export class LocalExecutor extends ToolExecutor {
     return Ok(commandResult);
   }
 
-  async getEvents({ sinceSequence }: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>> {
+  async getEvents(args?: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>> {
+    const { sinceSequence } = args ?? {};
     const getEventsResult = await this.agentApiClient.getEvents(sinceSequence);
     if (getEventsResult.isErr()) {
       const error = getEventsResult.error;
