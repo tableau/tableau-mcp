@@ -166,12 +166,6 @@ const getNewRestApiInstanceAsync = async (
     }
   }
 
-  log({
-    message: `Auth established via ${config.auth}`,
-    level: 'info',
-    logger: 'auth',
-  });
-
   return { restApi, signOutWhenCompleted };
 };
 
