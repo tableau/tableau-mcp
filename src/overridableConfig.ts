@@ -1,4 +1,4 @@
-import { ProcessEnvEx } from '../types/process-env.js';
+import { ProcessEnvWeb } from '../types/process-env.js';
 import { removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import {
   isWebToolGroupName,
@@ -18,7 +18,7 @@ const overridableVariables = [
   'MAX_RESULT_LIMITS',
   'DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS',
   'DISABLE_METADATA_API_REQUESTS',
-] as const satisfies ReadonlyArray<keyof ProcessEnvEx>;
+] as const satisfies ReadonlyArray<keyof ProcessEnvWeb>;
 
 type OverridableVariable = (typeof overridableVariables)[number];
 export function isOverridableVariable(variable: unknown): variable is OverridableVariable {

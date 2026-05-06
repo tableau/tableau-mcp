@@ -1,6 +1,12 @@
-export interface ProcessEnvEx {
-  AUTH: string | undefined;
+interface ProcessEnvBase {
   TRANSPORT: string | undefined;
+  DEFAULT_LOG_LEVEL: string | undefined;
+  ENABLED_LOGGERS: string | undefined;
+  FILE_LOGGER_DIRECTORY: string | undefined;
+}
+
+export interface ProcessEnvWeb extends ProcessEnvBase {
+  AUTH: string | undefined;
   SSL_KEY: string | undefined;
   SSL_CERT: string | undefined;
   HTTP_PORT_ENV_VAR_NAME: string | undefined;
@@ -22,7 +28,6 @@ export interface ProcessEnvEx {
   UAT_KEY_ID: string | undefined;
   JWT_ADDITIONAL_PAYLOAD: string | undefined;
   DATASOURCE_CREDENTIALS: string | undefined;
-  DEFAULT_LOG_LEVEL: string | undefined;
   DISABLE_LOG_MASKING: string | undefined;
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;
@@ -32,8 +37,6 @@ export interface ProcessEnvEx {
   DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: string | undefined;
   DISABLE_METADATA_API_REQUESTS: string | undefined;
   DISABLE_SESSION_MANAGEMENT: string | undefined;
-  ENABLED_LOGGERS: string | undefined;
-  FILE_LOGGER_DIRECTORY: string | undefined;
   INCLUDE_PROJECT_IDS: string | undefined;
   INCLUDE_DATASOURCE_IDS: string | undefined;
   INCLUDE_WORKBOOK_IDS: string | undefined;
@@ -68,9 +71,16 @@ export interface ProcessEnvEx {
   BREAK_GLASS_DISABLE_GLOBALLY: string | undefined;
 }
 
+export interface ProcessEnvDesktop extends ProcessEnvBase {
+  AGENT_API_BASE: string | undefined;
+  AGENT_API_AUTH_TOKEN: string | undefined;
+  AGENT_API_COMMAND_TIMEOUT_MS: string | undefined;
+  AGENT_API_POLL_INTERVAL_MS: string | undefined;
+}
+
 declare global {
   namespace NodeJS {
-    interface ProcessEnv extends ProcessEnvEx {
+    interface ProcessEnv extends ProcessEnvWeb, ProcessEnvDesktop {
       [key: string]: string | undefined;
     }
   }
