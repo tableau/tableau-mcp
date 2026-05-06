@@ -321,15 +321,13 @@ describe('LocalExecutor', () => {
         events: [
           {
             sequence: 1,
-            type: 'foo',
-            timestamp: '2024-01-01T00:00:00Z',
-            data: { command_id: 'cmd_2026-01-01T00:00:00Z_1' },
+            timestamp: '2026-05-06T16:56:35Z',
+            type: 'doc:editor-commit-ended-event',
           },
           {
             sequence: 2,
-            type: 'bar',
-            timestamp: '2024-01-01T00:00:01Z',
-            data: { command_id: 'cmd_2026-01-01T00:00:00Z_1' },
+            timestamp: '2026-05-06T16:56:35Z',
+            type: 'doc:update-field-relatability-event',
           },
         ],
         latest_sequence: 2,
