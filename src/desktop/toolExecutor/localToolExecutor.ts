@@ -1,5 +1,6 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
+import { getDesktopConfig } from '../../config.desktop';
 import { AgentApiClient } from '../../sdks/desktop/agentApi/client';
 import { GetCommandStatusResponse, GetEventsResponse } from '../../sdks/desktop/agentApi/types';
 import {
@@ -20,18 +21,12 @@ import {
   ToolExecutor,
 } from './toolExecutor';
 
-type LocalExecutorConfig = {
+export type LocalExecutorConfig = {
   agentApiBase: string;
   authToken?: string;
   commandTimeoutMs: number;
   pollIntervalMs: number;
   log?: typeof console.log;
-};
-
-const DEFAULT_CONFIG: LocalExecutorConfig = {
-  agentApiBase: 'http://127.0.0.1:8765/api/v1',
-  commandTimeoutMs: 300_000,
-  pollIntervalMs: 1_000,
 };
 
 export class LocalExecutor extends ToolExecutor {
@@ -41,7 +36,7 @@ export class LocalExecutor extends ToolExecutor {
 
   constructor(config?: Partial<LocalExecutorConfig>) {
     super();
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = { ...getDesktopConfig().localExecutorConfig, ...config };
     this.log = this.config.log;
 
     this.agentApiClient = new AgentApiClient({

@@ -1,10 +1,8 @@
-import { exportedForTesting } from './config.js';
+import { Config } from './config.js';
 import { milliseconds } from './milliseconds.js';
 import { stubDefaultEnvVars } from './testShared.js';
 
 describe('Config', () => {
-  const { Config } = exportedForTesting;
-
   beforeEach(() => {
     vi.resetModules();
     vi.unstubAllEnvs();

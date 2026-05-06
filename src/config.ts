@@ -38,7 +38,6 @@ export class Config extends BaseConfig {
   jwtAdditionalPayload: string;
   datasourceCredentials: string;
   disableLogMasking: boolean;
-  maxRequestTimeoutMs: number;
   disableSessionManagement: boolean;
   tableauServerVersionCheckIntervalInHours: number;
   passthroughAuthUserSessionCheckIntervalInMinutes: number;
@@ -99,7 +98,6 @@ export class Config extends BaseConfig {
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
       DISABLE_LOG_MASKING: disableLogMasking,
-      MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES:
@@ -310,12 +308,6 @@ export class Config extends BaseConfig {
       }
     }
 
-    this.maxRequestTimeoutMs = parseNumber(maxRequestTimeoutMs, {
-      defaultValue: milliseconds.fromMinutes(10),
-      minValue: 5000,
-      maxValue: milliseconds.fromHours(1),
-    });
-
     if (this.auth === 'pat') {
       invariant(patName, 'The environment variable PAT_NAME is not set');
       invariant(patValue, 'The environment variable PAT_VALUE is not set');
@@ -427,7 +419,3 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
 }
 
 export const getConfig = (): Config => new Config();
-
-export const exportedForTesting = {
-  Config,
-};

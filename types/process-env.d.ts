@@ -3,6 +3,7 @@ interface ProcessEnvBase {
   DEFAULT_LOG_LEVEL: string | undefined;
   ENABLED_LOGGERS: string | undefined;
   FILE_LOGGER_DIRECTORY: string | undefined;
+  MAX_REQUEST_TIMEOUT_MS: string | undefined;
 }
 
 export interface ProcessEnvWeb extends ProcessEnvBase {
@@ -31,7 +32,6 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   DISABLE_LOG_MASKING: string | undefined;
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;
-  MAX_REQUEST_TIMEOUT_MS: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
   MAX_RESULT_LIMITS: string | undefined;
   DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: string | undefined;
@@ -74,7 +74,6 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
 export interface ProcessEnvDesktop extends ProcessEnvBase {
   AGENT_API_BASE: string | undefined;
   AGENT_API_AUTH_TOKEN: string | undefined;
-  AGENT_API_COMMAND_TIMEOUT_MS: string | undefined;
   AGENT_API_POLL_INTERVAL_MS: string | undefined;
 }
 

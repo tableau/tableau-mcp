@@ -1,26 +1,34 @@
-import { join } from 'path';
+import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
+import { LocalExecutorConfig } from './desktop/toolExecutor/localToolExecutor.js';
+import { milliseconds } from './milliseconds.js';
+import { parseNumber } from './utils/parseNumber.js';
 
-import { removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
-import { LoggerType, parseLoggerTypes } from './logging/logger.js';
-
-export class Config {
-  transport: 'stdio';
-  defaultLogLevel: string;
-  loggers: Set<LoggerType>;
-  fileLoggerDirectory: string;
+export class Config extends BaseConfig {
+  localExecutorConfig: LocalExecutorConfig;
 
   constructor() {
+    super();
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
     const {
-      DEFAULT_LOG_LEVEL: defaultLogLevel,
-      ENABLED_LOGGERS: logging,
-      FILE_LOGGER_DIRECTORY: fileLoggerDirectory,
+      AGENT_API_BASE: agentApiBase,
+      AGENT_API_AUTH_TOKEN: agentApiAuthToken,
+      AGENT_API_POLL_INTERVAL_MS: agentApiPollIntervalMs,
     } = cleansedVars;
 
-    this.transport = 'stdio';
-    this.defaultLogLevel = defaultLogLevel ?? 'debug';
-    this.loggers = parseLoggerTypes(logging);
-    this.fileLoggerDirectory = fileLoggerDirectory || join(__dirname, 'logs');
+    if (this.transport !== 'stdio') {
+      throw new Error('TRANSPORT must be "stdio" for Tableau Desktop authoring');
+    }
+
+    this.localExecutorConfig = {
+      agentApiBase: agentApiBase ?? 'http://127.0.0.1:8765/api/v1',
+      authToken: agentApiAuthToken ?? '',
+      commandTimeoutMs: this.maxRequestTimeoutMs,
+      pollIntervalMs: parseNumber(agentApiPollIntervalMs, {
+        defaultValue: milliseconds.fromSeconds(1),
+        minValue: milliseconds.fromSeconds(1),
+        maxValue: milliseconds.fromSeconds(10),
+      }),
+    };
   }
 }
 
