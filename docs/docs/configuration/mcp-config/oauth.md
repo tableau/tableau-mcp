@@ -511,3 +511,8 @@ The MCP server supports three OAuth 2.1 grant types:
 - `/Callback`: OAuth callback handler (authorization code only)
 - `/oauth2/token`: Token exchange and refresh (all grant types)
 - `/oauth2/revoke`: Token revocation
+
+For MCP client-facing OAuth cleanup tools, see
+[OAuth Cleanup Tools](../../tools/oauth-cleanup-tools.md). For full cleanup, call
+[`reset-consent`](../../tools/oauth-cleanup-tools.md#reset-consent) before
+[`revoke-access-token`](../../tools/oauth-cleanup-tools.md#revoke-access-token).
