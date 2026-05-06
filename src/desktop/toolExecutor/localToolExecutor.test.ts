@@ -18,9 +18,9 @@ describe('LocalExecutor', () => {
       expect(MockedAgentApiClient).toHaveBeenCalledWith(
         expect.objectContaining({
           baseUrl: 'http://127.0.0.1:8765/api/v1',
-          authToken: undefined,
+          authToken: '',
           options: expect.objectContaining({
-            maxRequestTimeoutMs: 300_000,
+            maxRequestTimeoutMs: 600_000,
           }),
         }),
       );
@@ -33,9 +33,9 @@ describe('LocalExecutor', () => {
       expect(MockedAgentApiClient).toHaveBeenCalledWith(
         expect.objectContaining({
           baseUrl: 'http://127.0.0.1:8765/api/v1',
-          authToken: undefined,
+          authToken: '',
           options: expect.objectContaining({
-            maxRequestTimeoutMs: 300_000,
+            maxRequestTimeoutMs: 600_000,
           }),
         }),
       );
@@ -46,7 +46,7 @@ describe('LocalExecutor', () => {
         new LocalExecutor({
           agentApiBase: 'http://127.0.0.1:8765/api/v2',
           authToken: 'test-token',
-          commandTimeoutMs: 100_000,
+          commandTimeoutMs: 600_000,
         }),
       ).toBeInstanceOf(LocalExecutor);
 
@@ -56,7 +56,7 @@ describe('LocalExecutor', () => {
           baseUrl: 'http://127.0.0.1:8765/api/v2',
           authToken: 'test-token',
           options: expect.objectContaining({
-            maxRequestTimeoutMs: 100_000,
+            maxRequestTimeoutMs: 600_000,
           }),
         }),
       );

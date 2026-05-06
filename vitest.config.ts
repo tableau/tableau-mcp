@@ -13,7 +13,6 @@ export default mergeConfig(
         provider: 'v8',
         include: ['src'],
         exclude: [
-          'src/desktop/**/*',
           'src/scripts/**/*',
           'src/sdks/**/*',
           'src/server/**/*',
