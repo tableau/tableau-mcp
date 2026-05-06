@@ -3,7 +3,6 @@ import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { Err, Ok, Result } from 'ts-results-es';
-import { z } from 'zod';
 
 import {
   ErrorInterceptor,
@@ -13,15 +12,12 @@ import {
   ResponseInterceptor,
 } from '../../interceptors';
 import { agentApis } from './apis';
-import { ExecuteCommandRequest, ExecuteCommandResponse, GetCommandStatusResponse } from './types';
-
-const agentTokenSchema = z.object({
-  created: z.string().datetime(),
-  pid: z.number(),
-  port: z.number(),
-  token: z.string(),
-  version: z.string(),
-});
+import {
+  agentTokenSchema,
+  ExecuteCommandRequest,
+  ExecuteCommandResponse,
+  GetCommandStatusResponse,
+} from './types';
 
 export class AgentApiClient {
   private readonly _apiClient: ZodiosInstance<typeof agentApis>;
@@ -81,15 +77,19 @@ export class AgentApiClient {
     );
   }
 
+  get headers(): { headers: { Authorization: string } } {
+    return {
+      headers: { Authorization: `Bearer ${this.getAuthToken()}` },
+    };
+  }
+
   async executeCommand(
     request: ExecuteCommandRequest,
   ): Promise<Result<ExecuteCommandResponse, unknown>> {
     try {
       return Ok(
         await this._apiClient.executeCommand(request, {
-          headers: {
-            Authorization: `Bearer ${this.getAuthToken()}`,
-          },
+          ...this.headers,
         }),
       );
     } catch (error) {
@@ -102,9 +102,7 @@ export class AgentApiClient {
       return Ok(
         await this._apiClient.getCommandStatus({
           params: { commandId },
-          headers: {
-            Authorization: `Bearer ${this.getAuthToken()}`,
-          },
+          ...this.headers,
         }),
       );
     } catch (error) {

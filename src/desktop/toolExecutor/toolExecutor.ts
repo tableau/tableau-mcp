@@ -11,10 +11,6 @@ export type ExecuteCommandArgs = {
   args?: Record<string, any>;
 };
 
-export type GetEventsArgs = {
-  sinceSequence?: number;
-};
-
 export type ExecuteCommandError =
   | { type: 'command-failed'; error: ExecuteCommandResponse['error'] }
   | { type: 'command-timed-out' }
