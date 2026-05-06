@@ -1,3 +1,4 @@
+import { Config } from '../../config.js';
 import {
   exportedForTesting,
   getProductTelemetry,
@@ -24,7 +25,7 @@ describe('DirectTelemetryForwarder', () => {
   });
 
   it('throws error when endpoint is empty', () => {
-    expect(() => getProductTelemetry('', true, podName)).toThrowError(
+    expect(() => getProductTelemetry('', true, podName, new Config())).toThrowError(
       'Endpoint URL is required for DirectTelemetryForwarder',
     );
   });
@@ -32,7 +33,7 @@ describe('DirectTelemetryForwarder', () => {
   it('sends telemetry with PUT method by default', async () => {
     const properties = { action: 'click', count: 42 };
 
-    const forwarder = getProductTelemetry(endpoint, true, podName);
+    const forwarder = getProductTelemetry(endpoint, true, podName, new Config());
     forwarder.send('tool_call', properties);
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -59,7 +60,7 @@ describe('DirectTelemetryForwarder', () => {
   });
 
   it('uses provided podName for pod field', async () => {
-    const forwarder = getProductTelemetry(endpoint, true, podName);
+    const forwarder = getProductTelemetry(endpoint, true, podName, new Config());
     forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -73,7 +74,7 @@ describe('DirectTelemetryForwarder', () => {
   });
 
   it('uses default service_name', async () => {
-    const forwarder = getProductTelemetry(endpoint, true, podName);
+    const forwarder = getProductTelemetry(endpoint, true, podName, new Config());
     forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -85,7 +86,7 @@ describe('DirectTelemetryForwarder', () => {
   });
 
   it('does not send telemetry when enabled is false', () => {
-    const forwarder = getProductTelemetry(endpoint, false, podName);
+    const forwarder = getProductTelemetry(endpoint, false, podName, new Config());
     forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).not.toHaveBeenCalled();
