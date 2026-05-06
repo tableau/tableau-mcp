@@ -9,7 +9,7 @@ import styles from './embed-tableau-viz.module.css';
 import { getEmbeddingApiUrl } from './getEmbeddingApiUrl.js';
 import { createIframeForEmbeddedContainer } from './iframeWithSrcDocBuilder.js';
 
-const embedVizResultSchema = z.object({ url: z.string(), token: z.string() });
+const embedVizResultSchema = z.object({ url: z.string(), token: z.string().optional() });
 type EmbedVizResult = z.infer<typeof embedVizResultSchema>;
 
 function parseToolResult(callToolResult: CallToolResult): EmbedVizResult | null {
@@ -110,10 +110,10 @@ function EmbedTableauViz({
     if (!container || !parsed) return;
 
     const { url: workbookUrl, token } = parsed;
-    if (!token) return;
+    const tokenAttribute = token ? ` token="${token}"` : '';
     const iframe = createIframeForEmbeddedContainer(
       getEmbeddingApiUrl(workbookUrl),
-      `<div id="component-container"><tableau-viz src="${workbookUrl}" token="${token}" width="100%" height="600"></tableau-viz></div>`,
+      `<div id="component-container" style="height:100%;width:100%;"><tableau-viz src="${workbookUrl}"${tokenAttribute} width="100%" height="100%"></tableau-viz></div>`,
     );
     container.appendChild(iframe);
 
