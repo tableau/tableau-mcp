@@ -27,18 +27,3 @@ export const executeCommandResponseSchema = z.object({
   error: z.object({ code: z.string(), message: z.string(), recoverable: z.boolean() }).optional(),
 });
 export type ExecuteCommandResponse = z.infer<typeof executeCommandResponseSchema>;
-
-export const eventSchema = z
-  .object({
-    sequence: z.number(),
-    type: z.string(),
-    timestamp: z.string().datetime(),
-  })
-  .passthrough();
-
-export const getEventsResponseSchema = z.object({
-  events: z.array(eventSchema),
-  latest_sequence: z.number(),
-  count: z.number(),
-});
-export type GetEventsResponse = z.infer<typeof getEventsResponseSchema>;

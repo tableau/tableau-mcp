@@ -3,7 +3,6 @@ import { Result } from 'ts-results-es';
 import {
   ExecuteCommandResponse,
   GetCommandStatusResponse,
-  GetEventsResponse,
 } from '../../sdks/desktop/agentApi/types';
 
 export type ExecuteCommandArgs = {
@@ -28,5 +27,4 @@ export abstract class ToolExecutor {
   abstract executeCommand(
     args: ExecuteCommandArgs,
   ): Promise<Result<GetCommandStatusResponse, ExecuteCommandError>>;
-  abstract getEvents(args: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>>;
 }

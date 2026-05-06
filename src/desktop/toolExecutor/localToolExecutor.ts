@@ -2,7 +2,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 
 import { getDesktopConfig } from '../../config.desktop';
 import { AgentApiClient } from '../../sdks/desktop/agentApi/client';
-import { GetCommandStatusResponse, GetEventsResponse } from '../../sdks/desktop/agentApi/types';
+import { GetCommandStatusResponse } from '../../sdks/desktop/agentApi/types';
 import {
   ErrorInterceptor,
   getRequestInterceptorConfig,
@@ -14,12 +14,7 @@ import {
 } from '../../sdks/interceptors';
 import { isAxiosError } from '../../utils/axios';
 import { getExceptionMessage } from '../../utils/getExceptionMessage';
-import {
-  ExecuteCommandArgs,
-  ExecuteCommandError,
-  GetEventsArgs,
-  ToolExecutor,
-} from './toolExecutor';
+import { ExecuteCommandArgs, ExecuteCommandError, ToolExecutor } from './toolExecutor';
 
 export type LocalExecutorConfig = {
   agentApiBase: string;
@@ -125,22 +120,6 @@ export class LocalExecutor extends ToolExecutor {
     }
 
     return Ok(commandResult);
-  }
-
-  async getEvents(args?: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>> {
-    const { sinceSequence } = args ?? {};
-    const getEventsResult = await this.agentApiClient.getEvents(sinceSequence);
-    if (getEventsResult.isErr()) {
-      const error = getEventsResult.error;
-      this.log?.({
-        message: `Failed to get events. Reason: ${getExceptionMessage(error)}`,
-        level: 'error',
-        logger: 'LocalExecutor',
-        data: error,
-      });
-    }
-
-    return getEventsResult;
   }
 
   private async waitForCommand(

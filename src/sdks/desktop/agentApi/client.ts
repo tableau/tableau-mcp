@@ -13,12 +13,7 @@ import {
   ResponseInterceptor,
 } from '../../interceptors';
 import { agentApis } from './apis';
-import {
-  ExecuteCommandRequest,
-  ExecuteCommandResponse,
-  GetCommandStatusResponse,
-  GetEventsResponse,
-} from './types';
+import { ExecuteCommandRequest, ExecuteCommandResponse, GetCommandStatusResponse } from './types';
 
 const agentTokenSchema = z.object({
   created: z.string().datetime(),
@@ -107,21 +102,6 @@ export class AgentApiClient {
       return Ok(
         await this._apiClient.getCommandStatus({
           params: { commandId },
-          headers: {
-            Authorization: `Bearer ${this.getAuthToken()}`,
-          },
-        }),
-      );
-    } catch (error) {
-      return Err(error);
-    }
-  }
-
-  async getEvents(sinceSequence?: number): Promise<Result<GetEventsResponse, unknown>> {
-    try {
-      return Ok(
-        await this._apiClient.getEvents({
-          queries: sinceSequence !== undefined ? { since: sinceSequence } : undefined,
           headers: {
             Authorization: `Bearer ${this.getAuthToken()}`,
           },
