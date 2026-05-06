@@ -213,7 +213,7 @@ export function token(
             log({
               message:
                 'Tableau refresh token exchange failed, reusing existing (possibly expired) access token',
-              level: 'error',
+              level: 'debug',
               logger: 'oauth',
             });
             accessToken = await createAccessToken(
@@ -281,7 +281,7 @@ export function token(
         }
       }
     } catch (error) {
-      log({ message: `Token endpoint error: ${error}`, level: 'error', logger: 'oauth' });
+      log({ message: 'Token endpoint error', level: 'error', logger: 'oauth', error: error });
       res.status(500).json({
         error: 'server_error',
         error_description: 'Internal server error',
@@ -374,7 +374,12 @@ async function exchangeRefreshToken(
 
     return Ok(result);
   } catch (error) {
-    log({ message: `Failed to exchange refresh token: ${error}`, level: 'error', logger: 'oauth' });
+    log({
+      message: 'Failed to exchange refresh token',
+      level: 'error',
+      logger: 'oauth',
+      error,
+    });
     return Err('Failed to exchange refresh token');
   }
 }

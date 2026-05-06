@@ -99,9 +99,10 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
         privateKeyContents = readFileSync(this.config.oauth.jwePrivateKeyPath, 'utf8');
       } catch (error) {
         log({
-          message: `Failed to read JWE private key file: ${error}`,
+          message: 'Failed to read JWE private key file',
           level: 'error',
           logger: 'oauth',
+          error: error,
         });
         throw new Error('Failed to read private key file');
       }
@@ -115,9 +116,10 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
       });
     } catch (error) {
       log({
-        message: `Failed to create JWE private key: ${error}`,
+        message: 'Failed to create JWE private key',
         level: 'error',
         logger: 'oauth',
+        error,
       });
       throw new Error('Failed to create private key');
     }

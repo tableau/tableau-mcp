@@ -98,9 +98,10 @@ async function sendTelemetryRequest(req: Request): Promise<void> {
     }
   } catch (error) {
     log({
-      message: error,
+      message: 'Telemetry request failed',
       level: 'error',
       logger: 'telemetry',
+      error,
     });
   }
 }

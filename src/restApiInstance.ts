@@ -212,9 +212,10 @@ export const getRequestErrorInterceptor =
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.request) {
       log({
-        message: `Request ${requestId} failed with error: ${getExceptionMessage(error)}`,
+        message: `Request ${requestId} failed`,
         level: 'error',
         logger: 'rest-api',
+        error: getExceptionMessage(error),
       });
       notifier.error(
         server,
@@ -250,9 +251,10 @@ export const getResponseErrorInterceptor =
   (error, baseUrl) => {
     if (!isAxiosError(error) || !error.response) {
       log({
-        message: `Response from request ${requestId} failed with error: ${getExceptionMessage(error)}`,
+        message: `Response from request ${requestId} failed`,
         level: 'error',
         logger: 'rest-api',
+        error: getExceptionMessage(error),
       });
       notifier.error(
         server,

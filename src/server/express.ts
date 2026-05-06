@@ -164,7 +164,12 @@ export async function startExpressServer({
 
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
-      log({ message: `Error handling MCP request: ${error}`, level: 'error', logger: 'server' });
+      log({
+        message: 'Error handling MCP request',
+        level: 'error',
+        logger: 'server',
+        error: error,
+      });
       if (!res.headersSent) {
         res.status(500).json({
           jsonrpc: '2.0',

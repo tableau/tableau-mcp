@@ -216,9 +216,10 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
         errorCode = '500'; // Default to 500 if no HTTP status can be determined
       }
       log({
-        message: error,
+        message: 'Tool execution failed',
         level: 'error',
         logger: 'tool',
+        error,
       });
       toolResult = getErrorResult(requestId, error);
       return toolResult;

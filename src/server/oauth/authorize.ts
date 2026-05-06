@@ -210,9 +210,10 @@ async function getOAuthRedirectUrl(
     }
   } catch (error) {
     log({
-      message: `Failed to follow Tableau OAuth redirect for site picker: ${error}`,
+      message: 'Failed to follow Tableau OAuth redirect for site picker',
       level: 'debug',
       logger: 'oauth',
+      error: error,
     });
     return initialOAuthUrl;
   }
@@ -251,9 +252,10 @@ async function getClientFromMetadataDoc(
       clientMetadataUrl.hostname = ipAddress;
     } catch (error) {
       log({
-        message: `DNS resolution failed for client metadata URL ${clientMetadataUrl.hostname}: ${error}`,
+        message: `DNS resolution failed for client metadata URL ${clientMetadataUrl.hostname}`,
         level: 'info',
         logger: 'oauth',
+        error,
       });
       return Err({
         error: 'invalid_request',
@@ -305,9 +307,10 @@ async function getClientFromMetadataDoc(
     );
   } catch (error) {
     log({
-      message: `Failed to fetch client metadata from ${originalUrl}: ${error}`,
+      message: `Failed to fetch client metadata from ${originalUrl}`,
       level: 'info',
       logger: 'oauth',
+      error,
     });
     return Err({
       error: 'invalid_request',

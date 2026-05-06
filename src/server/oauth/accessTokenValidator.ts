@@ -104,9 +104,10 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
       });
     } catch (error) {
       log({
-        message: `Embedded access token validation error: ${error}`,
+        message: 'Embedded access token validation error',
         level: 'debug',
         logger: 'oauth',
+        error,
       });
       return new Err('Invalid or expired access token');
     }
@@ -168,9 +169,10 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
       });
     } catch (error) {
       log({
-        message: `Tableau access token validation error: ${error}`,
+        message: 'Tableau access token validation error',
         level: 'debug',
         logger: 'oauth',
+        error,
       });
       return new Err('Invalid or expired access token');
     }

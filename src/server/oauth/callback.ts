@@ -177,7 +177,12 @@ export function callback(
 
       res.redirect(redirectUrl.toString());
     } catch (error) {
-      log({ message: `OAuth callback error: ${error}`, level: 'error', logger: 'oauth' });
+      log({
+        message: 'OAuth callback error',
+        level: 'error',
+        logger: 'oauth',
+        error: error,
+      });
       res.status(500).json({
         error: 'server_error',
         error_description:
@@ -228,9 +233,10 @@ async function exchangeAuthorizationCode({
     return Ok(result);
   } catch (error) {
     log({
-      message: `Failed to exchange authorization code: ${error}`,
+      message: 'Failed to exchange authorization code',
       level: 'error',
       logger: 'oauth',
+      error: error,
     });
     return Err('Failed to exchange authorization code');
   }

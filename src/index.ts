@@ -10,7 +10,6 @@ import { isNotificationLevel, notifier, setNotificationLevel } from './logging/n
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server, serverName, serverVersion } from './server.js';
 import { startExpressServer } from './server/express.js';
-import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 async function startServer(): Promise<void> {
   dotenv.config();
@@ -25,9 +24,10 @@ async function startServer(): Promise<void> {
   // For stdio transport, there are no health checks, but we still await before serving.
   const serverInfoReady = getTableauServerInfo(config.server).catch((error) => {
     log({
-      message: `Fatal error initializing server info: ${getExceptionMessage(error)}`,
+      message: 'Fatal error initializing server info',
       level: 'error',
       logger: 'startup',
+      error,
     });
     process.exit(1);
   });
@@ -104,9 +104,10 @@ async function startServer(): Promise<void> {
 
 startServer().catch((error) => {
   log({
-    message: `Fatal error when starting the server: ${getExceptionMessage(error)}`,
+    message: 'Fatal error when starting the server',
     level: 'error',
     logger: 'startup',
+    error,
   });
   process.exit(1);
 });
