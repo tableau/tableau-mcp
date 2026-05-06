@@ -1,7 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
 
+import { LocalExecutor } from '../../desktop/toolExecutor/localToolExecutor.js';
+import { UnknownError } from '../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../server.desktop.js';
+import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { DesktopTool } from './tool.js';
 
 const paramsSchema = {};
@@ -22,7 +24,16 @@ export const getPlaceholderTool = (server: DesktopMcpServer): DesktopTool<typeof
         extra,
         args: {},
         callback: async () => {
-          return new Ok('placeholder');
+          const executor = new LocalExecutor();
+          await executor.start();
+
+          const eventsResult = await executor.getEvents();
+          if (eventsResult.isErr()) {
+            return new UnknownError(
+              `Failed to get events. Reason: ${getExceptionMessage(eventsResult.error)}`,
+            ).toErr();
+          }
+          return eventsResult;
         },
       });
     },
