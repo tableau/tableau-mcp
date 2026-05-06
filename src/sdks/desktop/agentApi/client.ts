@@ -121,7 +121,7 @@ export class AgentApiClient {
     try {
       return Ok(
         await this._apiClient.getEvents({
-          queries: { since: sinceSequence },
+          queries: sinceSequence !== undefined ? { since: sinceSequence } : undefined,
           headers: {
             Authorization: `Bearer ${this.getAuthToken()}`,
           },
