@@ -89,7 +89,7 @@ async function startServer(): Promise<void> {
   }
 
   if (config.disableLogMasking) {
-    log({ message: 'Log masking is disabled!', level: 'info', logger: 'startup' });
+    log({ message: '⚠️ Log masking is disabled!', level: 'info', logger: 'startup' });
   }
 
   if (config.breakGlassDisableGlobally) {

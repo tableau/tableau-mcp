@@ -42,7 +42,7 @@ export function parseLoggerTypes(value: string | undefined): Set<LoggerType> {
 }
 
 type LogParams = {
-  message: unknown;
+  message: string;
   error?: unknown;
   level: LogLevel;
   logger: string | undefined;
