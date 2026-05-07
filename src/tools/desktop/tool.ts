@@ -57,14 +57,11 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       };
       return toolResult;
     } catch (error) {
-      log(
-        {
-          message: error,
-          level: 'error',
-          logger: 'tool',
-        },
-        extra.config,
-      );
+      log({
+        message: error,
+        level: 'error',
+        logger: 'tool',
+      });
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     }

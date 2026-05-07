@@ -1,5 +1,3 @@
-// When the user does not provide a site name in the Claude MCP Bundle configuration,
-
 import { join } from 'path';
 
 import { LoggerType, parseLoggerTypes } from './logging/logger';
@@ -36,6 +34,7 @@ export abstract class BaseConfig {
   }
 }
 
+// When the user does not provide a site name in the Claude MCP Bundle configuration,
 // Claude doesn't replace its value and sets the site name to "${user_config.site_name}".
 export function removeClaudeMcpBundleUserConfigTemplates(
   envVars: Record<string, string | undefined>,
