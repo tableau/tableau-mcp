@@ -97,7 +97,13 @@ function getSendNotificationMessageFn(level: LoggingLevel) {
       notifier: server.name,
     },
   ) => {
-    getFileLogger()?.log({ message, level, logger: notifier });
+    const fileLogMessage =
+      typeof message === 'string' ? message : safeStringifyNotificationMessage(message);
+    getFileLogger()?.log({
+      message: fileLogMessage,
+      level: mapNotificationLevelToLogLevel(level),
+      logger: notifier,
+    });
 
     if (!shouldNotifyWhenLevelIsAtLeast(level)) {
       return;
@@ -128,4 +134,28 @@ function getSendNotificationMessageFn(level: LoggingLevel) {
       },
     );
   };
+}
+
+function safeStringifyNotificationMessage(message: NotificationMessage): string {
+  try {
+    return JSON.stringify(message);
+  } catch {
+    return '[Unable to serialize notification message]';
+  }
+}
+
+function mapNotificationLevelToLogLevel(level: LoggingLevel): 'debug' | 'info' | 'error' {
+  switch (level) {
+    case 'debug':
+      return 'debug';
+    case 'info':
+    case 'notice':
+      return 'info';
+    case 'warning':
+    case 'error':
+    case 'critical':
+    case 'alert':
+    case 'emergency':
+      return 'error';
+  }
 }
