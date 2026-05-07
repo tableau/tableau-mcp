@@ -1,10 +1,10 @@
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
-import { LocalExecutorConfig } from './desktop/toolExecutor/localToolExecutor.js';
+import { AgentApiClientConfig } from './desktop/getAgentApiClient.js';
 import { milliseconds } from './milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
 
 export class Config extends BaseConfig {
-  localExecutorConfig: LocalExecutorConfig;
+  agentApiClientConfig: AgentApiClientConfig;
 
   constructor() {
     super();
@@ -19,7 +19,7 @@ export class Config extends BaseConfig {
       throw new Error('TRANSPORT must be "stdio" for Tableau Desktop authoring');
     }
 
-    this.localExecutorConfig = {
+    this.agentApiClientConfig = {
       agentApiBase: agentApiBase ?? 'http://127.0.0.1:8765/api/v1',
       authToken: agentApiAuthToken ?? '',
       commandTimeoutMs: this.maxRequestTimeoutMs,

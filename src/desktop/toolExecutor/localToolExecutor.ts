@@ -1,52 +1,22 @@
 import { Err, Ok, Result } from 'ts-results-es';
+import { z } from 'zod';
 
 import { getDesktopConfig } from '../../config.desktop';
-import { AgentApiClient } from '../../sdks/desktop/agentApi/client';
+import { log } from '../../logging/logger';
 import { GetCommandStatusResponse } from '../../sdks/desktop/agentApi/types';
-import {
-  ErrorInterceptor,
-  getRequestInterceptorConfig,
-  getResponseInterceptorConfig,
-  RequestInterceptor,
-  RequestInterceptorConfig,
-  ResponseInterceptor,
-  ResponseInterceptorConfig,
-} from '../../sdks/interceptors';
-import { isAxiosError } from '../../utils/axios';
-import { getExceptionMessage } from '../../utils/getExceptionMessage';
+import { AgentApiClientConfig, getAgentApiClient } from '../getAgentApiClient';
 import { ExecuteCommandArgs, ExecuteCommandError, ToolExecutor } from './toolExecutor';
 
-export type LocalExecutorConfig = {
-  agentApiBase: string;
-  authToken?: string;
-  commandTimeoutMs: number;
-  pollIntervalMs: number;
-  log?: typeof console.log;
-};
-
 export class LocalExecutor extends ToolExecutor {
-  private readonly config: LocalExecutorConfig;
-  private readonly agentApiClient: AgentApiClient;
-  private readonly log: LocalExecutorConfig['log'];
+  private readonly config: AgentApiClientConfig;
 
-  constructor(config?: Partial<LocalExecutorConfig>) {
+  constructor(config?: Partial<AgentApiClientConfig>) {
     super();
-    this.config = { ...getDesktopConfig().localExecutorConfig, ...config };
-    this.log = this.config.log;
-
-    this.agentApiClient = new AgentApiClient({
-      baseUrl: this.config.agentApiBase,
-      authToken: this.config.authToken,
-      options: {
-        maxRequestTimeoutMs: this.config.commandTimeoutMs,
-        requestInterceptor: [this.getRequestInterceptor(), this.getRequestErrorInterceptor()],
-        responseInterceptor: [this.getResponseInterceptor(), this.getResponseErrorInterceptor()],
-      },
-    });
+    this.config = { ...getDesktopConfig().agentApiClientConfig, ...config };
   }
 
   async start(): Promise<void> {
-    this.log?.({
+    log?.({
       message: 'LocalExecutor starting',
       level: 'info',
       logger: 'LocalExecutor',
@@ -57,7 +27,7 @@ export class LocalExecutor extends ToolExecutor {
   }
 
   stop(): void {
-    this.log?.({
+    log?.({
       message: 'LocalExecutor stopped',
       level: 'info',
       logger: 'LocalExecutor',
@@ -68,25 +38,25 @@ export class LocalExecutor extends ToolExecutor {
     return true;
   }
 
-  async executeCommand({
+  async executeCommand<Z extends z.ZodTypeAny = z.ZodTypeAny>({
     command,
     namespace,
     args,
-  }: ExecuteCommandArgs): Promise<Result<GetCommandStatusResponse, ExecuteCommandError>> {
+    schema,
+  }: ExecuteCommandArgs<Z>): Promise<
+    Result<GetCommandStatusResponse & { parsedResult?: z.infer<Z> }, ExecuteCommandError>
+  > {
     args ??= {};
 
-    const executeResult = await this.agentApiClient.executeCommand({
-      namespace,
-      command,
-      args,
-    });
+    const client = await getAgentApiClient(this.config);
+    const executeResult = await client.executeCommand({ namespace, command, args });
 
     if (executeResult.isErr()) {
-      this.log?.({
-        message: `Failed to execute command ${namespace}:${command}. Reason: ${getExceptionMessage(executeResult.error)}`,
+      log?.({
+        message: `Failed to execute command ${namespace}:${command}`,
         level: 'error',
         logger: 'LocalExecutor',
-        data: executeResult.error,
+        error: executeResult.error,
       });
       return Err({ type: 'unknown', error: executeResult.error });
     }
@@ -95,14 +65,14 @@ export class LocalExecutor extends ToolExecutor {
     const commandStatusResult = await this.waitForCommand(commandId);
     if (commandStatusResult.isErr()) {
       const error = commandStatusResult.error;
-      this.log?.({
+      log?.({
         message:
           error.type === 'command-timed-out'
             ? `Command ${commandId} timed out`
-            : `Failed to get status of command ${commandId}. Reason: ${getExceptionMessage(error.error)}`,
+            : `Failed to get status of command ${commandId}`,
         level: 'error',
         logger: 'LocalExecutor',
-        data: error,
+        error,
       });
 
       return commandStatusResult;
@@ -110,13 +80,45 @@ export class LocalExecutor extends ToolExecutor {
 
     const commandResult = commandStatusResult.value;
     if (commandResult.status === 'failed') {
-      this.log?.({
-        message: `Command ${commandId} failed. Reason: ${commandResult.error?.message || 'Unknown error'}`,
+      log?.({
+        message: `Command ${commandId} failed`,
         level: 'error',
         logger: 'LocalExecutor',
-        data: commandResult.error,
+        error: commandResult.error,
       });
       return Err({ type: 'command-failed', error: commandResult.error });
+    }
+
+    if (schema) {
+      let parsedResult: z.infer<Z> | undefined;
+
+      try {
+        const safeParsedResult = schema.safeParse(JSON.parse(commandResult.result?.text ?? ''));
+        if (safeParsedResult.success) {
+          parsedResult = safeParsedResult.data;
+        } else {
+          log?.({
+            message: `Failed to parse command result with schema ${schema.toString()}.`,
+            level: 'error',
+            logger: 'LocalExecutor',
+            error: safeParsedResult.error,
+          });
+          return Err({ type: 'unknown', error: safeParsedResult.error });
+        }
+      } catch (error) {
+        log?.({
+          message: 'Failed to JSON parse command result',
+          level: 'error',
+          logger: 'LocalExecutor',
+          error,
+        });
+        return Err({ type: 'unknown', error });
+      }
+
+      return Ok({
+        ...commandResult,
+        ...(parsedResult ? { parsedResult } : {}),
+      });
     }
 
     return Ok(commandResult);
@@ -128,8 +130,11 @@ export class LocalExecutor extends ToolExecutor {
     const maxAttempts = Math.ceil(this.config.commandTimeoutMs / this.config.pollIntervalMs);
     let attempts = 0;
 
+    const client = await getAgentApiClient(this.config);
+
     while (attempts < maxAttempts) {
-      const commandStatusResult = await this.agentApiClient.getCommandStatus(commandId);
+      const commandStatusResult = await client.getCommandStatus(commandId);
+
       if (commandStatusResult.isErr()) {
         return Err({ type: 'unknown', error: commandStatusResult.error });
       }
@@ -144,101 +149,5 @@ export class LocalExecutor extends ToolExecutor {
     }
 
     return Err({ type: 'command-timed-out' });
-  }
-
-  private getRequestInterceptor(): RequestInterceptor {
-    return (request) => {
-      this.logRequest(request);
-      return request;
-    };
-  }
-
-  private getRequestErrorInterceptor(): ErrorInterceptor {
-    return (error, baseUrl) => {
-      if (!isAxiosError(error) || !error.request) {
-        this.log?.({
-          message: `Request failed with error: ${getExceptionMessage(error)}`,
-          level: 'error',
-          logger: 'LocalExecutor',
-          data: { error },
-        });
-        return;
-      }
-
-      const { request } = error;
-      this.logRequest({
-        baseUrl,
-        ...getRequestInterceptorConfig(request),
-      });
-    };
-  }
-
-  private getResponseInterceptor(): ResponseInterceptor {
-    return (response) => {
-      this.logResponse(response);
-      return response;
-    };
-  }
-
-  private getResponseErrorInterceptor(): ErrorInterceptor {
-    return (error, baseUrl) => {
-      if (!isAxiosError(error) || !error.response) {
-        this.log?.({
-          message: `Response failed with error: ${getExceptionMessage(error)}`,
-          level: 'error',
-          logger: 'LocalExecutor',
-          data: { error },
-        });
-        return;
-      }
-
-      this.logResponse({
-        baseUrl,
-        ...getResponseInterceptorConfig(error.response),
-      });
-    };
-  }
-
-  private logRequest(request: RequestInterceptorConfig): void {
-    const url = new URL(
-      `${request.baseUrl.replace(/\/$/, '')}/${request.url?.replace(/^\//, '') ?? ''}`,
-    );
-    if (request.params && Object.keys(request.params).length > 0) {
-      url.search = new URLSearchParams(request.params).toString();
-    }
-
-    this.log?.({
-      message: 'Agent API request',
-      level: 'debug',
-      logger: 'LocalExecutor',
-      data: {
-        method: request.method,
-        url: url.toString(),
-        headers: request.headers,
-        data: request.data,
-        params: request.params,
-      },
-    });
-  }
-
-  private logResponse(response: ResponseInterceptorConfig): void {
-    const url = new URL(
-      `${response.baseUrl.replace(/\/$/, '')}/${response.url?.replace(/^\//, '') ?? ''}`,
-    );
-    if (response.params && Object.keys(response.params).length > 0) {
-      url.search = new URLSearchParams(response.params).toString();
-    }
-
-    this.log?.({
-      message: 'Agent API response',
-      level: 'debug',
-      logger: 'LocalExecutor',
-      data: {
-        status: response.status,
-        url: url.toString(),
-        headers: response.headers,
-        data: response.data,
-      },
-    });
   }
 }
