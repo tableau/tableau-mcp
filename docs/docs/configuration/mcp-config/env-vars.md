@@ -109,7 +109,7 @@ The default minimum level for sending notifications to MCP clients.
 This value determines the minimum level at which to send notifications to MCP clients. That is,
 if set to `debug`, all notifications will be sent. If set to `error`, only notifications with a
 level of `error` or higher will be sent. Note that MCP clients can
-[change the minimum level](https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/logging#setting-log-level)
+[change the minimum level](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/logging#setting-log-level)
 any time they want.
 
 <hr />
@@ -305,7 +305,7 @@ This variable is site overridable, see [Site Settings](site-settings.md).
 
 When `false` (the default) and using the Streamable HTTP transport, the MCP server will create and
 manage sessions as per the
-[Session Management](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#session-management)
+[Session Management](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#session-management)
 section of the MCP spec. The only state persisted in the session from one request to another is
 information about the client's identity, capabilities, and protocol version compatibility.
 
