@@ -9,6 +9,8 @@ import { writeToStderr } from './logger.js';
 
 export type LogEntry = {
   message: unknown;
+  data?: unknown;
+  error?: unknown;
   level: LoggingLevel;
   logger: string | undefined;
 };
