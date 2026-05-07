@@ -129,7 +129,7 @@ describe('OAuth', () => {
   it('should provide a protected resource metadata endpoint for the OAuth 2.1 flow', async () => {
     const { app } = await startServer();
 
-    const response = await request(app).get('/.well-known/oauth-protected-resource');
+    const response = await request(app).get(`/${serverName}/.well-known/oauth-protected-resource`);
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({

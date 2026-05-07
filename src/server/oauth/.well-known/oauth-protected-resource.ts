@@ -12,7 +12,7 @@ import { getSupportedScopes } from '../scopes.js';
  * WWW-Authenticate header in 401 response.
  */
 export function oauthProtectedResource(app: express.Application): void {
-  app.get('/.well-known/oauth-protected-resource', (_req, res) => {
+  app.get(`/${serverName}/.well-known/oauth-protected-resource`, (_req, res) => {
     const { issuer, advertiseApiScopes, resourceUri, enforceScopes } = getConfig().oauth;
     res.json({
       resource: `${resourceUri}/${serverName}`,
