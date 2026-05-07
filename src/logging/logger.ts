@@ -1,11 +1,10 @@
 import { getConfig } from '../config.js';
 import { getFileLogger } from './fileLogger.js';
+import type { LogEntry, LogLevel } from './types.js';
 
 export const loggerTypes = ['fileLogger', 'appLogger'] as const;
 export type LoggerType = (typeof loggerTypes)[number];
 const validLoggerTypes = new Set(loggerTypes);
-
-export type LogLevel = 'debug' | 'info' | 'error';
 
 const logLevelSeverity: Record<LogLevel, number> = {
   debug: 0,
@@ -41,14 +40,7 @@ export function parseLoggerTypes(value: string | undefined): Set<LoggerType> {
   );
 }
 
-type LogParams = {
-  message: string;
-  error?: unknown;
-  level: LogLevel;
-  logger: string | undefined;
-};
-
-export function log(entry: LogParams): void {
+export function log(entry: LogEntry): void {
   const config = getConfig();
   if (!shouldLog(entry.level, config.logLevel)) {
     return;

@@ -4,12 +4,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
-
-export type LogEntry = {
-  message: unknown;
-  level: string;
-  logger: string | undefined;
-};
+import type { LogEntry } from './types.js';
 
 let _fileLogger: FileLogger | undefined;
 

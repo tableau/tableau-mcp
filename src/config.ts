@@ -2,7 +2,8 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
-import { LoggerType, LogLevel, parseLoggerTypes, parseLogLevel } from './logging/logger.js';
+import { LoggerType, parseLoggerTypes, parseLogLevel } from './logging/logger.js';
+import type { LogLevel } from './logging/types.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
