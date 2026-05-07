@@ -1,6 +1,6 @@
 import { join } from 'path';
 
-import { LoggerType, parseLoggerTypes } from './logging/logger';
+import { LoggerType, parseLoggerTypes } from './logging/loggerType';
 import { milliseconds } from './milliseconds';
 import { isTransport, TransportName } from './transports';
 import { parseNumber } from './utils/parseNumber';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseLoggerTypes } from './logger.js';
+import { parseLoggerTypes } from './loggerType';
 
 describe('parseLoggerTypes', () => {
   it('should return appLogger by default when value is undefined', () => {

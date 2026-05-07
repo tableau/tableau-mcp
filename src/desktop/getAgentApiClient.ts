@@ -44,16 +44,15 @@ export const getRequestErrorInterceptor = (): ErrorInterceptor => (error, baseUr
     log?.({
       message: 'Request failed',
       level: 'error',
-      logger: 'LocalExecutor',
+      logger: 'AgentApiClient',
       error,
     });
     return;
   }
 
-  const { request } = error;
   logRequest({
     baseUrl,
-    ...getRequestInterceptorConfig(request),
+    ...getRequestInterceptorConfig(error.request),
   });
 };
 
@@ -67,7 +66,7 @@ export const getResponseErrorInterceptor = (): ErrorInterceptor => (error, baseU
     log?.({
       message: 'Response failed',
       level: 'error',
-      logger: 'LocalExecutor',
+      logger: 'AgentApiClient',
       error,
     });
     return;
@@ -90,13 +89,12 @@ function logRequest(request: RequestInterceptorConfig): void {
   log?.({
     message: 'Agent API request',
     level: 'debug',
-    logger: 'LocalExecutor',
+    logger: 'AgentApiClient',
     data: {
       method: request.method,
       url: url.toString(),
       headers: request.headers,
       data: request.data,
-      params: request.params,
     },
   });
 }
@@ -112,7 +110,7 @@ function logResponse(response: ResponseInterceptorConfig): void {
   log?.({
     message: 'Agent API response',
     level: 'debug',
-    logger: 'LocalExecutor',
+    logger: 'AgentApiClient',
     data: {
       status: response.status,
       url: url.toString(),

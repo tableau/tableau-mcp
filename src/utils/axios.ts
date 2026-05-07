@@ -1,5 +1,6 @@
 import axios, {
   AxiosRequestConfig,
+  AxiosRequestHeaders,
   AxiosResponse,
   isAxiosError,
 } from '../../node_modules/axios/index.js';
@@ -16,4 +17,4 @@ export function getStringResponseHeader(
 }
 
 // We re-export Axios types to avoid import clutter in the codebase.
-export { axios, AxiosRequestConfig, AxiosResponse, isAxiosError };
+export { axios, AxiosRequestConfig, AxiosRequestHeaders, AxiosResponse, isAxiosError };
