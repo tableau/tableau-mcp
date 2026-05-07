@@ -77,9 +77,14 @@ export class AgentApiClient {
     );
   }
 
-  get headers(): { headers: { Authorization: string } } {
+  get headers(): { headers: { Authorization: `Bearer ${string}` } } | undefined {
+    const authToken = this.getAuthToken();
+    if (!authToken) {
+      return;
+    }
+
     return {
-      headers: { Authorization: `Bearer ${this.getAuthToken()}` },
+      headers: { Authorization: `Bearer ${authToken}` },
     };
   }
 
