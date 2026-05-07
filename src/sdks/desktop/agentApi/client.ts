@@ -41,7 +41,7 @@ export class AgentApiClient {
 
     this._tokenPath =
       process.platform === 'win32'
-        ? join(process.env.LOCALAPPDATA!, 'Tableau', 'Desktop', 'agent-token.txt')
+        ? join(process.env.LOCALAPPDATA ?? '', 'Tableau', 'Desktop', 'agent-token.txt')
         : join(homedir(), '.tableau', 'agent-token.txt');
 
     this._apiClient = new Zodios(baseUrl, agentApis, {
