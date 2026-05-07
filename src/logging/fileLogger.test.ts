@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { FileLogger } from './fileLogger.js';
+import type { LogLevel } from './types.js';
 
 const logLineSchema = z.object({
   timestamp: z.coerce.date(),
@@ -126,7 +127,7 @@ describe('FileLogger', () => {
   });
 
   it('should handle different log levels correctly', async () => {
-    const messages: Array<{ message: string; level: string }> = [
+    const messages: Array<{ message: string; level: LogLevel }> = [
       { message: 'Debug message', level: 'debug' },
       { message: 'Info message', level: 'info' },
       { message: 'Error message', level: 'error' },
