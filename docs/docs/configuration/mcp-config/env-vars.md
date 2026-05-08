@@ -112,7 +112,7 @@ level of `error` or higher will be sent. Note that MCP clients can
 [change the minimum level](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/logging#setting-log-level)
 any time they want.
 
-Note: this value was named DEFAULT_LOG_LEVEL until version 2.0.0
+Note: this variable was named DEFAULT_LOG_LEVEL until version 2.0.0
 
 <hr />
 
