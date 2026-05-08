@@ -1,3 +1,4 @@
+import { Config, getDesktopConfig } from '../config.desktop';
 import { log } from '../logging/logger';
 import { DesktopDiscoverer } from './desktopDiscoverer';
 import { DesktopInstance } from './desktopInstance';
@@ -13,6 +14,11 @@ export type DesktopConnection = {
 
 export class SessionManager {
   private readonly sessions: Map<string, DesktopConnection> = new Map();
+  private readonly desktopConfig: Config;
+
+  constructor() {
+    this.desktopConfig = getDesktopConfig();
+  }
 
   async getExecutor(sessionId: string): Promise<ToolExecutor> {
     let session = this.sessions.get(sessionId);
@@ -39,16 +45,19 @@ export class SessionManager {
       };
 
       this.sessions.set(sessionId, session);
-      log?.({
-        message: 'Session created',
-        level: 'info',
-        logger: 'SessionManager',
-        data: {
-          sessionId,
-          pid: desktopInstance.pid,
-          port: desktopInstance.port,
+      log?.(
+        {
+          message: 'Session created',
+          level: 'info',
+          logger: 'SessionManager',
+          data: {
+            sessionId,
+            pid: desktopInstance.pid,
+            port: desktopInstance.port,
+          },
         },
-      });
+        this.desktopConfig,
+      );
     }
 
     session.lastAccess = Date.now();
