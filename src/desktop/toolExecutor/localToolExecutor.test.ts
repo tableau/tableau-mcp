@@ -7,6 +7,7 @@ import { AgentApiClient } from '../../sdks/desktop/agentApi/client';
 import {
   ExecuteCommandResponse,
   GetCommandStatusResponse,
+  GetEventsResponse,
 } from '../../sdks/desktop/agentApi/types';
 import { LocalExecutor } from './localToolExecutor';
 
@@ -292,6 +293,88 @@ describe('LocalExecutor', () => {
       expect(result.isOk()).toBe(true);
       expect(result.unwrap()).toEqual(mockCompletedStatus);
       expect(mockGetCommandStatus).toHaveBeenCalledTimes(3);
+    });
+
+    describe('getEvents', () => {
+      const mockEventsResponse: GetEventsResponse = {
+        events: [
+          {
+            sequence: 1,
+            timestamp: '2026-05-06T16:56:35Z',
+            type: 'doc:editor-commit-ended-event',
+          },
+          {
+            sequence: 2,
+            timestamp: '2026-05-06T16:56:35Z',
+            type: 'doc:update-field-relatability-event',
+          },
+        ],
+        latest_sequence: 2,
+        count: 2,
+      };
+
+      it('should successfully get events', async () => {
+        const mockGetEvents = vi.fn().mockResolvedValue(Ok(mockEventsResponse));
+        const MockedAgentApiClient = vi.mocked(AgentApiClient);
+        MockedAgentApiClient.mockImplementation(
+          () =>
+            ({
+              getEvents: mockGetEvents,
+            }) as unknown as AgentApiClient,
+        );
+
+        const localExecutor = new LocalExecutor();
+        const result = await localExecutor.getEvents();
+
+        expect(result.isOk()).toBe(true);
+        expect(result.unwrap()).toEqual(mockEventsResponse);
+        expect(mockGetEvents).toHaveBeenCalledWith(undefined);
+      });
+
+      it('should successfully get events with sinceSequence', async () => {
+        const mockGetEvents = vi.fn().mockResolvedValue(Ok(mockEventsResponse));
+        const MockedAgentApiClient = vi.mocked(AgentApiClient);
+        MockedAgentApiClient.mockImplementation(
+          () =>
+            ({
+              getEvents: mockGetEvents,
+            }) as unknown as AgentApiClient,
+        );
+
+        const localExecutor = new LocalExecutor();
+        const result = await localExecutor.getEvents({ sinceSequence: 1 });
+
+        expect(result.isOk()).toBe(true);
+        expect(result.unwrap()).toEqual(mockEventsResponse);
+        expect(mockGetEvents).toHaveBeenCalledWith(1);
+      });
+
+      it('should handle get events failure', async () => {
+        const error = new Error('Failed to get events');
+        const mockGetEvents = vi.fn().mockResolvedValue(Err(error));
+        const MockedAgentApiClient = vi.mocked(AgentApiClient);
+        MockedAgentApiClient.mockImplementation(
+          () =>
+            ({
+              getEvents: mockGetEvents,
+            }) as unknown as AgentApiClient,
+        );
+
+        const localExecutor = new LocalExecutor();
+        const result = await localExecutor.getEvents();
+
+        expect(result.isErr()).toBe(true);
+        expect(result.unwrapErr()).toBe(error);
+        expect(logger.log).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Failed to get events',
+            level: 'error',
+            logger: 'LocalExecutor',
+            error,
+          }),
+          getDesktopConfig(),
+        );
+      });
     });
   });
 });

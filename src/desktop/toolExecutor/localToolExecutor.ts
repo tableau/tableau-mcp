@@ -3,9 +3,14 @@ import { z } from 'zod';
 
 import { Config, getDesktopConfig } from '../../config.desktop';
 import { log } from '../../logging/logger';
-import { GetCommandStatusResponse } from '../../sdks/desktop/agentApi/types';
+import { GetCommandStatusResponse, GetEventsResponse } from '../../sdks/desktop/agentApi/types';
 import { AgentApiClientConfig, getAgentApiClient } from '../getAgentApiClient';
-import { ExecuteCommandArgs, ExecuteCommandError, ToolExecutor } from './toolExecutor';
+import {
+  ExecuteCommandArgs,
+  ExecuteCommandError,
+  GetEventsArgs,
+  ToolExecutor,
+} from './toolExecutor';
 
 export class LocalExecutor extends ToolExecutor {
   private readonly config: AgentApiClientConfig;
@@ -145,6 +150,27 @@ export class LocalExecutor extends ToolExecutor {
     }
 
     return Ok(commandResult);
+  }
+
+  async getEvents(args?: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>> {
+    const { sinceSequence } = args ?? {};
+
+    const client = await getAgentApiClient(this.config);
+    const getEventsResult = await client.getEvents(sinceSequence);
+    if (getEventsResult.isErr()) {
+      const error = getEventsResult.error;
+      log?.(
+        {
+          message: 'Failed to get events',
+          level: 'error',
+          logger: 'LocalExecutor',
+          error,
+        },
+        this.desktopConfig,
+      );
+    }
+
+    return getEventsResult;
   }
 
   private async waitForCommand(

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   ExecuteCommandResponse,
   GetCommandStatusResponse,
+  GetEventsResponse,
 } from '../../sdks/desktop/agentApi/types';
 
 export type ExecuteCommandArgs<Z extends z.ZodTypeAny = z.ZodTypeAny> = {
@@ -11,6 +12,10 @@ export type ExecuteCommandArgs<Z extends z.ZodTypeAny = z.ZodTypeAny> = {
   namespace: string;
   args?: Record<string, any>;
   schema?: Z;
+};
+
+export type GetEventsArgs = {
+  sinceSequence?: number;
 };
 
 export type ExecuteCommandError =
@@ -25,4 +30,5 @@ export abstract class ToolExecutor {
   abstract executeCommand<Z extends z.ZodTypeAny = z.ZodTypeAny>(
     args: ExecuteCommandArgs<Z>,
   ): Promise<Result<GetCommandStatusResponse & { parsedResult?: z.infer<Z> }, ExecuteCommandError>>;
+  abstract getEvents(args: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>>;
 }

@@ -1,9 +1,11 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
+import { z } from 'zod';
 
 import {
   executeCommandRequestSchema,
   executeCommandResponseSchema,
   getCommandStatusResponseSchema,
+  getEventsResponseSchema,
   healthResponseSchema,
 } from './types';
 
@@ -30,6 +32,21 @@ const executeCommandEndpoint = makeEndpoint({
   response: executeCommandResponseSchema,
 });
 
+const getEventsEndpoint = makeEndpoint({
+  method: 'get',
+  path: '/events',
+  alias: 'getEvents',
+  description: 'Gets events from Tableau.',
+  parameters: [
+    {
+      name: 'since',
+      type: 'Query',
+      schema: z.number().optional(),
+    },
+  ],
+  response: getEventsResponseSchema,
+});
+
 const healthEndpoint = makeEndpoint({
   method: 'get',
   path: '/health',
@@ -38,5 +55,5 @@ const healthEndpoint = makeEndpoint({
   response: healthResponseSchema,
 });
 
-const agentApi = makeApi([getCommandStatusEndpoint, executeCommandEndpoint, healthEndpoint]);
+const agentApi = makeApi([getCommandStatusEndpoint, executeCommandEndpoint, getEventsEndpoint, healthEndpoint]);
 export const agentApis = [...agentApi] as const satisfies ZodiosEndpointDefinitions;
