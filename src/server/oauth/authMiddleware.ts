@@ -2,6 +2,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
+import { serverName } from '../../server.js';
 import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
@@ -50,7 +51,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
 
       const { enforceScopes, advertiseApiScopes, resourceUri } = getConfig().oauth;
       const baseUrl = new URL(resourceUri).origin;
-      const resourceMetadataUrl = `${baseUrl}/tableau-mcp/.well-known/oauth-protected-resource`;
+      const resourceMetadataUrl = `${baseUrl}/${serverName}/.well-known/oauth-protected-resource`;
       const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
       const requiredApiScopes = getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
       const scopeParam =
@@ -110,7 +111,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       if (missingScopes.length > 0) {
         const { resourceUri } = getConfig().oauth;
         const baseUrl = new URL(resourceUri).origin;
-        const resourceMetadataUrl = `${baseUrl}/tableau-mcp/.well-known/oauth-protected-resource`;
+        const resourceMetadataUrl = `${baseUrl}/${serverName}/.well-known/oauth-protected-resource`;
         const requiredScopesForChallenge = [
           ...requiredMcpScopes,
           ...(shouldCheckApiScopes ? requiredApiScopes : []),

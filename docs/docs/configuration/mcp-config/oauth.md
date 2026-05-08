@@ -353,10 +353,10 @@ sequenceDiagram
 
     %% Step 1: Initial Request (401 Unauthorized)
     Client->>MCP: 1. Request to protected resource<br/>(no Bearer token)
-    MCP->>Client: 2. 401 Unauthorized<br/>WWW-Authenticate: Bearer realm="MCP",<br />resource_metadata="/.well-known/oauth-protected-resource"
+    MCP->>Client: 2. 401 Unauthorized<br/>WWW-Authenticate: Bearer realm="MCP",<br />resource_metadata="/tableau-mcp/.well-known/oauth-protected-resource"
 
     %% Step 2: Resource Metadata Discovery
-    Client->>MCP: 3. GET /.well-known/oauth-protected-resource
+    Client->>MCP: 3. GET /tableau-mcp/.well-known/oauth-protected-resource
     MCP->>Client: 4. Resource metadata<br/>{resource, authorization_servers, bearer_methods_supported}
 
     %% Step 3: Authorization Server Metadata
@@ -504,7 +504,7 @@ The MCP server supports three OAuth 2.1 grant types:
 
 #### Endpoints
 
-- `/.well-known/oauth-protected-resource`: Resource metadata discovery
+- `/tableau-mcp/.well-known/oauth-protected-resource`: Resource metadata discovery
 - `/.well-known/oauth-authorization-server`: Authorization server metadata
 - `/oauth2/register`: Dynamic client registration
 - `/oauth2/authorize`: Authorization endpoint with PKCE (authorization code only)
