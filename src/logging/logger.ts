@@ -1,16 +1,10 @@
 import { getConfig } from '../config.js';
 import { getFileLogger } from './fileLogger.js';
-import type { LogEntry, LogLevel } from './types.js';
+import { LogEntry, LogLevel, logLevelSeverity } from './types.js';
 
 export const loggerTypes = ['fileLogger', 'appLogger'] as const;
 export type LoggerType = (typeof loggerTypes)[number];
 const validLoggerTypes = new Set(loggerTypes);
-
-const logLevelSeverity: Record<LogLevel, number> = {
-  debug: 0,
-  info: 1,
-  error: 2,
-};
 
 export function shouldLog(entryLevel: LogLevel, minLevel: LogLevel): boolean {
   return logLevelSeverity[entryLevel] >= logLevelSeverity[minLevel];

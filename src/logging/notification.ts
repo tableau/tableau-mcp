@@ -3,6 +3,7 @@ import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 import { Server } from '../server.js';
 import { ToolName } from '../tools/toolName.js';
 import { getFileLogger } from './fileLogger.js';
+import { orderedLogLevels } from './types.js';
 
 type NotificationName = 'rest-api' | (string & {});
 type NotificationType = LoggingLevel | 'request' | 'response' | 'tool' | 'request-cancelled';
@@ -11,16 +12,7 @@ type NotificationMessage = {
   [key: string]: any;
 };
 
-export const notificationLevels = [
-  'debug',
-  'info',
-  'notice',
-  'warning',
-  'error',
-  'critical',
-  'alert',
-  'emergency',
-] as const;
+export const notificationLevels = orderedLogLevels;
 
 let currentNotificationLevel: LoggingLevel = 'debug';
 
@@ -101,7 +93,7 @@ function getSendNotificationMessageFn(level: LoggingLevel) {
       typeof message === 'string' ? message : safeStringifyNotificationMessage(message);
     getFileLogger()?.log({
       message: fileLogMessage,
-      level: mapNotificationLevelToLogLevel(level),
+      level,
       logger: notifier,
     });
 
@@ -141,21 +133,5 @@ function safeStringifyNotificationMessage(message: NotificationMessage): string 
     return JSON.stringify(message);
   } catch {
     return '[Unable to serialize notification message]';
-  }
-}
-
-function mapNotificationLevelToLogLevel(level: LoggingLevel): 'debug' | 'info' | 'error' {
-  switch (level) {
-    case 'debug':
-      return 'debug';
-    case 'info':
-    case 'notice':
-      return 'info';
-    case 'warning':
-    case 'error':
-    case 'critical':
-    case 'alert':
-    case 'emergency':
-      return 'error';
   }
 }

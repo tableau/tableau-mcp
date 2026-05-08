@@ -124,8 +124,13 @@ transport, and file logger).
 - Default: `info`
 - Possible values:
   - `debug` — all log entries
-  - `info` — info and above
-  - `error` — errors only
+  - `info`
+  - `notice`
+  - `warning`
+  - `error`
+  - `critical`
+  - `alert`
+  - `emergency`
 
 Log entries with a level below the configured value are silently dropped. This is independent of
 [`DEFAULT_NOTIFICATION_LEVEL`](#default_notification_level), which controls MCP client notifications.

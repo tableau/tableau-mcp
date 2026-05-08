@@ -162,12 +162,17 @@ describe('parseLogLevel', () => {
   it('should parse valid log levels', () => {
     expect(parseLogLevel('debug')).toBe('debug');
     expect(parseLogLevel('info')).toBe('info');
+    expect(parseLogLevel('notice')).toBe('notice');
+    expect(parseLogLevel('warning')).toBe('warning');
     expect(parseLogLevel('error')).toBe('error');
+    expect(parseLogLevel('critical')).toBe('critical');
+    expect(parseLogLevel('alert')).toBe('alert');
+    expect(parseLogLevel('emergency')).toBe('emergency');
   });
 
   it('should return info for unsupported values', () => {
-    expect(parseLogLevel('warning')).toBe('info');
-    expect(parseLogLevel('emergency')).toBe('info');
+    expect(parseLogLevel('trace')).toBe('info');
+    expect(parseLogLevel('fatal')).toBe('info');
   });
 
   it('should trim whitespace', () => {
