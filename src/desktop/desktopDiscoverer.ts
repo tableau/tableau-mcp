@@ -10,6 +10,8 @@ const manifestSchema = z.object({
   instances: z.array(desktopInstanceMetadataSchema),
 });
 
+export type DesktopInstanceManifest = z.infer<typeof manifestSchema>;
+
 export class DesktopDiscoverer {
   getInstances(): Map<number, DesktopInstance> {
     const manifestPath = getManifestPath();
