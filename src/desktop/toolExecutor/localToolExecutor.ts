@@ -111,45 +111,44 @@ export class LocalExecutor extends ToolExecutor {
       return Err({ type: 'command-failed', error: commandResult.error });
     }
 
-    if (schema) {
-      let parsedResult: z.infer<Z> | undefined;
-
-      try {
-        const safeParsedResult = schema.safeParse(JSON.parse(commandResult.result?.text ?? ''));
-        if (safeParsedResult.success) {
-          parsedResult = safeParsedResult.data;
-        } else {
-          log?.(
-            {
-              message: `Failed to parse command result with schema ${schema.toString()}.`,
-              level: 'error',
-              logger: 'LocalExecutor',
-              error: safeParsedResult.error,
-            },
-            this.desktopConfig,
-          );
-          return Err({ type: 'unknown', error: safeParsedResult.error });
-        }
-      } catch (error) {
-        log?.(
-          {
-            message: 'Failed to JSON parse command result',
-            level: 'error',
-            logger: 'LocalExecutor',
-            error,
-          },
-          this.desktopConfig,
-        );
-        return Err({ type: 'unknown', error });
-      }
-
-      return Ok({
-        ...commandResult,
-        ...(parsedResult ? { parsedResult } : {}),
-      });
+    if (!schema) {
+      return Ok(commandResult);
     }
 
-    return Ok(commandResult);
+    let commandResultObj: unknown;
+    try {
+      commandResultObj = JSON.parse(commandResult.result?.text ?? '{}');
+    } catch (error) {
+      log?.(
+        {
+          message: 'Failed to JSON parse command result',
+          level: 'error',
+          logger: 'LocalExecutor',
+          error,
+        },
+        this.desktopConfig,
+      );
+      return Err({ type: 'unknown', error });
+    }
+
+    const safeParsedResult = schema.safeParse(commandResultObj);
+    if (!safeParsedResult.success) {
+      log?.(
+        {
+          message: `Failed to parse command result with schema ${schema.toString()}.`,
+          level: 'error',
+          logger: 'LocalExecutor',
+          error: safeParsedResult.error,
+        },
+        this.desktopConfig,
+      );
+      return Err({ type: 'unknown', error: safeParsedResult.error });
+    }
+
+    return Ok({
+      ...commandResult,
+      ...{ parsedResult: safeParsedResult.data },
+    });
   }
 
   async getEvents(args?: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>> {
