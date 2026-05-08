@@ -2,7 +2,8 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
-import { LoggerType, parseLoggerTypes } from './logging/logger.js';
+import { LoggerType, parseLoggerTypes, parseLogLevel } from './logging/logger.js';
+import type { LogLevel } from './logging/types.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
@@ -46,7 +47,8 @@ export class Config {
   uatKeyId: string;
   jwtAdditionalPayload: string;
   datasourceCredentials: string;
-  defaultLogLevel: string;
+  defaultNotificationLevel: string;
+  logLevel: LogLevel;
   disableLogMasking: boolean;
   maxRequestTimeoutMs: number;
   disableSessionManagement: boolean;
@@ -108,7 +110,8 @@ export class Config {
       UAT_KEY_ID: uatKeyId,
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
-      DEFAULT_LOG_LEVEL: defaultLogLevel,
+      DEFAULT_NOTIFICATION_LEVEL: defaultNotificationLevel,
+      LOG_LEVEL: logLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
@@ -158,7 +161,8 @@ export class Config {
     });
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
-    this.defaultLogLevel = defaultLogLevel ?? 'debug';
+    this.defaultNotificationLevel = defaultNotificationLevel ?? 'debug';
+    this.logLevel = parseLogLevel(logLevel);
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableSessionManagement = disableSessionManagement === 'true';
     this.loggers = parseLoggerTypes(logging);
