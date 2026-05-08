@@ -85,13 +85,12 @@ function clone<T>(obj: T): Result<T, Error> {
       return Err(error);
     }
 
-    const message = getExceptionMessage(error);
     log({
       message: 'Could not clone object, notification may not be sanitized!',
       level: 'error',
       logger: 'secretMask',
-      error: message,
+      error: error,
     });
-    return Err(new Error(message));
+    return Err(new Error(getExceptionMessage(error)));
   }
 }

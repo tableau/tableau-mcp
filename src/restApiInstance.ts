@@ -209,7 +209,7 @@ export const getRequestErrorInterceptor =
         message: `Request ${requestId} failed`,
         level: 'error',
         logger: 'rest-api',
-        error: getExceptionMessage(error),
+        error: error,
       });
       notifier.error(
         server,
@@ -248,7 +248,7 @@ export const getResponseErrorInterceptor =
         message: `Response from request ${requestId} failed`,
         level: 'error',
         logger: 'rest-api',
-        error: getExceptionMessage(error),
+        error: error,
       });
       notifier.error(
         server,
