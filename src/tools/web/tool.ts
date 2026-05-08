@@ -145,25 +145,32 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
       if (!errorCode) {
         errorCode = '500'; // Default to 500 if no HTTP status can be determined
       }
-      log({
-        message: error,
-        level: 'error',
-        logger: 'tool',
-      });
+      log(
+        {
+          message: error,
+          level: 'error',
+          logger: 'tool',
+        },
+        config,
+      );
       toolResult = getErrorResult(requestId, error);
       return toolResult;
     } finally {
-      productTelemetryForwarder.send('tool_call', {
-        tool_name: this.name,
-        request_id: requestId.toString(),
-        session_id: sessionId ?? '',
-        site_luid: extra.getSiteLuid(),
-        user_luid: extra.getUserLuid(),
-        podname: config.server,
-        is_hyperforce: config.isHyperforce,
-        success,
-        error_code: errorCode,
-      });
+      productTelemetryForwarder.send(
+        'tool_call',
+        {
+          tool_name: this.name,
+          request_id: requestId.toString(),
+          session_id: sessionId ?? '',
+          site_luid: extra.getSiteLuid(),
+          user_luid: extra.getUserLuid(),
+          podname: config.server,
+          is_hyperforce: config.isHyperforce,
+          success,
+          error_code: errorCode,
+        },
+        config,
+      );
       // Record custom metric for this tool call
       const telemetry = getTelemetryProvider();
       telemetry.recordMetric('mcp.tool.calls', 1, {

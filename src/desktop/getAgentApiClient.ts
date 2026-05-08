@@ -41,12 +41,15 @@ export const getRequestInterceptor = (): RequestInterceptor => (request) => {
 
 export const getRequestErrorInterceptor = (): ErrorInterceptor => (error, baseUrl) => {
   if (!isAxiosError(error) || !error.request) {
-    log?.({
-      message: 'Request failed',
-      level: 'error',
-      logger: 'AgentApiClient',
-      error,
-    });
+    log?.(
+      {
+        message: 'Request failed',
+        level: 'error',
+        logger: 'AgentApiClient',
+        error,
+      },
+      getDesktopConfig(),
+    );
     return;
   }
 
@@ -63,12 +66,15 @@ export const getResponseInterceptor = (): ResponseInterceptor => (response) => {
 
 export const getResponseErrorInterceptor = (): ErrorInterceptor => (error, baseUrl) => {
   if (!isAxiosError(error) || !error.response) {
-    log?.({
-      message: 'Response failed',
-      level: 'error',
-      logger: 'AgentApiClient',
-      error,
-    });
+    log?.(
+      {
+        message: 'Response failed',
+        level: 'error',
+        logger: 'AgentApiClient',
+        error,
+      },
+      getDesktopConfig(),
+    );
     return;
   }
 
@@ -86,17 +92,20 @@ function logRequest(request: RequestInterceptorConfig): void {
     url.search = new URLSearchParams(request.params).toString();
   }
 
-  log?.({
-    message: 'Agent API request',
-    level: 'debug',
-    logger: 'AgentApiClient',
-    data: {
-      method: request.method,
-      url: url.toString(),
-      headers: request.headers,
-      data: request.data,
+  log?.(
+    {
+      message: 'Agent API request',
+      level: 'debug',
+      logger: 'AgentApiClient',
+      data: {
+        method: request.method,
+        url: url.toString(),
+        headers: request.headers,
+        data: request.data,
+      },
     },
-  });
+    getDesktopConfig(),
+  );
 }
 
 function logResponse(response: ResponseInterceptorConfig): void {
@@ -107,15 +116,18 @@ function logResponse(response: ResponseInterceptorConfig): void {
     url.search = new URLSearchParams(response.params).toString();
   }
 
-  log?.({
-    message: 'Agent API response',
-    level: 'debug',
-    logger: 'AgentApiClient',
-    data: {
-      status: response.status,
-      url: url.toString(),
-      headers: response.headers,
-      data: response.data,
+  log?.(
+    {
+      message: 'Agent API response',
+      level: 'debug',
+      logger: 'AgentApiClient',
+      data: {
+        status: response.status,
+        url: url.toString(),
+        headers: response.headers,
+        data: response.data,
+      },
     },
-  });
+    getDesktopConfig(),
+  );
 }

@@ -1,5 +1,6 @@
 import os from 'os';
 
+import { BaseConfig } from '../../config.shared';
 import { log } from '../../logging/logger';
 
 type ValidPropertyValueType = string | number | boolean;
@@ -56,7 +57,7 @@ class DirectTelemetryForwarder {
    * @param eventType - The event type/name
    * @param properties - Key-value properties for the event
    */
-  send(eventType: TelemetryEventType, properties: PropertiesType): void {
+  send(eventType: TelemetryEventType, properties: PropertiesType, config: BaseConfig): void {
     if (!this.enabled) {
       return;
     }
@@ -81,11 +82,11 @@ class DirectTelemetryForwarder {
 
     const req = new Request(this.endpoint, init);
     // Intentionally not awaiting: telemetry should not block execution.
-    sendTelemetryRequest(req);
+    sendTelemetryRequest(req, config);
   }
 }
 
-async function sendTelemetryRequest(req: Request): Promise<void> {
+async function sendTelemetryRequest(req: Request, config: BaseConfig): Promise<void> {
   try {
     const res = await fetch(req);
     const body = await res.text();
@@ -93,11 +94,14 @@ async function sendTelemetryRequest(req: Request): Promise<void> {
       console.error(`[Telemetry] Failed: ${res.status} ${res.statusText}`, body);
     }
   } catch (error) {
-    log({
-      message: error,
-      level: 'error',
-      logger: 'telemetry',
-    });
+    log(
+      {
+        message: error,
+        level: 'error',
+        logger: 'telemetry',
+      },
+      config,
+    );
   }
 }
 
