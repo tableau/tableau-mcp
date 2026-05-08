@@ -35,3 +35,18 @@ export const agentTokenSchema = z.object({
   token: z.string(),
   version: z.string(),
 });
+
+export const eventSchema = z
+  .object({
+    sequence: z.number(),
+    type: z.string(),
+    timestamp: z.string().datetime(),
+  })
+  .passthrough();
+
+export const getEventsResponseSchema = z.object({
+  events: z.array(eventSchema),
+  latest_sequence: z.number(),
+  count: z.number(),
+});
+export type GetEventsResponse = z.infer<typeof getEventsResponseSchema>;

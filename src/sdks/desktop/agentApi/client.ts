@@ -17,6 +17,7 @@ import {
   ExecuteCommandRequest,
   ExecuteCommandResponse,
   GetCommandStatusResponse,
+  GetEventsResponse,
 } from './types';
 
 export class AgentApiClient {
@@ -108,6 +109,18 @@ export class AgentApiClient {
         await this._apiClient.getCommandStatus({
           params: { commandId },
           ...this.headers,
+        }),
+      );
+    } catch (error) {
+      return Err(error);
+    }
+  }
+
+  async getEvents(sinceSequence?: number): Promise<Result<GetEventsResponse, unknown>> {
+    try {
+      return Ok(
+        await this._apiClient.getEvents({
+          queries: sinceSequence !== undefined ? { since: sinceSequence } : undefined,
         }),
       );
     } catch (error) {
