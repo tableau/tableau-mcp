@@ -211,7 +211,7 @@ async function getOAuthRedirectUrl(
   } catch (error) {
     log({
       message: 'Failed to follow Tableau OAuth redirect for site picker',
-      level: 'debug',
+      level: 'error',
       logger: 'oauth',
       error: error,
     });
@@ -308,7 +308,7 @@ async function getClientFromMetadataDoc(
   } catch (error) {
     log({
       message: `Failed to fetch client metadata from ${originalUrl}`,
-      level: 'info',
+      level: 'error',
       logger: 'oauth',
       error,
     });
