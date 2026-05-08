@@ -3,6 +3,7 @@ import { AxiosError } from 'axios';
 import { Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
+import { getConfig } from '../../config.js';
 import { DatasourceNotAllowedError, ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { notifier } from '../../logging/notification.js';
 import { WebMcpServer } from '../../server.web.js';
@@ -228,6 +229,7 @@ describe('Tool', () => {
           success: true,
           error_code: '',
         }),
+        getConfig(),
       );
     });
 
@@ -250,6 +252,7 @@ describe('Tool', () => {
           success: false,
           error_code: '500',
         }),
+        getConfig(),
       );
     });
 
@@ -274,6 +277,7 @@ describe('Tool', () => {
           success: false,
           error_code: '401',
         }),
+        getConfig(),
       );
     });
 
@@ -294,6 +298,7 @@ describe('Tool', () => {
           success: false,
           error_code: '',
         }),
+        getConfig(),
       );
     });
 
@@ -314,6 +319,7 @@ describe('Tool', () => {
           success: true,
           error_code: '',
         }),
+        getConfig(),
       );
     });
   });
