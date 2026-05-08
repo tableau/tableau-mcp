@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
+import { getDesktopConfig } from '../config.desktop';
 import * as logger from '../logging/logger';
 import { DesktopDiscoverer, DesktopInstanceManifest } from './desktopDiscoverer';
 
@@ -188,6 +189,7 @@ describe('DesktopDiscoverer', () => {
           logger: 'DesktopDiscoverer',
           error: expect.any(Error),
         }),
+        getDesktopConfig(),
       );
     });
 
@@ -216,6 +218,7 @@ describe('DesktopDiscoverer', () => {
           level: 'error',
           logger: 'DesktopDiscoverer',
         }),
+        getDesktopConfig(),
       );
     });
 
@@ -238,6 +241,7 @@ describe('DesktopDiscoverer', () => {
             message: 'File read error',
           }),
         }),
+        getDesktopConfig(),
       );
     });
   });

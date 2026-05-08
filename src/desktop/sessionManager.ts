@@ -16,8 +16,8 @@ export class SessionManager {
   private readonly sessions: Map<string, DesktopConnection> = new Map();
   private readonly desktopConfig: Config;
 
-  constructor() {
-    this.desktopConfig = getDesktopConfig();
+  constructor(desktopConfig?: Config) {
+    this.desktopConfig = desktopConfig ?? getDesktopConfig();
   }
 
   async getExecutor(sessionId: string): Promise<ToolExecutor> {
@@ -29,7 +29,7 @@ export class SessionManager {
         throw new Error(`Invalid session ID for local mode: ${sessionId}. Expected numeric PID.`);
       }
 
-      const desktopDiscoverer = new DesktopDiscoverer();
+      const desktopDiscoverer = new DesktopDiscoverer(this.desktopConfig);
       const desktopInstance = desktopDiscoverer.getInstance(pid);
       const executor = new LocalExecutor({
         agentApiBase: `http://127.0.0.1:${desktopInstance.port}/api/v1`,
