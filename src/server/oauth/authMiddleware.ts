@@ -31,7 +31,6 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       return;
     }
 
-    const config = getConfig();
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -50,7 +49,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         return;
       }
 
-      const { enforceScopes, advertiseApiScopes, resourceUri } = config.oauth;
+      const { enforceScopes, advertiseApiScopes, resourceUri } = getConfig().oauth;
       const baseUrl = new URL(resourceUri).origin;
       const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
       const requiredApiScopes = getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
@@ -100,7 +99,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       return;
     }
     const authInfo = result.value;
-    const { enforceScopes, advertiseApiScopes } = config.oauth;
+    const { enforceScopes, advertiseApiScopes } = getConfig().oauth;
     if (enforceScopes) {
       const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
       const requiredApiScopes = getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
