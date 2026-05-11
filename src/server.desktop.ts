@@ -34,7 +34,7 @@ export class DesktopMcpServer extends Server {
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
       ) => {
         const tableauToolCallback = await Provider.from(callback);
-        const sessionManager = new SessionManager(config);
+        const sessionManager = new SessionManager();
         const tableauRequestHandlerExtra: TableauDesktopRequestHandlerExtra = {
           ...extra,
           config,

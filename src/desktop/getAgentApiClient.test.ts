@@ -1,6 +1,5 @@
 import { AxiosError } from 'axios';
 
-import { getDesktopConfig } from '../config.desktop';
 import * as logger from '../logging/logger';
 import { AxiosRequestHeaders, AxiosResponse } from '../utils/axios';
 import {
@@ -39,7 +38,6 @@ describe('getAgentApiClient', () => {
             data: undefined,
           }),
         }),
-        getDesktopConfig(),
       );
     });
   });
@@ -71,7 +69,6 @@ describe('getAgentApiClient', () => {
             data: {},
           }),
         }),
-        getDesktopConfig(),
       );
     });
   });
@@ -88,9 +85,8 @@ describe('getAgentApiClient', () => {
           message: 'Request failed',
           level: 'error',
           logger: 'AgentApiClient',
-          error,
+          data: error,
         }),
-        getDesktopConfig(),
       );
     });
 
@@ -118,7 +114,6 @@ describe('getAgentApiClient', () => {
             data: undefined,
           }),
         }),
-        getDesktopConfig(),
       );
     });
 
@@ -133,9 +128,8 @@ describe('getAgentApiClient', () => {
           message: 'Response failed',
           level: 'error',
           logger: 'AgentApiClient',
-          error,
+          data: error,
         }),
-        getDesktopConfig(),
       );
     });
 
@@ -182,7 +176,6 @@ describe('getAgentApiClient', () => {
             data: { error: 'Unauthorized' },
           }),
         }),
-        getDesktopConfig(),
       );
     });
   });

@@ -1,4 +1,3 @@
-import { getConfig } from '../../config.js';
 import {
   exportedForTesting,
   getProductTelemetry,
@@ -34,7 +33,7 @@ describe('DirectTelemetryForwarder', () => {
     const properties = { action: 'click', count: 42 };
 
     const forwarder = getProductTelemetry(endpoint, true, podName);
-    forwarder.send('tool_call', properties, getConfig());
+    forwarder.send('tool_call', properties);
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
@@ -61,7 +60,7 @@ describe('DirectTelemetryForwarder', () => {
 
   it('uses provided podName for pod field', async () => {
     const forwarder = getProductTelemetry(endpoint, true, podName);
-    forwarder.send('tool_call', { foo: 'bar' }, getConfig());
+    forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
@@ -75,7 +74,7 @@ describe('DirectTelemetryForwarder', () => {
 
   it('uses default service_name', async () => {
     const forwarder = getProductTelemetry(endpoint, true, podName);
-    forwarder.send('tool_call', { foo: 'bar' }, getConfig());
+    forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
@@ -87,7 +86,7 @@ describe('DirectTelemetryForwarder', () => {
 
   it('does not send telemetry when enabled is false', () => {
     const forwarder = getProductTelemetry(endpoint, false, podName);
-    forwarder.send('tool_call', { foo: 'bar' }, getConfig());
+    forwarder.send('tool_call', { foo: 'bar' });
 
     expect(mockFetch).not.toHaveBeenCalled();
   });

@@ -3,7 +3,6 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { z } from 'zod';
 
-import { Config, getDesktopConfig } from '../config.desktop';
 import { log } from '../logging/logger';
 import { DesktopInstance, desktopInstanceMetadataSchema } from './desktopInstance';
 
@@ -14,12 +13,6 @@ const manifestSchema = z.object({
 export type DesktopInstanceManifest = z.infer<typeof manifestSchema>;
 
 export class DesktopDiscoverer {
-  private readonly desktopConfig: Config;
-
-  constructor(desktopConfig?: Config) {
-    this.desktopConfig = desktopConfig ?? getDesktopConfig();
-  }
-
   getInstances(): Map<number, DesktopInstance> {
     const manifestPath = getManifestPath();
     if (!existsSync(manifestPath)) {
@@ -33,15 +26,12 @@ export class DesktopDiscoverer {
         manifest.instances.map((instance) => [instance.pid, new DesktopInstance(instance)]),
       );
     } catch (error) {
-      log?.(
-        {
-          message: 'Failed to read manifest',
-          level: 'error',
-          logger: 'DesktopDiscoverer',
-          error,
-        },
-        this.desktopConfig,
-      );
+      log?.({
+        message: 'Failed to read manifest',
+        level: 'error',
+        logger: 'DesktopDiscoverer',
+        data: error,
+      });
       return new Map();
     }
   }

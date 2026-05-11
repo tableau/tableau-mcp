@@ -3,7 +3,6 @@ import { AxiosError } from 'axios';
 import { Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
-import { getConfig } from '../../config.js';
 import { DatasourceNotAllowedError, ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { notifier } from '../../logging/notification.js';
 import { WebMcpServer } from '../../server.web.js';
@@ -62,7 +61,7 @@ describe('Tool', () => {
     const tool = new WebTool(mockParams);
     const testArgs = { param1: 'test' };
 
-    tool.logInvocation({ requestId: '2', args: testArgs, username: 'test-user' });
+    tool.notifyInvocation({ requestId: '2', args: testArgs, username: 'test-user' });
 
     const server = expect.any(Object);
     expect(spy).toHaveBeenCalledExactlyOnceWith(server, {
@@ -83,7 +82,7 @@ describe('Tool', () => {
       .fn()
       .mockImplementation(async (_requestId: string) => new Ok(successResult));
 
-    const spy = vi.spyOn(tool, 'logInvocation');
+    const spy = vi.spyOn(tool, 'notifyInvocation');
     const result = await tool.logAndExecute({
       extra: mockExtra,
       args: { param1: 'test' },
@@ -229,7 +228,6 @@ describe('Tool', () => {
           success: true,
           error_code: '',
         }),
-        getConfig(),
       );
     });
 
@@ -252,7 +250,6 @@ describe('Tool', () => {
           success: false,
           error_code: '500',
         }),
-        getConfig(),
       );
     });
 
@@ -277,7 +274,6 @@ describe('Tool', () => {
           success: false,
           error_code: '401',
         }),
-        getConfig(),
       );
     });
 
@@ -298,7 +294,6 @@ describe('Tool', () => {
           success: false,
           error_code: '',
         }),
-        getConfig(),
       );
     });
 
@@ -319,7 +314,6 @@ describe('Tool', () => {
           success: true,
           error_code: '',
         }),
-        getConfig(),
       );
     });
   });

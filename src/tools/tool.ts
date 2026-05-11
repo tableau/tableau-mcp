@@ -108,7 +108,7 @@ export abstract class Tool<
     this.disabled = disabled ?? false;
   }
 
-  logInvocation({
+  notifyInvocation({
     requestId,
     args,
     username,
