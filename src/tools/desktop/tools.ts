@@ -1,3 +1,3 @@
-import { getPlaceholderTool } from './placeholderTool.js';
+import { getListInstancesTool } from './session/listInstances';
 
-export const desktopToolFactories = [getPlaceholderTool];
+export const desktopToolFactories = [getListInstancesTool];

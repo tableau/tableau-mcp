@@ -137,3 +137,19 @@ export class UnknownError extends McpToolError {
     super({ type: 'unknown', message, statusCode });
   }
 }
+
+export class NoDesktopInstancesFoundError extends McpToolError {
+  constructor() {
+    super({
+      type: 'no-desktop-instances-found',
+      message: [
+        'No running Tableau Desktop instances found.',
+        'Make sure:',
+        '  1. Tableau Desktop is running',
+        '  2. Agent API is enabled',
+        '  3. The manifest file exists in the expected location',
+      ].join('\n'),
+      statusCode: 404,
+    });
+  }
+}

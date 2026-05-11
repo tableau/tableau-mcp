@@ -15,6 +15,7 @@ describe('DesktopMcpServer', () => {
       expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
         tool.name,
         {
+          title: await Provider.from(tool.title),
           description: await Provider.from(tool.description),
           inputSchema: await Provider.from(tool.paramsSchema),
           annotations: await Provider.from(tool.annotations),
