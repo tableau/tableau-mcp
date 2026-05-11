@@ -85,6 +85,11 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     const username = tableauAuthInfo?.username;
 
     this.notifyInvocation({ requestId, args, username });
+    log({
+      message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
+      level: 'debug',
+      logger: 'tool',
+    });
 
     const productTelemetryForwarder = getProductTelemetry(
       config.productTelemetryEndpoint,
