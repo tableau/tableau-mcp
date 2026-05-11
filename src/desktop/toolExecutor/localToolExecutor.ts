@@ -1,7 +1,7 @@
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { Config, getDesktopConfig } from '../../config.desktop';
+import { getDesktopConfig } from '../../config.desktop';
 import { log } from '../../logging/logger';
 import { GetCommandStatusResponse, GetEventsResponse } from '../../sdks/desktop/agentApi/types';
 import { AgentApiClientConfig, getAgentApiClient } from '../getAgentApiClient';
@@ -14,37 +14,29 @@ import {
 
 export class LocalExecutor extends ToolExecutor {
   private readonly config: AgentApiClientConfig;
-  private readonly desktopConfig: Config;
 
   constructor(config?: Partial<AgentApiClientConfig>) {
     super();
-    this.desktopConfig = getDesktopConfig();
-    this.config = { ...this.desktopConfig.agentApiClientConfig, ...config };
+    this.config = { ...getDesktopConfig().agentApiClientConfig, ...config };
   }
 
   async start(): Promise<void> {
-    log?.(
-      {
-        message: 'LocalExecutor starting',
-        level: 'info',
-        logger: 'LocalExecutor',
-        data: {
-          agentApiBase: this.config.agentApiBase,
-        },
+    log?.({
+      message: 'LocalExecutor starting',
+      level: 'info',
+      logger: 'LocalExecutor',
+      data: {
+        agentApiBase: this.config.agentApiBase,
       },
-      this.desktopConfig,
-    );
+    });
   }
 
   stop(): void {
-    log?.(
-      {
-        message: 'LocalExecutor stopped',
-        level: 'info',
-        logger: 'LocalExecutor',
-      },
-      this.desktopConfig,
-    );
+    log?.({
+      message: 'LocalExecutor stopped',
+      level: 'info',
+      logger: 'LocalExecutor',
+    });
   }
 
   isAvailable(): boolean {
@@ -65,15 +57,12 @@ export class LocalExecutor extends ToolExecutor {
     const executeResult = await client.executeCommand({ namespace, command, args });
 
     if (executeResult.isErr()) {
-      log?.(
-        {
-          message: `Failed to execute command ${namespace}:${command}`,
-          level: 'error',
-          logger: 'LocalExecutor',
-          error: executeResult.error,
-        },
-        this.desktopConfig,
-      );
+      log?.({
+        message: `Failed to execute command ${namespace}:${command}`,
+        level: 'error',
+        logger: 'LocalExecutor',
+        data: executeResult.error,
+      });
       return Err({ type: 'unknown', error: executeResult.error });
     }
 
@@ -81,33 +70,27 @@ export class LocalExecutor extends ToolExecutor {
     const commandStatusResult = await this.waitForCommand(commandId);
     if (commandStatusResult.isErr()) {
       const error = commandStatusResult.error;
-      log?.(
-        {
-          message:
-            error.type === 'command-timed-out'
-              ? `Command ${commandId} timed out`
-              : `Failed to get status of command ${commandId}`,
-          level: 'error',
-          logger: 'LocalExecutor',
-          error,
-        },
-        this.desktopConfig,
-      );
+      log?.({
+        message:
+          error.type === 'command-timed-out'
+            ? `Command ${commandId} timed out`
+            : `Failed to get status of command ${commandId}`,
+        level: 'error',
+        logger: 'LocalExecutor',
+        data: error,
+      });
 
       return commandStatusResult;
     }
 
     const commandResult = commandStatusResult.value;
     if (commandResult.status === 'failed') {
-      log?.(
-        {
-          message: `Command ${commandId} failed`,
-          level: 'error',
-          logger: 'LocalExecutor',
-          error: commandResult.error,
-        },
-        this.desktopConfig,
-      );
+      log?.({
+        message: `Command ${commandId} failed`,
+        level: 'error',
+        logger: 'LocalExecutor',
+        data: commandResult.error,
+      });
       return Err({ type: 'command-failed', error: commandResult.error });
     }
 
@@ -119,29 +102,23 @@ export class LocalExecutor extends ToolExecutor {
     try {
       commandResultObj = JSON.parse(commandResult.result?.text ?? '{}');
     } catch (error) {
-      log?.(
-        {
-          message: 'Failed to JSON parse command result',
-          level: 'error',
-          logger: 'LocalExecutor',
-          error,
-        },
-        this.desktopConfig,
-      );
+      log?.({
+        message: 'Failed to JSON parse command result',
+        level: 'error',
+        logger: 'LocalExecutor',
+        data: error,
+      });
       return Err({ type: 'unknown', error });
     }
 
     const safeParsedResult = schema.safeParse(commandResultObj);
     if (!safeParsedResult.success) {
-      log?.(
-        {
-          message: `Failed to parse command result with schema ${schema.toString()}.`,
-          level: 'error',
-          logger: 'LocalExecutor',
-          error: safeParsedResult.error,
-        },
-        this.desktopConfig,
-      );
+      log?.({
+        message: `Failed to parse command result with schema ${schema.toString()}.`,
+        level: 'error',
+        logger: 'LocalExecutor',
+        data: safeParsedResult.error,
+      });
       return Err({ type: 'unknown', error: safeParsedResult.error });
     }
 
@@ -158,15 +135,12 @@ export class LocalExecutor extends ToolExecutor {
     const getEventsResult = await client.getEvents(sinceSequence);
     if (getEventsResult.isErr()) {
       const error = getEventsResult.error;
-      log?.(
-        {
-          message: 'Failed to get events',
-          level: 'error',
-          logger: 'LocalExecutor',
-          error,
-        },
-        this.desktopConfig,
-      );
+      log?.({
+        message: 'Failed to get events',
+        level: 'error',
+        logger: 'LocalExecutor',
+        data: error,
+      });
     }
 
     return getEventsResult;

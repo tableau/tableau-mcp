@@ -207,11 +207,19 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  DEFAULT_LOG_LEVEL: {
+  DEFAULT_NOTIFICATION_LEVEL: {
     includeInUserConfig: false,
     type: 'string',
-    title: 'Default Log Level',
-    description: 'The default logging level of the server.',
+    title: 'Default Notification Level',
+    description: 'The default notification level for MCP client notifications.',
+    required: false,
+    sensitive: false,
+  },
+  LOG_LEVEL: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Log Level',
+    description: 'The minimum severity level for server log output.',
     required: false,
     sensitive: false,
   },

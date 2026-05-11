@@ -1,13 +1,16 @@
 import { join } from 'path';
 
+import { parseLogLevel } from './logging/logger';
 import { LoggerType, parseLoggerTypes } from './logging/loggerType';
+import { LogLevel } from './logging/types';
 import { milliseconds } from './milliseconds';
 import { isTransport, TransportName } from './transports';
 import { parseNumber } from './utils/parseNumber';
 
-export abstract class BaseConfig {
+export class BaseConfig {
   transport: TransportName;
-  defaultLogLevel: string;
+  defaultNotificationLevel: string;
+  logLevel: LogLevel;
   loggers: Set<LoggerType>;
   fileLoggerDirectory: string;
   maxRequestTimeoutMs: number;
@@ -16,14 +19,16 @@ export abstract class BaseConfig {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
     const {
       TRANSPORT: transport,
-      DEFAULT_LOG_LEVEL: defaultLogLevel,
+      DEFAULT_NOTIFICATION_LEVEL: defaultNotificationLevel,
+      LOG_LEVEL: logLevel,
       ENABLED_LOGGERS: logging,
       FILE_LOGGER_DIRECTORY: fileLoggerDirectory,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
     } = cleansedVars;
 
     this.transport = isTransport(transport) ? transport : 'stdio';
-    this.defaultLogLevel = defaultLogLevel ?? 'debug';
+    this.defaultNotificationLevel = defaultNotificationLevel ?? 'debug';
+    this.logLevel = parseLogLevel(logLevel);
     this.loggers = parseLoggerTypes(logging);
     this.fileLoggerDirectory = fileLoggerDirectory || join(__dirname, 'logs');
     this.maxRequestTimeoutMs = parseNumber(maxRequestTimeoutMs, {

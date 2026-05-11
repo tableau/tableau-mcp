@@ -1,7 +1,6 @@
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getDesktopConfig } from '../../config.desktop';
 import * as logger from '../../logging/logger';
 import { AgentApiClient } from '../../sdks/desktop/agentApi/client';
 import {
@@ -20,17 +19,14 @@ describe('LocalExecutor', () => {
       const localExecutor = new LocalExecutor();
       await localExecutor.start();
 
-      expect(logger.log).toHaveBeenCalledWith(
-        {
-          message: 'LocalExecutor starting',
-          level: 'info',
-          logger: 'LocalExecutor',
-          data: {
-            agentApiBase: 'http://127.0.0.1:8765/api/v1',
-          },
+      expect(logger.log).toHaveBeenCalledWith({
+        message: 'LocalExecutor starting',
+        level: 'info',
+        logger: 'LocalExecutor',
+        data: {
+          agentApiBase: 'http://127.0.0.1:8765/api/v1',
         },
-        getDesktopConfig(),
-      );
+      });
     });
   });
 
@@ -39,14 +35,11 @@ describe('LocalExecutor', () => {
       const localExecutor = new LocalExecutor();
       localExecutor.stop();
 
-      expect(logger.log).toHaveBeenCalledWith(
-        {
-          message: 'LocalExecutor stopped',
-          level: 'info',
-          logger: 'LocalExecutor',
-        },
-        getDesktopConfig(),
-      );
+      expect(logger.log).toHaveBeenCalledWith({
+        message: 'LocalExecutor stopped',
+        level: 'info',
+        logger: 'LocalExecutor',
+      });
     });
   });
 
@@ -159,15 +152,12 @@ describe('LocalExecutor', () => {
 
       expect(result.isErr()).toBe(true);
       expect(result.unwrapErr()).toEqual({ type: 'unknown', error });
-      expect(logger.log).toHaveBeenCalledWith(
-        {
-          message: 'Failed to execute command tabdoc:undo',
-          level: 'error',
-          logger: 'LocalExecutor',
-          error,
-        },
-        getDesktopConfig(),
-      );
+      expect(logger.log).toHaveBeenCalledWith({
+        message: 'Failed to execute command tabdoc:undo',
+        level: 'error',
+        logger: 'LocalExecutor',
+        data: error,
+      });
     });
 
     it('should handle command status check timeout', async () => {
@@ -192,15 +182,12 @@ describe('LocalExecutor', () => {
 
       expect(result.isErr()).toBe(true);
       expect(result.unwrapErr()).toEqual({ type: 'command-timed-out' });
-      expect(logger.log).toHaveBeenCalledWith(
-        {
-          message: 'Command cmd_2026-01-01T00:00:00Z_1 timed out',
-          level: 'error',
-          logger: 'LocalExecutor',
-          error: { type: 'command-timed-out' },
-        },
-        getDesktopConfig(),
-      );
+      expect(logger.log).toHaveBeenCalledWith({
+        message: 'Command cmd_2026-01-01T00:00:00Z_1 timed out',
+        level: 'error',
+        logger: 'LocalExecutor',
+        data: { type: 'command-timed-out' },
+      });
     });
 
     it('should handle command status check failure', async () => {
@@ -223,15 +210,12 @@ describe('LocalExecutor', () => {
 
       expect(result.isErr()).toBe(true);
       expect(result.unwrapErr()).toEqual({ type: 'unknown', error });
-      expect(logger.log).toHaveBeenCalledWith(
-        {
-          message: `Failed to get status of command ${commandId}`,
-          level: 'error',
-          logger: 'LocalExecutor',
-          error: { type: 'unknown', error },
-        },
-        getDesktopConfig(),
-      );
+      expect(logger.log).toHaveBeenCalledWith({
+        message: `Failed to get status of command ${commandId}`,
+        level: 'error',
+        logger: 'LocalExecutor',
+        data: { type: 'unknown', error },
+      });
     });
 
     it('should handle failed command status', async () => {
@@ -257,15 +241,12 @@ describe('LocalExecutor', () => {
         error: mockFailedStatus.error,
       });
 
-      expect(logger.log).toHaveBeenCalledWith(
-        {
-          message: `Command ${commandId} failed`,
-          level: 'error',
-          logger: 'LocalExecutor',
-          error: mockFailedStatus.error,
-        },
-        getDesktopConfig(),
-      );
+      expect(logger.log).toHaveBeenCalledWith({
+        message: `Command ${commandId} failed`,
+        level: 'error',
+        logger: 'LocalExecutor',
+        data: mockFailedStatus.error,
+      });
     });
 
     it('should poll until command completes', async () => {
@@ -370,9 +351,8 @@ describe('LocalExecutor', () => {
             message: 'Failed to get events',
             level: 'error',
             logger: 'LocalExecutor',
-            error,
+            data: error,
           }),
-          getDesktopConfig(),
         );
       });
     });

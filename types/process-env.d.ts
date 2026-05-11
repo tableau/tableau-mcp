@@ -1,6 +1,7 @@
 interface ProcessEnvBase {
   TRANSPORT: string | undefined;
-  DEFAULT_LOG_LEVEL: string | undefined;
+  DEFAULT_NOTIFICATION_LEVEL: string | undefined;
+  LOG_LEVEL: string | undefined;
   ENABLED_LOGGERS: string | undefined;
   FILE_LOGGER_DIRECTORY: string | undefined;
   MAX_REQUEST_TIMEOUT_MS: string | undefined;

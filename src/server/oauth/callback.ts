@@ -4,6 +4,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
+import { log } from '../../logging/logger.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getTokenResult } from '../../sdks/tableau-oauth/methods.js';
 import { TableauAccessToken } from '../../sdks/tableau-oauth/types.js';
@@ -176,7 +177,12 @@ export function callback(
 
       res.redirect(redirectUrl.toString());
     } catch (error) {
-      console.error('OAuth callback error:', error);
+      log({
+        message: 'OAuth callback error',
+        level: 'error',
+        logger: 'oauth',
+        data: error,
+      });
       res.status(500).json({
         error: 'server_error',
         error_description:
@@ -209,6 +215,7 @@ async function exchangeAuthorizationCode({
   clientId: string;
   codeVerifier: string;
 }): Promise<Result<TableauAccessToken, string>> {
+  const config = getConfig();
   try {
     const result = await getTokenResult(
       server,
@@ -220,12 +227,18 @@ async function exchangeAuthorizationCode({
         code_verifier: codeVerifier,
       },
       {
-        timeout: getConfig().maxRequestTimeoutMs,
+        timeout: config.maxRequestTimeoutMs,
       },
     );
 
     return Ok(result);
-  } catch {
+  } catch (error) {
+    log({
+      message: 'Failed to exchange authorization code',
+      level: 'error',
+      logger: 'oauth',
+      data: error,
+    });
     return Err('Failed to exchange authorization code');
   }
 }
