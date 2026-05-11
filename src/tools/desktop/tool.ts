@@ -35,7 +35,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
   }: DesktopToolLogAndExecuteParams<T, Args>): Promise<CallToolResult> {
     const { requestId } = extra;
 
-    this.logInvocation({ requestId, args });
+    this.notifyInvocation({ requestId, args });
 
     let toolResult: CallToolResult;
 
@@ -58,9 +58,10 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
       return toolResult;
     } catch (error) {
       log({
-        message: error,
+        message: 'Tool execution failed',
         level: 'error',
         logger: 'tool',
+        error,
       });
       toolResult = getErrorResult(requestId, error);
       return toolResult;

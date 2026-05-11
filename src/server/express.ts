@@ -12,6 +12,7 @@ import http from 'http';
 import https from 'https';
 
 import { Config } from '../config.js';
+import { log } from '../logging/logger.js';
 import { setNotificationLevel } from '../logging/notification.js';
 import { Server } from '../server.js';
 import { WebMcpServer } from '../server.web.js';
@@ -149,7 +150,11 @@ export async function startExpressServer({
           const server = new WebMcpServer({ clientInfo });
           await connect(server, transport, logLevel, getTableauAuthInfo(req.auth));
         } else {
-          // Invalid request
+          log({
+            message: 'Rejected request: no valid session ID and not an initialize request',
+            level: 'info',
+            logger: 'server',
+          });
           res.status(400).json({
             jsonrpc: '2.0',
             error: {
@@ -164,7 +169,12 @@ export async function startExpressServer({
 
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
-      console.error('Error handling MCP request:', error);
+      log({
+        message: 'Error handling MCP request',
+        level: 'error',
+        logger: 'server',
+        error: error,
+      });
       if (!res.headersSent) {
         res.status(500).json({
           jsonrpc: '2.0',
@@ -193,6 +203,7 @@ async function connect(
 
   await server.mcpServer.connect(transport);
   setNotificationLevel(server.mcpServer, logLevel);
+  log({ message: 'MCP server connected to transport', level: 'debug', logger: 'server' });
 }
 
 async function methodNotAllowed(_req: Request, res: Response): Promise<void> {

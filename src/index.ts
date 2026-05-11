@@ -7,12 +7,11 @@ import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
-import { writeToStderr } from './logging/logger.js';
+import { log } from './logging/logger.js';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { WebMcpServer } from './server.web.js';
 import { startExpressServer } from './server/express.js';
-import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 const serverVersion = pkg.version;
 
@@ -28,11 +27,24 @@ async function startServer(): Promise<void> {
   // then we await this before declaring the server ready.
   // For stdio transport, there are no health checks, but we still await before serving.
   const serverInfoReady = getTableauServerInfo(config.server).catch((error) => {
-    writeToStderr(`Fatal error initializing server info: ${getExceptionMessage(error)}`);
+    log({
+      message: 'Fatal error initializing server info',
+      level: 'error',
+      logger: 'startup',
+      error,
+    });
     process.exit(1);
   });
 
-  const logLevel = isNotificationLevel(config.defaultLogLevel) ? config.defaultLogLevel : 'debug';
+  log({
+    message: `Config resolved: transport=${config.transport}, auth=${config.auth}, server=${config.server}`,
+    level: 'info',
+    logger: 'startup',
+  });
+
+  const notificationLevel = isNotificationLevel(config.defaultNotificationLevel)
+    ? config.defaultNotificationLevel
+    : 'debug';
   if (config.loggers.has('fileLogger')) {
     setFileLogger(new FileLogger({ logDirectory: config.fileLoggerDirectory }));
   }
@@ -51,42 +63,58 @@ async function startServer(): Promise<void> {
       const transport = new StdioServerTransport();
       await server.mcpServer.connect(transport);
 
-      setNotificationLevel(server.mcpServer, logLevel);
+      setNotificationLevel(server.mcpServer, notificationLevel);
       notifier.info(server.mcpServer, `${server.name} v${server.version} running on stdio`);
       break;
     }
     case 'http': {
-      const { url } = await startExpressServer({ basePath: 'tableau-mcp', config, logLevel });
+      const { url } = await startExpressServer({
+        basePath: 'tableau-mcp',
+        config,
+        logLevel: notificationLevel,
+      });
 
       // Port is now open. Wait for server info before logging the ready message.
       await serverInfoReady;
 
       if (!config.oauth.enabled) {
-        console.warn(
-          '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access! By having explicitly disabled OAuth by setting the DANGEROUSLY_DISABLE_OAUTH environment variable to "true", you accept any and all risks associated with this decision.',
-        );
+        log({
+          message:
+            '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access! By having explicitly disabled OAuth by setting the DANGEROUSLY_DISABLE_OAUTH environment variable to "true", you accept any and all risks associated with this decision.',
+          level: 'info',
+          logger: 'startup',
+        });
       }
 
-      // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
-      console.log(
-        `tableau-mcp v${serverVersion} ${config.disableSessionManagement ? 'stateless ' : ''}streamable HTTP server available at ${url}`,
-      );
+      log({
+        message: `tableau-mcp v${serverVersion} ${config.disableSessionManagement ? 'stateless ' : ''}streamable HTTP server available at ${url}`,
+        level: 'info',
+        logger: 'startup',
+      });
       break;
     }
   }
 
   if (config.disableLogMasking) {
-    writeToStderr('⚠️ Log masking is disabled!');
+    log({ message: '⚠️ Log masking is disabled!', level: 'info', logger: 'startup' });
   }
 
   if (config.breakGlassDisableGlobally) {
-    writeToStderr(
-      '⚠️ BREAK_GLASS_DISABLE_GLOBALLY is enabled! This means that the MCP server will be disabled globally and will return errors to all users!',
-    );
+    log({
+      message:
+        '⚠️ BREAK_GLASS_DISABLE_GLOBALLY is enabled! This means that the MCP server will be disabled globally and will return errors to all users!',
+      level: 'info',
+      logger: 'startup',
+    });
   }
 }
 
 startServer().catch((error) => {
-  writeToStderr(`Fatal error when starting the server: ${getExceptionMessage(error)}`);
+  log({
+    message: 'Fatal error when starting the server',
+    level: 'error',
+    logger: 'startup',
+    error,
+  });
   process.exit(1);
 });

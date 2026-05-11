@@ -84,7 +84,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     const { config, requestId, sessionId, tableauAuthInfo } = extra;
     const username = tableauAuthInfo?.username;
 
-    this.logInvocation({ requestId, args, username });
+    this.notifyInvocation({ requestId, args, username });
 
     const productTelemetryForwarder = getProductTelemetry(
       config.productTelemetryEndpoint,
@@ -146,9 +146,10 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
         errorCode = '500'; // Default to 500 if no HTTP status can be determined
       }
       log({
-        message: error,
+        message: 'Tool execution failed',
         level: 'error',
         logger: 'tool',
+        error,
       });
       toolResult = getErrorResult(requestId, error);
       return toolResult;

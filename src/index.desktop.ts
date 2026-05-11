@@ -4,10 +4,9 @@ import dotenv from 'dotenv';
 
 import { getDesktopConfig } from './config.desktop.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
-import { writeToStderr } from './logging/logger.js';
+import { log } from './logging/logger.js';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
 import { DesktopMcpServer } from './server.desktop.js';
-import { getExceptionMessage } from './utils/getExceptionMessage.js';
 
 async function startServer(): Promise<void> {
   dotenv.config();
@@ -37,6 +36,11 @@ async function startServer(): Promise<void> {
 }
 
 startServer().catch((error) => {
-  writeToStderr(`Fatal error when starting the server: ${getExceptionMessage(error)}`);
+  log({
+    message: 'Fatal error when starting the server',
+    level: 'error',
+    logger: 'startup',
+    error,
+  });
   process.exit(1);
 });

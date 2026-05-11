@@ -61,7 +61,7 @@ describe('Tool', () => {
     const tool = new WebTool(mockParams);
     const testArgs = { param1: 'test' };
 
-    tool.logInvocation({ requestId: '2', args: testArgs, username: 'test-user' });
+    tool.notifyInvocation({ requestId: '2', args: testArgs, username: 'test-user' });
 
     const server = expect.any(Object);
     expect(spy).toHaveBeenCalledExactlyOnceWith(server, {
@@ -82,7 +82,7 @@ describe('Tool', () => {
       .fn()
       .mockImplementation(async (_requestId: string) => new Ok(successResult));
 
-    const spy = vi.spyOn(tool, 'logInvocation');
+    const spy = vi.spyOn(tool, 'notifyInvocation');
     const result = await tool.logAndExecute({
       extra: mockExtra,
       args: { param1: 'test' },
