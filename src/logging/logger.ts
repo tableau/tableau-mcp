@@ -44,7 +44,7 @@ export function log(entry: LogEntry): void {
     const { data, ...rest } = entry;
     const message = JSON.stringify(rest);
     if (config.transport === 'http') {
-      if (entry.data) {
+      if (data) {
         // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
         console.log(message, data);
       } else {
@@ -53,6 +53,9 @@ export function log(entry: LogEntry): void {
       }
     } else {
       process.stderr.write(message.endsWith('\n') ? message : `${message}\n`);
+      if (data) {
+        process.stderr.write(JSON.stringify(data) + '\n');
+      }
     }
   }
   if (config.loggers.has('fileLogger')) {
