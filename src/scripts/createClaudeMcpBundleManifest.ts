@@ -215,6 +215,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  LOG_LEVEL: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Log Level',
+    description: 'The minimum severity level for server log output.',
+    required: false,
+    sensitive: false,
+  },
   DATASOURCE_CREDENTIALS: {
     includeInUserConfig: true,
     type: 'string',

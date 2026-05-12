@@ -80,12 +80,9 @@ describe('log', () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const error = new Error('boom');
 
-    log({ ...entry, level: 'error', error });
+    log({ ...entry, level: 'error', data: error });
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      JSON.stringify({ ...entry, level: 'error', error }),
-      error,
-    );
+    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify({ ...entry, level: 'error' }), error);
     consoleSpy.mockRestore();
   });
 

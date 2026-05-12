@@ -181,7 +181,7 @@ export function callback(
         message: 'OAuth callback error',
         level: 'error',
         logger: 'oauth',
-        error: error,
+        data: error,
       });
       res.status(500).json({
         error: 'server_error',
@@ -236,7 +236,7 @@ async function exchangeAuthorizationCode({
       message: 'Failed to exchange authorization code',
       level: 'error',
       logger: 'oauth',
-      error: error,
+      data: error,
     });
     return Err('Failed to exchange authorization code');
   }

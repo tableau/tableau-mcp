@@ -40,11 +40,13 @@ export function log(entry: LogEntry): void {
     return;
   }
   if (config.loggers.has('appLogger')) {
-    const message = JSON.stringify(entry);
+    // Remove data from the entry to avoid double logging.
+    const { data, ...rest } = entry;
+    const message = JSON.stringify(rest);
     if (config.transport === 'http') {
-      if (entry.error) {
+      if (entry.data) {
         // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
-        console.log(message, entry.error);
+        console.log(message, data);
       } else {
         // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
         console.log(message);

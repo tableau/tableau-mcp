@@ -18,7 +18,7 @@ export const logLevelSeverity = Object.fromEntries(
 
 export type LogEntry = {
   message: string;
-  error?: unknown;
+  data?: unknown;
   level: LogLevel;
   logger: string | undefined;
 };
