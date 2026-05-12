@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SetLevelRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import dotenv from 'dotenv';
 
+import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { FileLogger, setFileLogger } from './logging/fileLogger.js';
 import { log } from './logging/logger.js';
 import { isNotificationLevel, notifier, setNotificationLevel } from './logging/notification.js';
 import { RestApi } from './sdks/tableau/restApi.js';
-import { Server, serverName, serverVersion } from './server.js';
+import { WebMcpServer } from './server.web.js';
 import { startExpressServer } from './server/express.js';
+
+const serverVersion = pkg.version;
 
 async function startServer(): Promise<void> {
   dotenv.config();
@@ -49,20 +53,23 @@ async function startServer(): Promise<void> {
     case 'stdio': {
       await serverInfoReady;
 
-      const server = new Server();
+      const server = new WebMcpServer();
       await server.registerTools();
-      server.registerRequestHandlers();
+      server.mcpServer.server.setRequestHandler(SetLevelRequestSchema, async (request) => {
+        setNotificationLevel(server.mcpServer, request.params.level);
+        return {};
+      });
 
       const transport = new StdioServerTransport();
-      await server.connect(transport);
+      await server.mcpServer.connect(transport);
 
-      setNotificationLevel(server, notificationLevel);
-      notifier.info(server, `${server.name} v${server.version} running on stdio`);
+      setNotificationLevel(server.mcpServer, notificationLevel);
+      notifier.info(server.mcpServer, `${server.name} v${server.version} running on stdio`);
       break;
     }
     case 'http': {
       const { url } = await startExpressServer({
-        basePath: serverName,
+        basePath: 'tableau-mcp',
         config,
         logLevel: notificationLevel,
       });
@@ -80,7 +87,7 @@ async function startServer(): Promise<void> {
       }
 
       log({
-        message: `${serverName} v${serverVersion} ${config.disableSessionManagement ? 'stateless ' : ''}streamable HTTP server available at ${url}`,
+        message: `tableau-mcp v${serverVersion} ${config.disableSessionManagement ? 'stateless ' : ''}streamable HTTP server available at ${url}`,
         level: 'info',
         logger: 'startup',
       });

@@ -6,6 +6,14 @@
   "configurations": [
     {
       "type": "node",
+      "request": "attach",
+      "name": "Attach to Node",
+      "port": 9229,
+      "restart": true,
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "node",
       "request": "launch",
       "name": "Launch MCP Server",
       "skipFiles": ["<node_internals>/**"],

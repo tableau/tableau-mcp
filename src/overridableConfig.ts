@@ -1,6 +1,11 @@
 import { ProcessEnvEx } from '../types/process-env.js';
-import { removeClaudeMcpBundleUserConfigTemplates } from './config.js';
-import { isToolGroupName, isToolName, toolGroups, ToolName } from './tools/toolName.js';
+import { removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
+import {
+  isWebToolGroupName,
+  isWebToolName,
+  webToolGroups,
+  WebToolName,
+} from './tools/web/toolName.js';
 
 export const overridableVariables = [
   'ALLOWED_REQUEST_OVERRIDES',
@@ -44,11 +49,11 @@ type RequestOverrideRestrictionType = 'restricted' | 'unrestricted';
 
 export class OverridableConfig {
   private maxResultLimit: number | null;
-  private maxResultLimits: Map<ToolName, number | null>;
+  private maxResultLimits: Map<WebToolName, number | null>;
 
   allowedRequestOverrides: Map<RequestOverridableVariable, RequestOverrideRestrictionType>;
-  includeTools: Array<ToolName>;
-  excludeTools: Array<ToolName>;
+  includeTools: Array<WebToolName>;
+  excludeTools: Array<WebToolName>;
 
   boundedContext: BoundedContext;
 
@@ -201,9 +206,9 @@ export class OverridableConfig {
   getToolsWithOverrides(
     envVariables: Record<string, string | undefined>,
     siteOverrides: Record<string, string> = {},
-  ): { includeTools: Array<ToolName>; excludeTools: Array<ToolName> } {
-    let includeTools: Array<ToolName> = [];
-    let excludeTools: Array<ToolName> = [];
+  ): { includeTools: Array<WebToolName>; excludeTools: Array<WebToolName> } {
+    let includeTools: Array<WebToolName> = [];
+    let excludeTools: Array<WebToolName> = [];
 
     if (
       (!Object.hasOwn(siteOverrides, 'INCLUDE_TOOLS') &&
@@ -214,13 +219,13 @@ export class OverridableConfig {
       includeTools = envVariables.INCLUDE_TOOLS
         ? envVariables.INCLUDE_TOOLS.split(',').flatMap((s) => {
             const v = s.trim();
-            return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
+            return isWebToolName(v) ? v : isWebToolGroupName(v) ? webToolGroups[v] : [];
           })
         : [];
       excludeTools = envVariables.EXCLUDE_TOOLS
         ? envVariables.EXCLUDE_TOOLS.split(',').flatMap((s) => {
             const v = s.trim();
-            return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
+            return isWebToolName(v) ? v : isWebToolGroupName(v) ? webToolGroups[v] : [];
           })
         : [];
 
@@ -231,13 +236,13 @@ export class OverridableConfig {
       // site override set for EXCLUDE_TOOLS
       excludeTools = siteOverrides.EXCLUDE_TOOLS.split(',').flatMap((s) => {
         const v = s.trim();
-        return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
+        return isWebToolName(v) ? v : isWebToolGroupName(v) ? webToolGroups[v] : [];
       });
     } else if (siteOverrides.INCLUDE_TOOLS) {
       // site override set for INCLUDE_TOOLS
       includeTools = siteOverrides.INCLUDE_TOOLS.split(',').flatMap((s) => {
         const v = s.trim();
-        return isToolName(v) ? v : isToolGroupName(v) ? toolGroups[v] : [];
+        return isWebToolName(v) ? v : isWebToolGroupName(v) ? webToolGroups[v] : [];
       });
     }
 
@@ -457,7 +462,7 @@ export class OverridableConfig {
     envVariables: Record<string, string | undefined>,
     siteOverrides: Record<string, string> = {},
     requestOverrides: Record<string, string> = {},
-  ): Map<ToolName, number | null> {
+  ): Map<WebToolName, number | null> {
     // Initializing tool specific limits from environment variables
     let maxResultLimits = getMaxResultLimits(envVariables.MAX_RESULT_LIMITS ?? '');
     // Applying site overrides
@@ -527,7 +532,7 @@ export class OverridableConfig {
     return maxResultLimits;
   }
 
-  getMaxResultLimit(toolName: ToolName): number | null {
+  getMaxResultLimit(toolName: WebToolName): number | null {
     if (this.maxResultLimits.has(toolName)) {
       // either number or null (i.e. tool specific limit set to unbounded)
       return this.maxResultLimits.get(toolName)!;
@@ -553,8 +558,8 @@ function createSetFromCommaSeparatedString(value: string | undefined): Set<strin
   );
 }
 
-function getMaxResultLimits(maxResultLimits: string): Map<ToolName, number | null> {
-  const map = new Map<ToolName, number | null>();
+function getMaxResultLimits(maxResultLimits: string): Map<WebToolName, number | null> {
+  const map = new Map<WebToolName, number | null>();
   if (!maxResultLimits) {
     return map;
   }
@@ -563,10 +568,10 @@ function getMaxResultLimits(maxResultLimits: string): Map<ToolName, number | nul
     const [toolName, maxResultLimit] = curr.split(':');
     const maxResultLimitNumber = maxResultLimit ? parseInt(maxResultLimit) : NaN;
     const actualLimit = maxResultLimitNumber > 0 ? maxResultLimitNumber : null;
-    if (isToolName(toolName)) {
+    if (isWebToolName(toolName)) {
       map.set(toolName, actualLimit);
-    } else if (isToolGroupName(toolName)) {
-      toolGroups[toolName].forEach((toolName) => {
+    } else if (isWebToolGroupName(toolName)) {
+      webToolGroups[toolName].forEach((toolName) => {
         if (!map.has(toolName)) {
           // Tool names take precedence over group names
           map.set(toolName, actualLimit);

@@ -106,9 +106,9 @@ The default minimum level for sending notifications to MCP clients.
   - `alert`
   - `emergency`
 
-This value determines the minimum level at which to send notifications to MCP clients. That is,
-if set to `debug`, all notifications will be sent. If set to `error`, only notifications with a
-level of `error` or higher will be sent. Note that MCP clients can
+This value determines the minimum level at which to send notifications to MCP clients. That is, if
+set to `debug`, all notifications will be sent. If set to `error`, only notifications with a level
+of `error` or higher will be sent. Note that MCP clients can
 [change the minimum level](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/logging#setting-log-level)
 any time they want.
 
@@ -133,7 +133,8 @@ transport, and file logger).
   - `emergency`
 
 Log entries with a level below the configured value are silently dropped. This is independent of
-[`DEFAULT_NOTIFICATION_LEVEL`](#default_notification_level), which controls MCP client notifications.
+[`DEFAULT_NOTIFICATION_LEVEL`](#default_notification_level), which controls MCP client
+notifications.
 
 <hr />
 
@@ -182,7 +183,7 @@ be available. This variable is site overridable, see [Site Settings](site-settin
 
 - Default: Empty string (_all_ are included)
 - For a list of available tools and groups, see
-  [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.ts).
+  [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/web/toolName.ts).
 - Mixing tool names and group names is allowed.
 
 <hr />
@@ -209,8 +210,9 @@ The maximum timeout for requests to the Tableau Server REST API.
 ## `MAX_RESULT_LIMIT`
 
 The maximum number of results that every tool with a `limit` parameter can return when no
-tool-specific max result limit is set in the [`MAX_RESULT_LIMITS`](#max_result_limits)
-variable. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+tool-specific max result limit is set in the [`MAX_RESULT_LIMITS`](#max_result_limits) variable.
+This variable is site and request overridable, see [Site Settings](site-settings.md) and
+[Request Overrides](request-overrides.md).
 
 :::warning
 
@@ -227,7 +229,8 @@ Take care when setting this value and be sure to set appropriate tool-specific l
 ## `MAX_RESULT_LIMITS`
 
 A comma-separated list of tool names (or tool group names) and the maximum number of results that
-each tool (or tools in the group) can return. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+each tool (or tools in the group) can return. This variable is site and request overridable, see
+[Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 :::info
 
@@ -248,7 +251,7 @@ This means that:
 
 - Default: Empty string (_no limits_)
 - For a list of available tools and groups, see
-  [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.ts).
+  [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/web/toolName.ts).
 - Only applies to tools that have a `limit` parameter and return an array of items.
 - Tool names take precedence over tool group names. That is, `datasource:1000,list-datasources:20`
   means that the `list-datasources` tool can return up to 20 data sources but the `query-datasource`
@@ -263,7 +266,8 @@ This means that:
 
 Disables requests that are made to the VizQl Data Service for validating queries in the
 [`query-datasource`](../../tools/data-qna/query-datasource.md) tool. Does not disable the ability to
-query the datasource. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+query the datasource. This variable is site and request overridable, see
+[Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - Default: `false`
 - When `true`, skips validation of queries against metadata results and validation of SET and MATCH
@@ -287,8 +291,9 @@ Disable validation of SET and MATCH filter values in the
 ## `DISABLE_METADATA_API_REQUESTS`
 
 Disables `graphql` requests to the Tableau Metadata API in the
-[`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool.
-This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+[`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool. This variable is
+site and request overridable, see [Site Settings](site-settings.md) and
+[Request Overrides](request-overrides.md).
 
 - Default: `false`
 - When `true`, skips requests to the `graphql` endpoint that provides additional context to field
