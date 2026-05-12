@@ -25,6 +25,7 @@ export type McpScope =
 
 export type TableauApiScope =
   | 'tableau:content:read'
+  | 'tableau:projects:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
   | 'tableau:insight_definitions_metrics:read'
@@ -72,6 +73,10 @@ const toolScopeMap: Record<
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
+  },
+  'list-projects': {
+    mcp: ['tableau:mcp:content:read'],
+    api: new Set(['tableau:projects:read', 'tableau:mcp_site_settings:read']),
   },
   'list-views': {
     mcp: ['tableau:mcp:view:read'],
