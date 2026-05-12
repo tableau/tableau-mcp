@@ -19,11 +19,6 @@ class ResourceAccessChecker {
     tags: Set<string> | null | undefined;
   };
 
-  private readonly _cachedDatasourceIds: Map<string, AllowedResult>;
-  private readonly _cachedWorkbookIds: Map<string, AllowedResult<Workbook>>;
-  private readonly _cachedViewIds: Map<string, AllowedResult>;
-  private readonly _cachedCustomViewIds: Map<string, AllowedResult>;
-
   static create(): ResourceAccessChecker {
     return new ResourceAccessChecker();
   }
@@ -41,11 +36,6 @@ class ResourceAccessChecker {
       workbookIds: testOverrides?.workbookIds,
       tags: testOverrides?.tags,
     };
-
-    this._cachedDatasourceIds = new Map();
-    this._cachedWorkbookIds = new Map();
-    this._cachedViewIds = new Map();
-    this._cachedCustomViewIds = new Map();
   }
 
   private async getAllowedProjectIds({
@@ -101,14 +91,6 @@ class ResourceAccessChecker {
       extra,
     });
 
-    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
-    const allowedTags = await this.getAllowedTags({ extra });
-    if (!allowedProjectIds && !allowedTags) {
-      // If project filtering is enabled, we cannot cache the result since the datasource may be moved between projects.
-      // If tag filtering is enabled, we cannot cache the result since the datasource tags can change over time.
-      this._cachedDatasourceIds.set(datasourceLuid, result);
-    }
-
     return result;
   }
 
@@ -124,14 +106,6 @@ class ResourceAccessChecker {
       extra,
     });
 
-    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
-    const allowedTags = await this.getAllowedTags({ extra });
-    if (!allowedProjectIds && !allowedTags) {
-      // If project filtering is enabled, we cannot cache the result since the workbook may be moved between projects.
-      // If tag filtering is enabled, we cannot cache the result since the workbook tags can change over time.
-      this._cachedWorkbookIds.set(workbookId, result);
-    }
-
     return result;
   }
 
@@ -146,14 +120,6 @@ class ResourceAccessChecker {
       viewId,
       extra,
     });
-
-    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
-    const allowedTags = await this.getAllowedTags({ extra });
-    if (!allowedProjectIds && !allowedTags) {
-      // If project filtering is enabled, we cannot cache the result since the workbook containing the view may be moved between projects.
-      // If tag filtering is enabled, we cannot cache the result since the view tags can change over time.
-      this._cachedViewIds.set(viewId, result);
-    }
 
     return result;
   }
@@ -173,16 +139,6 @@ class ResourceAccessChecker {
       extra,
     });
 
-    const allowedProjectIds = await this.getAllowedProjectIds({ extra });
-    const allowedTags = await this.getAllowedTags({ extra });
-    if (!allowedProjectIds && !allowedTags) {
-      // If project filtering is enabled, we cannot cache the result since the workbook containing the view
-      // that contains the custom view may be moved between projects.
-      // If tag filtering is enabled, we cannot cache the result since the tags on the view
-      // that contains the custom view can change over time.
-      this._cachedCustomViewIds.set(customViewId, result);
-    }
-
     return result;
   }
 
@@ -193,11 +149,6 @@ class ResourceAccessChecker {
     datasourceLuid: string;
     extra: TableauRequestHandlerExtra;
   }): Promise<AllowedResult> {
-    const cachedResult = this._cachedDatasourceIds.get(datasourceLuid);
-    if (cachedResult) {
-      return cachedResult;
-    }
-
     const allowedDatasourceIds = await this.getAllowedDatasourceIds({ extra });
     if (allowedDatasourceIds && !allowedDatasourceIds.has(datasourceLuid)) {
       return {
@@ -284,11 +235,6 @@ class ResourceAccessChecker {
     workbookId: string;
     extra: TableauRequestHandlerExtra;
   }): Promise<AllowedResult<Workbook>> {
-    const cachedResult = this._cachedWorkbookIds.get(workbookId);
-    if (cachedResult) {
-      return cachedResult;
-    }
-
     const allowedWorkbookIds = await this.getAllowedWorkbookIds({ extra });
     if (allowedWorkbookIds && !allowedWorkbookIds.has(workbookId)) {
       return {
@@ -375,11 +321,6 @@ class ResourceAccessChecker {
     viewId: string;
     extra: TableauRequestHandlerExtra;
   }): Promise<AllowedResult> {
-    const cachedResult = this._cachedViewIds.get(viewId);
-    if (cachedResult) {
-      return cachedResult;
-    }
-
     let view: View | undefined;
     async function getView(): Promise<View> {
       return await useRestApi({
@@ -482,11 +423,6 @@ class ResourceAccessChecker {
     customViewId: string;
     extra: TableauRequestHandlerExtra;
   }): Promise<AllowedResult> {
-    const cachedResult = this._cachedCustomViewIds.get(customViewId);
-    if (cachedResult) {
-      return cachedResult;
-    }
-
     const allowedWorkbookIds = await this.getAllowedWorkbookIds({ extra });
     const allowedProjectIds = await this.getAllowedProjectIds({ extra });
     const allowedTags = await this.getAllowedTags({ extra });
