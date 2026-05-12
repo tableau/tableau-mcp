@@ -119,7 +119,7 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     this.requiredApiScopes = getRequiredApiScopesForTool(name);
   }
 
-  logInvocation({
+  notifyInvocation({
     requestId,
     args,
     username,
@@ -149,7 +149,12 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
     const { config, requestId, sessionId, tableauAuthInfo } = extra;
     const username = tableauAuthInfo?.username;
 
-    this.logInvocation({ requestId, args, username });
+    this.notifyInvocation({ requestId, args, username });
+    log({
+      message: `Tool ${this.name} invoked: requestId=${requestId}, args=${JSON.stringify(args)}`,
+      level: 'debug',
+      logger: 'tool',
+    });
 
     const productTelemetryForwarder = getProductTelemetry(
       config.productTelemetryEndpoint,
@@ -211,9 +216,10 @@ export class Tool<Args extends ZodRawShape | undefined = undefined> {
         errorCode = '500'; // Default to 500 if no HTTP status can be determined
       }
       log({
-        message: error,
+        message: 'Tool execution failed',
         level: 'error',
         logger: 'tool',
+        error,
       });
       toolResult = getErrorResult(requestId, error);
       return toolResult;

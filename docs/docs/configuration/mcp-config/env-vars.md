@@ -71,9 +71,10 @@ A comma-separated list of loggers to enable.
     `tableau-mcp` for tool calls.
   - `message`: The log message itself. This may be a string or a JSON object.
 
-- All notifications are written to the local log files regardless of the server's currently
-  configured minimum logging level, since that only applies to notifications sent to MCP clients.
-  See [`DEFAULT_LOG_LEVEL`](#default_log_level) for more information.
+- All notifications are written to the local log files regardless of the notification level, since
+  [`DEFAULT_NOTIFICATION_LEVEL`](#default_notification_level) only applies to notifications sent to
+  MCP clients. Server log output (stderr/console) is controlled separately by
+  [`LOG_LEVEL`](#log_level).
 - Secrets are masked by default in the log files. To reveal them for debugging purposes, set the
   [`DISABLE_LOG_MASKING`](#disable_log_masking) environment variable to `true`.
 
@@ -90,9 +91,9 @@ The directory server logs are written to when [`ENABLED_LOGGERS`](#enabled_logge
 
 <hr />
 
-## `DEFAULT_LOG_LEVEL`
+## `DEFAULT_NOTIFICATION_LEVEL`
 
-The default logging level of the server.
+The default minimum level for sending notifications to MCP clients.
 
 - Default: `debug`
 - Possible values:
@@ -105,12 +106,34 @@ The default logging level of the server.
   - `alert`
   - `emergency`
 
-This value determines the minimum log level in which to send notifications to MCP clients. That is,
-if the server's currently configured minimum logging level is `debug`, all log messages will be sent
-to MCP clients. If the level is set to `error`, only log messages with a level of `error` or higher
-will be sent. Note that MCP clients can
-[change the minimum log level](https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/logging#setting-log-level)
+This value determines the minimum level at which to send notifications to MCP clients. That is,
+if set to `debug`, all notifications will be sent. If set to `error`, only notifications with a
+level of `error` or higher will be sent. Note that MCP clients can
+[change the minimum level](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/logging#setting-log-level)
 any time they want.
+
+Note: this variable was named DEFAULT_LOG_LEVEL until version 2.0.0
+
+<hr />
+
+## `LOG_LEVEL`
+
+The minimum severity level for server log output (stderr on stdio transport, console on http
+transport, and file logger).
+
+- Default: `info`
+- Possible values:
+  - `debug` — all log entries
+  - `info`
+  - `notice`
+  - `warning`
+  - `error`
+  - `critical`
+  - `alert`
+  - `emergency`
+
+Log entries with a level below the configured value are silently dropped. This is independent of
+[`DEFAULT_NOTIFICATION_LEVEL`](#default_notification_level), which controls MCP client notifications.
 
 <hr />
 
@@ -280,7 +303,7 @@ This variable is site and request overridable, see [Site Settings](site-settings
 
 When `false` (the default) and using the Streamable HTTP transport, the MCP server will create and
 manage sessions as per the
-[Session Management](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#session-management)
+[Session Management](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#session-management)
 section of the MCP spec. The only state persisted in the session from one request to another is
 information about the client's identity, capabilities, and protocol version compatibility.
 

@@ -1,3 +1,4 @@
+import { log } from '../logging/logger.js';
 import { BoundedContext } from '../overridableConfig.js';
 import { useRestApi } from '../restApiInstance.js';
 import { DataSource } from '../sdks/tableau/types/dataSource.js';
@@ -188,6 +189,12 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
+        log({
+          message: `Resource access check failed for datasource ${datasourceLuid}`,
+          level: 'error',
+          logger: 'resource-access',
+          error,
+        });
         return {
           allowed: false,
           message: [
@@ -214,6 +221,12 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
+        log({
+          message: `Resource access check failed for datasource ${datasourceLuid} tags`,
+          level: 'error',
+          logger: 'resource-access',
+          error,
+        });
         return {
           allowed: false,
           message: [
@@ -274,6 +287,12 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
+        log({
+          message: `Resource access check failed for workbook ${workbookId}`,
+          level: 'error',
+          logger: 'resource-access',
+          error,
+        });
         return {
           allowed: false,
           message: [
@@ -300,6 +319,12 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
+        log({
+          message: `Resource access check failed for workbook ${workbookId} tags`,
+          level: 'error',
+          logger: 'resource-access',
+          error,
+        });
         return {
           allowed: false,
           message: [
@@ -350,6 +375,12 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
+        log({
+          message: `Resource access check failed for view ${viewId} workbook`,
+          level: 'error',
+          logger: 'resource-access',
+          error,
+        });
         return {
           allowed: false,
           message: [
@@ -376,6 +407,12 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
+        log({
+          message: `Resource access check failed for view ${viewId} project`,
+          level: 'error',
+          logger: 'resource-access',
+          error,
+        });
         return {
           allowed: false,
           message: [
@@ -402,6 +439,12 @@ class ResourceAccessChecker {
           };
         }
       } catch (error) {
+        log({
+          message: `Resource access check failed for view ${viewId} tags`,
+          level: 'error',
+          logger: 'resource-access',
+          error,
+        });
         return {
           allowed: false,
           message: [
@@ -444,6 +487,12 @@ class ResourceAccessChecker {
       });
       underlyingViewId = customView.view.id;
     } catch (error) {
+      log({
+        message: `Resource access check failed for custom view ${customViewId}`,
+        level: 'error',
+        logger: 'resource-access',
+        error,
+      });
       return {
         allowed: false,
         message: [

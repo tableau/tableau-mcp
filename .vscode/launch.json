@@ -24,7 +24,7 @@
         "CONNECTED_APP_SECRET_VALUE": "${config:tableau.mcp.CONNECTED_APP_SECRET_VALUE}",
         "JWT_ADDITIONAL_PAYLOAD": "${config:tableau.mcp.JWT_ADDITIONAL_PAYLOAD}",
         "DATASOURCE_CREDENTIALS": "${config:tableau.mcp.DATASOURCE_CREDENTIALS}",
-        "DEFAULT_LOG_LEVEL": "${config:tableau.mcp.DEFAULT_LOG_LEVEL}",
+        "DEFAULT_NOTIFICATION_LEVEL": "${config:tableau.mcp.DEFAULT_NOTIFICATION_LEVEL}",
         "INCLUDE_TOOLS": "${config:tableau.mcp.INCLUDE_TOOLS}",
         "EXCLUDE_TOOLS": "${config:tableau.mcp.EXCLUDE_TOOLS}",
         "MAX_RESULT_LIMIT": "${config:tableau.mcp.MAX_RESULT_LIMIT}",

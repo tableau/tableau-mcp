@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Server } from '../server.js';
-import { writeToStderr } from './logger.js';
 import {
   getNotificationMessageForTool,
   isNotificationLevel,
@@ -11,12 +10,8 @@ import {
 } from './notification.js';
 
 describe('notification', () => {
-  const originalEnv = process.env.TABLEAU_MCP_TEST;
-
   beforeEach(() => {
     vi.clearAllMocks();
-
-    process.env.TABLEAU_MCP_TEST = originalEnv;
   });
 
   describe('isLoggingLevel', () => {
@@ -54,26 +49,6 @@ describe('notification', () => {
       expect(shouldNotifyWhenLevelIsAtLeast('warning')).toBe(true);
       expect(shouldNotifyWhenLevelIsAtLeast('error')).toBe(true);
       expect(shouldNotifyWhenLevelIsAtLeast('info')).toBe(false);
-    });
-  });
-
-  describe('writeToStderr', () => {
-    it('should write to stderr in non-test mode', () => {
-      process.env.TABLEAU_MCP_TEST = 'false';
-
-      const stderrSpy = vi.spyOn(process.stderr, 'write');
-      writeToStderr('test message');
-
-      expect(stderrSpy).toHaveBeenCalledWith('test message\n');
-    });
-
-    it('should not write to stderr in test mode', () => {
-      process.env.TABLEAU_MCP_TEST = 'true';
-
-      const stderrSpy = vi.spyOn(process.stderr, 'write');
-      writeToStderr('test message');
-
-      expect(stderrSpy).not.toHaveBeenCalled();
     });
   });
 
