@@ -34,6 +34,7 @@ describe('mcpSiteSettings', () => {
         tableauAuthInfo: undefined,
         disableLogging: true,
       },
+      requestOverrides: undefined,
     });
 
     expect(config.includeTools).toEqual([]);
@@ -73,6 +74,7 @@ describe('mcpSiteSettings', () => {
         tableauAuthInfo: undefined,
         disableLogging: true,
       },
+      requestOverrides: undefined,
     });
 
     expect(config.includeTools).toEqual(['list-views', 'list-datasources']);
@@ -97,6 +99,7 @@ describe('mcpSiteSettings', () => {
         tableauAuthInfo: undefined,
         disableLogging: true,
       },
+      requestOverrides: undefined,
     });
 
     expect(config.includeTools).toEqual(['list-views', 'list-datasources']);
