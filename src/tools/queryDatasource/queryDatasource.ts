@@ -22,7 +22,6 @@ import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { Provider } from '../../utils/provider.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
-import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool, ToolRules } from '../tool.js';
 import { getDatasourceCredentials } from './datasourceCredentials.js';
 import { queryDatasourceToolDescription20253 } from './descriptions/queryDescription.2025.3.js';
@@ -85,10 +84,12 @@ export const getQueryDatasourceTool = (
             return new ArgsValidationError(getExceptionMessage(error)).toErr();
           }
           const configWithOverrides = await getConfigWithOverrides();
-          const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
-            datasourceLuid,
-            extra,
-          });
+          const isDatasourceAllowedResult = await extra
+            .getResourceAccessChecker()
+            .isDatasourceAllowed({
+              datasourceLuid,
+              extra,
+            });
 
           if (!isDatasourceAllowedResult.allowed) {
             return new DatasourceNotAllowedError(isDatasourceAllowedResult.message).toErr();

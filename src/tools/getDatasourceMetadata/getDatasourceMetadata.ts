@@ -13,7 +13,6 @@ import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
 import { getResultForTableauVersion } from '../../utils/isTableauVersionAtLeast.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
-import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool, ToolRules } from '../tool.js';
 import { combineFields, simplifyReadMetadataResult } from './datasourceMetadataUtils.js';
 
@@ -128,10 +127,12 @@ export const getGetDatasourceMetadataTool = (
           }
           const configWithOverrides = await extra.getConfigWithOverrides();
 
-          const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
-            datasourceLuid,
-            extra,
-          });
+          const isDatasourceAllowedResult = await extra
+            .getResourceAccessChecker()
+            .isDatasourceAllowed({
+              datasourceLuid,
+              extra,
+            });
 
           if (!isDatasourceAllowedResult.allowed) {
             return new DatasourceNotAllowedError(isDatasourceAllowedResult.message).toErr();

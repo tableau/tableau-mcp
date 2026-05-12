@@ -7,7 +7,6 @@ import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
-import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ConstrainedResult, Tool } from '../tool.js';
 
 const paramsSchema = {
@@ -33,7 +32,7 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
         extra,
         args: { workbookId },
         callback: async () => {
-          const isWorkbookAllowedResult = await resourceAccessChecker.isWorkbookAllowed({
+          const isWorkbookAllowedResult = await extra.getResourceAccessChecker().isWorkbookAllowed({
             workbookId,
             extra,
           });

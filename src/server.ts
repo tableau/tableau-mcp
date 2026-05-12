@@ -15,6 +15,7 @@ import { setNotificationLevel } from './logging/notification.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
+import { globalResourceAccessChecker, ResourceAccessChecker } from './tools/resourceAccessChecker';
 import { Tool } from './tools/tool.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
 import { toolNames } from './tools/toolName.js';
@@ -120,6 +121,20 @@ export class Server extends McpServer {
           },
           getConfigWithOverrides: async () =>
             getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra, requestOverrides }),
+          getResourceAccessChecker: () => {
+            // if request overrides for tool scoping is present, create a new instance
+            // of resource access checker instead of the global one.
+            if (
+              Object.hasOwn(requestOverrides, 'INCLUDE_DATASOURCE_IDS') ||
+              Object.hasOwn(requestOverrides, 'INCLUDE_WORKBOOK_IDS') ||
+              Object.hasOwn(requestOverrides, 'INCLUDE_PROJECT_IDS') ||
+              Object.hasOwn(requestOverrides, 'INCLUDE_TAGS')
+            ) {
+              return ResourceAccessChecker.create();
+            }
+
+            return globalResourceAccessChecker;
+          },
         };
 
         return tableauToolCallback(args, tableauRequestHandlerExtra);

@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { CustomViewNotAllowedError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
-import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
 const paramsSchema = {
@@ -41,7 +40,7 @@ export const getGetCustomViewDataTool = (server: Server): Tool<typeof paramsSche
         extra,
         args: { customViewId, viewFilters },
         callback: async () => {
-          const isAllowedResult = await resourceAccessChecker.isCustomViewAllowed({
+          const isAllowedResult = await extra.getResourceAccessChecker().isCustomViewAllowed({
             customViewId,
             extra,
           });

@@ -11,7 +11,6 @@ import { useRestApi } from '../../restApiInstance.js';
 import { ProductVersion } from '../../sdks/tableau/types/serverInfo.js';
 import { Server } from '../../server.js';
 import { convertViewImageToToolResult } from '../convertViewImageToToolResult.js';
-import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 import { getImageFormatForVersion } from './getImageFormatForVersion.js';
 
@@ -63,7 +62,7 @@ export const getGetViewImageTool = (
             return formatResult;
           }
 
-          const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
+          const isViewAllowedResult = await extra.getResourceAccessChecker().isViewAllowed({
             viewId,
             extra,
           });

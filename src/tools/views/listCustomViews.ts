@@ -8,7 +8,6 @@ import { Server } from '../../server.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
-import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 import { parseAndValidateCustomViewsFilterString } from './customViewsFilterUtils.js';
 
@@ -68,7 +67,7 @@ export const getListCustomViewsTool = (server: Server): Tool<typeof paramsSchema
         extra,
         args: { workbookId },
         callback: async () => {
-          const isWorkbookAllowedResult = await resourceAccessChecker.isWorkbookAllowed({
+          const isWorkbookAllowedResult = await extra.getResourceAccessChecker().isWorkbookAllowed({
             workbookId,
             extra,
           });

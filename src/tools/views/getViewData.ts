@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { ViewNotAllowedError } from '../../errors/mcpToolError.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Server } from '../../server.js';
-import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { Tool } from '../tool.js';
 
 const paramsSchema = {
@@ -36,7 +35,7 @@ export const getGetViewDataTool = (server: Server): Tool<typeof paramsSchema> =>
         extra,
         args: { viewId, viewFilters },
         callback: async () => {
-          const isViewAllowedResult = await resourceAccessChecker.isViewAllowed({
+          const isViewAllowedResult = await extra.getResourceAccessChecker().isViewAllowed({
             viewId,
             extra,
           });

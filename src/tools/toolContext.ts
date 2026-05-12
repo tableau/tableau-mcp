@@ -11,6 +11,7 @@ import { Config } from '../config.js';
 import { OverridableConfig } from '../overridableConfig.js';
 import { Server } from '../server.js';
 import { TableauAuthInfo } from '../server/oauth/schemas.js';
+import { ResourceAccessChecker } from './resourceAccessChecker.js';
 
 // Additional context  available to all tool callbacks
 export type TableauToolContext = {
@@ -21,6 +22,7 @@ export type TableauToolContext = {
   server: Server;
   tableauAuthInfo: TableauAuthInfo | undefined;
   getConfigWithOverrides: () => Promise<OverridableConfig>;
+  getResourceAccessChecker: () => ResourceAccessChecker;
   getSiteLuid: () => string;
   getUserLuid: () => string;
   setSiteLuid?: (siteLuid: string) => void;
