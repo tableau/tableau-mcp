@@ -26,7 +26,7 @@ export function log(entry: LogEntry): void {
   if (config.loggers.has('appLogger')) {
     const message = JSON.stringify(entry);
     if (config.transport === 'http') {
-      if ('data' in entry && entry.data) {
+      if (entry.data) {
         // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
         console.log(message, entry.data);
       } else {
