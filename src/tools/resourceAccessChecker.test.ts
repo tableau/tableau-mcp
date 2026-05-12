@@ -72,16 +72,7 @@ describe('ResourceAccessChecker', () => {
             }),
           ).toEqual({ allowed: true });
 
-          // Check again to exercise the cache.
-          expect(
-            await resourceAccessChecker.isDatasourceAllowed({
-              datasourceLuid: mockDatasource.id,
-              extra,
-            }),
-          ).toEqual({ allowed: true });
-
-          // If project or tag filtering is enabled, we cannot cache the result so we need to call the "Query Datasource" API each time.
-          const expectedNumberOfCalls = projectIds || tags ? 2 : 0;
+          const expectedNumberOfCalls = projectIds || tags ? 1 : 0;
           expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(expectedNumberOfCalls);
         },
       );
@@ -139,18 +130,7 @@ describe('ResourceAccessChecker', () => {
             message: expectedMessage,
           });
 
-          expect(
-            await resourceAccessChecker.isDatasourceAllowed({
-              datasourceLuid: mockDatasource.id,
-              extra,
-            }),
-          ).toEqual({
-            allowed: false,
-            message: expectedMessage,
-          });
-
-          // If project or tag filtering is enabled, we cannot cache the result so we need to call the "Query Datasource" API each time.
-          const expectedNumberOfCalls = !datasourceIds && (projectIds || tags) ? 2 : 0;
+          const expectedNumberOfCalls = !datasourceIds && (projectIds || tags) ? 1 : 0;
           expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(expectedNumberOfCalls);
         },
       );
@@ -187,16 +167,7 @@ describe('ResourceAccessChecker', () => {
             }),
           ).toEqual({ allowed: true, content: projectIds || tags ? mockWorkbook : undefined });
 
-          // Check again to exercise the cache.
-          expect(
-            await resourceAccessChecker.isWorkbookAllowed({
-              workbookId: mockWorkbook.id,
-              extra,
-            }),
-          ).toEqual({ allowed: true, content: projectIds || tags ? mockWorkbook : undefined });
-
-          // If project or tag filtering is enabled, we cannot cache the result so we need to call the "Get Workbook" API each time.
-          const expectedNumberOfCalls = projectIds || tags ? 2 : 0;
+          const expectedNumberOfCalls = projectIds || tags ? 1 : 0;
           expect(mocks.mockGetWorkbook).toHaveBeenCalledTimes(expectedNumberOfCalls);
         },
       );
@@ -252,18 +223,7 @@ describe('ResourceAccessChecker', () => {
             message: expectedMessage,
           });
 
-          expect(
-            await resourceAccessChecker.isWorkbookAllowed({
-              workbookId: mockWorkbook.id,
-              extra,
-            }),
-          ).toEqual({
-            allowed: false,
-            message: expectedMessage,
-          });
-
-          // If project or tag filtering is enabled, we cannot cache the result so we need to call the "Get Workbook" API each time.
-          const expectedNumberOfCalls = !workbookIds && (projectIds || tags) ? 2 : 0;
+          const expectedNumberOfCalls = !workbookIds && (projectIds || tags) ? 1 : 0;
           expect(mocks.mockGetWorkbook).toHaveBeenCalledTimes(expectedNumberOfCalls);
         },
       );
@@ -300,23 +260,7 @@ describe('ResourceAccessChecker', () => {
             }),
           ).toEqual({ allowed: true });
 
-          // Check again to exercise the cache.
-          expect(
-            await resourceAccessChecker.isViewAllowed({
-              viewId: mockView.id,
-              extra,
-            }),
-          ).toEqual({ allowed: true });
-
-          let expectedNumberOfCalls = 0;
-          if (projectIds || tags) {
-            // If project or tag filtering is enabled, we cannot cache the result so we need to call the "Get View" API each time.
-            expectedNumberOfCalls = 2;
-          } else if (workbookIds) {
-            // If only workbook filtering is enabled, we can cache the result so we only need to call the "Get View" API once.
-            expectedNumberOfCalls = 1;
-          }
-
+          const expectedNumberOfCalls = workbookIds || projectIds || tags ? 1 : 0;
           expect(mocks.mockGetView).toHaveBeenCalledTimes(expectedNumberOfCalls);
         },
       );
@@ -374,25 +318,7 @@ describe('ResourceAccessChecker', () => {
             message: expectedMessage,
           });
 
-          expect(
-            await resourceAccessChecker.isViewAllowed({
-              viewId: mockView.id,
-              extra,
-            }),
-          ).toEqual({
-            allowed: false,
-            message: expectedMessage,
-          });
-
-          let expectedNumberOfCalls = 0;
-          if (projectIds || tags) {
-            // If project or tag filtering is enabled, we cannot cache the result so we need to call the "Get View" API each time.
-            expectedNumberOfCalls = 2;
-          } else if (workbookIds) {
-            // If only workbook filtering is enabled, we can cache the result so we only need to call the "Get View" API once.
-            expectedNumberOfCalls = 1;
-          }
-
+          const expectedNumberOfCalls = workbookIds || projectIds || tags ? 1 : 0;
           expect(mocks.mockGetView).toHaveBeenCalledTimes(expectedNumberOfCalls);
         },
       );

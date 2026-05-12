@@ -14,6 +14,7 @@ import { getTableauServerInfo } from './getTableauServerInfo';
 import { setNotificationLevel } from './logging/notification.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
+import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
 import { Tool } from './tools/tool.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
 import { toolNames } from './tools/toolName.js';
@@ -84,6 +85,9 @@ export class Server extends McpServer {
           );
         }
 
+        const requestOverridesHeader =
+          extra.requestInfo?.headers[X_TABLEAU_MCP_CONFIG_HEADER]?.toString() ?? '';
+        const requestOverrides = getRequestOverridesFromHeader(requestOverridesHeader);
         const tableauToolCallback = await Provider.from(callback);
         const tableauRequestHandlerExtra: TableauRequestHandlerExtra = {
           ...extra,
@@ -115,7 +119,7 @@ export class Server extends McpServer {
             tableauRequestHandlerExtra._siteLuid = siteLuid;
           },
           getConfigWithOverrides: async () =>
-            getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra }),
+            getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra, requestOverrides }),
         };
 
         return tableauToolCallback(args, tableauRequestHandlerExtra);
@@ -150,6 +154,7 @@ export class Server extends McpServer {
         tableauAuthInfo,
         disableLogging: true, // MCP server is not connected yet so we can't send logging notifications
       },
+      requestOverrides: {}, // request overrides are not relevant when getting tools
     });
 
     const tableauServerInfo = await getTableauServerInfo(config.server || tableauAuthInfo?.server);
