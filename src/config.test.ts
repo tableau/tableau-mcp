@@ -1,5 +1,6 @@
-import { exportedForTesting, ONE_HOUR_IN_MS, TEN_MINUTES_IN_MS } from './config.js';
+import { exportedForTesting } from './config.js';
 import { stubDefaultEnvVars } from './testShared.js';
+import { milliseconds } from './utils/milliseconds.js';
 
 describe('Config', () => {
   const { Config } = exportedForTesting;
@@ -142,21 +143,21 @@ describe('Config', () => {
     vi.stubEnv('MAX_REQUEST_TIMEOUT_MS', 'abc');
 
     const config = new Config();
-    expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
+    expect(config.maxRequestTimeoutMs).toBe(milliseconds.fromMinutes(10));
   });
 
   it('should set maxRequestTimeoutMs to the default value when specified as a negative number', () => {
     vi.stubEnv('MAX_REQUEST_TIMEOUT_MS', '-100');
 
     const config = new Config();
-    expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
+    expect(config.maxRequestTimeoutMs).toBe(milliseconds.fromMinutes(10));
   });
 
   it('should set maxRequestTimeoutMs to the default value when specified as a number greater than one hour', () => {
-    vi.stubEnv('MAX_REQUEST_TIMEOUT_MS', `${ONE_HOUR_IN_MS + 1}`);
+    vi.stubEnv('MAX_REQUEST_TIMEOUT_MS', `${milliseconds.fromHours(1) + 1}`);
 
     const config = new Config();
-    expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
+    expect(config.maxRequestTimeoutMs).toBe(milliseconds.fromMinutes(10));
   });
 
   it('should set disableSessionManagement to false by default', () => {

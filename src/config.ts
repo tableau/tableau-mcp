@@ -9,15 +9,10 @@ import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './te
 import { isTransport, TransportName } from './transports.js';
 import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
+import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
 
 const __dirname = getDirname();
-
-export const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
-export const ONE_HOUR_IN_MS = 60 * 60 * 1000;
-export const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
-export const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
-export const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
 const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
@@ -226,19 +221,19 @@ export class Config {
         ? dnsServers.split(',').map((ip) => ip.trim())
         : ['1.1.1.1', '1.0.0.1' /* Cloudflare public DNS */],
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
-        defaultValue: TEN_MINUTES_IN_MS,
+        defaultValue: milliseconds.fromMinutes(10),
         minValue: 0,
-        maxValue: ONE_HOUR_IN_MS,
+        maxValue: milliseconds.fromHours(1),
       }),
       accessTokenTimeoutMs: parseNumber(accessTokenTimeoutMs, {
-        defaultValue: ONE_HOUR_IN_MS,
+        defaultValue: milliseconds.fromHours(1),
         minValue: 0,
-        maxValue: THIRTY_DAYS_IN_MS,
+        maxValue: milliseconds.fromDays(30),
       }),
       refreshTokenTimeoutMs: parseNumber(refreshTokenTimeoutMs, {
-        defaultValue: THIRTY_DAYS_IN_MS,
+        defaultValue: milliseconds.fromDays(30),
         minValue: 0,
-        maxValue: ONE_YEAR_IN_MS,
+        maxValue: milliseconds.fromYears(1),
       }),
       clientIdSecretPairs: oauthClientIdSecretPairs
         ? oauthClientIdSecretPairs.split(',').reduce<Record<string, string>>((acc, curr) => {
@@ -341,9 +336,9 @@ export class Config {
     }
 
     this.maxRequestTimeoutMs = parseNumber(maxRequestTimeoutMs, {
-      defaultValue: TEN_MINUTES_IN_MS,
+      defaultValue: milliseconds.fromMinutes(10),
       minValue: 5000,
-      maxValue: ONE_HOUR_IN_MS,
+      maxValue: milliseconds.fromHours(1),
     });
 
     if (this.auth === 'pat') {
