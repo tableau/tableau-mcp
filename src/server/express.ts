@@ -15,7 +15,11 @@ import { createSession, getSession, Session } from '../sessions.js';
 import { latencyMiddleware } from './latencyMiddleware.js';
 import { handlePingRequest } from './middleware.js';
 import { getTableauAuthInfo } from './oauth/getTableauAuthInfo.js';
-import { EmbeddedOAuthProvider, TableauOAuthProvider } from './oauth/provider.js';
+import {
+  EmbeddedOAuthProvider,
+  OidcPassthroughOAuthProvider,
+  TableauOAuthProvider,
+} from './oauth/provider.js';
 import { TableauAuthInfo } from './oauth/schemas.js';
 import { AuthenticatedRequest } from './oauth/types.js';
 import { passthroughAuthMiddleware, X_TABLEAU_AUTH_HEADER } from './passthroughAuthMiddleware.js';
@@ -57,17 +61,25 @@ export async function startExpressServer({
   );
 
   const middleware: Array<RequestHandler> = [handlePingRequest];
-  if (config.enablePassthroughAuth) {
-    middleware.push(passthroughAuthMiddleware());
-  }
+  if (config.auth === 'oidc-passthrough') {
+    // In oidc-passthrough mode, skip passthroughAuthMiddleware to avoid header confusion.
+    // The OIDC provider handles auth via Google tokeninfo validation.
+    const oidcProvider = new OidcPassthroughOAuthProvider();
+    oidcProvider.setupRoutes(app);
+    middleware.push(oidcProvider.authMiddleware);
+  } else {
+    if (config.enablePassthroughAuth) {
+      middleware.push(passthroughAuthMiddleware());
+    }
 
-  if (config.oauth.enabled) {
-    const oauthProvider = config.oauth.embeddedAuthzServer
-      ? new EmbeddedOAuthProvider()
-      : new TableauOAuthProvider();
+    if (config.oauth.enabled) {
+      const oauthProvider = config.oauth.embeddedAuthzServer
+        ? new EmbeddedOAuthProvider()
+        : new TableauOAuthProvider();
 
-    oauthProvider.setupRoutes(app);
-    middleware.push(oauthProvider.authMiddleware);
+      oauthProvider.setupRoutes(app);
+      middleware.push(oauthProvider.authMiddleware);
+    }
   }
   middleware.push(latencyMiddleware());
 

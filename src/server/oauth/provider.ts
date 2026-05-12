@@ -9,6 +9,7 @@ import { oauthProtectedResource } from './.well-known/oauth-protected-resource.j
 import {
   AccessTokenValidator,
   EmbeddedAccessTokenValidator,
+  GoogleOpaqueAccessTokenValidator,
   TableauAccessTokenValidator,
 } from './accessTokenValidator.js';
 import { authMiddleware } from './authMiddleware.js';
@@ -137,5 +138,18 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
 export class TableauOAuthProvider extends OAuthProvider {
   get accessTokenValidator(): AccessTokenValidator {
     return new TableauAccessTokenValidator();
+  }
+}
+
+/**
+ * OIDC Passthrough provider for Google opaque access tokens.
+ *
+ * Pure resource server — validates incoming Google access tokens via tokeninfo,
+ * extracts the user's email, and passes it downstream as the Tableau username.
+ * No /authorize, /token, or /register routes.
+ */
+export class OidcPassthroughOAuthProvider extends OAuthProvider {
+  get accessTokenValidator(): AccessTokenValidator {
+    return new GoogleOpaqueAccessTokenValidator();
   }
 }

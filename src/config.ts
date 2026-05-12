@@ -18,7 +18,7 @@ export const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
 export const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
 export const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
-const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
+const authTypes = ['pat', 'uat', 'direct-trust', 'oauth', 'oidc-passthrough'] as const;
 type AuthType = (typeof authTypes)[number];
 
 function isAuthType(auth: unknown): auth is AuthType {
@@ -83,6 +83,15 @@ export class Config {
   productTelemetryEnabled: boolean;
   isHyperforce: boolean;
   breakGlassDisableGlobally: boolean;
+  oidc: {
+    expectedAudiences: string[];
+    expectedHd: string;
+    tokeninfoUrl: string;
+    usernameClaim: string;
+    usernameMap: Record<string, string>;
+    validationCacheTtlSeconds: number;
+    validationCacheMax: number;
+  };
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -146,6 +155,13 @@ export class Config {
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
       IS_HYPERFORCE: isHyperforce,
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
+      OIDC_EXPECTED_AUDIENCE: oidcExpectedAudience,
+      OIDC_EXPECTED_HD: oidcExpectedHd,
+      OIDC_TOKENINFO_URL: oidcTokeninfoUrl,
+      OIDC_USERNAME_CLAIM: oidcUsernameClaim,
+      OIDC_USERNAME_MAP_JSON: oidcUsernameMapJson,
+      OIDC_VALIDATION_CACHE_TTL_SECONDS: oidcValidationCacheTtlSeconds,
+      OIDC_VALIDATION_CACHE_MAX: oidcValidationCacheMax,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -277,9 +293,15 @@ export class Config {
     this.breakGlassDisableGlobally = breakGlassDisableGlobally === 'true';
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
-    this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
+    const needsHttp = this.oauth.enabled || this.auth === 'oidc-passthrough';
+    this.transport = isTransport(transport) ? transport : needsHttp ? 'http' : 'stdio';
 
-    if (this.transport === 'http' && !disableOauthOverride && !this.oauth.issuer) {
+    if (
+      this.transport === 'http' &&
+      !disableOauthOverride &&
+      !this.oauth.issuer &&
+      this.auth !== 'oidc-passthrough'
+    ) {
       throw new Error(
         'OAUTH_ISSUER must be set when TRANSPORT is "http" unless DANGEROUSLY_DISABLE_OAUTH is "true"',
       );
@@ -377,7 +399,35 @@ export class Config {
       ) {
         throw new Error(`UAT private key path does not exist: ${uatPrivateKeyPath}`);
       }
+    } else if (this.auth === 'oidc-passthrough') {
+      invariant(oidcExpectedAudience, 'The environment variable OIDC_EXPECTED_AUDIENCE is not set');
+      invariant(clientId, 'The environment variable CONNECTED_APP_CLIENT_ID is not set');
+      invariant(secretId, 'The environment variable CONNECTED_APP_SECRET_ID is not set');
+      invariant(secretValue, 'The environment variable CONNECTED_APP_SECRET_VALUE is not set');
+
+      // In oidc-passthrough mode, jwtUsername is set per-request from the validated Google token
+      jwtUsername = '{OAUTH_USERNAME}';
     }
+
+    this.oidc = {
+      expectedAudiences: oidcExpectedAudience
+        ? oidcExpectedAudience.split(',').map((s) => s.trim())
+        : [],
+      expectedHd: oidcExpectedHd ?? '',
+      tokeninfoUrl: oidcTokeninfoUrl || 'https://oauth2.googleapis.com/tokeninfo',
+      usernameClaim: oidcUsernameClaim || 'email',
+      usernameMap: oidcUsernameMapJson ? JSON.parse(oidcUsernameMapJson) : {},
+      validationCacheTtlSeconds: parseNumber(oidcValidationCacheTtlSeconds, {
+        defaultValue: 300,
+        minValue: 1,
+        maxValue: 3600,
+      }),
+      validationCacheMax: parseNumber(oidcValidationCacheMax, {
+        defaultValue: 1000,
+        minValue: 1,
+        maxValue: 100000,
+      }),
+    };
 
     this.server = server ?? '';
     this.patName = patName ?? '';

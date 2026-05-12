@@ -6,7 +6,9 @@ import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
+import { ExpiringMap } from '../../utils/expiringMap.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
+import { GoogleTokenInfoClient, TokenInfoResponse } from './googleTokenInfoClient.js';
 import {
   mcpAccessTokenSchema,
   mcpAccessTokenUserOnlySchema,
@@ -176,5 +178,97 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
       });
       return new Err('Invalid or expired access token');
     }
+  }
+}
+
+export class GoogleOpaqueAccessTokenValidator extends AccessTokenValidator {
+  private readonly client: GoogleTokenInfoClient;
+  private readonly cache: ExpiringMap<string, AuthInfo>;
+  private readonly maxCacheSize: number;
+
+  constructor(client?: GoogleTokenInfoClient) {
+    super();
+
+    this.client = client ?? new GoogleTokenInfoClient({
+      tokeninfoUrl: this.config.oidc.tokeninfoUrl,
+    });
+
+    this.cache = new ExpiringMap<string, AuthInfo>({
+      defaultExpirationTimeMs: this.config.oidc.validationCacheTtlSeconds * 1000,
+    });
+    this.maxCacheSize = this.config.oidc.validationCacheMax;
+  }
+
+  async validate(token: string): Promise<AccessTokenValidatorResult> {
+    const cached = this.cache.get(token);
+    if (cached) {
+      return Ok(cached);
+    }
+
+    let tokenInfo: TokenInfoResponse;
+    try {
+      tokenInfo = await this.client.validate(token);
+    } catch (error) {
+      log({
+        message: 'Google token validation failed',
+        level: 'debug',
+        logger: 'oauth',
+        error,
+      });
+      return new Err('Invalid or expired access token');
+    }
+
+    const { expectedAudiences, expectedHd } = this.config.oidc;
+
+    if (!expectedAudiences.includes(tokenInfo.aud)) {
+      log({
+        message: `Google token aud mismatch: got ${tokenInfo.aud}, expected one of [${expectedAudiences.join(', ')}]`,
+        level: 'info',
+        logger: 'oauth',
+      });
+      return new Err('Token audience mismatch');
+    }
+
+    if (expectedHd && tokenInfo.hd !== expectedHd) {
+      log({
+        message: `Google token hd mismatch: got ${tokenInfo.hd ?? 'undefined'}, expected ${expectedHd}`,
+        level: 'info',
+        logger: 'oauth',
+      });
+      return new Err('hd mismatch');
+    }
+
+    const username = this.config.oidc.usernameMap[tokenInfo.email] ?? tokenInfo.email;
+
+    const tableauAuthInfo: TableauAuthInfo = {
+      type: 'X-Tableau-Auth',
+      username,
+      server: this.config.server,
+    };
+
+    const authInfo: AuthInfo = {
+      token,
+      clientId: tokenInfo.aud,
+      scopes: tokenInfo.scope?.split(' ') ?? [],
+      expiresAt: Math.floor(Date.now() / 1000) + tokenInfo.expires_in,
+      extra: tableauAuthInfo,
+    };
+
+    const cacheTtlMs = Math.min(
+      tokenInfo.expires_in * 1000,
+      this.config.oidc.validationCacheTtlSeconds * 1000,
+    );
+
+    if (this.cache.size >= this.maxCacheSize) {
+      // Evict oldest entry (first key in Map iteration order)
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
+    }
+
+    this.cache.set(token, authInfo, cacheTtlMs);
+
+    return Ok(authInfo);
   }
 }

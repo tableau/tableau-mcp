@@ -19,8 +19,17 @@ import { Server, userAgent } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { TableauRequestHandlerExtra } from './tools/toolContext.js';
 import { isAxiosError } from './utils/axios.js';
+import { ExpiringMap } from './utils/expiringMap.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
+
+// Tableau session cache for oidc-passthrough mode.
+// Keyed by "email|siteName", stores X-Tableau-Auth credentials.
+// Avoids a UAT signin on every tool call (~200-500ms over the Internet).
+const TABLEAU_SESSION_TTL_MS = 239 * 60 * 1000 - 60_000; // Tableau Cloud default (240 min) minus 1 min buffer
+const tableauSessionCache = new ExpiringMap<string, { accessToken: string; userId: string }>({
+  defaultExpirationTimeMs: TABLEAU_SESSION_TTL_MS,
+});
 
 type JwtScopes =
   | 'tableau:viz_data_service:read'
@@ -148,6 +157,37 @@ const getNewRestApiInstanceAsync = async (
       });
       setSiteLuid?.(restApi.siteId);
       setUserLuid?.(restApi.userId);
+    } else if (config.auth === 'oidc-passthrough') {
+      const username = getJwtUsername(config, tableauAuthInfo);
+      invariant(username, 'OIDC username could not be determined from the request');
+
+      const cacheKey = `${username}|${config.siteName}`;
+      const cached = tableauSessionCache.get(cacheKey);
+
+      if (cached) {
+        signOutWhenCompleted = false;
+        restApi.setCredentials(cached.accessToken, cached.userId);
+      } else {
+        await restApi.signIn({
+          type: 'direct-trust',
+          siteName: config.siteName,
+          username,
+          clientId: config.connectedAppClientId,
+          secretId: config.connectedAppSecretId,
+          secretValue: config.connectedAppSecretValue,
+          scopes: jwtScopes,
+          additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
+        });
+
+        tableauSessionCache.set(cacheKey, {
+          accessToken: restApi.accessToken,
+          userId: restApi.userId,
+        });
+
+        signOutWhenCompleted = false;
+        setSiteLuid?.(restApi.siteId);
+        setUserLuid?.(restApi.userId);
+      }
     } else if (config.auth === 'oauth') {
       invariant(tableauAuthInfo, 'Tableau auth info not provided.');
 
@@ -182,6 +222,38 @@ export const useRestApi = async <T>(
   });
   try {
     return await callback(restApi);
+  } catch (error) {
+    // In oidc-passthrough mode, evict cached session on 401 and retry once
+    if (
+      remaining.config.auth === 'oidc-passthrough' &&
+      isAxiosError(error) &&
+      error.response?.status === 401 &&
+      remaining.tableauAuthInfo?.type === 'X-Tableau-Auth'
+    ) {
+      const username = remaining.tableauAuthInfo.username;
+      const cacheKey = `${username}|${remaining.config.siteName}`;
+      if (tableauSessionCache.has(cacheKey)) {
+        tableauSessionCache.delete(cacheKey);
+        log({
+          message: `Evicted stale Tableau session for ${username}, retrying signin`,
+          level: 'info',
+          logger: 'auth',
+        });
+        const { restApi: retryApi, signOutWhenCompleted: retrySignOut } =
+          await getNewRestApiInstanceAsync({
+            ...remaining,
+            jwtScopes: new Set(args.jwtScopes),
+          });
+        try {
+          return await callback(retryApi);
+        } finally {
+          if (retrySignOut) {
+            await retryApi.signOut();
+          }
+        }
+      }
+    }
+    throw error;
   } finally {
     if (signOutWhenCompleted) {
       // Tableau REST sessions for 'pat' and 'direct-trust' are intentionally ephemeral.

@@ -115,6 +115,14 @@ export class RestApi {
     return getBearerTokenPayload(this.creds.token)['https://tableau.com/userId'] ?? '';
   }
 
+  get accessToken(): string {
+    if (this.creds.type === 'X-Tableau-Auth') {
+      return this.creds.token;
+    }
+
+    return this.creds.token;
+  }
+
   private get authenticationMethods(): AuthenticationMethods {
     const authenticationMethods = new AuthenticationMethods(RestApi.baseUrl, {
       timeout: this._maxRequestTimeoutMs,
