@@ -1,4 +1,5 @@
 import { getConfig } from '../config.js';
+import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getFileLogger } from './fileLogger.js';
 import { LogEntry, LogLevel, logLevelSeverity } from './types.js';
 
@@ -44,7 +45,7 @@ export function log(entry: LogEntry): void {
     const { data, ...rest } = entry;
     const message = JSON.stringify(rest);
     if (config.transport === 'http') {
-      if (data) {
+      if (data !== undefined) {
         // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
         console.log(message, data);
       } else {
@@ -53,8 +54,12 @@ export function log(entry: LogEntry): void {
       }
     } else {
       process.stderr.write(message.endsWith('\n') ? message : `${message}\n`);
-      if (data) {
-        process.stderr.write(JSON.stringify(data) + '\n');
+      if (data !== undefined) {
+        try {
+          process.stderr.write(JSON.stringify(data) + '\n');
+        } catch (error) {
+          process.stderr.write(`Failed to write data to stderr: ${getExceptionMessage(error)}\n`);
+        }
       }
     }
   }
