@@ -70,7 +70,7 @@ async function startServer(): Promise<void> {
       // Port is now open. Wait for server info before logging the ready message.
       await serverInfoReady;
 
-      if (!config.oauth.enabled) {
+      if (!config.oauth.enabled && config.auth !== 'oidc-passthrough') {
         log({
           message:
             '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access! By having explicitly disabled OAuth by setting the DANGEROUSLY_DISABLE_OAUTH environment variable to "true", you accept any and all risks associated with this decision.',

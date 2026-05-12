@@ -84,7 +84,7 @@ describe('log', () => {
 
     expect(consoleSpy).toHaveBeenCalledWith(
       JSON.stringify({ ...entry, level: 'error', error }),
-      error,
+      { message: 'boom', name: 'Error' },
     );
     consoleSpy.mockRestore();
   });

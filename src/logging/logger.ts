@@ -1,4 +1,5 @@
 import { getConfig } from '../config.js';
+import { isAxiosError } from '../utils/axios.js';
 import { getFileLogger } from './fileLogger.js';
 import { LogEntry, LogLevel, logLevelSeverity } from './types.js';
 
@@ -34,6 +35,26 @@ export function parseLoggerTypes(value: string | undefined): Set<LoggerType> {
   );
 }
 
+function sanitizeError(error: unknown): unknown {
+  if (isAxiosError(error)) {
+    return {
+      message: error.message,
+      code: error.code,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      responseData: error.response?.data,
+      url: error.config?.url,
+      method: error.config?.method,
+    };
+  }
+
+  if (error instanceof Error) {
+    return { message: error.message, name: error.name };
+  }
+
+  return error;
+}
+
 export function log(entry: LogEntry): void {
   const config = getConfig();
   if (!shouldLog(entry.level, config.logLevel)) {
@@ -44,7 +65,7 @@ export function log(entry: LogEntry): void {
     if (config.transport === 'http') {
       if (entry.error) {
         // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
-        console.log(message, entry.error);
+        console.log(message, sanitizeError(entry.error));
       } else {
         // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
         console.log(message);
