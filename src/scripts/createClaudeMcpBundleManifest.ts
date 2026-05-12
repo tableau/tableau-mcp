@@ -406,6 +406,23 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Allow Sites to Configure Request Overrides',
+    description: 'Allow sites to configure request overrides.',
+    required: false,
+    sensitive: false,
+  },
+  ALLOWED_REQUEST_OVERRIDES: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Allowed Request Overrides',
+    description:
+      'A comma-separated list of request override variables to allow. The format is `overridableVariableName:restrictionType`.',
+    required: false,
+    sensitive: false,
+  },
   ENABLE_PASSTHROUGH_AUTH: {
     includeInUserConfig: false,
     type: 'boolean',
