@@ -5,9 +5,10 @@ import { isSSRFSafeURL } from 'ssrfcheck';
 import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
-import { getConfig, ONE_DAY_IN_MS } from '../../config.js';
+import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
 import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
+import { milliseconds } from '../../utils/milliseconds.js';
 import { parseUrl } from '../../utils/parseUrl.js';
 import { retry } from '../../utils/retry.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';
@@ -366,7 +367,10 @@ async function getClientFromMetadataDoc(
   if (cacheControlMaxAge) {
     const cacheControlMaxAgeSeconds = parseInt(cacheControlMaxAge);
     if (!isNaN(cacheControlMaxAgeSeconds) && cacheControlMaxAgeSeconds >= 0) {
-      cacheExpiryMs = Math.min(ONE_DAY_IN_MS, cacheControlMaxAgeSeconds * 1000);
+      cacheExpiryMs = Math.min(
+        milliseconds.fromDays(1),
+        milliseconds.fromSeconds(cacheControlMaxAgeSeconds),
+      );
     }
   }
 
