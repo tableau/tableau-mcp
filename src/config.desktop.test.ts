@@ -1,5 +1,5 @@
 import { Config } from './config.desktop.js';
-import { milliseconds } from './milliseconds.js';
+import { milliseconds } from './utils/milliseconds.js';
 
 describe('DesktopConfig', () => {
   beforeEach(() => {

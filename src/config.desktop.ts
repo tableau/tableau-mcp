@@ -1,6 +1,6 @@
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import { AgentApiClientConfig } from './desktop/getAgentApiClient.js';
-import { milliseconds } from './milliseconds.js';
+import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
 
 export class Config extends BaseConfig {

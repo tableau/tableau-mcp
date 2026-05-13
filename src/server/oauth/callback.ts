@@ -215,7 +215,6 @@ async function exchangeAuthorizationCode({
   clientId: string;
   codeVerifier: string;
 }): Promise<Result<TableauAccessToken, string>> {
-  const config = getConfig();
   try {
     const result = await getTokenResult(
       server,
@@ -227,7 +226,7 @@ async function exchangeAuthorizationCode({
         code_verifier: codeVerifier,
       },
       {
-        timeout: config.maxRequestTimeoutMs,
+        timeout: getConfig().maxRequestTimeoutMs,
       },
     );
 

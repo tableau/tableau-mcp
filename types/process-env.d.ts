@@ -30,6 +30,7 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   UAT_KEY_ID: string | undefined;
   JWT_ADDITIONAL_PAYLOAD: string | undefined;
   DATASOURCE_CREDENTIALS: string | undefined;
+  LOG_LEVEL: string | undefined;
   DISABLE_LOG_MASKING: string | undefined;
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;
@@ -46,6 +47,8 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES: string | undefined;
   MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: string | undefined;
   ENABLE_MCP_SITE_SETTINGS: string | undefined;
+  ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES: string | undefined;
+  ALLOWED_REQUEST_OVERRIDES: string | undefined;
   ENABLE_PASSTHROUGH_AUTH: string | undefined;
   DANGEROUSLY_DISABLE_OAUTH: string | undefined;
   OAUTH_EMBEDDED_AUTHZ_SERVER: string | undefined;

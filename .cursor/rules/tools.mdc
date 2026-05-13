@@ -68,7 +68,7 @@ Available in `extra` parameter:
 - `config` — server configuration
 - `server` — MCP Server instance
 - `tableauAuthInfo` — auth info (may be undefined for unauthenticated)
-- `getConfigWithOverrides()` — site-specific config overrides
+- `getConfigWithOverrides()` — config with site and request overrides applied
 - `getSiteLuid()` / `getUserLuid()` — resolved identifiers
 - `setSiteLuid()` / `setUserLuid()` — set during auth lifecycle
 - `requestId` — unique request identifier
