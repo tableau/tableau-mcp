@@ -7,8 +7,8 @@ import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
-import { milliseconds } from '../../milliseconds.js';
 import { axios, AxiosResponse, getStringResponseHeader, isAxiosError } from '../../utils/axios.js';
+import { milliseconds } from '../../utils/milliseconds.js';
 import { parseUrl } from '../../utils/parseUrl.js';
 import { retry } from '../../utils/retry.js';
 import { setLongTimeout } from '../../utils/setLongTimeout.js';

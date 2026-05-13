@@ -12,7 +12,7 @@ async function startServer(): Promise<void> {
   dotenv.config();
   const config = getDesktopConfig();
 
-  const notificationlevel = isNotificationLevel(config.defaultNotificationLevel)
+  const notificationLevel = isNotificationLevel(config.defaultNotificationLevel)
     ? config.defaultNotificationLevel
     : 'debug';
   if (config.loggers.has('fileLogger')) {
@@ -33,7 +33,7 @@ async function startServer(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.mcpServer.connect(transport);
 
-  setNotificationLevel(server.mcpServer, notificationlevel);
+  setNotificationLevel(server.mcpServer, notificationLevel);
   notifier.info(server.mcpServer, `${server.name} v${server.version} running on stdio`);
 }
 

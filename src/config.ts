@@ -2,10 +2,10 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
-import { milliseconds } from './milliseconds.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
-import { isTransport, TransportName } from './transports.js';
+import { isTransport } from './transports.js';
 import invariant from './utils/invariant.js';
+import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
 
 const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
@@ -18,7 +18,6 @@ function isAuthType(auth: unknown): auth is AuthType {
 export class Config extends BaseConfig {
   auth: AuthType;
   server: string;
-  transport: TransportName;
   sslKey: string;
   sslCert: string;
   httpPort: number;
@@ -43,6 +42,7 @@ export class Config extends BaseConfig {
   passthroughAuthUserSessionCheckIntervalInMinutes: number;
   mcpSiteSettingsCheckIntervalInMinutes: number;
   enableMcpSiteSettings: boolean;
+  allowSitesToConfigureRequestOverrides: boolean;
   enablePassthroughAuth: boolean;
   oauth: {
     enabled: boolean;
@@ -104,6 +104,7 @@ export class Config extends BaseConfig {
         passthroughAuthUserSessionCheckIntervalInMinutes,
       MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: mcpSiteSettingsCheckIntervalInMinutes,
       ENABLE_MCP_SITE_SETTINGS: enableMcpSiteSettings,
+      ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES: allowSitesToConfigureRequestOverrides,
       ENABLE_PASSTHROUGH_AUTH: enablePassthroughAuth,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_EMBEDDED_AUTHZ_SERVER: oauthEmbeddedAuthzServer,
@@ -174,11 +175,18 @@ export class Config extends BaseConfig {
     );
 
     this.enableMcpSiteSettings = enableMcpSiteSettings !== 'false';
+    this.allowSitesToConfigureRequestOverrides = allowSitesToConfigureRequestOverrides === 'true';
     this.enablePassthroughAuth = enablePassthroughAuth === 'true';
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';
     const enforceScopes = !disableScopes;
     const embeddedAuthzServer = oauthEmbeddedAuthzServer !== 'false';
+
+    if (this.allowSitesToConfigureRequestOverrides && !this.enableMcpSiteSettings) {
+      throw new Error(
+        'ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES is "true", but MCP site settings are not enabled.',
+      );
+    }
 
     this.oauth = {
       enabled: disableOauthOverride ? false : !!oauthIssuer,
