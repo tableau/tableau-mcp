@@ -3,8 +3,8 @@ import { join } from 'path';
 import { parseLogLevel } from './logging/logger';
 import { LoggerType, parseLoggerTypes } from './logging/loggerType';
 import { LogLevel } from './logging/types';
-import { milliseconds } from './milliseconds';
 import { isTransport, TransportName } from './transports';
+import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber';
 
 export class BaseConfig {

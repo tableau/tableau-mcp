@@ -2,10 +2,10 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
-import { milliseconds } from './milliseconds.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
 import { isTransport, TransportName } from './transports.js';
 import invariant from './utils/invariant.js';
+import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
 
 const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;

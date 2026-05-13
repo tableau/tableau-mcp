@@ -1,4 +1,5 @@
 import { BaseConfig } from '../config.shared.js';
+import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getFileLogger } from './fileLogger.js';
 import { LogEntry, LogLevel, logLevelSeverity } from './types.js';
 
@@ -24,17 +25,26 @@ export function log(entry: LogEntry): void {
     return;
   }
   if (config.loggers.has('appLogger')) {
-    const message = JSON.stringify(entry);
+    // Remove data from the entry to avoid double logging.
+    const { data, ...rest } = entry;
+    const message = JSON.stringify(rest);
     if (config.transport === 'http') {
-      if (entry.data) {
+      if (data !== undefined) {
         // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
-        console.log(message, entry.data);
+        console.log(message, data);
       } else {
         // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
         console.log(message);
       }
     } else {
       process.stderr.write(message.endsWith('\n') ? message : `${message}\n`);
+      if (data !== undefined) {
+        try {
+          process.stderr.write(JSON.stringify(data) + '\n');
+        } catch (error) {
+          process.stderr.write(`Failed to write data to stderr: ${getExceptionMessage(error)}\n`);
+        }
+      }
     }
   }
   if (config.loggers.has('fileLogger')) {

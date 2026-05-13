@@ -1,6 +1,6 @@
 import { Config } from './config.js';
-import { milliseconds } from './milliseconds.js';
 import { stubDefaultEnvVars } from './testShared.js';
+import { milliseconds } from './utils/milliseconds.js';
 
 describe('Config', () => {
   beforeEach(() => {

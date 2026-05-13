@@ -4,10 +4,10 @@ import request from 'supertest';
 import { MockedFunction, vi } from 'vitest';
 
 import { getConfig } from '../../../src/config.js';
-import { milliseconds } from '../../../src/milliseconds.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { clientMetadataCache } from '../../../src/server/oauth/clientMetadataCache.js';
 import { axios } from '../../../src/utils/axios.js';
+import { milliseconds } from '../../../src/utils/milliseconds.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
 const constants = vi.hoisted(() => ({
