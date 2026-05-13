@@ -44,7 +44,7 @@ export const getListInstancesTool = (
           }));
 
           return new Ok({
-            message: `Found ${instances.size} running Tableau Desktop instances.`,
+            message: `Found ${instances.size} running Tableau Desktop ${instances.size === 1 ? 'instance' : 'instances'}.`,
             instances: instanceList,
             instructions:
               'Use the session ID of the instance you want to use in the session parameter of other tools.',
