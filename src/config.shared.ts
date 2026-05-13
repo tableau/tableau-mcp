@@ -1,11 +1,11 @@
 import { join } from 'path';
 
-import { parseLogLevel } from './logging/logger';
-import { LoggerType, parseLoggerTypes } from './logging/loggerType';
-import { LogLevel } from './logging/types';
-import { isTransport, TransportName } from './transports';
-import { milliseconds } from './utils/milliseconds';
-import { parseNumber } from './utils/parseNumber';
+import { parseLogLevel } from './logging/logger.js';
+import { LoggerType, parseLoggerTypes } from './logging/loggerType.js';
+import { LogLevel } from './logging/types.js';
+import { isTransport, TransportName } from './transports.js';
+import { milliseconds } from './utils/milliseconds.js';
+import { parseNumber } from './utils/parseNumber.js';
 
 export class BaseConfig {
   transport: TransportName;
