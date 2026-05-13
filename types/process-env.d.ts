@@ -75,12 +75,9 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   BREAK_GLASS_DISABLE_GLOBALLY: string | undefined;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- no-empty-object-type rule will complain once we start adding members in the next PR
-export interface ProcessEnvDesktop extends ProcessEnvBase {}
-
 declare global {
   namespace NodeJS {
-    interface ProcessEnv extends ProcessEnvWeb, ProcessEnvDesktop {
+    interface ProcessEnv extends ProcessEnvWeb {
       [key: string]: string | undefined;
     }
   }
