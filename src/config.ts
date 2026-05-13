@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 
 import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
-import { isTransport, TransportName } from './transports.js';
+import { isTransport } from './transports.js';
 import invariant from './utils/invariant.js';
 import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
@@ -18,7 +18,6 @@ function isAuthType(auth: unknown): auth is AuthType {
 export class Config extends BaseConfig {
   auth: AuthType;
   server: string;
-  transport: TransportName;
   sslKey: string;
   sslCert: string;
   httpPort: number;
