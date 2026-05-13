@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getFileLogger } from './fileLogger.js';
 import { log, parseLogLevel, shouldLog } from './logger.js';
-import { parseLoggerTypes } from './loggerType';
+import { parseLoggerTypes } from './loggerType.js';
 
 vi.mock('./fileLogger.js', () => ({
   getFileLogger: vi.fn(),

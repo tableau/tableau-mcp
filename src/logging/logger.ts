@@ -1,4 +1,4 @@
-import { BaseConfig } from '../config.shared.js';
+import { getBaseConfig } from '../config.shared.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getFileLogger } from './fileLogger.js';
 import { LogEntry, LogLevel, logLevelSeverity } from './types.js';
@@ -20,7 +20,7 @@ export function parseLogLevel(value: string | undefined): LogLevel {
 }
 
 export function log(entry: LogEntry): void {
-  const config = new BaseConfig();
+  const config = getBaseConfig();
   if (!shouldLog(entry.level, config.logLevel)) {
     return;
   }
