@@ -2,6 +2,7 @@ import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
+import { removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import { LoggerType, parseLoggerTypes, parseLogLevel } from './logging/logger.js';
 import type { LogLevel } from './logging/types.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
@@ -58,6 +59,7 @@ export class Config {
   passthroughAuthUserSessionCheckIntervalInMinutes: number;
   mcpSiteSettingsCheckIntervalInMinutes: number;
   enableMcpSiteSettings: boolean;
+  allowSitesToConfigureRequestOverrides: boolean;
   enablePassthroughAuth: boolean;
   oauth: {
     enabled: boolean;
@@ -122,6 +124,7 @@ export class Config {
         passthroughAuthUserSessionCheckIntervalInMinutes,
       MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: mcpSiteSettingsCheckIntervalInMinutes,
       ENABLE_MCP_SITE_SETTINGS: enableMcpSiteSettings,
+      ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES: allowSitesToConfigureRequestOverrides,
       ENABLE_PASSTHROUGH_AUTH: enablePassthroughAuth,
       DANGEROUSLY_DISABLE_OAUTH: disableOauth,
       OAUTH_EMBEDDED_AUTHZ_SERVER: oauthEmbeddedAuthzServer,
@@ -196,11 +199,18 @@ export class Config {
     );
 
     this.enableMcpSiteSettings = enableMcpSiteSettings !== 'false';
+    this.allowSitesToConfigureRequestOverrides = allowSitesToConfigureRequestOverrides === 'true';
     this.enablePassthroughAuth = enablePassthroughAuth === 'true';
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';
     const enforceScopes = !disableScopes;
     const embeddedAuthzServer = oauthEmbeddedAuthzServer !== 'false';
+
+    if (this.allowSitesToConfigureRequestOverrides && !this.enableMcpSiteSettings) {
+      throw new Error(
+        'ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES is "true", but MCP site settings are not enabled.',
+      );
+    }
 
     this.oauth = {
       enabled: disableOauthOverride ? false : !!oauthIssuer,
@@ -444,21 +454,6 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
       `The environment variable CORS_ORIGIN_CONFIG is not a valid URL: ${corsOriginConfig}`,
     );
   }
-}
-
-// When the user does not provide a site name in the Claude MCP Bundle configuration,
-// Claude doesn't replace its value and sets the site name to "${user_config.site_name}".
-export function removeClaudeMcpBundleUserConfigTemplates(
-  envVars: Record<string, string | undefined>,
-): Record<string, string | undefined> {
-  return Object.entries(envVars).reduce<Record<string, string | undefined>>((acc, [key, value]) => {
-    if (value?.startsWith('${user_config.')) {
-      acc[key] = '';
-    } else {
-      acc[key] = value;
-    }
-    return acc;
-  }, {});
 }
 
 export const getConfig = (): Config => new Config();

@@ -26,7 +26,10 @@ it internally calls into VizQL Data Service, the JWT will only have the
 
 The username for the `sub` claim of the JWT.
 
-- Can either be a hard-coded username, or the OAuth username by setting it to `{OAUTH_USERNAME}`.
+- For OAuth-backed per-user access, set this to `{OAUTH_USERNAME}` so the generated JWT uses the
+  signed-in Tableau user.
+- A hard-coded username should only be used for deployments that are licensed and approved for that
+  user-based licensing (UBL) pattern.
 
 <hr />
 

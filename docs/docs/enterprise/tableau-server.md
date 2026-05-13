@@ -349,7 +349,7 @@ Tableau MCP has a lot of tools, some of which may not be necessary for your desi
 Only one of these environment variables can be specified at a time. Their values are a
 comma-separated list of tool names, or tool group names. A tool group is a collection of tools. For
 the list of tools and their groupings, see
-[toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.ts).
+[toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/web/toolName.ts).
 
 Examples:
 
@@ -466,9 +466,10 @@ The `AUTH` environment variable can still be set to any of the non-OAuth authent
 e.g. `direct-trust`. In the below example, the MCP server will still be protected from unauthorized
 access by OAuth—requiring users to first sign in to their Tableau site—but the user and site context
 will be mostly* ignored from then on by the MCP server. Authentication to the underlying REST API
-requests will use the Direct Trust Connected App instead. The `sub` claim of the generated JWT can
-either be a hard-coded username, *or dynamically set to the user's username by setting
-`JWT_SUB_CLAIM={OAUTH_USERNAME}`.
+requests will use the Direct Trust Connected App instead. For OAuth-backed per-user access, set the
+generated JWT's `sub` claim to the signed-in Tableau user with `JWT_SUB_CLAIM={OAUTH_USERNAME}`. A
+hard-coded `sub` claim should only be used for deployments that are licensed and approved for that
+user-based licensing (UBL) pattern.
 
 ```
 SERVER=https://tableau.superstore.com
