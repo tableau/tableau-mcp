@@ -1,8 +1,8 @@
-import { log } from '../logging/logger';
-import { DesktopDiscoverer } from './desktopDiscoverer';
-import { DesktopInstance } from './desktopInstance';
-import { LocalExecutor } from './toolExecutor/localToolExecutor';
-import { ToolExecutor } from './toolExecutor/toolExecutor';
+import { log } from '../logging/logger.js';
+import { DesktopDiscoverer } from './desktopDiscoverer.js';
+import { DesktopInstance } from './desktopInstance.js';
+import { LocalExecutor } from './toolExecutor/localToolExecutor.js';
+import { ToolExecutor } from './toolExecutor/toolExecutor.js';
 
 export type DesktopConnection = {
   sessionId: string;
