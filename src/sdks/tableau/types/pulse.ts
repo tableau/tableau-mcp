@@ -21,7 +21,7 @@ const pulseFilterSchema = z.object({
     z.object({
       string_value: z.string().optional(),
       bool_value: z.boolean().optional(),
-      null_value: z.string().optional(),
+      null_value: z.string().nullable().optional(),
     }),
   ),
 });
