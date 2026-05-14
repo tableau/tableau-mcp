@@ -4,7 +4,7 @@ import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/typ
 
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
-import { SessionManager } from './desktop/sessionManager';
+import { SessionManager } from './desktop/sessionManager.js';
 import { ClientInfo, Server } from './server.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';

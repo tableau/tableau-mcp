@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
-import * as logger from '../logging/logger';
-import { DesktopDiscoverer, DesktopInstanceManifest } from './desktopDiscoverer';
+import * as logger from '../logging/logger.js';
+import { DesktopDiscoverer, DesktopInstanceManifest } from './desktopDiscoverer.js';
 
 vi.mock('fs');
 vi.mock('os');

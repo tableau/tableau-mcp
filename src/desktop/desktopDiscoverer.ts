@@ -3,8 +3,8 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { z } from 'zod';
 
-import { log } from '../logging/logger';
-import { DesktopInstance, desktopInstanceMetadataSchema } from './desktopInstance';
+import { log } from '../logging/logger.js';
+import { DesktopInstance, desktopInstanceMetadataSchema } from './desktopInstance.js';
 
 const manifestSchema = z.object({
   instances: z.array(desktopInstanceMetadataSchema),

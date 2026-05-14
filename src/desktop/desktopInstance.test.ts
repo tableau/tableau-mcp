@@ -1,5 +1,5 @@
-import { AgentApiClient } from '../sdks/desktop/agentApi/client';
-import { DesktopInstance } from './desktopInstance';
+import { AgentApiClient } from '../sdks/desktop/agentApi/client.js';
+import { DesktopInstance } from './desktopInstance.js';
 
 vi.mock('../sdks/desktop/agentApi/client.js');
 
