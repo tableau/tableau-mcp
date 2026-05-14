@@ -21,7 +21,7 @@ export class LocalExecutor extends ToolExecutor {
   }
 
   async start(): Promise<void> {
-    log?.({
+    log({
       message: 'LocalExecutor starting',
       level: 'info',
       logger: 'LocalExecutor',
@@ -32,7 +32,7 @@ export class LocalExecutor extends ToolExecutor {
   }
 
   stop(): void {
-    log?.({
+    log({
       message: 'LocalExecutor stopped',
       level: 'info',
       logger: 'LocalExecutor',
@@ -57,7 +57,7 @@ export class LocalExecutor extends ToolExecutor {
     const executeResult = await client.executeCommand({ namespace, command, args });
 
     if (executeResult.isErr()) {
-      log?.({
+      log({
         message: `Failed to execute command ${namespace}:${command}`,
         level: 'error',
         logger: 'LocalExecutor',
@@ -70,7 +70,7 @@ export class LocalExecutor extends ToolExecutor {
     const commandStatusResult = await this.waitForCommand(commandId);
     if (commandStatusResult.isErr()) {
       const error = commandStatusResult.error;
-      log?.({
+      log({
         message:
           error.type === 'command-timed-out'
             ? `Command ${commandId} timed out`
@@ -85,7 +85,7 @@ export class LocalExecutor extends ToolExecutor {
 
     const commandResult = commandStatusResult.value;
     if (commandResult.status === 'failed') {
-      log?.({
+      log({
         message: `Command ${commandId} failed`,
         level: 'error',
         logger: 'LocalExecutor',
@@ -102,7 +102,7 @@ export class LocalExecutor extends ToolExecutor {
     try {
       commandResultObj = JSON.parse(commandResult.result?.text ?? '{}');
     } catch (error) {
-      log?.({
+      log({
         message: 'Failed to JSON parse command result',
         level: 'error',
         logger: 'LocalExecutor',
@@ -113,7 +113,7 @@ export class LocalExecutor extends ToolExecutor {
 
     const safeParsedResult = schema.safeParse(commandResultObj);
     if (!safeParsedResult.success) {
-      log?.({
+      log({
         message: `Failed to parse command result with schema ${schema.toString()}.`,
         level: 'error',
         logger: 'LocalExecutor',
@@ -135,7 +135,7 @@ export class LocalExecutor extends ToolExecutor {
     const getEventsResult = await client.getEvents(sinceSequence);
     if (getEventsResult.isErr()) {
       const error = getEventsResult.error;
-      log?.({
+      log({
         message: 'Failed to get events',
         level: 'error',
         logger: 'LocalExecutor',

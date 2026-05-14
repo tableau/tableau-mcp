@@ -41,7 +41,7 @@ export const getRequestInterceptor = (): RequestInterceptor => (request) => {
 
 export const getRequestErrorInterceptor = (): ErrorInterceptor => (error, baseUrl) => {
   if (!isAxiosError(error) || !error.request) {
-    log?.({
+    log({
       message: 'Request failed',
       level: 'error',
       logger: 'AgentApiClient',
@@ -63,7 +63,7 @@ export const getResponseInterceptor = (): ResponseInterceptor => (response) => {
 
 export const getResponseErrorInterceptor = (): ErrorInterceptor => (error, baseUrl) => {
   if (!isAxiosError(error) || !error.response) {
-    log?.({
+    log({
       message: 'Response failed',
       level: 'error',
       logger: 'AgentApiClient',
@@ -86,7 +86,7 @@ function logRequest(request: RequestInterceptorConfig): void {
     url.search = new URLSearchParams(request.params).toString();
   }
 
-  log?.({
+  log({
     message: 'Agent API request',
     level: 'debug',
     logger: 'AgentApiClient',
@@ -107,7 +107,7 @@ function logResponse(response: ResponseInterceptorConfig): void {
     url.search = new URLSearchParams(response.params).toString();
   }
 
-  log?.({
+  log({
     message: 'Agent API response',
     level: 'debug',
     logger: 'AgentApiClient',
