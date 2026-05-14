@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 
-import { DesktopInstanceManifest } from './desktopDiscoverer';
-import { SessionManager } from './sessionManager';
-import { LocalExecutor } from './toolExecutor/localToolExecutor';
+import { DesktopInstanceManifest } from './desktopDiscoverer.js';
+import { SessionManager } from './sessionManager.js';
+import { LocalExecutor } from './toolExecutor/localToolExecutor.js';
 
 vi.mock('fs');
 vi.mock('os');
