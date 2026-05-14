@@ -8,6 +8,7 @@ export class Config extends BaseConfig {
 
   constructor() {
     super();
+
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
     const {
       AGENT_API_BASE: agentApiBase,
