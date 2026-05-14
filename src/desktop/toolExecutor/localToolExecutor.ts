@@ -1,16 +1,16 @@
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { getDesktopConfig } from '../../config.desktop';
-import { log } from '../../logging/logger';
-import { GetCommandStatusResponse, GetEventsResponse } from '../../sdks/desktop/agentApi/types';
-import { AgentApiClientConfig, getAgentApiClient } from '../getAgentApiClient';
+import { getDesktopConfig } from '../../config.desktop.js';
+import { log } from '../../logging/logger.js';
+import { GetCommandStatusResponse, GetEventsResponse } from '../../sdks/desktop/agentApi/types.js';
+import { AgentApiClientConfig, getAgentApiClient } from '../getAgentApiClient.js';
 import {
   ExecuteCommandArgs,
   ExecuteCommandError,
   GetEventsArgs,
   ToolExecutor,
-} from './toolExecutor';
+} from './toolExecutor.js';
 
 export class LocalExecutor extends ToolExecutor {
   private readonly config: AgentApiClientConfig;

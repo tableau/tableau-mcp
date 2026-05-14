@@ -1,13 +1,13 @@
 import { AxiosError } from 'axios';
 
-import * as logger from '../logging/logger';
-import { AxiosRequestHeaders, AxiosResponse } from '../utils/axios';
+import * as logger from '../logging/logger.js';
+import { AxiosRequestHeaders, AxiosResponse } from '../utils/axios.js';
 import {
   getRequestErrorInterceptor,
   getRequestInterceptor,
   getResponseErrorInterceptor,
   getResponseInterceptor,
-} from './getAgentApiClient';
+} from './getAgentApiClient.js';
 
 vi.mock('../logging/logger.js');
 

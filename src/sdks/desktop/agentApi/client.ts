@@ -10,15 +10,15 @@ import {
   getResponseInterceptorConfig,
   RequestInterceptor,
   ResponseInterceptor,
-} from '../../interceptors';
-import { agentApis } from './apis';
+} from '../../interceptors.js';
+import { agentApis } from './apis.js';
 import {
   agentTokenSchema,
   ExecuteCommandRequest,
   ExecuteCommandResponse,
   GetCommandStatusResponse,
   GetEventsResponse,
-} from './types';
+} from './types.js';
 
 export class AgentApiClient {
   private readonly _apiClient: ZodiosInstance<typeof agentApis>;

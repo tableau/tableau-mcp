@@ -1,16 +1,16 @@
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import * as logger from '../../logging/logger';
-import { AgentApiClient } from '../../sdks/desktop/agentApi/client';
+import * as logger from '../../logging/logger.js';
+import { AgentApiClient } from '../../sdks/desktop/agentApi/client.js';
 import {
   ExecuteCommandResponse,
   GetCommandStatusResponse,
   GetEventsResponse,
-} from '../../sdks/desktop/agentApi/types';
-import { LocalExecutor } from './localToolExecutor';
+} from '../../sdks/desktop/agentApi/types.js';
+import { LocalExecutor } from './localToolExecutor.js';
 
-vi.mock('../../sdks/desktop/agentApi/client.js');
+vi.mock('../../sdks/desktop/agentApi/client.js.js');
 vi.mock('../../logging/logger.js');
 
 describe('LocalExecutor', () => {

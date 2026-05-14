@@ -1,6 +1,6 @@
-import { getDesktopConfig } from '../config.desktop';
-import { log } from '../logging/logger';
-import { AgentApiClient } from '../sdks/desktop/agentApi/client';
+import { getDesktopConfig } from '../config.desktop.js';
+import { log } from '../logging/logger.js';
+import { AgentApiClient } from '../sdks/desktop/agentApi/client.js';
 import {
   ErrorInterceptor,
   getRequestInterceptorConfig,
@@ -9,8 +9,8 @@ import {
   RequestInterceptorConfig,
   ResponseInterceptor,
   ResponseInterceptorConfig,
-} from '../sdks/interceptors';
-import { isAxiosError } from '../utils/axios';
+} from '../sdks/interceptors.js';
+import { isAxiosError } from '../utils/axios.js';
 
 export type AgentApiClientConfig = {
   agentApiBase: string;

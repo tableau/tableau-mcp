@@ -6,7 +6,7 @@ import {
   executeCommandResponseSchema,
   getCommandStatusResponseSchema,
   getEventsResponseSchema,
-} from './types';
+} from './types.js';
 
 const getCommandStatusEndpoint = makeEndpoint({
   method: 'get',
