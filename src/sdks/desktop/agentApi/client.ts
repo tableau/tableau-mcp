@@ -121,6 +121,7 @@ export class AgentApiClient {
       return Ok(
         await this._apiClient.getEvents({
           queries: sinceSequence !== undefined ? { since: sinceSequence } : undefined,
+          ...this.headers,
         }),
       );
     } catch (error) {
