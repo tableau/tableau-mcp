@@ -10,7 +10,7 @@ import {
 } from '../../sdks/desktop/agentApi/types.js';
 import { LocalExecutor } from './localToolExecutor.js';
 
-vi.mock('../../sdks/desktop/agentApi/client.js.js');
+vi.mock('../../sdks/desktop/agentApi/client.js');
 vi.mock('../../logging/logger.js');
 
 describe('LocalExecutor', () => {
