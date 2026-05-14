@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { getAgentApiClient } from './getAgentApiClient';
+import { getAgentApiClient } from './getAgentApiClient.js';
 
 export const desktopInstanceMetadataSchema = z.object({
   pid: z.number(),

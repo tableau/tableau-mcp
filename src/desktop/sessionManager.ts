@@ -39,7 +39,7 @@ export class SessionManager {
       };
 
       this.sessions.set(sessionId, session);
-      log?.({
+      log({
         message: 'Session created',
         level: 'info',
         logger: 'SessionManager',
