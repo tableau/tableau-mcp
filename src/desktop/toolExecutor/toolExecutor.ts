@@ -5,7 +5,7 @@ import {
   ExecuteCommandResponse,
   GetCommandStatusResponse,
   GetEventsResponse,
-} from '../../sdks/desktop/agentApi/types';
+} from '../../sdks/desktop/agentApi/types.js';
 
 export type ExecuteCommandArgs<Z extends z.ZodTypeAny = z.ZodTypeAny> = {
   command: string;

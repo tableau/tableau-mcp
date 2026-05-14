@@ -7,7 +7,7 @@ import {
   getCommandStatusResponseSchema,
   getEventsResponseSchema,
   healthResponseSchema,
-} from './types';
+} from './types.js';
 
 const getCommandStatusEndpoint = makeEndpoint({
   method: 'get',
@@ -55,5 +55,10 @@ const healthEndpoint = makeEndpoint({
   response: healthResponseSchema,
 });
 
-const agentApi = makeApi([getCommandStatusEndpoint, executeCommandEndpoint, getEventsEndpoint, healthEndpoint]);
+const agentApi = makeApi([
+  getCommandStatusEndpoint,
+  executeCommandEndpoint,
+  getEventsEndpoint,
+  healthEndpoint,
+]);
 export const agentApis = [...agentApi] as const satisfies ZodiosEndpointDefinitions;
