@@ -1,11 +1,7 @@
-import { getConfig } from '../config.js';
+import { getBaseConfig } from '../config.shared.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getFileLogger } from './fileLogger.js';
 import { LogEntry, LogLevel, logLevelSeverity } from './types.js';
-
-export const loggerTypes = ['fileLogger', 'appLogger'] as const;
-export type LoggerType = (typeof loggerTypes)[number];
-const validLoggerTypes = new Set(loggerTypes);
 
 export function shouldLog(entryLevel: LogLevel, minLevel: LogLevel): boolean {
   return logLevelSeverity[entryLevel] >= logLevelSeverity[minLevel];
@@ -23,20 +19,8 @@ export function parseLogLevel(value: string | undefined): LogLevel {
   return 'info';
 }
 
-export function parseLoggerTypes(value: string | undefined): Set<LoggerType> {
-  if (!value) {
-    return new Set<LoggerType>(['appLogger']);
-  }
-  return new Set(
-    value
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s): s is LoggerType => validLoggerTypes.has(s as LoggerType)),
-  );
-}
-
 export function log(entry: LogEntry): void {
-  const config = getConfig();
+  const config = getBaseConfig();
   if (!shouldLog(entry.level, config.logLevel)) {
     return;
   }

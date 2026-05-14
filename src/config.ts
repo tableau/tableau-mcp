@@ -1,18 +1,12 @@
 import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
 
-import { removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
-import { LoggerType, parseLoggerTypes, parseLogLevel } from './logging/logger.js';
-import type { LogLevel } from './logging/types.js';
+import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
-import { isTransport, TransportName } from './transports.js';
-import { getDirname } from './utils/getDirname.js';
+import { isTransport } from './transports.js';
 import invariant from './utils/invariant.js';
 import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
-
-const __dirname = getDirname();
 
 const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
@@ -21,10 +15,9 @@ function isAuthType(auth: unknown): auth is AuthType {
   return authTypes.some((type) => type === auth);
 }
 
-export class Config {
+export class Config extends BaseConfig {
   auth: AuthType;
   server: string;
-  transport: TransportName;
   sslKey: string;
   sslCert: string;
   httpPort: number;
@@ -43,13 +36,8 @@ export class Config {
   uatKeyId: string;
   jwtAdditionalPayload: string;
   datasourceCredentials: string;
-  defaultNotificationLevel: string;
-  logLevel: LogLevel;
   disableLogMasking: boolean;
-  maxRequestTimeoutMs: number;
   disableSessionManagement: boolean;
-  loggers: Set<LoggerType>;
-  fileLoggerDirectory: string;
   tableauServerVersionCheckIntervalInHours: number;
   passthroughAuthUserSessionCheckIntervalInMinutes: number;
   mcpSiteSettingsCheckIntervalInMinutes: number;
@@ -82,6 +70,8 @@ export class Config {
   breakGlassDisableGlobally: boolean;
 
   constructor() {
+    super();
+
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
     const {
       AUTH: auth,
@@ -107,13 +97,8 @@ export class Config {
       UAT_KEY_ID: uatKeyId,
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
-      DEFAULT_NOTIFICATION_LEVEL: defaultNotificationLevel,
-      LOG_LEVEL: logLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
-      MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
-      ENABLED_LOGGERS: logging,
-      FILE_LOGGER_DIRECTORY: fileLoggerDirectory,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES:
         passthroughAuthUserSessionCheckIntervalInMinutes,
@@ -159,12 +144,8 @@ export class Config {
     });
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
-    this.defaultNotificationLevel = defaultNotificationLevel ?? 'debug';
-    this.logLevel = parseLogLevel(logLevel);
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableSessionManagement = disableSessionManagement === 'true';
-    this.loggers = parseLoggerTypes(logging);
-    this.fileLoggerDirectory = fileLoggerDirectory || join(__dirname, 'logs');
 
     this.tableauServerVersionCheckIntervalInHours = parseNumber(
       tableauServerVersionCheckIntervalInHours,
@@ -335,12 +316,6 @@ export class Config {
       }
     }
 
-    this.maxRequestTimeoutMs = parseNumber(maxRequestTimeoutMs, {
-      defaultValue: milliseconds.fromMinutes(10),
-      minValue: 5000,
-      maxValue: milliseconds.fromHours(1),
-    });
-
     if (this.auth === 'pat') {
       invariant(patName, 'The environment variable PAT_NAME is not set');
       invariant(patValue, 'The environment variable PAT_VALUE is not set');
@@ -452,7 +427,3 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
 }
 
 export const getConfig = (): Config => new Config();
-
-export const exportedForTesting = {
-  Config,
-};

@@ -1,26 +1,12 @@
-import { join } from 'path';
+import { BaseConfig } from './config.shared.js';
 
-import { removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
-import { LoggerType, parseLoggerTypes } from './logging/logger.js';
-
-export class Config {
-  transport: 'stdio';
-  defaultLogLevel: string;
-  loggers: Set<LoggerType>;
-  fileLoggerDirectory: string;
-
+export class Config extends BaseConfig {
   constructor() {
-    const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
-    const {
-      DEFAULT_LOG_LEVEL: defaultLogLevel,
-      ENABLED_LOGGERS: logging,
-      FILE_LOGGER_DIRECTORY: fileLoggerDirectory,
-    } = cleansedVars;
+    super();
 
-    this.transport = 'stdio';
-    this.defaultLogLevel = defaultLogLevel ?? 'debug';
-    this.loggers = parseLoggerTypes(logging);
-    this.fileLoggerDirectory = fileLoggerDirectory || join(__dirname, 'logs');
+    if (this.transport !== 'stdio') {
+      throw new Error('TRANSPORT must be "stdio" for Tableau Desktop authoring');
+    }
   }
 }
 

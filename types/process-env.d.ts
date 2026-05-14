@@ -1,6 +1,14 @@
-export interface ProcessEnvEx {
-  AUTH: string | undefined;
+interface ProcessEnvBase {
   TRANSPORT: string | undefined;
+  DEFAULT_NOTIFICATION_LEVEL: string | undefined;
+  LOG_LEVEL: string | undefined;
+  ENABLED_LOGGERS: string | undefined;
+  FILE_LOGGER_DIRECTORY: string | undefined;
+  MAX_REQUEST_TIMEOUT_MS: string | undefined;
+}
+
+export interface ProcessEnvWeb extends ProcessEnvBase {
+  AUTH: string | undefined;
   SSL_KEY: string | undefined;
   SSL_CERT: string | undefined;
   HTTP_PORT_ENV_VAR_NAME: string | undefined;
@@ -22,19 +30,15 @@ export interface ProcessEnvEx {
   UAT_KEY_ID: string | undefined;
   JWT_ADDITIONAL_PAYLOAD: string | undefined;
   DATASOURCE_CREDENTIALS: string | undefined;
-  DEFAULT_NOTIFICATION_LEVEL: string | undefined;
   LOG_LEVEL: string | undefined;
   DISABLE_LOG_MASKING: string | undefined;
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;
-  MAX_REQUEST_TIMEOUT_MS: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
   MAX_RESULT_LIMITS: string | undefined;
   DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: string | undefined;
   DISABLE_METADATA_API_REQUESTS: string | undefined;
   DISABLE_SESSION_MANAGEMENT: string | undefined;
-  ENABLED_LOGGERS: string | undefined;
-  FILE_LOGGER_DIRECTORY: string | undefined;
   INCLUDE_PROJECT_IDS: string | undefined;
   INCLUDE_DATASOURCE_IDS: string | undefined;
   INCLUDE_WORKBOOK_IDS: string | undefined;
@@ -73,7 +77,7 @@ export interface ProcessEnvEx {
 
 declare global {
   namespace NodeJS {
-    interface ProcessEnv extends ProcessEnvEx {
+    interface ProcessEnv extends ProcessEnvWeb {
       [key: string]: string | undefined;
     }
   }
