@@ -71,9 +71,10 @@ A comma-separated list of loggers to enable.
     `tableau-mcp` for tool calls.
   - `message`: The log message itself. This may be a string or a JSON object.
 
-- All notifications are written to the local log files regardless of the server's currently
-  configured minimum logging level, since that only applies to notifications sent to MCP clients.
-  See [`DEFAULT_LOG_LEVEL`](#default_log_level) for more information.
+- All notifications are written to the local log files regardless of the notification level, since
+  [`DEFAULT_NOTIFICATION_LEVEL`](#default_notification_level) only applies to notifications sent to
+  MCP clients. Server log output (stderr/console) is controlled separately by
+  [`LOG_LEVEL`](#log_level).
 - Secrets are masked by default in the log files. To reveal them for debugging purposes, set the
   [`DISABLE_LOG_MASKING`](#disable_log_masking) environment variable to `true`.
 
@@ -90,9 +91,9 @@ The directory server logs are written to when [`ENABLED_LOGGERS`](#enabled_logge
 
 <hr />
 
-## `DEFAULT_LOG_LEVEL`
+## `DEFAULT_NOTIFICATION_LEVEL`
 
-The default logging level of the server.
+The default minimum level for sending notifications to MCP clients.
 
 - Default: `debug`
 - Possible values:
@@ -105,12 +106,35 @@ The default logging level of the server.
   - `alert`
   - `emergency`
 
-This value determines the minimum log level in which to send notifications to MCP clients. That is,
-if the server's currently configured minimum logging level is `debug`, all log messages will be sent
-to MCP clients. If the level is set to `error`, only log messages with a level of `error` or higher
-will be sent. Note that MCP clients can
-[change the minimum log level](https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/logging#setting-log-level)
+This value determines the minimum level at which to send notifications to MCP clients. That is, if
+set to `debug`, all notifications will be sent. If set to `error`, only notifications with a level
+of `error` or higher will be sent. Note that MCP clients can
+[change the minimum level](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/logging#setting-log-level)
 any time they want.
+
+Note: this variable was named DEFAULT_LOG_LEVEL until version 2.0.0
+
+<hr />
+
+## `LOG_LEVEL`
+
+The minimum severity level for server log output (stderr on stdio transport, console on http
+transport, and file logger).
+
+- Default: `info`
+- Possible values:
+  - `debug` — all log entries
+  - `info`
+  - `notice`
+  - `warning`
+  - `error`
+  - `critical`
+  - `alert`
+  - `emergency`
+
+Log entries with a level below the configured value are silently dropped. This is independent of
+[`DEFAULT_NOTIFICATION_LEVEL`](#default_notification_level), which controls MCP client
+notifications.
 
 <hr />
 
@@ -152,15 +176,6 @@ data source][tab-connect-ds].
 
 <hr />
 
-## `ENABLE_MCP_SITE_SETTINGS`
-
-When `true`, the Tableau MCP server will fetch and apply site settings overrides for any user session, see [Site Settings](site-settings.md).
-
-- Default: `true`
-- When `false`, Tableau MCP server will not fetch or apply site settings overrides.
-
-<hr />
-
 ## `INCLUDE_TOOLS`
 
 A comma-separated list of tool or tool group names to include in the server. Only these tools will
@@ -168,7 +183,7 @@ be available. This variable is site overridable, see [Site Settings](site-settin
 
 - Default: Empty string (_all_ are included)
 - For a list of available tools and groups, see
-  [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.ts).
+  [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/web/toolName.ts).
 - Mixing tool names and group names is allowed.
 
 <hr />
@@ -195,8 +210,9 @@ The maximum timeout for requests to the Tableau Server REST API.
 ## `MAX_RESULT_LIMIT`
 
 The maximum number of results that every tool with a `limit` parameter can return when no
-tool-specific max result limit is set in the [`MAX_RESULT_LIMITS`](#max_result_limits)
-variable. This variable is site overridable, see [Site Settings](site-settings.md).
+tool-specific max result limit is set in the [`MAX_RESULT_LIMITS`](#max_result_limits) variable.
+This variable is site and request overridable, see [Site Settings](site-settings.md) and
+[Request Overrides](request-overrides.md).
 
 :::warning
 
@@ -213,7 +229,8 @@ Take care when setting this value and be sure to set appropriate tool-specific l
 ## `MAX_RESULT_LIMITS`
 
 A comma-separated list of tool names (or tool group names) and the maximum number of results that
-each tool (or tools in the group) can return. This variable is site overridable, see [Site Settings](site-settings.md).
+each tool (or tools in the group) can return. This variable is site and request overridable, see
+[Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 :::info
 
@@ -234,14 +251,14 @@ This means that:
 
 - Default: Empty string (_no limits_)
 - For a list of available tools and groups, see
-  [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/toolName.ts).
+  [toolName.ts](https://github.com/tableau/tableau-mcp/blob/main/src/tools/web/toolName.ts).
 - Only applies to tools that have a `limit` parameter and return an array of items.
 - Tool names take precedence over tool group names. That is, `datasource:1000,list-datasources:20`
   means that the `list-datasources` tool can return up to 20 data sources but the `query-datasource`
   tool can only return up to 1000 results.
-- If a tool-specific limit is not set, the global limit specified by the
+- If a tool is not included in the comma-separated list, the global limit specified by the
   [`MAX_RESULT_LIMIT`](#max_result_limit) variable will be used instead.
-- Each limit must be a positive number.
+- Each limit must be a positive number, or `*` to indicate unbounded results.
 
 <hr />
 
@@ -249,7 +266,8 @@ This means that:
 
 Disables requests that are made to the VizQl Data Service for validating queries in the
 [`query-datasource`](../../tools/data-qna/query-datasource.md) tool. Does not disable the ability to
-query the datasource. This variable is site overridable, see [Site Settings](site-settings.md).
+query the datasource. This variable is site and request overridable, see
+[Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - Default: `false`
 - When `true`, skips validation of queries against metadata results and validation of SET and MATCH
@@ -273,8 +291,9 @@ Disable validation of SET and MATCH filter values in the
 ## `DISABLE_METADATA_API_REQUESTS`
 
 Disables `graphql` requests to the Tableau Metadata API in the
-[`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool.
-This variable is site overridable, see [Site Settings](site-settings.md).
+[`get-datasource-metadata`](../../tools/data-qna/get-datasource-metadata.md) tool. This variable is
+site and request overridable, see [Site Settings](site-settings.md) and
+[Request Overrides](request-overrides.md).
 
 - Default: `false`
 - When `true`, skips requests to the `graphql` endpoint that provides additional context to field
@@ -289,7 +308,7 @@ This variable is site overridable, see [Site Settings](site-settings.md).
 
 When `false` (the default) and using the Streamable HTTP transport, the MCP server will create and
 manage sessions as per the
-[Session Management](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#session-management)
+[Session Management](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#session-management)
 section of the MCP spec. The only state persisted in the session from one request to another is
 information about the client's identity, capabilities, and protocol version compatibility.
 
@@ -311,17 +330,6 @@ variable.
 
 - Default: `1` hour
 - Must be a positive number between `1` and `168` (7 days).
-
-<hr />
-
-## `MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES`
-
-When site settings are enabled by the Tableau MCP server, settings will be fetched for the given site and applied to each session.
-Rather than fetching site settings with every request, the MCP server will cache the settings and only check it again after the interval
-specified by this environment variable.
-
-- Default: `10` minutes
-- Must be a positive number between `1` and `1440` (1 day).
 
 <hr />
 

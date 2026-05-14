@@ -1,8 +1,9 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
-import { Server } from '../server.js';
 import { ToolName } from '../tools/toolName.js';
 import { getFileLogger } from './fileLogger.js';
+import { orderedLogLevels } from './types.js';
 
 type NotificationName = 'rest-api' | (string & {});
 type NotificationType = LoggingLevel | 'request' | 'response' | 'tool' | 'request-cancelled';
@@ -11,16 +12,7 @@ type NotificationMessage = {
   [key: string]: any;
 };
 
-export const notificationLevels = [
-  'debug',
-  'info',
-  'notice',
-  'warning',
-  'error',
-  'critical',
-  'alert',
-  'emergency',
-] as const;
+export const notificationLevels = orderedLogLevels;
 
 let currentNotificationLevel: LoggingLevel = 'debug';
 
@@ -29,7 +21,7 @@ export function isNotificationLevel(level: unknown): level is LoggingLevel {
 }
 
 export const setNotificationLevel = (
-  server: Server,
+  mcpServer: McpServer,
   level: LoggingLevel,
   { silent = false }: { silent?: boolean } = {},
 ): void => {
@@ -40,7 +32,7 @@ export const setNotificationLevel = (
   currentNotificationLevel = level;
 
   if (!silent) {
-    notifier.notice(server, `Logging level set to: ${level}`);
+    notifier.notice(mcpServer, `Logging level set to: ${level}`);
   }
 };
 
@@ -57,7 +49,7 @@ export const notifier = {
   emergency: getSendNotificationMessageFn('emergency'),
 } satisfies {
   [level in LoggingLevel]: (
-    server: Server,
+    mcpServer: McpServer,
     message: string | NotificationMessage,
     { notifier, requestId }: NotificationMethodOptions,
   ) => Promise<void>;
@@ -91,13 +83,17 @@ export const getNotificationMessageForTool = ({
 
 function getSendNotificationMessageFn(level: LoggingLevel) {
   return async (
-    server: Server,
+    mcpServer: McpServer,
     message: string | NotificationMessage,
-    { notifier: notifier, requestId }: NotificationMethodOptions = {
-      notifier: server.name,
-    },
+    { notifier, requestId }: NotificationMethodOptions = { notifier: 'tableau-mcp' },
   ) => {
-    getFileLogger()?.log({ message, level, logger: notifier });
+    const fileLogMessage =
+      typeof message === 'string' ? message : safeStringifyNotificationMessage(message);
+    getFileLogger()?.log({
+      message: fileLogMessage,
+      level,
+      logger: notifier,
+    });
 
     if (!shouldNotifyWhenLevelIsAtLeast(level)) {
       return;
@@ -105,7 +101,7 @@ function getSendNotificationMessageFn(level: LoggingLevel) {
 
     // server.sendNotification doesn't provide a way to provide the relatedRequestId
     // so we're using server.notification directly.
-    return server.server.notification(
+    return mcpServer.server.notification(
       {
         method: 'notifications/message',
         params: {
@@ -128,4 +124,12 @@ function getSendNotificationMessageFn(level: LoggingLevel) {
       },
     );
   };
+}
+
+function safeStringifyNotificationMessage(message: NotificationMessage): string {
+  try {
+    return JSON.stringify(message);
+  } catch {
+    return '[Unable to serialize notification message]';
+  }
 }

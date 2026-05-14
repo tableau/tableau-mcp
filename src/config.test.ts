@@ -1,9 +1,8 @@
-import { exportedForTesting, ONE_HOUR_IN_MS, TEN_MINUTES_IN_MS } from './config.js';
+import { Config } from './config.js';
 import { stubDefaultEnvVars } from './testShared.js';
+import { milliseconds } from './utils/milliseconds.js';
 
 describe('Config', () => {
-  const { Config } = exportedForTesting;
-
   beforeEach(() => {
     vi.resetModules();
     vi.unstubAllEnvs();
@@ -69,16 +68,16 @@ describe('Config', () => {
     expect(config.siteName).toBe('tc25');
   });
 
-  it('should set default log level to debug when not specified', () => {
+  it('should set default notification level to debug when not specified', () => {
     const config = new Config();
-    expect(config.defaultLogLevel).toBe('debug');
+    expect(config.defaultNotificationLevel).toBe('debug');
   });
 
-  it('should set custom log level when specified', () => {
-    vi.stubEnv('DEFAULT_LOG_LEVEL', 'info');
+  it('should set custom notification level when specified', () => {
+    vi.stubEnv('DEFAULT_NOTIFICATION_LEVEL', 'info');
 
     const config = new Config();
-    expect(config.defaultLogLevel).toBe('info');
+    expect(config.defaultNotificationLevel).toBe('info');
   });
 
   it('should set disableLogMasking to false by default', () => {
@@ -142,21 +141,21 @@ describe('Config', () => {
     vi.stubEnv('MAX_REQUEST_TIMEOUT_MS', 'abc');
 
     const config = new Config();
-    expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
+    expect(config.maxRequestTimeoutMs).toBe(milliseconds.fromMinutes(10));
   });
 
   it('should set maxRequestTimeoutMs to the default value when specified as a negative number', () => {
     vi.stubEnv('MAX_REQUEST_TIMEOUT_MS', '-100');
 
     const config = new Config();
-    expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
+    expect(config.maxRequestTimeoutMs).toBe(milliseconds.fromMinutes(10));
   });
 
   it('should set maxRequestTimeoutMs to the default value when specified as a number greater than one hour', () => {
-    vi.stubEnv('MAX_REQUEST_TIMEOUT_MS', `${ONE_HOUR_IN_MS + 1}`);
+    vi.stubEnv('MAX_REQUEST_TIMEOUT_MS', `${milliseconds.fromHours(1) + 1}`);
 
     const config = new Config();
-    expect(config.maxRequestTimeoutMs).toBe(TEN_MINUTES_IN_MS);
+    expect(config.maxRequestTimeoutMs).toBe(milliseconds.fromMinutes(10));
   });
 
   it('should set disableSessionManagement to false by default', () => {
@@ -230,6 +229,34 @@ describe('Config', () => {
 
     const config = new Config();
     expect(config.enableMcpSiteSettings).toBe(false);
+  });
+
+  it('should set allowSitesToConfigureRequestOverrides to false by default', () => {
+    const config = new Config();
+    expect(config.allowSitesToConfigureRequestOverrides).toBe(false);
+  });
+
+  it('should set allowSitesToConfigureRequestOverrides to true when specified', () => {
+    vi.stubEnv('ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES', 'true');
+
+    const config = new Config();
+    expect(config.allowSitesToConfigureRequestOverrides).toBe(true);
+  });
+
+  it('should set allowSitesToConfigureRequestOverrides to false when set to an invalid value', () => {
+    vi.stubEnv('ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES', 'yes');
+
+    const config = new Config();
+    expect(config.allowSitesToConfigureRequestOverrides).toBe(false);
+  });
+
+  it('should throw error when ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES is true but ENABLE_MCP_SITE_SETTINGS is false', () => {
+    vi.stubEnv('ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES', 'true');
+    vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
+
+    expect(() => new Config()).toThrow(
+      'ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES is "true", but MCP site settings are not enabled.',
+    );
   });
 
   it('should set enablePassthroughAuth to false by default', () => {
