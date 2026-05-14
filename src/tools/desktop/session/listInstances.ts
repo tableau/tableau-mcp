@@ -11,7 +11,7 @@ const paramsSchema = {};
 export const getListInstancesTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
-  const placeholderTool = new DesktopTool({
+  const listInstancesTool = new DesktopTool({
     server,
     name: 'list-instances',
     title: 'List Running Tableau Desktop Instances',
@@ -24,7 +24,7 @@ export const getListInstancesTool = (
       openWorldHint: false,
     },
     callback: async (_, extra): Promise<CallToolResult> => {
-      return await placeholderTool.logAndExecute({
+      return await listInstancesTool.logAndExecute({
         extra,
         args: {},
         callback: async () => {
@@ -54,5 +54,5 @@ export const getListInstancesTool = (
     },
   });
 
-  return placeholderTool;
+  return listInstancesTool;
 };
