@@ -1,3 +1,3 @@
-import { getListInstancesTool } from './session/listInstances';
+import { getListInstancesTool } from './session/listInstances.js';
 
 export const desktopToolFactories = [getListInstancesTool];
