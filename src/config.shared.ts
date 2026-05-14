@@ -4,8 +4,11 @@ import { parseLogLevel } from './logging/logger.js';
 import { LoggerType, parseLoggerTypes } from './logging/loggerType.js';
 import { LogLevel } from './logging/types.js';
 import { isTransport, TransportName } from './transports.js';
+import { getDirname } from './utils/getDirname.js';
 import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
+
+const __dirname = getDirname();
 
 export class BaseConfig {
   transport: TransportName;

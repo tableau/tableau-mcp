@@ -2,12 +2,12 @@ import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.s
 import { AgentApiClientConfig } from './desktop/getAgentApiClient.js';
 import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
-
 export class Config extends BaseConfig {
   agentApiClientConfig: AgentApiClientConfig;
 
   constructor() {
     super();
+
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
     const {
       AGENT_API_BASE: agentApiBase,
