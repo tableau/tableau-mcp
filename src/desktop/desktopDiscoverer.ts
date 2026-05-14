@@ -26,7 +26,7 @@ export class DesktopDiscoverer {
         manifest.instances.map((instance) => [instance.pid, new DesktopInstance(instance)]),
       );
     } catch (error) {
-      log?.({
+      log({
         message: 'Failed to read manifest',
         level: 'error',
         logger: 'DesktopDiscoverer',
