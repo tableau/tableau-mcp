@@ -9,6 +9,7 @@ import { Server } from '../../server.js';
 import { paginate } from '../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, Tool } from '../tool.js';
+import { parseAndValidateProjectsFilterString } from './projectsFilterUtils.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
@@ -55,6 +56,7 @@ export const getListProjectsTool = (server: Server): Tool<typeof paramsSchema> =
     },
     callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
+      const validatedFilter = filter ? parseAndValidateProjectsFilterString(filter) : undefined;
 
       return await listProjectsTool.logAndExecute({
         extra,
@@ -78,7 +80,7 @@ export const getListProjectsTool = (server: Server): Tool<typeof paramsSchema> =
                     const { pagination, projects: data } =
                       await restApi.projectsMethods.queryProjects({
                         siteId: restApi.siteId,
-                        filter: filter ?? '',
+                        filter: validatedFilter ?? '',
                         pageSize: pageConfig.pageSize,
                         pageNumber: pageConfig.pageNumber,
                       });
