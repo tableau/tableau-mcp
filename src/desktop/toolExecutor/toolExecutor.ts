@@ -7,7 +7,7 @@ import {
   GetEventsResponse,
 } from '../../sdks/desktop/agentApi/types.js';
 
-export type ExecuteCommandArgs<Z extends z.ZodTypeAny = z.ZodTypeAny> = {
+export type ExecuteCommandArgs<Z extends z.ZodTypeAny | undefined = undefined> = {
   command: string;
   namespace: string;
   args?: Record<string, any>;
@@ -20,15 +20,23 @@ export type GetEventsArgs = {
 
 export type ExecuteCommandError =
   | { type: 'command-failed'; error: ExecuteCommandResponse['error'] }
-  | { type: 'command-timed-out' }
+  | { type: 'command-timed-out'; error: string }
   | { type: 'unknown'; error: unknown };
+
+export type ExecuteCommandResult<Z extends z.ZodTypeAny | undefined = undefined> =
+  Z extends z.ZodTypeAny
+    ? GetCommandStatusResponse & { parsedResult: z.infer<Z> }
+    : GetCommandStatusResponse;
 
 export abstract class ToolExecutor {
   abstract start(): Promise<void>;
   abstract stop(): void;
   abstract isAvailable(): boolean;
-  abstract executeCommand<Z extends z.ZodTypeAny = z.ZodTypeAny>(
+  abstract executeCommand(
+    args: ExecuteCommandArgs<undefined>,
+  ): Promise<Result<ExecuteCommandResult<undefined>, ExecuteCommandError>>;
+  abstract executeCommand<Z extends z.ZodTypeAny>(
     args: ExecuteCommandArgs<Z>,
-  ): Promise<Result<GetCommandStatusResponse & { parsedResult?: z.infer<Z> }, ExecuteCommandError>>;
+  ): Promise<Result<ExecuteCommandResult<Z>, ExecuteCommandError>>;
   abstract getEvents(args: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>>;
 }

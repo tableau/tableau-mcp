@@ -8,6 +8,7 @@ import { AgentApiClientConfig, getAgentApiClient } from '../getAgentApiClient.js
 import {
   ExecuteCommandArgs,
   ExecuteCommandError,
+  ExecuteCommandResult,
   GetEventsArgs,
   ToolExecutor,
 } from './toolExecutor.js';
@@ -43,13 +44,25 @@ export class LocalExecutor extends ToolExecutor {
     return true;
   }
 
-  async executeCommand<Z extends z.ZodTypeAny = z.ZodTypeAny>({
+  // overload for no schema provided
+  async executeCommand(
+    args: ExecuteCommandArgs<undefined>,
+  ): Promise<Result<ExecuteCommandResult, ExecuteCommandError>>;
+
+  // overload for schema provided
+  async executeCommand<Z extends z.ZodTypeAny>(
+    args: ExecuteCommandArgs<Z>,
+  ): Promise<Result<ExecuteCommandResult<Z>, ExecuteCommandError>>;
+  async executeCommand({
     command,
     namespace,
     args,
     schema,
-  }: ExecuteCommandArgs<Z>): Promise<
-    Result<GetCommandStatusResponse & { parsedResult?: z.infer<Z> }, ExecuteCommandError>
+  }: ExecuteCommandArgs<z.ZodTypeAny | undefined>): Promise<
+    Result<
+      ExecuteCommandResult<undefined> | ExecuteCommandResult<z.ZodTypeAny>,
+      ExecuteCommandError
+    >
   > {
     args ??= {};
 
@@ -170,6 +183,6 @@ export class LocalExecutor extends ToolExecutor {
       attempts++;
     }
 
-    return Err({ type: 'command-timed-out' });
+    return Err({ type: 'command-timed-out', error: `Command ${commandId} timed out` });
   }
 }

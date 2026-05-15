@@ -2,6 +2,8 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
+import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor';
+
 export class McpToolError extends Error {
   readonly type: string;
   readonly statusCode: number;
@@ -150,6 +152,16 @@ export class NoDesktopInstancesFoundError extends McpToolError {
         '  3. The manifest file exists in the expected location',
       ].join('\n'),
       statusCode: 404,
+    });
+  }
+}
+
+export class DesktopCommandExecutionError extends McpToolError {
+  constructor(error: ExecuteCommandError) {
+    super({
+      type: 'desktop-command-execution-error',
+      message: JSON.stringify(error),
+      statusCode: 500,
     });
   }
 }
