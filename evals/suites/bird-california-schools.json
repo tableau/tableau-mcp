@@ -1,0 +1,728 @@
+[
+  {
+    "question_id": 5,
+    "question": "How many schools with an average score in Math greater than 400 in the SAT test are exclusively virtual?",
+    "evidence": "Exclusively virtual refers to Virtual = 'F'",
+    "difficulty": "simple",
+    "answer_type": "scalar",
+    "expected_value": 4,
+    "expected_row_count": 1,
+    "ai_summarized_answer": "There are 4 schools that are exclusively virtual and have an average Math SAT score greater than 400.",
+    "expected_columns": [
+      "School"
+    ],
+    "expected_filter_fields": [
+      "Virtual",
+      "Avgscrmath"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: How many schools with an average score in Math greater than 400 in the SAT test are exclusively virtual? Exclusively virtual refers to Virtual = 'F'",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 11,
+    "question": "Please list the codes of the schools with a total enrollment of over 500.",
+    "evidence": "Total enrollment can be represented by `Enrollment (K-12)` + `Enrollment (Ages 5-17)`",
+    "difficulty": "simple",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 7806,
+    "ai_summarized_answer": "The query returns 7,806 school codes with total enrollment over 500, including codes like 01100170109835, 01100170112607, 01100170124172, and 7,803 more.",
+    "expected_columns": [
+      "Cdscode"
+    ],
+    "expected_filter_fields": [],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: Please list the codes of the schools with a total enrollment of over 500. Total enrollment can be represented by `Enrollment (K-12)` + `Enrollment (Ages 5-17)`",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 12,
+    "question": "Among the schools with an SAT excellence rate of over 0.3, what is the highest eligible free rate for students aged 5-17?",
+    "evidence": "Excellence rate = NumGE1500 / NumTstTakr; Eligible free rates for students aged 5-17 = `Free Meal Count (Ages 5-17)` / `Enrollment (Ages 5-17)`",
+    "difficulty": "moderate",
+    "answer_type": "scalar",
+    "expected_value": 0.9049079754601227,
+    "expected_row_count": 1,
+    "ai_summarized_answer": "The highest eligible free rate for students aged 5-17 among schools with an SAT excellence rate over 0.3 is approximately 0.905 or 90.5%.",
+    "expected_columns": [
+      "Eligible Free Rate Max"
+    ],
+    "expected_filter_fields": [],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: Among the schools with an SAT excellence rate of over 0.3, what is the highest eligible free rate for students aged 5-17? Excellence rate = NumGE1500 / NumTstTakr; Eligible free rates for students aged 5-17 = `Free Meal Count (Ages 5-17)` / `Enrollment (Ages 5-17)`",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 17,
+    "question": "Rank schools by their average score in Writing where the score is greater than 499, showing their charter numbers.",
+    "evidence": "Valid charter number means the number is not null",
+    "difficulty": "simple",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 58,
+    "ai_summarized_answer": "The results show 58 schools ranked by writing scores above 499, with the top school (charter 0210) scoring 630 and rank 1, charter 0890 scoring 593 at rank 2, charter 0290 scoring 582 at rank 3, and 55 more schools ranked down to charter 1400 with a score of 501 at rank 58.",
+    "expected_columns": [
+      "Cdscode",
+      "Charternum",
+      "Avgscrwrite"
+    ],
+    "expected_filter_fields": [
+      "Avgscrwrite",
+      "Charternum"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: Rank schools by their average score in Writing where the score is greater than 499, showing their charter numbers. Valid charter number means the number is not null",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 23,
+    "question": "List the names of schools with more than 30 difference in enrollements between K-12 and ages 5-17? Please also give the full street adress of the schools.",
+    "evidence": "Diffrence in enrollement = `Enrollment (K-12)` - `Enrollment (Ages 5-17)`",
+    "difficulty": "moderate",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 1239,
+    "ai_summarized_answer": "The data shows 1,239 schools with enrollment differences greater than 30, including Alameda County Community at 313 West Winton Avenue, California School for the Deaf-Fremont at 39350 Gallaudet Drive, Alameda High at 2201 Encinal Avenue, and 1,236 more schools.",
+    "expected_columns": [
+      "Cdscode",
+      "School Name",
+      "Street"
+    ],
+    "expected_filter_fields": [],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: List the names of schools with more than 30 difference in enrollements between K-12 and ages 5-17? Please also give the full street adress of the schools. Diffrence in enrollement = `Enrollment (K-12)` - `Enrollment (Ages 5-17)`",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 24,
+    "question": "Give the names of the schools with the percent eligible for free meals in K-12 is more than 0.1 and test takers whose test score is greater than or equal to 1500?",
+    "evidence": "Percent eligible for free meals = Free Meal Count (K-12) / Total (Enrollment (K-12)",
+    "difficulty": "moderate",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 1165,
+    "ai_summarized_answer": "The results list 1,167 schools meeting both criteria, including FAME Public Charter, Envision Academy for Arts & Technology, Alameda Science and Technology Institute, Alameda High, Alternatives in Action, and 1,162 more.",
+    "expected_columns": [
+      "School Name"
+    ],
+    "expected_filter_fields": [
+      "Numge1500"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: Give the names of the schools with the percent eligible for free meals in K-12 is more than 0.1 and test takers whose test score is greater than or equal to 1500? Percent eligible for free meals = Free Meal Count (K-12) / Total (Enrollment (K-12)",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 25,
+    "question": "Name schools in Riverside which the average of average math score for SAT is grater than 400, what is the funding type of these schools?",
+    "evidence": "Average of average math = sum(average math scores) / count(schools).",
+    "difficulty": "moderate",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 6,
+    "ai_summarized_answer": "Six schools in Riverside meet the criteria: Arlington High, John W. North High, Martin Luther King Jr. High, Polytechnic High, and Ramona High all have no charter funding (None), while River Springs Charter is directly funded.",
+    "expected_columns": [
+      "Cds",
+      "School Name",
+      "Charter Funding Type"
+    ],
+    "expected_filter_fields": [
+      "District Name",
+      "Avgscrmath"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: Name schools in Riverside which the average of average math score for SAT is grater than 400, what is the funding type of these schools? Average of average math = sum(average math scores) / count(schools).",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 26,
+    "question": "State the names and full communication address of high schools in Monterey which has more than 800 free or reduced price meals for ages 15-17?",
+    "evidence": "Full communication address should include Street, City, State and zip code if any.",
+    "difficulty": "moderate",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 5,
+    "ai_summarized_answer": "Five high schools meet the criteria: Alisal High at 777 Williams Road, Salinas, CA 93905-1907; Everett Alvarez High at 1900 Independence Boulevard, Salinas, CA 93906-5300; North Salinas High at 55 Kip Drive, Salinas, CA 93906-2908; Salinas High at 726 South Main Street, Salinas, CA 93901-3243; and Soledad High at 425 Gabilan Drive, Soledad, CA 93960-3207.",
+    "expected_columns": [
+      "School Name",
+      "Street",
+      "City",
+      "State",
+      "Zip"
+    ],
+    "expected_filter_fields": [
+      "County",
+      "Free Meal Count (Ages 5-17)",
+      "School Type"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: State the names and full communication address of high schools in Monterey which has more than 800 free or reduced price meals for ages 15-17? Full communication address should include Street, City, State and zip code if any.",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 27,
+    "question": "What is the average score in writing for the schools that were opened after 1991 or closed before 2000? List the school names along with the score. Also, list the communication number of the schools if there is any.",
+    "evidence": "Communication number refers to phone number.",
+    "difficulty": "moderate",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 8574,
+    "ai_summarized_answer": "The query returns 8,574 schools with their writing scores and phone numbers. Many schools have null writing scores. Examples include FAME Public Charter with a score of 505.0 and no phone number, Envision Academy for Arts & Technology with 395.0 and phone (510) 596-8901, and 8,572 more schools with varying scores and phone availability.",
+    "expected_columns": [
+      "School",
+      "Avgscrwrite"
+    ],
+    "expected_filter_fields": [],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: What is the average score in writing for the schools that were opened after 1991 or closed before 2000? List the school names along with the score. Also, list the communication number of the schools if there is any. Communication number refers to phone number.",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 28,
+    "question": "Consider the average difference between K-12 enrollment and 15-17 enrollment of schools that are locally funded, list the names and DOC type of schools which has a difference above this average.",
+    "evidence": "Difference between K-12 enrollment and 15-17 enrollment can be computed by `Enrollment (K-12)` - `Enrollment (Ages 5-17)`",
+    "difficulty": "challenging",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 57,
+    "ai_summarized_answer": "The results show 57 locally funded schools with enrollment differences above the average. Examples include Mountain Oaks (DOC 00), Castle Rock (DOC 00), Clovis Online Charter (DOC 54), Washington Elementary (DOC 52), West Park Charter Academy (DOC 52), and 52 more schools with various DOC types.",
+    "expected_columns": [
+      "School",
+      "Doc"
+    ],
+    "expected_filter_fields": [
+      "Fundingtype"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: Consider the average difference between K-12 enrollment and 15-17 enrollment of schools that are locally funded, list the names and DOC type of schools which has a difference above this average. Difference between K-12 enrollment and 15-17 enrollment can be computed by `Enrollment (K-12)` - `Enrollment (Ages 5-17)`",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 31,
+    "question": "What is the eligible free rate of the 10th and 11th schools with the highest enrolment for students in grades 1 through 12?",
+    "evidence": "K-12 refers to students in grades 1 through 12; Eligible free rate for K-12 = `Free Meal Count (K-12)` / `Enrollment (K-12)`",
+    "difficulty": "moderate",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 2,
+    "ai_summarized_answer": "The eligible free rates for the 10th and 11th schools with the highest enrollment are approximately 0.134 (13.4%) and 0.291 (29.1%) respectively.",
+    "expected_columns": [
+      "Cds",
+      "Percent (%) Eligible Free (K-12)"
+    ],
+    "expected_filter_fields": [
+      "Cds"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: What is the eligible free rate of the 10th and 11th schools with the highest enrolment for students in grades 1 through 12? K-12 refers to students in grades 1 through 12; Eligible free rate for K-12 = `Free Meal Count (K-12)` / `Enrollment (K-12)`",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 32,
+    "question": "What is the eligible free or reduced price meal rate for the top 5 schools in grades 1-12 with the highest free or reduced price meal count of the schools with the ownership code 66?",
+    "evidence": "grades 1-12 means K-12; Eligible free or reduced price meal rate for K-12 = `FRPM Count (K-12)` / `Enrollment (K-12)`",
+    "difficulty": "moderate",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 5,
+    "ai_summarized_answer": "The top 5 schools with ownership code 66 have the following FRPM rates: Paramount High at 91.8%, Calexico High at 99.9%, Bell Senior High at 89.6%, Anaheim High at 89.6%, and Bell Gardens High at 91.4%.",
+    "expected_columns": [
+      "School Name",
+      "FRPM Rate"
+    ],
+    "expected_filter_fields": [
+      "Soc",
+      "Cdscode"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: What is the eligible free or reduced price meal rate for the top 5 schools in grades 1-12 with the highest free or reduced price meal count of the schools with the ownership code 66? grades 1-12 means K-12; Eligible free or reduced price meal rate for K-12 = `FRPM Count (K-12)` / `Enrollment (K-12)`",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 36,
+    "question": "Under whose administration is the school with the highest number of students scoring 1500 or more on the SAT? Indicate their full names.",
+    "evidence": "full name means first name, last name; There are at most 3 administrators for each school; SAT Scores are greater or equal to 1500 refers to NumGE1500",
+    "difficulty": "challenging",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 1,
+    "ai_summarized_answer": "The school with the highest number of students scoring 1500 or more on the SAT is administered by Michelle King. No additional administrators are listed for her school.",
+    "expected_columns": [
+      "administrator's first name",
+      "administrator's last name",
+      "Admfname2",
+      "Admlname2",
+      "Admfname3",
+      "Admlname3",
+      "Numge1500"
+    ],
+    "expected_filter_fields": [],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: Under whose administration is the school with the highest number of students scoring 1500 or more on the SAT? Indicate their full names. full name means first name, last name; There are at most 3 administrators for each school; SAT Scores are greater or equal to 1500 refers to NumGE1500",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 37,
+    "question": "What is the complete address of the school with the lowest excellence rate? Indicate the Street, City, Zip and State.",
+    "evidence": "Execellence Rate = NumGE1500 / NumTstTakr; complete address has Street, City, State, Zip code",
+    "difficulty": "moderate",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 1,
+    "ai_summarized_answer": "The school with the lowest excellence rate is located at 2125 Jefferson Avenue, Berkeley, CA 94703-1414.",
+    "expected_columns": [
+      "School",
+      "Street",
+      "City",
+      "State",
+      "Zip"
+    ],
+    "expected_filter_fields": [
+      "Street"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: What is the complete address of the school with the lowest excellence rate? Indicate the Street, City, Zip and State. Execellence Rate = NumGE1500 / NumTstTakr; complete address has Street, City, State, Zip code",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 39,
+    "question": "What is the average number of test takers from Fresno schools that opened between 1/1/1980 and 12/31/1980?",
+    "evidence": "between 1/1/1980 and 12/31/1980 means the year = 1980",
+    "difficulty": "simple",
+    "answer_type": "scalar",
+    "expected_value": 137.88888888888889,
+    "expected_row_count": 1,
+    "ai_summarized_answer": "The average number of test takers from Fresno schools that opened in 1980 is approximately 137.89.",
+    "expected_columns": [
+      "Numtsttakr"
+    ],
+    "expected_filter_fields": [
+      "County",
+      "Opendate"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: What is the average number of test takers from Fresno schools that opened between 1/1/1980 and 12/31/1980? between 1/1/1980 and 12/31/1980 means the year = 1980",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 40,
+    "question": "What is the telephone number for the school with the lowest average score in reading in Fresno Unified?",
+    "evidence": "Fresno Unified is a name of district;",
+    "difficulty": "moderate",
+    "answer_type": "scalar",
+    "expected_value": "(559) 248-5100",
+    "expected_row_count": 1,
+    "ai_summarized_answer": "The phone number for the Fresno Unified school with the lowest average reading score is (559) 248-5100.",
+    "expected_columns": [
+      "Phone",
+      "Avgscrread"
+    ],
+    "expected_filter_fields": [
+      "District",
+      "Avgscrread"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: What is the telephone number for the school with the lowest average score in reading in Fresno Unified? Fresno Unified is a name of district;",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 41,
+    "question": "List the names of virtual schools that are among the top 5 in their respective counties based on average reading scores.",
+    "evidence": "Exclusively virtual refers to Virtual = 'F'; respective counties means PARTITION BY County",
+    "difficulty": "simple",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 34,
+    "ai_summarized_answer": "The results show 34 virtual schools that rank in the top 5 within their respective counties. Examples include Academy of Arts and Sciences: Fresno, Dunlap Leadership Academy, Insight School of California, California Virtual Academy @ Kings, National University Academy, Armona, and 29 more schools.",
+    "expected_columns": [],
+    "expected_filter_fields": [],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: List the names of virtual schools that are among the top 5 in their respective counties based on average reading scores. Exclusively virtual refers to Virtual = 'F'; respective counties means PARTITION BY County",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 45,
+    "question": "What is the average writing score of each of the schools managed by Ricci Ulrich? List the schools and the corresponding average writing scores.",
+    "evidence": "Usually, administrators manage the school stuff.",
+    "difficulty": "moderate",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 1,
+    "ai_summarized_answer": "There is one school managed by Ricci Ulrich: Buchanan High with an average writing score of 507.",
+    "expected_columns": [
+      "School",
+      "Avgscrwrite"
+    ],
+    "expected_filter_fields": [],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: What is the average writing score of each of the schools managed by Ricci Ulrich? List the schools and the corresponding average writing scores. Usually, administrators manage the school stuff.",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 46,
+    "question": "Which state special schools have the highest number of enrollees from grades 1 through 12?",
+    "evidence": "State Special Schools refers to DOC = 31; Grades 1 through 12 means K-12",
+    "difficulty": "simple",
+    "answer_type": "scalar",
+    "expected_value": "California School for the Deaf-Fremont",
+    "expected_row_count": 1,
+    "ai_summarized_answer": "The state special school with the highest K-12 enrollment is California School for the Deaf-Fremont.",
+    "expected_columns": [
+      "School",
+      "Enrollment (K-12)"
+    ],
+    "expected_filter_fields": [
+      "Doc"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: Which state special schools have the highest number of enrollees from grades 1 through 12? State Special Schools refers to DOC = 31; Grades 1 through 12 means K-12",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 47,
+    "question": "What is the monthly average number of schools that opened in Alameda County under the jurisdiction of the Elementary School District in 1980?",
+    "evidence": "Elementary School District refers to DOC = 52; Monthly average number of schools that opened in 1980 = count(schools that opened in 1980) / 12",
+    "difficulty": "moderate",
+    "answer_type": "scalar",
+    "expected_value": 1.4166666666666667,
+    "expected_row_count": 1,
+    "ai_summarized_answer": "The monthly average number of Elementary School District schools that opened in Alameda County in 1980 is approximately 1.42 schools per month.",
+    "expected_columns": [
+      "Monthly Average Schools Opened"
+    ],
+    "expected_filter_fields": [
+      "Doc",
+      "County",
+      "Opendate"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: What is the monthly average number of schools that opened in Alameda County under the jurisdiction of the Elementary School District in 1980? Elementary School District refers to DOC = 52; Monthly average number of schools that opened in 1980 = count(schools that opened in 1980) / 12",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 48,
+    "question": "What is the ratio of merged Unified School District schools in Orange County to merged Elementary School District schools?",
+    "evidence": "Elementary School District refers to DOC = 52; Unified School District refers to DOC = 54.",
+    "difficulty": "moderate",
+    "answer_type": "scalar",
+    "expected_value": 0.5714285714285714,
+    "expected_row_count": 1,
+    "ai_summarized_answer": "The ratio of merged Unified School District schools to merged Elementary School District schools in Orange County is approximately 0.571, meaning there are about 0.57 unified schools for every elementary school.",
+    "expected_columns": [
+      "Ratio Unified to Elementary"
+    ],
+    "expected_filter_fields": [
+      "Statustype",
+      "County"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: What is the ratio of merged Unified School District schools in Orange County to merged Elementary School District schools? Elementary School District refers to DOC = 52; Unified School District refers to DOC = 54.",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 50,
+    "question": "What is the postal street address for the school with the 7th highest Math average? Indicate the school's name.",
+    "evidence": "Postal street and mailing street are synonyms.",
+    "difficulty": "simple",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 1,
+    "ai_summarized_answer": "The query returns the top 6 schools by math average. The 7th highest would be Saratoga High at 20300 Herriman Avenue (based on the ordering shown).",
+    "expected_columns": [
+      "School",
+      "Mailstreet",
+      "Avgscrmath"
+    ],
+    "expected_filter_fields": [],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: What is the postal street address for the school with the 7th highest Math average? Indicate the school's name. Postal street and mailing street are synonyms.",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 62,
+    "question": "What is the total number of non-chartered schools in the county of Los Angeles with a percent (%) of eligible free meals for grades 1 through 12 that is less than 0.18%?",
+    "evidence": "non-chartered schools refer to schools whose Charter = 0; K-12 means grades 1 through 12; percent of eligible free rate for K-12 = `Free Meal Count (K-12)` * 100 / `Enrollment (K-12)`",
+    "difficulty": "challenging",
+    "answer_type": "scalar",
+    "expected_value": 1,
+    "expected_row_count": 1,
+    "ai_summarized_answer": "There is 1 non-chartered school in Los Angeles County with an eligible free meal rate less than 0.18%.",
+    "expected_columns": [
+      "School"
+    ],
+    "expected_filter_fields": [
+      "County",
+      "Charter"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: What is the total number of non-chartered schools in the county of Los Angeles with a percent (%) of eligible free meals for grades 1 through 12 that is less than 0.18%? non-chartered schools refer to schools whose Charter = 0; K-12 means grades 1 through 12; percent of eligible free rate for K-12 = `Free Meal Count (K-12)` * 100 / `Enrollment (K-12)`",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 72,
+    "question": "How many students from the ages of 5 to 17 are enrolled at the State Special School school in Fremont for the 2014-2015 academic year?",
+    "evidence": "State Special School means EdOpsCode = 'SSS'",
+    "difficulty": "moderate",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 2,
+    "ai_summarized_answer": "There are two State Special Schools in Fremont for the 2014-2015 academic year with enrollments of 40.0 and 335.0 students aged 5-17.",
+    "expected_columns": [
+      "Enrollment (Ages 5-17)"
+    ],
+    "expected_filter_fields": [
+      "Edopscode",
+      "City",
+      "Academic Year"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: How many students from the ages of 5 to 17 are enrolled at the State Special School school in Fremont for the 2014-2015 academic year? State Special School means EdOpsCode = 'SSS'",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 77,
+    "question": "Which schools served a grade span of Kindergarten to 9th grade in the county of Los Angeles and what is its Percent (%) Eligible FRPM (Ages 5-17)?",
+    "evidence": "Percent (%) Eligible FRPM (Ages 5-17) can be acquired by `FRPM Count (Ages 5-17)` / `Enrollment (Ages 5-17)` * 100",
+    "difficulty": "moderate",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 2,
+    "ai_summarized_answer": "Two schools in Los Angeles County serve grades K-9: White Oak Elementary with a 3.76% eligible FRPM rate and The Accelerated with a 97.64% eligible FRPM rate.",
+    "expected_columns": [
+      "School",
+      "Percent Eligible FRPM (Ages 5-17)"
+    ],
+    "expected_filter_fields": [
+      "County",
+      "Gsserved"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: Which schools served a grade span of Kindergarten to 9th grade in the county of Los Angeles and what is its Percent (%) Eligible FRPM (Ages 5-17)? Percent (%) Eligible FRPM (Ages 5-17) can be acquired by `FRPM Count (Ages 5-17)` / `Enrollment (Ages 5-17)` * 100",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 79,
+    "question": "Between San Diego and Santa Barbara, which county offers the most number of schools that does not offer physical building? Indicate the amount.",
+    "evidence": "'Does not offer physical building' means Virtual = F in the database.",
+    "difficulty": "moderate",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 1,
+    "ai_summarized_answer": "San Diego County offers the most virtual schools (those without physical buildings) with a count of 8 schools.",
+    "expected_columns": [
+      "County",
+      "Virtual"
+    ],
+    "expected_filter_fields": [
+      "County",
+      "Virtual"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: Between San Diego and Santa Barbara, which county offers the most number of schools that does not offer physical building? Indicate the amount. 'Does not offer physical building' means Virtual = F in the database.",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 82,
+    "question": "What is the grade span offered in the school with the highest longitude?",
+    "evidence": "the highest longitude refers to the school with the maximum absolute longitude value.",
+    "difficulty": "simple",
+    "answer_type": "scalar",
+    "expected_value": "K-8",
+    "expected_row_count": 1,
+    "ai_summarized_answer": "The school with the highest absolute longitude value has a null grade span (no grade span information available). The next highest is K-8 with an absolute longitude of 124.28481",
+    "expected_columns": [
+      "Gsoffered",
+      "Max absolute longitude"
+    ],
+    "expected_filter_fields": [],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: What is the grade span offered in the school with the highest longitude? the highest longitude refers to the school with the maximum absolute longitude value.",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 83,
+    "question": "Of the schools that offers a magnet program serving a grade span of Kindergarten to 8th grade, how many offers Multiple Provision Types? List the number of cities that offers a Kindergarten to 8th grade span and indicate how many schools are there serving such grade span for each city.",
+    "evidence": "Kindergarten to 8th grade refers to K-8; 'Offers a magnet program' means Magnet = 1; Multiple Provision Types refers to `NSLP Provision Status` = 'Multiple Provision Types'",
+    "difficulty": "challenging",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 1,
+    "ai_summarized_answer": "There is 1 city (Adelanto) with a K-8 magnet school offering Multiple Provision Types, and it has 1 such school.",
+    "expected_columns": [
+      "City",
+      "Cdscode"
+    ],
+    "expected_filter_fields": [
+      "Magnet",
+      "Gsoffered",
+      "NSLP Provision Status"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: Of the schools that offers a magnet program serving a grade span of Kindergarten to 8th grade, how many offers Multiple Provision Types? List the number of cities that offers a Kindergarten to 8th grade span and indicate how many schools are there serving such grade span for each city. Kindergarten to 8th grade refers to K-8; 'Offers a magnet program' means Magnet = 1; Multiple Provision Types refers to `NSLP Provision Status` = 'Multiple Provision Types'",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 85,
+    "question": "What is the Percent (%) Eligible Free (K-12) in the school administered by an administrator whose first name is Alusine. List the district code of the school.",
+    "evidence": "Percent (%) Eligible Free (K-12) = `Free Meal Count (K-12)` / `Enrollment (K-12)` * 100%",
+    "difficulty": "moderate",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 1,
+    "ai_summarized_answer": "The school administered by Alusine has a percent eligible free rate of approximately 70.15% for K-12 students, and the district code is 64857.",
+    "expected_columns": [
+      "District Code",
+      "Percent Eligible Free (K-12)"
+    ],
+    "expected_filter_fields": [],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: What is the Percent (%) Eligible Free (K-12) in the school administered by an administrator whose first name is Alusine. List the district code of the school. Percent (%) Eligible Free (K-12) = `Free Meal Count (K-12)` / `Enrollment (K-12)` * 100%",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  },
+  {
+    "question_id": 87,
+    "question": "What are the valid e-mail addresses of the administrator of the school located in the San Bernardino county, City of San Bernardino City Unified that opened between 1/1/2009 to 12/31/2010 whose school types are public Intermediate/Middle Schools and Unified Schools?",
+    "evidence": "Intermediate/Middle Schools refers to SOC = 62; Unified School refers to DOC = 54; years between 2009 and 2010 can refer to 'between 1/1/2009 to 12/31/2010'",
+    "difficulty": "challenging",
+    "answer_type": "list",
+    "expected_value": null,
+    "expected_row_count": 1,
+    "ai_summarized_answer": "The administrator email addresses for the qualifying school are a.lucero@realjourney.org and j.hernandez@realjourney.org.",
+    "expected_columns": [
+      "Admemail1",
+      "Admemail2",
+      "Admemail3"
+    ],
+    "expected_filter_fields": [
+      "County",
+      "City",
+      "Doc",
+      "Soc",
+      "Opendate"
+    ],
+    "prompt": "Using datasource {{env.EVAL_DATASOURCE_LUID}}: What are the valid e-mail addresses of the administrator of the school located in the San Bernardino county, City of San Bernardino City Unified that opened between 1/1/2009 to 12/31/2010 whose school types are public Intermediate/Middle Schools and Unified Schools? Intermediate/Middle Schools refers to SOC = 62; Unified School refers to DOC = 54; years between 2009 and 2010 can refer to 'between 1/1/2009 to 12/31/2010'",
+    "expected_tools": [
+      "query-datasource"
+    ],
+    "budget": {
+      "max_wall_ms": 180000
+    }
+  }
+]

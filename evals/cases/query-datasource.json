@@ -1,0 +1,12 @@
+{
+  "id": "query-datasource",
+  "name": "Query Datasource",
+  "description": "Runs a small, bounded query against a known datasource LUID provided by EVAL_DATASOURCE_LUID.",
+  "tags": ["datasource", "query", "real-server"],
+  "prompt": "Use the Tableau MCP server to query datasource LUID {{env.EVAL_DATASOURCE_LUID}}. First inspect or use known metadata if needed, then run this query exactly: {{env.EVAL_DATASOURCE_QUERY}}. Keep the row limit small and summarize the returned rows.",
+  "expected_tools": ["query-datasource"],
+  "budget": {
+    "max_tool_calls": 8,
+    "max_wall_ms": 180000
+  }
+}
