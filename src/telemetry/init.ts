@@ -101,7 +101,7 @@ export function initializeTelemetry(): TelemetryProvider {
       message: 'Failed to initialize telemetry provider',
       level: 'error',
       logger: 'telemetry',
-      error,
+      data: error,
     });
     log({ message: 'Falling back to NoOp telemetry provider', level: 'info', logger: 'telemetry' });
 

@@ -101,7 +101,7 @@ async function sendTelemetryRequest(req: Request): Promise<void> {
       message: 'Telemetry request failed',
       level: 'error',
       logger: 'telemetry',
-      error,
+      data: error,
     });
   }
 }

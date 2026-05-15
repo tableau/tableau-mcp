@@ -15,9 +15,9 @@ import {
   ResponseInterceptorConfig,
 } from './sdks/tableau/interceptors.js';
 import { RestApi } from './sdks/tableau/restApi.js';
-import { Server, userAgent } from './server.js';
+import { Server } from './server.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
-import { TableauRequestHandlerExtra } from './tools/toolContext.js';
+import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
 import invariant from './utils/invariant.js';
@@ -35,7 +35,7 @@ type JwtScopes =
   | 'tableau:mcp_site_settings:read';
 
 export type RestApiArgs = Pick<
-  TableauRequestHandlerExtra,
+  TableauWebRequestHandlerExtra,
   'config' | 'server' | 'signal' | 'tableauAuthInfo' | 'setSiteLuid' | 'setUserLuid'
 > &
   (
@@ -70,7 +70,7 @@ const getNewRestApiInstanceAsync = async (
       'abort',
       () => {
         notifier.info(
-          server,
+          server.mcpServer,
           {
             type: 'request-cancelled',
             requestId,
@@ -210,10 +210,10 @@ export const getRequestErrorInterceptor =
         message: `Request ${requestId} failed`,
         level: 'error',
         logger: 'rest-api',
-        error: error,
+        data: error,
       });
       notifier.error(
-        server,
+        server.mcpServer,
         `Request ${requestId} failed with error: ${getExceptionMessage(error)}`,
         {
           notifier: 'rest-api',
@@ -249,10 +249,10 @@ export const getResponseErrorInterceptor =
         message: `Response from request ${requestId} failed`,
         level: 'error',
         logger: 'rest-api',
-        error: error,
+        data: error,
       });
       notifier.error(
-        server,
+        server.mcpServer,
         `Response from request ${requestId} failed with error: ${getExceptionMessage(error)}`,
         { notifier: 'rest-api', requestId },
       );
@@ -293,7 +293,7 @@ function logRequest(server: Server, request: RequestInterceptorConfig, requestId
     }),
   } as const;
 
-  notifier.info(server, messageObj, { notifier: 'rest-api', requestId });
+  notifier.info(server.mcpServer, messageObj, { notifier: 'rest-api', requestId });
 }
 
 function logResponse(
@@ -320,11 +320,11 @@ function logResponse(
     }),
   } as const;
 
-  notifier.info(server, messageObj, { notifier: 'rest-api', requestId });
+  notifier.info(server.mcpServer, messageObj, { notifier: 'rest-api', requestId });
 }
 
 function getUserAgent(server: Server): string {
-  const userAgentParts = [userAgent];
+  const userAgentParts = [server.userAgent];
   if (server.clientInfo) {
     const { name, version } = server.clientInfo;
     if (name) {

@@ -8,10 +8,10 @@ import { fileURLToPath } from 'url';
 import { z } from 'zod';
 
 import packageJson from '../../package.json';
-import { ProcessEnvEx } from '../../types/process-env.js';
-import { toolNames } from '../tools/toolName.js';
+import { ProcessEnvWeb } from '../../types/process-env.js';
+import { webToolNames } from '../tools/web/toolName.js';
 
-// @ts-expect-error - import.meta is not allowed in CommonJS output, but this file is built using esbuild as ESM
+// @ts-expect-error - import.meta is not allowed in CommonJS output, this script is run with tsx as ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -19,7 +19,7 @@ type McpbUserConfigurationOption = z.infer<typeof McpbUserConfigurationOptionSch
 type McpbManifest = z.infer<typeof McpbManifestSchema>;
 
 type EnvVars = {
-  [TKey in keyof ProcessEnvEx]: McpbUserConfigurationOption & {
+  [TKey in keyof ProcessEnvWeb]: McpbUserConfigurationOption & {
     includeInUserConfig: boolean;
   };
 };
@@ -215,6 +215,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  LOG_LEVEL: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Log Level',
+    description: 'The minimum severity level for server log output.',
+    required: false,
+    sensitive: false,
+  },
   DATASOURCE_CREDENTIALS: {
     includeInUserConfig: true,
     type: 'string',
@@ -403,6 +411,23 @@ const envVars = {
     type: 'boolean',
     title: 'Enable MCP Site Settings',
     description: 'Enable MCP site settings.',
+    required: false,
+    sensitive: false,
+  },
+  ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Allow Sites to Configure Request Overrides',
+    description: 'Allow sites to configure request overrides.',
+    required: false,
+    sensitive: false,
+  },
+  ALLOWED_REQUEST_OVERRIDES: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Allowed Request Overrides',
+    description:
+      'A comma-separated list of request override variables to allow. The format is `overridableVariableName:restrictionType`.',
     required: false,
     sensitive: false,
   },
@@ -633,7 +658,7 @@ const manifest = {
       env: manifestEnvObject,
     },
   },
-  tools: toolNames.map((name) => ({ name })),
+  tools: webToolNames.map((name) => ({ name })),
   user_config: userConfig,
 } satisfies McpbManifest;
 

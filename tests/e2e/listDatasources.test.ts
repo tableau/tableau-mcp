@@ -2,18 +2,28 @@ import z from 'zod';
 
 import { dataSourceSchema } from '../../src/sdks/tableau/types/dataSource.js';
 import { getDefaultEnv, getSuperstoreDatasource, resetEnv, setEnv } from '../testEnv.js';
-import { callTool } from './client.js';
+import { McpClient } from './mcpClient.js';
 
 describe('list-datasources', () => {
+  let client: McpClient;
+
   beforeAll(setEnv);
   afterAll(resetEnv);
+
+  beforeAll(async () => {
+    client = new McpClient();
+    await client.connect();
+  });
+
+  afterAll(async () => {
+    await client.close();
+  });
 
   it('should list datasources', async () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreDatasource(env);
 
-    const datasources = await callTool('list-datasources', {
-      env,
+    const datasources = await client.callTool('list-datasources', {
       schema: z.array(dataSourceSchema),
     });
 
@@ -32,8 +42,7 @@ describe('list-datasources', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreDatasource(env);
 
-    const datasources = await callTool('list-datasources', {
-      env,
+    const datasources = await client.callTool('list-datasources', {
       schema: z.array(dataSourceSchema),
       toolArgs: { filter: 'name:eq:Super*' },
     });
