@@ -123,9 +123,13 @@ function findMostRecentSuiteRunDir(): string {
     const sub = path.join(SUITE_RUNS_DIR, entry.name);
 
     // Support both flat (legacy) and date-nested layouts
-    const candidates = [sub, ...fs.readdirSync(sub, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => path.join(sub, e.name))];
+    const candidates = [
+      sub,
+      ...fs
+        .readdirSync(sub, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => path.join(sub, e.name)),
+    ];
 
     for (const dir of candidates) {
       const summaryPath = path.join(dir, 'suite-summary.json');
@@ -148,9 +152,7 @@ function findMostRecentSuiteRunDir(): string {
 
 async function main(): Promise<void> {
   const suiteRunDirArg = process.argv[2];
-  const suiteRunDir = suiteRunDirArg
-    ? path.resolve(suiteRunDirArg)
-    : findMostRecentSuiteRunDir();
+  const suiteRunDir = suiteRunDirArg ? path.resolve(suiteRunDirArg) : findMostRecentSuiteRunDir();
 
   const summaryPath = path.join(suiteRunDir, 'suite-summary.json');
   if (!fs.existsSync(summaryPath)) {
@@ -196,12 +198,18 @@ async function main(): Promise<void> {
     }
 
     const verdict = gradeResult?.verdict ?? 'grading_error';
-    const verdictLabel = verdict === 'pass' ? '✓ PASS'
-      : verdict === 'partial' ? '~ PARTIAL'
-      : verdict === 'fail' ? '✗ FAIL'
-      : verdict === 'error' ? '! ERROR'
-      : verdict === 'skip' ? '- SKIP'
-      : '? GRADING_ERROR';
+    const verdictLabel =
+      verdict === 'pass'
+        ? '✓ PASS'
+        : verdict === 'partial'
+          ? '~ PARTIAL'
+          : verdict === 'fail'
+            ? '✗ FAIL'
+            : verdict === 'error'
+              ? '! ERROR'
+              : verdict === 'skip'
+                ? '- SKIP'
+                : '? GRADING_ERROR';
 
     process.stdout.write(`${verdictLabel}\n`);
 
@@ -265,9 +273,7 @@ async function main(): Promise<void> {
 
   console.log('\n═══════════════════════════════════════');
   console.log(`Suite grade: ${suite_run_id}`);
-  console.log(
-    `  Pass rate: ${counts.pass}/${total} (${(passRate * 100).toFixed(1)}%)`,
-  );
+  console.log(`  Pass rate: ${counts.pass}/${total} (${(passRate * 100).toFixed(1)}%)`);
   console.log(
     `  pass=${counts.pass}  partial=${counts.partial}  fail=${counts.fail}` +
       `  error=${counts.error}  skip=${counts.skip}` +

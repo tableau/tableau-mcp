@@ -200,7 +200,9 @@ function main(): void {
   }
 
   if (!process.env.EVAL_DATASOURCE_LUID) {
-    console.error('EVAL_DATASOURCE_LUID must be set to the LUID of the published datasource to evaluate against.');
+    console.error(
+      'EVAL_DATASOURCE_LUID must be set to the LUID of the published datasource to evaluate against.',
+    );
     process.exit(1);
   }
 
@@ -243,7 +245,9 @@ function main(): void {
     const birdCase = cases[i];
     const caseLabel = `Q${birdCase.question_id} (${birdCase.difficulty}) [${i + 1}/${cases.length}]`;
     console.log(`\n─── ${caseLabel} ───`);
-    console.log(`    ${birdCase.question.slice(0, 80)}${birdCase.question.length > 80 ? '...' : ''}`);
+    console.log(
+      `    ${birdCase.question.slice(0, 80)}${birdCase.question.length > 80 ? '...' : ''}`,
+    );
 
     const evalCaseFile = buildEvalCaseFile(birdCase, absoluteSuitePath);
     const caseFilePath = path.join(casesDir, `case-${birdCase.question_id}.json`);
@@ -257,16 +261,12 @@ function main(): void {
 
     let spawnError: string | null = null;
     try {
-      execFileSync(
-        'npx',
-        ['tsx', runCaseScript, caseFilePath, '--run-id', runId],
-        {
-          env: process.env,
-          cwd: REPO_ROOT,
-          timeout: birdCase.budget.max_wall_ms + 30_000,
-          stdio: 'pipe',
-        },
-      );
+      execFileSync('npx', ['tsx', runCaseScript, caseFilePath, '--run-id', runId], {
+        env: process.env,
+        cwd: REPO_ROOT,
+        timeout: birdCase.budget.max_wall_ms + 30_000,
+        stdio: 'pipe',
+      });
     } catch (error: unknown) {
       const e = error as { message?: string };
       spawnError = e.message ?? 'unknown spawn error';
@@ -329,7 +329,7 @@ function main(): void {
   console.log(`  Total wall time: ${(totalWallMs / 1000).toFixed(1)}s`);
   console.log(`  Total tokens: ${totalInput} in / ${totalOutput} out`);
   console.log(`  Summary: ${summaryPath}`);
-  console.log(`\nTo grade cases:`);
+  console.log('\nTo grade cases:');
   for (const r of results) {
     console.log(`  npx tsx evals/grade-bird.ts ${r.run_dir}`);
   }

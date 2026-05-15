@@ -293,7 +293,9 @@ function extractFinalMessage(agentOutputJsonl: string): string {
   for (let i = assistantEvents.length - 1; i >= 0; i--) {
     const content = assistantEvents[i].message?.content;
     if (Array.isArray(content)) {
-      const textBlocks = content.filter((b) => b.type === 'text' && b.text).map((b) => b.text ?? '');
+      const textBlocks = content
+        .filter((b) => b.type === 'text' && b.text)
+        .map((b) => b.text ?? '');
       if (textBlocks.length > 0) return textBlocks.join('\n');
     }
     if (typeof content === 'string' && content.trim()) return content;
@@ -305,7 +307,9 @@ function extractFinalMessage(agentOutputJsonl: string): string {
 /** Extract all query-datasource tool inputs from hook.jsonl. */
 function extractQueryDatasourceInputs(hookRecords: Array<HookRecord>): Array<QueryDatasourceInput> {
   return hookRecords
-    .filter((r) => normalizeToolName(r.normalized_tool_name ?? r.tool_name ?? '') === 'query-datasource')
+    .filter(
+      (r) => normalizeToolName(r.normalized_tool_name ?? r.tool_name ?? '') === 'query-datasource',
+    )
     .map((r) => r.tool_input as QueryDatasourceInput)
     .filter(Boolean);
 }
@@ -330,10 +334,7 @@ function collectFilterCaptions(filters: Array<VizqlFilter> | undefined): Array<s
  * Try to extract a number from the final message that matches the expected value.
  * Returns the extracted number, or null if no suitable number was found.
  */
-function extractMatchingNumber(
-  text: string,
-  expected: number | string | null,
-): number | null {
+function extractMatchingNumber(text: string, expected: number | string | null): number | null {
   if (expected === null) return null;
 
   // Normalize expected to a number if possible
@@ -600,8 +601,7 @@ async function main(): Promise<void> {
       expected_filter_fields: birdCase.expected_filter_fields,
       actual_filter_fields: actualFilterFields,
       missing_filter_fields: missingFilterFields,
-      expected_value:
-        birdCase.answer_type === 'scalar' ? birdCase.expected_value : null,
+      expected_value: birdCase.answer_type === 'scalar' ? birdCase.expected_value : null,
       expected_row_count: birdCase.expected_row_count,
       extracted_number: extractedNumber,
       final_message_preview: finalMessage.slice(0, 500),
@@ -623,7 +623,9 @@ async function main(): Promise<void> {
   const s = birdResult.signals;
   console.log(`\nGrade: Q${questionId} (${birdResult.difficulty})`);
   console.log(`Verdict:        ${v}`);
-  console.log(`numeric_match:  ${s.numeric_match === null ? 'n/a' : s.numeric_match ? 'YES' : 'NO'}`);
+  console.log(
+    `numeric_match:  ${s.numeric_match === null ? 'n/a' : s.numeric_match ? 'YES' : 'NO'}`,
+  );
   console.log(
     `semantic_match: ${s.semantic_match === null ? 'n/a' : s.semantic_match.toFixed(2)}` +
       (llmJudge ? ` — ${llmJudge.reason}` : llmJudgeError ? ` (${llmJudgeError})` : ''),

@@ -489,9 +489,7 @@ function buildToolTimeAnchors(events: Array<ClaudeStreamEvent>): Map<number, num
 
   const preToolPath = path.join(runDir, 'pre-tool-times.jsonl');
   const preToolRecords = fs.existsSync(preToolPath)
-    ? parseJsonl<{ ts: string; tool_use_id: string }>(
-        fs.readFileSync(preToolPath, 'utf-8'),
-      )
+    ? parseJsonl<{ ts: string; tool_use_id: string }>(fs.readFileSync(preToolPath, 'utf-8'))
     : [];
   const dispatchTimes = new Map<string, number>();
   for (const r of preToolRecords) {
