@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
+import { getBaseConfig } from '../config.shared.js';
 import { ToolName } from '../tools/toolName.js';
 import { getFileLogger } from './fileLogger.js';
 import { sanitizeForNotification } from './sanitizeNotification.js';
@@ -88,7 +89,9 @@ function getSendNotificationMessageFn(level: LoggingLevel) {
     message: string | NotificationMessage,
     { notifier, requestId }: NotificationMethodOptions = { notifier: 'tableau-mcp' },
   ) => {
-    const sanitizedMessage = sanitizeForNotification(message);
+    const sanitizedMessage = sanitizeForNotification(message, {
+      maxStringLength: getBaseConfig().notificationPayloadMaxBytes,
+    });
     const fileLogMessage =
       typeof sanitizedMessage === 'string'
         ? sanitizedMessage

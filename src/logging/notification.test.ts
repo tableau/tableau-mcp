@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { WebMcpServer } from '../server.web.js';
 import { getFileLogger } from './fileLogger.js';
@@ -24,6 +24,10 @@ describe('notification', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getFileLogger).mockReturnValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   describe('isLoggingLevel', () => {
@@ -236,6 +240,36 @@ describe('notification', () => {
         .calls[0][0] as NotificationPayloadWithData;
       const notificationData = JSON.parse(notificationPayload.params.data);
       expect(notificationData.message).toEqual(message);
+    });
+
+    it('should use the configured notification payload max bytes', async () => {
+      vi.stubEnv('NOTIFICATION_PAYLOAD_MAX_BYTES', '12');
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'info', { silent: true });
+
+      await notifier.info(
+        server.mcpServer,
+        {
+          type: 'response',
+          data: 'notification payload',
+        },
+        { notifier: 'rest-api' },
+      );
+
+      const notificationPayload = vi.mocked(server.mcpServer.server.notification).mock
+        .calls[0][0] as NotificationPayloadWithData;
+      const notificationData = JSON.parse(notificationPayload.params.data);
+      expect(notificationData.message).toEqual({
+        type: 'response',
+        data: {
+          truncated: true,
+          reason: 'oversized-string',
+          message: '[truncated oversized string]',
+          value: 'notification',
+          originalLength: 20,
+          threshold: 12,
+        },
+      });
     });
   });
 });
