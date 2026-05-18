@@ -1,3 +1,4 @@
+import { setTimeout as setTimeoutPromise } from 'timers/promises';
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -14,9 +15,11 @@ import {
 
 export class LocalExecutor extends ToolExecutor {
   private readonly config: AgentApiClientConfig;
+  private readonly signal: AbortSignal;
 
-  constructor(config?: Partial<AgentApiClientConfig>) {
+  constructor({ signal, config }: { signal: AbortSignal; config?: Partial<AgentApiClientConfig> }) {
     super();
+    this.signal = signal;
     this.config = { ...getDesktopConfig().agentApiClientConfig, ...config };
   }
 
@@ -53,7 +56,10 @@ export class LocalExecutor extends ToolExecutor {
   > {
     args ??= {};
 
-    const client = await getAgentApiClient(this.config);
+    const client = await getAgentApiClient({
+      signal: this.signal,
+      config: this.config,
+    });
     const executeResult = await client.executeCommand({ namespace, command, args });
 
     if (executeResult.isErr()) {
@@ -131,7 +137,11 @@ export class LocalExecutor extends ToolExecutor {
   async getEvents(args?: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>> {
     const { sinceSequence } = args ?? {};
 
-    const client = await getAgentApiClient(this.config);
+    const client = await getAgentApiClient({
+      signal: this.signal,
+      config: this.config,
+    });
+
     const getEventsResult = await client.getEvents(sinceSequence);
     if (getEventsResult.isErr()) {
       const error = getEventsResult.error;
@@ -152,7 +162,10 @@ export class LocalExecutor extends ToolExecutor {
     const maxAttempts = Math.ceil(this.config.commandTimeoutMs / this.config.pollIntervalMs);
     let attempts = 0;
 
-    const client = await getAgentApiClient(this.config);
+    const client = await getAgentApiClient({
+      signal: this.signal,
+      config: this.config,
+    });
 
     while (attempts < maxAttempts) {
       const commandStatusResult = await client.getCommandStatus(commandId);
@@ -166,7 +179,7 @@ export class LocalExecutor extends ToolExecutor {
         return Ok(commandStatus);
       }
 
-      await new Promise((resolve) => setTimeout(resolve, this.config.pollIntervalMs));
+      await setTimeoutPromise(this.config.pollIntervalMs, undefined, { signal: this.signal });
       attempts++;
     }
 
