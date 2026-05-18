@@ -16,17 +16,28 @@ export class DesktopInstance {
   readonly port: number;
   readonly secret: string;
   readonly start_time: string;
+  readonly signal: AbortSignal;
 
-  constructor({ pid, port, secret, start_time }: DesktopInstanceMetadata) {
+  constructor({
+    pid,
+    port,
+    secret,
+    start_time,
+    signal,
+  }: DesktopInstanceMetadata & { signal: AbortSignal }) {
     this.pid = pid;
     this.port = port;
     this.secret = secret;
     this.start_time = start_time;
+    this.signal = signal;
   }
 
   async isAlive(): Promise<boolean> {
     const client = await getAgentApiClient({
-      agentApiBase: `http://127.0.0.1:${this.port}/api/v1`,
+      signal: this.signal,
+      config: {
+        agentApiBase: `http://127.0.0.1:${this.port}/api/v1`,
+      },
     });
 
     return await client.getHealth();

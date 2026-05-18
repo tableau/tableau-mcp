@@ -45,7 +45,7 @@ describe('SessionManager', () => {
     it('should create a new session when sessionId does not exist', async () => {
       const sessionId = '12345';
 
-      const sessionManager = new SessionManager();
+      const sessionManager = new SessionManager({ signal: new AbortController().signal });
       const executor = await sessionManager.getExecutor(sessionId);
       expect(executor).toBeInstanceOf(LocalExecutor);
     });
@@ -53,7 +53,7 @@ describe('SessionManager', () => {
     it('should throw error when sessionId is empty string', async () => {
       const sessionId = '';
 
-      const sessionManager = new SessionManager();
+      const sessionManager = new SessionManager({ signal: new AbortController().signal });
       await expect(sessionManager.getExecutor(sessionId)).rejects.toThrow(
         'Invalid session ID for local mode: . Expected numeric PID.',
       );
@@ -62,7 +62,7 @@ describe('SessionManager', () => {
     it('should throw error when sessionId is not a valid PID', async () => {
       const sessionId = 'invalid-pid';
 
-      const sessionManager = new SessionManager();
+      const sessionManager = new SessionManager({ signal: new AbortController().signal });
       await expect(sessionManager.getExecutor(sessionId)).rejects.toThrow(
         'Invalid session ID for local mode: invalid-pid. Expected numeric PID.',
       );
@@ -71,7 +71,7 @@ describe('SessionManager', () => {
     it('should throw error when desktop instance is not found', async () => {
       const sessionId = '99999';
 
-      const sessionManager = new SessionManager();
+      const sessionManager = new SessionManager({ signal: new AbortController().signal });
       await expect(sessionManager.getExecutor(sessionId)).rejects.toThrow(
         'No Desktop instance found with PID 99999',
       );
@@ -81,7 +81,7 @@ describe('SessionManager', () => {
       const sessionId1 = '12345';
       const sessionId2 = '67890';
 
-      const sessionManager = new SessionManager();
+      const sessionManager = new SessionManager({ signal: new AbortController().signal });
       const executor1 = await sessionManager.getExecutor(sessionId1);
       const executor2 = await sessionManager.getExecutor(sessionId2);
 

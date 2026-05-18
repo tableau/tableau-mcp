@@ -13,6 +13,11 @@ export type DesktopConnection = {
 
 export class SessionManager {
   private readonly sessions: Map<string, DesktopConnection> = new Map();
+  private readonly signal: AbortSignal;
+
+  constructor({ signal }: { signal: AbortSignal }) {
+    this.signal = signal;
+  }
 
   async getExecutor(sessionId: string): Promise<ToolExecutor> {
     let session = this.sessions.get(sessionId);
@@ -23,11 +28,14 @@ export class SessionManager {
         throw new Error(`Invalid session ID for local mode: ${sessionId}. Expected numeric PID.`);
       }
 
-      const desktopDiscoverer = new DesktopDiscoverer();
+      const desktopDiscoverer = new DesktopDiscoverer({ signal: this.signal });
       const desktopInstance = desktopDiscoverer.getInstance(pid);
       const executor = new LocalExecutor({
-        agentApiBase: `http://127.0.0.1:${desktopInstance.port}/api/v1`,
-        authToken: desktopInstance.secret,
+        signal: this.signal,
+        config: {
+          agentApiBase: `http://127.0.0.1:${desktopInstance.port}/api/v1`,
+          authToken: desktopInstance.secret,
+        },
       });
       await executor.start();
 
