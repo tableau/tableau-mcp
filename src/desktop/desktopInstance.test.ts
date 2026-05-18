@@ -11,6 +11,7 @@ describe('DesktopInstance', () => {
       port: 8765,
       secret: 'test-secret',
       start_time,
+      signal: new AbortController().signal,
     });
 
     expect(instance.pid).toBe(12345);
@@ -33,6 +34,7 @@ describe('DesktopInstance', () => {
       port: 8765,
       secret: 'test-secret',
       start_time: new Date().toISOString(),
+      signal: new AbortController().signal,
     });
 
     expect(await instance.isAlive()).toBe(true);
@@ -52,6 +54,7 @@ describe('DesktopInstance', () => {
       port: 8765,
       secret: 'test-secret',
       start_time: new Date().toISOString(),
+      signal: new AbortController().signal,
     });
 
     expect(await instance.isAlive()).toBe(false);
