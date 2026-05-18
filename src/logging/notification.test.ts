@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { WebMcpServer } from '../server.web.js';
+import { getFileLogger } from './fileLogger.js';
 import {
   getNotificationMessageForTool,
   isNotificationLevel,
@@ -9,9 +10,20 @@ import {
   shouldNotifyWhenLevelIsAtLeast,
 } from './notification.js';
 
+vi.mock('./fileLogger.js', () => ({
+  getFileLogger: vi.fn(),
+}));
+
+type NotificationPayloadWithData = {
+  params: {
+    data: string;
+  };
+};
+
 describe('notification', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getFileLogger).mockReturnValue(undefined);
   });
 
   describe('isLoggingLevel', () => {
@@ -164,6 +176,66 @@ describe('notification', () => {
           relatedRequestId: undefined,
         },
       );
+    });
+
+    it('should use sanitized messages for file logging and MCP notifications', async () => {
+      const server = new WebMcpServer();
+      const fileLogger = { log: vi.fn() };
+      vi.mocked(getFileLogger).mockReturnValue(fileLogger as never);
+      setNotificationLevel(server.mcpServer, 'info', { silent: true });
+      const message = {
+        type: 'response',
+        data: Buffer.from([137, 80, 78, 71]),
+      } as const;
+
+      await notifier.info(server.mcpServer, message, { notifier: 'rest-api' });
+
+      expect(fileLogger.log).toHaveBeenCalledWith({
+        message: JSON.stringify({
+          type: 'response',
+          data: {
+            redacted: true,
+            reason: 'binary-payload',
+            message: '[redacted binary payload]',
+            kind: 'Buffer',
+            byteLength: 4,
+          },
+        }),
+        level: 'info',
+        logger: 'rest-api',
+      });
+
+      const notificationPayload = vi.mocked(server.mcpServer.server.notification).mock
+        .calls[0][0] as NotificationPayloadWithData;
+      const notificationData = JSON.parse(notificationPayload.params.data);
+      expect(notificationData.message).toEqual({
+        type: 'response',
+        data: {
+          redacted: true,
+          reason: 'binary-payload',
+          message: '[redacted binary payload]',
+          kind: 'Buffer',
+          byteLength: 4,
+        },
+      });
+      expect(notificationPayload.params.data).not.toContain('"0":137');
+    });
+
+    it('should preserve small normal notification messages', async () => {
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'info', { silent: true });
+      const message = {
+        type: 'response',
+        status: 200,
+        data: { message: 'ok' },
+      } as const;
+
+      await notifier.info(server.mcpServer, message, { notifier: 'rest-api' });
+
+      const notificationPayload = vi.mocked(server.mcpServer.server.notification).mock
+        .calls[0][0] as NotificationPayloadWithData;
+      const notificationData = JSON.parse(notificationPayload.params.data);
+      expect(notificationData.message).toEqual(message);
     });
   });
 });

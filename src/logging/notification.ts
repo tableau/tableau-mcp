@@ -3,6 +3,7 @@ import { LoggingLevel, RequestId } from '@modelcontextprotocol/sdk/types.js';
 
 import { ToolName } from '../tools/toolName.js';
 import { getFileLogger } from './fileLogger.js';
+import { sanitizeForNotification } from './sanitizeNotification.js';
 import { orderedLogLevels } from './types.js';
 
 type NotificationName = 'rest-api' | (string & {});
@@ -87,8 +88,11 @@ function getSendNotificationMessageFn(level: LoggingLevel) {
     message: string | NotificationMessage,
     { notifier, requestId }: NotificationMethodOptions = { notifier: 'tableau-mcp' },
   ) => {
+    const sanitizedMessage = sanitizeForNotification(message);
     const fileLogMessage =
-      typeof message === 'string' ? message : safeStringifyNotificationMessage(message);
+      typeof sanitizedMessage === 'string'
+        ? sanitizedMessage
+        : safeStringifyNotificationMessage(sanitizedMessage);
     getFileLogger()?.log({
       message: fileLogMessage,
       level,
@@ -112,7 +116,7 @@ function getSendNotificationMessageFn(level: LoggingLevel) {
               timestamp: new Date().toISOString(),
               currentNotificationLevel,
               notifier,
-              message,
+              message: sanitizedMessage,
             },
             null,
             2,
@@ -126,7 +130,7 @@ function getSendNotificationMessageFn(level: LoggingLevel) {
   };
 }
 
-function safeStringifyNotificationMessage(message: NotificationMessage): string {
+function safeStringifyNotificationMessage(message: unknown): string {
   try {
     return JSON.stringify(message);
   } catch {
