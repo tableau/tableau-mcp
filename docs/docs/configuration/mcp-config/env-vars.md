@@ -146,6 +146,19 @@ Disable masking of credentials in MCP client notifications and server logs. For 
 
 <hr />
 
+## `NOTIFICATION_PAYLOAD_MAX_BYTES`
+
+The maximum string length included in MCP client notifications and server logs before large payloads
+are redacted or truncated.
+
+- Default: `8192`
+- Must be a positive number.
+
+Binary payloads, large SVG/XML payloads, and large base64 image payloads are redacted. Other strings
+larger than this value are truncated.
+
+<hr />
+
 ## `DATASOURCE_CREDENTIALS`
 
 A JSON string that includes usernames and passwords for any datasources that require them.
