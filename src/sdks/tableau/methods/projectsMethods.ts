@@ -22,7 +22,7 @@ export default class ProjectsMethods extends AuthenticatedMethods<typeof project
   /**
    * Returns a list of projects on the specified site.
    *
-   * Required scopes: `tableau:projects:read`
+   * Required scopes: `tableau:content:read`
    *
    * @param siteId - The Tableau site ID
    * @param filter - The filter string to filter projects by

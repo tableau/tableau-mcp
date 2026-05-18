@@ -76,7 +76,7 @@ const toolScopeMap: Record<
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
-    api: new Set(['tableau:projects:read', 'tableau:mcp_site_settings:read']),
+    api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
   'list-views': {
     mcp: ['tableau:mcp:view:read'],
