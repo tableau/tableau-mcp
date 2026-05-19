@@ -75,9 +75,15 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   BREAK_GLASS_DISABLE_GLOBALLY: string | undefined;
 }
 
+export interface ProcessEnvDesktop extends ProcessEnvBase {
+  AGENT_API_BASE: string | undefined;
+  AGENT_API_AUTH_TOKEN: string | undefined;
+  AGENT_API_POLL_INTERVAL_MS: string | undefined;
+}
+
 declare global {
   namespace NodeJS {
-    interface ProcessEnv extends ProcessEnvWeb {
+    interface ProcessEnv extends ProcessEnvWeb, ProcessEnvDesktop {
       [key: string]: string | undefined;
     }
   }
