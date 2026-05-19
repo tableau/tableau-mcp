@@ -17,6 +17,7 @@ export class BaseConfig {
   loggers: Set<LoggerType>;
   fileLoggerDirectory: string;
   maxRequestTimeoutMs: number;
+  notificationPayloadMaxBytes: number;
 
   constructor() {
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
@@ -27,6 +28,7 @@ export class BaseConfig {
       ENABLED_LOGGERS: logging,
       FILE_LOGGER_DIRECTORY: fileLoggerDirectory,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
+      NOTIFICATION_PAYLOAD_MAX_BYTES: notificationPayloadMaxBytes,
     } = cleansedVars;
 
     this.transport = isTransport(transport) ? transport : 'stdio';
@@ -38,6 +40,10 @@ export class BaseConfig {
       defaultValue: milliseconds.fromMinutes(10),
       minValue: 5000,
       maxValue: milliseconds.fromHours(1),
+    });
+    this.notificationPayloadMaxBytes = parseNumber(notificationPayloadMaxBytes, {
+      defaultValue: 8192,
+      minValue: 1,
     });
   }
 }
