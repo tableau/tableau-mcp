@@ -25,7 +25,6 @@ import invariant from './utils/invariant.js';
 type JwtScopes =
   | 'tableau:viz_data_service:read'
   | 'tableau:content:read'
-  | 'tableau:projects:read'
   | 'tableau:insight_definitions_metrics:read'
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'

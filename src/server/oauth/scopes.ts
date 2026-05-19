@@ -25,7 +25,6 @@ export type McpScope =
 
 export type TableauApiScope =
   | 'tableau:content:read'
-  | 'tableau:projects:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
   | 'tableau:insight_definitions_metrics:read'
