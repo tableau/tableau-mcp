@@ -154,7 +154,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
         message: 'Tool execution failed',
         level: 'error',
         logger: 'tool',
-        error,
+        data: error,
       });
       toolResult = getErrorResult(requestId, error);
       return toolResult;

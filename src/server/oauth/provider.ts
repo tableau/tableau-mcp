@@ -102,7 +102,7 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
           message: 'Failed to read JWE private key file',
           level: 'error',
           logger: 'oauth',
-          error: error,
+          data: error,
         });
         throw new Error('Failed to read private key file');
       }
@@ -119,7 +119,7 @@ export class EmbeddedOAuthProvider extends OAuthProvider {
         message: 'Failed to create JWE private key',
         level: 'error',
         logger: 'oauth',
-        error,
+        data: error,
       });
       throw new Error('Failed to create private key');
     }

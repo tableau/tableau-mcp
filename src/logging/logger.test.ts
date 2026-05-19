@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getFileLogger } from './fileLogger.js';
-import { log, parseLoggerTypes, parseLogLevel, shouldLog } from './logger.js';
+import { log, parseLogLevel, shouldLog } from './logger.js';
+import { parseLoggerTypes } from './loggerType.js';
 
 vi.mock('./fileLogger.js', () => ({
   getFileLogger: vi.fn(),
@@ -61,6 +62,35 @@ describe('log', () => {
     stderrSpy.mockRestore();
   });
 
+  it('should write JSON and data object to stderr when transport is stdio and appLogger is enabled', () => {
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    log({ ...entry, data: { test: 'test' } });
+
+    expect(stderrSpy).toHaveBeenCalledWith(JSON.stringify({ ...entry }) + '\n');
+    expect(stderrSpy).toHaveBeenCalledWith(JSON.stringify({ test: 'test' }) + '\n');
+    stderrSpy.mockRestore();
+  });
+
+  it('should write JSON and an error when the data object cannot be stringified', () => {
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    // Create a circular reference to test the error handling.
+    const data: Record<string, any> = {};
+    data.data = data;
+    log({ ...entry, data });
+
+    expect(stderrSpy).toHaveBeenCalledWith(JSON.stringify({ ...entry }) + '\n');
+    expect(stderrSpy).toHaveBeenCalledWith(
+      [
+        'Failed to write data to stderr: Converting circular structure to JSON',
+        "    --> starting at object with constructor 'Object'",
+        "    --- property 'data' closes the circle\n",
+      ].join('\n'),
+    );
+    stderrSpy.mockRestore();
+  });
+
   it('should write JSON to console.log when transport is http and appLogger is enabled', () => {
     vi.stubEnv('TRANSPORT', 'http');
     vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
@@ -73,19 +103,16 @@ describe('log', () => {
     consoleSpy.mockRestore();
   });
 
-  it('should write JSON and error to console.log when transport is http and appLogger is enabled', () => {
+  it('should write JSON and data object to console.log when transport is http and appLogger is enabled', () => {
     vi.stubEnv('TRANSPORT', 'http');
     vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
 
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const error = new Error('boom');
 
-    log({ ...entry, level: 'error', error });
+    log({ ...entry, level: 'error', data: error });
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      JSON.stringify({ ...entry, level: 'error', error }),
-      error,
-    );
+    expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify({ ...entry, level: 'error' }), error);
     consoleSpy.mockRestore();
   });
 

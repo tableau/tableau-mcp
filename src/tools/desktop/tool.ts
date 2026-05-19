@@ -61,7 +61,7 @@ export class DesktopTool<Args extends ZodRawShape | undefined = undefined> exten
         message: 'Tool execution failed',
         level: 'error',
         logger: 'tool',
-        error,
+        data: error,
       });
       toolResult = getErrorResult(requestId, error);
       return toolResult;

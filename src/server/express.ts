@@ -175,7 +175,7 @@ export async function startExpressServer({
         message: 'Error handling MCP request',
         level: 'error',
         logger: 'server',
-        error: error,
+        data: error,
       });
       if (!res.headersSent) {
         res.status(500).json({

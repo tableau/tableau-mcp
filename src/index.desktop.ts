@@ -12,7 +12,9 @@ async function startServer(): Promise<void> {
   dotenv.config();
   const config = getDesktopConfig();
 
-  const logLevel = isNotificationLevel(config.defaultLogLevel) ? config.defaultLogLevel : 'debug';
+  const notificationLevel = isNotificationLevel(config.defaultNotificationLevel)
+    ? config.defaultNotificationLevel
+    : 'debug';
   if (config.loggers.has('fileLogger')) {
     setFileLogger(new FileLogger({ logDirectory: config.fileLoggerDirectory }));
   }
@@ -31,7 +33,7 @@ async function startServer(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.mcpServer.connect(transport);
 
-  setNotificationLevel(server.mcpServer, logLevel);
+  setNotificationLevel(server.mcpServer, notificationLevel);
   notifier.info(server.mcpServer, `${server.name} v${server.version} running on stdio`);
 }
 
@@ -40,7 +42,7 @@ startServer().catch((error) => {
     message: 'Fatal error when starting the server',
     level: 'error',
     logger: 'startup',
-    error,
+    data: error,
   });
   process.exit(1);
 });

@@ -111,11 +111,11 @@ describe('OAuth', () => {
       scopes_supported: [
         'tableau:mcp:datasource:read',
         'tableau:mcp:workbook:read',
+        'tableau:mcp:content:read',
         'tableau:mcp:view:read',
         'tableau:mcp:view:download',
         'tableau:mcp:pulse:read',
         'tableau:mcp:insight:create',
-        'tableau:mcp:content:read',
       ],
     });
   });
@@ -138,11 +138,11 @@ describe('OAuth', () => {
       scopes_supported: [
         'tableau:mcp:datasource:read',
         'tableau:mcp:workbook:read',
+        'tableau:mcp:content:read',
         'tableau:mcp:view:read',
         'tableau:mcp:view:download',
         'tableau:mcp:pulse:read',
         'tableau:mcp:insight:create',
-        'tableau:mcp:content:read',
       ],
       token_endpoint_auth_methods_supported: ['none', 'client_secret_basic', 'client_secret_post'],
       subject_types_supported: ['public'],
@@ -170,11 +170,11 @@ describe('OAuth', () => {
       scopes_supported: [
         'tableau:mcp:datasource:read',
         'tableau:mcp:workbook:read',
+        'tableau:mcp:content:read',
         'tableau:mcp:view:read',
         'tableau:mcp:view:download',
         'tableau:mcp:pulse:read',
         'tableau:mcp:insight:create',
-        'tableau:mcp:content:read',
       ],
       token_endpoint_auth_methods_supported: ['none'],
       subject_types_supported: ['public'],

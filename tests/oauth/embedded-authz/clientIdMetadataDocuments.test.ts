@@ -3,10 +3,11 @@ import http from 'http';
 import request from 'supertest';
 import { MockedFunction, vi } from 'vitest';
 
-import { getConfig, ONE_DAY_IN_MS } from '../../../src/config.js';
+import { getConfig } from '../../../src/config.js';
 import { startExpressServer } from '../../../src/server/express.js';
 import { clientMetadataCache } from '../../../src/server/oauth/clientMetadataCache.js';
 import { axios } from '../../../src/utils/axios.js';
+import { milliseconds } from '../../../src/utils/milliseconds.js';
 import { resetEnv, setEnv } from './testEnv.js';
 
 const constants = vi.hoisted(() => ({
@@ -237,7 +238,7 @@ describe('clientIdMetadataDocuments', () => {
       ...mocks.MOCK_AXIOS_GET_RESPONSE,
       headers: {
         ...mocks.MOCK_AXIOS_GET_RESPONSE.headers,
-        'cache-control': `max-age=${ONE_DAY_IN_MS / 1000}`,
+        'cache-control': `max-age=${milliseconds.fromDays(1) / 1000}`,
       },
     });
 
@@ -255,7 +256,7 @@ describe('clientIdMetadataDocuments', () => {
 
     expect(response.status).toBe(302);
     expect(clientMetadataCache.get(constants.FAKE_CLIENT_METADATA_URL)).toBeDefined();
-    vi.advanceTimersByTime(ONE_DAY_IN_MS - 1);
+    vi.advanceTimersByTime(milliseconds.fromDays(1) - 1);
     expect(clientMetadataCache.get(constants.FAKE_CLIENT_METADATA_URL)).toBeDefined();
     vi.advanceTimersByTime(1);
     expect(clientMetadataCache.get(constants.FAKE_CLIENT_METADATA_URL)).toBeUndefined();

@@ -281,7 +281,7 @@ export function token(
         }
       }
     } catch (error) {
-      log({ message: 'Token endpoint error', level: 'error', logger: 'oauth', error: error });
+      log({ message: 'Token endpoint error', level: 'error', logger: 'oauth', data: error });
       res.status(500).json({
         error: 'server_error',
         error_description: 'Internal server error',
@@ -378,7 +378,7 @@ async function exchangeRefreshToken(
       message: 'Failed to exchange refresh token',
       level: 'error',
       logger: 'oauth',
-      error,
+      data: error,
     });
     return Err('Failed to exchange refresh token');
   }

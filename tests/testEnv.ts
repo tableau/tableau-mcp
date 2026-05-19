@@ -1,10 +1,10 @@
 import dotenv from 'dotenv';
 import { existsSync } from 'fs';
 
-import { ProcessEnvEx } from '../types/process-env.js';
+import { ProcessEnvWeb } from '../types/process-env.js';
 import { Datasource, getDatasource, getWorkbook, Workbook } from './constants.js';
 
-type EnvValues = Record<keyof ProcessEnvEx, string>;
+type EnvValues = Record<keyof ProcessEnvWeb, string>;
 
 export function setEnv(): void {
   if (existsSync('.env')) {
@@ -23,13 +23,13 @@ export function resetEnv(): void {
   dotenv.config({ path: 'tests/.env.reset', override: true });
 }
 
-export function getEnv(envKeys: Array<keyof ProcessEnvEx>): EnvValues {
+export function getEnv(envKeys: Array<keyof ProcessEnvWeb>): EnvValues {
   return envKeys.reduce(
     (acc, key) => {
       acc[key] = process.env[key] ?? '';
       return acc;
     },
-    {} as Record<keyof ProcessEnvEx, string>,
+    {} as Record<keyof ProcessEnvWeb, string>,
   );
 }
 

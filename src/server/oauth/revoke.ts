@@ -154,7 +154,7 @@ async function tryRevokeAccessToken(
           message: 'Best-effort Tableau signout failed during token revocation',
           level: 'error',
           logger: 'oauth',
-          error,
+          data: error,
         });
       }
     }
