@@ -4,6 +4,7 @@ import { BoundedContext } from '../../../../overridableConfig.js';
 import { RestApiArgs, useRestApi } from '../../../../restApiInstance.js';
 import { PulseMetricSubscription } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
+import { resolveCurrentUserLuid } from '../../../../server/oauth/resolveCurrentUserLuid.js';
 import { getRequiredApiScopesForTool } from '../../../../server/oauth/scopes.js';
 import { getExceptionMessage } from '../../../../utils/getExceptionMessage.js';
 import { ConstrainedResult, WebTool } from '../../tool.js';
@@ -44,7 +45,14 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
             ...extra,
             jwtScopes: listPulseMetricSubscriptionsTool.requiredApiScopes,
             callback: async (restApi) => {
-              return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
+              const userLuidResult = await resolveCurrentUserLuid({ restApi, extra });
+              if (userLuidResult.isErr()) {
+                return userLuidResult.error.toErr();
+              }
+
+              return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser(
+                userLuidResult.value,
+              );
             },
           });
         },

@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 
 import { getConfig } from '../../../../config.js';
 import { PulseDisabledError, PulseNotAvailableError } from '../../../../errors/mcpToolError.js';
@@ -24,6 +24,7 @@ const mockPulseMetricSubscriptions: PulseMetricSubscription[] = [
 const mocks = vi.hoisted(() => ({
   mockListPulseMetricSubscriptionsForCurrentUser: vi.fn(),
   mockListPulseMetricsFromMetricIds: vi.fn(),
+  mockGetCurrentServerSession: vi.fn(),
 }));
 
 vi.mock('../../../../restApiInstance.js', () => ({
@@ -33,6 +34,9 @@ vi.mock('../../../../restApiInstance.js', () => ({
         listPulseMetricSubscriptionsForCurrentUser:
           mocks.mockListPulseMetricSubscriptionsForCurrentUser,
         listPulseMetricsFromMetricIds: mocks.mockListPulseMetricsFromMetricIds,
+      },
+      authenticatedServerMethods: {
+        getCurrentServerSession: mocks.mockGetCurrentServerSession,
       },
       siteId: 'test-site-id',
     }),
@@ -61,10 +65,68 @@ describe('listPulseMetricSubscriptionsTool', () => {
     );
     const result = await getToolResult();
     expect(result.isError).toBe(false);
-    expect(mocks.mockListPulseMetricSubscriptionsForCurrentUser).toHaveBeenCalled();
+    expect(mocks.mockListPulseMetricSubscriptionsForCurrentUser).toHaveBeenCalledWith(
+      'test-user-luid',
+    );
+    expect(mocks.mockGetCurrentServerSession).not.toHaveBeenCalled();
     invariant(result.content[0].type === 'text');
     const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockPulseMetricSubscriptions);
+  });
+
+  it('should resolve the current user from the session API when the token claim is absent', async () => {
+    mocks.mockGetCurrentServerSession.mockResolvedValue(
+      new Ok({
+        site: { id: 'test-site-luid', name: 'test-site' },
+        user: { id: 'session-user-luid', name: 'test-user' },
+      }),
+    );
+    mocks.mockListPulseMetricSubscriptionsForCurrentUser.mockResolvedValue(
+      new Ok(mockPulseMetricSubscriptions),
+    );
+
+    const extra = getMockRequestHandlerExtra();
+    extra._userLuid = undefined;
+    extra.tableauAuthInfo = {
+      type: 'Bearer',
+      username: 'test-user',
+      server: 'https://tableau.example.com',
+      siteId: 'test-site-luid',
+      raw: 'test-token',
+    };
+
+    const result = await getToolResult(extra);
+
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetCurrentServerSession).toHaveBeenCalledOnce();
+    expect(mocks.mockListPulseMetricSubscriptionsForCurrentUser).toHaveBeenCalledWith(
+      'session-user-luid',
+    );
+  });
+
+  it('should return an actionable error when the session API cannot resolve the current user', async () => {
+    mocks.mockGetCurrentServerSession.mockResolvedValue(
+      new Err({ type: 'unauthorized', message: 'sensitive session details' }),
+    );
+
+    const extra = getMockRequestHandlerExtra();
+    extra._userLuid = undefined;
+    extra.tableauAuthInfo = {
+      type: 'Bearer',
+      username: 'test-user',
+      server: 'https://tableau.example.com',
+      siteId: 'test-site-luid',
+      raw: 'test-token',
+    };
+
+    const result = await getToolResult(extra);
+
+    expect(result.isError).toBe(true);
+    expect(mocks.mockListPulseMetricSubscriptionsForCurrentUser).not.toHaveBeenCalled();
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Unable to determine the current Tableau user');
+    expect(result.content[0].text).not.toContain('sensitive session details');
+    expect(result.content[0].text).not.toContain('test-token');
   });
 
   it('should handle API errors gracefully', async () => {
@@ -180,10 +242,10 @@ describe('listPulseMetricSubscriptionsTool', () => {
   });
 });
 
-async function getToolResult(): Promise<CallToolResult> {
+async function getToolResult(extra = getMockRequestHandlerExtra()): Promise<CallToolResult> {
   const listPulseMetricSubscriptionsTool = getListPulseMetricSubscriptionsTool(new WebMcpServer());
   const callback = await Provider.from(listPulseMetricSubscriptionsTool.callback);
-  return await callback({}, getMockRequestHandlerExtra());
+  return await callback({}, extra);
 }
 
 function getServer(): WebMcpServer {
