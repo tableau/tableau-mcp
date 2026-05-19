@@ -73,6 +73,10 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
+  'list-projects': {
+    mcp: ['tableau:mcp:content:read'],
+    api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
+  },
   'list-views': {
     mcp: ['tableau:mcp:view:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
