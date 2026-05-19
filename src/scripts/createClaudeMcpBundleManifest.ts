@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 import { z } from 'zod';
 
 import packageJson from '../../package.json';
-import { ProcessEnvEx } from '../../types/process-env.js';
+import { ProcessEnvWeb } from '../../types/process-env.js';
 import { webToolNames } from '../tools/web/toolName.js';
 
 // @ts-expect-error - import.meta is not allowed in CommonJS output, this script is run with tsx as ESM
@@ -19,7 +19,7 @@ type McpbUserConfigurationOption = z.infer<typeof McpbUserConfigurationOptionSch
 type McpbManifest = z.infer<typeof McpbManifestSchema>;
 
 type EnvVars = {
-  [TKey in keyof ProcessEnvEx]: McpbUserConfigurationOption & {
+  [TKey in keyof ProcessEnvWeb]: McpbUserConfigurationOption & {
     includeInUserConfig: boolean;
   };
 };
@@ -212,6 +212,14 @@ const envVars = {
     type: 'string',
     title: 'Default Notification Level',
     description: 'The default notification level for MCP client notifications.',
+    required: false,
+    sensitive: false,
+  },
+  LOG_LEVEL: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Log Level',
+    description: 'The minimum severity level for server log output.',
     required: false,
     sensitive: false,
   },

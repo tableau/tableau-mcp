@@ -89,7 +89,7 @@ function clone<T>(obj: T): Result<T, Error> {
       message: 'Could not clone object, notification may not be sanitized!',
       level: 'error',
       logger: 'secretMask',
-      error: error,
+      data: error,
     });
     return Err(new Error(getExceptionMessage(error)));
   }

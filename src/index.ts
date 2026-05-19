@@ -31,7 +31,7 @@ async function startServer(): Promise<void> {
       message: 'Fatal error initializing server info',
       level: 'error',
       logger: 'startup',
-      error,
+      data: error,
     });
     process.exit(1);
   });
@@ -114,7 +114,7 @@ startServer().catch((error) => {
     message: 'Fatal error when starting the server',
     level: 'error',
     logger: 'startup',
-    error,
+    data: error,
   });
   process.exit(1);
 });

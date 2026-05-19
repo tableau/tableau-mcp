@@ -1,23 +1,12 @@
 import { CorsOptions } from 'cors';
 import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
 
-import { removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
-import { LoggerType, parseLoggerTypes, parseLogLevel } from './logging/logger.js';
-import type { LogLevel } from './logging/types.js';
+import { BaseConfig, removeClaudeMcpBundleUserConfigTemplates } from './config.shared.js';
 import { isTelemetryProvider, providerConfigSchema, TelemetryConfig } from './telemetry/types.js';
-import { isTransport, TransportName } from './transports.js';
-import { getDirname } from './utils/getDirname.js';
+import { isTransport } from './transports.js';
 import invariant from './utils/invariant.js';
+import { milliseconds } from './utils/milliseconds.js';
 import { parseNumber } from './utils/parseNumber.js';
-
-const __dirname = getDirname();
-
-export const TEN_MINUTES_IN_MS = 10 * 60 * 1000;
-export const ONE_HOUR_IN_MS = 60 * 60 * 1000;
-export const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
-export const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
-export const ONE_YEAR_IN_MS = 365.25 * 24 * 60 * 60 * 1000;
 
 const authTypes = ['pat', 'uat', 'direct-trust', 'oauth'] as const;
 type AuthType = (typeof authTypes)[number];
@@ -26,10 +15,9 @@ function isAuthType(auth: unknown): auth is AuthType {
   return authTypes.some((type) => type === auth);
 }
 
-export class Config {
+export class Config extends BaseConfig {
   auth: AuthType;
   server: string;
-  transport: TransportName;
   sslKey: string;
   sslCert: string;
   httpPort: number;
@@ -48,13 +36,8 @@ export class Config {
   uatKeyId: string;
   jwtAdditionalPayload: string;
   datasourceCredentials: string;
-  defaultNotificationLevel: string;
-  logLevel: LogLevel;
   disableLogMasking: boolean;
-  maxRequestTimeoutMs: number;
   disableSessionManagement: boolean;
-  loggers: Set<LoggerType>;
-  fileLoggerDirectory: string;
   tableauServerVersionCheckIntervalInHours: number;
   passthroughAuthUserSessionCheckIntervalInMinutes: number;
   mcpSiteSettingsCheckIntervalInMinutes: number;
@@ -87,6 +70,8 @@ export class Config {
   breakGlassDisableGlobally: boolean;
 
   constructor() {
+    super();
+
     const cleansedVars = removeClaudeMcpBundleUserConfigTemplates(process.env);
     const {
       AUTH: auth,
@@ -112,13 +97,8 @@ export class Config {
       UAT_KEY_ID: uatKeyId,
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
-      DEFAULT_NOTIFICATION_LEVEL: defaultNotificationLevel,
-      LOG_LEVEL: logLevel,
       DISABLE_LOG_MASKING: disableLogMasking,
-      MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
-      ENABLED_LOGGERS: logging,
-      FILE_LOGGER_DIRECTORY: fileLoggerDirectory,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES:
         passthroughAuthUserSessionCheckIntervalInMinutes,
@@ -164,12 +144,8 @@ export class Config {
     });
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
-    this.defaultNotificationLevel = defaultNotificationLevel ?? 'debug';
-    this.logLevel = parseLogLevel(logLevel);
     this.disableLogMasking = disableLogMasking === 'true';
     this.disableSessionManagement = disableSessionManagement === 'true';
-    this.loggers = parseLoggerTypes(logging);
-    this.fileLoggerDirectory = fileLoggerDirectory || join(__dirname, 'logs');
 
     this.tableauServerVersionCheckIntervalInHours = parseNumber(
       tableauServerVersionCheckIntervalInHours,
@@ -226,19 +202,19 @@ export class Config {
         ? dnsServers.split(',').map((ip) => ip.trim())
         : ['1.1.1.1', '1.0.0.1' /* Cloudflare public DNS */],
       authzCodeTimeoutMs: parseNumber(authzCodeTimeoutMs, {
-        defaultValue: TEN_MINUTES_IN_MS,
+        defaultValue: milliseconds.fromMinutes(10),
         minValue: 0,
-        maxValue: ONE_HOUR_IN_MS,
+        maxValue: milliseconds.fromHours(1),
       }),
       accessTokenTimeoutMs: parseNumber(accessTokenTimeoutMs, {
-        defaultValue: ONE_HOUR_IN_MS,
+        defaultValue: milliseconds.fromHours(1),
         minValue: 0,
-        maxValue: THIRTY_DAYS_IN_MS,
+        maxValue: milliseconds.fromDays(30),
       }),
       refreshTokenTimeoutMs: parseNumber(refreshTokenTimeoutMs, {
-        defaultValue: THIRTY_DAYS_IN_MS,
+        defaultValue: milliseconds.fromDays(30),
         minValue: 0,
-        maxValue: ONE_YEAR_IN_MS,
+        maxValue: milliseconds.fromYears(1),
       }),
       clientIdSecretPairs: oauthClientIdSecretPairs
         ? oauthClientIdSecretPairs.split(',').reduce<Record<string, string>>((acc, curr) => {
@@ -339,12 +315,6 @@ export class Config {
         throw new Error('TRANSPORT must be "http" when OAUTH_ISSUER is set');
       }
     }
-
-    this.maxRequestTimeoutMs = parseNumber(maxRequestTimeoutMs, {
-      defaultValue: TEN_MINUTES_IN_MS,
-      minValue: 5000,
-      maxValue: ONE_HOUR_IN_MS,
-    });
 
     if (this.auth === 'pat') {
       invariant(patName, 'The environment variable PAT_NAME is not set');
@@ -457,7 +427,3 @@ function getCorsOriginConfig(corsOriginConfig: string): CorsOptions['origin'] {
 }
 
 export const getConfig = (): Config => new Config();
-
-export const exportedForTesting = {
-  Config,
-};
