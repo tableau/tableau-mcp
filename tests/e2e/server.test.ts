@@ -108,12 +108,16 @@ describe('server', () => {
 
       // Filter out oauth-only tools if not using oauth
       if (process.env.AUTH !== 'oauth') {
-        expectedWebToolNames = expectedWebToolNames.filter((name) => !oauthOnlyTools.includes(name));
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !oauthOnlyTools.includes(name),
+        );
       }
 
       // Filter out admin-only tools if admin tools are not enabled
       if (process.env.TMCP_ADMIN_TOOLS_ENABLED !== 'true') {
-        expectedWebToolNames = expectedWebToolNames.filter((name) => !adminOnlyTools.includes(name));
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !adminOnlyTools.includes(name),
+        );
       }
 
       const expectedToolNames = [...desktopToolNames, ...expectedWebToolNames];
