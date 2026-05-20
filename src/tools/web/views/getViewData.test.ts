@@ -123,6 +123,20 @@ describe('getViewDataTool', () => {
     expect(mocks.mockGetView).not.toHaveBeenCalled();
     expect(mocks.mockQueryViewData).not.toHaveBeenCalled();
   });
+
+  it('should successfully get view data when INCLUDE_VIEW_IDS contains the view', async () => {
+    vi.stubEnv('INCLUDE_VIEW_IDS', mockView.id);
+    mocks.mockQueryViewData.mockResolvedValue(mockViewData);
+
+    const result = await getToolResult({ viewId: mockView.id });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockQueryViewData).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      viewId: mockView.id,
+    });
+    // viewIds is a synchronous Set lookup — no need to fetch the view itself.
+    expect(mocks.mockGetView).not.toHaveBeenCalled();
+  });
 });
 
 async function getToolResult({

@@ -178,6 +178,24 @@ describe('getViewImageTool', () => {
     expect(mocks.mockQueryViewImage).not.toHaveBeenCalled();
   });
 
+  it('should successfully get view image when INCLUDE_VIEW_IDS contains the view', async () => {
+    vi.stubEnv('INCLUDE_VIEW_IDS', mockView.id);
+    mocks.mockQueryViewImage.mockResolvedValue(Ok(mockPngData));
+
+    const result = await getToolResult({ viewId: mockView.id });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockQueryViewImage).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      viewId: mockView.id,
+      width: undefined,
+      height: undefined,
+      resolution: 'high',
+      format: undefined,
+    });
+    // viewIds is a synchronous Set lookup — no need to fetch the view itself.
+    expect(mocks.mockGetView).not.toHaveBeenCalled();
+  });
+
   it('should return error when SVG format is requested on old Tableau version', async () => {
     const result = await getToolResult({
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',

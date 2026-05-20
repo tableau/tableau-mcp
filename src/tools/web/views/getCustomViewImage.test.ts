@@ -177,6 +177,24 @@ describe('getCustomViewImageTool', () => {
     expect(mocks.mockGetCustomViewImage).not.toHaveBeenCalled();
   });
 
+  it('should successfully get custom view image when INCLUDE_VIEW_IDS contains the underlying view', async () => {
+    vi.stubEnv('INCLUDE_VIEW_IDS', mockView.id);
+    mocks.mockGetCustomViewImage.mockResolvedValue(Ok(mockPngData));
+
+    const result = await getToolResult({ customViewId: mockCustomView.id });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockGetCustomView).toHaveBeenCalled();
+    expect(mocks.mockGetCustomViewImage).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      customViewId: mockCustomView.id,
+      width: undefined,
+      height: undefined,
+      resolution: 'high',
+      format: undefined,
+      viewFilters: undefined,
+    });
+  });
+
   it('should return error when SVG format is requested on old Tableau version', async () => {
     const result = await getToolResult({
       customViewId: mockCustomView.id,

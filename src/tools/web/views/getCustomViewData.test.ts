@@ -109,6 +109,21 @@ describe('getCustomViewDataTool', () => {
     expect(mocks.mockGetCustomView).toHaveBeenCalled();
     expect(mocks.mockGetCustomViewData).not.toHaveBeenCalled();
   });
+
+  it('should successfully get custom view data when INCLUDE_VIEW_IDS contains the underlying view', async () => {
+    vi.stubEnv('INCLUDE_VIEW_IDS', mockView.id);
+    const result = await getToolResult({ customViewId: mockCustomView.id });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Country/Region');
+    // The custom view is resolved once to look up its underlying view id.
+    expect(mocks.mockGetCustomView).toHaveBeenCalled();
+    expect(mocks.mockGetCustomViewData).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      customViewId: mockCustomView.id,
+      viewFilters: undefined,
+    });
+  });
 });
 
 async function getToolResult({
