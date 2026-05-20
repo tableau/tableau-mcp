@@ -16,7 +16,7 @@ export type DesktopConnection = {
 export class SessionManager {
   private readonly sessions: Map<string, DesktopConnection> = new Map();
 
-  async getExecutor(sessionId: string, signal: AbortSignal): Promise<ToolExecutor> {
+  async getExecutor(sessionId: string): Promise<ToolExecutor> {
     let session = this.sessions.get(sessionId);
 
     if (!session) {
@@ -26,7 +26,7 @@ export class SessionManager {
       }
 
       const pid = sessionIdResult.value;
-      const desktopDiscoverer = new DesktopDiscoverer({ signal });
+      const desktopDiscoverer = new DesktopDiscoverer();
       const desktopInstance = desktopDiscoverer.getInstance(pid);
       const executor = new LocalExecutor({
         agentApiBase: `http://127.0.0.1:${desktopInstance.port}/api/v1`,

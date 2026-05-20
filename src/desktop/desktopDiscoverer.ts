@@ -13,12 +13,6 @@ const manifestSchema = z.object({
 export type DesktopInstanceManifest = z.infer<typeof manifestSchema>;
 
 export class DesktopDiscoverer {
-  private readonly signal: AbortSignal;
-
-  constructor({ signal }: { signal: AbortSignal }) {
-    this.signal = signal;
-  }
-
   getInstances(): Map<number, DesktopInstance> {
     const manifestPath = getManifestPath();
     if (!existsSync(manifestPath)) {
@@ -29,10 +23,7 @@ export class DesktopDiscoverer {
       const content = readFileSync(manifestPath, 'utf8');
       const manifest = manifestSchema.parse(JSON.parse(content));
       return new Map(
-        manifest.instances.map((instance) => [
-          instance.pid,
-          new DesktopInstance({ ...instance, signal: this.signal }),
-        ]),
+        manifest.instances.map((instance) => [instance.pid, new DesktopInstance(instance)]),
       );
     } catch (error) {
       log({

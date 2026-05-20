@@ -40,7 +40,7 @@ export class DesktopMcpServer extends Server {
           ...extra,
           config,
           getExecutor: async (sessionId: string) => {
-            return await this.sessionManager.getExecutor(sessionId, extra.signal);
+            return await this.sessionManager.getExecutor(sessionId);
           },
           server: this,
         };
