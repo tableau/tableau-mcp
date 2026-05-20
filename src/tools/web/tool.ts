@@ -4,9 +4,7 @@ import { ZodRawShape } from 'zod';
 
 import { ZodiosValidationError } from '../../errors/mcpToolError.js';
 import { log } from '../../logging/logger.js';
-import { useRestApi } from '../../restApiInstance.js';
 import { WebMcpServer } from '../../server.web.js';
-import { resolveCurrentUserLuid } from '../../server/oauth/resolveCurrentUserLuid.js';
 import { getRequiredApiScopesForTool, TableauApiScope } from '../../server/oauth/scopes.js';
 import { getTelemetryProvider } from '../../telemetry/init.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
@@ -104,8 +102,6 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     let toolResult: CallToolResult;
 
     try {
-      await this.hydrateCurrentUserLuidForTelemetry(extra);
-
       const result = await callback();
       if (result.isOk()) {
         const constrainedResult = await constrainSuccessResult(result.value);
@@ -180,50 +176,6 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
         tool_name: this.name,
         request_id: requestId.toString(),
         error_code: errorCode,
-      });
-    }
-  }
-
-  private async hydrateCurrentUserLuidForTelemetry(
-    extra: TableauWebRequestHandlerExtra,
-  ): Promise<void> {
-    if (
-      extra._userLuid ||
-      extra.tableauAuthInfo?.type !== 'Bearer' ||
-      extra.tableauAuthInfo.userId
-    ) {
-      return;
-    }
-
-    try {
-      const userLuidResult = await useRestApi({
-        ...extra,
-        jwtScopes: this.requiredApiScopes,
-        callback: async (restApi) => resolveCurrentUserLuid({ restApi, extra }),
-      });
-
-      if (userLuidResult.isErr()) {
-        log({
-          message: 'Current user LUID telemetry hydration skipped.',
-          level: 'debug',
-          logger: 'auth',
-          data: {
-            requestId: extra.requestId,
-            tool_name: this.name,
-            reason: userLuidResult.error.type,
-          },
-        });
-      }
-    } catch {
-      log({
-        message: 'Current user LUID telemetry hydration skipped.',
-        level: 'debug',
-        logger: 'auth',
-        data: {
-          requestId: extra.requestId,
-          tool_name: this.name,
-          reason: 'session-lookup-failed',
-        },
       });
     }
   }

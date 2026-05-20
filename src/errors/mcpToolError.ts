@@ -84,17 +84,6 @@ export class PulseNotAvailableError extends McpToolError {
   }
 }
 
-export class ResolveCurrentUserError extends McpToolError {
-  constructor(statusCode: 401 | 502 = 502) {
-    super({
-      type: 'current-user-resolution-failed',
-      message:
-        'Unable to determine the current Tableau user. The bearer token does not contain a user identifier and the Tableau session lookup failed.',
-      statusCode,
-    });
-  }
-}
-
 export class QueryValidationError extends McpToolError {
   constructor(message: string) {
     super({ type: 'query-validation', message, statusCode: 400 });
