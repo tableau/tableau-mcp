@@ -8,6 +8,11 @@ When `AUTH` is `direct-trust`, the MCP server will use the provided [Tableau Dir
 App][direct-trust] info to generate a scoped [JSON Web Token (JWT)][jwt] and use it to authenticate
 to the Tableau REST APIs.
 
+For general multi-user HTTP deployments, prefer [OAuth](oauth.md). Direct Trust with OAuth disabled
+is intended for testing/prototyping or deployments that are licensed and approved for user-based
+licensing (UBL), not as the default shared-account end-user deployment path. Confirm non-OAuth HTTP
+usage with your Tableau licensing and security guidance.
+
 The generated JWT will have the minimum set of scopes necessary to invoke the methods called by the
 tool being executed.
 
@@ -21,7 +26,10 @@ it internally calls into VizQL Data Service, the JWT will only have the
 
 The username for the `sub` claim of the JWT.
 
-- Can either be a hard-coded username, or the OAuth username by setting it to `{OAUTH_USERNAME}`.
+- For OAuth-backed per-user access, set this to `{OAUTH_USERNAME}` so the generated JWT uses the
+  signed-in Tableau user.
+- A hard-coded username should only be used for deployments that are licensed and approved for that
+  user-based licensing (UBL) pattern.
 
 <hr />
 
