@@ -138,14 +138,15 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
    *
    * Required scopes: `tableau:metric_subscriptions:read`
    *
+   * @param userId - The user ID to list subscriptions for.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#PulseSubscriptionService_ListSubscriptions
    */
-  listPulseMetricSubscriptionsForCurrentUser = async (): Promise<
-    PulseResult<PulseMetricSubscription[]>
-  > => {
+  listPulseMetricSubscriptionsForCurrentUser = async (
+    userId: string,
+  ): Promise<PulseResult<PulseMetricSubscription[]>> => {
     return await guardAgainstPulseDisabled(async () => {
       const response = await this._apiClient.listPulseMetricSubscriptionsForCurrentUser({
-        queries: { user_id: this.userId },
+        queries: { user_id: userId },
         ...this.authHeader,
       });
       return response.subscriptions ?? [];
