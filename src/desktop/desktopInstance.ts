@@ -37,6 +37,7 @@ export class DesktopInstance {
       signal: this.signal,
       config: {
         agentApiBase: `http://127.0.0.1:${this.port}/api/v1`,
+        authToken: this.secret,
       },
     });
 
