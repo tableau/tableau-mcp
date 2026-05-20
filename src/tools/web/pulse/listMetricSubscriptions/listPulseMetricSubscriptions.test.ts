@@ -87,6 +87,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
 
     const extra = getMockRequestHandlerExtra();
     extra._userLuid = undefined;
+    setUserLuidOnExtra(extra);
     extra.tableauAuthInfo = {
       type: 'Bearer',
       username: 'test-user',
@@ -252,4 +253,10 @@ function getServer(): WebMcpServer {
   const server = new WebMcpServer();
   server.mcpServer.registerTool = vi.fn();
   return server;
+}
+
+function setUserLuidOnExtra(extra: ReturnType<typeof getMockRequestHandlerExtra>): void {
+  extra.setUserLuid = vi.fn((userLuid: string) => {
+    extra._userLuid = userLuid;
+  });
 }

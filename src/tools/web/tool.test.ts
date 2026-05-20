@@ -1,14 +1,24 @@
 import { ZodiosError } from '@zodios/core';
 import { AxiosError } from 'axios';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 import { z, ZodError } from 'zod';
 
 import { DatasourceNotAllowedError, ZodiosValidationError } from '../../errors/mcpToolError.js';
+import * as logger from '../../logging/logger.js';
 import { notifier } from '../../logging/notification.js';
 import { WebMcpServer } from '../../server.web.js';
 import invariant from '../../utils/invariant.js';
 import { WebTool } from './tool.js';
+import { TableauWebRequestHandlerExtra } from './toolContext.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
+
+const restApiMocks = vi.hoisted(() => ({
+  mockGetCurrentServerSession: vi.fn(),
+  mockUseRestApi: vi.fn(),
+}));
+vi.mock('../../restApiInstance.js', () => ({
+  useRestApi: restApiMocks.mockUseRestApi,
+}));
 
 // Mock for product telemetry - tracks calls to send()
 const mockTelemetrySend = vi.hoisted(() => vi.fn());
@@ -203,6 +213,15 @@ describe('Tool', () => {
   describe('product telemetry', () => {
     beforeEach(() => {
       mockTelemetrySend.mockClear();
+      restApiMocks.mockGetCurrentServerSession.mockReset();
+      restApiMocks.mockUseRestApi.mockReset();
+      restApiMocks.mockUseRestApi.mockImplementation(async ({ callback }) =>
+        callback({
+          authenticatedServerMethods: {
+            getCurrentServerSession: restApiMocks.mockGetCurrentServerSession,
+          },
+        }),
+      );
     });
 
     it('should send telemetry with success=true and empty error_code on success', async () => {
@@ -315,6 +334,74 @@ describe('Tool', () => {
           error_code: '',
         }),
       );
+    });
+
+    it('should hydrate user_luid telemetry from the session API when the bearer token claim is absent', async () => {
+      const tool = new WebTool(mockParams);
+      const extra = getNoMfaBearerExtra();
+      restApiMocks.mockGetCurrentServerSession.mockResolvedValue(
+        new Ok({
+          site: { id: 'test-site-luid', name: 'test-site' },
+          user: { id: 'session-user-luid', name: 'test-user' },
+        }),
+      );
+
+      await tool.logAndExecute({
+        extra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(restApiMocks.mockGetCurrentServerSession).toHaveBeenCalledOnce();
+      expect(extra.setUserLuid).toHaveBeenCalledWith('session-user-luid');
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          user_luid: 'session-user-luid',
+          success: true,
+        }),
+      );
+    });
+
+    it('should continue tool execution when telemetry user_luid hydration fails', async () => {
+      const tool = new WebTool(mockParams);
+      const extra = getNoMfaBearerExtra();
+      restApiMocks.mockGetCurrentServerSession.mockResolvedValue(
+        new Err({ type: 'unauthorized', message: 'sensitive session details' }),
+      );
+      const logSpy = vi.spyOn(logger, 'log');
+
+      await tool.logAndExecute({
+        extra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(restApiMocks.mockGetCurrentServerSession).toHaveBeenCalledOnce();
+      expect(mockTelemetrySend).toHaveBeenCalledWith(
+        'tool_call',
+        expect.objectContaining({
+          user_luid: '',
+          success: true,
+          error_code: '',
+        }),
+      );
+      expect(JSON.stringify(logSpy.mock.calls)).not.toContain('sensitive session details');
+    });
+
+    it('should not call the session API when user_luid is already available', async () => {
+      const tool = new WebTool(mockParams);
+
+      await tool.logAndExecute({
+        extra: mockExtra,
+        args: { param1: 'test-value' },
+        callback: () => Promise.resolve(Ok({ data: 'success' })),
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+
+      expect(restApiMocks.mockGetCurrentServerSession).not.toHaveBeenCalled();
     });
   });
 
@@ -487,3 +574,24 @@ describe('Tool', () => {
     });
   });
 });
+
+function getNoMfaBearerExtra(): TableauWebRequestHandlerExtra {
+  const extra: TableauWebRequestHandlerExtra = {
+    ...getMockRequestHandlerExtra(),
+    _userLuid: undefined,
+    tableauAuthInfo: {
+      type: 'Bearer',
+      username: 'test-user',
+      server: 'https://tableau.example.com',
+      siteId: 'test-site-luid',
+      raw: 'test-token',
+    },
+    getUserLuid() {
+      return this._userLuid ?? this.tableauAuthInfo?.userId ?? '';
+    },
+  };
+  extra.setUserLuid = vi.fn((userLuid: string) => {
+    extra._userLuid = userLuid;
+  });
+  return extra;
+}
