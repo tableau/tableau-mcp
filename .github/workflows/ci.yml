@@ -103,4 +103,5 @@ jobs:
           path: |
             build/
             junit/
+            playwright-report/
             tableau-mcp.mcpb
