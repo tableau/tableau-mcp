@@ -3,8 +3,15 @@ import { expect, test } from './base.js';
 import { getSuperstoreDatasource, getTableauMcpPulseDefinition } from './testEnv.js';
 
 test.describe('generate-pulse-insight-brief', () => {
-  // This test requires Tableau AI to be enabled on the site
-  test('generate pulse insight brief', async ({ client }) => {
+  test('generate pulse insight brief', async ({ env, client }, { skip }) => {
+    skip(
+      env.TABLEAU_AI_DISABLED,
+      [
+        'This test has been skipped because it requires Tableau AI to be enabled on the site.',
+        'If this test runs but fails with a 403 Forbidden error, enable Tableau AI on the site or set TABLEAU_AI_DISABLED to true.',
+      ].join(' '),
+    );
+
     const superstore = getSuperstoreDatasource();
     const definition = getTableauMcpPulseDefinition();
 

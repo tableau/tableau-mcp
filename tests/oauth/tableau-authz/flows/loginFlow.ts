@@ -43,21 +43,33 @@ export class LoginFlow extends Flow {
   };
 
   fillPassword = async (password: string): Promise<void> => {
-    await this.passwordTextbox.fill(password);
-    await this.submitPasswordButton.click();
+    // Do not use fill() because it will appear in the Playwright trace.
+    await this.passwordTextbox.evaluate(
+      (element: HTMLInputElement, password: string) => (element.value = password),
+      password,
+    );
+    await this.submitPasswordButton.evaluate((element: HTMLButtonElement) => element.click());
   };
 
   fill = async ({
     username,
     password,
     siteName,
+    fillSiteName = false,
   }: {
     username: string;
     password: string;
     siteName: string;
+    fillSiteName: boolean;
   }): Promise<void> => {
     await this.fillUsername(username);
-    await this.fillSiteName(siteName);
+
+    if (fillSiteName) {
+      // Looks like users who can only access a single site are not prompted to select a site.
+      // Set FILL_SITE_NAME to true if you are running this locally and are prompted to select the site.
+      await this.fillSiteName(siteName);
+    }
+
     await this.fillPassword(password);
   };
 }
