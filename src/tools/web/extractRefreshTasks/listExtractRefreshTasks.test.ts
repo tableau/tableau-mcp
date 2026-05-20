@@ -10,6 +10,7 @@ const mockTasks = [mockExtractRefreshTask];
 
 const mocks = vi.hoisted(() => ({
   mockListExtractRefreshTasks: vi.fn(),
+  mockAssertAdmin: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -18,9 +19,28 @@ vi.mock('../../../restApiInstance.js', () => ({
       tasksMethods: {
         listExtractRefreshTasks: mocks.mockListExtractRefreshTasks,
       },
+      usersMethods: {
+        getUser: vi.fn().mockResolvedValue({ siteRole: 'SiteAdministratorCreator' }),
+      },
       siteId: 'test-site-id',
+      userId: 'test-user-id',
     }),
   ),
+}));
+
+vi.mock('../_lib/adminGate.js', () => ({
+  adminGate: {
+    assertAdmin: mocks.mockAssertAdmin,
+  },
+}));
+
+vi.mock('../../../config.js', () => ({
+  getConfig: vi.fn(() => ({
+    adminToolsEnabled: true,
+    productTelemetryEnabled: false,
+    productTelemetryEndpoint: 'https://test.com',
+    server: 'https://test.tableau.com',
+  })),
 }));
 
 describe('listExtractRefreshTasksTool', () => {
