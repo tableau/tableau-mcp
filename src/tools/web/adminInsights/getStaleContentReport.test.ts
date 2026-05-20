@@ -5,6 +5,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import {
+  clearStaleContentReportCache,
   computeStaleRows,
   exportedForTesting,
   getGetStaleContentReportTool,
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   mockQueryDatasource: vi.fn(),
   mockListDatasources: vi.fn(),
   mockGetUser: vi.fn(),
+  mockQueryProjects: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -31,50 +33,54 @@ vi.mock('../../../restApiInstance.js', () => ({
       usersMethods: {
         getUser: mocks.mockGetUser,
       },
+      projectsMethods: {
+        queryProjects: mocks.mockQueryProjects,
+      },
     }),
   ),
 }));
 
 describe('computeStaleRows', () => {
-  const today = new Date('2026-05-17T00:00:00Z');
+  const today = new Date('2026-05-20T00:00:00Z');
 
-  it('excludes rows whose days_stale equals the threshold', () => {
+  function row(overrides: Record<string, unknown>): Record<string, unknown> {
+    return {
+      'Item ID': 'wb-x',
+      'Item Type': 'Workbook',
+      'Item Name': 'X',
+      'Item Parent Project Name': 'default',
+      'Owner Email': 'a@example.com',
+      'Created At': '2025-12-01T00:00:00Z',
+      'Updated At': '2025-12-01T00:00:00Z',
+      'Last Accessed At': null,
+      'Size (bytes)': 100,
+      ...overrides,
+    };
+  }
+
+  it('excludes rows whose daysSinceLastUse equals the threshold', () => {
     const rows = computeStaleRows({
       universe: [
-        {
+        row({
           'Item ID': 'wb-75',
-          'Item Type': 'Workbook',
-          'Item Name': 'Recent Workbook',
-          Project: 'Default',
-          'Owner Email': 'a@example.com',
-          'Created At': '2026-01-01T00:00:00Z',
-          Size: 1024,
-        },
+          'Last Accessed At': '2026-03-06T00:00:00Z', // 75 days before 2026-05-20
+        }),
       ],
-      lastAccess: new Map([['Workbook:wb-75', '2026-03-03T00:00:00Z']]),
       thresholdDays: 75,
-      projectScope: { mode: 'all' },
       today,
     });
     expect(rows).toHaveLength(0);
   });
 
-  it('excludes a 75-day-stale workbook when threshold is 90', () => {
+  it('excludes a 75-day-stale workbook when threshold is 90 (locks the mcpJam regression)', () => {
     const rows = computeStaleRows({
       universe: [
-        {
+        row({
           'Item ID': 'wb-1',
-          'Item Type': 'Workbook',
-          'Item Name': 'TS Users',
-          Project: 'Admin Insights',
-          'Owner Email': 'admin@example.com',
-          'Created At': '2026-01-01T00:00:00Z',
-          Size: 2048,
-        },
+          'Last Accessed At': '2026-03-06T00:00:00Z',
+        }),
       ],
-      lastAccess: new Map([['Workbook:wb-1', '2026-03-03T00:00:00Z']]),
       thresholdDays: 90,
-      projectScope: { mode: 'all' },
       today,
     });
     expect(rows).toHaveLength(0);
@@ -83,19 +89,12 @@ describe('computeStaleRows', () => {
   it('includes a 100-day-stale workbook when threshold is 90', () => {
     const rows = computeStaleRows({
       universe: [
-        {
+        row({
           'Item ID': 'wb-old',
-          'Item Type': 'Workbook',
-          'Item Name': 'Old Wb',
-          Project: 'Default',
-          'Owner Email': 'old@example.com',
-          'Created At': '2026-01-01T00:00:00Z',
-          Size: 4096,
-        },
+          'Last Accessed At': '2026-02-01T00:00:00Z',
+        }),
       ],
-      lastAccess: new Map([['Workbook:wb-old', '2026-02-01T00:00:00Z']]),
       thresholdDays: 90,
-      projectScope: { mode: 'all' },
       today,
     });
     expect(rows).toHaveLength(1);
@@ -104,20 +103,16 @@ describe('computeStaleRows', () => {
     expect(rows[0].daysSinceLastUse).toBeGreaterThan(90);
   });
 
-  it('treats never-accessed items by COALESCE(last_access, Created At) and flags them', () => {
+  it('falls back to Created At when Last Accessed At is null and flags neverAccessed', () => {
     const rows = computeStaleRows({
       universe: [
-        {
+        row({
           'Item ID': 'wb-never',
-          'Item Type': 'Workbook',
-          'Item Name': 'Never Opened',
           'Created At': '2025-01-01T00:00:00Z',
-          Size: 0,
-        },
+          'Last Accessed At': null,
+        }),
       ],
-      lastAccess: new Map(),
       thresholdDays: 90,
-      projectScope: { mode: 'all' },
       today,
     });
     expect(rows).toHaveLength(1);
@@ -125,65 +120,166 @@ describe('computeStaleRows', () => {
     expect(rows[0].lastUsedDate).toBe('2025-01-01T00:00:00Z');
   });
 
-  it('sorts descending by daysSinceLastUse, then by size', () => {
+  it('also falls back to Created At when Last Accessed At field is missing', () => {
     const rows = computeStaleRows({
       universe: [
         {
-          'Item ID': 'a',
+          'Item ID': 'wb-noacc',
           'Item Type': 'Workbook',
-          'Item Name': 'A',
-          'Created At': '2026-01-01T00:00:00Z',
-          Size: 100,
-        },
-        {
-          'Item ID': 'b',
-          'Item Type': 'Workbook',
-          'Item Name': 'B',
+          'Item Name': 'No Access Field',
+          'Item Parent Project Name': 'default',
           'Created At': '2025-01-01T00:00:00Z',
-          Size: 50,
-        },
-        {
-          'Item ID': 'c',
-          'Item Type': 'Workbook',
-          'Item Name': 'C',
-          'Created At': '2025-01-01T00:00:00Z',
-          Size: 500,
+          'Size (bytes)': 0,
         },
       ],
-      lastAccess: new Map(),
       thresholdDays: 90,
-      projectScope: { mode: 'all' },
+      today,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].neverAccessed).toBe(true);
+  });
+
+  it('coerces numeric Item ID to string (Site Content VDS returns integers)', () => {
+    const rows = computeStaleRows({
+      universe: [
+        {
+          'Item ID': 5092107,
+          'Item Type': 'Datasource',
+          'Item Name': 'California Schools (frpm + satscores)',
+          'Item Parent Project Name': 'default',
+          'Owner Email': 's.montesdeoca@salesforce.com',
+          'Created At': '2026-01-13T22:18:16',
+          'Last Accessed At': null,
+          'Size (bytes)': 1316088,
+        },
+      ],
+      thresholdDays: 90,
+      today,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].itemId).toBe('5092107');
+    expect(rows[0].neverAccessed).toBe(true);
+  });
+
+  it('sorts descending by daysSinceLastUse, then by size', () => {
+    const rows = computeStaleRows({
+      universe: [
+        row({ 'Item ID': 'a', 'Created At': '2026-01-01T00:00:00Z', 'Size (bytes)': 100 }),
+        row({ 'Item ID': 'b', 'Created At': '2025-01-01T00:00:00Z', 'Size (bytes)': 50 }),
+        row({ 'Item ID': 'c', 'Created At': '2025-01-01T00:00:00Z', 'Size (bytes)': 500 }),
+      ],
+      thresholdDays: 90,
       today,
     });
     expect(rows.map((r) => r.itemId)).toEqual(['c', 'b', 'a']);
   });
+});
 
-  it('filters by project scope when restricted', () => {
-    const rows = computeStaleRows({
-      universe: [
-        {
-          'Item ID': 'wb-in',
-          'Item Type': 'Workbook',
-          'Item Name': 'In',
-          'Project ID': 'p-allowed',
-          'Created At': '2025-01-01T00:00:00Z',
-          Size: 1,
-        },
-        {
-          'Item ID': 'wb-out',
-          'Item Type': 'Workbook',
-          'Item Name': 'Out',
-          'Project ID': 'p-other',
-          'Created At': '2025-01-01T00:00:00Z',
-          Size: 1,
-        },
-      ],
-      lastAccess: new Map(),
-      thresholdDays: 90,
-      projectScope: { mode: 'restricted', ids: new Set(['p-allowed']) },
-      today,
+describe('buildSiteContentQuery', () => {
+  it('emits the Admin Insights exclude filter on Item Parent Project Name', () => {
+    const query = exportedForTesting.buildSiteContentQuery(['Workbook', 'Datasource'], null);
+    const projectFilter = query.filters?.find(
+      (f) =>
+        'field' in f &&
+        'fieldCaption' in f.field &&
+        f.field.fieldCaption === 'Item Parent Project Name' &&
+        f.filterType === 'SET' &&
+        'exclude' in f &&
+        f.exclude === true,
+    );
+    expect(projectFilter).toBeDefined();
+    expect(projectFilter).toMatchObject({
+      field: { fieldCaption: 'Item Parent Project Name' },
+      filterType: 'SET',
+      values: [ADMIN_INSIGHTS_PROJECT_NAME],
+      exclude: true,
     });
-    expect(rows.map((r) => r.itemId)).toEqual(['wb-in']);
+  });
+
+  it('omits the project-scope include filter when scope is null', () => {
+    const query = exportedForTesting.buildSiteContentQuery(['Workbook', 'Datasource'], null);
+    const includeFilters = query.filters?.filter(
+      (f) =>
+        'field' in f &&
+        'fieldCaption' in f.field &&
+        f.field.fieldCaption === 'Item Parent Project Name' &&
+        f.filterType === 'SET' &&
+        'exclude' in f &&
+        f.exclude === false,
+    );
+    expect(includeFilters).toEqual([]);
+  });
+
+  it('adds an Item Parent Project Name SET include filter when scope is provided', () => {
+    const query = exportedForTesting.buildSiteContentQuery(
+      ['Workbook', 'Datasource'],
+      ['Finance', 'Sales'],
+    );
+    const includeFilter = query.filters?.find(
+      (f) =>
+        'field' in f &&
+        'fieldCaption' in f.field &&
+        f.field.fieldCaption === 'Item Parent Project Name' &&
+        f.filterType === 'SET' &&
+        'exclude' in f &&
+        f.exclude === false,
+    );
+    expect(includeFilter).toMatchObject({
+      field: { fieldCaption: 'Item Parent Project Name' },
+      filterType: 'SET',
+      values: ['Finance', 'Sales'],
+      exclude: false,
+    });
+  });
+
+  it('uses the documented Site Content field captions', () => {
+    const query = exportedForTesting.buildSiteContentQuery(['Workbook', 'Datasource'], null);
+    const captions = query.fields.map((f) => ('fieldCaption' in f ? f.fieldCaption : null));
+    expect(captions).toEqual([
+      'Item ID',
+      'Item Type',
+      'Item Name',
+      'Item Parent Project Name',
+      'Owner Email',
+      'Created At',
+      'Updated At',
+      'Last Accessed At',
+      'Size (bytes)',
+    ]);
+  });
+});
+
+describe('resolveProjectScopeIds', () => {
+  it('returns null when no scope is set', () => {
+    const ids = exportedForTesting.resolveProjectScopeIds({
+      argProjectIds: undefined,
+      boundedProjectIds: null,
+    });
+    expect(ids).toBeNull();
+  });
+
+  it('returns the arg LUIDs when no bounded context is set', () => {
+    const ids = exportedForTesting.resolveProjectScopeIds({
+      argProjectIds: ['p-1', 'p-2'],
+      boundedProjectIds: null,
+    });
+    expect(ids).toEqual(['p-1', 'p-2']);
+  });
+
+  it('returns the intersection when both arg and bounded context are set', () => {
+    const ids = exportedForTesting.resolveProjectScopeIds({
+      argProjectIds: ['p-1', 'p-other'],
+      boundedProjectIds: new Set(['p-1', 'p-allowed']),
+    });
+    expect(ids).toEqual(['p-1']);
+  });
+
+  it('falls back to bounded context when arg is omitted', () => {
+    const ids = exportedForTesting.resolveProjectScopeIds({
+      argProjectIds: undefined,
+      boundedProjectIds: new Set(['p-bounded']),
+    });
+    expect(ids).toEqual(['p-bounded']);
   });
 });
 
@@ -192,6 +288,7 @@ describe('get-stale-content-report tool', () => {
     vi.clearAllMocks();
     adminInsightsResolver.clearCache();
     adminGate.clearCache();
+    clearStaleContentReportCache();
 
     mocks.mockGetUser.mockResolvedValue({
       id: 'user-test',
@@ -200,10 +297,15 @@ describe('get-stale-content-report tool', () => {
     });
 
     mocks.mockListDatasources.mockResolvedValue({
-      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 2 },
-      datasources: [
-        { id: 'luid-tse', name: 'TS Events' },
-        { id: 'luid-sc', name: 'Site Content' },
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },
+      datasources: [{ id: 'luid-sc', name: 'Site Content' }],
+    });
+
+    mocks.mockQueryProjects.mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 2 },
+      projects: [
+        { id: 'p-1', name: 'Finance' },
+        { id: 'p-2', name: 'Sales' },
       ],
     });
   });
@@ -213,57 +315,50 @@ describe('get-stale-content-report tool', () => {
     expect(tool.name).toBe('get-stale-content-report');
   });
 
-  it('runs both VDS queries, anti-joins, applies threshold, and returns filtered rows', async () => {
+  it('runs a single Site Content VDS query and returns filtered rows', async () => {
     const { Ok } = await import('ts-results-es');
-    const todayIso = new Date().toISOString();
-    void todayIso;
-
-    mocks.mockQueryDatasource
-      .mockResolvedValueOnce(
-        Ok({
-          data: [
-            { 'Item ID': 'wb-1', 'Item Type': 'Workbook', last_access: '2026-03-03T00:00:00Z' },
-            { 'Item ID': 'ds-2', 'Item Type': 'Datasource', last_access: '2025-01-01T00:00:00Z' },
-          ],
-        }),
-      )
-      .mockResolvedValueOnce(
-        Ok({
-          data: [
-            {
-              'Item ID': 'wb-1',
-              'Item Type': 'Workbook',
-              'Item Name': 'Recent WB',
-              Project: 'Default',
-              'Owner Email': 'a@example.com',
-              'Created At': '2025-12-01T00:00:00Z',
-              Size: 100,
-            },
-            {
-              'Item ID': 'ds-2',
-              'Item Type': 'Datasource',
-              'Item Name': 'Old DS',
-              Project: 'Default',
-              'Owner Email': 'b@example.com',
-              'Created At': '2024-12-01T00:00:00Z',
-              Size: 200,
-            },
-            {
-              'Item ID': 'wb-3',
-              'Item Type': 'Workbook',
-              'Item Name': 'Never Opened',
-              Project: 'Default',
-              'Owner Email': 'c@example.com',
-              'Created At': '2024-01-01T00:00:00Z',
-              Size: 50,
-            },
-          ],
-        }),
-      );
+    mocks.mockQueryDatasource.mockResolvedValueOnce(
+      Ok({
+        data: [
+          {
+            'Item ID': 'wb-recent',
+            'Item Type': 'Workbook',
+            'Item Name': 'Recent WB',
+            'Item Parent Project Name': 'default',
+            'Owner Email': 'a@example.com',
+            'Created At': '2025-12-01T00:00:00Z',
+            'Last Accessed At': '2026-04-15T00:00:00Z',
+            'Size (bytes)': 100,
+          },
+          {
+            'Item ID': 'ds-old',
+            'Item Type': 'Datasource',
+            'Item Name': 'Old DS',
+            'Item Parent Project Name': 'default',
+            'Owner Email': 'b@example.com',
+            'Created At': '2024-12-01T00:00:00Z',
+            'Last Accessed At': '2025-01-01T00:00:00Z',
+            'Size (bytes)': 200,
+          },
+          {
+            'Item ID': 'wb-never',
+            'Item Type': 'Workbook',
+            'Item Name': 'Never Opened',
+            'Item Parent Project Name': 'default',
+            'Owner Email': 'c@example.com',
+            'Created At': '2024-01-01T00:00:00Z',
+            'Last Accessed At': null,
+            'Size (bytes)': 50,
+          },
+        ],
+      }),
+    );
 
     const result = await getToolResult({ minAgeDays: 90 });
 
     expect(result.isError).toBeFalsy();
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1); // single VDS call
+
     if (result.content[0].type !== 'text') {
       throw new Error('expected text content');
     }
@@ -275,11 +370,11 @@ describe('get-stale-content-report tool', () => {
 
     expect(payload.thresholdDays).toBe(90);
     const ids = payload.rows.map((r) => r.itemId);
-    expect(ids).toContain('ds-2');
-    expect(ids).toContain('wb-3');
-    expect(ids).not.toContain('wb-1'); // 75-ish days, would be < 90 only if today is 2026-05-17
+    expect(ids).toContain('ds-old');
+    expect(ids).toContain('wb-never');
+    expect(ids).not.toContain('wb-recent');
     expect(payload.rows.every((r) => r.daysSinceLastUse > 90)).toBe(true);
-    const neverFlagged = payload.rows.find((r) => r.itemId === 'wb-3');
+    const neverFlagged = payload.rows.find((r) => r.itemId === 'wb-never');
     expect(neverFlagged?.neverAccessed).toBe(true);
   });
 
@@ -299,75 +394,63 @@ describe('get-stale-content-report tool', () => {
     expect(result.content[0].text.toLowerCase()).toContain('admin');
   });
 
-  describe('Admin Insights project exclusion', () => {
-    it('buildSiteContentQuery emits an exclude filter on Project for "Admin Insights"', () => {
-      const query = exportedForTesting.buildSiteContentQuery(['Workbook', 'Datasource']);
-      const projectFilter = query.filters?.find(
-        (f) =>
-          'field' in f &&
-          'fieldCaption' in f.field &&
-          f.field.fieldCaption === 'Project' &&
-          f.filterType === 'SET',
-      );
-      expect(projectFilter).toBeDefined();
-      expect(projectFilter).toMatchObject({
-        field: { fieldCaption: 'Project' },
-        filterType: 'SET',
-        values: [ADMIN_INSIGHTS_PROJECT_NAME],
-        exclude: true,
-      });
-    });
+  it('resolves projectIds (LUIDs) → names via list-projects and applies the filter', async () => {
+    const { Ok } = await import('ts-results-es');
+    mocks.mockQueryDatasource.mockResolvedValueOnce(Ok({ data: [] }));
 
-    it('sends the Admin Insights exclude filter to VDS on the Site Content query', async () => {
-      const { Ok } = await import('ts-results-es');
-      mocks.mockQueryDatasource
-        .mockResolvedValueOnce(Ok({ data: [] }))
-        .mockResolvedValueOnce(Ok({ data: [] }));
+    await getToolResult({ minAgeDays: 90, projectIds: ['p-1', 'p-2'] });
 
-      await getToolResult({ minAgeDays: 90 });
+    expect(mocks.mockQueryProjects).toHaveBeenCalledTimes(1);
+    const vdsCall = mocks.mockQueryDatasource.mock.calls[0][0];
+    const filters = vdsCall.query.filters as Array<{
+      field?: { fieldCaption?: string };
+      filterType?: string;
+      values?: string[];
+      exclude?: boolean;
+    }>;
+    const includeFilter = filters.find(
+      (f) =>
+        f.field?.fieldCaption === 'Item Parent Project Name' &&
+        f.filterType === 'SET' &&
+        f.exclude === false,
+    );
+    expect(includeFilter).toBeDefined();
+    expect(includeFilter?.values).toEqual(['Finance', 'Sales']);
+  });
 
-      // Two VDS calls: TS Events (1st), Site Content (2nd)
-      expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(2);
-      const siteContentCall = mocks.mockQueryDatasource.mock.calls[1][0];
-      const filters = siteContentCall.query.filters as Array<{
-        field?: { fieldCaption?: string };
-        filterType?: string;
-        values?: string[];
-        exclude?: boolean;
-      }>;
-      const projectExclude = filters.find(
-        (f) => f.field?.fieldCaption === 'Project' && f.filterType === 'SET' && f.exclude === true,
-      );
-      expect(projectExclude).toBeDefined();
-      expect(projectExclude?.values).toEqual([ADMIN_INSIGHTS_PROJECT_NAME]);
-    });
+  it('caches list-projects per-site so a second invocation skips the REST call', async () => {
+    const { Ok } = await import('ts-results-es');
+    mocks.mockQueryDatasource
+      .mockResolvedValueOnce(Ok({ data: [] }))
+      .mockResolvedValueOnce(Ok({ data: [] }));
 
-    it('computeStaleRows still passes Admin Insights rows when given to it (exclusion happens at VDS layer, not in TS)', () => {
-      // Negative-control: documents that the post-processor is unchanged.
-      // Exclusion is enforced upstream at query time. If the VDS filter is ever
-      // bypassed, this test will keep passing — the failing layer is the query
-      // builder, covered by the test above.
-      const today = new Date('2026-05-20T00:00:00Z');
-      const rows = computeStaleRows({
-        universe: [
-          {
-            'Item ID': 'ai-1',
-            'Item Type': 'Datasource',
-            'Item Name': 'TS Users',
-            Project: ADMIN_INSIGHTS_PROJECT_NAME,
-            'Owner Email': 'admin@example.com',
-            'Created At': '2024-01-01T00:00:00Z',
-            Size: 999,
-          },
-        ],
-        lastAccess: new Map(),
-        thresholdDays: 90,
-        projectScope: { mode: 'all' },
-        today,
-      });
-      expect(rows).toHaveLength(1);
-      expect(rows[0].project).toBe(ADMIN_INSIGHTS_PROJECT_NAME);
-    });
+    await getToolResult({ minAgeDays: 90, projectIds: ['p-1'] });
+    await getToolResult({ minAgeDays: 90, projectIds: ['p-2'] });
+
+    expect(mocks.mockQueryProjects).toHaveBeenCalledTimes(1);
+  });
+
+  it('always sends the Admin Insights exclude filter to VDS', async () => {
+    const { Ok } = await import('ts-results-es');
+    mocks.mockQueryDatasource.mockResolvedValueOnce(Ok({ data: [] }));
+
+    await getToolResult({ minAgeDays: 90 });
+
+    const vdsCall = mocks.mockQueryDatasource.mock.calls[0][0];
+    const filters = vdsCall.query.filters as Array<{
+      field?: { fieldCaption?: string };
+      filterType?: string;
+      values?: string[];
+      exclude?: boolean;
+    }>;
+    const excludeFilter = filters.find(
+      (f) =>
+        f.field?.fieldCaption === 'Item Parent Project Name' &&
+        f.filterType === 'SET' &&
+        f.exclude === true,
+    );
+    expect(excludeFilter).toBeDefined();
+    expect(excludeFilter?.values).toEqual([ADMIN_INSIGHTS_PROJECT_NAME]);
   });
 });
 
@@ -378,11 +461,7 @@ async function getToolResult(params: {
   const tool = getGetStaleContentReportTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback(
-    {
-      minAgeDays: params.minAgeDays,
-      projectIds: params.projectIds,
-      itemTypes: undefined,
-    },
+    { minAgeDays: params.minAgeDays, projectIds: params.projectIds, itemTypes: undefined },
     getMockRequestHandlerExtra(),
   );
 }

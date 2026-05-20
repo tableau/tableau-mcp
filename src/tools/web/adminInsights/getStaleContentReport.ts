@@ -1,13 +1,15 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { AdminOnlyError } from '../../../errors/mcpToolError.js';
+import { AdminOnlyError, McpToolError } from '../../../errors/mcpToolError.js';
 import { adminGate, NotAdminError } from '../../../prompts/_lib/adminGate.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Query } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { paginate } from '../../../utils/paginate.js';
 import { WebTool } from '../tool.js';
 import { executeAdminInsightsQuery } from './adminInsightsToolBase.js';
 import { ADMIN_INSIGHTS_DATASETS, ADMIN_INSIGHTS_PROJECT_NAME } from './resolver.js';
@@ -27,8 +29,10 @@ const paramsSchema = {
     .array(z.string())
     .optional()
     .describe(
-      'Optional list of project LUIDs to scope the report to. ' +
-        'If omitted, falls back to the server-configured INCLUDE_PROJECT_IDS bound (if any).',
+      'Optional list of project LUIDs to scope the report to. The server resolves the LUIDs ' +
+        'to project names via the Tableau REST API and filters the Site Content datasource by ' +
+        'parent project name. If omitted, falls back to the server-configured INCLUDE_PROJECT_IDS ' +
+        'bound (if any).',
     ),
   itemTypes: z
     .array(z.enum(['Workbook', 'Datasource']))
@@ -50,22 +54,17 @@ export type StaleContentRow = {
   neverAccessed: boolean;
 };
 
-type TsEventsRow = Record<string, unknown> & {
-  'Item ID'?: string;
-  'Item Type'?: string;
-  last_access?: string;
-};
-
 type SiteContentRow = Record<string, unknown> & {
-  'Item ID'?: string;
+  // VDS returns Item ID as a number on Site Content (integer), not a string.
+  'Item ID'?: string | number;
   'Item Type'?: string;
   'Item Name'?: string;
-  Project?: string;
-  'Project ID'?: string;
+  'Item Parent Project Name'?: string;
   'Owner Email'?: string;
   'Created At'?: string;
   'Updated At'?: string;
-  Size?: number | string;
+  'Last Accessed At'?: string | null;
+  'Size (bytes)'?: number | string;
 };
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -80,14 +79,13 @@ export const getGetStaleContentReportTool = (
     disabled: !config.adminToolsEnabled,
     description: `
 Builds a deterministic report of stale Tableau Cloud content (workbooks and published
-datasources) by anti-joining the Admin Insights "TS Events" (last access) and "Site Content"
-(item universe) datasources, applying the staleness threshold server-side, and returning
-already-filtered rows. Restricted to Tableau site administrators on Tableau Cloud sites with
-Admin Insights enabled.
+datasources) by querying the Admin Insights "Site Content" datasource — which exposes a
+\`Last Accessed At\` field per item — applying the staleness threshold server-side, and
+returning already-filtered rows. Restricted to Tableau site administrators on Tableau Cloud
+sites with Admin Insights enabled.
 
-The server performs the join, threshold comparison, optional project filter, and sort —
-clients receive only items where days since last use exceed the threshold. No client-side
-math is required.
+The server applies the threshold comparison, optional project filter, and sort. Clients
+receive only items where days since last use exceed the threshold. No client-side math.
 
 **Output schema (JSON):**
 \`\`\`json
@@ -113,16 +111,16 @@ math is required.
 }
 \`\`\`
 
-Rows are sorted descending by \`daysSinceLastUse\`, then by \`size\`. Items with no Access
-events in the lookback window have \`lastUsedDate = createdAt\` and \`neverAccessed = true\`.
+Rows are sorted descending by \`daysSinceLastUse\`, then by \`size\`. Items with no recorded
+access have \`lastUsedDate = createdAt\` and \`neverAccessed = true\`.
 
 **Caveats**
-- Tableau Cloud TS Events lookback caps at 90 days (365 days with Advanced Management).
-  Items beyond the cap cannot be distinguished from each other on \`daysSinceLastUse\`.
-- Only \`Access\` events are considered "use". Refresh-only datasources will look stale
-  even if they are being refreshed nightly.
-- The Tableau-managed \`Admin Insights\` project is excluded by design — its
-  datasources are admin-owned and not user content.
+- The Tableau-managed \`Admin Insights\` project is excluded by design — its datasources
+  are admin-owned and not user content.
+- \`Last Accessed At\` is \`null\` for items that have never been accessed; the report
+  ages those items from \`Created At\` instead.
+- When \`projectIds\` is set (or \`INCLUDE_PROJECT_IDS\` is configured), the server resolves
+  LUIDs to project names via a Tableau REST list-projects call.
 `.trim(),
     paramsSchema,
     annotations: {
@@ -134,7 +132,7 @@ events in the lookback window have \`lastUsedDate = createdAt\` and \`neverAcces
       const configWithOverrides = await extra.getConfigWithOverrides();
       const thresholdDays = minAgeDays ?? configWithOverrides.staleContentMinAgeDays;
       const types = itemTypes ?? ['Workbook', 'Datasource'];
-      const projectScope = resolveProjectScope({
+      const requestedProjectIds = resolveProjectScopeIds({
         argProjectIds: projectIds,
         boundedProjectIds: configWithOverrides.boundedContext.projectIds,
       });
@@ -156,35 +154,33 @@ events in the lookback window have \`lastUsedDate = createdAt\` and \`neverAcces
                 throw error;
               }
 
-              const tsEventsResult = await executeAdminInsightsQuery({
-                restApi,
-                datasetName: ADMIN_INSIGHTS_DATASETS.TS_EVENTS,
-                query: buildTsEventsQuery(types),
-              });
-              if (tsEventsResult.isErr()) {
-                return tsEventsResult;
+              let projectNameScope: ReadonlyArray<string> | null = null;
+              if (requestedProjectIds) {
+                const namesResult = await resolveProjectIdsToNames({
+                  restApi,
+                  projectIds: requestedProjectIds,
+                });
+                if (namesResult.isErr()) {
+                  return namesResult;
+                }
+                projectNameScope = namesResult.value;
               }
 
               const siteContentResult = await executeAdminInsightsQuery({
                 restApi,
                 datasetName: ADMIN_INSIGHTS_DATASETS.SITE_CONTENT,
-                query: buildSiteContentQuery(types),
+                query: buildSiteContentQuery(types, projectNameScope),
               });
               if (siteContentResult.isErr()) {
                 return siteContentResult;
               }
 
-              const lastAccess = indexLastAccess(
-                (tsEventsResult.value.data ?? []) as TsEventsRow[],
-              );
               const universe = (siteContentResult.value.data ?? []) as SiteContentRow[];
 
               const today = new Date();
               const rows = computeStaleRows({
                 universe,
-                lastAccess,
                 thresholdDays,
-                projectScope,
                 today,
               });
 
@@ -205,142 +201,156 @@ events in the lookback window have \`lastUsedDate = createdAt\` and \`neverAcces
   return tool;
 };
 
-function buildTsEventsQuery(types: ReadonlyArray<'Workbook' | 'Datasource'>): Query {
-  return {
-    fields: [
-      { fieldCaption: 'Item ID' },
-      { fieldCaption: 'Item Type' },
-      {
-        fieldCaption: 'Event Date (UTC)',
-        function: 'MAX',
-        fieldAlias: 'last_access',
-      },
-    ],
-    filters: [
-      {
-        field: { fieldCaption: 'Event Type' },
-        filterType: 'SET',
-        values: ['Access'],
-        exclude: false,
-      },
-      {
-        field: { fieldCaption: 'Item Type' },
-        filterType: 'SET',
-        values: [...types],
-        exclude: false,
-      },
-    ],
-  };
-}
+function buildSiteContentQuery(
+  types: ReadonlyArray<'Workbook' | 'Datasource'>,
+  projectNameScope: ReadonlyArray<string> | null,
+): Query {
+  const filters: Query['filters'] = [
+    {
+      field: { fieldCaption: 'Item Type' },
+      filterType: 'SET',
+      values: [...types],
+      exclude: false,
+    },
+    // Exclude the Tableau-managed Admin Insights project — its datasources are
+    // admin-owned, refreshed by Tableau, and not user content.
+    {
+      field: { fieldCaption: 'Item Parent Project Name' },
+      filterType: 'SET',
+      values: [ADMIN_INSIGHTS_PROJECT_NAME],
+      exclude: true,
+    },
+  ];
 
-function buildSiteContentQuery(types: ReadonlyArray<'Workbook' | 'Datasource'>): Query {
+  if (projectNameScope && projectNameScope.length > 0) {
+    filters.push({
+      field: { fieldCaption: 'Item Parent Project Name' },
+      filterType: 'SET',
+      values: [...projectNameScope],
+      exclude: false,
+    });
+  }
+
   return {
     fields: [
       { fieldCaption: 'Item ID' },
       { fieldCaption: 'Item Type' },
       { fieldCaption: 'Item Name' },
-      { fieldCaption: 'Project' },
-      { fieldCaption: 'Project ID' },
+      { fieldCaption: 'Item Parent Project Name' },
       { fieldCaption: 'Owner Email' },
       { fieldCaption: 'Created At' },
       { fieldCaption: 'Updated At' },
-      { fieldCaption: 'Size' },
+      { fieldCaption: 'Last Accessed At' },
+      { fieldCaption: 'Size (bytes)' },
     ],
-    filters: [
-      {
-        field: { fieldCaption: 'Item Type' },
-        filterType: 'SET',
-        values: [...types],
-        exclude: false,
-      },
-      // Exclude the Tableau-managed Admin Insights project — its datasources are
-      // admin-owned, refreshed by Tableau, and not user content.
-      {
-        field: { fieldCaption: 'Project' },
-        filterType: 'SET',
-        values: [ADMIN_INSIGHTS_PROJECT_NAME],
-        exclude: true,
-      },
-    ],
+    filters,
   };
 }
 
-function indexLastAccess(rows: ReadonlyArray<TsEventsRow>): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const row of rows) {
-    const itemId = row['Item ID'];
-    const itemType = row['Item Type'];
-    const lastAccess = row.last_access;
-    if (
-      typeof itemId === 'string' &&
-      typeof itemType === 'string' &&
-      typeof lastAccess === 'string'
-    ) {
-      map.set(`${itemType}:${itemId}`, lastAccess);
-    }
+/**
+ * Resolves project LUIDs → project names via the Tableau REST API. Cached per (siteId).
+ *
+ * Site Content does not expose a project LUID field — only `Item Parent Project Name`.
+ * The tool's public contract takes `projectIds` (LUIDs) for parity with INCLUDE_PROJECT_IDS,
+ * so we resolve LUIDs to names before passing to the VDS filter.
+ */
+async function resolveProjectIdsToNames({
+  restApi,
+  projectIds,
+}: {
+  restApi: RestApi;
+  projectIds: ReadonlyArray<string>;
+}): Promise<Result<string[], McpToolError>> {
+  const idSet = new Set(projectIds);
+  const cache = projectNameCache.get(restApi.siteId);
+  const now = Date.now();
+  if (cache && cache.expiresAt > now) {
+    return new Ok(filterAndDedupe(cache.byId, idSet));
   }
-  return map;
+
+  const projects = await paginate({
+    pageConfig: { pageSize: 1000 },
+    getDataFn: async (pageConfig) => {
+      const { pagination, projects: data } = await restApi.projectsMethods.queryProjects({
+        siteId: restApi.siteId,
+        filter: '',
+        pageSize: pageConfig.pageSize,
+        pageNumber: pageConfig.pageNumber,
+      });
+      return { pagination, data };
+    },
+  });
+
+  const byId = new Map<string, string>();
+  for (const p of projects) {
+    byId.set(p.id, p.name);
+  }
+  projectNameCache.set(restApi.siteId, { byId, expiresAt: now + PROJECT_NAME_CACHE_TTL_MS });
+
+  return new Ok(filterAndDedupe(byId, idSet));
 }
 
-type ProjectScope = { mode: 'all' } | { mode: 'restricted'; ids: Set<string> };
+function filterAndDedupe(byId: Map<string, string>, idSet: ReadonlySet<string>): string[] {
+  const out = new Set<string>();
+  for (const id of idSet) {
+    const name = byId.get(id);
+    if (name) {
+      out.add(name);
+    }
+  }
+  return Array.from(out);
+}
 
-function resolveProjectScope({
+const PROJECT_NAME_CACHE_TTL_MS = 5 * 60 * 1000;
+const projectNameCache: Map<string, { byId: Map<string, string>; expiresAt: number }> = new Map();
+
+function resolveProjectScopeIds({
   argProjectIds,
   boundedProjectIds,
 }: {
   argProjectIds: ReadonlyArray<string> | undefined;
   boundedProjectIds: Set<string> | null;
-}): ProjectScope {
+}): ReadonlyArray<string> | null {
   if (argProjectIds && argProjectIds.length > 0) {
     if (boundedProjectIds) {
-      const intersection = new Set(argProjectIds.filter((id) => boundedProjectIds.has(id)));
-      return { mode: 'restricted', ids: intersection };
+      return argProjectIds.filter((id) => boundedProjectIds.has(id));
     }
-    return { mode: 'restricted', ids: new Set(argProjectIds) };
+    return [...argProjectIds];
   }
   if (boundedProjectIds) {
-    return { mode: 'restricted', ids: boundedProjectIds };
+    return Array.from(boundedProjectIds);
   }
-  return { mode: 'all' };
+  return null;
 }
 
 export function computeStaleRows({
   universe,
-  lastAccess,
   thresholdDays,
-  projectScope,
   today,
 }: {
   universe: ReadonlyArray<SiteContentRow>;
-  lastAccess: Map<string, string>;
   thresholdDays: number;
-  projectScope: ProjectScope;
   today: Date;
 }): StaleContentRow[] {
   const todayMs = today.getTime();
   const out: StaleContentRow[] = [];
 
   for (const row of universe) {
-    const itemId = row['Item ID'];
+    const rawItemId = row['Item ID'];
+    const itemId =
+      typeof rawItemId === 'string'
+        ? rawItemId
+        : typeof rawItemId === 'number' && Number.isFinite(rawItemId)
+          ? String(rawItemId)
+          : null;
     const itemType = row['Item Type'];
     const itemName = row['Item Name'];
-    if (
-      typeof itemId !== 'string' ||
-      typeof itemType !== 'string' ||
-      typeof itemName !== 'string'
-    ) {
+    if (itemId === null || typeof itemType !== 'string' || typeof itemName !== 'string') {
       continue;
     }
 
-    if (projectScope.mode === 'restricted') {
-      const projectId = row['Project ID'];
-      if (typeof projectId !== 'string' || !projectScope.ids.has(projectId)) {
-        continue;
-      }
-    }
-
-    const accessKey = `${itemType}:${itemId}`;
-    const lastAccessStr = lastAccess.get(accessKey);
+    const lastAccessStr =
+      typeof row['Last Accessed At'] === 'string' ? row['Last Accessed At'] : null;
     const createdAt = typeof row['Created At'] === 'string' ? row['Created At'] : null;
     const lastUsedStr = lastAccessStr ?? createdAt;
     if (!lastUsedStr) {
@@ -361,14 +371,17 @@ export function computeStaleRows({
       itemId,
       itemType,
       itemName,
-      project: typeof row.Project === 'string' ? row.Project : null,
+      project:
+        typeof row['Item Parent Project Name'] === 'string'
+          ? row['Item Parent Project Name']
+          : null,
       ownerEmail: typeof row['Owner Email'] === 'string' ? row['Owner Email'] : null,
       createdAt,
       updatedAt: typeof row['Updated At'] === 'string' ? row['Updated At'] : null,
       lastUsedDate: lastUsedStr,
       daysSinceLastUse,
-      size: parseSize(row.Size),
-      neverAccessed: lastAccessStr === undefined,
+      size: parseSize(row['Size (bytes)']),
+      neverAccessed: lastAccessStr === null,
     });
   }
 
@@ -393,10 +406,12 @@ function parseSize(raw: unknown): number | null {
   return null;
 }
 
+export function clearStaleContentReportCache(): void {
+  projectNameCache.clear();
+}
+
 export const exportedForTesting = {
-  buildTsEventsQuery,
   buildSiteContentQuery,
-  indexLastAccess,
-  resolveProjectScope,
+  resolveProjectScopeIds,
   parseSize,
 };
