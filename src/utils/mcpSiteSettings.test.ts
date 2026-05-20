@@ -85,7 +85,7 @@ describe('mcpSiteSettings', () => {
       projectIds: new Set(['project1', 'project2']),
       datasourceIds: new Set(['datasource1', 'datasource2']),
       workbookIds: new Set(['workbook1', 'workbook2']),
-      viewIds: new Set(['view1, view2']),
+      viewIds: new Set(['view1', 'view2']),
       tags: new Set(['tag1', 'tag2']),
     });
     expect(config.getMaxResultLimit('query-datasource')).toEqual(100);
@@ -111,7 +111,7 @@ describe('mcpSiteSettings', () => {
       projectIds: new Set(['project1', 'project2']),
       datasourceIds: new Set(['datasource1', 'datasource2']),
       workbookIds: new Set(['workbook1', 'workbook2']),
-      viewIds: new Set(['view1, view2']),
+      viewIds: new Set(['view1', 'view2']),
       tags: new Set(['tag1', 'tag2']),
     });
     expect(config.getMaxResultLimit('query-datasource')).toEqual(100);
