@@ -1,4 +1,4 @@
-import { makeApi, makeEndpoint } from '@zodios/core';
+import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
 import { userSchema } from '../types/user.js';
@@ -22,4 +22,4 @@ const getUserOnSiteEndpoint = makeEndpoint({
 });
 
 const usersApi = makeApi([getUserOnSiteEndpoint]);
-export const usersApis = [...usersApi] as const;
+export const usersApis = [...usersApi] as const satisfies ZodiosEndpointDefinitions;

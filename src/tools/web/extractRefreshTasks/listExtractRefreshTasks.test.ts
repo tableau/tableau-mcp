@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
+import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getListExtractRefreshTasksTool } from './listExtractRefreshTasks.js';
 import { mockExtractRefreshTask } from './mockExtractRefreshTask.js';
@@ -139,5 +140,6 @@ describe('listExtractRefreshTasksTool', () => {
 
 async function getToolResult(args: Record<string, never>): Promise<CallToolResult> {
   const listExtractRefreshTasksTool = getListExtractRefreshTasksTool(new WebMcpServer());
-  return listExtractRefreshTasksTool.callback(args, getMockRequestHandlerExtra());
+  const callback = await Provider.from(listExtractRefreshTasksTool.callback);
+  return await callback(args, getMockRequestHandlerExtra());
 }

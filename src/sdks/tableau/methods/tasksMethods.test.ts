@@ -117,8 +117,12 @@ describe('TasksMethods', () => {
 
       const result = await tasksMethods.listExtractRefreshTasks({ siteId: 'site-1' });
 
-      expect(result[0].schedule?.frequencyDetails?.intervals?.interval?.[0].hours).toBe(8);
-      expect(result[0].schedule?.frequencyDetails?.intervals?.interval?.[0].minutes).toBe(0);
+      const interval = result[0].schedule?.frequencyDetails?.intervals?.interval;
+      expect(Array.isArray(interval)).toBe(true);
+      if (Array.isArray(interval)) {
+        expect(interval[0].hours).toBe(8);
+        expect(interval[0].minutes).toBe(0);
+      }
     });
   });
 });
