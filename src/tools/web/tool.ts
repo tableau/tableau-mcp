@@ -207,7 +207,11 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
           message: 'Current user LUID telemetry hydration skipped.',
           level: 'debug',
           logger: 'auth',
-          data: { reason: userLuidResult.error.type },
+          data: {
+            requestId: extra.requestId,
+            tool_name: this.name,
+            reason: userLuidResult.error.type,
+          },
         });
       }
     } catch {
@@ -215,7 +219,11 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
         message: 'Current user LUID telemetry hydration skipped.',
         level: 'debug',
         logger: 'auth',
-        data: { reason: 'session-lookup-failed' },
+        data: {
+          requestId: extra.requestId,
+          tool_name: this.name,
+          reason: 'session-lookup-failed',
+        },
       });
     }
   }

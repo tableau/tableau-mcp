@@ -388,6 +388,18 @@ describe('Tool', () => {
           error_code: '',
         }),
       );
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Current user LUID telemetry hydration skipped.',
+          level: 'debug',
+          logger: 'auth',
+          data: {
+            requestId: 2,
+            tool_name: 'get-datasource-metadata',
+            reason: 'current-user-resolution-failed',
+          },
+        }),
+      );
       expect(JSON.stringify(logSpy.mock.calls)).not.toContain('sensitive session details');
     });
 
