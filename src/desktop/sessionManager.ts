@@ -29,11 +29,8 @@ export class SessionManager {
       const desktopDiscoverer = new DesktopDiscoverer({ signal });
       const desktopInstance = desktopDiscoverer.getInstance(pid);
       const executor = new LocalExecutor({
-        signal,
-        config: {
-          agentApiBase: `http://127.0.0.1:${desktopInstance.port}/api/v1`,
-          authToken: desktopInstance.secret,
-        },
+        agentApiBase: `http://127.0.0.1:${desktopInstance.port}/api/v1`,
+        authToken: desktopInstance.secret,
       });
       await executor.start();
 
