@@ -11,7 +11,6 @@ describe('DesktopInstance', () => {
       port: 8765,
       secret: 'test-secret',
       start_time,
-      signal: new AbortController().signal,
     });
 
     expect(instance.pid).toBe(12345);
@@ -34,10 +33,9 @@ describe('DesktopInstance', () => {
       port: 8765,
       secret: 'test-secret',
       start_time: new Date().toISOString(),
-      signal: new AbortController().signal,
     });
 
-    expect(await instance.isAlive()).toBe(true);
+    expect(await instance.isAlive(new AbortController().signal)).toBe(true);
   });
 
   it('should not be alive when agent API client is not healthy', async () => {
@@ -54,9 +52,8 @@ describe('DesktopInstance', () => {
       port: 8765,
       secret: 'test-secret',
       start_time: new Date().toISOString(),
-      signal: new AbortController().signal,
     });
 
-    expect(await instance.isAlive()).toBe(false);
+    expect(await instance.isAlive(new AbortController().signal)).toBe(false);
   });
 });

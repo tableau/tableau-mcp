@@ -16,7 +16,7 @@ vi.mock('../../logging/logger.js');
 describe('LocalExecutor', () => {
   describe('start', () => {
     it('should log startup message', async () => {
-      const localExecutor = new LocalExecutor({ signal: new AbortController().signal });
+      const localExecutor = new LocalExecutor();
       await localExecutor.start();
 
       expect(logger.log).toHaveBeenCalledWith({
@@ -32,7 +32,7 @@ describe('LocalExecutor', () => {
 
   describe('stop', () => {
     it('should log stop message', () => {
-      const localExecutor = new LocalExecutor({ signal: new AbortController().signal });
+      const localExecutor = new LocalExecutor();
       localExecutor.stop();
 
       expect(logger.log).toHaveBeenCalledWith({
@@ -45,7 +45,7 @@ describe('LocalExecutor', () => {
 
   describe('isAvailable', () => {
     it('should return true', () => {
-      expect(new LocalExecutor({ signal: new AbortController().signal }).isAvailable()).toBe(true);
+      expect(new LocalExecutor().isAvailable()).toBe(true);
     });
   });
 
@@ -103,10 +103,11 @@ describe('LocalExecutor', () => {
           }) as unknown as AgentApiClient,
       );
 
-      const localExecutor = new LocalExecutor({ signal: new AbortController().signal });
+      const localExecutor = new LocalExecutor();
       const result = await localExecutor.executeCommand({
         namespace: 'tabdoc',
         command: 'undo',
+        signal: new AbortController().signal,
       });
 
       expect(result.isOk()).toBe(true);
@@ -123,11 +124,12 @@ describe('LocalExecutor', () => {
           }) as unknown as AgentApiClient,
       );
 
-      const localExecutor = new LocalExecutor({ signal: new AbortController().signal });
+      const localExecutor = new LocalExecutor();
       const result = await localExecutor.executeCommand({
         namespace: 'tabdoc',
         command: 'undo',
         schema: z.object({ name: z.string() }),
+        signal: new AbortController().signal,
       });
 
       expect(result.isOk()).toBe(true);
@@ -144,10 +146,11 @@ describe('LocalExecutor', () => {
           }) as unknown as AgentApiClient,
       );
 
-      const localExecutor = new LocalExecutor({ signal: new AbortController().signal });
+      const localExecutor = new LocalExecutor();
       const result = await localExecutor.executeCommand({
         namespace: 'tabdoc',
         command: 'undo',
+        signal: new AbortController().signal,
       });
 
       expect(result.isErr()).toBe(true);
@@ -171,16 +174,14 @@ describe('LocalExecutor', () => {
       );
 
       const localExecutor = new LocalExecutor({
-        signal: new AbortController().signal,
-        config: {
-          commandTimeoutMs: 1, // short timeout/interval to force wait timeout
-          pollIntervalMs: 1,
-        },
+        commandTimeoutMs: 1, // short timeout/interval to force wait timeout
+        pollIntervalMs: 1,
       });
 
       const result = await localExecutor.executeCommand({
         namespace: 'tabdoc',
         command: 'undo',
+        signal: new AbortController().signal,
       });
 
       expect(result.isErr()).toBe(true);
@@ -204,11 +205,12 @@ describe('LocalExecutor', () => {
           }) as unknown as AgentApiClient,
       );
 
-      const localExecutor = new LocalExecutor({ signal: new AbortController().signal });
+      const localExecutor = new LocalExecutor();
 
       const result = await localExecutor.executeCommand({
         namespace: 'tabdoc',
         command: 'undo',
+        signal: new AbortController().signal,
       });
 
       expect(result.isErr()).toBe(true);
@@ -231,11 +233,12 @@ describe('LocalExecutor', () => {
           }) as unknown as AgentApiClient,
       );
 
-      const localExecutor = new LocalExecutor({ signal: new AbortController().signal });
+      const localExecutor = new LocalExecutor();
 
       const result = await localExecutor.executeCommand({
         namespace: 'tabdoc',
         command: 'undo',
+        signal: new AbortController().signal,
       });
 
       expect(result.isErr()).toBe(true);
@@ -268,10 +271,11 @@ describe('LocalExecutor', () => {
           }) as unknown as AgentApiClient,
       );
 
-      const localExecutor = new LocalExecutor({ signal: new AbortController().signal });
+      const localExecutor = new LocalExecutor();
       const result = await localExecutor.executeCommand({
         namespace: 'tabdoc',
         command: 'undo',
+        signal: new AbortController().signal,
       });
 
       expect(result.isOk()).toBe(true);
@@ -307,8 +311,8 @@ describe('LocalExecutor', () => {
             }) as unknown as AgentApiClient,
         );
 
-        const localExecutor = new LocalExecutor({ signal: new AbortController().signal });
-        const result = await localExecutor.getEvents();
+        const localExecutor = new LocalExecutor();
+        const result = await localExecutor.getEvents({ signal: new AbortController().signal });
 
         expect(result.isOk()).toBe(true);
         expect(result.unwrap()).toEqual(mockEventsResponse);
@@ -325,8 +329,11 @@ describe('LocalExecutor', () => {
             }) as unknown as AgentApiClient,
         );
 
-        const localExecutor = new LocalExecutor({ signal: new AbortController().signal });
-        const result = await localExecutor.getEvents({ sinceSequence: 1 });
+        const localExecutor = new LocalExecutor();
+        const result = await localExecutor.getEvents({
+          signal: new AbortController().signal,
+          sinceSequence: 1,
+        });
 
         expect(result.isOk()).toBe(true);
         expect(result.unwrap()).toEqual(mockEventsResponse);
@@ -344,8 +351,10 @@ describe('LocalExecutor', () => {
             }) as unknown as AgentApiClient,
         );
 
-        const localExecutor = new LocalExecutor({ signal: new AbortController().signal });
-        const result = await localExecutor.getEvents();
+        const localExecutor = new LocalExecutor();
+        const result = await localExecutor.getEvents({
+          signal: new AbortController().signal,
+        });
 
         expect(result.isErr()).toBe(true);
         expect(result.unwrapErr()).toBe(error);
