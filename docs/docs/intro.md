@@ -40,6 +40,9 @@ Tableau's official MCP Server. Helping Agents see and understand data.
 | [generate-pulse-metric-value-insight-bundle](tools/pulse/generate-pulse-metric-value-insight-bundle.md)               | Generate Pulse Metric Value Insight Bundle ([Pulse API][pulse])                                                     |
 | [generate-pulse-insight-brief](tools/pulse/generate-pulse-insight-brief.md)                                           | Generate AI-powered Pulse Insight Brief (Discover) ([Pulse API][pulse])                                             |
 | [search-content](tools/content-exploration/search-content.md)                                                         | Searches for content in a Tableau site ([Content Exploration API][content-exploration])                             |
+| [query-admin-insights-ts-events](tools/admin-insights/query-admin-insights-ts-events.md)                              | Admin-only. Issues a VDS query against the Admin Insights `TS Events` datasource ([VDS API][vds])                   |
+| [query-admin-insights-site-content](tools/admin-insights/query-admin-insights-site-content.md)                        | Admin-only. Issues a VDS query against the Admin Insights `Site Content` datasource ([VDS API][vds])                |
+| [get-stale-content-report](tools/admin-insights/get-stale-content-report.md)                                          | Admin-only. Deterministic stale-content report from `Site Content` ([VDS API][vds])                                 |
 
 [query]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources
