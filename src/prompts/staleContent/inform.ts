@@ -63,7 +63,7 @@ export const getStaleContentCleanupInformPrompt: WebPromptFactory = () => ({
       '2. Render `rows` as a Markdown table with columns: `Project | Item Type | Item Name | Owner Email | Last Used | Days Stale | Size (bytes) | Never Accessed`. Preserve the order returned by the tool — the server already sorted descending by `daysSinceLastUse`, then by `size`.',
       '3. If `rows` is empty, state explicitly: "No stale items found above the threshold." and stop.',
       '4. Below the table, append the following fixed notes:',
-      '   - Note: TS Events caps at 90 days lookback on Tableau Cloud (365 days with Advanced Management). Items with `Days Stale` ≥ 90 may have been accessed earlier than the lookback window can prove.',
+      '   - Note: TS Events caps at 90 days lookback on Tableau Cloud (365 days with Advanced Management). Items with `Days Stale` ≥ 90 may have been accessed earlier than the lookback window might suggest.',
       '   - Note: Only `Access` events count as "use". Refresh-only datasources may appear stale even if refreshed nightly.',
       '   - Note: This report is read-only. No tagging, notification, or deletion actions are performed.',
     ].join('\n');
