@@ -5,7 +5,9 @@ runs:
   steps:
     - name: OAuth Tableau Authorization Tests
       shell: bash
-      run: npm run test:oauth:tableau
+      run: |
+        npx playwright install --with-deps
+        npm run test:oauth:tableau
       env:
         OAUTH_ISSUER: https://sso.online.tableau.com
         ADVERTISE_API_SCOPES: true
