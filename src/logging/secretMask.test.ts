@@ -1,7 +1,4 @@
-import {
-  RequestInterceptorConfig,
-  ResponseInterceptorConfig,
-} from '../sdks/tableau/interceptors.js';
+import { RequestInterceptorConfig, ResponseInterceptorConfig } from '../sdks/interceptors.js';
 import { WebMcpServer } from '../server.web.js';
 import { setNotificationLevel } from './notification.js';
 import { maskRequest, maskResponse } from './secretMask.js';

@@ -10,9 +10,11 @@ transport. This is useful for deploying the server remotely and exposing it to m
 :::warning
 
 When `TRANSPORT` is `http`, the default behavior changes to require protecting your MCP server with
-OAuth as a security best practice.
+OAuth as a security best practice for general multi-user deployments.
 
-To opt out of this behavior at your own risk, please see the entry on
+Non-OAuth HTTP configurations are intended only for testing/prototyping or deployments that are
+licensed and approved for user-based licensing (UBL). Confirm this with your Tableau licensing and
+security guidance before opting out. To opt out, see the entry on
 [`DANGEROUSLY_DISABLE_OAUTH`](oauth.md#dangerously_disable_oauth).
 
 :::
@@ -30,15 +32,16 @@ The method the MCP server uses to authenticate to the Tableau REST APIs.
 
 :::danger
 
-Do not use a PAT when [`TRANSPORT`](env-vars.md#transport) is `http` if you expect simultaneous
-requests from multiple clients since PATs cannot be used concurrently. Signing in multiple times
-with the same PAT at the same time will terminate any prior session and will result in an
-authentication error. See
+For general multi-user HTTP deployments, prefer [OAuth](./authentication/oauth.md). Non-OAuth HTTP
+configurations such as PAT or Direct Trust are intended for testing/prototyping or deployments that
+are licensed and approved for UBL.
+
+As an additional operational caveat, do not use a PAT when
+[`TRANSPORT`](env-vars.md#transport) is `http` if you expect simultaneous requests from multiple
+clients since PATs cannot be used concurrently. Signing in multiple times with the same PAT at the
+same time will terminate any prior session and will result in an authentication error. See
 [Understand personal access tokens](https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm#understand-personal-access-tokens)
 for more details.
-
-[OAuth](./authentication/oauth.md) is recommended but
-[Direct Trust](./authentication/direct-trust.md) can also be used.
 
 :::
 
