@@ -5,6 +5,7 @@ import { Err, Ok, Result } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
+import { log } from '../../logging/logger.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import {
   mcpAccessTokenSchema,
@@ -101,7 +102,13 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
         expiresAt: payload.exp,
         extra: tableauAuthInfo,
       });
-    } catch {
+    } catch (error) {
+      log({
+        message: 'Embedded access token validation error',
+        level: 'debug',
+        logger: 'oauth',
+        data: error,
+      });
       return new Err('Invalid or expired access token');
     }
   }
@@ -160,7 +167,13 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
         expiresAt: exp,
         extra: tableauAuthInfo,
       });
-    } catch {
+    } catch (error) {
+      log({
+        message: 'Tableau access token validation error',
+        level: 'debug',
+        logger: 'oauth',
+        data: error,
+      });
       return new Err('Invalid or expired access token');
     }
   }

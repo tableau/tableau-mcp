@@ -1,4 +1,74 @@
-import { getToolNameFromRequestBody } from './requestUtils.js';
+import { isRequestOverridableVariable } from '../overridableConfig.js';
+import { getRequestOverridesFromHeader, getToolNameFromRequestBody } from './requestUtils.js';
+
+vi.mock('../overridableConfig', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../overridableConfig')>();
+  return {
+    ...actual,
+    isRequestOverridableVariable: vi.fn(actual.isRequestOverridableVariable),
+  };
+});
+
+describe('getRequestOverridesFromHeader', () => {
+  beforeEach(() => {
+    vi.mocked(isRequestOverridableVariable).mockReset();
+  });
+
+  it('should return empty object when header is an empty string', () => {
+    expect(getRequestOverridesFromHeader('')).toEqual({});
+  });
+
+  it('should parse a single override', () => {
+    vi.mocked(isRequestOverridableVariable).mockReturnValue(true);
+
+    expect(getRequestOverridesFromHeader('INCLUDE_PROJECT_IDS=abc')).toEqual({
+      INCLUDE_PROJECT_IDS: 'abc',
+    });
+  });
+
+  it('should parse multiple overrides separated by &', () => {
+    vi.mocked(isRequestOverridableVariable).mockReturnValue(true);
+
+    expect(getRequestOverridesFromHeader('INCLUDE_PROJECT_IDS=abc&INCLUDE_TAGS=tag1')).toEqual({
+      INCLUDE_PROJECT_IDS: 'abc',
+      INCLUDE_TAGS: 'tag1',
+    });
+  });
+
+  it('should accept an empty string value for a valid key', () => {
+    vi.mocked(isRequestOverridableVariable).mockReturnValue(true);
+
+    expect(getRequestOverridesFromHeader('INCLUDE_PROJECT_IDS=')).toEqual({
+      INCLUDE_PROJECT_IDS: '',
+    });
+  });
+
+  it('should throw when a key is not a request-overridable variable', () => {
+    vi.mocked(isRequestOverridableVariable).mockReturnValue(false);
+
+    expect(() => getRequestOverridesFromHeader('INVALID_KEY=value')).toThrow(
+      "'x-tableau-mcp-config' header is invalid",
+    );
+  });
+
+  it('should throw when a valid key has no value', () => {
+    vi.mocked(isRequestOverridableVariable).mockReturnValue(true);
+
+    expect(() => getRequestOverridesFromHeader('INCLUDE_PROJECT_IDS')).toThrow(
+      "'x-tableau-mcp-config' header does not provide a value for 'INCLUDE_PROJECT_IDS'",
+    );
+  });
+
+  it('should throw on the first invalid key in a multi-override header', () => {
+    vi.mocked(isRequestOverridableVariable).mockImplementation(
+      (key) => key === 'INCLUDE_PROJECT_IDS',
+    );
+
+    expect(() => getRequestOverridesFromHeader('INCLUDE_PROJECT_IDS=abc&BAD_KEY=val')).toThrow(
+      "'x-tableau-mcp-config' header is invalid",
+    );
+  });
+});
 
 describe('getToolNamesFromRequestBody', () => {
   it('should extract tool name from a valid CallToolRequest', () => {

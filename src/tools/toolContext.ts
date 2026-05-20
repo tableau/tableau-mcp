@@ -7,31 +7,20 @@ import {
   ServerRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { Config } from '../config.js';
-import { OverridableConfig } from '../overridableConfig.js';
 import { Server } from '../server.js';
-import { TableauAuthInfo } from '../server/oauth/schemas.js';
 
-// Additional context  available to all tool callbacks
-export type TableauToolContext = {
-  _userLuid?: string;
-  _siteLuid?: string;
-
-  config: Config;
-  server: Server;
-  tableauAuthInfo: TableauAuthInfo | undefined;
-  getConfigWithOverrides: () => Promise<OverridableConfig>;
-  getSiteLuid: () => string;
-  getUserLuid: () => string;
-  setSiteLuid?: (siteLuid: string) => void;
-  setUserLuid?: (userLuid: string) => void;
+// Additional context available to all tool callbacks
+export type TableauToolContext<TServer extends Server> = {
+  server: TServer;
 };
 
 // An extension of the RequestHandlerExtra type that includes the TableauToolContext
-export type TableauRequestHandlerExtra = TableauToolContext &
+export type TableauRequestHandlerExtra<TServer extends Server> = TableauToolContext<TServer> &
   RequestHandlerExtra<ServerRequest, ServerNotification>;
 
 // An extension of ToolCallback that includes additional context in the extra parameter
 export type TableauToolCallback<
+  TServer extends Server,
+  TExtra extends TableauRequestHandlerExtra<TServer>,
   Args extends undefined | ZodRawShapeCompat | AnySchema = undefined,
-> = BaseToolCallback<CallToolResult, TableauRequestHandlerExtra, Args>;
+> = BaseToolCallback<CallToolResult, TExtra, Args>;

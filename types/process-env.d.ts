@@ -1,6 +1,14 @@
-export interface ProcessEnvEx {
-  AUTH: string | undefined;
+interface ProcessEnvBase {
   TRANSPORT: string | undefined;
+  DEFAULT_NOTIFICATION_LEVEL: string | undefined;
+  LOG_LEVEL: string | undefined;
+  ENABLED_LOGGERS: string | undefined;
+  FILE_LOGGER_DIRECTORY: string | undefined;
+  MAX_REQUEST_TIMEOUT_MS: string | undefined;
+}
+
+export interface ProcessEnvWeb extends ProcessEnvBase {
+  AUTH: string | undefined;
   SSL_KEY: string | undefined;
   SSL_CERT: string | undefined;
   HTTP_PORT_ENV_VAR_NAME: string | undefined;
@@ -22,18 +30,15 @@ export interface ProcessEnvEx {
   UAT_KEY_ID: string | undefined;
   JWT_ADDITIONAL_PAYLOAD: string | undefined;
   DATASOURCE_CREDENTIALS: string | undefined;
-  DEFAULT_LOG_LEVEL: string | undefined;
+  LOG_LEVEL: string | undefined;
   DISABLE_LOG_MASKING: string | undefined;
   INCLUDE_TOOLS: string | undefined;
   EXCLUDE_TOOLS: string | undefined;
-  MAX_REQUEST_TIMEOUT_MS: string | undefined;
   MAX_RESULT_LIMIT: string | undefined;
   MAX_RESULT_LIMITS: string | undefined;
   DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS: string | undefined;
   DISABLE_METADATA_API_REQUESTS: string | undefined;
   DISABLE_SESSION_MANAGEMENT: string | undefined;
-  ENABLED_LOGGERS: string | undefined;
-  FILE_LOGGER_DIRECTORY: string | undefined;
   INCLUDE_PROJECT_IDS: string | undefined;
   INCLUDE_DATASOURCE_IDS: string | undefined;
   INCLUDE_WORKBOOK_IDS: string | undefined;
@@ -42,6 +47,8 @@ export interface ProcessEnvEx {
   PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES: string | undefined;
   MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES: string | undefined;
   ENABLE_MCP_SITE_SETTINGS: string | undefined;
+  ALLOW_SITES_TO_CONFIGURE_REQUEST_OVERRIDES: string | undefined;
+  ALLOWED_REQUEST_OVERRIDES: string | undefined;
   ENABLE_PASSTHROUGH_AUTH: string | undefined;
   DANGEROUSLY_DISABLE_OAUTH: string | undefined;
   OAUTH_EMBEDDED_AUTHZ_SERVER: string | undefined;
@@ -68,9 +75,15 @@ export interface ProcessEnvEx {
   BREAK_GLASS_DISABLE_GLOBALLY: string | undefined;
 }
 
+export interface ProcessEnvDesktop extends ProcessEnvBase {
+  AGENT_API_BASE: string | undefined;
+  AGENT_API_AUTH_TOKEN: string | undefined;
+  AGENT_API_POLL_INTERVAL_MS: string | undefined;
+}
+
 declare global {
   namespace NodeJS {
-    interface ProcessEnv extends ProcessEnvEx {
+    interface ProcessEnv extends ProcessEnvWeb, ProcessEnvDesktop {
       [key: string]: string | undefined;
     }
   }
