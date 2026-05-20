@@ -21,7 +21,8 @@ export type McpScope =
   | 'tableau:mcp:view:read'
   | 'tableau:mcp:view:download'
   | 'tableau:mcp:pulse:read'
-  | 'tableau:mcp:insight:create';
+  | 'tableau:mcp:insight:create'
+  | 'tableau:mcp:tasks:read';
 
 export type TableauApiScope =
   | 'tableau:content:read'
@@ -32,7 +33,8 @@ export type TableauApiScope =
   | 'tableau:metric_subscriptions:read'
   | 'tableau:insights:read'
   | 'tableau:insight_brief:create'
-  | 'tableau:mcp_site_settings:read';
+  | 'tableau:mcp_site_settings:read'
+  | 'tableau:tasks:read';
 
 /**
  * Default scopes supported by the MCP server
@@ -47,6 +49,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:view:download',
   'tableau:mcp:pulse:read',
   'tableau:mcp:insight:create',
+  'tableau:mcp:tasks:read',
 ];
 
 export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauApiScope> = [
@@ -68,6 +71,10 @@ const toolScopeMap: Record<
   'list-datasources': {
     mcp: ['tableau:mcp:datasource:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
+  },
+  'list-extract-refresh-tasks': {
+    mcp: ['tableau:mcp:tasks:read'],
+    api: new Set(['tableau:tasks:read']),
   },
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],
