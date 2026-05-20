@@ -15,6 +15,8 @@ const serverName = 'tableau-desktop-mcp';
 const serverVersion = pkg.version;
 
 export class DesktopMcpServer extends Server {
+  private readonly sessionManager = new SessionManager();
+
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
     super({ mcpServer, clientInfo, serverName, serverVersion });
   }
@@ -34,12 +36,11 @@ export class DesktopMcpServer extends Server {
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
       ) => {
         const tableauToolCallback = await Provider.from(callback);
-        const sessionManager = new SessionManager({ signal: extra.signal });
         const tableauRequestHandlerExtra: TableauDesktopRequestHandlerExtra = {
           ...extra,
           config,
           getExecutor: async (sessionId: string) => {
-            return await sessionManager.getExecutor(sessionId);
+            return await this.sessionManager.getExecutor(sessionId, extra.signal);
           },
           server: this,
         };
