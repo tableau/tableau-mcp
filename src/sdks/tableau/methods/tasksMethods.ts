@@ -27,7 +27,11 @@ export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis>
    * @param siteId - The Tableau site ID
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_jobs_tasks_and_schedules.htm#list_extract_refresh_tasks_in_site
    */
-  listExtractRefreshTasks = async ({ siteId }: { siteId: string }): Promise<ExtractRefreshTask[]> => {
+  listExtractRefreshTasks = async ({
+    siteId,
+  }: {
+    siteId: string;
+  }): Promise<ExtractRefreshTask[]> => {
     const raw = await this._apiClient.listExtractRefreshTasks({
       params: { siteId },
       ...this.authHeader,

@@ -23,8 +23,20 @@ export const extractRefreshScheduleSchema = z.object({
         .object({
           interval: z
             .union([
-              z.array(z.object({ weekDay: z.string().optional(), monthDay: z.union([z.string(), z.number()]).optional(), hours: z.coerce.number().optional(), minutes: z.coerce.number().optional() })),
-              z.object({ weekDay: z.string().optional(), monthDay: z.union([z.string(), z.number()]).optional(), hours: z.coerce.number().optional(), minutes: z.coerce.number().optional() }),
+              z.array(
+                z.object({
+                  weekDay: z.string().optional(),
+                  monthDay: z.union([z.string(), z.number()]).optional(),
+                  hours: z.coerce.number().optional(),
+                  minutes: z.coerce.number().optional(),
+                }),
+              ),
+              z.object({
+                weekDay: z.string().optional(),
+                monthDay: z.union([z.string(), z.number()]).optional(),
+                hours: z.coerce.number().optional(),
+                minutes: z.coerce.number().optional(),
+              }),
             ])
             .optional(),
         })

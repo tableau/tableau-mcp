@@ -24,12 +24,7 @@ export function normalizeListExtractRefreshTasksResponse(raw: unknown): unknown 
   }
   const data = raw as Record<string, unknown>;
   const tasks = data.tasks;
-  if (
-    tasks &&
-    typeof tasks === 'object' &&
-    !Array.isArray(tasks) &&
-    !('task' in tasks)
-  ) {
+  if (tasks && typeof tasks === 'object' && !Array.isArray(tasks) && !('task' in tasks)) {
     return { ...data, tasks: { ...tasks, task: [] } };
   }
   return raw;

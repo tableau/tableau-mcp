@@ -8,7 +8,9 @@ import { ConstrainedResult, WebTool } from '../tool.js';
 
 const paramsSchema = {};
 
-export const getListExtractRefreshTasksTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+export const getListExtractRefreshTasksTool = (
+  server: WebMcpServer,
+): WebTool<typeof paramsSchema> => {
   const listExtractRefreshTasksTool = new WebTool({
     server,
     name: 'list-extract-refresh-tasks',
@@ -49,7 +51,9 @@ export const getListExtractRefreshTasksTool = (server: WebMcpServer): WebTool<ty
           });
           return new Ok(tasks);
         },
-        constrainSuccessResult: (tasks: ExtractRefreshTask[]): ConstrainedResult<ExtractRefreshTask[]> => {
+        constrainSuccessResult: (
+          tasks: ExtractRefreshTask[],
+        ): ConstrainedResult<ExtractRefreshTask[]> => {
           if (tasks.length === 0) {
             return {
               type: 'empty',
