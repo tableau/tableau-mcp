@@ -137,3 +137,15 @@ export class UnknownError extends McpToolError {
     super({ type: 'unknown', message, statusCode });
   }
 }
+
+export class AdminOnlyError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'admin-only', message, statusCode: 403 });
+  }
+}
+
+export class AdminInsightsUnavailableError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'admin-insights-unavailable', message, statusCode: 404 });
+  }
+}

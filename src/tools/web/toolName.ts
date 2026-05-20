@@ -21,6 +21,9 @@ export const webToolNames = [
   'search-content',
   'revoke-access-token',
   'reset-consent',
+  'query-admin-insights-ts-events',
+  'query-admin-insights-site-content',
+  'get-stale-content-report',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -32,6 +35,7 @@ export const webToolGroupNames = [
   'pulse',
   'content-exploration',
   'token-management',
+  'admin-insights',
 ] as const;
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
@@ -58,6 +62,11 @@ export const webToolGroups = {
   ],
   'content-exploration': ['search-content'],
   'token-management': ['revoke-access-token', 'reset-consent'],
+  'admin-insights': [
+    'query-admin-insights-ts-events',
+    'query-admin-insights-site-content',
+    'get-stale-content-report',
+  ],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 
 export function isWebToolName(value: unknown): value is WebToolName {

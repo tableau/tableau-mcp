@@ -6,6 +6,7 @@ import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
+import { registerPrompts } from './prompts/index.js';
 import { ClientInfo, Server } from './server.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
@@ -95,6 +96,8 @@ export class WebMcpServer extends Server {
         toolCallback,
       );
     }
+
+    registerPrompts(this);
   };
 
   protected _getToolsToRegister = async (

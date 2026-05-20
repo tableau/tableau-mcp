@@ -603,6 +603,24 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  TMCP_ADMIN_TOOLS_ENABLED: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable admin-only MCP tools',
+    description:
+      'When "true", registers admin-only MCP tools and prompts (e.g. Admin Insights queries, stale-content cleanup). Defaults to "false".',
+    required: false,
+    sensitive: false,
+  },
+  STALE_CONTENT_MIN_AGE_DAYS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Stale content min age (days)',
+    description:
+      'Minimum days since last access for content to be considered stale by the stale-content-cleanup-inform prompt. Defaults to 90.',
+    required: false,
+    sensitive: false,
+  },
 } satisfies EnvVars;
 
 const userConfig = Object.entries(envVars).reduce<Record<string, McpbUserConfigurationOption>>(

@@ -19,7 +19,12 @@ export const overridableVariables = [
   'MAX_RESULT_LIMITS',
   'DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS',
   'DISABLE_METADATA_API_REQUESTS',
+  'STALE_CONTENT_MIN_AGE_DAYS',
 ] as const satisfies ReadonlyArray<keyof ProcessEnvWeb>;
+
+export const STALE_CONTENT_MIN_AGE_DAYS_DEFAULT = 90;
+const STALE_CONTENT_MIN_AGE_DAYS_MIN = 1;
+const STALE_CONTENT_MIN_AGE_DAYS_MAX = 3650;
 
 export const requestOverridableVariables = overridableVariables.filter(
   (v) => v !== 'ALLOWED_REQUEST_OVERRIDES' && v !== 'INCLUDE_TOOLS' && v !== 'EXCLUDE_TOOLS',
@@ -59,6 +64,8 @@ export class OverridableConfig {
 
   disableQueryDatasourceValidationRequests: boolean;
   disableMetadataApiRequests: boolean;
+
+  staleContentMinAgeDays: number;
 
   /**
    * General pattern for overriding variables:
@@ -121,6 +128,13 @@ export class OverridableConfig {
       requestOverrides,
       false, // default value
       true, // allowed value when restricted
+    );
+
+    // STALE_CONTENT_MIN_AGE_DAYS
+    this.staleContentMinAgeDays = this.getStaleContentMinAgeDaysWithOverrides(
+      envVariables,
+      siteOverrides,
+      requestOverrides,
     );
 
     // MAX_RESULT_LIMIT
@@ -408,6 +422,59 @@ export class OverridableConfig {
       }
     }
     return toReturn;
+  }
+
+  getStaleContentMinAgeDaysWithOverrides(
+    envVariables: Record<string, string | undefined>,
+    siteOverrides: Record<string, string> = {},
+    requestOverrides: Record<string, string> = {},
+  ): number {
+    const parseDays = (raw: string | undefined): number | null => {
+      if (raw === undefined || raw === '') {
+        return null;
+      }
+      const n = parseInt(raw);
+      if (
+        Number.isNaN(n) ||
+        n < STALE_CONTENT_MIN_AGE_DAYS_MIN ||
+        n > STALE_CONTENT_MIN_AGE_DAYS_MAX
+      ) {
+        return null;
+      }
+      return n;
+    };
+
+    let value =
+      parseDays(envVariables.STALE_CONTENT_MIN_AGE_DAYS) ?? STALE_CONTENT_MIN_AGE_DAYS_DEFAULT;
+
+    if (Object.hasOwn(siteOverrides, 'STALE_CONTENT_MIN_AGE_DAYS')) {
+      const parsed = parseDays(siteOverrides.STALE_CONTENT_MIN_AGE_DAYS);
+      if (parsed !== null) {
+        value = parsed;
+      } else if (siteOverrides.STALE_CONTENT_MIN_AGE_DAYS === '') {
+        value = STALE_CONTENT_MIN_AGE_DAYS_DEFAULT;
+      }
+    }
+
+    if (Object.hasOwn(requestOverrides, 'STALE_CONTENT_MIN_AGE_DAYS')) {
+      if (!this.allowedRequestOverrides.has('STALE_CONTENT_MIN_AGE_DAYS')) {
+        throw new Error('STALE_CONTENT_MIN_AGE_DAYS is not an allowed request override');
+      }
+      const raw = requestOverrides.STALE_CONTENT_MIN_AGE_DAYS;
+      if (raw === '') {
+        value = STALE_CONTENT_MIN_AGE_DAYS_DEFAULT;
+      } else {
+        const parsed = parseDays(raw);
+        if (parsed === null) {
+          throw new Error(
+            'STALE_CONTENT_MIN_AGE_DAYS was provided an invalid request override value',
+          );
+        }
+        value = parsed;
+      }
+    }
+
+    return value;
   }
 
   getMaxResultLimitWithOverrides(

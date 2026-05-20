@@ -1,3 +1,6 @@
+import { getGetStaleContentReportTool } from './adminInsights/getStaleContentReport.js';
+import { getQueryAdminInsightsSiteContentTool } from './adminInsights/querySiteContent.js';
+import { getQueryAdminInsightsTsEventsTool } from './adminInsights/queryTsEvents.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
@@ -44,4 +47,7 @@ export const webToolFactories = [
   getSearchContentTool,
   getRevokeAccessTokenTool,
   getResetConsentTool,
+  getQueryAdminInsightsTsEventsTool,
+  getQueryAdminInsightsSiteContentTool,
+  getGetStaleContentReportTool,
 ];

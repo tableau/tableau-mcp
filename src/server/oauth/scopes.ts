@@ -167,6 +167,34 @@ const toolScopeMap: Record<
     mcp: [],
     api: new Set<TableauApiScope>(),
   },
+  // Admin Insights (admin-only). Resolves dataset LUID via list-datasources, then VDS query.
+  // Bypasses resourceAccessChecker — datasources are internal/known and admin-gated.
+  'query-admin-insights-ts-events': {
+    mcp: ['tableau:mcp:datasource:read'],
+    api: new Set([
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
+    ]),
+  },
+  'query-admin-insights-site-content': {
+    mcp: ['tableau:mcp:datasource:read'],
+    api: new Set([
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
+    ]),
+  },
+  // Server-side anti-join: runs TS Events + Site Content VDS queries internally,
+  // applies threshold, returns final filtered rows. Deterministic — no LLM math.
+  'get-stale-content-report': {
+    mcp: ['tableau:mcp:datasource:read'],
+    api: new Set([
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
+    ]),
+  },
 };
 
 const supportedMcpScopes = Array.from(
