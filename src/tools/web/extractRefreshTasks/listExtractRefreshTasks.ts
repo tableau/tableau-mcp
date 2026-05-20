@@ -6,7 +6,7 @@ import { ExtractRefreshTask } from '../../../sdks/tableau/types/extractRefreshTa
 import { WebMcpServer } from '../../../server.web.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 
-const paramsSchema = undefined;
+const paramsSchema = {};
 
 export const getListExtractRefreshTasksTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const listExtractRefreshTasksTool = new WebTool({
