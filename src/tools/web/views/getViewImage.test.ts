@@ -161,6 +161,23 @@ describe('getViewImageTool', () => {
     expect(mocks.mockQueryViewImage).not.toHaveBeenCalled();
   });
 
+  it('should return view not allowed error when INCLUDE_VIEW_IDS excludes the view', async () => {
+    vi.stubEnv('INCLUDE_VIEW_IDS', 'some-other-view-id');
+
+    const result = await getToolResult({ viewId: mockView.id });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      [
+        'The set of allowed views that can be queried is limited by the server configuration.',
+        `Querying the view with LUID ${mockView.id} is not allowed.`,
+      ].join(' '),
+    );
+
+    expect(mocks.mockGetView).not.toHaveBeenCalled();
+    expect(mocks.mockQueryViewImage).not.toHaveBeenCalled();
+  });
+
   it('should return error when SVG format is requested on old Tableau version', async () => {
     const result = await getToolResult({
       viewId: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',

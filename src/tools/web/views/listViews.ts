@@ -128,13 +128,17 @@ export function constrainViews({
     };
   }
 
-  const { projectIds, workbookIds, tags } = boundedContext;
+  const { projectIds, workbookIds, viewIds, tags } = boundedContext;
   if (projectIds) {
     views = views.filter((view) => (view.project?.id ? projectIds.has(view.project.id) : false));
   }
 
   if (workbookIds) {
     views = views.filter((view) => (view.workbook?.id ? workbookIds.has(view.workbook.id) : false));
+  }
+
+  if (viewIds) {
+    views = views.filter((view) => (view.id ? viewIds.has(view.id) : false));
   }
 
   if (tags) {

@@ -105,6 +105,24 @@ describe('getViewDataTool', () => {
 
     expect(mocks.mockQueryViewData).not.toHaveBeenCalled();
   });
+
+  it('should return view not allowed error when INCLUDE_VIEW_IDS excludes the view', async () => {
+    vi.stubEnv('INCLUDE_VIEW_IDS', 'some-other-view-id');
+
+    const result = await getToolResult({ viewId: mockView.id });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      [
+        'The set of allowed views that can be queried is limited by the server configuration.',
+        `Querying the view with LUID ${mockView.id} is not allowed.`,
+      ].join(' '),
+    );
+
+    // viewIds is a synchronous Set lookup — no fetch should happen.
+    expect(mocks.mockGetView).not.toHaveBeenCalled();
+    expect(mocks.mockQueryViewData).not.toHaveBeenCalled();
+  });
 });
 
 async function getToolResult({

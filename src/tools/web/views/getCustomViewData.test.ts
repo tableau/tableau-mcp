@@ -96,6 +96,19 @@ describe('getCustomViewDataTool', () => {
     expect(result.content[0].text).toContain('does not belong to an allowed workbook');
     expect(mocks.mockGetCustomViewData).not.toHaveBeenCalled();
   });
+
+  it('should return not allowed when INCLUDE_VIEW_IDS excludes the underlying view', async () => {
+    vi.stubEnv('INCLUDE_VIEW_IDS', 'some-other-view-id');
+    const result = await getToolResult({ customViewId: mockCustomView.id });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(
+      `Querying the view with LUID ${mockView.id} is not allowed.`,
+    );
+    // The custom view must be resolved to its underlying view id.
+    expect(mocks.mockGetCustomView).toHaveBeenCalled();
+    expect(mocks.mockGetCustomViewData).not.toHaveBeenCalled();
+  });
 });
 
 async function getToolResult({
