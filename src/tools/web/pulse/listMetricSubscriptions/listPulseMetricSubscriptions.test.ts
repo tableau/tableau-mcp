@@ -61,7 +61,9 @@ describe('listPulseMetricSubscriptionsTool', () => {
     );
     const result = await getToolResult();
     expect(result.isError).toBe(false);
-    expect(mocks.mockListPulseMetricSubscriptionsForCurrentUser).toHaveBeenCalled();
+    expect(mocks.mockListPulseMetricSubscriptionsForCurrentUser).toHaveBeenCalledWith(
+      'test-user-luid',
+    );
     invariant(result.content[0].type === 'text');
     const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockPulseMetricSubscriptions);
@@ -180,10 +182,10 @@ describe('listPulseMetricSubscriptionsTool', () => {
   });
 });
 
-async function getToolResult(): Promise<CallToolResult> {
+async function getToolResult(extra = getMockRequestHandlerExtra()): Promise<CallToolResult> {
   const listPulseMetricSubscriptionsTool = getListPulseMetricSubscriptionsTool(new WebMcpServer());
   const callback = await Provider.from(listPulseMetricSubscriptionsTool.callback);
-  return await callback({}, getMockRequestHandlerExtra());
+  return await callback({}, extra);
 }
 
 function getServer(): WebMcpServer {
