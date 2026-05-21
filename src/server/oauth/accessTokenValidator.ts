@@ -6,6 +6,7 @@ import { fromError } from 'zod-validation-error/v3';
 
 import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
+import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
 import {
   mcpAccessTokenSchema,
@@ -128,6 +129,7 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
         return Err(`Invalid access token: ${fromError(parsed.error).toString()}`);
       }
 
+      let { 'https://tableau.com/userId': userId } = parsed.data;
       const {
         sub,
         iss,
@@ -136,7 +138,6 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
         scope,
         client_id,
         'https://tableau.com/siteId': siteId,
-        'https://tableau.com/userId': userId,
         'https://tableau.com/targetUrl': targetUrl,
       } = parsed.data;
 
@@ -149,6 +150,26 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
       // TODO(cleanup): once George's AS rollout is complete and client_id is confirmed live in all
       // environments, remove the aud fallback and update the schema to require client_id.
       const oauthClientId = client_id ?? aud;
+
+      if (!userId) {
+        const restApi = new RestApi({
+          maxRequestTimeoutMs: this.config.maxRequestTimeoutMs,
+        });
+
+        restApi.setBearerToken(token);
+        const sessionResult = await restApi.authenticatedServerMethods.getCurrentServerSession();
+        if (sessionResult.isErr()) {
+          log({
+            message: 'Tableau access token validation error',
+            level: 'debug',
+            logger: 'oauth',
+            data: sessionResult.error,
+          });
+          return new Err('Invalid or expired access token');
+        }
+
+        userId = sessionResult.value.user.id;
+      }
 
       const tableauAuthInfo: TableauAuthInfo = {
         type: 'Bearer',
