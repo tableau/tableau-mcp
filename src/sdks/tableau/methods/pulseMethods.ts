@@ -197,13 +197,19 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
 
 export type PulseResult<T> = Result<T, McpToolError>;
 
-// ntbue/insights-gai/ntbue-embeddings-service surfaces these Tableau error codes
-// when GIA (Generative Insights AI / Tableau+ AI) is disabled on the site.
-// See brief_aio_controller.py in ntbue-embeddings-service.
-const PULSE_INSIGHTS_DISABLED_ERROR_CODES: ReadonlySet<string> = new Set([
-  '0x62c06627',
-  '0x8c454877',
-]);
+// These Tableau error codes indicate AI-powered Pulse insights are disabled for the site.
+const PULSE_INSIGHTS_DISABLED_ERROR_CODES = ['0x62c06627', '0x8c454877'] as const;
+
+export function hasPulseInsightsDisabledErrorCode(value: unknown): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const normalizedValue = value.toLowerCase();
+  return PULSE_INSIGHTS_DISABLED_ERROR_CODES.some((errorCode) =>
+    normalizedValue.includes(errorCode),
+  );
+}
 
 async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise<PulseResult<T>> {
   try {
@@ -224,9 +230,10 @@ async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise
       }
 
       const tableauErrorCode = error.response?.headers?.tableau_error_code;
+      const responseMessage = error.response?.data?.message;
       if (
-        typeof tableauErrorCode === 'string' &&
-        PULSE_INSIGHTS_DISABLED_ERROR_CODES.has(tableauErrorCode.toLowerCase())
+        hasPulseInsightsDisabledErrorCode(tableauErrorCode) ||
+        hasPulseInsightsDisabledErrorCode(responseMessage)
       ) {
         return new PulseInsightsDisabledError().toErr();
       }
