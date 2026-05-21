@@ -263,7 +263,7 @@ export class Config extends BaseConfig {
     this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
     this.isHyperforce = isHyperforce === 'true';
     this.breakGlassDisableGlobally = breakGlassDisableGlobally === 'true';
-    this.featureConfigPath = featureConfigPath ?? 'features.json';
+    this.featureConfigPath = featureConfigPath || 'features.json';
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
