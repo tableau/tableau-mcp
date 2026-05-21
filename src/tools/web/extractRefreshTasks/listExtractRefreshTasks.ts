@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
@@ -35,7 +36,7 @@ export const getListExtractRefreshTasksTool = (
   - \`datasource.id\` or \`workbook.id\` – the target data source or workbook
   - \`schedule\` – frequency, nextRunAt, and (on Tableau Server) name, state, id
 
-  **Note:** Tableau Cloud uses \`tableau:tasks:read\` scope. On Tableau Server, users see only tasks they own unless they are site or server administrators.
+  **Note:** Tableau Cloud uses \`tableau:tasks:read\` scope. On Tableau Server, users see only tasks they own unless they are site or server administrators. The Tableau REST API does not support filtering or pagination for extract refresh tasks - all tasks are returned in a single request.
   `,
     paramsSchema,
     annotations: {

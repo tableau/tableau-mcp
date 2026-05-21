@@ -45,6 +45,10 @@ See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
 
 This tool takes no arguments.
 
+:::note API Limitation
+The Tableau REST API does not support filtering or pagination parameters for extract refresh tasks. All tasks are returned in a single request. For sites with many extract refresh tasks, consider using client-side filtering based on the returned data.
+:::
+
 ## Response structure
 
 Each task includes:
