@@ -3,7 +3,7 @@ import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
-import { serverName } from '../../server.js';
+import { serverName } from '../../server.web.js';
 import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {

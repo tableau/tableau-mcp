@@ -1,7 +1,7 @@
 import express from 'express';
 
 import { getConfig } from '../../../config.js';
-import { serverName } from '../../../server.js';
+import { serverName } from '../../../server.web.js';
 import { getSupportedScopes } from '../scopes.js';
 
 const protectedResourcePath = `/${serverName}`;
