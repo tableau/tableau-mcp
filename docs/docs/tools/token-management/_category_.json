@@ -1,0 +1,8 @@
+{
+  "label": "Token Management",
+  "position": 7,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for managing OAuth token and consent state for the current MCP session."
+  }
+}

@@ -62,7 +62,13 @@ describe('listDatasourcesTool', () => {
     it('should return empty result when no datasources are found', () => {
       const result = constrainDatasources({
         datasources: [],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: null,
+        },
       });
 
       invariant(result.type === 'empty');
@@ -78,6 +84,7 @@ describe('listDatasourcesTool', () => {
           projectIds: new Set(['123']),
           datasourceIds: null,
           workbookIds: null,
+          viewIds: null,
           tags: null,
         },
       });
@@ -96,17 +103,19 @@ describe('listDatasourcesTool', () => {
         projectIds: [null, new Set([mockDatasources.datasources[0].project.id])],
         datasourceIds: [null, new Set([mockDatasources.datasources[0].id])],
         workbookIds: [null], // n/a for datasources
+        viewIds: [null], // n/a for datasources
         tags: [null, new Set([mockDatasources.datasources[0].tags.tag[0].label])],
       }),
     )(
-      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
-      async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, viewIds: $viewIds, tags: $tags',
+      async ({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
         const result = constrainDatasources({
           datasources: mockDatasources.datasources,
           boundedContext: {
             projectIds,
             datasourceIds,
             workbookIds,
+            viewIds,
             tags,
           },
         });

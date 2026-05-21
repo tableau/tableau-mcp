@@ -104,6 +104,15 @@ Overrides which workbook IDs constrain tool arguments and results.
 | `restricted` | If there are any current bounds set, the override value must be a **subset** of the current bounds. Cannot clear existing bounds. |
 | `unrestricted` | Override value can be any valid set of workbook IDs, including values not in the current bounds. Can clear existing bounds with an empty value. |
 
+### [`INCLUDE_VIEW_IDS`](tool-scoping.md#include_view_ids)
+
+Overrides which view IDs constrain tool arguments and results.
+
+| Restriction Type | Behavior |
+|---|---|
+| `restricted` | If there are any current bounds set, the override value must be a **subset** of the current bounds. Cannot clear existing bounds. |
+| `unrestricted` | Override value can be any valid set of view IDs, including values not in the current bounds. Can clear existing bounds with an empty value. |
+
 ### [`INCLUDE_TAGS`](tool-scoping.md#include_tags)
 
 Overrides which tags constrain tool arguments and results.

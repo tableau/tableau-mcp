@@ -1,3 +1,6 @@
+import { Err, Ok } from 'ts-results-es';
+
+import { RestApi } from '../../sdks/tableau/restApi.js';
 import { TableauAccessTokenValidator } from './accessTokenValidator.js';
 
 const MOCK_ISSUER = 'https://sso.online.tableau.com';
@@ -137,6 +140,64 @@ describe('TableauAccessTokenValidator', () => {
       expect(extra.username).toBe('user@example.com');
       expect(extra.siteId).toBe('abc123');
       expect(extra.userId).toBe('uid-1');
+    });
+
+    it('resolves tableauAuthInfo.userId from the current session when the bearer token claim is absent', async () => {
+      const mockSetBearerToken = vi.fn();
+      const mockGetCurrentServerSession = vi.fn().mockResolvedValue(
+        new Ok({
+          site: { id: 'abc123', name: 'site-name' },
+          user: { id: 'session-user-id', name: 'user@example.com' },
+        }),
+      );
+      vi.mocked(RestApi).mockImplementationOnce(
+        () =>
+          ({
+            setBearerToken: mockSetBearerToken,
+            authenticatedServerMethods: {
+              getCurrentServerSession: mockGetCurrentServerSession,
+            },
+          }) as unknown as RestApi,
+      );
+      const { 'https://tableau.com/userId': _userId, ...payloadWithoutUserId } = basePayload({
+        client_id: MOCK_CLIENT_ID,
+      });
+      const token = makeBearer(payloadWithoutUserId);
+
+      const result = await validator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+      expect(mockSetBearerToken).toHaveBeenCalledWith(token);
+      expect(mockGetCurrentServerSession).toHaveBeenCalledOnce();
+      const extra = result.value.extra as Record<string, unknown>;
+      expect(extra.userId).toBe('session-user-id');
+    });
+
+    it('rejects the token when current session userId resolution fails', async () => {
+      const mockGetCurrentServerSession = vi
+        .fn()
+        .mockResolvedValue(new Err({ type: 'unauthorized', message: 'unauthorized' }));
+      vi.mocked(RestApi).mockImplementationOnce(
+        () =>
+          ({
+            setBearerToken: vi.fn(),
+            authenticatedServerMethods: {
+              getCurrentServerSession: mockGetCurrentServerSession,
+            },
+          }) as unknown as RestApi,
+      );
+      const { 'https://tableau.com/userId': _userId, ...payloadWithoutUserId } = basePayload({
+        client_id: MOCK_CLIENT_ID,
+      });
+      const token = makeBearer(payloadWithoutUserId);
+
+      const result = await validator.validate(token);
+
+      expect(result.isErr()).toBe(true);
+      if (!result.isErr()) return;
+      expect(result.error).toBe('Invalid or expired access token');
+      expect(mockGetCurrentServerSession).toHaveBeenCalledOnce();
     });
   });
 });

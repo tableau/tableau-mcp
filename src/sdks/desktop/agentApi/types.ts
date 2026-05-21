@@ -28,6 +28,14 @@ export const executeCommandResponseSchema = z.object({
 });
 export type ExecuteCommandResponse = z.infer<typeof executeCommandResponseSchema>;
 
+export const healthResponseSchema = z.object({
+  status: z.literal('healthy'),
+  version: z.string(),
+  queue_depth: z.number(),
+  commands_completed_last_hour: z.number(),
+});
+export type HealthResponse = z.infer<typeof healthResponseSchema>;
+
 export const agentTokenSchema = z.object({
   created: z.string().datetime(),
   pid: z.number(),
