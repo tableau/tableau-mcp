@@ -7,7 +7,7 @@ import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockWorkbook } from '../workbooks/mockWorkbook.js';
-import { getListCustomViewsTool } from './listCustomViews.js';
+import { constrainCustomViews, getListCustomViewsTool } from './listCustomViews.js';
 import { mockCustomView } from './mockCustomView.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
@@ -148,6 +148,111 @@ describe('listCustomViewsTool', () => {
         `Querying the workbook with LUID ${mockWorkbook.id} is not allowed.`,
       ].join(' '),
     );
+  });
+
+  it('should include custom views whose underlying view is in INCLUDE_VIEW_IDS', async () => {
+    vi.stubEnv('INCLUDE_VIEW_IDS', mockCustomView.view.id);
+    mocks.mockListCustomViews.mockResolvedValue(mockCustomViews);
+    mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
+
+    const result = await getToolResult({
+      workbookId: mockWorkbook.id,
+      filter: `viewId:eq:${mockCustomView.view.id}`,
+    });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(JSON.parse(`${result.content[0].text}`)).toMatchObject(mockCustomViews.customViews);
+  });
+
+  it('should filter out custom views whose underlying view is not in INCLUDE_VIEW_IDS', async () => {
+    vi.stubEnv('INCLUDE_VIEW_IDS', 'some-other-view-id');
+    mocks.mockListCustomViews.mockResolvedValue(mockCustomViews);
+    mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
+
+    const result = await getToolResult({
+      workbookId: mockWorkbook.id,
+      filter: `viewId:eq:${mockCustomView.view.id}`,
+    });
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toBe(
+      [
+        'The set of allowed views that can be queried is limited by the server configuration.',
+        'While custom views were found, they were all filtered out by the server configuration.',
+      ].join(' '),
+    );
+  });
+
+  describe('constrainCustomViews', () => {
+    it('should return empty result when no custom views are found', () => {
+      const result = constrainCustomViews({
+        customViews: [],
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: null,
+        },
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        'No custom views for this workbook were found. Either none exist or you do not have permission to view them.',
+      );
+    });
+
+    it('should return all custom views when viewIds is null', () => {
+      const result = constrainCustomViews({
+        customViews: [mockCustomView],
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: null,
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual([mockCustomView]);
+    });
+
+    it('should keep custom views whose underlying view id is in viewIds', () => {
+      const result = constrainCustomViews({
+        customViews: [mockCustomView],
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: new Set([mockCustomView.view.id]),
+          tags: null,
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual([mockCustomView]);
+    });
+
+    it('should return empty when all custom views are filtered out by viewIds', () => {
+      const result = constrainCustomViews({
+        customViews: [mockCustomView],
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: new Set(['some-other-view-id']),
+          tags: null,
+        },
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        [
+          'The set of allowed views that can be queried is limited by the server configuration.',
+          'While custom views were found, they were all filtered out by the server configuration.',
+        ].join(' '),
+      );
+    });
   });
 });
 

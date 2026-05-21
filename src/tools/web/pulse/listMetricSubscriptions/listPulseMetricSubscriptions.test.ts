@@ -108,7 +108,13 @@ describe('listPulseMetricSubscriptionsTool', () => {
     it('should return empty result when no subscriptions are found', async () => {
       const result = await constrainPulseMetricSubscriptions({
         subscriptions: [],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: null,
+        },
         restApiArgs,
       });
 
@@ -129,6 +135,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
           projectIds: null,
           datasourceIds: new Set(['123']),
           workbookIds: null,
+          viewIds: null,
           tags: null,
         },
         restApiArgs,
@@ -150,7 +157,13 @@ describe('listPulseMetricSubscriptionsTool', () => {
 
       const result = await constrainPulseMetricSubscriptions({
         subscriptions: mockPulseMetricSubscriptions,
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: null,
+        },
         restApiArgs,
       });
 
@@ -169,6 +182,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
           projectIds: null,
           datasourceIds: new Set([mockPulseMetrics[0].datasource_luid]),
           workbookIds: null,
+          viewIds: null,
           tags: null,
         },
         restApiArgs,

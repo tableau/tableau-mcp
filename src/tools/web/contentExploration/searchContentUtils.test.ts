@@ -500,6 +500,7 @@ describe('searchContentUtils', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: null,
+          viewIds: null,
           tags: null,
         },
       });
@@ -519,6 +520,7 @@ describe('searchContentUtils', () => {
           projectIds: new Set(['123']),
           datasourceIds: null,
           workbookIds: null,
+          viewIds: null,
           tags: null,
         },
       });
@@ -541,6 +543,7 @@ describe('searchContentUtils', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: null,
+          viewIds: null,
           tags: null,
         },
       });
@@ -557,6 +560,7 @@ describe('searchContentUtils', () => {
           projectIds: new Set(['123456']),
           datasourceIds: null,
           workbookIds: null,
+          viewIds: null,
           tags: null,
         },
       });
@@ -573,6 +577,7 @@ describe('searchContentUtils', () => {
           projectIds: null,
           datasourceIds: new Set(['some-other-datasource-luid']),
           workbookIds: null,
+          viewIds: null,
           tags: null,
         },
       });
@@ -589,6 +594,7 @@ describe('searchContentUtils', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: new Set(['some-other-workbook-luid']),
+          viewIds: null,
           tags: null,
         },
       });
@@ -605,12 +611,63 @@ describe('searchContentUtils', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: null,
+          viewIds: null,
           tags: new Set(['sales']),
         },
       });
 
       invariant(result.type === 'success');
       expect(result.result).toEqual([items[0]]);
+    });
+
+    it('should filter view-type items by viewIds while passing through non-view types', () => {
+      const items = [
+        ...reduceSearchContentResponse(mockSearchContentResponse),
+        { type: 'view', luid: 'view-luid-1', title: 'Allowed View' },
+        { type: 'view', luid: 'view-luid-2', title: 'Disallowed View' },
+      ];
+      const result = constrainSearchContent({
+        items,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: new Set(['view-luid-1']),
+          tags: null,
+        },
+      });
+
+      invariant(result.type === 'success');
+      const luids = result.result.map((item) => item.luid);
+      // Workbook and datasource items pass through (they are not view-type).
+      expect(luids).toContain('workbook-1-luid');
+      expect(luids).toContain('datasource-1-luid');
+      // The allowed view is kept.
+      expect(luids).toContain('view-luid-1');
+      // The disallowed view is excluded.
+      expect(luids).not.toContain('view-luid-2');
+    });
+
+    it('should return empty result when all view-type items are filtered out by viewIds', () => {
+      const items = [{ type: 'view', luid: 'view-luid-1', title: 'Some View' }];
+      const result = constrainSearchContent({
+        items,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: new Set(['some-other-view-luid']),
+          tags: null,
+        },
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        [
+          'The set of allowed content that can be queried is limited by the server configuration.',
+          'While search results were found, they were all filtered out by the server configuration.',
+        ].join(' '),
+      );
     });
   });
 });

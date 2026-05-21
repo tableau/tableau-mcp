@@ -3,13 +3,15 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { CustomViewNotAllowedError, WorkbookNotFoundError } from '../../../errors/mcpToolError.js';
+import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import { CustomView } from '../../../sdks/tableau/types/customView.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { paginate } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { WebTool } from '../tool.js';
+import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateCustomViewsFilterString } from './customViewsFilterUtils.js';
 
 const paramsSchema = {
@@ -134,17 +136,55 @@ export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof par
             },
           });
         },
-        constrainSuccessResult: async (customViews) => {
-          // The custom views do not need to be further constrained since they are already constrained by the workbook.
-          // Workbook filtering was already handled by the tool itself.
-          return {
-            type: 'success',
-            result: customViews,
-          };
-        },
+        constrainSuccessResult: async (customViews) =>
+          constrainCustomViews({
+            customViews,
+            boundedContext: configWithOverrides.boundedContext,
+          }),
       });
     },
   });
 
   return listCustomViewsTool;
 };
+
+export function constrainCustomViews({
+  customViews,
+  boundedContext,
+}: {
+  customViews: Array<CustomView>;
+  boundedContext: BoundedContext;
+}): ConstrainedResult<Array<CustomView>> {
+  if (customViews.length === 0) {
+    return {
+      type: 'empty',
+      message:
+        'No custom views for this workbook were found. Either none exist or you do not have permission to view them.',
+    };
+  }
+
+  const { viewIds } = boundedContext;
+
+  // The workbook has already been validated by isWorkbookAllowed, so we don't need to
+  // re-check workbook/project/tag bounds here.
+  if (viewIds) {
+    customViews = customViews.filter((customView) =>
+      customView.view?.id ? viewIds.has(customView.view.id) : false,
+    );
+  }
+
+  if (customViews.length === 0) {
+    return {
+      type: 'empty',
+      message: [
+        'The set of allowed views that can be queried is limited by the server configuration.',
+        'While custom views were found, they were all filtered out by the server configuration.',
+      ].join(' '),
+    };
+  }
+
+  return {
+    type: 'success',
+    result: customViews,
+  };
+}
