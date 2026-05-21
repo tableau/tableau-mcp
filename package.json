@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "Helping agents see and understand data.",
-  "version": "1.18.10",
+  "version": "2.4.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -24,6 +24,8 @@
   },
   "scripts": {
     "build": "tsx src/scripts/build.ts",
+    "build:desktop": "tsx src/scripts/build.ts --variant desktop",
+    "build:combined": "tsx src/scripts/build.ts --variant combined",
     "build:dev": "tsx src/scripts/build.ts --dev",
     "build:docker": "docker build -t tableau-mcp .",
     ":build:mcpb": "npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb",

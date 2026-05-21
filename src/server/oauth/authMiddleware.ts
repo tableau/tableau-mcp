@@ -2,7 +2,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
-import { serverName } from '../../server.js';
+import { log } from '../../logging/logger.js';
 import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
@@ -13,6 +13,8 @@ import {
   getSupportedMcpScopes,
 } from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
+
+const protectedResourceMetadataPath = '/tableau-mcp/.well-known/oauth-protected-resource';
 
 /**
  * Express middleware for OAuth authentication
@@ -51,7 +53,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
 
       const { enforceScopes, advertiseApiScopes, resourceUri } = getConfig().oauth;
       const baseUrl = new URL(resourceUri).origin;
-      const resourceMetadataUrl = `${baseUrl}/${serverName}/.well-known/oauth-protected-resource`;
+      const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;
       const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
       const requiredApiScopes = getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
       const scopeParam =
@@ -88,6 +90,11 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         return;
       }
 
+      log({
+        message: `Access token validation failed: ${result.error}`,
+        level: 'info',
+        logger: 'oauth',
+      });
       res.status(401).json({
         error: 'invalid_token',
         error_description: result.error,
@@ -109,9 +116,14 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       const missingScopes = [...missingMcpScopes, ...missingApiScopes];
 
       if (missingScopes.length > 0) {
+        log({
+          message: `Insufficient scopes: missing [${missingScopes.join(', ')}]`,
+          level: 'info',
+          logger: 'oauth',
+        });
         const { resourceUri } = getConfig().oauth;
         const baseUrl = new URL(resourceUri).origin;
-        const resourceMetadataUrl = `${baseUrl}/${serverName}/.well-known/oauth-protected-resource`;
+        const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;
         const requiredScopesForChallenge = [
           ...requiredMcpScopes,
           ...(shouldCheckApiScopes ? requiredApiScopes : []),

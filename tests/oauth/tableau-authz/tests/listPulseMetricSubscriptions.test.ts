@@ -4,8 +4,7 @@ import { pulseMetricSubscriptionSchema } from '../../../../src/sdks/tableau/type
 import { expect, test } from './base.js';
 import { getTableauMcpPulseDefinition } from './testEnv.js';
 
-// Skip until we can reliably get the user id from the bearer token
-test.describe.skip('list-pulse-metric-subscriptions', () => {
+test.describe('list-pulse-metric-subscriptions', () => {
   test('list pulse metric subscriptions', async ({ client }) => {
     const definition = getTableauMcpPulseDefinition();
 
