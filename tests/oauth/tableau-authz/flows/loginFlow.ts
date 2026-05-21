@@ -55,7 +55,7 @@ export class LoginFlow extends Flow {
     username,
     password,
     siteName,
-    fillSiteName = false,
+    fillSiteName,
   }: {
     username: string;
     password: string;
