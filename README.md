@@ -41,6 +41,37 @@ Standard config works in most MCP clients:
 }
 ```
 
+## Feature Flags
+
+Control available features during development via `features.json`:
+
+```json
+{
+  "mcpapps": true,
+  "pulse": true,
+  "oauth-embedded": false
+}
+```
+
+**Configuration:**
+- Default location: `features.json` in project root
+- Override with environment variable: `FEATURE_CONFIG_PATH=/path/to/features.json`
+
+**Usage in code:**
+
+```typescript
+import { getFeatureGate } from './features';
+
+if (getFeatureGate().isFeatureEnabled('mcpapps')) {
+  // MCP Apps logic here
+}
+```
+
+**Behavior:**
+- Features not listed in config: Disabled by default
+- Invalid JSON or missing file: All features disabled
+- Invalid boolean values: Treated as false
+
 ## Deploy to Heroku
 
 [![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://www.heroku.com/deploy?template=https://github.com/tableau/tableau-mcp)
