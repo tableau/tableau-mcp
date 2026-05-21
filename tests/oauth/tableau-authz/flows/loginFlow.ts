@@ -43,12 +43,13 @@ export class LoginFlow extends Flow {
   };
 
   fillPassword = async (password: string): Promise<void> => {
-    // Do not use fill() because it will appear in the Playwright trace.
+    // Do not use fill() because the password will appear in the Playwright trace.
     await this.passwordTextbox.evaluate(
       (element: HTMLInputElement, password: string) => (element.value = password),
       password,
     );
-    await this.submitPasswordButton.evaluate((element: HTMLButtonElement) => element.click());
+
+    await this.submitPasswordButton.click();
   };
 
   fill = async ({
