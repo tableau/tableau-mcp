@@ -67,4 +67,25 @@ describe('FeatureGate', () => {
       expect(gate.isFeatureEnabled('experimental')).toBe(false);
     });
   });
+
+  describe('edge cases', () => {
+    it('should handle empty JSON object', () => {
+      writeFileSync(testConfigPath, '{}');
+
+      const gate = new FeatureGate(testConfigPath);
+
+      expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
+      expect(gate.isFeatureEnabled('any-feature')).toBe(false);
+    });
+
+    it('should return false for unknown features', () => {
+      const config = { mcpapps: true };
+      writeFileSync(testConfigPath, JSON.stringify(config));
+
+      const gate = new FeatureGate(testConfigPath);
+
+      expect(gate.isFeatureEnabled('unknown-feature')).toBe(false);
+      expect(gate.isFeatureEnabled('nonexistent')).toBe(false);
+    });
+  });
 });
