@@ -40,4 +40,31 @@ describe('FeatureGate', () => {
       expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
     });
   });
+
+  describe('invalid JSON handling', () => {
+    it('should handle invalid JSON gracefully', () => {
+      writeFileSync(testConfigPath, '{ invalid json }');
+
+      const gate = new FeatureGate(testConfigPath);
+
+      expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
+    });
+
+    it('should treat invalid boolean values as false', () => {
+      const config = {
+        mcpapps: 'yes',
+        pulse: null,
+        oauth: 123,
+        experimental: []
+      };
+      writeFileSync(testConfigPath, JSON.stringify(config));
+
+      const gate = new FeatureGate(testConfigPath);
+
+      expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
+      expect(gate.isFeatureEnabled('pulse')).toBe(false);
+      expect(gate.isFeatureEnabled('oauth')).toBe(false);
+      expect(gate.isFeatureEnabled('experimental')).toBe(false);
+    });
+  });
 });
