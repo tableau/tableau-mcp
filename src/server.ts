@@ -35,6 +35,7 @@ export type ClientInfo = InitializeRequest['params']['clientInfo'];
 export class Server extends McpServer {
   readonly name: string;
   readonly version: string;
+  private readonly _registeredAppResourceUris = new Set<string>();
 
   // Note that the McpServer class does expose a (poorly named) "getClientVersion()" method that returns the client info,
   // but the value of the field it returns is only set during the initialization lifecycle request.
@@ -205,25 +206,28 @@ export class Server extends McpServer {
     );
 
     // Register the resource, which returns the bundled HTML/JavaScript for the UI.
-    this.registerAppResource(
-      // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.
-      this,
-      resourceUri,
-      resourceUri,
-      { mimeType: RESOURCE_MIME_TYPE },
-      async (): Promise<ReadResourceResult> => {
-        return {
-          contents: [
-            {
-              uri: resourceUri,
-              mimeType: RESOURCE_MIME_TYPE,
-              text: html,
-              _meta: { ui: { ...sandboxCapabilities } },
-            },
-          ],
-        };
-      },
-    );
+    if (!this._registeredAppResourceUris.has(resourceUri)) {
+      this.registerAppResource(
+        // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.
+        this,
+        resourceUri,
+        resourceUri,
+        { mimeType: RESOURCE_MIME_TYPE },
+        async (): Promise<ReadResourceResult> => {
+          return {
+            contents: [
+              {
+                uri: resourceUri,
+                mimeType: RESOURCE_MIME_TYPE,
+                text: html,
+                _meta: { ui: { ...sandboxCapabilities } },
+              },
+            ],
+          };
+        },
+      );
+      this._registeredAppResourceUris.add(resourceUri);
+    }
   };
 }
 

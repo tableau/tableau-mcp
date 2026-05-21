@@ -7,11 +7,18 @@ import { BoundedContext } from '../../overridableConfig.js';
 import { useRestApi } from '../../restApiInstance.js';
 import { Workbook } from '../../sdks/tableau/types/workbook.js';
 import { Server } from '../../server.js';
+import { getJwt } from '../../utils/getJwt.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ConstrainedResult, Tool } from '../tool.js';
 
 const paramsSchema = {
   workbookId: z.string(),
+};
+
+type GetWorkbookResult = {
+  workbook: Workbook;
+  url?: string;
+  token: string;
 };
 
 export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> => {
@@ -26,10 +33,20 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
       readOnlyHint: true,
       openWorldHint: false,
     },
+    app: {
+      name: 'embed-tableau-viz',
+      sandboxCapabilities: {
+        csp: {
+          connectDomains: ['https://*.tableau.com'],
+          resourceDomains: ['https://*.tableau.com'],
+          frameDomains: ['https://*.tableau.com'],
+        },
+      },
+    },
     callback: async ({ workbookId }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 
-      return await getWorkbookTool.logAndExecute<Workbook>({
+      return await getWorkbookTool.logAndExecute<GetWorkbookResult>({
         extra,
         args: { workbookId },
         callback: async () => {
@@ -67,13 +84,38 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
                   workbook.views.view = views;
                 }
 
-                return workbook;
+                const { config, tableauAuthInfo } = extra;
+                let token = '';
+
+                if (config.auth === 'direct-trust') {
+                  token = await getJwt({
+                    username: tableauAuthInfo?.username ?? config.jwtUsername,
+                    config: {
+                      type: 'connected-app',
+                      clientId: config.connectedAppClientId,
+                      secretId: config.connectedAppSecretId,
+                      secretValue: config.connectedAppSecretValue,
+                    },
+                    scopes: new Set(['tableau:views:embed']),
+                  });
+                } else if (tableauAuthInfo?.type === 'Bearer' && tableauAuthInfo.raw) {
+                  token = tableauAuthInfo.raw;
+                }
+
+                const viewName = workbook.views?.view.find(
+                  (view) => view.id === workbook.defaultViewId,
+                )?.name;
+                const viewUrl = workbook.webpageUrl?.replace(
+                  /\/workbooks\/.*$/,
+                  `/views/${workbook.contentUrl}/${viewName}`,
+                );
+                return { workbook, url: viewUrl, token };
               },
             }),
           );
         },
-        constrainSuccessResult: (workbook) =>
-          filterWorkbookViews({ workbook, boundedContext: configWithOverrides.boundedContext }),
+        constrainSuccessResult: (result) =>
+          filterWorkbookViews({ result, boundedContext: configWithOverrides.boundedContext }),
       });
     },
   });
@@ -82,12 +124,13 @@ export const getGetWorkbookTool = (server: Server): Tool<typeof paramsSchema> =>
 };
 
 export function filterWorkbookViews({
-  workbook,
+  result,
   boundedContext,
 }: {
-  workbook: Workbook;
+  result: GetWorkbookResult;
   boundedContext: BoundedContext;
-}): ConstrainedResult<Workbook> {
+}): ConstrainedResult<GetWorkbookResult> {
+  const { workbook } = result;
   const { tags } = boundedContext;
 
   // We don't need to check the tags on the workbook since we already
@@ -96,7 +139,7 @@ export function filterWorkbookViews({
   if (!workbook.views || !tags) {
     return {
       type: 'success',
-      result: workbook,
+      result,
     };
   }
 
@@ -106,6 +149,6 @@ export function filterWorkbookViews({
 
   return {
     type: 'success',
-    result: workbook,
+    result,
   };
 }

@@ -118,6 +118,20 @@ describe('server', () => {
 
     expect(server.server.setRequestHandler).toHaveBeenCalled();
   });
+
+  it('should register shared app resources only once', async () => {
+    const server = getServer();
+    await server.registerTools();
+
+    const allTools = toolFactories.map((toolFactory) => toolFactory(server, testProductVersion));
+    const disabledFlags = await Promise.all(allTools.map((tool) => Provider.from(tool.disabled)));
+    const appTools = allTools.filter((tool, i) => tool.app && !disabledFlags[i]);
+    const uniqueResourceUris = new Set(
+      appTools.flatMap((tool) => (tool.app ? [tool.app.resourceUri] : [])),
+    );
+
+    expect(server.registerAppResource).toHaveBeenCalledTimes(uniqueResourceUris.size);
+  });
 });
 
 function getServer(): InstanceType<typeof Server> {

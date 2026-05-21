@@ -50,6 +50,7 @@ describe('getWorkbookTool', () => {
       'Retrieves information about the specified workbook',
     );
     expect(getWorkbookTool.paramsSchema).toMatchObject({ workbookId: expect.any(Object) });
+    expect(getWorkbookTool.app?.name).toBe('embed-tableau-viz');
   });
 
   it('should successfully get workbook', async () => {
@@ -59,6 +60,7 @@ describe('getWorkbookTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Superstore');
+    expect(result.content[0].text).toContain('https://my-tableau-server.com/views/Superstore');
     expect(mocks.mockGetWorkbook).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       workbookId: '96a43833-27db-40b6-aa80-751efc776b9a',
