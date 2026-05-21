@@ -40,16 +40,55 @@ export class FeatureGate {
         if (typeof value === 'boolean') {
           features.set(trimmedName, value);
         } else {
-          console.warn(`Invalid boolean value for feature '${trimmedName}': ${value}. Treating as false.`);
+          console.warn(
+            `Invalid boolean value for feature '${trimmedName}': ${value}. Treating as false.`,
+          );
           features.set(trimmedName, false);
         }
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`Failed to load feature config from ${filePath}: ${errorMessage}. All features disabled.`);
+      console.error(
+        `Failed to load feature config from ${filePath}: ${errorMessage}. All features disabled.`,
+      );
       return new Map<string, boolean>();
     }
 
     return features;
   }
+}
+
+// Singleton instance for global use
+let globalFeatureGate: FeatureGate | null = null;
+
+/**
+ * Initialize the global feature gate with config
+ * @param configPath - Path to features.json
+ * @throws Error if already initialized
+ */
+export function initializeFeatureGate(configPath?: string): FeatureGate {
+  if (globalFeatureGate !== null) {
+    throw new Error('FeatureGate already initialized. Multiple initializations are not allowed.');
+  }
+
+  globalFeatureGate = new FeatureGate(configPath);
+  return globalFeatureGate;
+}
+
+/**
+ * Get the global feature gate instance
+ * @throws Error if not initialized
+ */
+export function getFeatureGate(): FeatureGate {
+  if (globalFeatureGate === null) {
+    throw new Error('FeatureGate not initialized. Call initializeFeatureGate() first.');
+  }
+  return globalFeatureGate;
+}
+
+/**
+ * Reset the global feature gate instance (for testing purposes only)
+ */
+export function resetFeatureGate(): void {
+  globalFeatureGate = null;
 }

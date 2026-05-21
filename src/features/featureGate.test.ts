@@ -2,7 +2,7 @@ import { existsSync, unlinkSync, writeFileSync } from 'fs';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { FeatureGate } from './featureGate.js';
+import { FeatureGate, initializeFeatureGate, getFeatureGate, resetFeatureGate } from './featureGate.js';
 
 describe('FeatureGate', () => {
   const testConfigPath = path.join(process.cwd(), 'test-features.json');
@@ -115,6 +115,44 @@ describe('FeatureGate', () => {
       expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
       expect(gate.isFeatureEnabled('pulse')).toBe(true);
       expect(gate.isFeatureEnabled('oauth-embedded')).toBe(false);
+    });
+  });
+
+  describe('singleton instance', () => {
+    beforeEach(() => {
+      // Reset singleton state before each test
+      resetFeatureGate();
+    });
+
+    afterEach(() => {
+      // Clean up singleton state after each test
+      resetFeatureGate();
+    });
+
+    it('should initialize and retrieve global feature gate', () => {
+      const config = { mcpapps: true };
+      writeFileSync(testConfigPath, JSON.stringify(config));
+
+      const gate = initializeFeatureGate(testConfigPath);
+      const retrieved = getFeatureGate();
+
+      expect(retrieved).toBe(gate);
+      expect(retrieved.isFeatureEnabled('mcpapps')).toBe(true);
+    });
+
+    it('should throw error when accessing uninitialized feature gate', () => {
+      expect(() => getFeatureGate()).toThrow('FeatureGate not initialized');
+    });
+
+    it('should throw error when re-initializing feature gate', () => {
+      const config = { mcpapps: true };
+      writeFileSync(testConfigPath, JSON.stringify(config));
+
+      initializeFeatureGate(testConfigPath);
+
+      expect(() => initializeFeatureGate(testConfigPath)).toThrow(
+        'FeatureGate already initialized',
+      );
     });
   });
 });
