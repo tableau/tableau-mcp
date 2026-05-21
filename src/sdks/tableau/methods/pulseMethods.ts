@@ -5,6 +5,7 @@ import z from 'zod';
 import {
   McpToolError,
   PulseDisabledError,
+  PulseInsightsDisabledError,
   PulseNotAvailableError,
 } from '../../../errors/mcpToolError.js';
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
@@ -195,6 +196,15 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
 }
 
 export type PulseResult<T> = Result<T, McpToolError>;
+
+// ntbue/insights-gai/ntbue-embeddings-service surfaces these Tableau error codes
+// when GIA (Generative Insights AI / Tableau+ AI) is disabled on the site.
+// See brief_aio_controller.py in ntbue-embeddings-service.
+const PULSE_INSIGHTS_DISABLED_ERROR_CODES: ReadonlySet<string> = new Set([
+  '0x62c06627',
+  '0x8c454877',
+]);
+
 async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise<PulseResult<T>> {
   try {
     return new Ok(await callback());
@@ -211,6 +221,14 @@ async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise
       ) {
         // ntbue-service-chassis/-/blob/main/server/interceptors/site_settings.go
         return new PulseDisabledError().toErr();
+      }
+
+      const tableauErrorCode = error.response?.headers?.tableau_error_code;
+      if (
+        typeof tableauErrorCode === 'string' &&
+        PULSE_INSIGHTS_DISABLED_ERROR_CODES.has(tableauErrorCode.toLowerCase())
+      ) {
+        return new PulseInsightsDisabledError().toErr();
       }
     }
 
