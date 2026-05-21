@@ -1,7 +1,6 @@
 import { fromError } from 'zod-validation-error/v3';
 
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
-import { AuthConfig } from './authConfig.js';
 import {
   AxiosInterceptor,
   ErrorInterceptor,
@@ -9,7 +8,8 @@ import {
   getResponseInterceptorConfig,
   RequestInterceptor,
   ResponseInterceptor,
-} from './interceptors.js';
+} from '../interceptors.js';
+import { AuthConfig } from './authConfig.js';
 import {
   AuthenticatedAuthenticationMethods,
   AuthenticationMethods,

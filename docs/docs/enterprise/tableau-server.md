@@ -111,21 +111,22 @@ authentication option is most appropriate.
 
 ```mermaid
 flowchart TD
-    B{Just prototyping?}
-    B -- Yes --> C[Personal Access Token]
-    B -- No --> D{Should Tableau MCP return data on behalf of the user?}
-    D -- Yes --> E[OAuth]
-    D -- No, a single shared account is fine --> F[Direct Trust]
+    B{General multi-user HTTP deployment?}
+    B -- Yes --> C[OAuth]
+    B -- No, testing or prototyping --> D[Personal Access Token]
+    B -- No, licensed and approved UBL scenario --> E[Direct Trust]
 ```
 
 <hr />
 
-- **Are you just prototyping?**
-  - Yes: Using a Personal Access Token will work fine for testing purposes.
-  - No, I am configuring for production use. **Should Tableau MCP return data on behalf of the user
-    making requests to the MCP server?**
-    - Yes: Use OAuth.
-    - No, a single shared account is fine: Use a Direct Trust Connected App.
+- **Are you configuring a general multi-user HTTP deployment?**
+  - Yes: Use OAuth so Tableau MCP can authenticate each user and make Tableau REST API requests on
+    that user's behalf.
+  - No, I am testing or prototyping: A Personal Access Token can be used for basic testing, with the
+    concurrency caveat noted below.
+  - No, I have a licensed and approved user-based licensing (UBL) scenario: A Direct Trust Connected
+    App may be appropriate. Confirm this with your Tableau licensing and security guidance before
+    using a non-OAuth HTTP configuration.
 
 ### Step 2: Prepare the Configuration
 
@@ -147,7 +148,10 @@ are provided below and assume the use of a `.env` file in the working directory 
 Create a PAT using the instructions provided in
 [Personal Access Tokens - Tableau](https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm).
 All requests made to the MCP server will use the PAT to authenticate to the underlying Tableau REST
-APIs. ⚠️ PATs should not be used outside of basic testing since they cannot be used concurrently.
+APIs. For general multi-user HTTP deployments, prefer OAuth. PAT-based HTTP configurations are
+intended for testing/prototyping or licensed and approved UBL scenarios. ⚠️ PATs also should not be
+used when you expect simultaneous requests from multiple clients since they cannot be used
+concurrently.
 
 ```
 SERVER=https://tableau.superstore.com
@@ -172,7 +176,9 @@ Create a Direct Trust Connected App using the instructions provided in
 All requests made to the MCP server will use the provided details of the Connected App to generate a
 scoped
 [JSON Web Token (JWT)](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#jwt)
-and use it to authenticate to the Tableau REST APIs.
+and use it to authenticate to the Tableau REST APIs. For general multi-user HTTP deployments, prefer
+OAuth. Direct Trust with OAuth disabled is intended for testing/prototyping or deployments that are
+licensed and approved for UBL, not as the default shared-account end-user deployment path.
 
 ```
 SERVER=https://tableau.superstore.com
@@ -460,9 +466,10 @@ The `AUTH` environment variable can still be set to any of the non-OAuth authent
 e.g. `direct-trust`. In the below example, the MCP server will still be protected from unauthorized
 access by OAuth—requiring users to first sign in to their Tableau site—but the user and site context
 will be mostly* ignored from then on by the MCP server. Authentication to the underlying REST API
-requests will use the Direct Trust Connected App instead. The `sub` claim of the generated JWT can
-either be a hard-coded username, *or dynamically set to the user's username by setting
-`JWT_SUB_CLAIM={OAUTH_USERNAME}`.
+requests will use the Direct Trust Connected App instead. For OAuth-backed per-user access, set the
+generated JWT's `sub` claim to the signed-in Tableau user with `JWT_SUB_CLAIM={OAUTH_USERNAME}`. A
+hard-coded `sub` claim should only be used for deployments that are licensed and approved for that
+user-based licensing (UBL) pattern.
 
 ```
 SERVER=https://tableau.superstore.com
