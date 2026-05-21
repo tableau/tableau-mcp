@@ -8,18 +8,19 @@ import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {};
 
+const title = 'List Running Tableau Desktop Instances';
 export const getListInstancesTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
   const listInstancesTool = new DesktopTool({
     server,
     name: 'list-instances',
-    title: 'List Running Tableau Desktop Instances',
+    title,
     description:
       'List all running Tableau Desktop instances. Returns available instances with session IDs that can be used in the session parameter of other tools.',
     paramsSchema,
     annotations: {
-      title: 'List Running Tableau Desktop Instances',
+      title,
       readOnlyHint: true,
       openWorldHint: false,
     },
