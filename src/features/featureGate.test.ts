@@ -88,4 +88,33 @@ describe('FeatureGate', () => {
       expect(gate.isFeatureEnabled('nonexistent')).toBe(false);
     });
   });
+
+  describe('with test fixtures', () => {
+    it('should load all-enabled fixture correctly', () => {
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/features-all-enabled.json');
+      const gate = new FeatureGate(fixturePath);
+
+      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
+      expect(gate.isFeatureEnabled('pulse')).toBe(true);
+      expect(gate.isFeatureEnabled('oauth-embedded')).toBe(true);
+    });
+
+    it('should load all-disabled fixture correctly', () => {
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/features-all-disabled.json');
+      const gate = new FeatureGate(fixturePath);
+
+      expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
+      expect(gate.isFeatureEnabled('pulse')).toBe(false);
+      expect(gate.isFeatureEnabled('oauth-embedded')).toBe(false);
+    });
+
+    it('should load mixed fixture correctly', () => {
+      const fixturePath = path.join(process.cwd(), 'tests/fixtures/features-mixed.json');
+      const gate = new FeatureGate(fixturePath);
+
+      expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
+      expect(gate.isFeatureEnabled('pulse')).toBe(true);
+      expect(gate.isFeatureEnabled('oauth-embedded')).toBe(false);
+    });
+  });
 });
