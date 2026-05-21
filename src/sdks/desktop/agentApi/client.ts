@@ -129,6 +129,15 @@ export class AgentApiClient {
     }
   }
 
+  async getHealth(): Promise<boolean> {
+    try {
+      const response = await this._apiClient.health({ ...this.headers });
+      return response.status === 'healthy';
+    } catch {
+      return false;
+    }
+  }
+
   private getAuthToken(): string | undefined {
     if (this._authToken) {
       return this._authToken;
