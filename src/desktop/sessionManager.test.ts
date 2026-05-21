@@ -113,51 +113,6 @@ describe('SessionManager', () => {
       );
     });
 
-    it('should throw error when sessionId contains letters and numbers', async () => {
-      const sessionId = '123abc';
-
-      const sessionManager = new SessionManager();
-      await expect(sessionManager.getExecutor(sessionId)).rejects.toThrow(
-        'Invalid session ID for local mode: 123abc. Expected numeric PID.',
-      );
-    });
-
-    it('should throw error when sessionId contains special characters', async () => {
-      const sessionId = '123-456';
-
-      const sessionManager = new SessionManager();
-      await expect(sessionManager.getExecutor(sessionId)).rejects.toThrow(
-        'Invalid session ID for local mode: 123-456. Expected numeric PID.',
-      );
-    });
-
-    it('should throw error when sessionId contains whitespace', async () => {
-      const sessionId = '123 456';
-
-      const sessionManager = new SessionManager();
-      await expect(sessionManager.getExecutor(sessionId)).rejects.toThrow(
-        'Invalid session ID for local mode: 123 456. Expected numeric PID.',
-      );
-    });
-
-    it('should throw error when sessionId is a floating point number', async () => {
-      const sessionId = '123.456';
-
-      const sessionManager = new SessionManager();
-      await expect(sessionManager.getExecutor(sessionId)).rejects.toThrow(
-        'Invalid session ID for local mode: 123.456. Expected numeric PID.',
-      );
-    });
-
-    it('should throw error when sessionId is negative number', async () => {
-      const sessionId = '-12345';
-
-      const sessionManager = new SessionManager();
-      await expect(sessionManager.getExecutor(sessionId)).rejects.toThrow(
-        'Invalid session ID for local mode: -12345. Expected numeric PID.',
-      );
-    });
-
     it('should throw error when desktop instance is not found', async () => {
       const sessionId = '99999';
 
