@@ -39,8 +39,8 @@ export const getListInstancesTool = (
             sessionId: instance.pid.toString(),
             pid: instance.pid,
             port: instance.port,
-            start_time: instance.start_time,
-            secret_preview: instance.secret ? `${instance.secret.substring(0, 8)}...` : null,
+            startTime: instance.start_time,
+            hasSecret: !!instance.secret,
           }));
 
           return new Ok({
