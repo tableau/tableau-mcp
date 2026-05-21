@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "Helping agents see and understand data.",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
