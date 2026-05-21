@@ -159,7 +159,7 @@ export function constrainCustomViews({
     return {
       type: 'empty',
       message:
-        'No custom views were found. Either none exist or you do not have permission to view them.',
+        'No custom views for this workbook were found. Either none exist or you do not have permission to view them.',
     };
   }
 

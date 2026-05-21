@@ -5,7 +5,7 @@ sidebar_position: 5
 # Tool Scoping
 
 The Tableau MCP server can be configured to limit the scope of its tools to a set of data sources,
-workbooks, projects, or tags.
+workbooks, views, projects, or tags.
 
 Enabling tool scoping can cause:
 
