@@ -98,7 +98,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts-node${{ matrix.node-version == '>=22.7.5 <23' || matrix.node-version }}
+          name: artifacts-node${{ matrix.node-version == '>=22.7.5 <23' && '22.x' || matrix.node-version }}
           if-no-files-found: error
           path: |
             build/
