@@ -1,5 +1,10 @@
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
+import { z } from 'zod';
+
+// Define the schema for the feature config JSON
+// Strict validation: all values must be boolean
+const FeatureConfigSchema = z.record(z.string(), z.boolean());
 
 export class FeatureGate {
   private features: Map<string, boolean>;
@@ -21,7 +26,7 @@ export class FeatureGate {
     const features = new Map<string, boolean>();
 
     // Determine config file path
-    const filePath = configPath ?? path.join(process.cwd(), 'features.json');
+    const filePath = configPath || path.join(process.cwd(), 'features.json');
 
     // If file doesn't exist, return empty map (all features disabled)
     if (!existsSync(filePath)) {
@@ -31,20 +36,14 @@ export class FeatureGate {
 
     try {
       const fileContent = readFileSync(filePath, 'utf-8');
-      const config = JSON.parse(fileContent);
+      const rawConfig = JSON.parse(fileContent);
 
-      // Parse each feature
+      // Strict validation with Zod - all values must be boolean
+      const config = FeatureConfigSchema.parse(rawConfig);
+
+      // Load validated features
       for (const [name, value] of Object.entries(config)) {
-        const trimmedName = name.trim();
-
-        if (typeof value === 'boolean') {
-          features.set(trimmedName, value);
-        } else {
-          console.warn(
-            `Invalid boolean value for feature '${trimmedName}': ${value}. Treating as false.`,
-          );
-          features.set(trimmedName, false);
-        }
+        features.set(name, value);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

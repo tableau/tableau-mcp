@@ -2,7 +2,12 @@ import { existsSync, unlinkSync, writeFileSync } from 'fs';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { FeatureGate, initializeFeatureGate, getFeatureGate, resetFeatureGate } from './featureGate.js';
+import {
+  FeatureGate,
+  getFeatureGate,
+  initializeFeatureGate,
+  resetFeatureGate,
+} from './featureGate.js';
 
 describe('FeatureGate', () => {
   const testConfigPath = path.join(process.cwd(), 'test-features.json');
@@ -50,17 +55,18 @@ describe('FeatureGate', () => {
       expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
     });
 
-    it('should treat invalid boolean values as false', () => {
+    it('should reject config with invalid boolean values', () => {
       const config = {
         mcpapps: 'yes',
         pulse: null,
         oauth: 123,
-        experimental: []
+        experimental: [],
       };
       writeFileSync(testConfigPath, JSON.stringify(config));
 
       const gate = new FeatureGate(testConfigPath);
 
+      // With strict validation, invalid config causes all features to be disabled
       expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
       expect(gate.isFeatureEnabled('pulse')).toBe(false);
       expect(gate.isFeatureEnabled('oauth')).toBe(false);
