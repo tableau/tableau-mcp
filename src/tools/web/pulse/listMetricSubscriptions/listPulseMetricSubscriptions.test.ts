@@ -61,7 +61,9 @@ describe('listPulseMetricSubscriptionsTool', () => {
     );
     const result = await getToolResult();
     expect(result.isError).toBe(false);
-    expect(mocks.mockListPulseMetricSubscriptionsForCurrentUser).toHaveBeenCalled();
+    expect(mocks.mockListPulseMetricSubscriptionsForCurrentUser).toHaveBeenCalledWith(
+      'test-user-luid',
+    );
     invariant(result.content[0].type === 'text');
     const parsedValue = JSON.parse(result.content[0].text);
     expect(parsedValue).toEqual(mockPulseMetricSubscriptions);
@@ -108,7 +110,13 @@ describe('listPulseMetricSubscriptionsTool', () => {
     it('should return empty result when no subscriptions are found', async () => {
       const result = await constrainPulseMetricSubscriptions({
         subscriptions: [],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: null,
+        },
         restApiArgs,
       });
 
@@ -129,6 +137,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
           projectIds: null,
           datasourceIds: new Set(['123']),
           workbookIds: null,
+          viewIds: null,
           tags: null,
         },
         restApiArgs,
@@ -150,7 +159,13 @@ describe('listPulseMetricSubscriptionsTool', () => {
 
       const result = await constrainPulseMetricSubscriptions({
         subscriptions: mockPulseMetricSubscriptions,
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: null,
+        },
         restApiArgs,
       });
 
@@ -169,6 +184,7 @@ describe('listPulseMetricSubscriptionsTool', () => {
           projectIds: null,
           datasourceIds: new Set([mockPulseMetrics[0].datasource_luid]),
           workbookIds: null,
+          viewIds: null,
           tags: null,
         },
         restApiArgs,
@@ -180,10 +196,10 @@ describe('listPulseMetricSubscriptionsTool', () => {
   });
 });
 
-async function getToolResult(): Promise<CallToolResult> {
+async function getToolResult(extra = getMockRequestHandlerExtra()): Promise<CallToolResult> {
   const listPulseMetricSubscriptionsTool = getListPulseMetricSubscriptionsTool(new WebMcpServer());
   const callback = await Provider.from(listPulseMetricSubscriptionsTool.callback);
-  return await callback({}, getMockRequestHandlerExtra());
+  return await callback({}, extra);
 }
 
 function getServer(): WebMcpServer {

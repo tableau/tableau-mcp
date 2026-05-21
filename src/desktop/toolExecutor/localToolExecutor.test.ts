@@ -1,6 +1,7 @@
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import * as getAgentApiClientModule from '../../desktop/getAgentApiClient.js';
 import * as logger from '../../logging/logger.js';
 import { AgentApiClient } from '../../sdks/desktop/agentApi/client.js';
 import {
@@ -10,7 +11,7 @@ import {
 } from '../../sdks/desktop/agentApi/types.js';
 import { LocalExecutor } from './localToolExecutor.js';
 
-vi.mock('../../sdks/desktop/agentApi/client.js');
+vi.mock('../../desktop/getAgentApiClient.js');
 vi.mock('../../logging/logger.js');
 
 describe('LocalExecutor', () => {
@@ -94,35 +95,40 @@ describe('LocalExecutor', () => {
     };
 
     it('should successfully execute a command', async () => {
-      const MockedAgentApiClient = vi.mocked(AgentApiClient);
-      MockedAgentApiClient.mockImplementation(
-        () =>
-          ({
-            executeCommand: vi.fn().mockResolvedValue(Ok(mockExecuteResponse)),
-            getCommandStatus: vi.fn().mockResolvedValue(Ok(mockCompletedStatus)),
-          }) as unknown as AgentApiClient,
-      );
+      const mockExecuteCommand = vi.fn().mockResolvedValue(Ok(mockExecuteResponse));
+      const mockGetCommandStatus = vi.fn().mockResolvedValue(Ok(mockCompletedStatus));
+      const mockGetAgentApiClient = vi
+        .spyOn(getAgentApiClientModule, 'getAgentApiClient')
+        .mockResolvedValue({
+          executeCommand: mockExecuteCommand,
+          getCommandStatus: mockGetCommandStatus,
+        } as unknown as AgentApiClient);
 
+      const signal = new AbortController().signal;
       const localExecutor = new LocalExecutor();
       const result = await localExecutor.executeCommand({
         namespace: 'tabdoc',
         command: 'undo',
-        signal: new AbortController().signal,
+        signal,
       });
 
       expect(result.isOk()).toBe(true);
       expect(result.unwrap()).toEqual(mockCompletedStatus);
+
+      expect(mockGetAgentApiClient).toHaveBeenCalled();
+      for (const [call] of mockGetAgentApiClient.mock.calls) {
+        expect(call.signal).toBe(signal);
+      }
     });
 
     it('should successfully execute a command with a schema', async () => {
-      const MockedAgentApiClient = vi.mocked(AgentApiClient);
-      MockedAgentApiClient.mockImplementation(
-        () =>
-          ({
-            executeCommand: vi.fn().mockResolvedValue(Ok(mockExecuteResponse)),
-            getCommandStatus: vi.fn().mockResolvedValue(Ok(mockCompletedStatus)),
-          }) as unknown as AgentApiClient,
-      );
+      const mockExecuteCommand = vi.fn().mockResolvedValue(Ok(mockExecuteResponse));
+      const mockGetCommandStatus = vi.fn().mockResolvedValue(Ok(mockCompletedStatus));
+
+      vi.spyOn(getAgentApiClientModule, 'getAgentApiClient').mockResolvedValue({
+        executeCommand: mockExecuteCommand,
+        getCommandStatus: mockGetCommandStatus,
+      } as unknown as AgentApiClient);
 
       const localExecutor = new LocalExecutor();
       const result = await localExecutor.executeCommand({
@@ -138,13 +144,10 @@ describe('LocalExecutor', () => {
 
     it('should handle command execution failure', async () => {
       const error = new Error('Network error');
-      const MockedAgentApiClient = vi.mocked(AgentApiClient);
-      MockedAgentApiClient.mockImplementation(
-        () =>
-          ({
-            executeCommand: vi.fn().mockResolvedValue(Err(error)),
-          }) as unknown as AgentApiClient,
-      );
+      const mockExecuteCommand = vi.fn().mockResolvedValue(Err(error));
+      vi.spyOn(getAgentApiClientModule, 'getAgentApiClient').mockResolvedValue({
+        executeCommand: mockExecuteCommand,
+      } as unknown as AgentApiClient);
 
       const localExecutor = new LocalExecutor();
       const result = await localExecutor.executeCommand({
@@ -164,14 +167,12 @@ describe('LocalExecutor', () => {
     });
 
     it('should handle command status check timeout', async () => {
-      const MockedAgentApiClient = vi.mocked(AgentApiClient);
-      MockedAgentApiClient.mockImplementation(
-        () =>
-          ({
-            executeCommand: vi.fn().mockResolvedValue(Ok(mockExecuteResponse)),
-            getCommandStatus: vi.fn().mockResolvedValue(Ok(mockRunningStatus)),
-          }) as unknown as AgentApiClient,
-      );
+      const mockExecuteCommand = vi.fn().mockResolvedValue(Ok(mockExecuteResponse));
+      const mockGetCommandStatus = vi.fn().mockResolvedValue(Ok(mockRunningStatus));
+      vi.spyOn(getAgentApiClientModule, 'getAgentApiClient').mockResolvedValue({
+        executeCommand: mockExecuteCommand,
+        getCommandStatus: mockGetCommandStatus,
+      } as unknown as AgentApiClient);
 
       const localExecutor = new LocalExecutor({
         commandTimeoutMs: 1, // short timeout/interval to force wait timeout
@@ -196,14 +197,12 @@ describe('LocalExecutor', () => {
 
     it('should handle command status check failure', async () => {
       const error = new Error('Network error');
-      const MockedAgentApiClient = vi.mocked(AgentApiClient);
-      MockedAgentApiClient.mockImplementation(
-        () =>
-          ({
-            executeCommand: vi.fn().mockResolvedValue(Ok(mockExecuteResponse)),
-            getCommandStatus: vi.fn().mockResolvedValue(Err(error)),
-          }) as unknown as AgentApiClient,
-      );
+      const mockExecuteCommand = vi.fn().mockResolvedValue(Ok(mockExecuteResponse));
+      const mockGetCommandStatus = vi.fn().mockResolvedValue(Err(error));
+      vi.spyOn(getAgentApiClientModule, 'getAgentApiClient').mockResolvedValue({
+        executeCommand: mockExecuteCommand,
+        getCommandStatus: mockGetCommandStatus,
+      } as unknown as AgentApiClient);
 
       const localExecutor = new LocalExecutor();
 
@@ -224,14 +223,12 @@ describe('LocalExecutor', () => {
     });
 
     it('should handle failed command status', async () => {
-      const MockedAgentApiClient = vi.mocked(AgentApiClient);
-      MockedAgentApiClient.mockImplementation(
-        () =>
-          ({
-            executeCommand: vi.fn().mockResolvedValue(Ok(mockExecuteResponse)),
-            getCommandStatus: vi.fn().mockResolvedValue(Ok(mockFailedStatus)),
-          }) as unknown as AgentApiClient,
-      );
+      const mockExecuteCommand = vi.fn().mockResolvedValue(Ok(mockExecuteResponse));
+      const mockGetCommandStatus = vi.fn().mockResolvedValue(Ok(mockFailedStatus));
+      vi.spyOn(getAgentApiClientModule, 'getAgentApiClient').mockResolvedValue({
+        executeCommand: mockExecuteCommand,
+        getCommandStatus: mockGetCommandStatus,
+      } as unknown as AgentApiClient);
 
       const localExecutor = new LocalExecutor();
 
@@ -262,14 +259,11 @@ describe('LocalExecutor', () => {
         .mockResolvedValueOnce(Ok(mockRunningStatus))
         .mockResolvedValueOnce(Ok(mockCompletedStatus));
 
-      const MockedAgentApiClient = vi.mocked(AgentApiClient);
-      MockedAgentApiClient.mockImplementation(
-        () =>
-          ({
-            executeCommand: vi.fn().mockResolvedValue(Ok(mockExecuteResponse)),
-            getCommandStatus: mockGetCommandStatus,
-          }) as unknown as AgentApiClient,
-      );
+      const mockExecuteCommand = vi.fn().mockResolvedValue(Ok(mockExecuteResponse));
+      vi.spyOn(getAgentApiClientModule, 'getAgentApiClient').mockResolvedValue({
+        executeCommand: mockExecuteCommand,
+        getCommandStatus: mockGetCommandStatus,
+      } as unknown as AgentApiClient);
 
       const localExecutor = new LocalExecutor();
       const result = await localExecutor.executeCommand({
@@ -303,13 +297,9 @@ describe('LocalExecutor', () => {
 
       it('should successfully get events', async () => {
         const mockGetEvents = vi.fn().mockResolvedValue(Ok(mockEventsResponse));
-        const MockedAgentApiClient = vi.mocked(AgentApiClient);
-        MockedAgentApiClient.mockImplementation(
-          () =>
-            ({
-              getEvents: mockGetEvents,
-            }) as unknown as AgentApiClient,
-        );
+        vi.spyOn(getAgentApiClientModule, 'getAgentApiClient').mockResolvedValue({
+          getEvents: mockGetEvents,
+        } as unknown as AgentApiClient);
 
         const localExecutor = new LocalExecutor();
         const result = await localExecutor.getEvents({ signal: new AbortController().signal });
@@ -321,13 +311,9 @@ describe('LocalExecutor', () => {
 
       it('should successfully get events with sinceSequence', async () => {
         const mockGetEvents = vi.fn().mockResolvedValue(Ok(mockEventsResponse));
-        const MockedAgentApiClient = vi.mocked(AgentApiClient);
-        MockedAgentApiClient.mockImplementation(
-          () =>
-            ({
-              getEvents: mockGetEvents,
-            }) as unknown as AgentApiClient,
-        );
+        vi.spyOn(getAgentApiClientModule, 'getAgentApiClient').mockResolvedValue({
+          getEvents: mockGetEvents,
+        } as unknown as AgentApiClient);
 
         const localExecutor = new LocalExecutor();
         const result = await localExecutor.getEvents({
@@ -343,13 +329,9 @@ describe('LocalExecutor', () => {
       it('should handle get events failure', async () => {
         const error = new Error('Failed to get events');
         const mockGetEvents = vi.fn().mockResolvedValue(Err(error));
-        const MockedAgentApiClient = vi.mocked(AgentApiClient);
-        MockedAgentApiClient.mockImplementation(
-          () =>
-            ({
-              getEvents: mockGetEvents,
-            }) as unknown as AgentApiClient,
-        );
+        vi.spyOn(getAgentApiClientModule, 'getAgentApiClient').mockResolvedValue({
+          getEvents: mockGetEvents,
+        } as unknown as AgentApiClient);
 
         const localExecutor = new LocalExecutor();
         const result = await localExecutor.getEvents({

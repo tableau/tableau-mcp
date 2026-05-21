@@ -17,6 +17,7 @@ class ResourceAccessChecker {
     projectIds: Set<string> | null | undefined;
     datasourceIds: Set<string> | null | undefined;
     workbookIds: Set<string> | null | undefined;
+    viewIds: Set<string> | null | undefined;
     tags: Set<string> | null | undefined;
   };
 
@@ -35,6 +36,7 @@ class ResourceAccessChecker {
       projectIds: testOverrides?.projectIds,
       datasourceIds: testOverrides?.datasourceIds,
       workbookIds: testOverrides?.workbookIds,
+      viewIds: testOverrides?.viewIds,
       tags: testOverrides?.tags,
     };
   }
@@ -69,6 +71,16 @@ class ResourceAccessChecker {
     return (
       this._testOverrides.workbookIds ??
       (await extra.getConfigWithOverrides()).boundedContext.workbookIds
+    );
+  }
+
+  private async getAllowedViewIds({
+    extra,
+  }: {
+    extra: TableauWebRequestHandlerExtra;
+  }): Promise<Set<string> | null> {
+    return (
+      this._testOverrides.viewIds ?? (await extra.getConfigWithOverrides()).boundedContext.viewIds
     );
   }
 
@@ -346,6 +358,17 @@ class ResourceAccessChecker {
     viewId: string;
     extra: TableauWebRequestHandlerExtra;
   }): Promise<AllowedResult> {
+    const allowedViewIds = await this.getAllowedViewIds({ extra });
+    if (allowedViewIds && !allowedViewIds.has(viewId)) {
+      return {
+        allowed: false,
+        message: [
+          'The set of allowed views that can be queried is limited by the server configuration.',
+          `Querying the view with LUID ${viewId} is not allowed.`,
+        ].join(' '),
+      };
+    }
+
     let view: View | undefined;
     async function getView(): Promise<View> {
       return await useRestApi({
@@ -468,8 +491,9 @@ class ResourceAccessChecker {
   }): Promise<AllowedResult> {
     const allowedWorkbookIds = await this.getAllowedWorkbookIds({ extra });
     const allowedProjectIds = await this.getAllowedProjectIds({ extra });
+    const allowedViewIds = await this.getAllowedViewIds({ extra });
     const allowedTags = await this.getAllowedTags({ extra });
-    if (!allowedWorkbookIds && !allowedProjectIds && !allowedTags) {
+    if (!allowedWorkbookIds && !allowedProjectIds && !allowedViewIds && !allowedTags) {
       // If no filtering is enabled, there's no need to resolve the view the custom view belongs to.
       return { allowed: true };
     }

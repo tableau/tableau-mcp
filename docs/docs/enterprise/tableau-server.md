@@ -372,7 +372,7 @@ Examples:
 #### Tool Scoping
 
 The Tableau MCP server can be configured to limit the scope of its tools to a set of data sources,
-workbooks, projects, or tags. For example, this can be helpful if your sites have hundreds of data
+workbooks, views, projects, or tags. For example, this can be helpful if your sites have hundreds of data
 sources but you only want a select few to be made available when constructing MCP tool call results.
 
 Each value is a comma-separated list. For more information, see

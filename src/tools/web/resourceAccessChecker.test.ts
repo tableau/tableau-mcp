@@ -53,15 +53,17 @@ describe('ResourceAccessChecker', () => {
           projectIds: [null, new Set([mockDatasource.project.id])],
           datasourceIds: [null, new Set([mockDatasource.id])],
           workbookIds: [null], // n/a for datasources
+          viewIds: [null], // n/a for datasources
           tags: [null, new Set([mockDatasource.tags.tag[0].label])],
         }),
       )(
-        'should return allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
-        async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+        'should return allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, viewIds: $viewIds, tags: $tags',
+        async ({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
           const resourceAccessChecker = createResourceAccessChecker({
             projectIds,
             datasourceIds,
             workbookIds,
+            viewIds,
             tags,
           });
 
@@ -83,21 +85,27 @@ describe('ResourceAccessChecker', () => {
         projectIds: [null, new Set(['some-project-id'])],
         datasourceIds: [null, new Set(['some-datasource-id'])],
         workbookIds: [null], // n/a for datasources
+        viewIds: [null], // n/a for datasources
         tags: [null, new Set(['some-tag-label'])],
-      }).filter(({ projectIds, datasourceIds, workbookIds, tags }) => {
+      }).filter(({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
         // Remove the combination where they are all null
         return (
-          projectIds !== null || datasourceIds !== null || workbookIds !== null || tags !== null
+          projectIds !== null ||
+          datasourceIds !== null ||
+          workbookIds !== null ||
+          viewIds !== null ||
+          tags !== null
         );
       });
 
       test.each(notAllowedCombinations)(
-        'should return not allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
-        async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+        'should return not allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, viewIds: $viewIds, tags: $tags',
+        async ({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
           const resourceAccessChecker = createResourceAccessChecker({
             projectIds,
             datasourceIds,
             workbookIds,
+            viewIds,
             tags,
           });
 
@@ -148,15 +156,17 @@ describe('ResourceAccessChecker', () => {
           projectIds: [null, new Set([mockWorkbook.project.id])],
           datasourceIds: [null], // n/a for workbooks
           workbookIds: [null, new Set([mockWorkbook.id])],
+          viewIds: [null], // n/a for workbooks
           tags: [null, new Set([mockWorkbook.tags.tag[0].label])],
         }),
       )(
-        'should return allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
-        async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+        'should return allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, viewIds: $viewIds, tags: $tags',
+        async ({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
           const resourceAccessChecker = createResourceAccessChecker({
             projectIds,
             datasourceIds,
             workbookIds,
+            viewIds,
             tags,
           });
 
@@ -178,21 +188,27 @@ describe('ResourceAccessChecker', () => {
         projectIds: [null, new Set(['some-project-id'])],
         datasourceIds: [null], // n/a for workbooks
         workbookIds: [null, new Set(['some-workbook-id'])],
+        viewIds: [null], // n/a for workbooks
         tags: [null, new Set(['some-tag-label'])],
-      }).filter(({ projectIds, datasourceIds, workbookIds, tags }) => {
+      }).filter(({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
         // Remove the combination where they are all null
         return (
-          projectIds !== null || datasourceIds !== null || workbookIds !== null || tags !== null
+          projectIds !== null ||
+          datasourceIds !== null ||
+          workbookIds !== null ||
+          viewIds !== null ||
+          tags !== null
         );
       });
 
       test.each(notAllowedCombinations)(
-        'should return not allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
-        async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+        'should return not allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, viewIds: $viewIds, tags: $tags',
+        async ({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
           const resourceAccessChecker = createResourceAccessChecker({
             projectIds,
             datasourceIds,
             workbookIds,
+            viewIds,
             tags,
           });
 
@@ -241,15 +257,17 @@ describe('ResourceAccessChecker', () => {
           projectIds: [null, new Set([mockView.project.id])],
           datasourceIds: [null], // n/a for views
           workbookIds: [null, new Set([mockView.workbook.id])],
+          viewIds: [null, new Set([mockView.id])],
           tags: [null, new Set([mockView.tags.tag[0].label])],
         }),
       )(
-        'should return allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
-        async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+        'should return allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, viewIds: $viewIds, tags: $tags',
+        async ({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
           const resourceAccessChecker = createResourceAccessChecker({
             projectIds,
             datasourceIds,
             workbookIds,
+            viewIds,
             tags,
           });
 
@@ -260,6 +278,7 @@ describe('ResourceAccessChecker', () => {
             }),
           ).toEqual({ allowed: true });
 
+          // viewIds is a synchronous Set lookup; only workbook/project/tag checks fetch the view.
           const expectedNumberOfCalls = workbookIds || projectIds || tags ? 1 : 0;
           expect(mocks.mockGetView).toHaveBeenCalledTimes(expectedNumberOfCalls);
         },
@@ -271,28 +290,38 @@ describe('ResourceAccessChecker', () => {
         projectIds: [null, new Set(['some-project-id'])],
         datasourceIds: [null], // n/a for views
         workbookIds: [null, new Set(['some-workbook-id'])],
+        viewIds: [null, new Set(['some-view-id'])],
         tags: [null, new Set(['some-tag-label'])],
-      }).filter(({ projectIds, datasourceIds, workbookIds, tags }) => {
+      }).filter(({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
         // Remove the combination where they are all null
         return (
-          projectIds !== null || datasourceIds !== null || workbookIds !== null || tags !== null
+          projectIds !== null ||
+          datasourceIds !== null ||
+          workbookIds !== null ||
+          viewIds !== null ||
+          tags !== null
         );
       });
 
       test.each(notAllowedCombinations)(
-        'should return not allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
-        async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+        'should return not allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, viewIds: $viewIds, tags: $tags',
+        async ({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
           const resourceAccessChecker = createResourceAccessChecker({
             projectIds,
             datasourceIds,
             workbookIds,
+            viewIds,
             tags,
           });
 
           const sentences = [
             'The set of allowed views that can be queried is limited by the server configuration.',
           ];
-          if (workbookIds) {
+          // Order must match the production order in _isViewAllowed:
+          // viewIds → workbookIds → projectIds → tags.
+          if (viewIds) {
+            sentences.push(`Querying the view with LUID ${mockView.id} is not allowed.`);
+          } else if (workbookIds) {
             sentences.push(
               `The view with LUID ${mockView.id} cannot be queried because it does not belong to an allowed workbook.`,
             );
@@ -318,7 +347,8 @@ describe('ResourceAccessChecker', () => {
             message: expectedMessage,
           });
 
-          const expectedNumberOfCalls = workbookIds || projectIds || tags ? 1 : 0;
+          // viewIds short-circuits before any getView() call.
+          const expectedNumberOfCalls = !viewIds && (workbookIds || projectIds || tags) ? 1 : 0;
           expect(mocks.mockGetView).toHaveBeenCalledTimes(expectedNumberOfCalls);
         },
       );
@@ -336,6 +366,7 @@ describe('ResourceAccessChecker', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        viewIds: null,
         tags: null,
       });
 
@@ -355,6 +386,7 @@ describe('ResourceAccessChecker', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: new Set(['some-workbook-id']),
+        viewIds: null,
         tags: null,
       });
 
@@ -382,6 +414,7 @@ describe('ResourceAccessChecker', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: new Set(['some-workbook-id']),
+        viewIds: null,
         tags: null,
       });
 
@@ -404,6 +437,7 @@ describe('ResourceAccessChecker', () => {
         projectIds: new Set(['some-project-id']),
         datasourceIds: null,
         workbookIds: null,
+        viewIds: null,
         tags: null,
       });
 
@@ -426,6 +460,7 @@ describe('ResourceAccessChecker', () => {
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        viewIds: null,
         tags: new Set(['some-tag-label']),
       });
 
@@ -441,6 +476,54 @@ describe('ResourceAccessChecker', () => {
           `The view with LUID ${mockView.id} cannot be queried because it does not have one of the allowed tags.`,
         ].join(' '),
       });
+    });
+
+    it('should not allow when the underlying view is excluded by view id gate', async () => {
+      const resourceAccessChecker = createResourceAccessChecker({
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+        viewIds: new Set(['some-other-view-id']),
+        tags: null,
+      });
+
+      expect(
+        await resourceAccessChecker.isCustomViewAllowed({
+          customViewId: mockCustomView.id,
+          extra,
+        }),
+      ).toEqual({
+        allowed: false,
+        message: [
+          'The set of allowed views that can be queried is limited by the server configuration.',
+          `Querying the view with LUID ${mockView.id} is not allowed.`,
+        ].join(' '),
+      });
+
+      // The custom view must be resolved to look up its underlying view id.
+      expect(mocks.mockGetCustomView).toHaveBeenCalledTimes(1);
+      // viewIds short-circuits inside _isViewAllowed, so getView is not called.
+      expect(mocks.mockGetView).not.toHaveBeenCalled();
+    });
+
+    it('should allow when only viewIds is set and the underlying view matches', async () => {
+      const resourceAccessChecker = createResourceAccessChecker({
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+        viewIds: new Set([mockView.id]),
+        tags: null,
+      });
+
+      expect(
+        await resourceAccessChecker.isCustomViewAllowed({
+          customViewId: mockCustomView.id,
+          extra,
+        }),
+      ).toEqual({ allowed: true });
+
+      expect(mocks.mockGetCustomView).toHaveBeenCalledTimes(1);
+      expect(mocks.mockGetView).not.toHaveBeenCalled();
     });
   });
 });
