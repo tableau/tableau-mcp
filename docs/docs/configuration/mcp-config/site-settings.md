@@ -6,9 +6,25 @@ sidebar_position: 6
 
 Tableau MCP supports configuration on a per-site basis via REST API. When a Tableau MCP user is authenticated to a given site, the site's configuration is fetched and applied to their session such that each setting will override any current value set by the Tableau MCP server.
 
-In order to use site settings:
-- Only available in Tableau versions 2026.2 or higher.
-- Site settings must be enabled by the Tableau MCP server, see [`ENABLE_MCP_SITE_SETTINGS`](env-vars.md#enable_mcp_site_settings).
+## Enabling Site Settings
+
+Site settings are enabled by default, and are only available in Tableau versions 2026.2 or higher.
+
+### `ENABLE_MCP_SITE_SETTINGS`
+
+When `true`, the Tableau MCP server will fetch and apply site settings overrides for any user session.
+
+- Default: `true`
+- When `false`, the Tableau MCP server will not fetch or apply site settings overrides.
+
+<hr />
+
+### `MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES`
+
+Rather than fetching site settings with every request, the MCP server will cache the settings and only refresh them after the interval specified by this environment variable.
+
+- Default: `10` minutes
+- Must be a positive number between `1` and `1440` (1 day).
 
 ## Configuring Site Settings
 
@@ -25,12 +41,13 @@ When creating or updating site settings via REST API:
 When configuring site settings, make sure to validate your overrides have been applied successfully.
 Tableau MCP will ignore any overrides if it does not recognize the variable being overriden, or if the override value is invalid.
 
-You might not see changes take immediate effect due to caching, see [`MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES`](env-vars.md#mcp_site_settings_check_interval_in_minutes).
+You might not see changes take immediate effect due to caching, see [`MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES`](#mcp_site_settings_check_interval_in_minutes).
 
 :::
 
 ## Site Overridable Variables
 
+- ### [`ALLOWED_REQUEST_OVERRIDES`](request-overrides.md#allowed_request_overrides)
 - ### [`DISABLE_METADATA_API_REQUESTS`](env-vars.md#disable_metadata_api_requests)
 - ### [`DISABLE_QUERY_DATASOURCE_VALIDATION_REQUESTS`](env-vars.md#disable_query_datasource_validation_requests)
 - ### [`EXCLUDE_TOOLS`](env-vars.md#exclude_tools)
@@ -38,6 +55,7 @@ You might not see changes take immediate effect due to caching, see [`MCP_SITE_S
 - ### [`INCLUDE_PROJECT_IDS`](tool-scoping.md#include_project_ids)
 - ### [`INCLUDE_TOOLS`](env-vars.md#include_tools)
 - ### [`INCLUDE_TAGS`](tool-scoping.md#include_tags)
+- ### [`INCLUDE_VIEW_IDS`](tool-scoping.md#include_view_ids)
 - ### [`INCLUDE_WORKBOOK_IDS`](tool-scoping.md#include_workbook_ids)
 - ### [`MAX_RESULT_LIMIT`](env-vars.md#max_result_limit)
 - ### [`MAX_RESULT_LIMITS`](env-vars.md#max_result_limits)

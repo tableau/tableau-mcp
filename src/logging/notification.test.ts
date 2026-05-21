@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Server } from '../server.js';
-import { writeToStderr } from './logger.js';
+import { WebMcpServer } from '../server.web.js';
+import { getFileLogger } from './fileLogger.js';
 import {
   getNotificationMessageForTool,
   isNotificationLevel,
@@ -10,13 +10,24 @@ import {
   shouldNotifyWhenLevelIsAtLeast,
 } from './notification.js';
 
-describe('notification', () => {
-  const originalEnv = process.env.TABLEAU_MCP_TEST;
+vi.mock('./fileLogger.js', () => ({
+  getFileLogger: vi.fn(),
+}));
 
+type NotificationPayloadWithData = {
+  params: {
+    data: string;
+  };
+};
+
+describe('notification', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getFileLogger).mockReturnValue(undefined);
+  });
 
-    process.env.TABLEAU_MCP_TEST = originalEnv;
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   describe('isLoggingLevel', () => {
@@ -35,45 +46,25 @@ describe('notification', () => {
 
   describe('setLogLevel', () => {
     it('should set the log level', () => {
-      setNotificationLevel(new Server(), 'error', { silent: true });
+      setNotificationLevel(new WebMcpServer().mcpServer, 'error', { silent: true });
       expect(shouldNotifyWhenLevelIsAtLeast('error')).toBe(true);
       expect(shouldNotifyWhenLevelIsAtLeast('debug')).toBe(false);
     });
 
     it('should not change level if it is the same', () => {
-      const server = new Server();
-      setNotificationLevel(server, 'debug', { silent: true });
-      setNotificationLevel(server, 'debug', { silent: true });
-      expect(server.server.notification).not.toHaveBeenCalled();
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'debug', { silent: true });
+      setNotificationLevel(server.mcpServer, 'debug', { silent: true });
+      expect(server.mcpServer.server.notification).not.toHaveBeenCalled();
     });
   });
 
   describe('shouldLogWhenLevelIsAtLeast', () => {
     it('should return true for levels at or above current level', () => {
-      setNotificationLevel(new Server(), 'warning', { silent: true });
+      setNotificationLevel(new WebMcpServer().mcpServer, 'warning', { silent: true });
       expect(shouldNotifyWhenLevelIsAtLeast('warning')).toBe(true);
       expect(shouldNotifyWhenLevelIsAtLeast('error')).toBe(true);
       expect(shouldNotifyWhenLevelIsAtLeast('info')).toBe(false);
-    });
-  });
-
-  describe('writeToStderr', () => {
-    it('should write to stderr in non-test mode', () => {
-      process.env.TABLEAU_MCP_TEST = 'false';
-
-      const stderrSpy = vi.spyOn(process.stderr, 'write');
-      writeToStderr('test message');
-
-      expect(stderrSpy).toHaveBeenCalledWith('test message\n');
-    });
-
-    it('should not write to stderr in test mode', () => {
-      process.env.TABLEAU_MCP_TEST = 'true';
-
-      const stderrSpy = vi.spyOn(process.stderr, 'write');
-      writeToStderr('test message');
-
-      expect(stderrSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -115,12 +106,12 @@ describe('notification', () => {
 
   describe('log functions', () => {
     it('should send logging message when level is appropriate', async () => {
-      const server = new Server();
-      setNotificationLevel(server, 'info', { silent: true });
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'info', { silent: true });
 
-      await notifier.info(server, 'test message', { notifier: 'test-logger' });
+      await notifier.info(server.mcpServer, 'test message', { notifier: 'test-logger' });
 
-      expect(server.server.notification).toHaveBeenCalledWith(
+      expect(server.mcpServer.server.notification).toHaveBeenCalledWith(
         {
           method: 'notifications/message',
           params: {
@@ -136,26 +127,26 @@ describe('notification', () => {
     });
 
     it('should not send logging message when level is below current level', async () => {
-      const server = new Server();
-      setNotificationLevel(server, 'warning', { silent: true });
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'warning', { silent: true });
 
-      await notifier.debug(server, 'test message', { notifier: 'test-logger' });
+      await notifier.debug(server.mcpServer, 'test message', { notifier: 'test-logger' });
 
-      expect(server.server.notification).not.toHaveBeenCalled();
+      expect(server.mcpServer.server.notification).not.toHaveBeenCalled();
     });
 
-    it('should use server name as default logger', async () => {
-      const server = new Server();
-      setNotificationLevel(server, 'info', { silent: true });
+    it('should use tableau-mcp as default logger', async () => {
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'info', { silent: true });
 
-      await notifier.info(server, 'test message');
+      await notifier.info(server.mcpServer, 'test message');
 
-      expect(server.server.notification).toHaveBeenCalledWith(
+      expect(server.mcpServer.server.notification).toHaveBeenCalledWith(
         {
           method: 'notifications/message',
           params: {
             level: 'info',
-            notifier: 'test-server',
+            notifier: 'tableau-mcp',
             data: expect.stringContaining('test message'),
           },
         },
@@ -166,17 +157,17 @@ describe('notification', () => {
     });
 
     it('should handle LogMessage objects', async () => {
-      const server = new Server();
-      setNotificationLevel(server, 'info', { silent: true });
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'info', { silent: true });
       const logMessage = {
         type: 'request',
         method: 'GET',
         path: '/test',
       } as const;
 
-      await notifier.info(server, logMessage, { notifier: 'test-logger' });
+      await notifier.info(server.mcpServer, logMessage, { notifier: 'test-logger' });
 
-      expect(server.server.notification).toHaveBeenCalledWith(
+      expect(server.mcpServer.server.notification).toHaveBeenCalledWith(
         {
           method: 'notifications/message',
           params: {
@@ -189,6 +180,96 @@ describe('notification', () => {
           relatedRequestId: undefined,
         },
       );
+    });
+
+    it('should use sanitized messages for file logging and MCP notifications', async () => {
+      const server = new WebMcpServer();
+      const fileLogger = { log: vi.fn() };
+      vi.mocked(getFileLogger).mockReturnValue(fileLogger as never);
+      setNotificationLevel(server.mcpServer, 'info', { silent: true });
+      const message = {
+        type: 'response',
+        data: Buffer.from([137, 80, 78, 71]),
+      } as const;
+
+      await notifier.info(server.mcpServer, message, { notifier: 'rest-api' });
+
+      expect(fileLogger.log).toHaveBeenCalledWith({
+        message: JSON.stringify({
+          type: 'response',
+          data: {
+            redacted: true,
+            reason: 'binary-payload',
+            message: '[redacted binary payload]',
+            kind: 'Buffer',
+            byteLength: 4,
+          },
+        }),
+        level: 'info',
+        logger: 'rest-api',
+      });
+
+      const notificationPayload = vi.mocked(server.mcpServer.server.notification).mock
+        .calls[0][0] as NotificationPayloadWithData;
+      const notificationData = JSON.parse(notificationPayload.params.data);
+      expect(notificationData.message).toEqual({
+        type: 'response',
+        data: {
+          redacted: true,
+          reason: 'binary-payload',
+          message: '[redacted binary payload]',
+          kind: 'Buffer',
+          byteLength: 4,
+        },
+      });
+      expect(notificationPayload.params.data).not.toContain('"0":137');
+    });
+
+    it('should preserve small normal notification messages', async () => {
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'info', { silent: true });
+      const message = {
+        type: 'response',
+        status: 200,
+        data: { message: 'ok' },
+      } as const;
+
+      await notifier.info(server.mcpServer, message, { notifier: 'rest-api' });
+
+      const notificationPayload = vi.mocked(server.mcpServer.server.notification).mock
+        .calls[0][0] as NotificationPayloadWithData;
+      const notificationData = JSON.parse(notificationPayload.params.data);
+      expect(notificationData.message).toEqual(message);
+    });
+
+    it('should use the configured notification payload max bytes', async () => {
+      vi.stubEnv('NOTIFICATION_PAYLOAD_MAX_BYTES', '12');
+      const server = new WebMcpServer();
+      setNotificationLevel(server.mcpServer, 'info', { silent: true });
+
+      await notifier.info(
+        server.mcpServer,
+        {
+          type: 'response',
+          data: 'notification payload',
+        },
+        { notifier: 'rest-api' },
+      );
+
+      const notificationPayload = vi.mocked(server.mcpServer.server.notification).mock
+        .calls[0][0] as NotificationPayloadWithData;
+      const notificationData = JSON.parse(notificationPayload.params.data);
+      expect(notificationData.message).toEqual({
+        type: 'response',
+        data: {
+          truncated: true,
+          reason: 'oversized-string',
+          message: '[truncated oversized string]',
+          value: 'notification',
+          originalLength: 20,
+          threshold: 12,
+        },
+      });
     });
   });
 });

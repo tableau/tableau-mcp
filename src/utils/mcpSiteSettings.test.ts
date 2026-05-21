@@ -1,4 +1,4 @@
-import { Server } from '../server';
+import { WebMcpServer } from '../server.web';
 import { stubDefaultEnvVars } from '../testShared';
 import { getConfigWithOverrides } from './mcpSiteSettings';
 
@@ -30,10 +30,11 @@ describe('mcpSiteSettings', () => {
     vi.stubEnv('ENABLE_MCP_SITE_SETTINGS', 'false');
     const config = await getConfigWithOverrides({
       restApiArgs: {
-        server: new Server(),
+        server: new WebMcpServer(),
         tableauAuthInfo: undefined,
         disableLogging: true,
       },
+      requestOverrides: undefined,
     });
 
     expect(config.includeTools).toEqual([]);
@@ -42,6 +43,7 @@ describe('mcpSiteSettings', () => {
       projectIds: null,
       datasourceIds: null,
       workbookIds: null,
+      viewIds: null,
       tags: null,
     });
     expect(config.getMaxResultLimit('query-datasource')).toEqual(null);
@@ -59,6 +61,7 @@ describe('mcpSiteSettings', () => {
         { key: 'INCLUDE_PROJECT_IDS', value: 'project1,project2' },
         { key: 'INCLUDE_DATASOURCE_IDS', value: 'datasource1,datasource2' },
         { key: 'INCLUDE_WORKBOOK_IDS', value: 'workbook1,workbook2' },
+        { key: 'INCLUDE_VIEW_IDS', value: 'view1,view2' },
         { key: 'INCLUDE_TAGS', value: 'tag1,tag2' },
         { key: 'MAX_RESULT_LIMIT', value: '100' },
         { key: 'MAX_RESULT_LIMITS', value: 'query-datasource:100,list-datasources:20' },
@@ -69,10 +72,11 @@ describe('mcpSiteSettings', () => {
 
     let config = await getConfigWithOverrides({
       restApiArgs: {
-        server: new Server(),
+        server: new WebMcpServer(),
         tableauAuthInfo: undefined,
         disableLogging: true,
       },
+      requestOverrides: undefined,
     });
 
     expect(config.includeTools).toEqual(['list-views', 'list-datasources']);
@@ -81,6 +85,7 @@ describe('mcpSiteSettings', () => {
       projectIds: new Set(['project1', 'project2']),
       datasourceIds: new Set(['datasource1', 'datasource2']),
       workbookIds: new Set(['workbook1', 'workbook2']),
+      viewIds: new Set(['view1', 'view2']),
       tags: new Set(['tag1', 'tag2']),
     });
     expect(config.getMaxResultLimit('query-datasource')).toEqual(100);
@@ -93,10 +98,11 @@ describe('mcpSiteSettings', () => {
     // Verify cache behavior
     config = await getConfigWithOverrides({
       restApiArgs: {
-        server: new Server(),
+        server: new WebMcpServer(),
         tableauAuthInfo: undefined,
         disableLogging: true,
       },
+      requestOverrides: undefined,
     });
 
     expect(config.includeTools).toEqual(['list-views', 'list-datasources']);
@@ -105,6 +111,7 @@ describe('mcpSiteSettings', () => {
       projectIds: new Set(['project1', 'project2']),
       datasourceIds: new Set(['datasource1', 'datasource2']),
       workbookIds: new Set(['workbook1', 'workbook2']),
+      viewIds: new Set(['view1', 'view2']),
       tags: new Set(['tag1', 'tag2']),
     });
     expect(config.getMaxResultLimit('query-datasource')).toEqual(100);

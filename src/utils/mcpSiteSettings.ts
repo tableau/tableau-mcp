@@ -73,6 +73,10 @@ async function getMcpSiteSettings({
     }
   }
 
+  if (!config.allowSitesToConfigureRequestOverrides) {
+    delete mcpSiteSettings.ALLOWED_REQUEST_OVERRIDES;
+  }
+
   mcpSiteSettingsCache.set(cacheKey, mcpSiteSettings);
   return mcpSiteSettings;
 }
@@ -83,8 +87,10 @@ type GetConfigWithOverridesArgs = DistributiveOmit<RestApiArgs, 'config' | 'sign
 
 export async function getConfigWithOverrides({
   restApiArgs,
+  requestOverrides,
 }: {
   restApiArgs: GetConfigWithOverridesArgs;
+  requestOverrides: Record<string, string> | undefined;
 }): Promise<OverridableConfig> {
   const config = restApiArgs.config ?? getConfig();
   const signal = restApiArgs.signal ?? AbortSignal.timeout(config.maxRequestTimeoutMs);
@@ -93,5 +99,5 @@ export async function getConfigWithOverrides({
     restApiArgs: { ...restApiArgs, config, signal },
   });
 
-  return getOverridableConfig(siteOverrides);
+  return getOverridableConfig(siteOverrides, requestOverrides);
 }
