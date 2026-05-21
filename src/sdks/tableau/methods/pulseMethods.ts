@@ -5,6 +5,7 @@ import z from 'zod';
 import {
   McpToolError,
   PulseDisabledError,
+  PulseInsightsDisabledError,
   PulseNotAvailableError,
 } from '../../../errors/mcpToolError.js';
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
@@ -195,6 +196,21 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
 }
 
 export type PulseResult<T> = Result<T, McpToolError>;
+
+// These Tableau error codes indicate AI-powered Pulse insights are disabled for the site.
+const PULSE_INSIGHTS_DISABLED_ERROR_CODES = ['0x62c06627', '0x8c454877'] as const;
+
+export function hasPulseInsightsDisabledErrorCode(value: unknown): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const normalizedValue = value.toLowerCase();
+  return PULSE_INSIGHTS_DISABLED_ERROR_CODES.some((errorCode) =>
+    normalizedValue.includes(errorCode),
+  );
+}
+
 async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise<PulseResult<T>> {
   try {
     return new Ok(await callback());
@@ -211,6 +227,15 @@ async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise
       ) {
         // ntbue-service-chassis/-/blob/main/server/interceptors/site_settings.go
         return new PulseDisabledError().toErr();
+      }
+
+      const tableauErrorCode = error.response?.headers?.tableau_error_code;
+      const responseMessage = error.response?.data?.message;
+      if (
+        hasPulseInsightsDisabledErrorCode(tableauErrorCode) ||
+        hasPulseInsightsDisabledErrorCode(responseMessage)
+      ) {
+        return new PulseInsightsDisabledError().toErr();
       }
     }
 
