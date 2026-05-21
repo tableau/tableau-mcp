@@ -1,10 +1,10 @@
-import { existsSync, readFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import path from 'path';
 import { z } from 'zod';
 
-// Define the schema for the feature config JSON
-// Strict validation: all values must be boolean
-const FeatureConfigSchema = z.record(z.string(), z.boolean());
+import { log } from '../logging/logger.js';
+
+export const FeatureConfigSchema = z.record(z.string(), z.boolean());
 
 export class FeatureGate {
   private features: Map<string, boolean>;
@@ -23,37 +23,23 @@ export class FeatureGate {
   }
 
   private loadFeatures(configPath?: string): Map<string, boolean> {
-    const features = new Map<string, boolean>();
-
-    // Determine config file path
     const filePath = configPath || path.join(process.cwd(), 'features.json');
-
-    // If file doesn't exist, return empty map (all features disabled)
-    if (!existsSync(filePath)) {
-      console.warn(`Feature config file not found: ${filePath}. All features disabled.`);
-      return features;
-    }
 
     try {
       const fileContent = readFileSync(filePath, 'utf-8');
       const rawConfig = JSON.parse(fileContent);
-
-      // Strict validation with Zod - all values must be boolean
       const config = FeatureConfigSchema.parse(rawConfig);
 
-      // Load validated features
-      for (const [name, value] of Object.entries(config)) {
-        features.set(name, value);
-      }
+      return new Map(Object.entries(config));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(
-        `Failed to load feature config from ${filePath}: ${errorMessage}. All features disabled.`,
-      );
+      log({
+        level: 'error',
+        message: `Failed to load feature config from ${filePath}: ${errorMessage}. All features disabled.`,
+        logger: 'featureGate',
+      });
       return new Map<string, boolean>();
     }
-
-    return features;
   }
 }
 
