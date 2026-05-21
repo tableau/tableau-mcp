@@ -197,7 +197,7 @@ describe('listCustomViewsTool', () => {
 
       invariant(result.type === 'empty');
       expect(result.message).toBe(
-        'No custom views were found. Either none exist or you do not have permission to view them.',
+        'No custom views for this workbook were found. Either none exist or you do not have permission to view them.',
       );
     });
 
