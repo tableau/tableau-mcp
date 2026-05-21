@@ -4,12 +4,12 @@ import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
 import { AdminOnlyError, McpToolError } from '../../../errors/mcpToolError.js';
-import { adminGate, NotAdminError } from '../../../prompts/_lib/adminGate.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { Query } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { paginate } from '../../../utils/paginate.js';
+import { adminGate, NotAdminError } from '../_lib/adminGate.js';
 import { WebTool } from '../tool.js';
 import { executeAdminInsightsQuery } from './adminInsightsToolBase.js';
 import { ADMIN_INSIGHTS_DATASETS, ADMIN_INSIGHTS_PROJECT_NAME } from './resolver.js';
@@ -212,22 +212,26 @@ function buildSiteContentQuery(
       values: [...types],
       exclude: false,
     },
-    // Exclude the Tableau-managed Admin Insights project — its datasources are
-    // admin-owned, refreshed by Tableau, and not user content.
-    {
-      field: { fieldCaption: 'Item Parent Project Name' },
-      filterType: 'SET',
-      values: [ADMIN_INSIGHTS_PROJECT_NAME],
-      exclude: true,
-    },
   ];
 
+  // VDS rejects multiple SET filters on the same field (e.g. one exclude + one include
+  // on Item Parent Project Name). When a project scope is provided, send only the
+  // include filter — Admin Insights exclusion is then enforced client-side in
+  // computeStaleRows. Otherwise send the exclude filter so the smaller payload
+  // is transferred from VDS.
   if (projectNameScope && projectNameScope.length > 0) {
     filters.push({
       field: { fieldCaption: 'Item Parent Project Name' },
       filterType: 'SET',
       values: [...projectNameScope],
       exclude: false,
+    });
+  } else {
+    filters.push({
+      field: { fieldCaption: 'Item Parent Project Name' },
+      filterType: 'SET',
+      values: [ADMIN_INSIGHTS_PROJECT_NAME],
+      exclude: true,
     });
   }
 
@@ -346,6 +350,14 @@ export function computeStaleRows({
     const itemType = row['Item Type'];
     const itemName = row['Item Name'];
     if (itemId === null || typeof itemType !== 'string' || typeof itemName !== 'string') {
+      continue;
+    }
+
+    // Belt-and-suspenders client-side exclusion of the Tableau-managed Admin Insights
+    // project. The VDS query already excludes it when no projectNameScope is set, but
+    // when scope is set we cannot stack a second SET filter on the same field — so the
+    // exclusion must happen here.
+    if (row['Item Parent Project Name'] === ADMIN_INSIGHTS_PROJECT_NAME) {
       continue;
     }
 

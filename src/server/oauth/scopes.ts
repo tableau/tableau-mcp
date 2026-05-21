@@ -32,7 +32,8 @@ export type TableauApiScope =
   | 'tableau:metric_subscriptions:read'
   | 'tableau:insights:read'
   | 'tableau:insight_brief:create'
-  | 'tableau:mcp_site_settings:read';
+  | 'tableau:mcp_site_settings:read'
+  | 'tableau:users:read';
 
 /**
  * Default scopes supported by the MCP server
@@ -175,6 +176,8 @@ const toolScopeMap: Record<
       'tableau:viz_data_service:read',
       'tableau:content:read',
       'tableau:mcp_site_settings:read',
+      // adminGate.assertAdmin → GET /sites/{siteId}/users/{userId}
+      'tableau:users:read',
     ]),
   },
   'query-admin-insights-site-content': {
@@ -183,6 +186,7 @@ const toolScopeMap: Record<
       'tableau:viz_data_service:read',
       'tableau:content:read',
       'tableau:mcp_site_settings:read',
+      'tableau:users:read',
     ]),
   },
   // Server-side anti-join: runs TS Events + Site Content VDS queries internally,
@@ -193,6 +197,7 @@ const toolScopeMap: Record<
       'tableau:viz_data_service:read',
       'tableau:content:read',
       'tableau:mcp_site_settings:read',
+      'tableau:users:read',
     ]),
   },
 };

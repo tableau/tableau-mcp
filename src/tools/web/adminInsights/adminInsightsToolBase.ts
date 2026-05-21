@@ -7,7 +7,6 @@ import {
   McpToolError,
   ZodiosValidationError,
 } from '../../../errors/mcpToolError.js';
-import { adminGate, NotAdminError } from '../../../prompts/_lib/adminGate.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
   Datasource,
@@ -17,6 +16,7 @@ import {
 } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { TableauApiScope } from '../../../server/oauth/scopes.js';
+import { adminGate, NotAdminError } from '../_lib/adminGate.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import {

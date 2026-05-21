@@ -1,8 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { adminGate } from '../../../prompts/_lib/adminGate.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
+import { adminGate } from '../_lib/adminGate.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import {
   clearStaleContentReportCache,
@@ -139,6 +139,28 @@ describe('computeStaleRows', () => {
     expect(rows[0].neverAccessed).toBe(true);
   });
 
+  it('client-side excludes Admin Insights project rows even when VDS returns them', () => {
+    const rows = computeStaleRows({
+      universe: [
+        row({
+          'Item ID': 'wb-ai',
+          'Item Parent Project Name': 'Admin Insights',
+          'Created At': '2024-01-01T00:00:00Z',
+          'Last Accessed At': null,
+        }),
+        row({
+          'Item ID': 'wb-keep',
+          'Item Parent Project Name': 'default',
+          'Created At': '2024-01-01T00:00:00Z',
+          'Last Accessed At': null,
+        }),
+      ],
+      thresholdDays: 90,
+      today,
+    });
+    expect(rows.map((r) => r.itemId)).toEqual(['wb-keep']);
+  });
+
   it('coerces numeric Item ID to string (Site Content VDS returns integers)', () => {
     const rows = computeStaleRows({
       universe: [
@@ -176,7 +198,7 @@ describe('computeStaleRows', () => {
 });
 
 describe('buildSiteContentQuery', () => {
-  it('emits the Admin Insights exclude filter on Item Parent Project Name', () => {
+  it('emits the Admin Insights exclude filter when no project scope is set', () => {
     const query = exportedForTesting.buildSiteContentQuery(['Workbook', 'Datasource'], null);
     const projectFilter = query.filters?.find(
       (f) =>
@@ -196,7 +218,7 @@ describe('buildSiteContentQuery', () => {
     });
   });
 
-  it('omits the project-scope include filter when scope is null', () => {
+  it('omits the include filter when scope is null', () => {
     const query = exportedForTesting.buildSiteContentQuery(['Workbook', 'Datasource'], null);
     const includeFilters = query.filters?.filter(
       (f) =>
@@ -210,21 +232,19 @@ describe('buildSiteContentQuery', () => {
     expect(includeFilters).toEqual([]);
   });
 
-  it('adds an Item Parent Project Name SET include filter when scope is provided', () => {
+  it('replaces the AI exclude with the project-scope include when scope is provided (VDS rejects multiple SET filters on the same field)', () => {
     const query = exportedForTesting.buildSiteContentQuery(
       ['Workbook', 'Datasource'],
       ['Finance', 'Sales'],
     );
-    const includeFilter = query.filters?.find(
+    const projectFilters = query.filters?.filter(
       (f) =>
         'field' in f &&
         'fieldCaption' in f.field &&
-        f.field.fieldCaption === 'Item Parent Project Name' &&
-        f.filterType === 'SET' &&
-        'exclude' in f &&
-        f.exclude === false,
+        f.field.fieldCaption === 'Item Parent Project Name',
     );
-    expect(includeFilter).toMatchObject({
+    expect(projectFilters).toHaveLength(1);
+    expect(projectFilters?.[0]).toMatchObject({
       field: { fieldCaption: 'Item Parent Project Name' },
       filterType: 'SET',
       values: ['Finance', 'Sales'],
@@ -430,7 +450,7 @@ describe('get-stale-content-report tool', () => {
     expect(mocks.mockQueryProjects).toHaveBeenCalledTimes(1);
   });
 
-  it('always sends the Admin Insights exclude filter to VDS', async () => {
+  it('sends the Admin Insights exclude filter to VDS when no project scope is set', async () => {
     const { Ok } = await import('ts-results-es');
     mocks.mockQueryDatasource.mockResolvedValueOnce(Ok({ data: [] }));
 
@@ -451,6 +471,26 @@ describe('get-stale-content-report tool', () => {
     );
     expect(excludeFilter).toBeDefined();
     expect(excludeFilter?.values).toEqual([ADMIN_INSIGHTS_PROJECT_NAME]);
+  });
+
+  it('does NOT send a second SET filter on Item Parent Project Name when project scope is set (VDS rejects multiple SETs on same field)', async () => {
+    const { Ok } = await import('ts-results-es');
+    mocks.mockQueryDatasource.mockResolvedValueOnce(Ok({ data: [] }));
+
+    await getToolResult({ minAgeDays: 90, projectIds: ['p-1'] });
+
+    const vdsCall = mocks.mockQueryDatasource.mock.calls[0][0];
+    const filters = vdsCall.query.filters as Array<{
+      field?: { fieldCaption?: string };
+      filterType?: string;
+      values?: string[];
+      exclude?: boolean;
+    }>;
+    const projectFilters = filters.filter(
+      (f) => f.field?.fieldCaption === 'Item Parent Project Name',
+    );
+    expect(projectFilters).toHaveLength(1);
+    expect(projectFilters[0].exclude).toBe(false);
   });
 });
 

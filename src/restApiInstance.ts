@@ -31,7 +31,8 @@ type JwtScopes =
   | 'tableau:insights:read'
   | 'tableau:views:download'
   | 'tableau:insight_brief:create'
-  | 'tableau:mcp_site_settings:read';
+  | 'tableau:mcp_site_settings:read'
+  | 'tableau:users:read';
 
 export type RestApiArgs = Pick<
   TableauWebRequestHandlerExtra,

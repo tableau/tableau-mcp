@@ -34,10 +34,17 @@ describe('server', () => {
     it('should list tools', async () => {
       const names = await client.listTools();
       const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
-      const expectedToolNames =
-        process.env.AUTH === 'oauth'
-          ? [...webToolNames]
-          : webToolNames.filter((name) => !oauthOnlyTools.includes(name));
+      const adminOnlyTools: ReadonlyArray<WebToolName> = [
+        'query-admin-insights-ts-events',
+        'query-admin-insights-site-content',
+        'get-stale-content-report',
+      ];
+      const expectedToolNames = webToolNames.filter((name) => {
+        if (process.env.AUTH !== 'oauth' && oauthOnlyTools.includes(name)) return false;
+        if (process.env.TMCP_ADMIN_TOOLS_ENABLED !== 'true' && adminOnlyTools.includes(name))
+          return false;
+        return true;
+      });
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });
@@ -94,10 +101,17 @@ describe('server', () => {
     it('should list tools', async () => {
       const names = await client.listTools();
       const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
-      const expectedWebToolNames =
-        process.env.AUTH === 'oauth'
-          ? [...webToolNames]
-          : webToolNames.filter((name) => !oauthOnlyTools.includes(name));
+      const adminOnlyTools: ReadonlyArray<WebToolName> = [
+        'query-admin-insights-ts-events',
+        'query-admin-insights-site-content',
+        'get-stale-content-report',
+      ];
+      const expectedWebToolNames = webToolNames.filter((name) => {
+        if (process.env.AUTH !== 'oauth' && oauthOnlyTools.includes(name)) return false;
+        if (process.env.TMCP_ADMIN_TOOLS_ENABLED !== 'true' && adminOnlyTools.includes(name))
+          return false;
+        return true;
+      });
       const expectedToolNames = [...desktopToolNames, ...expectedWebToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
