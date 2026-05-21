@@ -60,7 +60,7 @@ Control available features during development via `features.json`:
 **Usage in code:**
 
 ```typescript
-import { getFeatureGate } from './features';
+import { getFeatureGate } from './features/featureGate.js';
 
 if (getFeatureGate().isFeatureEnabled('mcpapps')) {
   // MCP Apps logic here
@@ -69,8 +69,8 @@ if (getFeatureGate().isFeatureEnabled('mcpapps')) {
 
 **Behavior:**
 - Features not listed in config: Disabled by default
-- Invalid JSON or missing file: All features disabled
-- Invalid boolean values: Treated as false
+- Invalid JSON or missing file: All features disabled, error logged
+- Strict validation: All values must be boolean, or entire config is rejected
 
 ## Deploy to Heroku
 

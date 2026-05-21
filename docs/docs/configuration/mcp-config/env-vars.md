@@ -420,6 +420,29 @@ Enables product telemetry for tool usage tracking.
 
 <hr />
 
+## `FEATURE_CONFIG_PATH`
+
+The path to the feature configuration JSON file used for feature gating.
+
+- Default: `features.json`
+- The file must be a valid JSON object where each key is a feature name and each value is a boolean.
+- If the file does not exist or is malformed, all features will be disabled and an error will be logged.
+- Features are checked at server startup. Invalid configurations will prevent features from being enabled but will not prevent the server from starting.
+
+**Example `features.json`:**
+
+```json
+{
+  "mcpapps": true,
+  "pulse": false,
+  "oauth-embedded": true
+}
+```
+
+The feature gating system allows you to enable or disable experimental features without code changes.
+
+<hr />
+
 ## `BREAK_GLASS_DISABLE_GLOBALLY`
 
 Can be used to force all MCP tools to return a "service unavailable" error message. Use with
