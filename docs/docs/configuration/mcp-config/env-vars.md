@@ -420,6 +420,21 @@ Enables product telemetry for tool usage tracking.
 
 <hr />
 
+## `TMCP_ADMIN_TOOLS_ENABLED`
+
+Enables admin-only tools that require site administrator permissions.
+
+- Default: `false`
+- When `true`, enables tools that are restricted to Tableau site administrators:
+  - [`list-extract-refresh-tasks`](../../tools/tasks/list-extract-refresh-tasks.md)
+- These tools require the user to have one of the following site roles:
+  - SiteAdministratorCreator
+  - SiteAdministratorExplorer
+  - ServerAdministrator
+- Admin tools perform runtime role verification and will return a 403 error if the user does not have the required permissions.
+
+<hr />
+
 ## `BREAK_GLASS_DISABLE_GLOBALLY`
 
 Can be used to force all MCP tools to return a "service unavailable" error message. Use with
