@@ -24,4 +24,20 @@ describe('FeatureGate', () => {
       expect(gate.isFeatureEnabled('pulse')).toBe(false);
     });
   });
+
+  describe('missing file handling', () => {
+    it('should handle missing file gracefully', () => {
+      const gate = new FeatureGate('/nonexistent/path/features.json');
+
+      expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
+      expect(gate.isFeatureEnabled('pulse')).toBe(false);
+    });
+
+    it('should use default path when not specified', () => {
+      const gate = new FeatureGate();
+
+      // All features disabled when default file doesn't exist
+      expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
+    });
+  });
 });
