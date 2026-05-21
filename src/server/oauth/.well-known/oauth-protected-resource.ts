@@ -1,9 +1,10 @@
 import express from 'express';
 
 import { getConfig } from '../../../config.js';
+import { serverName } from '../../../server.js';
 import { getSupportedScopes } from '../scopes.js';
 
-const protectedResourcePath = '/tableau-mcp';
+const protectedResourcePath = `/${serverName}`;
 
 /**
  * OAuth 2.0 Protected Resource Metadata

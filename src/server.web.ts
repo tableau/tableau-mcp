@@ -6,7 +6,7 @@ import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
-import { ClientInfo, Server } from './server.js';
+import { ClientInfo, Server, serverName } from './server.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
@@ -17,7 +17,6 @@ import { webToolFactories } from './tools/web/tools.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings.js';
 import { Provider } from './utils/provider.js';
 
-const serverName = 'tableau-mcp';
 const serverVersion = pkg.version;
 
 export class WebMcpServer extends Server {

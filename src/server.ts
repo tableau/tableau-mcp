@@ -3,6 +3,8 @@ import { InitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
 import { TableauAuthInfo } from './server/oauth/schemas.js';
 
+export const serverName = 'tableau-mcp';
+
 export type ClientInfo = InitializeRequest['params']['clientInfo'];
 
 export abstract class Server {

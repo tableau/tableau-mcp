@@ -3,6 +3,7 @@ import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
+import { serverName } from '../../server.js';
 import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
@@ -14,7 +15,7 @@ import {
 } from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
 
-const protectedResourceMetadataPath = '/tableau-mcp/.well-known/oauth-protected-resource';
+const protectedResourceMetadataPath = `/${serverName}/.well-known/oauth-protected-resource`;
 
 /**
  * Express middleware for OAuth authentication
