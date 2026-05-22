@@ -88,21 +88,29 @@ export function filterWorkbookViews({
   workbook: Workbook;
   boundedContext: BoundedContext;
 }): ConstrainedResult<Workbook> {
-  const { tags } = boundedContext;
+  const { viewIds, tags } = boundedContext;
 
   // We don't need to check the tags on the workbook since we already
   // did that before getting the detailed workbook information.
-  // We only need to check the tags on the workbook's views.
-  if (!workbook.views || !tags) {
+  // We only need to check the views on the workbook against viewIds and tags.
+  if (!workbook.views || (!viewIds && !tags)) {
     return {
       type: 'success',
       result: workbook,
     };
   }
 
-  workbook.views.view = workbook.views.view.filter((view) =>
-    view.tags?.tag?.some((tag) => tags.has(tag.label)),
-  );
+  let views = workbook.views.view;
+
+  if (viewIds) {
+    views = views.filter((view) => (view.id ? viewIds.has(view.id) : false));
+  }
+
+  if (tags) {
+    views = views.filter((view) => view.tags?.tag?.some((tag) => tags.has(tag.label)));
+  }
+
+  workbook.views.view = views;
 
   return {
     type: 'success',

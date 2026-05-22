@@ -5,7 +5,7 @@ sidebar_position: 5
 # Tool Scoping
 
 The Tableau MCP server can be configured to limit the scope of its tools to a set of data sources,
-workbooks, projects, or tags.
+workbooks, views, projects, or tags.
 
 Enabling tool scoping can cause:
 
@@ -90,6 +90,25 @@ tools. This variable is site and request overridable, see [Site Settings](site-s
 - Has no impact on the results of the Pulse-related tools.
 
 Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
+
+<hr />
+
+### `INCLUDE_VIEW_IDS`
+
+A comma-separated list of view IDs by which to constrain tool arguments and results. Only
+the specified views can be queried, fetched as images, or returned by listing tools. This variable
+is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
+
+- When set, cannot be empty.
+- When overriden, can be empty to clear any bounds set by the Tableau MCP server.
+- View IDs can be determined using the
+  [Query Views for Site](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_views_for_site)
+  REST API or the [List Views](../../tools/views/list-views.md) tool (assuming tool scoping is
+  disabled).
+- For custom views, the underlying published view must be in this list.
+- Has no impact on the results of the Pulse-related tools.
+
+Example: `4d18c547-bbb1-4187-ae5a-7f78b35adf2d`
 
 <hr />
 

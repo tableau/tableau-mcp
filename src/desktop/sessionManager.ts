@@ -1,0 +1,73 @@
+import { Err, Ok, Result } from 'ts-results-es';
+
+import { log } from '../logging/logger.js';
+import { DesktopDiscoverer } from './desktopDiscoverer.js';
+import { DesktopInstance } from './desktopInstance.js';
+import { LocalExecutor } from './toolExecutor/localToolExecutor.js';
+import { ToolExecutor } from './toolExecutor/toolExecutor.js';
+
+export type DesktopConnection = {
+  sessionId: string;
+  executor: ToolExecutor;
+  lastAccess: number;
+  desktopInstance: DesktopInstance;
+};
+
+export class SessionManager {
+  private readonly sessions: Map<string, DesktopConnection> = new Map();
+
+  async getExecutor(sessionId: string): Promise<ToolExecutor> {
+    let session = this.sessions.get(sessionId);
+
+    if (!session) {
+      const sessionIdResult = parseSessionId(sessionId);
+      if (sessionIdResult.isErr()) {
+        throw new Error(`Invalid session ID for local mode: ${sessionId}. Expected numeric PID.`);
+      }
+
+      const pid = sessionIdResult.value;
+      const desktopDiscoverer = new DesktopDiscoverer();
+      const desktopInstance = desktopDiscoverer.getInstance(pid);
+      const executor = new LocalExecutor({
+        agentApiBase: `http://127.0.0.1:${desktopInstance.port}/api/v1`,
+        authToken: desktopInstance.secret,
+      });
+      await executor.start();
+
+      session = {
+        sessionId,
+        executor,
+        lastAccess: Date.now(),
+        desktopInstance,
+      };
+
+      this.sessions.set(sessionId, session);
+      log({
+        message: 'Session created',
+        level: 'info',
+        logger: 'SessionManager',
+        data: {
+          sessionId,
+          pid: desktopInstance.pid,
+          port: desktopInstance.port,
+        },
+      });
+    }
+
+    session.lastAccess = Date.now();
+    return session.executor;
+  }
+}
+
+function parseSessionId(sessionId: string): Result<number, void> {
+  if (!/^\d+$/.test(sessionId)) {
+    return Err.EMPTY;
+  }
+
+  const pid = parseInt(sessionId, 10);
+  if (isNaN(pid)) {
+    return Err.EMPTY;
+  }
+
+  return Ok(pid);
+}
