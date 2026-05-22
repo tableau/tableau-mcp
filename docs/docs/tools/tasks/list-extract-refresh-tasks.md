@@ -7,7 +7,7 @@ sidebar_position: 1
 Retrieves a list of extract refresh tasks for the Tableau site. Each task describes a scheduled refresh for a data source or workbook extract and includes schedule information (e.g. frequency, next run time, schedule name on Server).
 
 :::warning Admin Only
-This tool is restricted to Tableau site administrators and requires the `TMCP_ADMIN_TOOLS_ENABLED` feature flag to be enabled.
+This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` feature flag to be enabled.
 :::
 
 ## APIs called
@@ -36,7 +36,7 @@ Use this tool when you need to:
 Enable this tool by setting the feature flag:
 
 ```bash
-TMCP_ADMIN_TOOLS_ENABLED=true
+ADMIN_TOOLS_ENABLED=true
 ```
 
 See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)

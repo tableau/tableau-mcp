@@ -74,7 +74,7 @@ const toolScopeMap: Record<
   },
   'list-extract-refresh-tasks': {
     mcp: ['tableau:mcp:tasks:read'],
-    api: new Set(['tableau:tasks:read']),
+    api: new Set(['tableau:tasks:read', 'tableau:users:read']),
   },
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],

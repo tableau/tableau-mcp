@@ -25,7 +25,7 @@ export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis>
    * Required scopes (Tableau Cloud): `tableau:tasks:read`
    *
    * @param siteId - The Tableau site ID
-   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_jobs_tasks_and_schedules.htm#list_extract_refresh_tasks_in_site
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_jobs_tasks_and_schedules.htm#list_extract_refresh_tasks
    */
   listExtractRefreshTasks = async ({
     siteId,

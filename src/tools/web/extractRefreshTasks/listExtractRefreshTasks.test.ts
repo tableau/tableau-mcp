@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
 
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
@@ -11,6 +12,7 @@ const mockTasks = [mockExtractRefreshTask];
 
 const mocks = vi.hoisted(() => ({
   mockListExtractRefreshTasks: vi.fn(),
+  mockQueryUserOnSite: vi.fn(),
   mockAssertAdmin: vi.fn(),
 }));
 
@@ -21,7 +23,7 @@ vi.mock('../../../restApiInstance.js', () => ({
         listExtractRefreshTasks: mocks.mockListExtractRefreshTasks,
       },
       usersMethods: {
-        getUser: vi.fn().mockResolvedValue({ siteRole: 'SiteAdministratorCreator' }),
+        queryUserOnSite: mocks.mockQueryUserOnSite,
       },
       siteId: 'test-site-id',
       userId: 'test-user-id',
@@ -29,10 +31,8 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
-vi.mock('../_lib/adminGate.js', () => ({
-  adminGate: {
-    assertAdmin: mocks.mockAssertAdmin,
-  },
+vi.mock('../adminGate.js', () => ({
+  assertAdmin: mocks.mockAssertAdmin,
 }));
 
 vi.mock('../../../config.js', () => ({
@@ -47,6 +47,8 @@ vi.mock('../../../config.js', () => ({
 describe('listExtractRefreshTasksTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
+    mocks.mockQueryUserOnSite.mockResolvedValue({ siteRole: 'SiteAdministratorCreator' });
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -55,7 +57,9 @@ describe('listExtractRefreshTasksTool', () => {
     expect(listExtractRefreshTasksTool.description).toContain(
       'Retrieves a list of extract refresh tasks for the Tableau site',
     );
-    expect(listExtractRefreshTasksTool.paramsSchema).toEqual({});
+    expect(listExtractRefreshTasksTool.paramsSchema).toHaveProperty('filter');
+    expect(listExtractRefreshTasksTool.paramsSchema).toHaveProperty('pageSize');
+    expect(listExtractRefreshTasksTool.paramsSchema).toHaveProperty('limit');
   });
 
   it('should successfully get extract refresh tasks', async () => {

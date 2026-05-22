@@ -43,7 +43,7 @@ describe('server', () => {
       }
 
       // Filter out admin-only tools if admin tools are not enabled
-      if (process.env.TMCP_ADMIN_TOOLS_ENABLED !== 'true') {
+      if (process.env.ADMIN_TOOLS_ENABLED !== 'true') {
         expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
       }
 
@@ -114,7 +114,7 @@ describe('server', () => {
       }
 
       // Filter out admin-only tools if admin tools are not enabled
-      if (process.env.TMCP_ADMIN_TOOLS_ENABLED !== 'true') {
+      if (process.env.ADMIN_TOOLS_ENABLED !== 'true') {
         expectedWebToolNames = expectedWebToolNames.filter(
           (name) => !adminOnlyTools.includes(name),
         );

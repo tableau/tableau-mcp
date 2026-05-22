@@ -7,37 +7,31 @@ const taskEntrySchema = z.object({
   extractRefresh: extractRefreshTaskSchema,
 });
 
+/**
+ * Tableau API response schema with transform to normalize different response shapes:
+ * - `{ tasks: { task: [...] } }` → normalized to `{ tasks: { task: [...] } }`
+ * - `{ tasks: { task: {...} } }` → normalized to `{ tasks: { task: [{...}] } }`
+ * - `{ tasks: [...] }` → normalized to `{ tasks: { task: [...] } }`
+ * - `{ tasks: {} }` → normalized to `{ tasks: { task: [] } }`
+ */
 const listExtractRefreshTasksBodySchema = z.object({
   tasks: z.union([
-    z.object({ task: z.union([z.array(taskEntrySchema), taskEntrySchema]) }),
-    z.array(taskEntrySchema),
+    z.object({
+      task: z.union([
+        z.array(taskEntrySchema),
+        taskEntrySchema.transform((task) => [task]),
+      ]),
+    }),
+    z.array(taskEntrySchema).transform((tasks) => ({ task: tasks })),
+    z.object({}).transform(() => ({ task: [] })),
   ]),
 });
 
-/**
- * Tableau returns `tasks: {}` when there are no extract refresh tasks. Normalize before Zod
- * validates so the response matches the documented `{ tasks: { task: ... } }` shape.
- */
-export function normalizeListExtractRefreshTasksResponse(raw: unknown): unknown {
-  if (!raw || typeof raw !== 'object') {
-    return raw;
-  }
-  const data = raw as Record<string, unknown>;
-  const tasks = data.tasks;
-  if (tasks && typeof tasks === 'object' && !Array.isArray(tasks) && !('task' in tasks)) {
-    return { ...data, tasks: { ...tasks, task: [] } };
-  }
-  return raw;
-}
-
-/** Same as {@link listExtractRefreshTasksBodySchema}; use with {@link normalizeListExtractRefreshTasksResponse} when testing raw API payloads. */
-export const listExtractRefreshTasksResponseSchema = listExtractRefreshTasksBodySchema;
-
 export type ListExtractRefreshTasksBody = z.infer<typeof listExtractRefreshTasksBodySchema>;
 
-/** Normalize then parse; use this instead of relying on Zodios response validation (Tableau may return `tasks: {}`). */
+/** Parse response using Zod schema with built-in transforms for normalization. */
 export function parseListExtractRefreshTasksResponse(raw: unknown): ListExtractRefreshTasksBody {
-  return listExtractRefreshTasksBodySchema.parse(normalizeListExtractRefreshTasksResponse(raw));
+  return listExtractRefreshTasksBodySchema.parse(raw);
 }
 
 /**
@@ -60,8 +54,7 @@ const listExtractRefreshTasksEndpoint = makeEndpoint({
       schema: z.string(),
     },
   ],
-  // Do not validate with Zodios here — Tableau returns `tasks: {}` with no `task` key; we parse in {@link parseListExtractRefreshTasksResponse}.
-  response: z.any(),
+  response: listExtractRefreshTasksBodySchema,
 });
 
 const tasksApi = makeApi([listExtractRefreshTasksEndpoint]);

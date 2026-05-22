@@ -8,7 +8,7 @@ describe('parseListExtractRefreshTasksResponse', () => {
     expect(data.tasks).toEqual({ task: [] });
   });
 
-  it('does not change responses that already include task', () => {
+  it('does not change responses that already include task as array', () => {
     const entry = {
       extractRefresh: {
         id: 't1',
@@ -16,6 +16,17 @@ describe('parseListExtractRefreshTasksResponse', () => {
       },
     };
     const data = parseListExtractRefreshTasksResponse({ tasks: { task: [entry] } });
+    expect(data.tasks).toEqual({ task: [entry] });
+  });
+
+  it('normalizes single task object to array', () => {
+    const entry = {
+      extractRefresh: {
+        id: 't1',
+        datasource: { id: 'd1' },
+      },
+    };
+    const data = parseListExtractRefreshTasksResponse({ tasks: { task: entry } });
     expect(data.tasks).toEqual({ task: [entry] });
   });
 

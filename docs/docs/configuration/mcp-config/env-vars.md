@@ -420,7 +420,7 @@ Enables product telemetry for tool usage tracking.
 
 <hr />
 
-## `TMCP_ADMIN_TOOLS_ENABLED`
+## `ADMIN_TOOLS_ENABLED`
 
 Enables admin-only tools that require site administrator permissions.
 

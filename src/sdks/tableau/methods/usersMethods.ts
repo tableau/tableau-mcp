@@ -21,11 +21,13 @@ export default class UsersMethods extends AuthenticatedMethods<typeof usersApis>
   /**
    * Returns information about the specified user.
    *
+   * Required scopes (Tableau Cloud): `tableau:users:read`
+   *
    * @param siteId - The Tableau site ID
    * @param userId - The user ID
-   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#get_user_on_site
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#query_user_on_site
    */
-  getUser = async ({ siteId, userId }: { siteId: string; userId: string }): Promise<User> => {
+  queryUserOnSite = async ({ siteId, userId }: { siteId: string; userId: string }): Promise<User> => {
     const { user } = await this._apiClient.getUserOnSite({
       params: { siteId, userId },
       ...this.authHeader,
