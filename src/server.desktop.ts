@@ -4,6 +4,7 @@ import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/typ
 
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
+import { SessionManager } from './desktop/sessionManager.js';
 import { ClientInfo, Server } from './server.js';
 import { DesktopTool } from './tools/desktop/tool.js';
 import { TableauDesktopRequestHandlerExtra } from './tools/desktop/toolContext.js';
@@ -14,6 +15,8 @@ const serverName = 'tableau-desktop-mcp';
 const serverVersion = pkg.version;
 
 export class DesktopMcpServer extends Server {
+  private readonly sessionManager = new SessionManager();
+
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
     super({ mcpServer, clientInfo, serverName, serverVersion });
   }
@@ -36,6 +39,9 @@ export class DesktopMcpServer extends Server {
         const tableauRequestHandlerExtra: TableauDesktopRequestHandlerExtra = {
           ...extra,
           config,
+          getExecutor: async (sessionId: string) => {
+            return await this.sessionManager.getExecutor(sessionId);
+          },
           server: this,
         };
 

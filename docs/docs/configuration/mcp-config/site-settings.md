@@ -55,6 +55,7 @@ You might not see changes take immediate effect due to caching, see [`MCP_SITE_S
 - ### [`INCLUDE_PROJECT_IDS`](tool-scoping.md#include_project_ids)
 - ### [`INCLUDE_TOOLS`](env-vars.md#include_tools)
 - ### [`INCLUDE_TAGS`](tool-scoping.md#include_tags)
+- ### [`INCLUDE_VIEW_IDS`](tool-scoping.md#include_view_ids)
 - ### [`INCLUDE_WORKBOOK_IDS`](tool-scoping.md#include_workbook_ids)
 - ### [`MAX_RESULT_LIMIT`](env-vars.md#max_result_limit)
 - ### [`MAX_RESULT_LIMITS`](env-vars.md#max_result_limits)

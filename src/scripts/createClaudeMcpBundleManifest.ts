@@ -274,6 +274,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  INCLUDE_VIEW_IDS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'IDs of views to constrain tool results by',
+    description: 'A comma-separated list of view IDs to constrain tool results by.',
+    required: false,
+    sensitive: false,
+  },
   INCLUDE_TAGS: {
     includeInUserConfig: false,
     type: 'string',

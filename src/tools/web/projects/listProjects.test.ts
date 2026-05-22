@@ -73,7 +73,13 @@ describe('listProjectsTool', () => {
     it('should return empty result when no projects are found', () => {
       const result = constrainProjects({
         projects: [],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: null,
+        },
       });
 
       invariant(result.type === 'empty');
@@ -89,6 +95,7 @@ describe('listProjectsTool', () => {
           projectIds: new Set(['unrelated-id']),
           datasourceIds: null,
           workbookIds: null,
+          viewIds: null,
           tags: null,
         },
       });
@@ -107,17 +114,19 @@ describe('listProjectsTool', () => {
         projectIds: [null, new Set([mockProject.id])],
         datasourceIds: [null], // n/a for projects
         workbookIds: [null], // n/a for projects
+        viewIds: [null], // n/a for projects
         tags: [null], // n/a for projects
       }),
     )(
-      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
-      async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, viewIds: $viewIds, tags: $tags',
+      async ({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
         const result = constrainProjects({
           projects: [mockProject, mockProject2],
           boundedContext: {
             projectIds,
             datasourceIds,
             workbookIds,
+            viewIds,
             tags,
           },
         });

@@ -74,7 +74,13 @@ describe('listViewsTool', () => {
     it('should return empty result when no views are found', () => {
       const result = constrainViews({
         views: [],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: null,
+        },
       });
 
       invariant(result.type === 'empty');
@@ -90,6 +96,28 @@ describe('listViewsTool', () => {
           projectIds: new Set(['123']),
           datasourceIds: null,
           workbookIds: null,
+          viewIds: null,
+          tags: null,
+        },
+      });
+
+      invariant(result.type === 'empty');
+      expect(result.message).toBe(
+        [
+          'The set of allowed views that can be queried is limited by the server configuration.',
+          'While views were found, they were all filtered out by the server configuration.',
+        ].join(' '),
+      );
+    });
+
+    it('should return empty results when all views are filtered out by viewIds', () => {
+      const result = constrainViews({
+        views: mockViews.views,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: new Set(['some-other-view-id']),
           tags: null,
         },
       });
@@ -108,23 +136,25 @@ describe('listViewsTool', () => {
         projectIds: [null, new Set([mockViews.views[0].project.id])],
         datasourceIds: [null], // n/a for views
         workbookIds: [null, new Set([mockViews.views[0].workbook.id])],
+        viewIds: [null, new Set([mockViews.views[0].id])],
         tags: [null, new Set([mockViews.views[0].tags.tag[0].label])],
       }),
     )(
-      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
-      async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, viewIds: $viewIds, tags: $tags',
+      async ({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
         const result = constrainViews({
           views: mockViews.views,
           boundedContext: {
             projectIds,
             datasourceIds,
             workbookIds,
+            viewIds,
             tags,
           },
         });
 
         invariant(result.type === 'success');
-        if (!projectIds && !workbookIds && !tags) {
+        if (!projectIds && !workbookIds && !viewIds && !tags) {
           expect(result.result).toEqual(mockViews.views);
         } else {
           expect(result.result).toEqual([mockViews.views[0]]);

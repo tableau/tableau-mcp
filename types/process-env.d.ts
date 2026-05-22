@@ -42,6 +42,7 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   INCLUDE_PROJECT_IDS: string | undefined;
   INCLUDE_DATASOURCE_IDS: string | undefined;
   INCLUDE_WORKBOOK_IDS: string | undefined;
+  INCLUDE_VIEW_IDS: string | undefined;
   INCLUDE_TAGS: string | undefined;
   TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: string | undefined;
   PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES: string | undefined;

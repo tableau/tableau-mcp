@@ -70,6 +70,20 @@ export class PulseDisabledError extends McpToolError {
   }
 }
 
+export class PulseInsightsDisabledError extends McpToolError {
+  constructor() {
+    super({
+      type: 'pulse-insights-disabled',
+      message: 'Pulse AI insights are disabled',
+      statusCode: 403,
+    });
+  }
+
+  override getErrorText(): string {
+    return 'AI-powered Pulse insights are not enabled on this Tableau Cloud site. This feature requires Tableau+ to be enabled by a site administrator.';
+  }
+}
+
 export class PulseNotAvailableError extends McpToolError {
   constructor() {
     super({
