@@ -1,5 +1,5 @@
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
-import { WebMcpServer } from './server.web.js';
+import { serverName, WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/listDatasources/listDatasources.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
@@ -38,6 +38,10 @@ describe('server', () => {
         expect.any(Function),
       );
     }
+  });
+
+  it('should use the web variant server name', () => {
+    expect(new WebMcpServer().name).toBe(serverName);
   });
 
   it('should not register disabled tools', async () => {
