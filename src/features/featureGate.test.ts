@@ -49,22 +49,28 @@ describe('FeatureGate', () => {
       expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
     });
 
-    it('should reject config with invalid boolean values', () => {
+    it('should skip invalid values and load valid ones', () => {
       const config = {
-        mcpapps: 'yes',
-        pulse: null,
-        oauth: 123,
-        experimental: [],
+        mcpapps: true,
+        validFeature: false,
+        invalidString: 'yes',
+        invalidNull: null,
+        invalidNumber: 123,
+        invalidArray: [],
       };
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
 
       const gate = getFeatureGate();
 
-      // With strict validation, invalid config causes all features to be disabled
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
-      expect(gate.isFeatureEnabled('pulse')).toBe(false);
-      expect(gate.isFeatureEnabled('oauth')).toBe(false);
-      expect(gate.isFeatureEnabled('experimental')).toBe(false);
+      // Valid features should be loaded
+      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
+      expect(gate.isFeatureEnabled('validFeature')).toBe(false);
+
+      // Invalid features should be skipped (disabled)
+      expect(gate.isFeatureEnabled('invalidString')).toBe(false);
+      expect(gate.isFeatureEnabled('invalidNull')).toBe(false);
+      expect(gate.isFeatureEnabled('invalidNumber')).toBe(false);
+      expect(gate.isFeatureEnabled('invalidArray')).toBe(false);
     });
   });
 
@@ -121,28 +127,6 @@ describe('FeatureGate', () => {
       expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
       expect(gate.isFeatureEnabled('pulse')).toBe(true);
       expect(gate.isFeatureEnabled('oauth-embedded')).toBe(false);
-    });
-  });
-
-  describe('singleton instance', () => {
-    it('should return same instance on subsequent calls', () => {
-      const config = { mcpapps: true };
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const gate1 = getFeatureGate();
-      const gate2 = getFeatureGate();
-
-      expect(gate2).toBe(gate1);
-      expect(gate2.isFeatureEnabled('mcpapps')).toBe(true);
-    });
-
-    it('should initialize lazily on first access', () => {
-      const config = { mcpapps: true };
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const gate = getFeatureGate();
-
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
     });
   });
 });

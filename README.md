@@ -71,7 +71,7 @@ if (getFeatureGate().isFeatureEnabled('mcpapps')) {
 - Lazy initialization: Feature gate loads config on first access
 - Features not listed in config: Disabled by default
 - Invalid JSON or missing file: All features disabled, error logged
-- Strict validation: All values must be boolean, or entire config is rejected
+- Partial validation: Invalid key-value pairs are skipped with a warning, valid pairs are loaded
 
 ## Deploy to Heroku
 

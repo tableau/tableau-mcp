@@ -1,10 +1,7 @@
 import { readFileSync } from 'fs';
 import path from 'path';
-import { z } from 'zod';
 
 import { log } from '../logging/logger.js';
-
-export const FeatureConfigSchema = z.record(z.string(), z.boolean());
 
 const FEATURES_CONFIG_PATH = 'features.json';
 
@@ -30,9 +27,34 @@ export class FeatureGate {
     try {
       const fileContent = readFileSync(filePath, 'utf-8');
       const rawConfig = JSON.parse(fileContent);
-      const config = FeatureConfigSchema.parse(rawConfig);
 
-      return new Map(Object.entries(config));
+      // Validate that it's an object
+      if (typeof rawConfig !== 'object' || rawConfig === null || Array.isArray(rawConfig)) {
+        throw new Error('Config must be a JSON object');
+      }
+
+      // Load valid key-value pairs, skip malformed ones
+      const validFeatures = new Map<string, boolean>();
+      const invalidEntries: string[] = [];
+
+      for (const [key, value] of Object.entries(rawConfig)) {
+        if (typeof value === 'boolean') {
+          validFeatures.set(key, value);
+        } else {
+          invalidEntries.push(`${key} (${typeof value})`);
+        }
+      }
+
+      // Log warning if any entries were invalid
+      if (invalidEntries.length > 0) {
+        log({
+          level: 'warning',
+          message: `Skipped invalid feature flags in ${filePath}: ${invalidEntries.join(', ')}. Valid features loaded.`,
+          logger: 'featureGate',
+        });
+      }
+
+      return validFeatures;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log({
