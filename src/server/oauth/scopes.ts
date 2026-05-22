@@ -34,7 +34,8 @@ export type TableauApiScope =
   | 'tableau:insights:read'
   | 'tableau:insight_brief:create'
   | 'tableau:mcp_site_settings:read'
-  | 'tableau:tasks:read';
+  | 'tableau:tasks:read'
+  | 'tableau:users:read';
 
 /**
  * Default scopes supported by the MCP server

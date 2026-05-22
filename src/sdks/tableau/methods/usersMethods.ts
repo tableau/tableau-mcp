@@ -27,7 +27,13 @@ export default class UsersMethods extends AuthenticatedMethods<typeof usersApis>
    * @param userId - The user ID
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#query_user_on_site
    */
-  queryUserOnSite = async ({ siteId, userId }: { siteId: string; userId: string }): Promise<User> => {
+  queryUserOnSite = async ({
+    siteId,
+    userId,
+  }: {
+    siteId: string;
+    userId: string;
+  }): Promise<User> => {
     const { user } = await this._apiClient.getUserOnSite({
       params: { siteId, userId },
       ...this.authHeader,

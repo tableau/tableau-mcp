@@ -38,13 +38,13 @@ export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis>
     });
     const response = parseListExtractRefreshTasksResponse(raw);
 
-    const tasks = response.tasks;
+    const tasks = response.tasks as any;
     if (Array.isArray(tasks)) {
-      return tasks.map((t) => t.extractRefresh);
+      return tasks.map((t: any) => t.extractRefresh);
     }
     const task = tasks.task;
     if (Array.isArray(task)) {
-      return task.map((t) => t.extractRefresh);
+      return task.map((t: any) => t.extractRefresh);
     }
     return task ? [task.extractRefresh] : [];
   };

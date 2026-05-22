@@ -17,10 +17,7 @@ const taskEntrySchema = z.object({
 const listExtractRefreshTasksBodySchema = z.object({
   tasks: z.union([
     z.object({
-      task: z.union([
-        z.array(taskEntrySchema),
-        taskEntrySchema.transform((task) => [task]),
-      ]),
+      task: z.union([z.array(taskEntrySchema), taskEntrySchema.transform((task) => [task])]),
     }),
     z.array(taskEntrySchema).transform((tasks) => ({ task: tasks })),
     z.object({}).transform(() => ({ task: [] })),

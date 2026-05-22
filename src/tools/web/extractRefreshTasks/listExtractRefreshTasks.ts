@@ -146,9 +146,7 @@ export function constrainExtractRefreshTasks({
 
   // Filter by datasourceIds - only keep tasks for datasources in the allowed set
   if (datasourceIds) {
-    tasks = tasks.filter(
-      (task) => task.datasource?.id && datasourceIds.has(task.datasource.id),
-    );
+    tasks = tasks.filter((task) => task.datasource?.id && datasourceIds.has(task.datasource.id));
   }
 
   // Filter by workbookIds - only keep tasks for workbooks in the allowed set
@@ -175,4 +173,4 @@ export function constrainExtractRefreshTasks({
   }
 
   return { type: 'success', result: tasks };
-};
+}

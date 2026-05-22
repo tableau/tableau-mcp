@@ -128,7 +128,7 @@ describe('extractRefreshTasksFilterUtils', () => {
 
     it('should return false for undefined/null values', () => {
       expect(matchesFilter(undefined, 'eq', 'value')).toBe(false);
-      expect(matchesFilter(null, 'eq', 'value')).toBe(false);
+      expect(matchesFilter(null as any, 'eq', 'value')).toBe(false);
     });
   });
 

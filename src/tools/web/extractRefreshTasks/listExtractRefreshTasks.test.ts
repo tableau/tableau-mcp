@@ -142,7 +142,7 @@ describe('listExtractRefreshTasksTool', () => {
   });
 });
 
-async function getToolResult(args: Record<string, never>): Promise<CallToolResult> {
+async function getToolResult(args: any = {}): Promise<CallToolResult> {
   const listExtractRefreshTasksTool = getListExtractRefreshTasksTool(new WebMcpServer());
   const callback = await Provider.from(listExtractRefreshTasksTool.callback);
   return await callback(args, getMockRequestHandlerExtra());
