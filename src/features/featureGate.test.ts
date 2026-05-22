@@ -1,29 +1,24 @@
-import { existsSync, unlinkSync, writeFileSync } from 'fs';
-import path from 'path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'fs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  FeatureGate,
-  getFeatureGate,
-  initializeFeatureGate,
-  resetFeatureGate,
-} from './featureGate.js';
+vi.mock('fs', () => ({
+  readFileSync: vi.fn(),
+}));
+
+import { getFeatureGate, resetFeatureGate } from './featureGate.js';
 
 describe('FeatureGate', () => {
-  const testConfigPath = path.join(process.cwd(), 'test-features.json');
-
-  afterEach(() => {
-    if (existsSync(testConfigPath)) {
-      unlinkSync(testConfigPath);
-    }
+  beforeEach(() => {
+    resetFeatureGate();
+    vi.clearAllMocks();
   });
 
   describe('loadFeatures', () => {
     it('should load valid feature config file', () => {
       const config = { mcpapps: true, pulse: false };
-      writeFileSync(testConfigPath, JSON.stringify(config));
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
 
-      const gate = new FeatureGate(testConfigPath);
+      const gate = getFeatureGate();
 
       expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
       expect(gate.isFeatureEnabled('pulse')).toBe(false);
@@ -32,25 +27,24 @@ describe('FeatureGate', () => {
 
   describe('missing file handling', () => {
     it('should handle missing file gracefully', () => {
-      const gate = new FeatureGate('/nonexistent/path/features.json');
+      const error: NodeJS.ErrnoException = new Error('ENOENT: no such file or directory');
+      error.code = 'ENOENT';
+      vi.mocked(readFileSync).mockImplementation(() => {
+        throw error;
+      });
+
+      const gate = getFeatureGate();
 
       expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
       expect(gate.isFeatureEnabled('pulse')).toBe(false);
-    });
-
-    it('should use default path when not specified', () => {
-      const gate = new FeatureGate();
-
-      // All features disabled when default file doesn't exist
-      expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
     });
   });
 
   describe('invalid JSON handling', () => {
     it('should handle invalid JSON gracefully', () => {
-      writeFileSync(testConfigPath, '{ invalid json }');
+      vi.mocked(readFileSync).mockReturnValue('{ invalid json }');
 
-      const gate = new FeatureGate(testConfigPath);
+      const gate = getFeatureGate();
 
       expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
     });
@@ -62,9 +56,9 @@ describe('FeatureGate', () => {
         oauth: 123,
         experimental: [],
       };
-      writeFileSync(testConfigPath, JSON.stringify(config));
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
 
-      const gate = new FeatureGate(testConfigPath);
+      const gate = getFeatureGate();
 
       // With strict validation, invalid config causes all features to be disabled
       expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
@@ -76,9 +70,9 @@ describe('FeatureGate', () => {
 
   describe('edge cases', () => {
     it('should handle empty JSON object', () => {
-      writeFileSync(testConfigPath, '{}');
+      vi.mocked(readFileSync).mockReturnValue('{}');
 
-      const gate = new FeatureGate(testConfigPath);
+      const gate = getFeatureGate();
 
       expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
       expect(gate.isFeatureEnabled('any-feature')).toBe(false);
@@ -86,9 +80,9 @@ describe('FeatureGate', () => {
 
     it('should return false for unknown features', () => {
       const config = { mcpapps: true };
-      writeFileSync(testConfigPath, JSON.stringify(config));
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
 
-      const gate = new FeatureGate(testConfigPath);
+      const gate = getFeatureGate();
 
       expect(gate.isFeatureEnabled('unknown-feature')).toBe(false);
       expect(gate.isFeatureEnabled('nonexistent')).toBe(false);
@@ -97,8 +91,10 @@ describe('FeatureGate', () => {
 
   describe('with test fixtures', () => {
     it('should load all-enabled fixture correctly', () => {
-      const fixturePath = path.join(process.cwd(), 'tests/fixtures/features-all-enabled.json');
-      const gate = new FeatureGate(fixturePath);
+      const config = { mcpapps: true, pulse: true, 'oauth-embedded': true };
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
+
+      const gate = getFeatureGate();
 
       expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
       expect(gate.isFeatureEnabled('pulse')).toBe(true);
@@ -106,8 +102,10 @@ describe('FeatureGate', () => {
     });
 
     it('should load all-disabled fixture correctly', () => {
-      const fixturePath = path.join(process.cwd(), 'tests/fixtures/features-all-disabled.json');
-      const gate = new FeatureGate(fixturePath);
+      const config = { mcpapps: false, pulse: false, 'oauth-embedded': false };
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
+
+      const gate = getFeatureGate();
 
       expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
       expect(gate.isFeatureEnabled('pulse')).toBe(false);
@@ -115,8 +113,10 @@ describe('FeatureGate', () => {
     });
 
     it('should load mixed fixture correctly', () => {
-      const fixturePath = path.join(process.cwd(), 'tests/fixtures/features-mixed.json');
-      const gate = new FeatureGate(fixturePath);
+      const config = { mcpapps: false, pulse: true, 'oauth-embedded': false };
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
+
+      const gate = getFeatureGate();
 
       expect(gate.isFeatureEnabled('mcpapps')).toBe(false);
       expect(gate.isFeatureEnabled('pulse')).toBe(true);
@@ -125,40 +125,24 @@ describe('FeatureGate', () => {
   });
 
   describe('singleton instance', () => {
-    beforeEach(() => {
-      // Reset singleton state before each test
-      resetFeatureGate();
-    });
-
-    afterEach(() => {
-      // Clean up singleton state after each test
-      resetFeatureGate();
-    });
-
-    it('should initialize and retrieve global feature gate', () => {
+    it('should return same instance on subsequent calls', () => {
       const config = { mcpapps: true };
-      writeFileSync(testConfigPath, JSON.stringify(config));
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
 
-      const gate = initializeFeatureGate(testConfigPath);
-      const retrieved = getFeatureGate();
+      const gate1 = getFeatureGate();
+      const gate2 = getFeatureGate();
 
-      expect(retrieved).toBe(gate);
-      expect(retrieved.isFeatureEnabled('mcpapps')).toBe(true);
+      expect(gate2).toBe(gate1);
+      expect(gate2.isFeatureEnabled('mcpapps')).toBe(true);
     });
 
-    it('should throw error when accessing uninitialized feature gate', () => {
-      expect(() => getFeatureGate()).toThrow('FeatureGate not initialized');
-    });
-
-    it('should throw error when re-initializing feature gate', () => {
+    it('should initialize lazily on first access', () => {
       const config = { mcpapps: true };
-      writeFileSync(testConfigPath, JSON.stringify(config));
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
 
-      initializeFeatureGate(testConfigPath);
+      const gate = getFeatureGate();
 
-      expect(() => initializeFeatureGate(testConfigPath)).toThrow(
-        'FeatureGate already initialized',
-      );
+      expect(gate.isFeatureEnabled('mcpapps')).toBe(true);
     });
   });
 });

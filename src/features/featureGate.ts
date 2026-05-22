@@ -6,11 +6,13 @@ import { log } from '../logging/logger.js';
 
 export const FeatureConfigSchema = z.record(z.string(), z.boolean());
 
+const FEATURES_CONFIG_PATH = 'features.json';
+
 export class FeatureGate {
   private features: Map<string, boolean>;
 
-  constructor(configPath?: string) {
-    this.features = this.loadFeatures(configPath);
+  constructor() {
+    this.features = this.loadFeatures();
   }
 
   /**
@@ -22,8 +24,8 @@ export class FeatureGate {
     return this.features.get(featureName) ?? false;
   }
 
-  private loadFeatures(configPath?: string): Map<string, boolean> {
-    const filePath = configPath || path.join(process.cwd(), 'features.json');
+  private loadFeatures(): Map<string, boolean> {
+    const filePath = path.join(process.cwd(), FEATURES_CONFIG_PATH);
 
     try {
       const fileContent = readFileSync(filePath, 'utf-8');
@@ -47,26 +49,11 @@ export class FeatureGate {
 let globalFeatureGate: FeatureGate | null = null;
 
 /**
- * Initialize the global feature gate with config
- * @param configPath - Path to features.json
- * @throws Error if already initialized
- */
-export function initializeFeatureGate(configPath?: string): FeatureGate {
-  if (globalFeatureGate !== null) {
-    throw new Error('FeatureGate already initialized. Multiple initializations are not allowed.');
-  }
-
-  globalFeatureGate = new FeatureGate(configPath);
-  return globalFeatureGate;
-}
-
-/**
- * Get the global feature gate instance
- * @throws Error if not initialized
+ * Get the global feature gate instance (lazy initialized)
  */
 export function getFeatureGate(): FeatureGate {
   if (globalFeatureGate === null) {
-    throw new Error('FeatureGate not initialized. Call initializeFeatureGate() first.');
+    globalFeatureGate = new FeatureGate();
   }
   return globalFeatureGate;
 }

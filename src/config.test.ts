@@ -283,20 +283,6 @@ describe('Config', () => {
     expect(config.breakGlassDisableGlobally).toBe(true);
   });
 
-  it('should set featureConfigPath to default when FEATURE_CONFIG_PATH is not set', () => {
-    vi.stubEnv('FEATURE_CONFIG_PATH', undefined);
-
-    const config = new Config();
-    expect(config.featureConfigPath).toBe('features.json');
-  });
-
-  it('should set featureConfigPath when FEATURE_CONFIG_PATH is set', () => {
-    vi.stubEnv('FEATURE_CONFIG_PATH', '/etc/tableau-mcp/features.json');
-
-    const config = new Config();
-    expect(config.featureConfigPath).toBe('/etc/tableau-mcp/features.json');
-  });
-
   describe('HTTP server config parsing', () => {
     it('should set sslKey to default when SSL_KEY is not set', () => {
       const config = new Config();

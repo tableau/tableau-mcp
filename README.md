@@ -54,8 +54,8 @@ Control available features during development via `features.json`:
 ```
 
 **Configuration:**
-- Default location: `features.json` in project root
-- Override with environment variable: `FEATURE_CONFIG_PATH=/path/to/features.json`
+- Location: `features.json` in project root
+- No environment variable configuration needed
 
 **Usage in code:**
 
@@ -68,6 +68,7 @@ if (getFeatureGate().isFeatureEnabled('mcpapps')) {
 ```
 
 **Behavior:**
+- Lazy initialization: Feature gate loads config on first access
 - Features not listed in config: Disabled by default
 - Invalid JSON or missing file: All features disabled, error logged
 - Strict validation: All values must be boolean, or entire config is rejected
