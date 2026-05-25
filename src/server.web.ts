@@ -18,7 +18,8 @@ import { webToolFactories } from './tools/web/tools.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings.js';
 import { Provider } from './utils/provider.js';
 
-const serverName = 'tableau-mcp';
+export const serverName = 'tableau-mcp';
+
 const serverVersion = pkg.version;
 
 export class WebMcpServer extends Server {
