@@ -142,7 +142,6 @@ export function constrainExtractRefreshTasks({
   }
 
   const { datasourceIds, workbookIds } = boundedContext;
-  const originalCount = tasks.length;
 
   // Filter by datasourceIds - only keep tasks for datasources in the allowed set
   if (datasourceIds) {
@@ -154,21 +153,13 @@ export function constrainExtractRefreshTasks({
     tasks = tasks.filter((task) => task.workbook?.id && workbookIds.has(task.workbook.id));
   }
 
-  if (tasks.length === 0 && originalCount > 0) {
+  if (tasks.length === 0) {
     return {
       type: 'empty',
       message: [
         'The set of allowed extract refresh tasks is limited by the server configuration.',
         'While extract refresh tasks were found, they were all filtered out by the server configuration.',
       ].join(' '),
-    };
-  }
-
-  if (tasks.length === 0) {
-    return {
-      type: 'empty',
-      message:
-        'No extract refresh tasks were found. Either none exist or you do not have permission to view them.',
     };
   }
 
