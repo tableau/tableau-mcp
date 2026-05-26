@@ -7,9 +7,8 @@ import z from 'zod';
 
 import styles from './embed-tableau-viz.module.css';
 import { getEmbeddingApiUrl } from './getEmbeddingApiUrl.js';
-import { createIframeForEmbeddedContainer } from './iframeWithSrcDocBuilder.js';
 
-const embedVizResultSchema = z.object({ url: z.string(), token: z.string().optional() });
+const embedVizResultSchema = z.object({ url: z.string(), token: z.string() });
 type EmbedVizResult = z.infer<typeof embedVizResultSchema>;
 
 function parseToolResult(callToolResult: CallToolResult): EmbedVizResult | null {
@@ -103,24 +102,52 @@ function EmbedTableauViz({
   hostContext: _hostContext,
 }: EmbedTableauVizProps): React.ReactNode {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [apiLoaded, setApiLoaded] = useState(false);
   const parsed = toolResult ? parseToolResult(toolResult) : null;
 
+  // Load Embedding API script directly into React DOM
+  useEffect(() => {
+    if (!parsed) return;
+
+    // Check if script already loaded
+    const existingScript = document.querySelector(
+      `script[src="${getEmbeddingApiUrl(parsed.url)}"]`
+    );
+
+    if (existingScript) {
+      setApiLoaded(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.type = 'module';
+    script.src = getEmbeddingApiUrl(parsed.url);
+    script.onload = () => setApiLoaded(true);
+    script.onerror = () => console.error('Failed to load Embedding API');
+    document.head.appendChild(script);
+  }, [parsed?.url]);
+
+  // Create <tableau-viz> directly when API is loaded
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !parsed) return;
+    if (!container || !apiLoaded || !parsed) return;
 
-    const { url: workbookUrl, token } = parsed;
-    const tokenAttribute = token ? ` token="${token}"` : '';
-    const iframe = createIframeForEmbeddedContainer(
-      getEmbeddingApiUrl(workbookUrl),
-      `<div id="component-container" style="height:100%;width:100%;"><tableau-viz src="${workbookUrl}"${tokenAttribute} width="100%" height="100%"></tableau-viz></div>`,
-    );
-    container.appendChild(iframe);
+    const { url, token } = parsed;
+    if (!token) return;
+
+    // Create viz element using DOM APIs (prevents XSS)
+    const viz = document.createElement('tableau-viz');
+    viz.setAttribute('src', url);
+    viz.setAttribute('token', token);
+    viz.setAttribute('width', '100%');
+    viz.setAttribute('height', '600');
+
+    container.appendChild(viz);
 
     return () => {
       container.innerHTML = '';
     };
-  }, [parsed?.url, parsed?.token]);
+  }, [apiLoaded, parsed?.url, parsed?.token]);
 
   if (!toolResult) {
     return (

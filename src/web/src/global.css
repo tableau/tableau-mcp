@@ -68,11 +68,18 @@
 
 html,
 body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
   font-family: var(--font-sans);
   font-size: var(--font-text-md-size);
   font-weight: var(--font-weight-normal);
   line-height: var(--font-text-md-line-height);
   color: var(--color-text-primary);
+}
+
+#root {
+  height: 100%;
 }
 
 h1 {
