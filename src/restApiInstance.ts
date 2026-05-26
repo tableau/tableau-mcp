@@ -190,6 +190,7 @@ export const useRestApi = async <T>(
       // Sessions for 'oauth' and 'passthrough' are not. Signing out would invalidate the session,
       // preventing the access token from being reused for subsequent requests.
       await restApi.signOut();
+      log({ message: 'Signed out of Tableau REST API', level: 'debug', logger: 'auth' });
     }
   }
 };
