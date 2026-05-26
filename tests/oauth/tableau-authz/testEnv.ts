@@ -6,8 +6,14 @@ const envSchema = z.object({
   TEST_USER: z.string(),
   TEST_PASSWORD: z.string(),
   TEST_SITE_NAME: z.string(),
-  FILL_SITE_NAME: z.coerce.boolean().default(false),
-  TABLEAU_AI_DISABLED: z.coerce.boolean().default(false),
+  FILL_SITE_NAME: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
+  TABLEAU_AI_DISABLED: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => v === 'true'),
 });
 
 export type Env = z.infer<typeof envSchema>;
