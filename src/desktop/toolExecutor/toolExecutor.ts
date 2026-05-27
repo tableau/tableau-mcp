@@ -13,7 +13,7 @@ type WithAbortSignal = {
 
 export type ExecuteCommandArgs<Z extends z.ZodTypeAny | undefined = undefined> = {
   command: string;
-  namespace: string;
+  namespace: 'tabui' | 'tabdoc';
   args?: Record<string, any>;
   schema?: Z;
 } & WithAbortSignal;
