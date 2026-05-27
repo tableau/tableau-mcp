@@ -157,8 +157,9 @@ describe('server', () => {
   it('should register app tools when tool has app property', async () => {
     const server = getServer();
     server.registerAppTool = vi.fn();
+    server.registerAppResource = vi.fn();
 
-    const callback = vi.fn()
+    const callback = vi.fn();
 
     // Mock a tool factory that returns a tool with app property
     const mockAppTool = {
@@ -171,6 +172,7 @@ describe('server', () => {
       app: {
         name: 'test-app',
         resourceUri: 'tableau://app/test',
+        html: '<html><body>Test App UI</body></html>',
       },
     };
 
@@ -192,6 +194,14 @@ describe('server', () => {
           },
         },
       },
+      expect.any(Function),
+    );
+
+    expect(server.registerAppResource).toHaveBeenCalledWith(
+      server.mcpServer,
+      'tableau://app/test',
+      'tableau://app/test',
+      expect.objectContaining({ mimeType: expect.any(String) }),
       expect.any(Function),
     );
   });

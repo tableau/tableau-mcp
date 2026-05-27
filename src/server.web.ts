@@ -4,7 +4,7 @@ import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/typ
 import {
   registerAppTool,
   registerAppResource,
-  type McpUiReadResourceCallback,
+  RESOURCE_MIME_TYPE,
 } from '@modelcontextprotocol/ext-apps/server';
 
 import pkg from '../package.json';
@@ -20,6 +20,7 @@ import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings.js';
+import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
 
 export const serverName = 'tableau-mcp';
@@ -152,8 +153,13 @@ export class WebMcpServer extends Server {
     tool: WebTool<any>,
     toolCallback: ToolCallback<typeof tool.paramsSchema>,
   ): Promise<void> => {
-    const resourceUri = tool.app?.resourceUri ?? "";
+    invariant(tool.app, `Tool ${tool.name} is an app but no app details were provided`);
 
+    const { resourceUri, html } = tool.app;
+
+    // Register a tool with UI metadata. When the host calls this tool, it reads
+    // `_meta.ui.resourceUri` to know which resource to fetch and render as an
+    // interactive UI.
     this.registerAppTool(
       this.mcpServer,
       tool.name,
@@ -170,7 +176,28 @@ export class WebMcpServer extends Server {
       },
       toolCallback,
     );
+
+    // Register the resource, which returns the bundled HTML/JavaScript for the UI.
+    this.registerAppResource(
+      // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.
+      this.mcpServer,
+      resourceUri,
+      resourceUri,
+      { mimeType: RESOURCE_MIME_TYPE },
+      async () => {
+        return {
+          contents: [
+            {
+              uri: resourceUri,
+              mimeType: RESOURCE_MIME_TYPE,
+              text: html,
+            },
+          ],
+        };
+      },
+    );
   };
 
   registerAppTool = registerAppTool;
+  registerAppResource = registerAppResource;
 }

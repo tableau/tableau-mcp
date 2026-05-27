@@ -16,9 +16,10 @@ import { WebToolName } from './toolName.js';
 
 export type ToolRules = Record<string, boolean | undefined>;
 
-type AppDetails = {
+export type AppDetails = {
   name: string;
   resourceUri: string;
+  html: string;
 };
 
 export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = ToolParams<
