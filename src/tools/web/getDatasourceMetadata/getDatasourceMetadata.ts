@@ -15,7 +15,12 @@ import { getResultForTableauVersion } from '../../../utils/isTableauVersionAtLea
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ToolRules, WebTool } from '../tool.js';
-import { combineFields, simplifyReadMetadataResult } from './datasourceMetadataUtils.js';
+import {
+  combineFields,
+  fetchSampleStringValues,
+  FieldsResult,
+  simplifyReadMetadataResult,
+} from './datasourceMetadataUtils.js';
 
 export const getGraphqlQuery = (datasourceLuid: string): string => `
   query datasourceFieldInfo {
@@ -85,6 +90,7 @@ export const getGraphqlQuery = (datasourceLuid: string): string => `
 
 const paramsSchema = {
   datasourceLuid: z.string().nonempty(),
+  sampleStringValues: z.boolean().optional().default(true),
 };
 
 export type GetDatasourceMetadataError =
@@ -108,6 +114,7 @@ export const getGetDatasourceMetadataTool = (
     This tool retrieves metadata for a specified datasource by taking the basic, high level, metadata results from Tableau's VizQL Data Service and enriches them with additional context provided by Tableau's Metadata API.
     The metadata provided by this tool consists of the datasource model, fields, and parameters that belong to the datasource.
     Fields will contain properties such as name and dataType, but may also expose richer context such as descriptions, dataCategories, roles, etc.
+    By default, the response also includes up to 3 distinct sample values per STRING field (in a \`sampleValues\` array), which helps downstream tools build accurate filter queries. Set \`sampleStringValues\` to \`false\` to skip these per-field sample queries; useful for very wide datasources where the additional latency or token cost outweighs the value, or when only schema-level information is needed.
     This tool should be used for getting the metadata to ground the use of a tool that queries Tableau published data sources.
     `,
     paramsSchema,
@@ -116,12 +123,13 @@ export const getGetDatasourceMetadataTool = (
       readOnlyHint: true,
       openWorldHint: false,
     },
-    callback: async ({ datasourceLuid }, extra): Promise<CallToolResult> => {
+    callback: async ({ datasourceLuid, sampleStringValues }, extra): Promise<CallToolResult> => {
       const query = getGraphqlQuery(datasourceLuid);
+      const shouldSampleStringValues = sampleStringValues ?? true;
 
       return await getDatasourceMetadataTool.logAndExecute({
         extra,
-        args: { datasourceLuid },
+        args: { datasourceLuid, sampleStringValues: shouldSampleStringValues },
         callback: async () => {
           if (!datasourceLuid) {
             return new ArgsValidationError('datasourceLuid must be a non-empty string.').toErr();
@@ -165,39 +173,44 @@ export const getGetDatasourceMetadataTool = (
                 return new FeatureDisabledError(getVizqlDataServiceDisabledError()).toErr();
               }
 
+              let fieldsResult: FieldsResult;
               if (configWithOverrides.disableMetadataApiRequests) {
-                // Exit early since requests to the Tableau Metadata API are disabled.
-                return Ok(
-                  simplifyReadMetadataResult(
-                    readMetadataResult.value,
-                    datasourceModelResult?.value,
-                  ),
-                );
-              }
-
-              let listFieldsResult: GraphQLResponse;
-
-              try {
-                // Fetching metadata from Tableau Metadata API.
-                // Using try-catch here since requests could fail if the service is not enabled.
-                listFieldsResult = await restApi.metadataMethods.graphql(query);
-              } catch {
-                return Ok(
-                  simplifyReadMetadataResult(
-                    readMetadataResult.value,
-                    datasourceModelResult?.value,
-                  ),
-                );
-              }
-
-              // Combine the results from the VizQL Data Service API and the Tableau Metadata API.
-              return Ok(
-                combineFields(
+                // Only using readMetadata results from VDS API as requests to the Tableau Metadata API are disabled.
+                fieldsResult = simplifyReadMetadataResult(
                   readMetadataResult.value,
-                  listFieldsResult,
                   datasourceModelResult?.value,
-                ),
-              );
+                );
+              } else {
+                let listFieldsResult: GraphQLResponse | undefined;
+                try {
+                  // Fetching metadata from Tableau Metadata API.
+                  // Using try-catch here since requests could fail if the service is not enabled.
+                  listFieldsResult = await restApi.metadataMethods.graphql(query);
+                } catch {
+                  // ignore — fall back to readMetadata-only result below
+                }
+
+                fieldsResult = listFieldsResult
+                  ? combineFields(
+                      readMetadataResult.value,
+                      listFieldsResult,
+                      datasourceModelResult?.value,
+                    )
+                  : simplifyReadMetadataResult(
+                      readMetadataResult.value,
+                      datasourceModelResult?.value,
+                    );
+              }
+
+              if (shouldSampleStringValues) {
+                fieldsResult = await fetchSampleStringValues(
+                  restApi.vizqlDataServiceMethods,
+                  { datasourceLuid },
+                  fieldsResult,
+                );
+              }
+
+              return Ok(fieldsResult);
             },
           });
         },

@@ -36,5 +36,40 @@ describe('get-datasource-metadata', () => {
     const fieldNames = flatFields.map((field) => field.name);
     expect(fieldNames).toContain('Postal Code');
     expect(fieldNames).toContain('Product Name');
+
+    const stringFieldsWithSamples = flatFields.filter(
+      (field) =>
+        field.dataType === 'STRING' &&
+        Array.isArray(field.sampleValues) &&
+        field.sampleValues.length > 0,
+    );
+    expect(stringFieldsWithSamples.length).toBeGreaterThan(0);
+    for (const field of stringFieldsWithSamples) {
+      expect(field.sampleValues!.length).toBeLessThanOrEqual(3);
+      for (const value of field.sampleValues!) {
+        expect(typeof value).toBe('string');
+      }
+    }
+  });
+
+  it('should omit sampleValues when sampleStringValues is false', async () => {
+    const env = getDefaultEnv();
+    const superstore = getSuperstoreDatasource(env);
+
+    const { fieldGroups } = await client.callTool('get-datasource-metadata', {
+      schema: fieldsResultSchema,
+      toolArgs: {
+        datasourceLuid: superstore.id,
+        sampleStringValues: false,
+      },
+    });
+
+    invariant(fieldGroups, 'fieldGroups is undefined');
+    const flatFields = fieldGroups.flatMap((group) => group.fields ?? []);
+    expect(flatFields.length).toBeGreaterThan(0);
+
+    for (const field of flatFields) {
+      expect(field.sampleValues).toBeUndefined();
+    }
   });
 });

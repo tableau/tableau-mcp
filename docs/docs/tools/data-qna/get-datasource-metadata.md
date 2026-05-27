@@ -17,7 +17,8 @@ Fetches datasource metadata for the specified datasource, including:
 - [Request data source model](https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/GetDatasourceModel)
 - [Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/index.html)
 - [Query Data Source](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source)
-  (if applicable [tool scoping](../../configuration/mcp-config/tool-scoping.md) is enabled)
+  (if applicable [tool scoping](../../configuration/mcp-config/tool-scoping.md) is enabled, and one
+  call per `STRING` field when `sampleStringValues` is `true`)
 
 ## Environment variables
 
@@ -31,6 +32,21 @@ The LUID of the data source, potentially retrieved by the [List Data Sources](li
 tool.
 
 Example: `2d935df8-fe7e-4fd8-bb14-35eb4ba31d45`
+
+## Optional arguments
+
+### `sampleStringValues`
+
+When `true` (the default), the response includes up to 3 distinct sample values for each field whose
+`dataType` is `STRING`, in a `sampleValues: string[]` property on that field. This helps downstream
+tools (such as [Query Datasource](query-datasource.md)) construct accurate `SET` and `MATCH`
+filters without first making an additional discovery query.
+
+Set to `false` to skip these per-field sample queries. Useful for very wide datasources where the
+additional latency or token cost outweighs the value, or when only schema-level information is
+needed. When `false`, the `sampleValues` property is omitted from every field.
+
+Default: `true`
 
 ## Response shape
 
@@ -87,7 +103,8 @@ endpoint (2025.3+). On older versions, it is omitted.
           "logicalTableId": "Orders_...",
           "defaultAggregation": "COUNT",
           "dataCategory": "NOMINAL",
-          "role": "DIMENSION"
+          "role": "DIMENSION",
+          "sampleValues": ["CA-2017-152156", "CA-2017-138688", "US-2018-108966"]
         },
         {
           "name": "Sales",

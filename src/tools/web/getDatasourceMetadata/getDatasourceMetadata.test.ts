@@ -235,6 +235,7 @@ const mocks = vi.hoisted(() => ({
   mockReadMetadata: vi.fn(),
   mockGetDatasourceModel: vi.fn(),
   mockGraphql: vi.fn(),
+  mockQueryDatasource: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -243,6 +244,7 @@ vi.mock('../../../restApiInstance.js', () => ({
       vizqlDataServiceMethods: {
         readMetadata: mocks.mockReadMetadata,
         getDatasourceModel: mocks.mockGetDatasourceModel,
+        queryDatasource: mocks.mockQueryDatasource,
       },
       metadataMethods: {
         graphql: mocks.mockGraphql,
@@ -258,6 +260,7 @@ describe('getDatasourceMetadataTool', () => {
     stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
     mocks.mockGetDatasourceModel.mockResolvedValue(new Ok(mockDatasourceModelResponses.success));
+    mocks.mockQueryDatasource.mockResolvedValue(new Ok({ data: [] }));
   });
 
   afterEach(() => {
@@ -273,6 +276,7 @@ describe('getDatasourceMetadataTool', () => {
     expect(getDatasourceMetadataTool.description).toEqual(expect.any(String));
     expect(getDatasourceMetadataTool.paramsSchema).toMatchObject({
       datasourceLuid: expect.any(Object),
+      sampleStringValues: expect.any(Object),
     });
     expect(getDatasourceMetadataTool.annotations).toMatchObject({
       title: 'Get Datasource Metadata',
@@ -797,7 +801,10 @@ describe('getDatasourceMetadataTool', () => {
     );
     const callback = await Provider.from(getDatasourceMetadataTool.callback);
 
-    const result = await callback({ datasourceLuid: '' }, getMockRequestHandlerExtra());
+    const result = await callback(
+      { datasourceLuid: '', sampleStringValues: true },
+      getMockRequestHandlerExtra(),
+    );
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -842,6 +849,91 @@ describe('getDatasourceMetadataTool', () => {
     expect(mocks.mockGetDatasourceModel).not.toHaveBeenCalled();
   });
 
+  it('should populate sampleValues for STRING fields by default', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+    mocks.mockQueryDatasource.mockResolvedValue(
+      new Ok({
+        data: [
+          { SampleValues: 'Stapler' },
+          { SampleValues: 'Stapler' }, // duplicate to verify deduping
+          { SampleValues: 'Notebook' },
+          { SampleValues: 'Pen' },
+          { SampleValues: 'Eraser' }, // beyond max — should be ignored
+        ],
+      }),
+    );
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    const fields = flattenResponseFields(responseData);
+
+    const productNameField = fields.find((f) => f.name === 'Product Name');
+    expect(productNameField).toMatchObject({
+      dataType: 'STRING',
+      sampleValues: ['Stapler', 'Notebook', 'Pen'],
+    });
+
+    const quantityField = fields.find((f) => f.name === 'Quantity');
+    expect(quantityField).toBeDefined();
+    expect(quantityField).not.toHaveProperty('sampleValues');
+
+    const profitRatioField = fields.find((f) => f.name === 'Profit Ratio');
+    expect(profitRatioField).toBeDefined();
+    expect(profitRatioField).not.toHaveProperty('sampleValues');
+
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledWith({
+      datasource: { datasourceLuid: 'test-luid' },
+      query: {
+        fields: [{ fieldCaption: 'Product Name', fieldAlias: 'SampleValues' }],
+      },
+      options: {
+        returnFormat: 'OBJECTS',
+        debug: true,
+        disaggregate: false,
+      },
+    });
+  });
+
+  it('should skip sampleValues fetching when sampleStringValues is false', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+
+    const result = await getToolResult({ sampleStringValues: false });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+
+    expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    for (const field of flattenResponseFields(responseData)) {
+      expect(field).not.toHaveProperty('sampleValues');
+    }
+  });
+
+  it('should not fail the request when a per-field sample query fails', async () => {
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+    mocks.mockQueryDatasource.mockResolvedValue(
+      Err({ type: 'api-error', message: 'Boom', httpStatus: 400, errorCode: 'X' }),
+    );
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    const productNameField = flattenResponseFields(responseData).find(
+      (f) => f.name === 'Product Name',
+    );
+    expect(productNameField).toBeDefined();
+    expect(productNameField).not.toHaveProperty('sampleValues');
+  });
+
   it('should return data source not allowed error when datasource is not allowed', async () => {
     vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
 
@@ -861,14 +953,17 @@ describe('getDatasourceMetadataTool', () => {
 });
 
 async function getToolResult(
-  params: { productVersion?: ProductVersion } = {},
+  params: { productVersion?: ProductVersion; sampleStringValues?: boolean } = {},
 ): Promise<CallToolResult> {
   const getDatasourceMetadataTool = getGetDatasourceMetadataTool(
     new WebMcpServer(),
     params.productVersion ?? testProductVersion,
   );
   const callback = await Provider.from(getDatasourceMetadataTool.callback);
-  return await callback({ datasourceLuid: 'test-luid' }, getMockRequestHandlerExtra());
+  return await callback(
+    { datasourceLuid: 'test-luid', sampleStringValues: params.sampleStringValues ?? true },
+    getMockRequestHandlerExtra(),
+  );
 }
 
 function flattenResponseFields(responseData: Record<string, unknown>): Record<string, unknown>[] {
