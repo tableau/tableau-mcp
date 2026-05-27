@@ -167,3 +167,9 @@ export class NoDesktopInstancesFoundError extends McpToolError {
     });
   }
 }
+
+export class GetEventsFailedError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'get-events-failed', message, statusCode: 500 });
+  }
+}
