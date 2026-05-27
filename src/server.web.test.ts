@@ -153,6 +153,48 @@ describe('server', () => {
           'The Tableau MCP server is temporarily unavailable. Please try again later.',
     );
   });
+
+  it('should register app tools when tool has app property', async () => {
+    const server = getServer();
+    server.registerAppTool = vi.fn();
+
+    const callback = vi.fn()
+
+    // Mock a tool factory that returns a tool with app property
+    const mockAppTool = {
+      name: 'test-app-tool',
+      description: 'Test app tool',
+      paramsSchema: {},
+      annotations: { title: 'Test App' },
+      callback,
+      disabled: false,
+      app: {
+        name: 'test-app',
+        resourceUri: 'tableau://app/test',
+      },
+    };
+
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool] as any);
+
+    await server.registerTools();
+
+    expect(server.registerAppTool).toHaveBeenCalledWith(
+      server.mcpServer,
+      'test-app-tool',
+      {
+        title: 'Test App',
+        description: 'Test app tool',
+        inputSchema: {},
+        annotations: { title: 'Test App' },
+        _meta: {
+          ui: {
+            resourceUri: 'tableau://app/test',
+          },
+        },
+      },
+      expect.any(Function),
+    );
+  });
 });
 
 function getServer(): WebMcpServer {

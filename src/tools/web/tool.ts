@@ -16,6 +16,21 @@ import { WebToolName } from './toolName.js';
 
 export type ToolRules = Record<string, boolean | undefined>;
 
+type AppDetails = {
+  name: string;
+  resourceUri: string;
+};
+
+export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = ToolParams<
+  WebMcpServer,
+  WebToolName,
+  TableauWebRequestHandlerExtra,
+  TableauWebToolCallback<Args>,
+  Args
+> & {
+  app?: AppDetails;
+};
+
 export type ConstrainedResult<T> =
   | {
       type: 'success';
@@ -53,6 +68,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
   Args
 > {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
+  app?: AppDetails;
 
   constructor({
     server,
@@ -62,16 +78,12 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     annotations,
     callback,
     disabled,
-  }: ToolParams<
-    WebMcpServer,
-    WebToolName,
-    TableauWebRequestHandlerExtra,
-    TableauWebToolCallback<Args>,
-    Args
-  >) {
+    app,
+  }: WebToolParams<Args>) {
     super({ server, name, description, paramsSchema, annotations, callback, disabled });
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name as WebToolName);
+    this.app = app;
   }
 
   async logAndExecute<T>({

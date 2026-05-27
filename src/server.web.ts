@@ -1,6 +1,11 @@
 import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
+import {
+  registerAppTool,
+  registerAppResource,
+  type McpUiReadResourceCallback,
+} from '@modelcontextprotocol/ext-apps/server';
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
@@ -29,15 +34,9 @@ export class WebMcpServer extends Server {
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
     const config = getConfig();
 
-    for (const {
-      name,
-      description,
-      paramsSchema,
-      annotations,
-      callback,
-    } of await this._getToolsToRegister(tableauAuthInfo)) {
-      const toolCallback: ToolCallback<typeof paramsSchema> = async (
-        args: typeof paramsSchema,
+    for (const tool of await this._getToolsToRegister(tableauAuthInfo)) {
+      const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
+        args: typeof tool.paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
       ) => {
         if (config.breakGlassDisableGlobally) {
@@ -49,7 +48,7 @@ export class WebMcpServer extends Server {
         const requestOverridesHeader =
           extra.requestInfo?.headers[X_TABLEAU_MCP_CONFIG_HEADER]?.toString() ?? '';
         const requestOverrides = getRequestOverridesFromHeader(requestOverridesHeader);
-        const tableauToolCallback = await Provider.from(callback);
+        const tableauToolCallback = await Provider.from(tool.callback);
         const tableauRequestHandlerExtra: TableauWebRequestHandlerExtra = {
           ...extra,
           config,
@@ -86,15 +85,11 @@ export class WebMcpServer extends Server {
         return tableauToolCallback(args, tableauRequestHandlerExtra);
       };
 
-      this.mcpServer.registerTool(
-        name,
-        {
-          description: await Provider.from(description),
-          inputSchema: await Provider.from(paramsSchema),
-          annotations: await Provider.from(annotations),
-        },
-        toolCallback,
-      );
+      if (tool.app) {
+        await this._registerAppTool(tool, toolCallback);
+      } else {
+        await this._registerTool(tool, toolCallback);
+      }
     }
   };
 
@@ -137,4 +132,45 @@ export class WebMcpServer extends Server {
 
     return toolsToRegister;
   };
+
+  private _registerTool = async (
+    tool: WebTool<any>,
+    toolCallback: ToolCallback<typeof tool.paramsSchema>,
+  ): Promise<void> => {
+    this.mcpServer.registerTool(
+      tool.name,
+      {
+        description: await Provider.from(tool.description),
+        inputSchema: await Provider.from(tool.paramsSchema),
+        annotations: await Provider.from(tool.annotations),
+      },
+      toolCallback,
+    );
+  };
+
+  private _registerAppTool = async (
+    tool: WebTool<any>,
+    toolCallback: ToolCallback<typeof tool.paramsSchema>,
+  ): Promise<void> => {
+    const resourceUri = tool.app?.resourceUri ?? "";
+
+    this.registerAppTool(
+      this.mcpServer,
+      tool.name,
+      {
+        title: (await Provider.from(tool.annotations)).title,
+        description: await Provider.from(tool.description),
+        inputSchema: await Provider.from(tool.paramsSchema),
+        annotations: await Provider.from(tool.annotations),
+        _meta: {
+          ui: {
+            resourceUri,
+          },
+        },
+      },
+      toolCallback,
+    );
+  };
+
+  registerAppTool = registerAppTool;
 }
