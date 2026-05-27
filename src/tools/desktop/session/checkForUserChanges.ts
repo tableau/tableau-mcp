@@ -24,7 +24,7 @@ type CheckForUserChangesResult = {
   message: string;
   instructions?: string;
   events?: Array<string>;
-  currentSequence?: number;
+  currentSequence: number;
 };
 
 const title = 'Check for User Changes';
@@ -71,15 +71,16 @@ export const getCheckForUserChangesTool = (
           if (sinceSequence === undefined) {
             log({
               message: 'No sinceSequence provided, returning current latest sequence',
-              level: 'info',
+              level: 'debug',
               logger: 'checkForUserChangesTool',
               data: result.value,
             });
 
             return new Ok({
-              message: `Current event sequence checkpoint: ${latestSequence}.`,
+              message: 'Current event sequence checkpoint.',
               instructions:
                 'Use this sequence number in subsequent calls to check for user changes.',
+              currentSequence: latestSequence,
             });
           }
 
