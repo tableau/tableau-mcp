@@ -934,6 +934,65 @@ describe('getDatasourceMetadataTool', () => {
     expect(productNameField).not.toHaveProperty('sampleValues');
   });
 
+  it('should skip sampleValues fetching when query-datasource is excluded by tool scoping', async () => {
+    vi.stubEnv('EXCLUDE_TOOLS', 'query-datasource');
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+
+    expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    for (const field of flattenResponseFields(responseData)) {
+      expect(field).not.toHaveProperty('sampleValues');
+    }
+  });
+
+  it('should skip sampleValues fetching when INCLUDE_TOOLS does not include query-datasource', async () => {
+    vi.stubEnv('INCLUDE_TOOLS', 'get-datasource-metadata');
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+
+    expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    for (const field of flattenResponseFields(responseData)) {
+      expect(field).not.toHaveProperty('sampleValues');
+    }
+  });
+
+  it('should populate sampleValues when INCLUDE_TOOLS includes query-datasource', async () => {
+    vi.stubEnv('INCLUDE_TOOLS', 'get-datasource-metadata,query-datasource');
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+    mocks.mockQueryDatasource.mockResolvedValue(
+      new Ok({
+        data: [{ SampleValues: 'Stapler' }, { SampleValues: 'Notebook' }],
+      }),
+    );
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+    const productNameField = flattenResponseFields(responseData).find(
+      (f) => f.name === 'Product Name',
+    );
+    expect(productNameField).toMatchObject({
+      dataType: 'STRING',
+      sampleValues: ['Stapler', 'Notebook'],
+    });
+    expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(1);
+  });
+
   it('should return data source not allowed error when datasource is not allowed', async () => {
     vi.stubEnv('INCLUDE_DATASOURCE_IDS', 'some-other-datasource-luid');
 

@@ -103,6 +103,48 @@ describe('OverridableConfig', () => {
         'Cannot include and exclude tools simultaneously',
       );
     });
+
+    describe('isToolEnabled', () => {
+      it('should return true for any tool when neither INCLUDE_TOOLS nor EXCLUDE_TOOLS is set', () => {
+        const config = new OverridableConfig({});
+        expect(config.isToolEnabled('query-datasource')).toBe(true);
+        expect(config.isToolEnabled('get-datasource-metadata')).toBe(true);
+      });
+
+      it('should return true for a tool listed in INCLUDE_TOOLS and false for one that is not', () => {
+        vi.stubEnv('INCLUDE_TOOLS', 'get-datasource-metadata');
+
+        const config = new OverridableConfig({});
+        expect(config.isToolEnabled('get-datasource-metadata')).toBe(true);
+        expect(config.isToolEnabled('query-datasource')).toBe(false);
+      });
+
+      it('should return false for a tool listed in EXCLUDE_TOOLS and true for one that is not', () => {
+        vi.stubEnv('EXCLUDE_TOOLS', 'query-datasource');
+
+        const config = new OverridableConfig({});
+        expect(config.isToolEnabled('query-datasource')).toBe(false);
+        expect(config.isToolEnabled('get-datasource-metadata')).toBe(true);
+      });
+
+      it('should return true for query-datasource when INCLUDE_TOOLS uses the datasource group', () => {
+        vi.stubEnv('INCLUDE_TOOLS', 'datasource');
+
+        const config = new OverridableConfig({});
+        expect(config.isToolEnabled('query-datasource')).toBe(true);
+        expect(config.isToolEnabled('get-datasource-metadata')).toBe(true);
+        expect(config.isToolEnabled('list-workbooks')).toBe(false);
+      });
+
+      it('should return false for query-datasource when EXCLUDE_TOOLS uses the datasource group', () => {
+        vi.stubEnv('EXCLUDE_TOOLS', 'datasource');
+
+        const config = new OverridableConfig({});
+        expect(config.isToolEnabled('query-datasource')).toBe(false);
+        expect(config.isToolEnabled('get-datasource-metadata')).toBe(false);
+        expect(config.isToolEnabled('list-workbooks')).toBe(true);
+      });
+    });
   });
 
   describe('Bounded context parsing', () => {

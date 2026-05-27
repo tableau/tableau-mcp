@@ -17,8 +17,9 @@ Fetches datasource metadata for the specified datasource, including:
 - [Request data source model](https://help.tableau.com/current/api/vizql-data-service/en-us/reference/index.html#tag/HeadlessBI/operation/GetDatasourceModel)
 - [Metadata API](https://help.tableau.com/current/api/metadata_api/en-us/index.html)
 - [Query Data Source](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_source)
-  (if applicable [tool scoping](../../configuration/mcp-config/tool-scoping.md) is enabled, and one
-  call per `STRING` field when `sampleStringValues` is `true`)
+  (when `sampleStringValues` is `true` and the
+  [Query Datasource](query-datasource.md) tool is enabled by
+  [tool scoping](../../configuration/mcp-config/tool-scoping.md); one call per `STRING` field)
 
 ## Environment variables
 
@@ -47,6 +48,11 @@ additional latency or token cost outweighs the value, or when only schema-level 
 needed. When `false`, the `sampleValues` property is omitted from every field.
 
 Default: `true`
+
+Sampling is also automatically skipped when the [Query Datasource](query-datasource.md) tool is not
+enabled by [tool scoping](../../configuration/mcp-config/tool-scoping.md), since sampling uses the
+same VizQL Data Service query endpoint. In that case, `sampleValues` is omitted from every field
+even if `sampleStringValues` is `true`.
 
 ## Response shape
 

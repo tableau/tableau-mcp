@@ -113,16 +113,13 @@ export class WebMcpServer extends Server {
 
     const tableauServerInfo = await getTableauServerInfo(config.server || tableauAuthInfo?.server);
 
-    const { includeTools, excludeTools } = configOverrides;
-
     const allTools = webToolFactories.map((toolFactory) =>
       toolFactory(this, tableauServerInfo.productVersion),
     );
     const toolsToRegister: typeof allTools = [];
     for (const tool of allTools) {
       if (await Provider.from(tool.disabled)) continue;
-      if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
-      if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
+      if (!configOverrides.isToolEnabled(tool.name)) continue;
       toolsToRegister.push(tool);
     }
 
@@ -130,8 +127,8 @@ export class WebMcpServer extends Server {
       throw new Error(`
           No tools to register.
           Tools available = [${webToolNames.join(', ')}].
-          EXCLUDE_TOOLS = [${excludeTools.join(', ')}].
-          INCLUDE_TOOLS = [${includeTools.join(', ')}]
+          EXCLUDE_TOOLS = [${configOverrides.excludeTools.join(', ')}].
+          INCLUDE_TOOLS = [${configOverrides.includeTools.join(', ')}]
         `);
     }
 

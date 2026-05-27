@@ -548,6 +548,16 @@ export class OverridableConfig {
     // fallback to overall max result limit
     return this.maxResultLimit;
   }
+
+  isToolEnabled(toolName: WebToolName): boolean {
+    if (this.includeTools.length > 0 && !this.includeTools.includes(toolName)) {
+      return false;
+    }
+    if (this.excludeTools.includes(toolName)) {
+      return false;
+    }
+    return true;
+  }
 }
 
 // Creates a set from a comma-separated string of values.
