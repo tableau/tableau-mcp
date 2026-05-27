@@ -1,6 +1,7 @@
 export const webToolNames = [
   'list-datasources',
   'list-workbooks',
+  'list-projects',
   'list-views',
   'list-custom-views',
   'query-datasource',
@@ -26,6 +27,7 @@ export type WebToolName = (typeof webToolNames)[number];
 export const webToolGroupNames = [
   'datasource',
   'workbook',
+  'project',
   'view',
   'pulse',
   'content-exploration',
@@ -36,6 +38,7 @@ export type WebToolGroupName = (typeof webToolGroupNames)[number];
 export const webToolGroups = {
   datasource: ['list-datasources', 'get-datasource-metadata', 'query-datasource'],
   workbook: ['list-workbooks', 'get-workbook'],
+  project: ['list-projects'],
   view: [
     'list-views',
     'list-custom-views',

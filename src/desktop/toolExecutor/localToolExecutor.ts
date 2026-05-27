@@ -1,3 +1,4 @@
+import { setTimeout as setTimeoutPromise } from 'timers/promises';
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
@@ -56,6 +57,7 @@ export class LocalExecutor extends ToolExecutor {
   async executeCommand({
     command,
     namespace,
+    signal,
     args,
     schema,
   }: ExecuteCommandArgs<z.ZodTypeAny | undefined>): Promise<
@@ -66,7 +68,10 @@ export class LocalExecutor extends ToolExecutor {
   > {
     args ??= {};
 
-    const client = await getAgentApiClient(this.config);
+    const client = await getAgentApiClient({
+      signal,
+      config: this.config,
+    });
     const executeResult = await client.executeCommand({ namespace, command, args });
 
     if (executeResult.isErr()) {
@@ -80,7 +85,7 @@ export class LocalExecutor extends ToolExecutor {
     }
 
     const commandId = executeResult.value.command_id;
-    const commandStatusResult = await this.waitForCommand(commandId);
+    const commandStatusResult = await this.waitForCommand({ commandId, signal });
     if (commandStatusResult.isErr()) {
       const error = commandStatusResult.error;
       log({
@@ -141,10 +146,15 @@ export class LocalExecutor extends ToolExecutor {
     });
   }
 
-  async getEvents(args?: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>> {
-    const { sinceSequence } = args ?? {};
+  async getEvents({
+    signal,
+    sinceSequence,
+  }: GetEventsArgs): Promise<Result<GetEventsResponse, unknown>> {
+    const client = await getAgentApiClient({
+      signal: signal,
+      config: this.config,
+    });
 
-    const client = await getAgentApiClient(this.config);
     const getEventsResult = await client.getEvents(sinceSequence);
     if (getEventsResult.isErr()) {
       const error = getEventsResult.error;
@@ -159,13 +169,20 @@ export class LocalExecutor extends ToolExecutor {
     return getEventsResult;
   }
 
-  private async waitForCommand(
-    commandId: string,
-  ): Promise<Result<GetCommandStatusResponse, ExecuteCommandError>> {
+  private async waitForCommand({
+    commandId,
+    signal,
+  }: {
+    commandId: string;
+    signal: AbortSignal;
+  }): Promise<Result<GetCommandStatusResponse, ExecuteCommandError>> {
     const maxAttempts = Math.ceil(this.config.commandTimeoutMs / this.config.pollIntervalMs);
     let attempts = 0;
 
-    const client = await getAgentApiClient(this.config);
+    const client = await getAgentApiClient({
+      signal,
+      config: this.config,
+    });
 
     while (attempts < maxAttempts) {
       const commandStatusResult = await client.getCommandStatus(commandId);
@@ -179,7 +196,7 @@ export class LocalExecutor extends ToolExecutor {
         return Ok(commandStatus);
       }
 
-      await new Promise((resolve) => setTimeout(resolve, this.config.pollIntervalMs));
+      await setTimeoutPromise(this.config.pollIntervalMs, undefined, { signal });
       attempts++;
     }
 

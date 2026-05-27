@@ -1,3 +1,5 @@
+import { Err, Ok, Result } from 'ts-results-es';
+
 import { log } from '../logging/logger.js';
 import { DesktopDiscoverer } from './desktopDiscoverer.js';
 import { DesktopInstance } from './desktopInstance.js';
@@ -18,11 +20,12 @@ export class SessionManager {
     let session = this.sessions.get(sessionId);
 
     if (!session) {
-      const pid = parseInt(sessionId);
-      if (isNaN(pid)) {
+      const sessionIdResult = parseSessionId(sessionId);
+      if (sessionIdResult.isErr()) {
         throw new Error(`Invalid session ID for local mode: ${sessionId}. Expected numeric PID.`);
       }
 
+      const pid = sessionIdResult.value;
       const desktopDiscoverer = new DesktopDiscoverer();
       const desktopInstance = desktopDiscoverer.getInstance(pid);
       const executor = new LocalExecutor({
@@ -54,4 +57,17 @@ export class SessionManager {
     session.lastAccess = Date.now();
     return session.executor;
   }
+}
+
+function parseSessionId(sessionId: string): Result<number, void> {
+  if (!/^\d+$/.test(sessionId)) {
+    return Err.EMPTY;
+  }
+
+  const pid = parseInt(sessionId, 10);
+  if (isNaN(pid)) {
+    return Err.EMPTY;
+  }
+
+  return Ok(pid);
 }

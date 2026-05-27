@@ -35,7 +35,7 @@ describe('DesktopInstance', () => {
       start_time: new Date().toISOString(),
     });
 
-    expect(await instance.isAlive()).toBe(true);
+    expect(await instance.isAlive(new AbortController().signal)).toBe(true);
   });
 
   it('should not be alive when agent API client is not healthy', async () => {
@@ -54,6 +54,6 @@ describe('DesktopInstance', () => {
       start_time: new Date().toISOString(),
     });
 
-    expect(await instance.isAlive()).toBe(false);
+    expect(await instance.isAlive(new AbortController().signal)).toBe(false);
   });
 });

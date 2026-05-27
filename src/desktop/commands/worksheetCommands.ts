@@ -3,20 +3,26 @@ import { z } from 'zod';
 
 import { ExecuteCommandError, ToolExecutor } from '../toolExecutor/toolExecutor';
 
-export async function getWorkbookXml(
-  executor: ToolExecutor,
-  sessionId: string,
-): Promise<Result<string, ExecuteCommandError>> {
+export async function getWorkbookXml({
+  executor,
+  session,
+  signal,
+}: {
+  executor: ToolExecutor;
+  session: string;
+  signal: AbortSignal;
+}): Promise<Result<string, ExecuteCommandError>> {
   const result = await executor.executeCommand({
     command: 'tabui',
     namespace: 'save-underlying-metadata',
     args: {
-      _session: sessionId,
+      _session: session,
       'is-json': false,
     },
     schema: z.object({
       text: z.string(),
     }),
+    signal,
   });
 
   if (result.isErr()) {

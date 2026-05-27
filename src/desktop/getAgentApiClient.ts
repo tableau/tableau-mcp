@@ -19,15 +19,20 @@ export type AgentApiClientConfig = {
   pollIntervalMs: number;
 };
 
-export async function getAgentApiClient(
-  config?: Partial<AgentApiClientConfig>,
-): Promise<AgentApiClient> {
+export async function getAgentApiClient({
+  signal,
+  config,
+}: {
+  signal: AbortSignal;
+  config?: Partial<AgentApiClientConfig>;
+}): Promise<AgentApiClient> {
   const mergedConfig = { ...getDesktopConfig().agentApiClientConfig, ...config };
   return new AgentApiClient({
     baseUrl: mergedConfig.agentApiBase,
     authToken: mergedConfig.authToken,
     options: {
       maxRequestTimeoutMs: mergedConfig.commandTimeoutMs,
+      signal,
       requestInterceptor: [getRequestInterceptor(), getRequestErrorInterceptor()],
       responseInterceptor: [getResponseInterceptor(), getResponseErrorInterceptor()],
     },

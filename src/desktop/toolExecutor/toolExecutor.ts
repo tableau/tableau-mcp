@@ -7,16 +7,20 @@ import {
   GetEventsResponse,
 } from '../../sdks/desktop/agentApi/types.js';
 
+type WithAbortSignal = {
+  signal: AbortSignal;
+};
+
 export type ExecuteCommandArgs<Z extends z.ZodTypeAny | undefined = undefined> = {
   command: string;
   namespace: string;
   args?: Record<string, any>;
   schema?: Z;
-};
+} & WithAbortSignal;
 
 export type GetEventsArgs = {
   sinceSequence?: number;
-};
+} & WithAbortSignal;
 
 export type ExecuteCommandError =
   | { type: 'command-failed'; error: ExecuteCommandResponse['error'] }

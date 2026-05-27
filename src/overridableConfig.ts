@@ -14,6 +14,7 @@ export const overridableVariables = [
   'INCLUDE_PROJECT_IDS',
   'INCLUDE_DATASOURCE_IDS',
   'INCLUDE_WORKBOOK_IDS',
+  'INCLUDE_VIEW_IDS',
   'INCLUDE_TAGS',
   'MAX_RESULT_LIMIT',
   'MAX_RESULT_LIMITS',
@@ -42,6 +43,7 @@ export type BoundedContext = {
   projectIds: Set<string> | null;
   datasourceIds: Set<string> | null;
   workbookIds: Set<string> | null;
+  viewIds: Set<string> | null;
   tags: Set<string> | null;
 };
 
@@ -96,7 +98,7 @@ export class OverridableConfig {
     this.includeTools = includeTools;
     this.excludeTools = excludeTools;
 
-    // INCLUDE_PROJECT_IDS, INCLUDE_DATASOURCE_IDS, INCLUDE_WORKBOOK_IDS, INCLUDE_TAGS
+    // INCLUDE_PROJECT_IDS, INCLUDE_DATASOURCE_IDS, INCLUDE_WORKBOOK_IDS, INCLUDE_VIEW_IDS, INCLUDE_TAGS
     this.boundedContext = this.getBoundedContextWithOverrides(
       envVariables,
       siteOverrides,
@@ -342,13 +344,19 @@ export class OverridableConfig {
       siteOverrides,
       requestOverrides,
     );
+    const viewIds = this.getBoundedVariableWithOverrides(
+      'INCLUDE_VIEW_IDS',
+      envVariables,
+      siteOverrides,
+      requestOverrides,
+    );
     const tags = this.getBoundedVariableWithOverrides(
       'INCLUDE_TAGS',
       envVariables,
       siteOverrides,
       requestOverrides,
     );
-    return { projectIds, datasourceIds, workbookIds, tags };
+    return { projectIds, datasourceIds, workbookIds, viewIds, tags };
   }
 
   getBooleanVariableWithOverrides(

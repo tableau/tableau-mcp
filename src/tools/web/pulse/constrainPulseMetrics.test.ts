@@ -8,7 +8,13 @@ describe('constrainPulseMetrics', () => {
   it('should return empty result when no metrics are found', () => {
     const result = constrainPulseMetrics({
       metrics: [],
-      boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+        viewIds: null,
+        tags: null,
+      },
     });
 
     invariant(result.type === 'empty');
@@ -24,6 +30,7 @@ describe('constrainPulseMetrics', () => {
         projectIds: null,
         datasourceIds: new Set(['123']),
         workbookIds: null,
+        viewIds: null,
         tags: null,
       },
     });
@@ -40,7 +47,13 @@ describe('constrainPulseMetrics', () => {
   it('should return success result when no metrics were filtered out by the bounded context', () => {
     const result = constrainPulseMetrics({
       metrics: mockPulseMetrics,
-      boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
+      boundedContext: {
+        projectIds: null,
+        datasourceIds: null,
+        workbookIds: null,
+        viewIds: null,
+        tags: null,
+      },
     });
 
     invariant(result.type === 'success');
@@ -54,6 +67,7 @@ describe('constrainPulseMetrics', () => {
         projectIds: null,
         datasourceIds: new Set([mockPulseMetrics[0].datasource_luid]),
         workbookIds: null,
+        viewIds: null,
         tags: null,
       },
     });

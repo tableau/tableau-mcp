@@ -50,7 +50,7 @@ describe('DesktopDiscoverer', () => {
       expect(instances.size).toBe(0);
 
       expect(existsSync).toHaveBeenCalledWith(
-        join(mockLocalAppData, 'Tableau', 'Desktop', 'agent-manifest.json'),
+        join(mockWindowsHomedir, 'AppData', 'Local', 'Tableau', 'Desktop', 'agent-manifest.json'),
       );
     });
 

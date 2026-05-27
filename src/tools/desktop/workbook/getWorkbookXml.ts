@@ -61,7 +61,7 @@ export const getGetWorkbookXmlTool = (
         args: { session, mode },
         callback: async () => {
           const executor = await extra.getExecutor(session);
-          const result = await getWorkbookXml(executor, session);
+          const result = await getWorkbookXml({ executor, session, signal: extra.signal });
 
           if (result.isErr()) {
             return new DesktopCommandExecutionError(result.error).toErr();

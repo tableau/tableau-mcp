@@ -1,4 +1,4 @@
-export const desktopToolNames = ['list-instances', 'get-workbook-xml'] as const;
+export const desktopToolNames = ['list-instances', 'check-for-user-changes', 'get-workbook-xml'] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 
 export function isDesktopToolName(value: unknown): value is DesktopToolName {

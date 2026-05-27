@@ -44,7 +44,9 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
             ...extra,
             jwtScopes: listPulseMetricSubscriptionsTool.requiredApiScopes,
             callback: async (restApi) => {
-              return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser();
+              return await restApi.pulseMethods.listPulseMetricSubscriptionsForCurrentUser(
+                extra.getUserLuid(),
+              );
             },
           });
         },

@@ -3,6 +3,7 @@ import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
 import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor';
+import { getExceptionMessage } from '../utils/getExceptionMessage';
 
 export class McpToolError extends Error {
   readonly type: string;
@@ -69,6 +70,20 @@ export class PulseDisabledError extends McpToolError {
 
   override getErrorText(): string {
     return 'Pulse is disabled on this Tableau Cloud site. To enable Pulse, please see the instructions at https://help.tableau.com/current/online/en-us/pulse_set_up.htm.';
+  }
+}
+
+export class PulseInsightsDisabledError extends McpToolError {
+  constructor() {
+    super({
+      type: 'pulse-insights-disabled',
+      message: 'Pulse AI insights are disabled',
+      statusCode: 403,
+    });
+  }
+
+  override getErrorText(): string {
+    return 'AI-powered Pulse insights are not enabled on this Tableau Cloud site. This feature requires Tableau+ to be enabled by a site administrator.';
   }
 }
 
@@ -152,6 +167,21 @@ export class NoDesktopInstancesFoundError extends McpToolError {
         '  3. The manifest file exists in the expected location',
       ].join('\n'),
       statusCode: 404,
+    });
+  }
+}
+
+export class GetEventsFailedError extends McpToolError {
+  constructor(error: unknown) {
+    super({
+      type: 'get-events-failed',
+      message: [
+        `Failed to get events: ${getExceptionMessage(error)}.`,
+        'Make sure:',
+        '  1. Tableau Desktop is running',
+        '  2. Agent API is enabled',
+      ].join('\n'),
+      statusCode: 500,
     });
   }
 }

@@ -24,9 +24,13 @@ export class DesktopInstance {
     this.start_time = start_time;
   }
 
-  async isAlive(): Promise<boolean> {
+  async isAlive(signal: AbortSignal): Promise<boolean> {
     const client = await getAgentApiClient({
-      agentApiBase: `http://127.0.0.1:${this.port}/api/v1`,
+      signal,
+      config: {
+        agentApiBase: `http://127.0.0.1:${this.port}/api/v1`,
+        authToken: this.secret,
+      },
     });
 
     return await client.getHealth();

@@ -18,6 +18,7 @@ import ContentExplorationMethods from './methods/contentExplorationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
 import McpSettingsMethods from './methods/mcpSettingsMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
+import ProjectsMethods from './methods/projectsMethods.js';
 import PulseMethods from './methods/pulseMethods.js';
 import { AuthenticatedServerMethods, ServerMethods } from './methods/serverMethods.js';
 import ViewsMethods from './methods/viewsMethods.js';
@@ -176,6 +177,15 @@ export class RestApi {
     });
     this._addInterceptors(baseUrl, metadataMethods.interceptors);
     return metadataMethods;
+  }
+
+  get projectsMethods(): ProjectsMethods {
+    const projectsMethods = new ProjectsMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, projectsMethods.interceptors);
+    return projectsMethods;
   }
 
   get pulseMethods(): PulseMethods {
