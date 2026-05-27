@@ -205,7 +205,10 @@ describe('checkForUserChangesTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Failed to get events');
+    expect(result.content[0].text).toContain('Failed to get events: Network error.');
+    expect(result.content[0].text).toContain(
+      'Ensure Tableau Desktop is running and the session is valid.',
+    );
   });
 });
 

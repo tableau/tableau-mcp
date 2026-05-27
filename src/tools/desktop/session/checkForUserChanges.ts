@@ -59,7 +59,10 @@ export const getCheckForUserChangesTool = (
 
           if (result.isErr()) {
             return new GetEventsFailedError(
-              `Failed to get events: ${getExceptionMessage(result.error)}`,
+              [
+                `Failed to get events: ${getExceptionMessage(result.error)}.`,
+                'Ensure Tableau Desktop is running and the session is valid.',
+              ].join('\n'),
             ).toErr();
           }
 
