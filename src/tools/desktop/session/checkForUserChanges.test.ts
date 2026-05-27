@@ -62,8 +62,9 @@ describe('checkForUserChangesTool', () => {
 
     const resultObj = resultSchema.parse(JSON.parse(result.content[0].text));
     expect(resultObj).toMatchObject({
-      message: 'Current event sequence checkpoint: 42.',
+      message: 'Current event sequence checkpoint.',
       instructions: 'Use this sequence number in subsequent calls to check for user changes.',
+      currentSequence: 42,
     });
   });
 
