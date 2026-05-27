@@ -39,7 +39,7 @@ describe('checkForUserChangesTool', () => {
   });
 
   it('should return checkpoint when sinceSequence is not provided', async () => {
-    const mockExecutor = vi.fn().mockResolvedValue({
+    const mockGetExecutor = vi.fn().mockResolvedValue({
       getEvents: vi.fn().mockResolvedValue({
         isOk: () => true,
         isErr: () => false,
@@ -54,7 +54,7 @@ describe('checkForUserChangesTool', () => {
     const result = await getToolResult({
       session: '12345',
       sinceSequence: undefined,
-      mockExecutor,
+      mockGetExecutor,
     });
 
     expect(result.isError).toBe(false);
@@ -68,7 +68,7 @@ describe('checkForUserChangesTool', () => {
   });
 
   it('should detect no user changes when count is 0', async () => {
-    const mockExecutor = vi.fn().mockResolvedValue({
+    const mockGetExecutor = vi.fn().mockResolvedValue({
       getEvents: vi.fn().mockResolvedValue({
         isOk: () => true,
         isErr: () => false,
@@ -83,7 +83,7 @@ describe('checkForUserChangesTool', () => {
     const result = await getToolResult({
       session: '12345',
       sinceSequence: 50,
-      mockExecutor,
+      mockGetExecutor,
     });
 
     expect(result.isError).toBe(false);
@@ -109,7 +109,7 @@ describe('checkForUserChangesTool', () => {
       count: 1,
     };
 
-    const mockExecutor = vi.fn().mockResolvedValue({
+    const mockGetExecutor = vi.fn().mockResolvedValue({
       getEvents: vi.fn().mockResolvedValue({
         isOk: () => true,
         isErr: () => false,
@@ -120,7 +120,7 @@ describe('checkForUserChangesTool', () => {
     const result = await getToolResult({
       session: '12345',
       sinceSequence: 1,
-      mockExecutor,
+      mockGetExecutor,
     });
 
     expect(result.isError).toBe(false);
@@ -137,7 +137,7 @@ describe('checkForUserChangesTool', () => {
   });
 
   it('should detect user changes with multiple events', async () => {
-    const mockExecutor = vi.fn().mockResolvedValue({
+    const mockGetExecutor = vi.fn().mockResolvedValue({
       getEvents: vi.fn().mockResolvedValue({
         isOk: () => true,
         isErr: () => false,
@@ -168,7 +168,7 @@ describe('checkForUserChangesTool', () => {
     const result = await getToolResult({
       session: '12345',
       sinceSequence: 42,
-      mockExecutor,
+      mockGetExecutor,
     });
 
     expect(result.isError).toBe(false);
@@ -189,7 +189,7 @@ describe('checkForUserChangesTool', () => {
   });
 
   it('should return error when getEvents fails', async () => {
-    const mockExecutor = vi.fn().mockResolvedValue({
+    const mockGetExecutor = vi.fn().mockResolvedValue({
       getEvents: vi.fn().mockResolvedValue({
         isOk: () => false,
         isErr: () => true,
@@ -200,7 +200,7 @@ describe('checkForUserChangesTool', () => {
     const result = await getToolResult({
       session: '12345',
       sinceSequence: 42,
-      mockExecutor,
+      mockGetExecutor,
     });
 
     expect(result.isError).toBe(true);
@@ -210,23 +210,58 @@ describe('checkForUserChangesTool', () => {
       'Ensure Tableau Desktop is running and the session is valid.',
     );
   });
+
+  it('should pass the same abort signal to executor.getEvents', async () => {
+    const mockGetEvents = vi.fn().mockResolvedValue({
+      isOk: () => true,
+      isErr: () => false,
+      value: {
+        events: [],
+        latest_sequence: 42,
+        count: 0,
+      },
+    });
+
+    const mockGetExecutor = vi.fn().mockResolvedValue({
+      getEvents: mockGetEvents,
+    });
+
+    const customSignal = new AbortController().signal;
+
+    await getToolResult({
+      session: '12345',
+      sinceSequence: undefined,
+      mockGetExecutor,
+      customSignal,
+    });
+
+    // Verify getEvents was called with the SDK's abort signal
+    expect(mockGetEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        signal: customSignal,
+      }),
+    );
+  });
 });
 
 async function getToolResult({
   session,
   sinceSequence,
-  mockExecutor,
+  mockGetExecutor,
+  customSignal,
 }: {
   session: string;
   sinceSequence: number | undefined;
-  mockExecutor: TableauDesktopToolContext['getExecutor'];
+  mockGetExecutor: TableauDesktopToolContext['getExecutor'];
+  customSignal?: AbortSignal;
 }): Promise<CallToolResult> {
   const checkForUserChangesTool = getCheckForUserChangesTool(new DesktopMcpServer());
   const callback = await Provider.from(checkForUserChangesTool.callback);
 
   const extra = {
     ...getMockRequestHandlerExtra(),
-    getExecutor: mockExecutor,
+    getExecutor: mockGetExecutor,
+    signal: customSignal ?? new AbortController().signal,
   };
 
   return await callback({ session, sinceSequence }, extra);
