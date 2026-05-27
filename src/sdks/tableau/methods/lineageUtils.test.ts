@@ -1,8 +1,6 @@
 import {
-  getDatasourceDownstreamLineageByLuid,
   getViewLineageByLuid,
   getWorkbookLineageByLuid,
-  mergeDatasourceDownstreamWorkbooks,
   mergeViewLineage,
   mergeWorkbookLineage,
 } from './lineageUtils.js';
@@ -78,68 +76,5 @@ describe('lineageUtils', () => {
         upstreamDatasources: [{ luid: 'datasource-1', name: 'Sales' }],
       },
     ]);
-  });
-
-  it('promotes user-owned and popular downstream workbooks, then fills remaining slots from lineage', () => {
-    const downstreamWorkbookNodes: Array<{ luid: string; name?: string | null }> = Array.from<
-      unknown,
-      { luid: string; name?: string | null }
-    >({ length: 12 }, (_, index) => ({
-      luid: `workbook-${index + 1}`,
-      name: `Workbook ${index + 1}`,
-    })).concat([
-      { luid: 'shadow-workbook-null', name: null },
-      { luid: 'shadow-workbook-missing-name' },
-    ]);
-
-    const downstreamLineageByDatasourceLuid = getDatasourceDownstreamLineageByLuid({
-      data: {
-        publishedDatasourcesConnection: {
-          nodes: [
-            {
-              luid: 'datasource-1',
-              downstreamWorkbooksConnection: {
-                totalCount: 12,
-                nodes: downstreamWorkbookNodes,
-              },
-            },
-          ],
-        },
-      },
-    });
-
-    const result = mergeDatasourceDownstreamWorkbooks({
-      datasources: [
-        {
-          id: 'datasource-1',
-          name: 'Datasource',
-          project: { id: 'project-1', name: 'Project' },
-          tags: {},
-        },
-      ],
-      downstreamLineageByDatasourceLuid,
-      popularWorkbooks: [
-        { luid: 'workbook-11', name: 'Workbook 11', totalViewCount: 1000 },
-        { luid: 'workbook-3', name: 'Workbook 3', totalViewCount: 500 },
-      ],
-      userOwnedWorkbooks: [{ luid: 'workbook-12', name: 'Workbook 12' }],
-    });
-
-    expect(result[0]).toMatchObject({
-      downstreamWorkbookCount: 12,
-      downstreamWorkbooks: [
-        { luid: 'workbook-12', name: 'Workbook 12', ownedByCurrentUser: true },
-        { luid: 'workbook-11', name: 'Workbook 11', ownedByCurrentUser: false },
-        { luid: 'workbook-3', name: 'Workbook 3', ownedByCurrentUser: false },
-        { luid: 'workbook-1', name: 'Workbook 1', ownedByCurrentUser: false },
-        { luid: 'workbook-2', name: 'Workbook 2', ownedByCurrentUser: false },
-        { luid: 'workbook-4', name: 'Workbook 4', ownedByCurrentUser: false },
-        { luid: 'workbook-5', name: 'Workbook 5', ownedByCurrentUser: false },
-        { luid: 'workbook-6', name: 'Workbook 6', ownedByCurrentUser: false },
-        { luid: 'workbook-7', name: 'Workbook 7', ownedByCurrentUser: false },
-        { luid: 'workbook-8', name: 'Workbook 8', ownedByCurrentUser: false },
-      ],
-    });
-    expect(result[0].downstreamWorkbooks).toHaveLength(10);
   });
 });

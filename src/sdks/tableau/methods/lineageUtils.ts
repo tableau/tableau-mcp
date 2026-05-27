@@ -1,26 +1,11 @@
 import { z } from 'zod';
 
-import { DataSource } from '../types/dataSource.js';
 import { View } from '../types/view.js';
 import { Workbook } from '../types/workbook.js';
 
 export type LineageContent = {
   luid: string;
   name: string;
-};
-
-export type DownstreamWorkbook = LineageContent & {
-  ownedByCurrentUser: boolean;
-};
-
-export type PopularWorkbook = LineageContent & {
-  totalViewCount: number;
-};
-
-export type DatasourceDownstreamLineage = {
-  datasourceLuid: string;
-  downstreamWorkbookCount: number;
-  downstreamWorkbooks: Array<LineageContent>;
 };
 
 const lineageContentSchema = z.object({
@@ -69,24 +54,6 @@ const viewLineageResponseSchema = z.object({
   }),
 });
 
-const datasourceLineageResponseSchema = z.object({
-  data: z.object({
-    publishedDatasourcesConnection: z.object({
-      nodes: z.array(
-        z.object({
-          luid: z.string(),
-          downstreamWorkbooksConnection: z
-            .object({
-              totalCount: z.number().int().nonnegative().optional(),
-              nodes: z.array(lineageContentSchema).nullish(),
-            })
-            .nullish(),
-        }),
-      ),
-    }),
-  }),
-});
-
 export function getWorkbookLineageQuery(workbookLuids: Array<string>): string {
   return `
     query workbookLineage {
@@ -124,25 +91,6 @@ export function getViewLineageQuery(viewLuids: Array<string>): string {
               luid
               name
               username
-            }
-          }
-        }
-      }
-    }
-  `;
-}
-
-export function getDatasourceLineageQuery(datasourceLuids: Array<string>): string {
-  return `
-    query datasourceLineage {
-      publishedDatasourcesConnection(filter: { luidWithin: ${toGraphqlStringArray(datasourceLuids)} }) {
-        nodes {
-          luid
-          downstreamWorkbooksConnection(first: 1000) {
-            totalCount
-            nodes {
-              luid
-              name
             }
           }
         }
@@ -241,27 +189,6 @@ type ViewLineage = {
   projectName?: string;
 };
 
-export function getDatasourceDownstreamLineageByLuid(
-  response: unknown,
-): Map<string, DatasourceDownstreamLineage> {
-  const parsed = datasourceLineageResponseSchema.parse(response);
-  return new Map(
-    parsed.data.publishedDatasourcesConnection.nodes.map((node) => {
-      const downstreamWorkbooks = normalizeNamedLineageContents(
-        node.downstreamWorkbooksConnection?.nodes,
-      );
-      return [
-        node.luid,
-        {
-          datasourceLuid: node.luid,
-          downstreamWorkbookCount: downstreamWorkbooks.length,
-          downstreamWorkbooks,
-        },
-      ];
-    }),
-  );
-}
-
 export function mergeWorkbookLineage<T extends Pick<Workbook, 'id'> & Partial<Workbook>>(
   workbooks: Array<T>,
   lineageByLuid: Map<string, Array<LineageContent>>,
@@ -326,84 +253,6 @@ export function mergeViewLineage<T extends Pick<View, 'id'> & Partial<View>>(
   });
 }
 
-export function mergeDatasourceDownstreamWorkbooks({
-  datasources,
-  downstreamLineageByDatasourceLuid,
-  popularWorkbooks,
-  userOwnedWorkbooks,
-  allowedWorkbookIds,
-}: {
-  datasources: Array<DataSource>;
-  downstreamLineageByDatasourceLuid: Map<string, DatasourceDownstreamLineage>;
-  popularWorkbooks: Array<PopularWorkbook>;
-  userOwnedWorkbooks: Array<LineageContent>;
-  allowedWorkbookIds?: Set<string> | null;
-}): Array<DataSource> {
-  return datasources.map((datasource) => {
-    const lineage = downstreamLineageByDatasourceLuid.get(datasource.id);
-    if (!lineage) {
-      return datasource;
-    }
-
-    const allowedDownstreamWorkbooks = filterLineageContentsByAllowedIds(
-      lineage.downstreamWorkbooks,
-      allowedWorkbookIds,
-    );
-    const downstreamWorkbookLuids = new Set(
-      allowedDownstreamWorkbooks.map((workbook) => workbook.luid),
-    );
-
-    const userOwnedDownstreamWorkbooks = userOwnedWorkbooks
-      .filter((workbook) => downstreamWorkbookLuids.has(workbook.luid))
-      .map((workbook) => ({ ...workbook, ownedByCurrentUser: true }));
-
-    const userOwnedWorkbookLuids = new Set(
-      userOwnedDownstreamWorkbooks.map((workbook) => workbook.luid),
-    );
-
-    const popularDownstreamWorkbooks = popularWorkbooks
-      .filter(
-        (workbook) =>
-          downstreamWorkbookLuids.has(workbook.luid) && !userOwnedWorkbookLuids.has(workbook.luid),
-      )
-      .map((workbook) => ({ luid: workbook.luid, name: workbook.name, ownedByCurrentUser: false }));
-
-    const promotedWorkbookLuids = new Set([
-      ...userOwnedDownstreamWorkbooks.map((workbook) => workbook.luid),
-      ...popularDownstreamWorkbooks.map((workbook) => workbook.luid),
-    ]);
-
-    const remainingDownstreamWorkbooks = allowedDownstreamWorkbooks
-      .filter((workbook) => !promotedWorkbookLuids.has(workbook.luid))
-      .map((workbook) => ({ ...workbook, ownedByCurrentUser: false }));
-
-    const downstreamWorkbooks = [
-      ...userOwnedDownstreamWorkbooks,
-      ...popularDownstreamWorkbooks,
-      ...remainingDownstreamWorkbooks,
-    ].slice(0, 10);
-
-    return {
-      ...datasource,
-      downstreamWorkbookCount: lineage.downstreamWorkbookCount,
-      downstreamWorkbooks,
-    };
-  });
-}
-
-export function getPopularWorkbooksFromSearchResults(
-  searchResults: Array<Record<string, unknown>>,
-): Array<PopularWorkbook> {
-  return searchResults.flatMap((item) => {
-    if (item.type !== 'workbook' || typeof item.luid !== 'string') {
-      return [];
-    }
-    const name = typeof item.title === 'string' ? item.title : item.luid;
-    const totalViewCount = typeof item.totalViewCount === 'number' ? item.totalViewCount : 0;
-    return [{ luid: item.luid, name, totalViewCount }];
-  });
-}
-
 function toGraphqlStringArray(values: Array<string>): string {
   return `[${values.map((value) => JSON.stringify(value)).join(', ')}]`;
 }
@@ -414,17 +263,6 @@ function normalizeLineageContents(
   return (contents ?? [])
     .filter((content): content is { luid: string; name?: string | null } => !!content.luid)
     .map((content) => ({ luid: content.luid, name: content.name ?? content.luid }));
-}
-
-function normalizeNamedLineageContents(
-  contents: Array<z.infer<typeof lineageContentSchema>> | null | undefined,
-): Array<LineageContent> {
-  return (contents ?? [])
-    .filter(
-      (content): content is { luid: string; name: string } =>
-        !!content.luid && typeof content.name === 'string' && content.name.trim().length > 0,
-    )
-    .map((content) => ({ luid: content.luid, name: content.name }));
 }
 
 function filterLineageContentsByAllowedIds(

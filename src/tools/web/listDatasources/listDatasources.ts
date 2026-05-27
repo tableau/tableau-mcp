@@ -2,23 +2,11 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import {
-  getDatasourceDownstreamLineageByLuid,
-  getDatasourceLineageQuery,
-  getPopularWorkbooksFromSearchResults,
-  LineageContent,
-  mergeDatasourceDownstreamWorkbooks,
-  PopularWorkbook,
-} from '../../../sdks/tableau/methods/lineageUtils.js';
-import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { DataSource } from '../../../sdks/tableau/types/dataSource.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { paginate } from '../../../utils/paginate.js';
-import { reduceSearchContentResponse } from '../contentExploration/searchContentUtils.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { parseAndValidateDatasourcesFilterString } from './datasourcesFilterUtils.js';
@@ -124,17 +112,7 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
                 },
               });
 
-              if (configWithOverrides.disableMetadataApiRequests || datasources.length === 0) {
-                return datasources;
-              }
-
-              return await enrichDatasourcesWithDownstreamWorkbooks({
-                datasources,
-                username: extra.tableauAuthInfo?.username,
-                isPAT: extra.config.auth === 'pat',
-                boundedContext: configWithOverrides.boundedContext,
-                restApi,
-              });
+              return datasources;
             },
           });
 
@@ -198,99 +176,3 @@ export function constrainDatasources({
 export const exportedForTesting = {
   listDatasourcesParamsSchema: paramsSchema,
 };
-
-async function enrichDatasourcesWithDownstreamWorkbooks({
-  datasources,
-  username,
-  isPAT,
-  boundedContext,
-  restApi,
-}: {
-  datasources: Array<DataSource>;
-  username: string | undefined;
-  isPAT: boolean;
-  boundedContext: BoundedContext;
-  restApi: RestApi;
-}): Promise<Array<DataSource>> {
-  let downstreamLineageByDatasourceLuid: ReturnType<typeof getDatasourceDownstreamLineageByLuid>;
-  try {
-    downstreamLineageByDatasourceLuid = getDatasourceDownstreamLineageByLuid(
-      await restApi.metadataMethods.graphql(
-        getDatasourceLineageQuery(datasources.map((datasource) => datasource.id)),
-      ),
-    );
-  } catch (error) {
-    log({
-      message: 'Failed to enrich datasources with downstream workbook lineage metadata',
-      level: 'warning',
-      logger: 'lineage',
-      data: getExceptionMessage(error),
-    });
-    return datasources;
-  }
-
-  const fetchPopular = async (): Promise<Array<PopularWorkbook>> => {
-    try {
-      const response = await restApi.contentExplorationMethods.searchContent({
-        page: 0,
-        limit: 100,
-        order_by: 'hitsTotal:desc',
-        filter: 'type:eq:workbook',
-      });
-      return getPopularWorkbooksFromSearchResults(
-        reduceSearchContentResponse(response as Parameters<typeof reduceSearchContentResponse>[0]),
-      );
-    } catch (error) {
-      log({
-        message: 'Failed to fetch popular workbooks for datasource downstream lineage',
-        level: 'warning',
-        logger: 'lineage',
-        data: getExceptionMessage(error),
-      });
-      return [];
-    }
-  };
-
-  const fetchUserOwned = async (): Promise<Array<LineageContent>> => {
-    if (!username) {
-      return [];
-    }
-
-    try {
-      const workbooks = await paginate({
-        pageConfig: { pageSize: 1000 },
-        getDataFn: async (pageConfig) => {
-          const { pagination, workbooks: data } =
-            await restApi.workbooksMethods.queryWorkbooksForSite({
-              siteId: restApi.siteId,
-              filter: `ownerName:eq:${username}`,
-              pageSize: pageConfig.pageSize,
-              pageNumber: pageConfig.pageNumber,
-            });
-          return { pagination, data };
-        },
-      });
-      return workbooks.map((workbook) => ({ luid: workbook.id, name: workbook.name }));
-    } catch (error) {
-      log({
-        message: 'Failed to fetch user-owned workbooks for datasource downstream lineage',
-        level: 'warning',
-        logger: 'lineage',
-        data: getExceptionMessage(error),
-      });
-      return [];
-    }
-  };
-
-  const [popularWorkbooks, userOwnedWorkbooks] = isPAT
-    ? [await fetchPopular(), await fetchUserOwned()]
-    : await Promise.all([fetchPopular(), fetchUserOwned()]);
-
-  return mergeDatasourceDownstreamWorkbooks({
-    datasources,
-    downstreamLineageByDatasourceLuid,
-    popularWorkbooks,
-    userOwnedWorkbooks,
-    allowedWorkbookIds: boundedContext.workbookIds,
-  });
-}
