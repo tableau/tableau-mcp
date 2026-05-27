@@ -203,10 +203,15 @@ export const getQueryDatasourceTool = (
 };
 
 function getQueryDatasourceRules(productVersion: ProductVersion): ToolRules {
-  return getResultForTableauVersion({
+  return getResultForTableauVersion<ToolRules>({
     productVersion,
     mappings: {
-      '2026.1.0': {},
+      '2026.1.0': { enableTableCalculations: true },
+      '2025.3.0': {
+        dontSpecifyRowLimits: true,
+        restrictFunctionsAndCalculationsInFilters: true,
+        enableTableCalculations: true,
+      },
       default: {
         dontSpecifyRowLimits: true,
         restrictFunctionsAndCalculationsInFilters: true,

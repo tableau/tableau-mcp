@@ -3,6 +3,7 @@ import { ToolRules } from '../tool.js';
 import { validateDatasourceLuid } from '../validateDatasourceLuid.js';
 import { validateFields } from './validators/validateFields.js';
 import { validateFilters } from './validators/validateFilters.js';
+import { validateTableCalculations } from './validators/validateTableCalculations.js';
 
 export function validateQueryWithRules(
   rules: ToolRules,
@@ -25,6 +26,7 @@ export function validateQuery({
 
   const { fields, filters } = query;
   validateFields(fields);
+  validateTableCalculations(fields, rules);
   validateFilters(filters, rules);
 
   const result = querySchema.safeParse(query);

@@ -596,6 +596,209 @@ Filter relative date periods:
 
 Note: Calculated Fields created as part of a query cannot be referenced in other calculations or filters.
 
+## Table Calculations
+
+Table calculations are transformations applied to query results — for example rankings, running totals, percent of total, moving averages, and differences. A table calculation is attached to a field as a sibling of \`function\` and \`calculation\`, using the \`tableCalculation\` property. The result column replaces the raw measure value with the transformed value (e.g. a rank instead of a sum).
+
+**Required for every \`tableCalculation\`:**
+- \`tableCalcType\` — one of: \`CUSTOM\`, \`NESTED\`, \`DIFFERENCE_FROM\`, \`PERCENT_DIFFERENCE_FROM\`, \`PERCENT_FROM\`, \`PERCENT_OF_TOTAL\`, \`RANK\`, \`PERCENTILE\`, \`RUNNING_TOTAL\`, \`MOVING_CALCULATION\`.
+- \`dimensions\` — array of \`{ "fieldCaption": "...", "function": "..." }\` references that define partitioning. Use \`[]\` to compute across the entire result set.
+
+### RANK
+Assigns a rank to each row within the partition.
+\`\`\`json
+{
+  "fieldCaption": "Profit",
+  "function": "SUM",
+  "tableCalculation": {
+    "tableCalcType": "RANK",
+    "dimensions": [
+      { "fieldCaption": "Region" },
+      { "fieldCaption": "Order Date", "function": "YEAR" }
+    ],
+    "rankType": "COMPETITION",
+    "direction": "DESC"
+  }
+}
+\`\`\`
+- \`rankType\`: \`COMPETITION\` (default), \`MODIFIED COMPETITION\` (note the literal space), \`DENSE\`, or \`UNIQUE\`.
+- \`direction\`: \`ASC\` or \`DESC\`.
+
+### PERCENT_OF_TOTAL
+Each value as a percent of the partition total.
+\`\`\`json
+{
+  "fieldCaption": "Profit",
+  "function": "SUM",
+  "tableCalculation": {
+    "tableCalcType": "PERCENT_OF_TOTAL",
+    "dimensions": [
+      { "fieldCaption": "Region" },
+      { "fieldCaption": "Order Date", "function": "YEAR" }
+    ]
+  }
+}
+\`\`\`
+
+### RUNNING_TOTAL
+Cumulative aggregation across the partition.
+\`\`\`json
+{
+  "fieldCaption": "Profit",
+  "function": "SUM",
+  "tableCalculation": {
+    "tableCalcType": "RUNNING_TOTAL",
+    "dimensions": [
+      { "fieldCaption": "Region" },
+      { "fieldCaption": "Order Date", "function": "YEAR" }
+    ],
+    "aggregation": "SUM",
+    "restartEvery": { "fieldCaption": "Order Date", "function": "YEAR" }
+  }
+}
+\`\`\`
+- \`aggregation\`: \`SUM\` (default), \`AVG\`, \`MIN\`, \`MAX\`.
+- \`restartEvery\`: optional reference at which the running total resets.
+
+### MOVING_CALCULATION
+Sliding window aggregation.
+\`\`\`json
+{
+  "fieldCaption": "Profit",
+  "function": "SUM",
+  "tableCalculation": {
+    "tableCalcType": "MOVING_CALCULATION",
+    "dimensions": [
+      { "fieldCaption": "Region" },
+      { "fieldCaption": "Order Date", "function": "YEAR" }
+    ],
+    "aggregation": "AVG",
+    "previous": -2,
+    "next": 1,
+    "includeCurrent": true,
+    "fillInNull": false
+  }
+}
+\`\`\`
+- \`previous\` (default \`2\`) and \`next\` (default \`0\`) are integers describing the window relative to the current row. \`includeCurrent\` defaults to \`true\`. The window must be non-empty (at least one of \`previous\`, \`next\`, or \`includeCurrent\` must be set so the window contains a row).
+
+### DIFFERENCE_FROM / PERCENT_DIFFERENCE_FROM / PERCENT_FROM
+Compare each value to a reference row.
+\`\`\`json
+{
+  "fieldCaption": "Profit",
+  "function": "SUM",
+  "tableCalculation": {
+    "tableCalcType": "DIFFERENCE_FROM",
+    "dimensions": [
+      { "fieldCaption": "Order Date", "function": "YEAR" }
+    ],
+    "relativeTo": "PREVIOUS"
+  }
+}
+\`\`\`
+- \`relativeTo\`: \`PREVIOUS\` (default), \`NEXT\`, \`FIRST\`, \`LAST\`.
+- \`PERCENT_DIFFERENCE_FROM\` and \`PERCENT_FROM\` use the same shape, only \`tableCalcType\` differs.
+
+### PERCENTILE
+Express each value as a percentile within the partition.
+\`\`\`json
+{
+  "fieldCaption": "Profit",
+  "function": "SUM",
+  "tableCalculation": {
+    "tableCalcType": "PERCENTILE",
+    "dimensions": [
+      { "fieldCaption": "Region" }
+    ],
+    "direction": "ASC"
+  }
+}
+\`\`\`
+
+### CUSTOM
+A custom Tableau calculation expression that uses table calc functions like \`LOOKUP\`, \`WINDOW_AVG\`, \`RUNNING_SUM\`, etc. The parent field **must** also include a \`calculation\` string.
+\`\`\`json
+{
+  "fieldCaption": "MyDifferenceCalc",
+  "calculation": "ZN(SUM([Sales])) - LOOKUP(ZN(SUM([Sales])), -1)",
+  "tableCalculation": {
+    "tableCalcType": "CUSTOM",
+    "dimensions": [
+      { "fieldCaption": "Region" },
+      { "fieldCaption": "Segment" },
+      { "fieldCaption": "Order Date", "function": "YEAR" }
+    ]
+  }
+}
+\`\`\`
+
+### Secondary table calculations
+\`RUNNING_TOTAL\` and \`MOVING_CALCULATION\` (and only those two types) accept a \`secondaryTableCalculation\`, applied after the primary calc.
+\`\`\`json
+{
+  "fieldCaption": "Profit",
+  "function": "SUM",
+  "tableCalculation": {
+    "tableCalcType": "RUNNING_TOTAL",
+    "dimensions": [
+      { "fieldCaption": "Region" },
+      { "fieldCaption": "Order Date", "function": "YEAR" }
+    ],
+    "aggregation": "SUM",
+    "secondaryTableCalculation": {
+      "tableCalcType": "PERCENT_DIFFERENCE_FROM",
+      "dimensions": [
+        { "fieldCaption": "Region" },
+        { "fieldCaption": "Order Date", "function": "YEAR" }
+      ],
+      "relativeTo": "PREVIOUS"
+    }
+  }
+}
+\`\`\`
+
+### Nested table calculations
+When a custom expression references multiple inner table calculations, set \`tableCalcType: CUSTOM\` on the outer field and configure each inner calc independently in \`nestedTableCalculations\`. Each inner entry uses \`tableCalcType: NESTED\` and a unique \`fieldCaption\` that matches the inner calc name in the formula.
+\`\`\`json
+{
+  "fieldCaption": "3-nest",
+  "tableCalculation": {
+    "tableCalcType": "CUSTOM",
+    "dimensions": []
+  },
+  "nestedTableCalculations": [
+    {
+      "tableCalcType": "NESTED",
+      "fieldCaption": "1-nest",
+      "dimensions": [
+        { "fieldCaption": "Region" },
+        { "fieldCaption": "Segment" },
+        { "fieldCaption": "Order Date", "function": "YEAR" }
+      ]
+    },
+    {
+      "tableCalcType": "NESTED",
+      "fieldCaption": "2-nest",
+      "dimensions": [
+        { "fieldCaption": "Region" },
+        { "fieldCaption": "Segment" }
+      ],
+      "restartEvery": { "fieldCaption": "Region" }
+    }
+  ]
+}
+\`\`\`
+
+### Limitations and notes
+- Requires Tableau Server / Cloud v2025.3 or newer. Older servers reject queries containing \`tableCalculation\`.
+- \`dimensions\` is required on every spec; pass \`[]\` to address across the entire result.
+- \`MODIFIED COMPETITION\` is one literal string with a space — not an underscore.
+- A NESTED specification must appear inside \`nestedTableCalculations\`, never directly in \`tableCalculation\`.
+- Each \`nestedTableCalculations\` entry must have a unique \`fieldCaption\`.
+- \`secondaryTableCalculation\` is only supported on \`RUNNING_TOTAL\` and \`MOVING_CALCULATION\`.
+- \`CUSTOM\` table calculations require the parent field to also provide a \`calculation\` expression.
+
 ## Error Prevention and Data Management
 
 **When to profile data first:**

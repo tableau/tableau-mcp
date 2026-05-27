@@ -109,12 +109,157 @@ const parameterSchema = z.discriminatedUnion('parameterType', [
 // Field schemas
 const sortDirectionSchema = z.enum(['ASC', 'DESC']);
 
+// Table calculation schemas (Tableau v2025.3+)
+const tableCalcFieldReferenceSchema = z
+  .object({
+    fieldCaption: z.string().nonempty(),
+    function: functionSchema.optional(),
+  })
+  .strict();
+
+const tableCalcCustomSortSchema = z
+  .object({
+    fieldCaption: z.string().nonempty(),
+    function: functionSchema,
+    direction: sortDirectionSchema,
+  })
+  .strict();
+
+const rankTypeSchema = z.enum(['COMPETITION', 'MODIFIED COMPETITION', 'DENSE', 'UNIQUE']);
+const relativeToSchema = z.enum(['PREVIOUS', 'NEXT', 'FIRST', 'LAST']);
+const tableCalcAggregationSchema = z.enum(['SUM', 'AVG', 'MIN', 'MAX']);
+
+const tableCalcDimensionsSchema = z.array(tableCalcFieldReferenceSchema);
+
+// Lazy reference used by RUNNING_TOTAL and MOVING_CALCULATION secondaryTableCalculation.
+// `z.discriminatedUnion` does not allow `z.lazy`, so the union below uses `z.union`.
+const lazyTableCalcSpecificationSchema: z.ZodType<unknown> = z.lazy(
+  () => tableCalcSpecificationSchema,
+);
+
+const customTableCalcSchema = z
+  .object({
+    tableCalcType: z.literal('CUSTOM'),
+    dimensions: tableCalcDimensionsSchema,
+    levelAddress: tableCalcFieldReferenceSchema.optional(),
+    restartEvery: tableCalcFieldReferenceSchema.optional(),
+    customSort: tableCalcCustomSortSchema.optional(),
+  })
+  .strict();
+
+const nestedTableCalcSchema = z
+  .object({
+    tableCalcType: z.literal('NESTED'),
+    fieldCaption: z.string().nonempty(),
+    dimensions: tableCalcDimensionsSchema,
+    levelAddress: tableCalcFieldReferenceSchema.optional(),
+    restartEvery: tableCalcFieldReferenceSchema.optional(),
+    customSort: tableCalcCustomSortSchema.optional(),
+  })
+  .strict();
+
+const differenceFromTableCalcSchema = z
+  .object({
+    tableCalcType: z.literal('DIFFERENCE_FROM'),
+    dimensions: tableCalcDimensionsSchema,
+    levelAddress: tableCalcFieldReferenceSchema.optional(),
+    relativeTo: relativeToSchema.optional(),
+    customSort: tableCalcCustomSortSchema.optional(),
+  })
+  .strict();
+
+const percentDifferenceFromTableCalcSchema = z
+  .object({
+    tableCalcType: z.literal('PERCENT_DIFFERENCE_FROM'),
+    dimensions: tableCalcDimensionsSchema,
+    levelAddress: tableCalcFieldReferenceSchema.optional(),
+    relativeTo: relativeToSchema.optional(),
+    customSort: tableCalcCustomSortSchema.optional(),
+  })
+  .strict();
+
+const percentFromTableCalcSchema = z
+  .object({
+    tableCalcType: z.literal('PERCENT_FROM'),
+    dimensions: tableCalcDimensionsSchema,
+    levelAddress: tableCalcFieldReferenceSchema.optional(),
+    relativeTo: relativeToSchema.optional(),
+    customSort: tableCalcCustomSortSchema.optional(),
+  })
+  .strict();
+
+const percentOfTotalTableCalcSchema = z
+  .object({
+    tableCalcType: z.literal('PERCENT_OF_TOTAL'),
+    dimensions: tableCalcDimensionsSchema,
+    levelAddress: tableCalcFieldReferenceSchema.optional(),
+    customSort: tableCalcCustomSortSchema.optional(),
+  })
+  .strict();
+
+const rankTableCalcSchema = z
+  .object({
+    tableCalcType: z.literal('RANK'),
+    dimensions: tableCalcDimensionsSchema,
+    rankType: rankTypeSchema.optional(),
+    direction: sortDirectionSchema.optional(),
+  })
+  .strict();
+
+const percentileTableCalcSchema = z
+  .object({
+    tableCalcType: z.literal('PERCENTILE'),
+    dimensions: tableCalcDimensionsSchema,
+    direction: sortDirectionSchema.optional(),
+  })
+  .strict();
+
+const runningTotalTableCalcSchema = z
+  .object({
+    tableCalcType: z.literal('RUNNING_TOTAL'),
+    dimensions: tableCalcDimensionsSchema,
+    aggregation: tableCalcAggregationSchema.optional(),
+    restartEvery: tableCalcFieldReferenceSchema.optional(),
+    customSort: tableCalcCustomSortSchema.optional(),
+    secondaryTableCalculation: lazyTableCalcSpecificationSchema.optional(),
+  })
+  .strict();
+
+const movingCalculationTableCalcSchema = z
+  .object({
+    tableCalcType: z.literal('MOVING_CALCULATION'),
+    dimensions: tableCalcDimensionsSchema,
+    aggregation: tableCalcAggregationSchema.optional(),
+    previous: z.number().int().optional(),
+    next: z.number().int().optional(),
+    includeCurrent: z.boolean().optional(),
+    fillInNull: z.boolean().optional(),
+    customSort: tableCalcCustomSortSchema.optional(),
+    secondaryTableCalculation: lazyTableCalcSpecificationSchema.optional(),
+  })
+  .strict();
+
+export const tableCalcSpecificationSchema = z.union([
+  customTableCalcSchema,
+  nestedTableCalcSchema,
+  differenceFromTableCalcSchema,
+  percentDifferenceFromTableCalcSchema,
+  percentFromTableCalcSchema,
+  percentOfTotalTableCalcSchema,
+  rankTableCalcSchema,
+  percentileTableCalcSchema,
+  runningTotalTableCalcSchema,
+  movingCalculationTableCalcSchema,
+]);
+
 const fieldBaseSchema = z.object({
   fieldCaption: z.string(),
   fieldAlias: z.string().optional(),
   maxDecimalPlaces: z.number().int().gte(0).optional(),
   sortDirection: sortDirectionSchema.optional(),
   sortPriority: z.number().int().gt(0).optional(),
+  tableCalculation: tableCalcSpecificationSchema.optional(),
+  nestedTableCalculations: z.array(tableCalcSpecificationSchema).optional(),
 });
 
 const dimensionFieldSchema = fieldBaseSchema.strict();
@@ -449,6 +594,10 @@ export type Query = z.infer<typeof querySchema>;
 export type QueryOutput = z.infer<typeof queryOutputSchema>;
 export type QueryRequest = z.infer<typeof queryRequestSchema>;
 export type QueryParameter = z.infer<typeof queryParameterSchema>;
+
+export type TableCalcSpecification = z.infer<typeof tableCalcSpecificationSchema>;
+export type TableCalcFieldReference = z.infer<typeof tableCalcFieldReferenceSchema>;
+export type TableCalcType = TableCalcSpecification['tableCalcType'];
 
 export type ReadMetadataRequest = z.infer<typeof readMetadataRequestSchema>;
 export type GetDatasourceModelRequest = z.infer<typeof getDatasourceModelRequestSchema>;

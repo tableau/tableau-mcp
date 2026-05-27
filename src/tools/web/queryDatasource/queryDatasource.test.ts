@@ -203,6 +203,145 @@ describe('queryDatasourceTool', () => {
     });
   });
 
+  describe('Table Calculations', () => {
+    const rankFields = [
+      { fieldCaption: 'Region' },
+      { fieldCaption: 'Order Date', function: 'YEAR' as const },
+      { fieldCaption: 'Profit', function: 'SUM' as const },
+      {
+        fieldCaption: 'Profit',
+        function: 'SUM' as const,
+        tableCalculation: {
+          tableCalcType: 'RANK' as const,
+          dimensions: [
+            { fieldCaption: 'Region' },
+            { fieldCaption: 'Order Date', function: 'YEAR' as const },
+          ],
+          rankType: 'COMPETITION' as const,
+        },
+      },
+    ];
+
+    it('should forward a RANK table calculation to VDS unchanged on 2026.1', async () => {
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+      vi.stubEnv('DISABLE_QUERY_VALIDATION_REQUESTS', 'true');
+
+      const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
+      const callback = await Provider.from(queryDatasourceTool.callback);
+      const result = await callback(
+        {
+          datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+          query: { fields: rankFields },
+          limit: undefined,
+        },
+        getMockRequestHandlerExtra(),
+      );
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: { fields: rankFields },
+        }),
+      );
+    });
+
+    it('should forward a RANK table calculation to VDS unchanged on 2025.3', async () => {
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+      vi.stubEnv('DISABLE_QUERY_VALIDATION_REQUESTS', 'true');
+
+      const queryDatasourceTool = getQueryDatasourceTool(
+        new WebMcpServer(),
+        testProductVersion2025_3,
+      );
+      const callback = await Provider.from(queryDatasourceTool.callback);
+      const result = await callback(
+        {
+          datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+          query: { fields: rankFields },
+          limit: undefined,
+        },
+        getMockRequestHandlerExtra(),
+      );
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: { fields: rankFields },
+        }),
+      );
+    });
+
+    it('should reject table calculations on Tableau servers older than 2025.3', async () => {
+      const olderProductVersion: ProductVersion = {
+        value: '2025.2.0',
+        build: '20252.25.0701.0001',
+      };
+
+      const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), olderProductVersion);
+      const callback = await Provider.from(queryDatasourceTool.callback);
+      const result = await callback(
+        {
+          datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+          query: { fields: rankFields },
+          limit: undefined,
+        },
+        getMockRequestHandlerExtra(),
+      );
+
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Table calculations require Tableau v2025.3 or newer',
+      );
+      expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    });
+
+    it('should accept a nested table calculation arrangement', async () => {
+      mocks.mockQueryDatasource.mockResolvedValue(new Ok(mockVdsResponses.success));
+      vi.stubEnv('DISABLE_QUERY_VALIDATION_REQUESTS', 'true');
+
+      const nestedFields = [
+        { fieldCaption: 'Region', sortPriority: 1 },
+        {
+          fieldCaption: '3-nest',
+          calculation: '[1-nest] + [2-nest]',
+          tableCalculation: { tableCalcType: 'CUSTOM' as const, dimensions: [] },
+          nestedTableCalculations: [
+            {
+              tableCalcType: 'NESTED' as const,
+              fieldCaption: '1-nest',
+              dimensions: [{ fieldCaption: 'Region' }],
+            },
+            {
+              tableCalcType: 'NESTED' as const,
+              fieldCaption: '2-nest',
+              dimensions: [{ fieldCaption: 'Region' }],
+              restartEvery: { fieldCaption: 'Region' },
+            },
+          ],
+        },
+      ];
+
+      const queryDatasourceTool = getQueryDatasourceTool(new WebMcpServer(), testProductVersion);
+      const callback = await Provider.from(queryDatasourceTool.callback);
+      const result = await callback(
+        {
+          datasourceLuid: '71db762b-6201-466b-93da-57cc0aec8ed9',
+          query: { fields: nestedFields },
+          limit: undefined,
+        },
+        getMockRequestHandlerExtra(),
+      );
+
+      expect(result.isError).toBe(false);
+      expect(mocks.mockQueryDatasource).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: { fields: nestedFields },
+        }),
+      );
+    });
+  });
+
   it('should return a successful result when the VDS response contains a schema validation error', async () => {
     const badResponse = {
       ...mockVdsResponses.success,

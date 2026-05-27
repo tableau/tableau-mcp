@@ -32,6 +32,197 @@ describe('Field schema', () => {
   });
 });
 
+describe('Table Calculation schemas', () => {
+  it('accepts a RANK table calculation field', () => {
+    const data = {
+      fieldCaption: 'Profit',
+      function: 'SUM',
+      tableCalculation: {
+        tableCalcType: 'RANK',
+        dimensions: [{ fieldCaption: 'Region' }, { fieldCaption: 'Order Date', function: 'YEAR' }],
+        rankType: 'COMPETITION',
+      },
+    };
+    expect(() => fieldSchema.parse(data)).not.toThrow();
+  });
+
+  it('accepts a PERCENT_OF_TOTAL table calculation field', () => {
+    const data = {
+      fieldCaption: 'Profit',
+      function: 'SUM',
+      tableCalculation: {
+        tableCalcType: 'PERCENT_OF_TOTAL',
+        dimensions: [{ fieldCaption: 'Region' }, { fieldCaption: 'Order Date', function: 'YEAR' }],
+      },
+    };
+    expect(() => fieldSchema.parse(data)).not.toThrow();
+  });
+
+  it('accepts a RUNNING_TOTAL table calculation with restartEvery', () => {
+    const data = {
+      fieldCaption: 'Profit',
+      function: 'SUM',
+      tableCalculation: {
+        tableCalcType: 'RUNNING_TOTAL',
+        dimensions: [{ fieldCaption: 'Region' }, { fieldCaption: 'Order Date', function: 'YEAR' }],
+        restartEvery: { fieldCaption: 'Order Date', function: 'YEAR' },
+      },
+    };
+    expect(() => fieldSchema.parse(data)).not.toThrow();
+  });
+
+  it('accepts a DIFFERENCE_FROM table calculation', () => {
+    const data = {
+      fieldCaption: 'Profit',
+      function: 'SUM',
+      tableCalculation: {
+        tableCalcType: 'DIFFERENCE_FROM',
+        dimensions: [{ fieldCaption: 'Order Date', function: 'YEAR' }],
+        relativeTo: 'PREVIOUS',
+      },
+    };
+    expect(() => fieldSchema.parse(data)).not.toThrow();
+  });
+
+  it('accepts a MOVING_CALCULATION table calculation', () => {
+    const data = {
+      fieldCaption: 'Profit',
+      function: 'SUM',
+      tableCalculation: {
+        tableCalcType: 'MOVING_CALCULATION',
+        dimensions: [{ fieldCaption: 'Region' }, { fieldCaption: 'Order Date', function: 'YEAR' }],
+        aggregation: 'SUM',
+        previous: -2,
+        next: 1,
+        includeCurrent: true,
+      },
+    };
+    expect(() => fieldSchema.parse(data)).not.toThrow();
+  });
+
+  it('accepts a RUNNING_TOTAL with a secondaryTableCalculation', () => {
+    const data = {
+      fieldCaption: 'Profit',
+      function: 'SUM',
+      tableCalculation: {
+        tableCalcType: 'RUNNING_TOTAL',
+        dimensions: [{ fieldCaption: 'Region' }, { fieldCaption: 'Order Date', function: 'YEAR' }],
+        aggregation: 'SUM',
+        secondaryTableCalculation: {
+          tableCalcType: 'PERCENT_DIFFERENCE_FROM',
+          dimensions: [
+            { fieldCaption: 'Region' },
+            { fieldCaption: 'Order Date', function: 'YEAR' },
+          ],
+          relativeTo: 'PREVIOUS',
+        },
+      },
+    };
+    expect(() => fieldSchema.parse(data)).not.toThrow();
+  });
+
+  it('accepts a CUSTOM table calculation with a calculation expression', () => {
+    const data = {
+      fieldCaption: 'MyDifferenceCalc',
+      calculation: 'ZN(SUM([Sales])) - LOOKUP(ZN(SUM([Sales])), -1)',
+      tableCalculation: {
+        tableCalcType: 'CUSTOM',
+        dimensions: [
+          { fieldCaption: 'Region' },
+          { fieldCaption: 'Segment' },
+          { fieldCaption: 'Order Date', function: 'YEAR' },
+        ],
+      },
+    };
+    expect(() => fieldSchema.parse(data)).not.toThrow();
+  });
+
+  it('accepts a 3-nest CUSTOM field with NESTED entries', () => {
+    const data = {
+      fieldCaption: '3-nest',
+      tableCalculation: { tableCalcType: 'CUSTOM', dimensions: [] },
+      nestedTableCalculations: [
+        {
+          tableCalcType: 'NESTED',
+          fieldCaption: '1-nest',
+          dimensions: [
+            { fieldCaption: 'Region' },
+            { fieldCaption: 'Segment' },
+            { fieldCaption: 'Order Date', function: 'YEAR' },
+          ],
+        },
+        {
+          tableCalcType: 'NESTED',
+          fieldCaption: '2-nest',
+          dimensions: [{ fieldCaption: 'Region' }, { fieldCaption: 'Segment' }],
+          restartEvery: { fieldCaption: 'Region' },
+        },
+      ],
+    };
+    expect(() => fieldSchema.parse(data)).not.toThrow();
+  });
+
+  it('accepts MODIFIED COMPETITION as a rankType (literal space)', () => {
+    const data = {
+      fieldCaption: 'Profit',
+      function: 'SUM',
+      tableCalculation: {
+        tableCalcType: 'RANK',
+        dimensions: [],
+        rankType: 'MODIFIED COMPETITION',
+      },
+    };
+    expect(() => fieldSchema.parse(data)).not.toThrow();
+  });
+
+  it('rejects MODIFIED_COMPETITION (underscore variant)', () => {
+    const data = {
+      fieldCaption: 'Profit',
+      function: 'SUM',
+      tableCalculation: {
+        tableCalcType: 'RANK',
+        dimensions: [],
+        rankType: 'MODIFIED_COMPETITION',
+      },
+    };
+    expect(() => fieldSchema.parse(data)).toThrow();
+  });
+
+  it('rejects an unknown tableCalcType', () => {
+    const data = {
+      fieldCaption: 'Profit',
+      function: 'SUM',
+      tableCalculation: {
+        tableCalcType: 'UNKNOWN_TYPE',
+        dimensions: [],
+      },
+    };
+    expect(() => fieldSchema.parse(data)).toThrow();
+  });
+
+  it('rejects a tableCalculation missing required dimensions', () => {
+    const data = {
+      fieldCaption: 'Profit',
+      function: 'SUM',
+      tableCalculation: { tableCalcType: 'RANK' },
+    };
+    expect(() => fieldSchema.parse(data)).toThrow();
+  });
+
+  it('rejects a tableCalculation with extra properties', () => {
+    const data = {
+      fieldCaption: 'Profit',
+      function: 'SUM',
+      tableCalculation: {
+        tableCalcType: 'RANK',
+        dimensions: [],
+        bogus: true,
+      },
+    };
+    expect(() => fieldSchema.parse(data)).toThrow();
+  });
+});
+
 describe('SET Filter schema', () => {
   it('accepts a valid SET filter', () => {
     const data = {
