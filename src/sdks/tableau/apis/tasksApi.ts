@@ -31,6 +31,7 @@ const listExtractRefreshTasksEndpoint = makeEndpoint({
     tasks: z.union([
       z.object({ task: z.union([z.array(taskEntrySchema), taskEntrySchema]) }),
       z.array(taskEntrySchema),
+      z.object({}), // Handle empty object when no tasks exist
     ]),
   }),
 });

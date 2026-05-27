@@ -34,6 +34,12 @@ export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis>
     });
 
     const tasks = response.tasks;
+
+    // Handle empty object case (no tasks)
+    if (typeof tasks === 'object' && !Array.isArray(tasks) && Object.keys(tasks).length === 0) {
+      return [];
+    }
+
     if (Array.isArray(tasks)) {
       return tasks.map((t) => t.extractRefresh);
     }
