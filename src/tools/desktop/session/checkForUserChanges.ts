@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { GetEventsFailedError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
-import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {
@@ -58,12 +57,7 @@ export const getCheckForUserChangesTool = (
           });
 
           if (result.isErr()) {
-            return new GetEventsFailedError(
-              [
-                `Failed to get events: ${getExceptionMessage(result.error)}.`,
-                'Ensure Tableau Desktop is running and the session is valid.',
-              ].join('\n'),
-            ).toErr();
+            return new GetEventsFailedError(result.error).toErr();
           }
 
           const { events, latest_sequence: latestSequence, count } = result.value;

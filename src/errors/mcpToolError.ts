@@ -2,6 +2,8 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
+import { getExceptionMessage } from '../utils/getExceptionMessage';
+
 export class McpToolError extends Error {
   readonly type: string;
   readonly statusCode: number;
@@ -169,7 +171,16 @@ export class NoDesktopInstancesFoundError extends McpToolError {
 }
 
 export class GetEventsFailedError extends McpToolError {
-  constructor(message: string) {
-    super({ type: 'get-events-failed', message, statusCode: 500 });
+  constructor(error: unknown) {
+    super({
+      type: 'get-events-failed',
+      message: [
+        `Failed to get events: ${getExceptionMessage(error)}.`,
+        'Make sure:',
+        '  1. Tableau Desktop is running',
+        '  2. Agent API is enabled',
+      ].join('\n'),
+      statusCode: 500,
+    });
   }
 }

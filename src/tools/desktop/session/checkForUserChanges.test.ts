@@ -1,6 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
+import { GetEventsFailedError } from '../../../errors/mcpToolError.js';
 import { GetEventsResponse } from '../../../sdks/desktop/agentApi/types.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
@@ -190,11 +191,12 @@ describe('checkForUserChangesTool', () => {
   });
 
   it('should return error when getEvents fails', async () => {
+    const error = new Error('Network error');
     const mockGetExecutor = vi.fn().mockResolvedValue({
       getEvents: vi.fn().mockResolvedValue({
         isOk: () => false,
         isErr: () => true,
-        error: new Error('Network error'),
+        error,
       }),
     });
 
@@ -206,10 +208,7 @@ describe('checkForUserChangesTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Failed to get events: Network error.');
-    expect(result.content[0].text).toContain(
-      'Ensure Tableau Desktop is running and the session is valid.',
-    );
+    expect(result.content[0].text).toBe(new GetEventsFailedError(error).message);
   });
 
   it('should pass the same abort signal to executor.getEvents', async () => {
