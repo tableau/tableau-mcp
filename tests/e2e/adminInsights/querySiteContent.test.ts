@@ -18,7 +18,7 @@ describe('query-admin-insights-site-content', () => {
 
   beforeAll(async () => {
     client = new McpClient({
-      env: { ...getDefaultEnv(), TMCP_ADMIN_TOOLS_ENABLED: 'true' },
+      env: { ...getDefaultEnv(), ADMIN_TOOLS_ENABLED: 'true' },
     });
     await client.connect();
     const tools = await client.listTools();
@@ -26,7 +26,7 @@ describe('query-admin-insights-site-content', () => {
     if (!toolsAvailable) {
       console.warn(
         'Skipping query-admin-insights-site-content e2e tests — admin tools not registered. ' +
-          'Ensure TMCP_ADMIN_TOOLS_ENABLED=true in tests/.env and the test site has Admin Insights enabled.',
+          'Ensure ADMIN_TOOLS_ENABLED=true in tests/.env and the test site has Admin Insights enabled.',
       );
     }
   });

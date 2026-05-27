@@ -32,7 +32,7 @@ thresholds defined in the PRD.
 ### 1.2 In scope
 
 - All admin tools and prompts shipped under the epic, gated behind
-  `TMCP_ADMIN_TOOLS_ENABLED`.
+  `ADMIN_TOOLS_ENABLED`.
 - All three JTBDs, both Inform (P1) and Apply (P2 / P3) phases.
 - Functional, negative, adversarial, and performance test cases.
 - A required + optional AI-client matrix.
@@ -173,10 +173,10 @@ JTBD).
 # Local
 npm ci
 npm run build
-TMCP_ADMIN_TOOLS_ENABLED=true npm run start:web
+ADMIN_TOOLS_ENABLED=true npm run start:web
 
 # Heroku
-heroku config:set TMCP_ADMIN_TOOLS_ENABLED=true STALE_CONTENT_MIN_AGE_DAYS=90 --app <app>
+heroku config:set ADMIN_TOOLS_ENABLED=true STALE_CONTENT_MIN_AGE_DAYS=90 --app <app>
 git push heroku main
 ```
 
@@ -184,7 +184,7 @@ git push heroku main
 
 | Var | Sample | Notes |
 |---|---|---|
-| `TMCP_ADMIN_TOOLS_ENABLED` | `true` | Off by default. Restart required to take effect. |
+| `ADMIN_TOOLS_ENABLED` | `true` | Off by default. Restart required to take effect. |
 | `STALE_CONTENT_MIN_AGE_DAYS` | `90` | 1–3650. Default 90. |
 | `INCLUDE_PROJECT_IDS` | `<luid>,<luid>` | Optional bound; reused by report tools. |
 | `MAX_RESULT_LIMITS` | `get-stale-content-report:1000` | Per-tool row caps. |
@@ -300,9 +300,9 @@ Placeholder. Full table to be populated when WIs land. Expected coverage:
 
 | # | Test | Expected | Cycle 1 |
 |---|---|---|---|
-| C.1 | `TMCP_ADMIN_TOOLS_ENABLED=false` (default) | Admin tools not in tool list; prompt not registered | ☐ |
-| C.2 | `TMCP_ADMIN_TOOLS_ENABLED=true`, non-admin caller | Tools visible but each call returns `AdminOnlyError` (403) | ☐ |
-| C.3 | `TMCP_ADMIN_TOOLS_ENABLED=true`, admin caller | Tools work normally | ☐ |
+| C.1 | `ADMIN_TOOLS_ENABLED=false` (default) | Admin tools not in tool list; prompt not registered | ☐ |
+| C.2 | `ADMIN_TOOLS_ENABLED=true`, non-admin caller | Tools visible but each call returns `AdminOnlyError` (403) | ☐ |
+| C.3 | `ADMIN_TOOLS_ENABLED=true`, admin caller | Tools work normally | ☐ |
 | C.4 | OAuth scope missing for an admin tool | Tool call fails with 401/403; `WWW-Authenticate` hints required scope | ☐ |
 | C.5 | Tableau Server (not Cloud) | Admin tools either disabled or report Admin Insights unavailable cleanly | ☐ |
 | C.6 | Admin Insights datasource missing on site | `AdminInsightsUnavailableError` (404) with actionable message | ☐ |
@@ -469,7 +469,7 @@ Reproduce PRD §Success Criteria thresholds. Append a new column per cycle.
 ```bash
 heroku create my-tmcp
 heroku config:set \
-  TMCP_ADMIN_TOOLS_ENABLED=true \
+  ADMIN_TOOLS_ENABLED=true \
   STALE_CONTENT_MIN_AGE_DAYS=90 \
   TRANSPORT=http \
   AUTH=oauth \

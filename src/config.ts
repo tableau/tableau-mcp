@@ -130,7 +130,7 @@ export class Config extends BaseConfig {
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
       IS_HYPERFORCE: isHyperforce,
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
-      TMCP_ADMIN_TOOLS_ENABLED: adminToolsEnabled,
+      ADMIN_TOOLS_ENABLED: adminToolsEnabled,
     } = cleansedVars;
 
     let jwtUsername = '';

@@ -25,7 +25,7 @@ vi.mock('../../../restApiInstance.js', () => ({
         listDatasources: mocks.mockListDatasources,
       },
       usersMethods: {
-        getUser: vi.fn().mockResolvedValue({
+        queryUserOnSite: vi.fn().mockResolvedValue({
           id: 'user-test',
           name: 'admin',
           siteRole: 'SiteAdministratorCreator',
@@ -86,7 +86,9 @@ describe('query-admin-insights-ts-events tool', () => {
         vizqlDataServiceMethods: { queryDatasource: mocks.mockQueryDatasource },
         datasourcesMethods: { listDatasources: mocks.mockListDatasources },
         usersMethods: {
-          getUser: vi.fn().mockResolvedValue({ id: 'user-test', name: 'u', siteRole: 'Viewer' }),
+          queryUserOnSite: vi
+            .fn()
+            .mockResolvedValue({ id: 'user-test', name: 'u', siteRole: 'Viewer' }),
         },
       }),
     );

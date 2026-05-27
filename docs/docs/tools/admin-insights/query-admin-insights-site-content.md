@@ -9,7 +9,7 @@ query against the Admin Insights `Site Content` published datasource on the conn
 Cloud site. Returns the universe of content items (workbooks, datasources, views, flows,
 projects) — including items that have **never been accessed**.
 
-The tool is admin-only — it is registered only when `TMCP_ADMIN_TOOLS_ENABLED=true`, and at request
+The tool is admin-only — it is registered only when `ADMIN_TOOLS_ENABLED=true`, and at request
 time it verifies the caller's site role and rejects anything below
 `SiteAdministratorCreator` / `SiteAdministratorExplorer` / `ServerAdministrator`. The Admin
 Insights datasource LUID is resolved automatically; callers do not pass `datasourceLuid`.

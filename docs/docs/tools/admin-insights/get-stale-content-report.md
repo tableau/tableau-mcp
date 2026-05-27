@@ -12,7 +12,7 @@ already-filtered rows.
 The server applies the threshold comparison, optional project filter, and sort. Clients receive
 only items where days since last use exceed the threshold. **No client-side math is required.**
 
-The tool is admin-only — it is registered only when `TMCP_ADMIN_TOOLS_ENABLED=true`, and at request
+The tool is admin-only — it is registered only when `ADMIN_TOOLS_ENABLED=true`, and at request
 time it verifies the caller's site role and rejects anything below
 `SiteAdministratorCreator` / `SiteAdministratorExplorer` / `ServerAdministrator`.
 

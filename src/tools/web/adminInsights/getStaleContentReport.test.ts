@@ -15,7 +15,7 @@ import { ADMIN_INSIGHTS_PROJECT_NAME, adminInsightsResolver } from './resolver.j
 const mocks = vi.hoisted(() => ({
   mockQueryDatasource: vi.fn(),
   mockListDatasources: vi.fn(),
-  mockGetUser: vi.fn(),
+  mockQueryUserOnSite: vi.fn(),
   mockQueryProjects: vi.fn(),
 }));
 
@@ -31,7 +31,7 @@ vi.mock('../../../restApiInstance.js', () => ({
         listDatasources: mocks.mockListDatasources,
       },
       usersMethods: {
-        getUser: mocks.mockGetUser,
+        queryUserOnSite: mocks.mockQueryUserOnSite,
       },
       projectsMethods: {
         queryProjects: mocks.mockQueryProjects,
@@ -310,7 +310,7 @@ describe('get-stale-content-report tool', () => {
     adminGate.clearCache();
     clearStaleContentReportCache();
 
-    mocks.mockGetUser.mockResolvedValue({
+    mocks.mockQueryUserOnSite.mockResolvedValue({
       id: 'user-test',
       name: 'admin',
       siteRole: 'SiteAdministratorCreator',
@@ -399,7 +399,7 @@ describe('get-stale-content-report tool', () => {
   });
 
   it('rejects when caller is not an admin', async () => {
-    mocks.mockGetUser.mockResolvedValueOnce({
+    mocks.mockQueryUserOnSite.mockResolvedValueOnce({
       id: 'user-test',
       name: 'viewer',
       siteRole: 'Viewer',

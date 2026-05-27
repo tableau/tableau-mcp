@@ -2,6 +2,7 @@ import { getGetStaleContentReportTool } from './adminInsights/getStaleContentRep
 import { getQueryAdminInsightsSiteContentTool } from './adminInsights/querySiteContent.js';
 import { getQueryAdminInsightsTsEventsTool } from './adminInsights/queryTsEvents.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
+import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
 import { getListProjectsTool } from './projects/listProjects.js';
@@ -27,6 +28,7 @@ import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 export const webToolFactories = [
   getGetDatasourceMetadataTool,
   getListDatasourcesTool,
+  getListExtractRefreshTasksTool,
   getQueryDatasourceTool,
   getListAllPulseMetricDefinitionsTool,
   getListPulseMetricDefinitionsFromDefinitionIdsTool,

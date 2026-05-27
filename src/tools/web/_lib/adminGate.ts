@@ -31,7 +31,7 @@ export const adminGate = {
     if (cached && cached.expiresAt > now) {
       siteRole = cached.siteRole;
     } else {
-      const user = await restApi.usersMethods.getUser({ siteId, userId });
+      const user = await restApi.usersMethods.queryUserOnSite({ siteId, userId });
       siteRole = user.siteRole;
       cache.set(cacheKey, { siteRole, expiresAt: now + CACHE_TTL_MS });
     }

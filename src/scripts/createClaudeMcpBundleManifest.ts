@@ -611,7 +611,7 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  TMCP_ADMIN_TOOLS_ENABLED: {
+  ADMIN_TOOLS_ENABLED: {
     includeInUserConfig: false,
     type: 'boolean',
     title: 'Enable admin-only MCP tools',

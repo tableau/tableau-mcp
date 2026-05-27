@@ -10,15 +10,15 @@ describe('adminGate', () => {
     siteId,
     userId,
     siteRole,
-    getUserSpy,
+    queryUserOnSiteSpy,
   }: {
     siteId: string;
     userId: string;
     siteRole: string | undefined;
-    getUserSpy?: ReturnType<typeof vi.fn>;
+    queryUserOnSiteSpy?: ReturnType<typeof vi.fn>;
   }): RestApi {
-    const getUser =
-      getUserSpy ??
+    const queryUserOnSite =
+      queryUserOnSiteSpy ??
       vi.fn().mockResolvedValue({
         id: userId,
         name: 'tester',
@@ -28,7 +28,7 @@ describe('adminGate', () => {
       siteId,
       userId,
       usersMethods: {
-        getUser,
+        queryUserOnSite,
       },
     } as unknown as RestApi;
   }
@@ -58,7 +58,7 @@ describe('adminGate', () => {
   });
 
   it('caches per (siteId, userId) so repeat calls skip the REST lookup', async () => {
-    const getUserSpy = vi.fn().mockResolvedValue({
+    const queryUserOnSiteSpy = vi.fn().mockResolvedValue({
       id: 'u1',
       name: 'tester',
       siteRole: 'SiteAdministratorCreator',
@@ -67,12 +67,12 @@ describe('adminGate', () => {
       siteId: 's1',
       userId: 'u1',
       siteRole: 'SiteAdministratorCreator',
-      getUserSpy,
+      queryUserOnSiteSpy,
     });
 
     await adminGate.assertAdmin(restApi);
     await adminGate.assertAdmin(restApi);
 
-    expect(getUserSpy).toHaveBeenCalledTimes(1);
+    expect(queryUserOnSiteSpy).toHaveBeenCalledTimes(1);
   });
 });

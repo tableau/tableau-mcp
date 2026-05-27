@@ -37,7 +37,7 @@ describe('get-stale-content-report', () => {
 
   beforeAll(async () => {
     client = new McpClient({
-      env: { ...getDefaultEnv(), TMCP_ADMIN_TOOLS_ENABLED: 'true' },
+      env: { ...getDefaultEnv(), ADMIN_TOOLS_ENABLED: 'true' },
     });
     await client.connect();
     const tools = await client.listTools();
@@ -45,7 +45,7 @@ describe('get-stale-content-report', () => {
     if (!toolsAvailable) {
       console.warn(
         'Skipping get-stale-content-report e2e tests — admin tools not registered. ' +
-          'Ensure TMCP_ADMIN_TOOLS_ENABLED=true in tests/.env and the test site has Admin Insights enabled.',
+          'Ensure ADMIN_TOOLS_ENABLED=true in tests/.env and the test site has Admin Insights enabled.',
       );
     }
   });

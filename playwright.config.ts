@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { fromError } from 'zod-validation-error/v3';
 
 dotenv.config();
+process.env.ADMIN_TOOLS_ENABLED = 'true';
 
 const envSchema = z.object({
   SERVER: z.string(),

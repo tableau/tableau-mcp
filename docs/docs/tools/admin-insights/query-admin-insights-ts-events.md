@@ -9,7 +9,7 @@ query against the Admin Insights `TS Events` published datasource on the connect
 site. Returns audit events (Access, Publish, Update, Delete, etc.) for content and users on the
 site.
 
-The tool is admin-only — it is registered only when `TMCP_ADMIN_TOOLS_ENABLED=true`, and at request
+The tool is admin-only — it is registered only when `ADMIN_TOOLS_ENABLED=true`, and at request
 time it verifies the caller's site role and rejects anything below
 `SiteAdministratorCreator` / `SiteAdministratorExplorer` / `ServerAdministrator`. The Admin
 Insights datasource LUID is resolved automatically; callers do not pass `datasourceLuid`.
