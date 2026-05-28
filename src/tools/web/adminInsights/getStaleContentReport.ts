@@ -54,18 +54,25 @@ export type StaleContentRow = {
   neverAccessed: boolean;
 };
 
-type SiteContentRow = Record<string, unknown> & {
-  // VDS returns Item ID as a number on Site Content (integer), not a string.
-  'Item ID'?: string | number;
-  'Item Type'?: string;
-  'Item Name'?: string;
-  'Item Parent Project Name'?: string;
-  'Owner Email'?: string;
-  'Created At'?: string;
-  'Updated At'?: string;
-  'Last Accessed At'?: string | null;
-  'Size (bytes)'?: number | string;
-};
+// Schema for the row shape returned by the Admin Insights "Site Content" datasource.
+// VDS returns Item ID as a number (integer) on Site Content, not a string. All fields are
+// optional because the datasource may omit columns that were not explicitly selected.
+// `.passthrough()` keeps any additional keys VDS might add without rejecting the row.
+const siteContentRowSchema = z
+  .object({
+    'Item ID': z.union([z.string(), z.number()]).optional(),
+    'Item Type': z.string().optional(),
+    'Item Name': z.string().optional(),
+    'Item Parent Project Name': z.string().optional(),
+    'Owner Email': z.string().optional(),
+    'Created At': z.string().optional(),
+    'Updated At': z.string().optional(),
+    'Last Accessed At': z.string().nullable().optional(),
+    'Size (bytes)': z.union([z.number(), z.string()]).optional(),
+  })
+  .passthrough();
+
+type SiteContentRow = z.infer<typeof siteContentRowSchema>;
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -175,7 +182,9 @@ access have \`lastUsedDate = createdAt\` and \`neverAccessed = true\`.
                 return siteContentResult;
               }
 
-              const universe = (siteContentResult.value.data ?? []) as SiteContentRow[];
+              const universe = z
+                .array(siteContentRowSchema)
+                .parse(siteContentResult.value.data ?? []);
 
               const today = new Date();
               const rows = computeStaleRows({
