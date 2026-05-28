@@ -184,3 +184,9 @@ export class GetEventsFailedError extends McpToolError {
     });
   }
 }
+
+export class AdminOnlyError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'admin-only', message, statusCode: 403 });
+  }
+}
