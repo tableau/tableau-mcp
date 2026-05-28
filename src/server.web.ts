@@ -10,6 +10,7 @@ import {
 import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
+import { getFeatureGate } from './features/featureGate.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { ClientInfo, Server } from './server.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
@@ -86,7 +87,9 @@ export class WebMcpServer extends Server {
         return tableauToolCallback(args, tableauRequestHandlerExtra);
       };
 
-      if (tool.app) {
+      const mcpAppsEnabled = getFeatureGate().isFeatureEnabled('mcp-apps');
+
+      if (mcpAppsEnabled && tool.app) {
         await this._registerAppTool(tool, toolCallback);
       } else {
         await this._registerTool(tool, toolCallback);
@@ -181,7 +184,7 @@ export class WebMcpServer extends Server {
     this.registerAppResource(
       // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.
       this.mcpServer,
-      resourceUri,
+      tool.name,
       resourceUri,
       { mimeType: RESOURCE_MIME_TYPE },
       async () => {

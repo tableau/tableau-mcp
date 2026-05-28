@@ -10,6 +10,15 @@ import { webToolFactories } from './tools/web/tools.js';
 import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
 
+// Create a stable mock instance that can be spied on
+const mockFeatureGate = {
+  isFeatureEnabled: vi.fn(() => false),
+};
+
+vi.mock('./features/featureGate.js', () => ({
+  getFeatureGate: vi.fn(() => mockFeatureGate),
+}));
+
 describe('server', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
@@ -155,6 +164,8 @@ describe('server', () => {
   });
 
   it('should register app tools when tool has app property', async () => {
+    vi.spyOn(mockFeatureGate, 'isFeatureEnabled').mockReturnValue(true);
+
     const server = getServer();
     server.registerAppTool = vi.fn();
     server.registerAppResource = vi.fn();
@@ -176,7 +187,7 @@ describe('server', () => {
       },
     };
 
-    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool] as any);
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
 
     await server.registerTools();
 
@@ -199,11 +210,55 @@ describe('server', () => {
 
     expect(server.registerAppResource).toHaveBeenCalledWith(
       server.mcpServer,
-      'tableau://app/test',
+      'test-app-tool',
       'tableau://app/test',
       expect.objectContaining({ mimeType: expect.any(String) }),
       expect.any(Function),
     );
+  });
+
+  it('should register as standard tool when mcp-apps feature flag is disabled', async () => {
+    vi.spyOn(mockFeatureGate, 'isFeatureEnabled').mockReturnValue(false);
+
+    const server = getServer();
+    server.registerAppTool = vi.fn();
+    server.registerAppResource = vi.fn();
+
+    const callback = vi.fn();
+
+    // Mock a tool with app property
+    const mockAppTool = {
+      name: 'test-standard-tool',
+      description: 'Test standard tool',
+      paramsSchema: {},
+      annotations: { title: 'Test Standard' },
+      callback,
+      disabled: false,
+      app: {
+        name: 'test-app',
+        resourceUri: 'tableau://app/test',
+        html: '<html><body>Test App UI</body></html>',
+      },
+    };
+
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    // Should register as standard tool, not app tool
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'test-standard-tool',
+      {
+        description: 'Test standard tool',
+        inputSchema: {},
+        annotations: { title: 'Test Standard' },
+      },
+      expect.any(Function),
+    );
+
+    // Should NOT register as app tool
+    expect(server.registerAppTool).not.toHaveBeenCalled();
+    expect(server.registerAppResource).not.toHaveBeenCalled();
   });
 });
 
