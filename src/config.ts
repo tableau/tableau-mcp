@@ -68,6 +68,7 @@ export class Config extends BaseConfig {
   productTelemetryEnabled: boolean;
   isHyperforce: boolean;
   breakGlassDisableGlobally: boolean;
+  adminToolsEnabled: boolean;
 
   constructor() {
     super();
@@ -129,6 +130,7 @@ export class Config extends BaseConfig {
       PRODUCT_TELEMETRY_ENABLED: productTelemetryEnabled,
       IS_HYPERFORCE: isHyperforce,
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
+      ADMIN_TOOLS_ENABLED: adminToolsEnabled,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -261,6 +263,7 @@ export class Config extends BaseConfig {
     this.productTelemetryEnabled = productTelemetryEnabled !== 'false';
     this.isHyperforce = isHyperforce === 'true';
     this.breakGlassDisableGlobally = breakGlassDisableGlobally === 'true';
+    this.adminToolsEnabled = adminToolsEnabled === 'true';
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';

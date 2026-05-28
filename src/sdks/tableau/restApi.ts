@@ -21,6 +21,8 @@ import MetadataMethods from './methods/metadataMethods.js';
 import ProjectsMethods from './methods/projectsMethods.js';
 import PulseMethods from './methods/pulseMethods.js';
 import { AuthenticatedServerMethods, ServerMethods } from './methods/serverMethods.js';
+import TasksMethods from './methods/tasksMethods.js';
+import UsersMethods from './methods/usersMethods.js';
 import ViewsMethods from './methods/viewsMethods.js';
 import VizqlDataServiceMethods from './methods/vizqlDataServiceMethods.js';
 import WorkbooksMethods from './methods/workbooksMethods.js';
@@ -213,6 +215,24 @@ export class RestApi {
     });
     this._addInterceptors(RestApi.baseUrl, mcpSettingsMethods.interceptors);
     return mcpSettingsMethods;
+  }
+
+  get tasksMethods(): TasksMethods {
+    const tasksMethods = new TasksMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, tasksMethods.interceptors);
+    return tasksMethods;
+  }
+
+  get usersMethods(): UsersMethods {
+    const usersMethods = new UsersMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, usersMethods.interceptors);
+    return usersMethods;
   }
 
   get vizqlDataServiceMethods(): VizqlDataServiceMethods {

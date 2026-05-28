@@ -1,5 +1,6 @@
 export const webToolNames = [
   'list-datasources',
+  'list-extract-refresh-tasks',
   'list-workbooks',
   'list-projects',
   'list-views',
@@ -31,6 +32,7 @@ export const webToolGroupNames = [
   'view',
   'pulse',
   'content-exploration',
+  'tasks',
   'token-management',
 ] as const;
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
@@ -57,6 +59,7 @@ export const webToolGroups = {
     'generate-pulse-insight-brief',
   ],
   'content-exploration': ['search-content'],
+  tasks: ['list-extract-refresh-tasks'],
   'token-management': ['revoke-access-token', 'reset-consent'],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 
