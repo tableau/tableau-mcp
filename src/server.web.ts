@@ -1,11 +1,11 @@
+import {
+  registerAppResource,
+  registerAppTool,
+  RESOURCE_MIME_TYPE,
+} from '@modelcontextprotocol/ext-apps/server';
 import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
-import {
-  registerAppTool,
-  registerAppResource,
-  RESOURCE_MIME_TYPE,
-} from '@modelcontextprotocol/ext-apps/server';
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
@@ -20,8 +20,8 @@ import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
-import { getConfigWithOverrides } from './utils/mcpSiteSettings.js';
 import invariant from './utils/invariant.js';
+import { getConfigWithOverrides } from './utils/mcpSiteSettings.js';
 import { Provider } from './utils/provider.js';
 
 export const serverName = 'tableau-mcp';
