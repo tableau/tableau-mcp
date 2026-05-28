@@ -11,9 +11,10 @@ export const ADMIN_INSIGHTS_DATASETS = {
 export type AdminInsightsDataset =
   (typeof ADMIN_INSIGHTS_DATASETS)[keyof typeof ADMIN_INSIGHTS_DATASETS];
 
-type SiteCacheEntry = Map<string, string>;
-
-const cache: Map<string, SiteCacheEntry> = new Map();
+// Mirrors the cache pattern in `adminGate.ts`: TTL-bounded entries keyed by a flat string.
+// Full optimization (size limits, eviction policy, telemetry) tracked in W-22551424.
+const cache: Map<string, { luid: string; expiresAt: number }> = new Map();
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 export class AdminInsightsDatasetNotFoundError extends Error {
   constructor(datasetName: string) {
@@ -34,9 +35,11 @@ export const adminInsightsResolver = {
     datasetName: AdminInsightsDataset;
   }): Promise<string> {
     const siteId = restApi.siteId;
-    const cached = cache.get(siteId)?.get(datasetName);
-    if (cached) {
-      return cached;
+    const cacheKey = `${siteId}:${datasetName}`;
+    const now = Date.now();
+    const cached = cache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.luid;
     }
 
     const datasources = await paginate({
@@ -52,17 +55,19 @@ export const adminInsightsResolver = {
       },
     });
 
-    const siteCache: SiteCacheEntry = cache.get(siteId) ?? new Map();
+    const expiresAt = Date.now() + CACHE_TTL_MS;
+    let resolvedLuid: string | undefined;
     for (const ds of datasources) {
-      siteCache.set(ds.name, ds.id);
+      cache.set(`${siteId}:${ds.name}`, { luid: ds.id, expiresAt });
+      if (ds.name === datasetName) {
+        resolvedLuid = ds.id;
+      }
     }
-    cache.set(siteId, siteCache);
 
-    const luid = siteCache.get(datasetName);
-    if (!luid) {
+    if (!resolvedLuid) {
       throw new AdminInsightsDatasetNotFoundError(datasetName);
     }
-    return luid;
+    return resolvedLuid;
   },
 
   clearCache(): void {
