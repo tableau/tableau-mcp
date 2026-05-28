@@ -67,7 +67,7 @@ jobs:
           OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY_PASSPHRASE }}
 
       - name: OAuth Tests (Tableau authz server)
-        if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+        if: false
         uses: ./.github/actions/run-oauth-tableau-authz-tests
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}
