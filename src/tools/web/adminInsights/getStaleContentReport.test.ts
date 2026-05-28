@@ -2,7 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
-import { adminGate } from '../_lib/adminGate.js';
+import { adminGate } from '../adminGate.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import {
   clearStaleContentReportCache,

@@ -9,7 +9,7 @@ export const registerPrompts = (server: WebMcpServer): void => {
   const config = getConfig();
   for (const factory of webPromptFactories) {
     const prompt = factory(server);
-    if (!prompt.enabled(config)) {
+    if (prompt.disabled(config)) {
       continue;
     }
     server.mcpServer.registerPrompt(

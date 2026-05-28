@@ -29,7 +29,7 @@ export const getStaleContentCleanupInformPrompt: WebPromptFactory = () => ({
     'invoking the deterministic `get-stale-content-report` tool, which performs the ' +
     'TS Events / Site Content anti-join and threshold filter server-side. Read-only.',
   argsSchema,
-  enabled: (config) => config.adminToolsEnabled,
+  disabled: (config) => !config.adminToolsEnabled,
   callback: (args) => {
     const minAgeDays = args.minAgeDays
       ? parseInt(args.minAgeDays, 10)

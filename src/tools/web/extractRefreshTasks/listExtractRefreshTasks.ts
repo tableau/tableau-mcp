@@ -7,7 +7,7 @@ import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { ExtractRefreshTask } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { adminGate } from '../_lib/adminGate.js';
+import { adminGate } from '../adminGate.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import {
   applyTaskFilters,

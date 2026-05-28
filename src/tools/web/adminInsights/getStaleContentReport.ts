@@ -9,7 +9,7 @@ import { Query } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { paginate } from '../../../utils/paginate.js';
-import { adminGate, NotAdminError } from '../_lib/adminGate.js';
+import { adminGate, NotAdminError } from '../adminGate.js';
 import { WebTool } from '../tool.js';
 import { executeAdminInsightsQuery } from './adminInsightsToolBase.js';
 import { ADMIN_INSIGHTS_DATASETS, ADMIN_INSIGHTS_PROJECT_NAME } from './resolver.js';

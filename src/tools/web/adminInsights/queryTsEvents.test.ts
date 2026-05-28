@@ -3,7 +3,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Query } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
-import { adminGate } from '../_lib/adminGate.js';
+import { adminGate } from '../adminGate.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getQueryAdminInsightsTsEventsTool } from './queryTsEvents.js';
 import { adminInsightsResolver } from './resolver.js';

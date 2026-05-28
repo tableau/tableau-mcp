@@ -16,7 +16,7 @@ import {
 } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { TableauApiScope } from '../../../server/oauth/scopes.js';
-import { adminGate, NotAdminError } from '../_lib/adminGate.js';
+import { adminGate, NotAdminError } from '../adminGate.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import {

@@ -1,5 +1,5 @@
-import { RestApi } from '../../../sdks/tableau/restApi.js';
-import { isAdminSiteRole } from '../../../sdks/tableau/types/user.js';
+import { RestApi } from '../../sdks/tableau/restApi.js';
+import { isAdminSiteRole } from '../../sdks/tableau/types/user.js';
 
 export class NotAdminError extends Error {
   constructor(siteRole: string | undefined) {

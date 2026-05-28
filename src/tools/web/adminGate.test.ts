@@ -1,4 +1,4 @@
-import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { RestApi } from '../../sdks/tableau/restApi.js';
 import { adminGate, NotAdminError } from './adminGate.js';
 
 describe('adminGate', () => {
