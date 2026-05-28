@@ -3,6 +3,7 @@
 .env.*
 .vscode/
 build/
+cache/
 node_modules/
 junit/
 coverage/
