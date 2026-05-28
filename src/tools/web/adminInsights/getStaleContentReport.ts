@@ -22,17 +22,14 @@ const paramsSchema = {
     .max(3650)
     .optional()
     .describe(
-      'Minimum days since last access for content to be considered stale. ' +
-        'Defaults to the server-configured threshold (STALE_CONTENT_MIN_AGE_DAYS, default 90).',
+      'Minimum days since last access for content to be considered stale. Defaults to 90 days.',
     ),
   projectIds: z
     .array(z.string())
     .optional()
     .describe(
-      'Optional list of project LUIDs to scope the report to. The server resolves the LUIDs ' +
-        'to project names via the Tableau REST API and filters the Site Content datasource by ' +
-        'parent project name. If omitted, falls back to the server-configured INCLUDE_PROJECT_IDS ' +
-        'bound (if any).',
+      'Optional list of project LUIDs to scope the report to. ' +
+        'If omitted, returns all projects the caller can access.',
     ),
   itemTypes: z
     .array(z.enum(['Workbook', 'Datasource']))
@@ -126,8 +123,6 @@ access have \`lastUsedDate = createdAt\` and \`neverAccessed = true\`.
   are admin-owned and not user content.
 - \`Last Accessed At\` is \`null\` for items that have never been accessed; the report
   ages those items from \`Created At\` instead.
-- When \`projectIds\` is set (or \`INCLUDE_PROJECT_IDS\` is configured), the server resolves
-  LUIDs to project names via a Tableau REST list-projects call.
 `.trim(),
     paramsSchema,
     annotations: {
