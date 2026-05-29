@@ -31,13 +31,14 @@ type FileResult = {
 };
 type GetWorkbookXmlToolResult = { message: string } & (InlineResult | FileResult);
 
+const title = 'Get Workbook XML';
 export const getGetWorkbookXmlTool = (
   server: DesktopMcpServer,
 ): DesktopTool<typeof paramsSchema> => {
   const getWorkbookXmlTool = new DesktopTool({
     server,
     name: 'get-workbook-xml',
-    title: 'Get Workbook XML',
+    title,
     description: [
       'Gets the current workbook.',
       'Default mode writes a cache file and returns the path (recommended for large workbooks).',
@@ -49,7 +50,7 @@ export const getGetWorkbookXmlTool = (
     ].join(' '),
     paramsSchema,
     annotations: {
-      title: 'Get Workbook (File-based)',
+      title,
       readOnlyHint: false,
       openWorldHint: false,
       destructiveHint: false,
