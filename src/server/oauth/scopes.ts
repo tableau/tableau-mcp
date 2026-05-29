@@ -175,6 +175,38 @@ const toolScopeMap: Record<
     mcp: [],
     api: new Set<TableauApiScope>(),
   },
+  // Admin Insights (admin-only). Resolves dataset LUID via list-datasources, then VDS query.
+  // Bypasses resourceAccessChecker — datasources are internal/known and admin-gated.
+  'query-admin-insights-ts-events': {
+    mcp: ['tableau:mcp:datasource:read'],
+    api: new Set([
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
+      // adminGate.assertAdmin → GET /sites/{siteId}/users/{userId}
+      'tableau:users:read',
+    ]),
+  },
+  'query-admin-insights-site-content': {
+    mcp: ['tableau:mcp:datasource:read'],
+    api: new Set([
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
+      'tableau:users:read',
+    ]),
+  },
+  // Server-side anti-join: runs TS Events + Site Content VDS queries internally,
+  // applies threshold, returns final filtered rows. Deterministic — no LLM math.
+  'get-stale-content-report': {
+    mcp: ['tableau:mcp:datasource:read'],
+    api: new Set([
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
+      'tableau:users:read',
+    ]),
+  },
 };
 
 function getEnabledToolNames(): Set<WebToolName> {
@@ -184,6 +216,9 @@ function getEnabledToolNames(): Set<WebToolName> {
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
     enabledTools.delete('list-extract-refresh-tasks');
+    enabledTools.delete('query-admin-insights-ts-events');
+    enabledTools.delete('query-admin-insights-site-content');
+    enabledTools.delete('get-stale-content-report');
   }
 
   return enabledTools;

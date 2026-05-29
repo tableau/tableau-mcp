@@ -190,3 +190,9 @@ export class AdminOnlyError extends McpToolError {
     super({ type: 'admin-only', message, statusCode: 403 });
   }
 }
+
+export class AdminInsightsUnavailableError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'admin-insights-unavailable', message, statusCode: 404 });
+  }
+}
