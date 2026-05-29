@@ -158,6 +158,15 @@ Overrides whether Metadata API requests are disabled.
 | `restricted` | Can only be overridden to `true`. |
 | `unrestricted` | Can be overridden to `true` or `false`. |
 
+### [`STALE_CONTENT_MIN_AGE_DAYS`](env-vars.md#stale_content_min_age_days)
+
+Overrides the default threshold (in days) used by the `get-stale-content-report` tool to flag stale workbooks and published datasources. Override value must be an integer in the range `1`–`3650`. Empty string reverts to the default (`90`).
+
+| Restriction Type | Behavior |
+|---|---|
+| `restricted` | Override value must be a valid integer in the range `1`–`3650`. |
+| `unrestricted` | Override value must be a valid integer in the range `1`–`3650`. |
+
 ## Override Hierarchy
 
 Request overrides are applied on top of site overrides and environment variables in the following order of precedence (highest to lowest):

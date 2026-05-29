@@ -620,6 +620,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  ADMIN_GATE_CACHE_TTL_MINUTES: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Admin tools cache TTL (minutes)',
+    description:
+      'TTL for caches used by admin-only tools (assertAdmin, Admin Insights dataset LUID, project name resolution). Defaults to 5; range 1-1440.',
+    required: false,
+    sensitive: false,
+  },
   STALE_CONTENT_MIN_AGE_DAYS: {
     includeInUserConfig: false,
     type: 'string',
