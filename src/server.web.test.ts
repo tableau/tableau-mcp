@@ -218,7 +218,7 @@ describe('server', () => {
 
     expect(mocks.mockRegisterAppTool).toHaveBeenCalledWith(
       server.mcpServer,
-      'test-app-tool',
+      'get-workbook',
       {
         title: 'Test test-app-tool',
         description: 'Test test-app-tool',
@@ -235,7 +235,7 @@ describe('server', () => {
 
     expect(mocks.mockRegisterAppResource).toHaveBeenCalledWith(
       server.mcpServer,
-      'test-app-tool',
+      'get-workbook',
       'tableau://app/test',
       expect.objectContaining({ mimeType: expect.any(String) }),
       expect.any(Function),
@@ -253,7 +253,7 @@ describe('server', () => {
 
     // Should register as standard tool, not app tool
     expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
-      'test-standard-tool',
+      'get-workbook',
       {
         title: 'Test test-standard-tool',
         description: 'Test test-standard-tool',
