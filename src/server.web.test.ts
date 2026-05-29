@@ -10,24 +10,60 @@ import { webToolFactories } from './tools/web/tools.js';
 import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
 
-// Create a stable mock instance that can be spied on
-const mockFeatureGate = {
-  isFeatureEnabled: vi.fn(() => false),
-};
+const mocks = vi.hoisted(() => ({
+  mockRegisterAppTool: vi.fn(),
+  mockRegisterAppResource: vi.fn(),
+  mockFeatureGate: {
+    isFeatureEnabled: vi.fn(() => false),
+  },
+}));
+
+vi.mock('@modelcontextprotocol/ext-apps/server', () => ({
+  registerAppTool: mocks.mockRegisterAppTool,
+  registerAppResource: mocks.mockRegisterAppResource,
+  RESOURCE_MIME_TYPE: 'text/html',
+}));
 
 vi.mock('./features/featureGate.js', () => ({
-  getFeatureGate: vi.fn(() => mockFeatureGate),
+  getFeatureGate: vi.fn(() => mocks.mockFeatureGate),
 }));
 
 describe('server', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
+    mocks.mockRegisterAppTool.mockClear();
+    mocks.mockRegisterAppResource.mockClear();
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
   });
+
+  // Helper functions
+  function getServer(): WebMcpServer {
+    const server = new WebMcpServer();
+    server.mcpServer.registerTool = vi.fn();
+    return server;
+  }
+
+  function createMockAppTool(name: string) {
+    return {
+      name,
+      title: `Test ${name}`,
+      description: `Test ${name}`,
+      paramsSchema: {},
+      annotations: { title: `Test ${name}` },
+      callback: vi.fn(),
+      disabled: false,
+      app: {
+        name: 'test-app',
+        resourceUri: 'tableau://app/test',
+        html: '<html><body>Test App UI</body></html>',
+      },
+    };
+  }
 
   it('should register tools', async () => {
     const server = getServer();
@@ -167,41 +203,22 @@ describe('server', () => {
   });
 
   it('should register app tools when tool has app property', async () => {
-    vi.spyOn(mockFeatureGate, 'isFeatureEnabled').mockReturnValue(true);
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
 
     const server = getServer();
-    server.registerAppTool = vi.fn();
-    server.registerAppResource = vi.fn();
-
-    const callback = vi.fn();
-
-    // Mock a tool factory that returns a tool with app property
-    const mockAppTool = {
-      name: 'test-app-tool',
-      description: 'Test app tool',
-      paramsSchema: {},
-      annotations: { title: 'Test App' },
-      callback,
-      disabled: false,
-      app: {
-        name: 'test-app',
-        resourceUri: 'tableau://app/test',
-        html: '<html><body>Test App UI</body></html>',
-      },
-    };
-
+    const mockAppTool = createMockAppTool('test-app-tool');
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
 
     await server.registerTools();
 
-    expect(server.registerAppTool).toHaveBeenCalledWith(
+    expect(mocks.mockRegisterAppTool).toHaveBeenCalledWith(
       server.mcpServer,
       'test-app-tool',
       {
-        title: 'Test App',
-        description: 'Test app tool',
+        title: 'Test test-app-tool',
+        description: 'Test test-app-tool',
         inputSchema: {},
-        annotations: { title: 'Test App' },
+        annotations: { title: 'Test test-app-tool' },
         _meta: {
           ui: {
             resourceUri: 'tableau://app/test',
@@ -211,7 +228,7 @@ describe('server', () => {
       expect.any(Function),
     );
 
-    expect(server.registerAppResource).toHaveBeenCalledWith(
+    expect(mocks.mockRegisterAppResource).toHaveBeenCalledWith(
       server.mcpServer,
       'test-app-tool',
       'tableau://app/test',
@@ -221,29 +238,10 @@ describe('server', () => {
   });
 
   it('should register as standard tool when mcp-apps feature flag is disabled', async () => {
-    vi.spyOn(mockFeatureGate, 'isFeatureEnabled').mockReturnValue(false);
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
 
     const server = getServer();
-    server.registerAppTool = vi.fn();
-    server.registerAppResource = vi.fn();
-
-    const callback = vi.fn();
-
-    // Mock a tool with app property
-    const mockAppTool = {
-      name: 'test-standard-tool',
-      description: 'Test standard tool',
-      paramsSchema: {},
-      annotations: { title: 'Test Standard' },
-      callback,
-      disabled: false,
-      app: {
-        name: 'test-app',
-        resourceUri: 'tableau://app/test',
-        html: '<html><body>Test App UI</body></html>',
-      },
-    };
-
+    const mockAppTool = createMockAppTool('test-standard-tool');
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
 
     await server.registerTools();
@@ -252,21 +250,16 @@ describe('server', () => {
     expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
       'test-standard-tool',
       {
-        description: 'Test standard tool',
+        title: 'Test test-standard-tool',
+        description: 'Test test-standard-tool',
         inputSchema: {},
-        annotations: { title: 'Test Standard' },
+        annotations: { title: 'Test test-standard-tool' },
       },
       expect.any(Function),
     );
 
     // Should NOT register as app tool
-    expect(server.registerAppTool).not.toHaveBeenCalled();
-    expect(server.registerAppResource).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
   });
 });
-
-function getServer(): WebMcpServer {
-  const server = new WebMcpServer();
-  server.mcpServer.registerTool = vi.fn();
-  return server;
-}
