@@ -3,6 +3,7 @@ import { serverName, WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/listDatasources/listDatasources.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
+import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
 import { webToolNames } from './tools/web/toolName.js';
@@ -48,15 +49,19 @@ describe('server', () => {
     return server;
   }
 
-  function createMockAppTool(name: string) {
+  function createMockAppTool(name: string): WebTool<any> {
     return {
-      name,
+      name: "get-workbook",
+      server: {} as any,
       title: `Test ${name}`,
       description: `Test ${name}`,
       paramsSchema: {},
       annotations: { title: `Test ${name}` },
       callback: vi.fn(),
       disabled: false,
+      requiredApiScopes: [],
+      logAndExecute: vi.fn(),
+      notifyInvocation: vi.fn(),
       app: {
         name: 'test-app',
         resourceUri: 'tableau://app/test',
