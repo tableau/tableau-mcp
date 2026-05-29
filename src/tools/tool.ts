@@ -28,6 +28,9 @@ export type ToolParams<
   // The name of the tool
   name: TToolName;
 
+  // The title of the tool
+  title?: TypeOrProvider<string>;
+
   // The description of the tool
   description: TypeOrProvider<string>;
 
@@ -84,6 +87,7 @@ export abstract class Tool<
 > {
   server: TServer;
   name: TToolName;
+  title?: TypeOrProvider<string>;
   description: TypeOrProvider<string>;
   paramsSchema: TypeOrProvider<Args>;
   annotations: TypeOrProvider<ToolAnnotations>;
@@ -93,6 +97,7 @@ export abstract class Tool<
   constructor({
     server,
     name,
+    title,
     description,
     paramsSchema,
     annotations,
@@ -101,6 +106,7 @@ export abstract class Tool<
   }: ToolParams<TServer, TToolName, TExtra, TCallback, Args>) {
     this.server = server;
     this.name = name;
+    this.title = title;
     this.description = description;
     this.paramsSchema = paramsSchema;
     this.annotations = annotations;

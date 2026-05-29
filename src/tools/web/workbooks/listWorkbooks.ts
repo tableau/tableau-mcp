@@ -2,10 +2,17 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import {
+  getWorkbookLineageByLuid,
+  getWorkbookLineageQuery,
+  mergeWorkbookLineage,
+} from '../../../sdks/tableau/methods/lineageUtils.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { paginate } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
@@ -99,7 +106,28 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
                   },
                 });
 
-                return workbooks;
+                if (configWithOverrides.disableMetadataApiRequests || workbooks.length === 0) {
+                  return workbooks;
+                }
+
+                try {
+                  const response = await restApi.metadataMethods.graphql(
+                    getWorkbookLineageQuery(workbooks.map((workbook) => workbook.id)),
+                  );
+                  return mergeWorkbookLineage(
+                    workbooks,
+                    getWorkbookLineageByLuid(response),
+                    configWithOverrides.boundedContext.datasourceIds,
+                  );
+                } catch (error) {
+                  log({
+                    message: 'Failed to enrich workbooks with lineage metadata',
+                    level: 'warning',
+                    logger: 'lineage',
+                    data: getExceptionMessage(error),
+                  });
+                  return workbooks;
+                }
               },
             }),
           );

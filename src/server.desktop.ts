@@ -26,6 +26,7 @@ export class DesktopMcpServer extends Server {
 
     for (const {
       name,
+      title,
       description,
       paramsSchema,
       annotations,
@@ -51,6 +52,7 @@ export class DesktopMcpServer extends Server {
       this.mcpServer.registerTool(
         name,
         {
+          title: await Provider.from(title),
           description: await Provider.from(description),
           inputSchema: await Provider.from(paramsSchema),
           annotations: await Provider.from(annotations),

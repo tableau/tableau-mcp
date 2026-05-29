@@ -146,6 +146,7 @@ type SearchItemContent =
   | 'tags'
   | 'title'
   | 'totalViewCount'
+  | 'upstreamDatasources'
   | 'viewCountLastMonth'
   | 'type'
   | 'workbookDescription';
