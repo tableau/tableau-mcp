@@ -180,8 +180,9 @@ export function combineFields(
   // Create a response object that combines field data from
   // readMetadata (VizQL Data Service API) and listFields (GraphQL Metadata API) results
   // to optimize for LLM accuracy and reduce tokens in response.
+  const publishedDatasource = listFieldsResult.data.publishedDatasources?.[0];
   const combinedFields: FieldsResult = {
-    datasourceDescription: listFieldsResult.data.publishedDatasources[0]?.description ?? '',
+    datasourceDescription: publishedDatasource?.description ?? '',
     ...(datasourceModelResult
       ? { datasourceModel: getSimplifiedDatasourceModel(datasourceModelResult) }
       : {}),
@@ -191,9 +192,9 @@ export function combineFields(
   const fields: Field[] = [];
 
   if (!readMetadataResult.data) {
-    if (listFieldsResult.data.publishedDatasources[0]?.fields.length) {
+    if (publishedDatasource?.fields.length) {
       // fallback to returning listFields results if we don't have any fields from readMetadata.
-      for (const field of listFieldsResult.data.publishedDatasources[0].fields) {
+      for (const field of publishedDatasource.fields) {
         const toPush: Field = {
           name: field.name,
           logicalTableId: null,
@@ -261,16 +262,14 @@ export function combineFields(
     }
   }
 
-  if (!listFieldsResult.data.publishedDatasources[0]?.fields.length) {
+  if (!publishedDatasource?.fields.length) {
     combinedFields.fieldGroups = groupFieldsByLogicalTableId(fields);
     return combinedFields;
   }
 
   // Of the fields in our response object, populate them with additional properties we get from listFields results.
   for (const field of fields) {
-    const matchingListField = listFieldsResult.data.publishedDatasources[0].fields.find(
-      (f) => f.name === field.name,
-    );
+    const matchingListField = publishedDatasource.fields.find((f) => f.name === field.name);
     if (matchingListField) {
       populateFieldWithAdditionalProperties(matchingListField, field);
     }

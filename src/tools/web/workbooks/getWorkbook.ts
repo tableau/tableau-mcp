@@ -3,10 +3,17 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
+import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import {
+  getWorkbookLineageByLuid,
+  getWorkbookLineageQuery,
+  mergeWorkbookLineage,
+} from '../../../sdks/tableau/methods/lineageUtils.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 
@@ -67,7 +74,28 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                   workbook.views.view = views;
                 }
 
-                return workbook;
+                if (configWithOverrides.disableMetadataApiRequests) {
+                  return workbook;
+                }
+
+                try {
+                  const response = await restApi.metadataMethods.graphql(
+                    getWorkbookLineageQuery([workbook.id]),
+                  );
+                  return mergeWorkbookLineage(
+                    [workbook],
+                    getWorkbookLineageByLuid(response),
+                    configWithOverrides.boundedContext.datasourceIds,
+                  )[0];
+                } catch (error) {
+                  log({
+                    message: `Failed to enrich workbook ${workbook.id} with lineage metadata`,
+                    level: 'warning',
+                    logger: 'lineage',
+                    data: getExceptionMessage(error),
+                  });
+                  return workbook;
+                }
               },
             }),
           );
@@ -96,7 +124,7 @@ export function filterWorkbookViews({
   if (!workbook.views || (!viewIds && !tags)) {
     return {
       type: 'success',
-      result: workbook,
+      result: flattenWorkbookViewUsage(workbook),
     };
   }
 
@@ -114,6 +142,22 @@ export function filterWorkbookViews({
 
   return {
     type: 'success',
-    result: workbook,
+    result: flattenWorkbookViewUsage(workbook),
+  };
+}
+
+function flattenWorkbookViewUsage(workbook: Workbook): Workbook {
+  if (!workbook.views) {
+    return workbook;
+  }
+
+  return {
+    ...workbook,
+    views: {
+      view: workbook.views.view.map(({ usage, ...view }) => ({
+        ...view,
+        totalViewCount: usage?.totalViewCount ?? 0,
+      })),
+    },
   };
 }
