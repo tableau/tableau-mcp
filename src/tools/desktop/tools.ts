@@ -1,3 +1,4 @@
-import { getPlaceholderTool } from './placeholderTool.js';
+import { getCheckForUserChangesTool } from './session/checkForUserChanges.js';
+import { getListInstancesTool } from './session/listInstances.js';
 
-export const desktopToolFactories = [getPlaceholderTool];
+export const desktopToolFactories = [getListInstancesTool, getCheckForUserChangesTool];
