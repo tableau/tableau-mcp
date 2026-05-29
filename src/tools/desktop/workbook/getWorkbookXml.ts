@@ -4,7 +4,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { DesktopCache } from '../../../desktop/cache.js';
-import { getWorkbookXml } from '../../../desktop/commands/worksheetCommands.js';
+import { getWorkbookXml } from '../../../desktop/commands/workbookCommands.js';
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
