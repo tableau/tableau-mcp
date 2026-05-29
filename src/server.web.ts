@@ -89,7 +89,6 @@ export class WebMcpServer extends Server {
         return tableauToolCallback(args, tableauRequestHandlerExtra);
       };
 
-
       if (mcpAppsEnabled && tool.app) {
         await this._registerAppTool(tool, toolCallback);
       } else {
