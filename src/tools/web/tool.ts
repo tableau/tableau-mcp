@@ -16,6 +16,13 @@ import { WebToolName } from './toolName.js';
 
 export type ToolRules = Record<string, boolean | undefined>;
 
+/**
+ * MCP App metadata for tools that provide interactive UI capabilities.
+ *
+ * MCP Apps extend standard MCP tools by registering additional resources
+ * (HTML/JavaScript) that clients can render as interactive interfaces.
+ * This enables richer user experiences beyond text-based tool responses.
+ */
 export type AppDetails = {
   name: string;
   resourceUri: string;
