@@ -22,7 +22,8 @@ let cache: ExpiringMap<string, string> | null = null;
 
 function getCache(): ExpiringMap<string, string> {
   if (!cache) {
-    const ttlMinutes = parseNumber(process.env.ADMIN_INSIGHTS_RESOLVER_CACHE_TTL_MINUTES, {
+    // Reuses ADMIN_GATE_CACHE_TTL_MINUTES — single knob for all admin-tools caches.
+    const ttlMinutes = parseNumber(process.env.ADMIN_GATE_CACHE_TTL_MINUTES, {
       defaultValue: 5,
       minValue: 1,
       maxValue: 60 * 24, // 24 hours

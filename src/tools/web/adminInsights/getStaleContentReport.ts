@@ -8,7 +8,10 @@ import { useRestApi } from '../../../restApiInstance.js';
 import { Query } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { ExpiringMap } from '../../../utils/expiringMap.js';
+import { milliseconds } from '../../../utils/milliseconds.js';
 import { paginate } from '../../../utils/paginate.js';
+import { parseNumber } from '../../../utils/parseNumber.js';
 import { assertAdmin } from '../adminGate.js';
 import { WebTool } from '../tool.js';
 import { executeAdminInsightsQuery } from './adminInsightsToolBase.js';
@@ -266,12 +269,24 @@ async function resolveProjectIdsToNames({
   projectIds: ReadonlyArray<string>;
 }): Promise<Result<string[], McpToolError>> {
   const idSet = new Set(projectIds);
-  const cache = projectNameCache.get(restApi.siteId);
-  const now = Date.now();
-  if (cache && cache.expiresAt > now) {
-    return new Ok(filterAndDedupe(cache.byId, idSet));
+  const cache = getProjectNameCache();
+
+  // Cache hit: every requested ID is in the cache.
+  const cachedNames = new Set<string>();
+  let allHit = true;
+  for (const id of idSet) {
+    const name = cache.get(`${restApi.siteId}:${id}`);
+    if (name === undefined) {
+      allHit = false;
+      break;
+    }
+    cachedNames.add(name);
+  }
+  if (allHit) {
+    return new Ok(Array.from(cachedNames));
   }
 
+  // Cache miss for at least one ID: refresh the full project list for this site.
   const projects = await paginate({
     pageConfig: { pageSize: 1000 },
     getDataFn: async (pageConfig) => {
@@ -285,28 +300,37 @@ async function resolveProjectIdsToNames({
     },
   });
 
-  const byId = new Map<string, string>();
-  for (const p of projects) {
-    byId.set(p.id, p.name);
-  }
-  projectNameCache.set(restApi.siteId, { byId, expiresAt: now + PROJECT_NAME_CACHE_TTL_MS });
-
-  return new Ok(filterAndDedupe(byId, idSet));
-}
-
-function filterAndDedupe(byId: Map<string, string>, idSet: ReadonlySet<string>): string[] {
   const out = new Set<string>();
-  for (const id of idSet) {
-    const name = byId.get(id);
-    if (name) {
-      out.add(name);
+  for (const p of projects) {
+    cache.set(`${restApi.siteId}:${p.id}`, p.name);
+    if (idSet.has(p.id)) {
+      out.add(p.name);
     }
   }
-  return Array.from(out);
+
+  return new Ok(Array.from(out));
 }
 
-const PROJECT_NAME_CACHE_TTL_MS = 5 * 60 * 1000;
-const projectNameCache: Map<string, { byId: Map<string, string>; expiresAt: number }> = new Map();
+// Lazy-initialized cache to avoid module-level parseNumber call.
+// Mirrors the pattern in `adminGate.ts`: ExpiringMap with env-var-configurable TTL,
+// keyed by `${siteId}:${projectId}` -> project name. Full optimization
+// (size limits, eviction policy, telemetry) tracked in W-22551424.
+let projectNameCache: ExpiringMap<string, string> | null = null;
+
+function getProjectNameCache(): ExpiringMap<string, string> {
+  if (!projectNameCache) {
+    // Reuses ADMIN_GATE_CACHE_TTL_MINUTES — single knob for all admin-tools caches.
+    const ttlMinutes = parseNumber(process.env.ADMIN_GATE_CACHE_TTL_MINUTES, {
+      defaultValue: 5,
+      minValue: 1,
+      maxValue: 60 * 24, // 24 hours
+    });
+    projectNameCache = new ExpiringMap<string, string>({
+      defaultExpirationTimeMs: milliseconds.fromMinutes(ttlMinutes),
+    });
+  }
+  return projectNameCache;
+}
 
 function resolveProjectScopeIds({
   argProjectIds,
@@ -419,7 +443,8 @@ function parseSize(raw: unknown): number | null {
 }
 
 export function clearStaleContentReportCache(): void {
-  projectNameCache.clear();
+  projectNameCache?.clear();
+  projectNameCache = null;
 }
 
 export const exportedForTesting = {
