@@ -1,9 +1,11 @@
 import { RestApi } from '../../sdks/tableau/restApi.js';
-import { TableauWebRequestHandlerExtra } from './toolContext.js';
 import { assertAdmin } from './adminGate.js';
+import { TableauWebRequestHandlerExtra } from './toolContext.js';
 
 describe('assertAdmin', () => {
-  function makeExtra({ userLuid = 'user-1' }: { userLuid?: string } = {}): TableauWebRequestHandlerExtra {
+  function makeExtra({
+    userLuid = 'user-1',
+  }: { userLuid?: string } = {}): TableauWebRequestHandlerExtra {
     return {
       getUserLuid: () => userLuid,
     } as unknown as TableauWebRequestHandlerExtra;
