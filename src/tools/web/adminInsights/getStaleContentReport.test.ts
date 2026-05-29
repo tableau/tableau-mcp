@@ -1,8 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err, Ok } from 'ts-results-es';
 
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
-import { adminGate } from '../adminGate.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import {
   clearStaleContentReportCache,
@@ -15,7 +15,7 @@ import { ADMIN_INSIGHTS_PROJECT_NAME, adminInsightsResolver } from './resolver.j
 const mocks = vi.hoisted(() => ({
   mockQueryDatasource: vi.fn(),
   mockListDatasources: vi.fn(),
-  mockQueryUserOnSite: vi.fn(),
+  mockAssertAdmin: vi.fn(),
   mockQueryProjects: vi.fn(),
 }));
 
@@ -30,14 +30,15 @@ vi.mock('../../../restApiInstance.js', () => ({
       datasourcesMethods: {
         listDatasources: mocks.mockListDatasources,
       },
-      usersMethods: {
-        queryUserOnSite: mocks.mockQueryUserOnSite,
-      },
       projectsMethods: {
         queryProjects: mocks.mockQueryProjects,
       },
     }),
   ),
+}));
+
+vi.mock('../adminGate.js', () => ({
+  assertAdmin: mocks.mockAssertAdmin,
 }));
 
 describe('computeStaleRows', () => {
@@ -307,14 +308,9 @@ describe('get-stale-content-report tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     adminInsightsResolver.clearCache();
-    adminGate.clearCache();
     clearStaleContentReportCache();
 
-    mocks.mockQueryUserOnSite.mockResolvedValue({
-      id: 'user-test',
-      name: 'admin',
-      siteRole: 'SiteAdministratorCreator',
-    });
+    mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
 
     mocks.mockListDatasources.mockResolvedValue({
       pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },
@@ -399,11 +395,9 @@ describe('get-stale-content-report tool', () => {
   });
 
   it('rejects when caller is not an admin', async () => {
-    mocks.mockQueryUserOnSite.mockResolvedValueOnce({
-      id: 'user-test',
-      name: 'viewer',
-      siteRole: 'Viewer',
-    });
+    mocks.mockAssertAdmin.mockResolvedValueOnce(
+      new Err('This tool requires site administrator permissions. Your site role is: Viewer'),
+    );
 
     const result = await getToolResult({ minAgeDays: 90 });
 

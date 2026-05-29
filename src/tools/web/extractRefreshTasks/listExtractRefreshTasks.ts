@@ -7,7 +7,7 @@ import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { ExtractRefreshTask } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { adminGate } from '../adminGate.js';
+import { assertAdmin } from '../adminGate.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import {
   applyTaskFilters,
@@ -98,7 +98,10 @@ export const getListExtractRefreshTasksTool = (
             jwtScopes: listExtractRefreshTasksTool.requiredApiScopes,
             callback: async (restApi) => {
               // Verify user has admin privileges
-              await adminGate.assertAdmin(restApi);
+              const adminResult = await assertAdmin(restApi, extra);
+              if (adminResult.isErr()) {
+                throw new Error(adminResult.error);
+              }
 
               return restApi.tasksMethods.listExtractRefreshTasks({
                 siteId: restApi.siteId,

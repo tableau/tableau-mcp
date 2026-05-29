@@ -16,7 +16,7 @@ import {
 } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { TableauApiScope } from '../../../server/oauth/scopes.js';
-import { adminGate, NotAdminError } from '../adminGate.js';
+import { assertAdmin } from '../adminGate.js';
 import { getVizqlDataServiceDisabledError } from '../getVizqlDataServiceDisabledError.js';
 import { TableauWebRequestHandlerExtra } from '../toolContext.js';
 import {
@@ -115,13 +115,9 @@ export async function runAdminInsightsQuery({
     ...extra,
     jwtScopes,
     callback: async (restApi) => {
-      try {
-        await adminGate.assertAdmin(restApi);
-      } catch (error) {
-        if (error instanceof NotAdminError) {
-          return new AdminOnlyError(error.message).toErr();
-        }
-        throw error;
+      const adminResult = await assertAdmin(restApi, extra);
+      if (adminResult.isErr()) {
+        return new AdminOnlyError(adminResult.error).toErr();
       }
 
       return await executeAdminInsightsQuery({ restApi, datasetName, query, rowLimit });

@@ -1,9 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Err, Ok } from 'ts-results-es';
 
 import { Query } from '../../../sdks/tableau/apis/vizqlDataServiceApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { Provider } from '../../../utils/provider.js';
-import { adminGate } from '../adminGate.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getQueryAdminInsightsTsEventsTool } from './queryTsEvents.js';
 import { adminInsightsResolver } from './resolver.js';
@@ -11,6 +11,7 @@ import { adminInsightsResolver } from './resolver.js';
 const mocks = vi.hoisted(() => ({
   mockQueryDatasource: vi.fn(),
   mockListDatasources: vi.fn(),
+  mockAssertAdmin: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -24,15 +25,12 @@ vi.mock('../../../restApiInstance.js', () => ({
       datasourcesMethods: {
         listDatasources: mocks.mockListDatasources,
       },
-      usersMethods: {
-        queryUserOnSite: vi.fn().mockResolvedValue({
-          id: 'user-test',
-          name: 'admin',
-          siteRole: 'SiteAdministratorCreator',
-        }),
-      },
     }),
   ),
+}));
+
+vi.mock('../adminGate.js', () => ({
+  assertAdmin: mocks.mockAssertAdmin,
 }));
 
 const validQuery: Query = {
@@ -43,8 +41,8 @@ describe('query-admin-insights-ts-events tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     adminInsightsResolver.clearCache();
-    adminGate.clearCache();
 
+    mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
     mocks.mockListDatasources.mockResolvedValue({
       pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },
       datasources: [{ id: 'luid-tse', name: 'TS Events' }],
@@ -57,9 +55,8 @@ describe('query-admin-insights-ts-events tool', () => {
   });
 
   it('runs the VDS query against the resolved TS Events LUID and returns OK', async () => {
-    const { Ok } = await import('ts-results-es');
     mocks.mockQueryDatasource.mockResolvedValue(
-      Ok({ data: [{ 'Item ID': 'wb-1', last_access: '2026-04-15' }] }),
+      new Ok({ data: [{ 'Item ID': 'wb-1', last_access: '2026-04-15' }] }),
     );
 
     const result = await getToolResult({ query: validQuery });
@@ -74,23 +71,8 @@ describe('query-admin-insights-ts-events tool', () => {
   });
 
   it('returns 403 when the caller is not an admin', async () => {
-    const { Ok } = await import('ts-results-es');
-    mocks.mockQueryDatasource.mockResolvedValue(Ok({ data: [] }));
-
-    // Override usersMethods on the next callback to flip role
-    const { useRestApi } = await import('../../../restApiInstance.js');
-    (useRestApi as ReturnType<typeof vi.fn>).mockImplementationOnce(async ({ callback }) =>
-      callback({
-        siteId: 'site-test',
-        userId: 'user-test',
-        vizqlDataServiceMethods: { queryDatasource: mocks.mockQueryDatasource },
-        datasourcesMethods: { listDatasources: mocks.mockListDatasources },
-        usersMethods: {
-          queryUserOnSite: vi
-            .fn()
-            .mockResolvedValue({ id: 'user-test', name: 'u', siteRole: 'Viewer' }),
-        },
-      }),
+    mocks.mockAssertAdmin.mockResolvedValueOnce(
+      new Err('This tool requires site administrator permissions. Your site role is: Viewer'),
     );
 
     const result = await getToolResult({ query: validQuery });

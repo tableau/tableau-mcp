@@ -1,5 +1,8 @@
 import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { ExpiringMap } from '../../../utils/expiringMap.js';
+import { milliseconds } from '../../../utils/milliseconds.js';
 import { paginate } from '../../../utils/paginate.js';
+import { parseNumber } from '../../../utils/parseNumber.js';
 
 export const ADMIN_INSIGHTS_PROJECT_NAME = 'Admin Insights';
 
@@ -11,10 +14,25 @@ export const ADMIN_INSIGHTS_DATASETS = {
 export type AdminInsightsDataset =
   (typeof ADMIN_INSIGHTS_DATASETS)[keyof typeof ADMIN_INSIGHTS_DATASETS];
 
-// Mirrors the cache pattern in `adminGate.ts`: TTL-bounded entries keyed by a flat string.
-// Full optimization (size limits, eviction policy, telemetry) tracked in W-22551424.
-const cache: Map<string, { luid: string; expiresAt: number }> = new Map();
-const CACHE_TTL_MS = 5 * 60 * 1000;
+// Lazy-initialized cache to avoid module-level parseNumber call.
+// Mirrors the pattern in `adminGate.ts`: ExpiringMap with env-var-configurable TTL,
+// keyed by `${siteId}:${datasetName}` -> dataset LUID. Full optimization
+// (size limits, eviction policy, telemetry) tracked in W-22551424.
+let cache: ExpiringMap<string, string> | null = null;
+
+function getCache(): ExpiringMap<string, string> {
+  if (!cache) {
+    const ttlMinutes = parseNumber(process.env.ADMIN_INSIGHTS_RESOLVER_CACHE_TTL_MINUTES, {
+      defaultValue: 5,
+      minValue: 1,
+      maxValue: 60 * 24, // 24 hours
+    });
+    cache = new ExpiringMap<string, string>({
+      defaultExpirationTimeMs: milliseconds.fromMinutes(ttlMinutes),
+    });
+  }
+  return cache;
+}
 
 export class AdminInsightsDatasetNotFoundError extends Error {
   constructor(datasetName: string) {
@@ -36,10 +54,10 @@ export const adminInsightsResolver = {
   }): Promise<string> {
     const siteId = restApi.siteId;
     const cacheKey = `${siteId}:${datasetName}`;
-    const now = Date.now();
-    const cached = cache.get(cacheKey);
-    if (cached && cached.expiresAt > now) {
-      return cached.luid;
+    const resolverCache = getCache();
+    const cached = resolverCache.get(cacheKey);
+    if (cached) {
+      return cached;
     }
 
     const datasources = await paginate({
@@ -55,10 +73,9 @@ export const adminInsightsResolver = {
       },
     });
 
-    const expiresAt = Date.now() + CACHE_TTL_MS;
     let resolvedLuid: string | undefined;
     for (const ds of datasources) {
-      cache.set(`${siteId}:${ds.name}`, { luid: ds.id, expiresAt });
+      resolverCache.set(`${siteId}:${ds.name}`, ds.id);
       if (ds.name === datasetName) {
         resolvedLuid = ds.id;
       }
@@ -71,6 +88,7 @@ export const adminInsightsResolver = {
   },
 
   clearCache(): void {
-    cache.clear();
+    cache?.clear();
+    cache = null;
   },
 };

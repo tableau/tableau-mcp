@@ -1,47 +1,71 @@
-import { RestApi } from '../../sdks/tableau/restApi.js';
-import { isAdminSiteRole } from '../../sdks/tableau/types/user.js';
+import { Err, Ok, Result } from 'ts-results-es';
 
-export class NotAdminError extends Error {
-  constructor(siteRole: string | undefined) {
-    const observed = siteRole ?? 'unknown';
-    super(
-      'This tool is restricted to Tableau site administrators. ' +
-        `The caller's site role is "${observed}", which does not have permission to invoke admin-only tooling.`,
-    );
-    this.name = 'NotAdminError';
-  }
+import { RestApi } from '../../sdks/tableau/restApi.js';
+import { ExpiringMap } from '../../utils/expiringMap.js';
+import { milliseconds } from '../../utils/milliseconds.js';
+import { parseNumber } from '../../utils/parseNumber.js';
+import { TableauWebRequestHandlerExtra } from './toolContext.js';
+
+const ADMIN_SITE_ROLES = new Set([
+  'SiteAdministratorCreator',
+  'SiteAdministratorExplorer',
+  'ServerAdministrator',
+]);
+
+function isAdminSiteRole(siteRole: string | undefined): boolean {
+  return !!siteRole && ADMIN_SITE_ROLES.has(siteRole);
 }
 
-const cache: Map<string, { siteRole: string | undefined; expiresAt: number }> = new Map();
-const CACHE_TTL_MS = 5 * 60 * 1000;
+// Lazy-initialized cache to avoid module-level parseNumber call
+let cache: ExpiringMap<string, string> | null = null;
 
-export const adminGate = {
-  async assertAdmin(restApi: RestApi): Promise<void> {
-    const siteId = restApi.siteId;
-    const userId = restApi.userId;
-    if (!userId) {
-      throw new NotAdminError(undefined);
-    }
+function getCache(): ExpiringMap<string, string> {
+  if (!cache) {
+    const ttlMinutes = parseNumber(process.env.ADMIN_GATE_CACHE_TTL_MINUTES, {
+      defaultValue: 5,
+      minValue: 1,
+      maxValue: 60 * 24, // 24 hours
+    });
+    cache = new ExpiringMap<string, string>({
+      defaultExpirationTimeMs: milliseconds.fromMinutes(ttlMinutes),
+    });
+  }
+  return cache;
+}
 
-    const cacheKey = `${siteId}:${userId}`;
-    const cached = cache.get(cacheKey);
-    const now = Date.now();
-    let siteRole: string | undefined;
+/**
+ * Checks if the current user has admin permissions.
+ *
+ * @param restApi - REST API instance
+ * @param extra - Request handler extra context (for getUserLuid)
+ * @returns Ok(true) if user is admin, Err(message) otherwise
+ */
+export async function assertAdmin(
+  restApi: RestApi,
+  extra: TableauWebRequestHandlerExtra,
+): Promise<Result<true, string>> {
+  const siteId = restApi.siteId;
+  const userId = extra.getUserLuid();
+  if (!userId) {
+    return new Err('This tool requires site administrator permissions');
+  }
 
-    if (cached && cached.expiresAt > now) {
-      siteRole = cached.siteRole;
-    } else {
-      const user = await restApi.usersMethods.queryUserOnSite({ siteId, userId });
-      siteRole = user.siteRole;
-      cache.set(cacheKey, { siteRole, expiresAt: now + CACHE_TTL_MS });
-    }
+  const cacheKey = `${siteId}:${userId}`;
+  const adminCache = getCache();
+  let siteRole = adminCache.get(cacheKey);
 
-    if (!isAdminSiteRole(siteRole)) {
-      throw new NotAdminError(siteRole);
-    }
-  },
+  if (!siteRole) {
+    const user = await restApi.usersMethods.queryUserOnSite({ siteId, userId });
+    siteRole = user.siteRole ?? '';
+    adminCache.set(cacheKey, siteRole);
+  }
 
-  clearCache(): void {
-    cache.clear();
-  },
-};
+  if (!isAdminSiteRole(siteRole)) {
+    const message = siteRole
+      ? `This tool requires site administrator permissions. Your site role is: ${siteRole}`
+      : 'This tool requires site administrator permissions';
+    return new Err(message);
+  }
+
+  return new Ok(true);
+}

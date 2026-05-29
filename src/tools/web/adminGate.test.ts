@@ -1,78 +1,59 @@
 import { RestApi } from '../../sdks/tableau/restApi.js';
-import { adminGate, NotAdminError } from './adminGate.js';
+import { TableauWebRequestHandlerExtra } from './toolContext.js';
+import { assertAdmin } from './adminGate.js';
 
-describe('adminGate', () => {
-  beforeEach(() => {
-    adminGate.clearCache();
-  });
+describe('assertAdmin', () => {
+  function makeExtra({ userLuid = 'user-1' }: { userLuid?: string } = {}): TableauWebRequestHandlerExtra {
+    return {
+      getUserLuid: () => userLuid,
+    } as unknown as TableauWebRequestHandlerExtra;
+  }
 
   function makeRestApi({
-    siteId,
-    userId,
-    siteRole,
+    siteId = 'site-1',
     queryUserOnSiteSpy,
   }: {
-    siteId: string;
-    userId: string;
-    siteRole: string | undefined;
+    siteId?: string;
     queryUserOnSiteSpy?: ReturnType<typeof vi.fn>;
-  }): RestApi {
+  } = {}): RestApi {
     const queryUserOnSite =
       queryUserOnSiteSpy ??
       vi.fn().mockResolvedValue({
-        id: userId,
-        name: 'tester',
-        siteRole,
+        id: 'user-1',
+        name: 'name',
+        siteRole: 'SiteAdministratorCreator',
       });
     return {
       siteId,
-      userId,
       usersMethods: {
         queryUserOnSite,
       },
     } as unknown as RestApi;
   }
 
-  it('passes for SiteAdministratorCreator', async () => {
-    const restApi = makeRestApi({
-      siteId: 's1',
-      userId: 'u1',
-      siteRole: 'SiteAdministratorCreator',
-    });
-    await expect(adminGate.assertAdmin(restApi)).resolves.toBeUndefined();
+  it('returns Ok when user is a site administrator', async () => {
+    const result = await assertAdmin(makeRestApi(), makeExtra());
+    expect(result.isOk()).toBe(true);
   });
 
-  it('passes for ServerAdministrator', async () => {
-    const restApi = makeRestApi({ siteId: 's1', userId: 'u1', siteRole: 'ServerAdministrator' });
-    await expect(adminGate.assertAdmin(restApi)).resolves.toBeUndefined();
-  });
-
-  it('rejects non-admin roles', async () => {
-    const restApi = makeRestApi({ siteId: 's1', userId: 'u1', siteRole: 'Viewer' });
-    await expect(adminGate.assertAdmin(restApi)).rejects.toBeInstanceOf(NotAdminError);
-  });
-
-  it('rejects when site role is missing', async () => {
-    const restApi = makeRestApi({ siteId: 's1', userId: 'u1', siteRole: undefined });
-    await expect(adminGate.assertAdmin(restApi)).rejects.toBeInstanceOf(NotAdminError);
-  });
-
-  it('caches per (siteId, userId) so repeat calls skip the REST lookup', async () => {
+  it('returns Err when user is not an administrator', async () => {
     const queryUserOnSiteSpy = vi.fn().mockResolvedValue({
-      id: 'u1',
-      name: 'tester',
-      siteRole: 'SiteAdministratorCreator',
+      id: 'user-viewer',
+      name: 'name',
+      siteRole: 'Viewer',
     });
-    const restApi = makeRestApi({
-      siteId: 's1',
-      userId: 'u1',
-      siteRole: 'SiteAdministratorCreator',
-      queryUserOnSiteSpy,
-    });
+    const result = await assertAdmin(
+      makeRestApi({ queryUserOnSiteSpy }),
+      makeExtra({ userLuid: 'user-viewer' }),
+    );
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error).toContain('Viewer');
+    }
+  });
 
-    await adminGate.assertAdmin(restApi);
-    await adminGate.assertAdmin(restApi);
-
-    expect(queryUserOnSiteSpy).toHaveBeenCalledTimes(1);
+  it('returns Err when user LUID is missing', async () => {
+    const result = await assertAdmin(makeRestApi(), makeExtra({ userLuid: '' }));
+    expect(result.isErr()).toBe(true);
   });
 });

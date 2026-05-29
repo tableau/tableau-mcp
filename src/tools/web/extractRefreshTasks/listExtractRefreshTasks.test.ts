@@ -1,4 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Ok } from 'ts-results-es';
 
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
@@ -31,10 +32,7 @@ vi.mock('../../../restApiInstance.js', () => ({
 }));
 
 vi.mock('../adminGate.js', () => ({
-  adminGate: {
-    assertAdmin: mocks.mockAssertAdmin,
-    clearCache: vi.fn(),
-  },
+  assertAdmin: mocks.mockAssertAdmin,
 }));
 
 vi.mock('../../../config.js', () => ({
@@ -49,7 +47,7 @@ vi.mock('../../../config.js', () => ({
 describe('listExtractRefreshTasksTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.mockAssertAdmin.mockResolvedValue(undefined);
+    mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
     mocks.mockQueryUserOnSite.mockResolvedValue({ siteRole: 'SiteAdministratorCreator' });
   });
 
