@@ -49,14 +49,14 @@ describe('server', () => {
     return server;
   }
 
-  function createMockAppTool(name: string): WebTool<any> {
+  function createMockAppTool(): WebTool<any> {
     return {
       name: 'get-workbook',
       server: {} as any,
-      title: `Test ${name}`,
-      description: `Test ${name}`,
+      title: 'Test App Tool',
+      description: 'Test App Tool',
       paramsSchema: {},
-      annotations: { title: `Test ${name}` },
+      annotations: { title: 'Test App Tool' },
       callback: vi.fn(),
       disabled: false,
       requiredApiScopes: [],
@@ -211,7 +211,7 @@ describe('server', () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
 
     const server = getServer();
-    const mockAppTool = createMockAppTool('test-app-tool');
+    const mockAppTool = createMockAppTool();
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
 
     await server.registerTools();
@@ -220,10 +220,10 @@ describe('server', () => {
       server.mcpServer,
       'get-workbook',
       {
-        title: 'Test test-app-tool',
-        description: 'Test test-app-tool',
+        title: 'Test App Tool',
+        description: 'Test App Tool',
         inputSchema: {},
-        annotations: { title: 'Test test-app-tool' },
+        annotations: { title: 'Test App Tool' },
         _meta: {
           ui: {
             resourceUri: 'tableau://app/test',
@@ -246,7 +246,7 @@ describe('server', () => {
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
 
     const server = getServer();
-    const mockAppTool = createMockAppTool('test-standard-tool');
+    const mockAppTool = createMockAppTool();
     vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
 
     await server.registerTools();
@@ -255,10 +255,10 @@ describe('server', () => {
     expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
       'get-workbook',
       {
-        title: 'Test test-standard-tool',
-        description: 'Test test-standard-tool',
+        title: 'Test App Tool',
+        description: 'Test App Tool',
         inputSchema: {},
-        annotations: { title: 'Test test-standard-tool' },
+        annotations: { title: 'Test App Tool' },
       },
       expect.any(Function),
     );
