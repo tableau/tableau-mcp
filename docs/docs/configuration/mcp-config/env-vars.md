@@ -427,9 +427,9 @@ Enables admin-only tools that require site administrator permissions.
 - Default: `false`
 - When `true`, enables tools that are restricted to Tableau site administrators:
   - [`list-extract-refresh-tasks`](../../tools/tasks/list-extract-refresh-tasks.md)
-  - [`query-admin-insights-ts-events`](../../tools/admin-insights/query-admin-insights-ts-events.md)
-  - [`query-admin-insights-site-content`](../../tools/admin-insights/query-admin-insights-site-content.md)
-  - [`get-stale-content-report`](../../tools/admin-insights/get-stale-content-report.md)
+  - `query-admin-insights-ts-events`
+  - `query-admin-insights-site-content`
+  - `get-stale-content-report`
 - These tools require the user to have one of the following site roles:
   - SiteAdministratorCreator
   - SiteAdministratorExplorer
@@ -455,7 +455,7 @@ Tune lower if site role / project metadata changes need to propagate faster. Tun
 
 ## `STALE_CONTENT_MIN_AGE_DAYS`
 
-Default minimum days since last access for content to be considered stale by the [`get-stale-content-report`](../../tools/admin-insights/get-stale-content-report.md) tool. Callers can pass an explicit `minAgeDays` argument to override per-call.
+Default minimum days since last access for content to be considered stale by the `get-stale-content-report` tool. Callers can pass an explicit `minAgeDays` argument to override per-call.
 
 - Default: `90`
 - Minimum: `1`
