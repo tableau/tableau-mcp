@@ -51,7 +51,7 @@ describe('server', () => {
 
   function createMockAppTool(name: string): WebTool<any> {
     return {
-      name: "get-workbook",
+      name: 'get-workbook',
       server: {} as any,
       title: `Test ${name}`,
       description: `Test ${name}`,
