@@ -163,7 +163,7 @@ export class WebMcpServer extends Server {
     // Register a tool with UI metadata. When the host calls this tool, it reads
     // `_meta.ui.resourceUri` to know which resource to fetch and render as an
     // interactive UI.
-    this.registerAppTool(
+    registerAppTool(
       this.mcpServer,
       tool.name,
       {
@@ -181,7 +181,7 @@ export class WebMcpServer extends Server {
     );
 
     // Register the resource, which returns the bundled HTML/JavaScript for the UI.
-    this.registerAppResource(
+    registerAppResource(
       // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.
       this.mcpServer,
       tool.name,
@@ -200,7 +200,4 @@ export class WebMcpServer extends Server {
       },
     );
   };
-
-  registerAppTool = registerAppTool;
-  registerAppResource = registerAppResource;
 }
