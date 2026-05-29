@@ -12,6 +12,7 @@ import { getConfig } from './config.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { getFeatureGate } from './features/featureGate.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
+import { registerPrompts } from './prompts/index.js';
 import { ClientInfo, Server } from './server.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
@@ -95,6 +96,8 @@ export class WebMcpServer extends Server {
         await this._registerTool(tool, toolCallback);
       }
     }
+
+    registerPrompts(this);
   };
 
   protected _getToolsToRegister = async (
