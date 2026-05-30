@@ -57,6 +57,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@xmldom/xmldom": "^0.9.10",
     "@zodios/core": "^10.9.6",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -66,6 +67,7 @@
     "jose": "^6.0.12",
     "ssrfcheck": "^1.2.0",
     "ts-results-es": "^5.0.1",
+    "xpath": "^0.0.34",
     "zod": "^3.24.3",
     "zod-validation-error": "^4.0.1"
   },

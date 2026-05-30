@@ -195,3 +195,13 @@ export class DesktopCommandExecutionError extends McpToolError {
     });
   }
 }
+
+export class FileReadError extends McpToolError {
+  constructor(error: unknown) {
+    super({
+      type: 'file-read-error',
+      message: `Failed to read file: ${getExceptionMessage(error)}. Make sure the file exists and is readable.`,
+      statusCode: 500,
+    });
+  }
+}

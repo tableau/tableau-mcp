@@ -11,6 +11,12 @@ type WithAbortSignal = {
   signal: AbortSignal;
 };
 
+type WithExecutor = {
+  executor: ToolExecutor;
+};
+
+export type WithExecutorAndAbortSignal = WithExecutor & WithAbortSignal;
+
 export type ExecuteCommandArgs<Z extends z.ZodTypeAny | undefined = undefined> = {
   command: string;
   namespace: 'tabui' | 'tabdoc';
