@@ -67,7 +67,7 @@ describe('validation framework', () => {
       worksheetResult.issues.filter((i) => i.ruleId === 'test-workbook-only-rule').length,
     ).toBe(0);
 
-    const workbookResult = runValidation('<workbook/>', 'workbook');
+    const workbookResult = runValidation('<workbook/>', 'workbook', [workbookOnlyRule]);
     expect(
       workbookResult.issues.filter((i) => i.ruleId === 'test-workbook-only-rule').length,
     ).toBeGreaterThan(0);
