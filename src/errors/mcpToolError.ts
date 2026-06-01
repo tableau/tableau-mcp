@@ -2,7 +2,7 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
-import { LoadWorkbookXmlError } from '../desktop/commands/workbookCommands';
+import { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml';
 import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor';
 import { ExecuteCommandResponseError } from '../sdks/desktop/agentApi/types';
 import { getExceptionMessage } from '../utils/getExceptionMessage';

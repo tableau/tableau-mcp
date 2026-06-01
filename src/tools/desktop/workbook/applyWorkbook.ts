@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { loadWorkbookXml } from '../../../desktop/commands/workbookCommands.js';
+import { loadWorkbookXml } from '../../../desktop/commands/workbook/loadWorkbookXml.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,

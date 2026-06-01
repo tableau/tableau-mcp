@@ -2,34 +2,13 @@ import { writeFileSync } from 'fs';
 import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { log } from '../../logging/logger';
-import { ExecuteCommandResponseError } from '../../sdks/desktop/agentApi/types';
-import { DesktopCache } from '../cache';
-import { xmlToJson } from '../libraries/workbook-serialization-converter';
-import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../toolExecutor/toolExecutor';
-import { runValidation } from '../validation/registry';
-import { ValidationIssue } from '../validation/types';
-
-export async function getWorkbookXml({
-  executor,
-  signal,
-}: WithExecutorAndAbortSignal): Promise<Result<string, ExecuteCommandError>> {
-  const result = await executor.executeCommand({
-    namespace: 'tabui',
-    command: 'save-underlying-metadata',
-    args: {
-      'is-json': false,
-    },
-    schema: z.string(),
-    signal,
-  });
-
-  if (result.isErr()) {
-    return result;
-  }
-
-  return Ok(result.value.parsedResult);
-}
+import { log } from '../../../logging/logger';
+import { ExecuteCommandResponseError } from '../../../sdks/desktop/agentApi/types';
+import { DesktopCache } from '../../cache';
+import { xmlToJson } from '../../libraries/workbook-serialization-converter';
+import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../../toolExecutor/toolExecutor';
+import { runValidation } from '../../validation/registry';
+import { ValidationIssue } from '../../validation/types';
 
 export type LoadWorkbookXmlError =
   | { type: 'invalid-xml' }
