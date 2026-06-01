@@ -141,6 +141,27 @@ server. This should be the base URL of your MCP server deployment.
 
 <hr />
 
+### `OAUTH_VALIDATE_AUDIENCE`
+
+Reject bearer tokens whose `aud` (audience) claim does not match this MCP server's canonical
+resource identifier (`<OAUTH_RESOURCE_URI>/tableau-mcp`, the same value advertised as `resource` in
+the protected resource metadata document).
+
+- Default: `false`
+- When `true`, the MCP server enforces [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) audience
+  validation, returning `401` for tokens issued for a different resource (for example, a token
+  minted for another deployment that shares the same SSO issuer).
+- Only enable this once the authorization server stamps the resource URL into the access token's
+  `aud` claim (per [RFC 8707](https://www.rfc-editor.org/rfc/rfc8707)) in every environment.
+  Enabling it before then will reject legacy tokens. Set it back to `false` to disable enforcement
+  immediately if needed.
+- Applies only when using an external Tableau authorization server
+  ([`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) is `false`). The embedded
+  authorization server always validates the audience of the tokens it issues, so this flag is a
+  no-op in that mode.
+
+<hr />
+
 ### `OAUTH_CLIENT_ID_SECRET_PAIRS`
 
 A comma-separated list of client ID and secret pairs to be used for confidential OAuth clients that

@@ -512,6 +512,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  OAUTH_VALIDATE_AUDIENCE: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'OAuth Validate Audience',
+    description:
+      "Reject bearer tokens whose 'aud' claim does not match this MCP server's resource URL when set to true.",
+    required: false,
+    sensitive: false,
+  },
   OAUTH_LOCK_SITE: {
     includeInUserConfig: false,
     type: 'boolean',

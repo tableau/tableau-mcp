@@ -2,6 +2,7 @@ import express from 'express';
 
 import { getConfig } from '../../../config.js';
 import { serverName } from '../../../server.web.js';
+import { buildResourceIdentifier } from '../resourceIdentifier.js';
 import { getSupportedScopes } from '../scopes.js';
 
 const protectedResourcePath = `/${serverName}`;
@@ -17,7 +18,7 @@ export function oauthProtectedResource(app: express.Application): void {
   app.get(`${protectedResourcePath}/.well-known/oauth-protected-resource`, (_req, res) => {
     const { issuer, advertiseApiScopes, resourceUri, enforceScopes } = getConfig().oauth;
     res.json({
-      resource: `${resourceUri}${protectedResourcePath}`,
+      resource: buildResourceIdentifier(resourceUri),
       authorization_servers: [issuer],
       bearer_methods_supported: ['header'],
       scopes_supported: enforceScopes

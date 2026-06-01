@@ -61,6 +61,7 @@ export class Config extends BaseConfig {
     dnsServers: string[];
     enforceScopes: boolean;
     advertiseApiScopes: boolean;
+    validateAudience: boolean;
   };
   telemetry: TelemetryConfig;
   latencyMetricName: string;
@@ -115,6 +116,7 @@ export class Config extends BaseConfig {
       OAUTH_JWE_PRIVATE_KEY_PATH: oauthJwePrivateKeyPath,
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
       OAUTH_RESOURCE_URI: oauthResourceUri,
+      OAUTH_VALIDATE_AUDIENCE: oauthValidateAudience,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
       OAUTH_CIMD_DNS_SERVERS: dnsServers,
@@ -229,6 +231,7 @@ export class Config extends BaseConfig {
         : null,
       enforceScopes,
       advertiseApiScopes: advertiseApiScopes === 'true',
+      validateAudience: oauthValidateAudience === 'true',
     };
 
     if (

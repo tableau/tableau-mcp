@@ -200,4 +200,65 @@ describe('TableauAccessTokenValidator', () => {
       expect(mockGetCurrentServerSession).toHaveBeenCalledOnce();
     });
   });
+
+  describe('audience validation (RFC 9068)', () => {
+    const EXPECTED_AUD = `${MOCK_RESOURCE_URL}/tableau-mcp`;
+
+    beforeEach(() => {
+      vi.stubEnv('OAUTH_RESOURCE_URI', MOCK_RESOURCE_URL);
+    });
+
+    it('accepts a token whose aud matches the resource identifier when validation is enabled', async () => {
+      vi.stubEnv('OAUTH_VALIDATE_AUDIENCE', 'true');
+      const audValidator = new TableauAccessTokenValidator();
+      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID, aud: EXPECTED_AUD }));
+
+      const result = await audValidator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+    });
+
+    it('rejects a token minted for another deployment (cross-pod) when validation is enabled', async () => {
+      vi.stubEnv('OAUTH_VALIDATE_AUDIENCE', 'true');
+      const audValidator = new TableauAccessTokenValidator();
+      const token = makeBearer(
+        basePayload({
+          client_id: MOCK_CLIENT_ID,
+          aud: 'https://other-pod.example.com/tableau-mcp',
+        }),
+      );
+
+      const result = await audValidator.validate(token);
+
+      expect(result.isErr()).toBe(true);
+      if (!result.isErr()) return;
+      expect(result.error).toMatch(/audience/i);
+    });
+
+    it('does not enforce audience when validation is disabled (default)', async () => {
+      vi.stubEnv('OAUTH_VALIDATE_AUDIENCE', 'false');
+      const audValidator = new TableauAccessTokenValidator();
+      const token = makeBearer(
+        basePayload({
+          client_id: MOCK_CLIENT_ID,
+          aud: 'https://other-pod.example.com/tableau-mcp',
+        }),
+      );
+
+      const result = await audValidator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+    });
+
+    it('rejects a token with a matching aud but no client_id claim when validation is enabled', async () => {
+      vi.stubEnv('OAUTH_VALIDATE_AUDIENCE', 'true');
+      const audValidator = new TableauAccessTokenValidator();
+      // basePayload omits client_id unless overridden, so this token has a valid aud but no client_id.
+      const token = makeBearer(basePayload({ aud: EXPECTED_AUD }));
+
+      const result = await audValidator.validate(token);
+
+      expect(result.isErr()).toBe(true);
+    });
+  });
 });

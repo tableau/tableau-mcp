@@ -603,6 +603,7 @@ describe('Config', () => {
       dnsServers: ['1.1.1.1', '1.0.0.1'],
       enforceScopes: true,
       advertiseApiScopes: false,
+      validateAudience: false,
       ...defaultOAuthTimeoutMs,
     } as const;
 
@@ -622,6 +623,7 @@ describe('Config', () => {
         dnsServers: ['1.1.1.1', '1.0.0.1'],
         enforceScopes: true,
         advertiseApiScopes: false,
+        validateAudience: false,
         ...defaultOAuthTimeoutMs,
       });
     });
@@ -670,6 +672,17 @@ describe('Config', () => {
       expect(config.oauth).toEqual({
         ...defaultOAuthConfig,
         lockSite: false,
+      });
+    });
+
+    it('should set validateAudience to true when OAUTH_VALIDATE_AUDIENCE is "true"', () => {
+      stubDefaultOAuthEnvVars();
+      vi.stubEnv('OAUTH_VALIDATE_AUDIENCE', 'true');
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        validateAudience: true,
       });
     });
 
