@@ -2,7 +2,7 @@ import { Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import {
-  ExecuteCommandResponse,
+  ExecuteCommandResponseError,
   GetCommandStatusResponse,
   GetEventsResponse,
 } from '../../sdks/desktop/agentApi/types.js';
@@ -29,7 +29,7 @@ export type GetEventsArgs = {
 } & WithAbortSignal;
 
 export type ExecuteCommandError =
-  | { type: 'command-failed'; error: ExecuteCommandResponse['error'] }
+  | { type: 'command-failed'; error: ExecuteCommandResponseError }
   | { type: 'command-timed-out'; error: string }
   | { type: 'unknown'; error: unknown };
 

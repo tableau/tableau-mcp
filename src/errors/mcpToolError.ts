@@ -2,7 +2,9 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
+import { LoadWorkbookXmlError } from '../desktop/commands/workbookCommands';
 import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor';
+import { ExecuteCommandResponseError } from '../sdks/desktop/agentApi/types';
 import { getExceptionMessage } from '../utils/getExceptionMessage';
 
 export class McpToolError extends Error {
@@ -190,6 +192,26 @@ export class DesktopCommandExecutionError extends McpToolError {
   constructor(error: ExecuteCommandError) {
     super({
       type: 'desktop-command-execution-error',
+      message: JSON.stringify(error),
+      statusCode: 500,
+    });
+  }
+}
+
+export class WorkbookXmlLoadFailedError extends McpToolError {
+  constructor(error: LoadWorkbookXmlError) {
+    super({
+      type: 'load-workbook-xml-error',
+      message: JSON.stringify(error),
+      statusCode: 500,
+    });
+  }
+}
+
+export class LoadUnderlyingMetadataError extends McpToolError {
+  constructor(error: ExecuteCommandResponseError) {
+    super({
+      type: 'load-underlying-metadata-error',
       message: JSON.stringify(error),
       statusCode: 500,
     });

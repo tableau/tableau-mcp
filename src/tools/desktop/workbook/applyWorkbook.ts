@@ -1,17 +1,17 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { DesktopCache } from '../../../desktop/cache.js';
-import { getWorkbookXml } from '../../../desktop/commands/workbookCommands.js';
+import { loadWorkbookXml } from '../../../desktop/commands/workbookCommands.js';
 import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   FileReadError,
+  LoadUnderlyingMetadataError,
   WorkbookNotFoundError,
+  WorkbookXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
-import { log } from '../../../logging/logger.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
@@ -98,6 +98,29 @@ export const getApplyWorkbookTool = (
               break;
             }
           }
+
+          const executor = await extra.getExecutor(session);
+          const result = await loadWorkbookXml({
+            xml: workbookXml,
+            executor,
+            signal: extra.signal,
+          });
+
+          if (result.isErr()) {
+            const { type, error } = result.error;
+            switch (type) {
+              case 'execute-command-error':
+                return new DesktopCommandExecutionError(error).toErr();
+              case 'load-workbook-xml-error':
+                return new WorkbookXmlLoadFailedError(error).toErr();
+              case 'load-underlying-metadata-error':
+                return new LoadUnderlyingMetadataError(error).toErr();
+            }
+          }
+
+          return new Ok({
+            message: 'Successfully applied workbook XML. The workbook has been updated.',
+          });
         },
       });
     },

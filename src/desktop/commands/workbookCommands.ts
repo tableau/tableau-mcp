@@ -1,14 +1,14 @@
-import { Ok, Result } from 'ts-results-es';
+import { writeFileSync } from 'fs';
+import { Err, Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
 import { log } from '../../logging/logger';
+import { ExecuteCommandResponseError } from '../../sdks/desktop/agentApi/types';
+import { DesktopCache } from '../cache';
 import { xmlToJson } from '../libraries/workbook-serialization-converter';
-import {
-  ExecuteCommandError,
-  ToolExecutor,
-  WithExecutorAndAbortSignal,
-} from '../toolExecutor/toolExecutor';
+import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../toolExecutor/toolExecutor';
 import { runValidation } from '../validation/registry';
+import { ValidationIssue } from '../validation/types';
 
 export async function getWorkbookXml({
   executor,
@@ -31,17 +31,26 @@ export async function getWorkbookXml({
   return Ok(result.value.parsedResult);
 }
 
+export type LoadWorkbookXmlError =
+  | { type: 'invalid-xml' }
+  | { type: 'validation-failed'; issues: Array<ValidationIssue> };
+
 export async function loadWorkbookXml({
   xml,
   filePath,
   executor,
   signal,
 }: { xml: string; filePath?: string } & WithExecutorAndAbortSignal): Promise<
-  Result<boolean, ExecuteCommandError>
+  Result<
+    void,
+    | { type: 'execute-command-error'; error: ExecuteCommandError }
+    | { type: 'load-workbook-xml-error'; error: LoadWorkbookXmlError }
+    | { type: 'load-underlying-metadata-error'; error: ExecuteCommandResponseError }
+  >
 > {
   xml = xml.trim();
-  if (!xml.startsWith('<?xml') && !xml.startsWith('<')) {
-    return Ok(false);
+  if (!xml || (!xml.startsWith('<?xml') && !xml.startsWith('<'))) {
+    return Err({ type: 'load-workbook-xml-error', error: { type: 'invalid-xml' } });
   }
 
   // Preflight semantic validation — catches known failure patterns before
@@ -55,7 +64,10 @@ export async function loadWorkbookXml({
       data: validation.issues,
     });
 
-    return Ok(false);
+    return Err({
+      type: 'load-workbook-xml-error',
+      error: { type: 'validation-failed', issues: validation.issues },
+    });
   }
 
   if (validation.issues.length > 0) {
@@ -67,45 +79,162 @@ export async function loadWorkbookXml({
     });
   }
 
+  return loadUnderlyingMetadataByFilepath({ xml, executor, signal, filePath });
+}
+
+async function loadUnderlyingMetadataByFilepath({
+  xml,
+  filePath,
+  executor,
+  signal,
+}: {
+  xml: string;
+  filePath?: string;
+} & WithExecutorAndAbortSignal): Promise<
+  Result<
+    void,
+    | { type: 'execute-command-error'; error: ExecuteCommandError }
+    | { type: 'load-underlying-metadata-error'; error: ExecuteCommandResponseError }
+  >
+> {
   let jsonContent: string | undefined;
-  if (xml.length > 0) {
-    try {
-      jsonContent = xmlToJson(xml);
-      const jsonPath =
-        (filePath || ctx.getCacheFilePath('workbook-apply')).replace(/\.xml$/i, '') + '.json';
-      fs.writeFileSync(jsonPath, jsonContent, 'utf-8');
-      ctx.log(
-        'INFO',
-        `Converted XML→JSON for file-path load: ${xml.length} bytes XML → ${jsonContent.length} bytes JSON → ${jsonPath}`,
-      );
 
-      const fileResult = await ctx.executeTableauCommand('tabui', 'load-underlying-metadata', {
-        _session: sessionId,
-        filepath: jsonPath,
-      });
+  try {
+    jsonContent = xmlToJson(xml);
+  } catch (error) {
+    log({
+      level: 'warning',
+      message: 'XML→JSON conversion failed, falling back to text',
+      logger: 'workbookCommands',
+      data: {
+        error,
+      },
+    });
 
-      if (fileResult && fileResult.status === 'completed') {
-        ctx.log('INFO', 'load-underlying-metadata (filepath/JSON) completed');
-        saveRollbackSnapshot(ctx, sessionId, xml, 'load-underlying-metadata-filepath');
-        return true;
-      }
-      const filePathError = fileResult
-        ? `filepath approach: status=${fileResult.status}, error=${fileResult.error?.message ?? 'none'}`
-        : 'filepath approach: null response';
-      ctx.log('WARN', 'File-path approach did not complete, falling back to text', {
-        filePathError,
-      });
-      pendingFilepathFailure = {
-        tool: 'loadWorkbookXml',
-        operation: 'load-underlying-metadata-filepath',
-        error: filePathError,
-        validation,
-        jsonContent,
-      };
-    } catch (conversionError) {
-      ctx.log('WARN', 'XML→JSON conversion failed, falling back to text', {
-        error: String(conversionError),
-      });
-    }
+    return loadUnderlyingMetadataByText({ xml, executor, signal });
   }
+
+  const jsonPath =
+    filePath ||
+    new DesktopCache().getCacheFilePath({ prefix: 'workbook-apply', extension: 'json' });
+  writeFileSync(jsonPath, jsonContent, 'utf-8');
+
+  log({
+    level: 'info',
+    message: 'Converted XML→JSON for file-path load',
+    logger: 'workbookCommands',
+    data: {
+      xmlLength: xml.length,
+      jsonLength: jsonContent.length,
+      filePath: jsonPath,
+    },
+  });
+
+  const result = await executor.executeCommand({
+    namespace: 'tabui',
+    command: 'load-underlying-metadata',
+    signal,
+    args: {
+      filepath: jsonPath,
+    },
+    schema: z.object({
+      status: z.enum(['completed', 'failed']),
+    }),
+  });
+
+  if (result.isErr()) {
+    return Err({ type: 'execute-command-error', error: result.error });
+  }
+
+  const {
+    error,
+    parsedResult: { status },
+  } = result.value;
+
+  if (status === 'completed') {
+    log({
+      level: 'info',
+      message: 'load-underlying-metadata (filepath/JSON) completed',
+      logger: 'workbookCommands',
+    });
+
+    return Ok.EMPTY;
+  }
+
+  log({
+    level: 'warning',
+    message: 'File-path approach did not complete, falling back to text',
+    logger: 'workbookCommands',
+    data: {
+      status,
+      error: error?.message ?? 'none',
+    },
+  });
+
+  return loadUnderlyingMetadataByText({ xml, executor, signal });
+}
+
+async function loadUnderlyingMetadataByText({
+  xml,
+  executor,
+  signal,
+}: {
+  xml: string;
+} & WithExecutorAndAbortSignal): Promise<
+  Result<
+    void,
+    | { type: 'execute-command-error'; error: ExecuteCommandError }
+    | { type: 'load-underlying-metadata-error'; error: ExecuteCommandResponseError }
+  >
+> {
+  const result = await executor.executeCommand({
+    namespace: 'tabui',
+    command: 'load-underlying-metadata',
+    signal,
+    args: {
+      text: xml,
+    },
+    schema: z.object({
+      status: z.enum(['completed', 'failed']),
+    }),
+  });
+
+  if (result.isErr()) {
+    return Err({ type: 'execute-command-error', error: result.error });
+  }
+
+  const {
+    error,
+    parsedResult: { status },
+  } = result.value;
+
+  if (status === 'failed') {
+    log({
+      level: 'error',
+      message: 'load-underlying-metadata (text) failed',
+      logger: 'workbookCommands',
+      data: {
+        commandId: result.value.command_id,
+        error,
+      },
+    });
+
+    return Err({
+      type: 'load-underlying-metadata-error',
+      error,
+    });
+  }
+
+  log({
+    level: 'info',
+    message: 'load-underlying-metadata (text) completed',
+    logger: 'workbookCommands',
+    data: {
+      commandId: result.value.command_id,
+      hasResult: !!result.value.result,
+      resultKeys: result.value.result ? Object.keys(result.value.result) : [],
+    },
+  });
+
+  return Ok.EMPTY;
 }

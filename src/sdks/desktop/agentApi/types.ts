@@ -27,6 +27,7 @@ export const executeCommandResponseSchema = z.object({
   error: z.object({ code: z.string(), message: z.string(), recoverable: z.boolean() }).optional(),
 });
 export type ExecuteCommandResponse = z.infer<typeof executeCommandResponseSchema>;
+export type ExecuteCommandResponseError = ExecuteCommandResponse['error'];
 
 export const healthResponseSchema = z.object({
   status: z.literal('healthy'),

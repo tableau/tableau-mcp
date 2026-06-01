@@ -16,8 +16,17 @@ export class DesktopCache {
     }
   }
 
-  getCacheFilePath(prefix: string, id?: string): string {
+  getCacheFilePath({
+    prefix,
+    id,
+    extension,
+  }: {
+    prefix: string;
+    id?: string;
+    extension?: 'xml' | 'json';
+  }): string {
+    extension = extension || 'xml';
     id = id || this._id || `${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    return join(this._cacheDirectory, `${prefix}-${id}.xml`);
+    return join(this._cacheDirectory, `${prefix}-${id}.${extension}`);
   }
 }

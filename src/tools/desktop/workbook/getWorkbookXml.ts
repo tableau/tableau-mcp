@@ -79,7 +79,7 @@ export const getGetWorkbookXmlTool = (
             }
             case 'file': {
               // Save to cache file
-              const cacheFile = new DesktopCache().getCacheFilePath('workbook');
+              const cacheFile = new DesktopCache().getCacheFilePath({ prefix: 'workbook' });
               writeFileSync(cacheFile, workbookXml, 'utf-8');
               log({
                 message: `Saved workbook XML to cache file: ${cacheFile}`,
