@@ -21,6 +21,7 @@ export type Env = z.infer<typeof envSchema>;
 export function getEnv(): Env {
   dotenv.config();
   dotenv.config({ path: 'tests/oauth/tableau-authz/.env.oauth', override: true });
+  process.env.ADMIN_TOOLS_ENABLED = 'true';
 
   const result = envSchema.safeParse(process.env);
 

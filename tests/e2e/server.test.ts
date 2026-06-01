@@ -34,10 +34,24 @@ describe('server', () => {
     it('should list tools', async () => {
       const names = await client.listTools();
       const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
-      const expectedToolNames =
-        process.env.AUTH === 'oauth'
-          ? [...webToolNames]
-          : webToolNames.filter((name) => !oauthOnlyTools.includes(name));
+      const adminOnlyTools: ReadonlyArray<WebToolName> = [
+        'list-extract-refresh-tasks',
+        'query-admin-insights-ts-events',
+        'query-admin-insights-site-content',
+        'get-stale-content-report',
+      ];
+      let expectedToolNames = [...webToolNames];
+
+      // Filter out oauth-only tools if not using oauth
+      if (process.env.AUTH !== 'oauth') {
+        expectedToolNames = expectedToolNames.filter((name) => !oauthOnlyTools.includes(name));
+      }
+
+      // Filter out admin-only tools if admin tools are not enabled
+      if (process.env.ADMIN_TOOLS_ENABLED !== 'true') {
+        expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
+      }
+
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });
@@ -94,10 +108,28 @@ describe('server', () => {
     it('should list tools', async () => {
       const names = await client.listTools();
       const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
-      const expectedWebToolNames =
-        process.env.AUTH === 'oauth'
-          ? [...webToolNames]
-          : webToolNames.filter((name) => !oauthOnlyTools.includes(name));
+      const adminOnlyTools: ReadonlyArray<WebToolName> = [
+        'list-extract-refresh-tasks',
+        'query-admin-insights-ts-events',
+        'query-admin-insights-site-content',
+        'get-stale-content-report',
+      ];
+      let expectedWebToolNames = [...webToolNames];
+
+      // Filter out oauth-only tools if not using oauth
+      if (process.env.AUTH !== 'oauth') {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !oauthOnlyTools.includes(name),
+        );
+      }
+
+      // Filter out admin-only tools if admin tools are not enabled
+      if (process.env.ADMIN_TOOLS_ENABLED !== 'true') {
+        expectedWebToolNames = expectedWebToolNames.filter(
+          (name) => !adminOnlyTools.includes(name),
+        );
+      }
+
       const expectedToolNames = [...desktopToolNames, ...expectedWebToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);

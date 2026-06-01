@@ -74,6 +74,9 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   PRODUCT_TELEMETRY_ENDPOINT: string | undefined;
   IS_HYPERFORCE: string | undefined;
   BREAK_GLASS_DISABLE_GLOBALLY: string | undefined;
+  ADMIN_TOOLS_ENABLED: string | undefined;
+  ADMIN_GATE_CACHE_TTL_MINUTES: string | undefined;
+  STALE_CONTENT_MIN_AGE_DAYS: string | undefined;
 }
 
 export interface ProcessEnvDesktop extends ProcessEnvBase {

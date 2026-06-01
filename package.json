@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "Helping agents see and understand data.",
-  "version": "2.4.6",
+  "version": "2.6.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -56,6 +56,7 @@
     "docs:start": "npm run start --prefix docs"
   },
   "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.2",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@xmldom/xmldom": "^0.9.10",
     "@zodios/core": "^10.9.6",

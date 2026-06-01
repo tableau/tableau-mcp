@@ -188,6 +188,18 @@ export class GetEventsFailedError extends McpToolError {
   }
 }
 
+export class AdminOnlyError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'admin-only', message, statusCode: 403 });
+  }
+}
+
+export class AdminInsightsUnavailableError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'admin-insights-unavailable', message, statusCode: 404 });
+  }
+}
+
 export class DesktopCommandExecutionError extends McpToolError {
   constructor(error: ExecuteCommandError) {
     super({

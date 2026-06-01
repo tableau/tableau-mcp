@@ -10,6 +10,13 @@ import { mockView } from '../views/mockView.js';
 import { filterWorkbookViews, getGetWorkbookTool } from './getWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
 
+const mockWorkbookWithFlattenedViewUsage = {
+  ...mockWorkbook,
+  views: {
+    view: [{ ...mockView, totalViewCount: 0 }],
+  },
+};
+
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
 
 const mocks = vi.hoisted(() => ({
@@ -105,7 +112,7 @@ describe('getWorkbookTool', () => {
         },
       });
       invariant(result.type === 'success');
-      expect(result.result).toEqual(mockWorkbook);
+      expect(result.result).toEqual(mockWorkbookWithFlattenedViewUsage);
     });
 
     it('should return the views that match the tags in the bounded context', () => {
@@ -121,7 +128,7 @@ describe('getWorkbookTool', () => {
       });
 
       invariant(result.type === 'success');
-      expect(result.result).toEqual(mockWorkbook);
+      expect(result.result).toEqual(mockWorkbookWithFlattenedViewUsage);
     });
 
     it('should remove views from the workbook when all views were filtered out by the tags in the bounded context', () => {

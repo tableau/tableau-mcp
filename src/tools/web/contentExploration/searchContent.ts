@@ -2,12 +2,19 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import {
+  getSearchContentLineageQuery,
+  getViewLineageByLuid,
+  getWorkbookLineageByLuid,
+} from '../../../sdks/tableau/methods/lineageUtils.js';
 import {
   orderBySchema,
   searchContentFilterSchema,
 } from '../../../sdks/tableau/types/contentExploration.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { WebTool } from '../tool.js';
 import {
   buildFilterString,
@@ -83,7 +90,17 @@ This tool searches across all supported content types for objects relevant to th
                   order_by: orderByString,
                   filter: filterString,
                 });
-                return reduceSearchContentResponse(response);
+                const searchResults = reduceSearchContentResponse(response);
+
+                if (configWithOverrides.disableMetadataApiRequests) {
+                  return searchResults;
+                }
+
+                return await enrichSearchResultsWithLineage({
+                  searchResults,
+                  datasourceIds: configWithOverrides.boundedContext.datasourceIds,
+                  graphql: (query) => restApi.metadataMethods.graphql(query),
+                });
               },
             }),
           );
@@ -96,3 +113,100 @@ This tool searches across all supported content types for objects relevant to th
 
   return searchContentTool;
 };
+
+async function enrichSearchResultsWithLineage({
+  searchResults,
+  datasourceIds,
+  graphql,
+}: {
+  searchResults: Array<ReducedSearchContentResponse>;
+  datasourceIds?: Set<string> | null;
+  graphql: (query: string) => Promise<unknown>;
+}): Promise<Array<ReducedSearchContentResponse>> {
+  const workbookLuids = getSearchResultLuids(searchResults, 'workbook');
+  const viewLuids = getSearchResultLuids(searchResults, 'view');
+
+  const { workbookLineageByLuid, viewLineageByLuid } = await getSearchContentLineage({
+    workbookLuids,
+    viewLuids,
+    graphql,
+  });
+
+  return searchResults.map((item) => {
+    if (item.type === 'workbook' && typeof item.luid === 'string') {
+      const upstreamDatasources = filterUpstreamDatasources(
+        workbookLineageByLuid.get(item.luid),
+        datasourceIds,
+      );
+      return upstreamDatasources.length ? { ...item, upstreamDatasources } : item;
+    }
+
+    if (item.type === 'view' && typeof item.luid === 'string') {
+      const upstreamDatasources = filterUpstreamDatasources(
+        viewLineageByLuid.get(item.luid)?.upstreamDatasources,
+        datasourceIds,
+      );
+      return upstreamDatasources.length ? { ...item, upstreamDatasources } : item;
+    }
+
+    return item;
+  });
+}
+
+async function getSearchContentLineage({
+  workbookLuids,
+  viewLuids,
+  graphql,
+}: {
+  workbookLuids: Array<string>;
+  viewLuids: Array<string>;
+  graphql: (query: string) => Promise<unknown>;
+}): Promise<{
+  workbookLineageByLuid: ReturnType<typeof getWorkbookLineageByLuid>;
+  viewLineageByLuid: ReturnType<typeof getViewLineageByLuid>;
+}> {
+  if (workbookLuids.length === 0 && viewLuids.length === 0) {
+    return { workbookLineageByLuid: new Map(), viewLineageByLuid: new Map() };
+  }
+
+  try {
+    const response = await graphql(getSearchContentLineageQuery({ workbookLuids, viewLuids }));
+    return {
+      workbookLineageByLuid: workbookLuids.length ? getWorkbookLineageByLuid(response) : new Map(),
+      viewLineageByLuid: viewLuids.length ? getViewLineageByLuid(response) : new Map(),
+    };
+  } catch (error) {
+    log({
+      message: 'Failed to enrich search results with lineage metadata',
+      level: 'warning',
+      logger: 'lineage',
+      data: getExceptionMessage(error),
+    });
+    return { workbookLineageByLuid: new Map(), viewLineageByLuid: new Map() };
+  }
+}
+
+function getSearchResultLuids(
+  searchResults: Array<ReducedSearchContentResponse>,
+  type: 'view' | 'workbook',
+): Array<string> {
+  return searchResults.flatMap((item) =>
+    item.type === type && typeof item.luid === 'string' ? [item.luid] : [],
+  );
+}
+
+function filterUpstreamDatasources(
+  upstreamDatasources: unknown,
+  datasourceIds?: Set<string> | null,
+): Array<{ luid: string; name: string }> {
+  if (!Array.isArray(upstreamDatasources)) {
+    return [];
+  }
+
+  return upstreamDatasources.filter(
+    (datasource): datasource is { luid: string; name: string } =>
+      typeof datasource?.luid === 'string' &&
+      typeof datasource.name === 'string' &&
+      (!datasourceIds || datasourceIds.has(datasource.luid)),
+  );
+}

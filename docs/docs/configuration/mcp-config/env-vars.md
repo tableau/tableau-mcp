@@ -420,6 +420,51 @@ Enables product telemetry for tool usage tracking.
 
 <hr />
 
+## `ADMIN_TOOLS_ENABLED`
+
+Enables admin-only tools that require site administrator permissions.
+
+- Default: `false`
+- When `true`, enables tools that are restricted to Tableau site administrators:
+  - [`list-extract-refresh-tasks`](../../tools/tasks/list-extract-refresh-tasks.md)
+  - `query-admin-insights-ts-events`
+  - `query-admin-insights-site-content`
+  - `get-stale-content-report`
+- These tools require the user to have one of the following site roles:
+  - SiteAdministratorCreator
+  - SiteAdministratorExplorer
+  - ServerAdministrator
+- Admin tools perform runtime role verification and will return a 403 error if the user does not have the required permissions.
+
+<hr />
+
+## `ADMIN_GATE_CACHE_TTL_MINUTES`
+
+TTL (in minutes) for caches used by admin-only tools. Affects:
+- Admin role lookups (`assertAdmin`)
+- Admin Insights dataset LUID resolution
+- Project ID → name resolution used by `get-stale-content-report`
+
+- Default: `5`
+- Minimum: `1`
+- Maximum: `1440` (24 hours)
+
+Tune lower if site role / project metadata changes need to propagate faster. Tune higher under memory pressure to reduce REST traffic.
+
+<hr />
+
+## `STALE_CONTENT_MIN_AGE_DAYS`
+
+Default minimum days since last access for content to be considered stale by the `get-stale-content-report` tool. Callers can pass an explicit `minAgeDays` argument to override per-call.
+
+- Default: `90`
+- Minimum: `1`
+- Maximum: `3650` (10 years)
+
+Overridable per-site via [Site Settings](site-settings.md) and per-request via [Request Overrides](request-overrides.md#stale_content_min_age_days).
+
+<hr />
+
 ## `BREAK_GLASS_DISABLE_GLOBALLY`
 
 Can be used to force all MCP tools to return a "service unavailable" error message. Use with
