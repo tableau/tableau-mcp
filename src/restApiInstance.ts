@@ -33,7 +33,10 @@ type JwtScopes =
   | 'tableau:insight_brief:create'
   | 'tableau:mcp_site_settings:read'
   | 'tableau:tasks:read'
-  | 'tableau:users:read';
+  | 'tableau:users:read'
+  | 'tableau:flows:read'
+  | 'tableau:flow_connections:read'
+  | 'tableau:flow_runs:read';
 
 export type RestApiArgs = Pick<
   TableauWebRequestHandlerExtra,

@@ -1,7 +1,7 @@
 import { Ok } from 'ts-results-es';
 
 import type { Pagination, PulsePagination } from '../sdks/tableau/types/pagination.js';
-import { paginate, pulsePaginate } from './paginate.js';
+import { paginate, paginateWithMetadata, pulsePaginate } from './paginate.js';
 
 describe('paginate', () => {
   beforeEach(() => {
@@ -280,6 +280,138 @@ describe('paginate', () => {
     ]);
     expect(result).toHaveLength(7);
     expect(getDataFn).toHaveBeenCalledTimes(3);
+  });
+});
+
+// ----------------------------------------------------------------------------
+// paginateWithMetadata — exposes totalAvailable + truncatedByLimit
+// ----------------------------------------------------------------------------
+// Existing callers using `paginate` only get an array of items back; that
+// shape can't distinguish "you got everything" from "a configured limit cut
+// you off and more exist server-side". `paginateWithMetadata` surfaces both
+// `totalAvailable` and `truncatedByLimit` so callers can emit a structured
+// truncation signal (e.g. `list-flows`' `mcp.resultInfo.truncated` /
+// `truncationReason`) when the user's request was silently capped.
+describe('paginateWithMetadata', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns truncatedByLimit=false and the full set when no limit is set', async () => {
+    const data = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 10, totalAvailable: 3 },
+      data,
+    });
+
+    const result = await paginateWithMetadata({
+      pageConfig: { pageSize: 10, pageNumber: 1 },
+      getDataFn,
+    });
+
+    expect(result).toEqual({ items: data, totalAvailable: 3, truncatedByLimit: false });
+  });
+
+  it('returns truncatedByLimit=true when the limit cuts off available items', async () => {
+    // Single-page query where Tableau says totalAvailable=10 but the limit
+    // only lets us return 5: that's the canonical admin-cap-style trim.
+    const data = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 5, totalAvailable: 10 },
+      data,
+    });
+
+    const result = await paginateWithMetadata({
+      pageConfig: { pageSize: 5, pageNumber: 1, limit: 5 },
+      getDataFn,
+    });
+
+    expect(result).toEqual({ items: data, totalAvailable: 10, truncatedByLimit: true });
+  });
+
+  it('returns truncatedByLimit=true after multi-page pagination is cut by limit mid-page', async () => {
+    // Limit of 3 across pages of size 2: page 1 fetches 2, page 2 fetches 2,
+    // post-loop slice trims to 3. totalAvailable is 4, so result is truncated.
+    const getDataFn = vi
+      .fn()
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 1, pageSize: 2, totalAvailable: 4 },
+        data: [{ id: 1 }, { id: 2 }],
+      })
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 2, pageSize: 2, totalAvailable: 4 },
+        data: [{ id: 3 }, { id: 4 }],
+      });
+
+    const result = await paginateWithMetadata({
+      pageConfig: { pageSize: 2, pageNumber: 1, limit: 3 },
+      getDataFn,
+    });
+
+    expect(result).toEqual({
+      items: [{ id: 1 }, { id: 2 }, { id: 3 }],
+      totalAvailable: 4,
+      truncatedByLimit: true,
+    });
+  });
+
+  it('returns truncatedByLimit=false when limit equals totalAvailable exactly (regression guard)', async () => {
+    // Boundary case: passing `limit: 4` with totalAvailable=4 must NOT be
+    // misreported as truncated. truncatedByLimit is strictly "more exists".
+    const getDataFn = vi
+      .fn()
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 1, pageSize: 2, totalAvailable: 4 },
+        data: [{ id: 1 }, { id: 2 }],
+      })
+      .mockResolvedValueOnce({
+        pagination: { pageNumber: 2, pageSize: 2, totalAvailable: 4 },
+        data: [{ id: 3 }, { id: 4 }],
+      });
+
+    const result = await paginateWithMetadata({
+      pageConfig: { pageSize: 2, pageNumber: 1, limit: 4 },
+      getDataFn,
+    });
+
+    expect(result.truncatedByLimit).toBe(false);
+    expect(result.totalAvailable).toBe(4);
+    expect(result.items).toHaveLength(4);
+  });
+
+  it('returns truncatedByLimit=false when limit > totalAvailable', async () => {
+    const data = [{ id: 1 }, { id: 2 }];
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 10, totalAvailable: 2 },
+      data,
+    });
+
+    const result = await paginateWithMetadata({
+      pageConfig: { pageSize: 10, pageNumber: 1, limit: 100 },
+      getDataFn,
+    });
+
+    expect(result).toEqual({ items: data, totalAvailable: 2, truncatedByLimit: false });
+  });
+});
+
+describe('paginate (delegates to paginateWithMetadata)', () => {
+  // Regression guard: paginate is now a thin wrapper over paginateWithMetadata.
+  // Make sure it still behaves identically to its prior contract — items only.
+  it('returns just the items array (matches existing public contract)', async () => {
+    const data = [{ id: 1 }, { id: 2 }];
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: { pageNumber: 1, pageSize: 10, totalAvailable: 2 },
+      data,
+    });
+
+    const result = await paginate({
+      pageConfig: { pageSize: 10, pageNumber: 1 },
+      getDataFn,
+    });
+
+    expect(result).toEqual(data);
+    expect(Array.isArray(result)).toBe(true);
   });
 });
 
