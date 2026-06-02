@@ -154,7 +154,8 @@ Description: [generated description]
 Product Tag: [tag]
 Epic: [epic or "None"]
 Status: New
-Assignee: [current user]
+Assignee: Unassigned
+Sprint: Not assigned
 ---
 ```
 
@@ -165,19 +166,21 @@ Ask: "Create this GUS item? (yes/no)"
 **Load user config:**
 Read `/Users/j.song/.claude/plugins/cache/salesforce-native-ai-stack/ecc-gus/1.0.0/skills/gus/config.json` for:
 - `gus_username` (target org)
-- `user_id` (assignee)
 
 **Create the work item:**
 
-**IMPORTANT:** Format Details__c with HTML (`<br/>` for line breaks, `<b>` for bold):
+**IMPORTANT:** 
+- Format Details__c with HTML (`<br/>` for line breaks, `<b>` for bold)
+- Do NOT assign to a user - leave Assignee__c unset
+- Do NOT assign to a sprint - leave Sprint__c unset
 
 ```bash
-sf data create record --target-org [gus_username] --json --sobject ADM_Work__c --values $'Subject__c=\'[TITLE]\' Details__c=\'[HTML_FORMATTED_DESCRIPTION]\' Status__c=\'New\' RecordTypeId=\'[RECORD_TYPE_ID]\' Product_Tag__c=\'[PRODUCT_TAG_ID]\' Assignee__c=\'[USER_ID]\' Epic__c=\'[EPIC_ID]\''
+sf data create record --target-org [gus_username] --json --sobject ADM_Work__c --values $'Subject__c=\'[TITLE]\' Details__c=\'[HTML_FORMATTED_DESCRIPTION]\' Status__c=\'New\' RecordTypeId=\'[RECORD_TYPE_ID]\' Product_Tag__c=\'[PRODUCT_TAG_ID]\' Epic__c=\'[EPIC_ID]\''
 ```
 
 Example:
 ```bash
-sf data create record --target-org j.song@gus.com --json --sobject ADM_Work__c --values $'Subject__c=\'Fix duplicate logging\' Details__c=\'<b>Branch:</b> formatlog<br/><br/><b>Summary:</b><br/>Fixed duplicate logging...\' Status__c=\'New\' RecordTypeId=\'0129000000006gDAAQ\' Product_Tag__c=\'a1aEE000001u8APYAY\' Assignee__c=\'005EE000000d4ADYAY\' Epic__c=\'a3QEE000002HgRV2A0\''
+sf data create record --target-org j.song@gus.com --json --sobject ADM_Work__c --values $'Subject__c=\'Fix duplicate logging\' Details__c=\'<b>Branch:</b> formatlog<br/><br/><b>Summary:</b><br/>Fixed duplicate logging...\' Status__c=\'New\' RecordTypeId=\'0129000000006gDAAQ\' Product_Tag__c=\'a1aEE000001u8APYAY\' Epic__c=\'a3QEE000002HgRV2A0\''
 ```
 
 **Return to user:**
@@ -199,11 +202,13 @@ sf data create record --target-org j.song@gus.com --json --sobject ADM_Work__c -
 - Details__c (description)
 - Status__c: 'New'
 - Product_Tag__c
-- Assignee__c (current user from config)
 
 ### Optional
-- Epic fields (if user provides)
-- Sprint_Name__c (current sprint if known)
+- Epic__c (if user provides)
+
+### Never Set
+- Assignee__c (leave unassigned for team to assign)
+- Sprint__c (leave unassigned for sprint planning)
 
 ## Common Mistakes
 
