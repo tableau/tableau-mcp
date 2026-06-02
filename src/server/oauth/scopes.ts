@@ -21,6 +21,7 @@ export type McpScope =
   | 'tableau:mcp:workbook:read'
   | 'tableau:mcp:view:read'
   | 'tableau:mcp:view:download'
+  | 'tableau:mcp:flow:read'
   | 'tableau:mcp:pulse:read'
   | 'tableau:mcp:insight:create'
   | 'tableau:mcp:tasks:read'
@@ -34,6 +35,9 @@ export type TableauApiScope =
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
   | 'tableau:views:embed'
+  | 'tableau:flows:read'
+  | 'tableau:flow_connections:read'
+  | 'tableau:flow_runs:read'
   | 'tableau:insight_definitions_metrics:read'
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
@@ -66,6 +70,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:content:delete',
   'tableau:mcp:view:read',
   'tableau:mcp:view:download',
+  'tableau:mcp:flow:read',
   'tableau:mcp:pulse:read',
   'tableau:mcp:insight:create',
 ];
@@ -74,6 +79,43 @@ export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauA
   'tableau:content:read',
   'tableau:mcp_site_settings:read',
 ];
+
+/**
+ * Scopes the resource access checker needs to fetch a *flow* for a
+ * bounded-context check. Flows are gated by `tableau:flows:read` (NOT
+ * `tableau:content:read`, which covers workbooks/datasources/views), so this
+ * is intentionally kept separate from RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES
+ * to avoid forcing the flow scope onto every other resource check (which would
+ * break those checks for connected apps that do not grant `tableau:flows:read`).
+ */
+export const RESOURCE_ACCESS_CHECKER_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:flows:read',
+  'tableau:mcp_site_settings:read',
+];
+
+/**
+ * Tableau API scopes for the `get-flow` tool, defined here so the tool composes
+ * its per-call scope set from named constants instead of scattering scope
+ * string literals across the codebase.
+ *
+ * `get-flow` requests the *minimum* scopes needed for each call rather than the
+ * full superset: Tableau Connected Apps reject a JWT mint that asks for an
+ * un-granted scope, so a metadata-only deployment (a connected app granting
+ * only `tableau:flows:read`) must be able to call `get-flow` without the
+ * sidecar scopes. `GET_FLOW_BASE_API_SCOPES` is always required; the
+ * connections / runs scopes are added only when the caller opts into that
+ * sidecar.
+ *
+ * The maximum set (`toolScopeMap['get-flow'].api`, used for the MCP-layer OAuth
+ * gate) is composed from these same constants, so there is a single source of
+ * truth for the get-flow scope surface.
+ */
+export const GET_FLOW_BASE_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:flows:read',
+  'tableau:mcp_site_settings:read',
+];
+export const GET_FLOW_CONNECTIONS_API_SCOPE: TableauApiScope = 'tableau:flow_connections:read';
+export const GET_FLOW_RUNS_API_SCOPE: TableauApiScope = 'tableau:flow_runs:read';
 
 /**
  * Validates that a scope string is a valid MCP scope
@@ -129,6 +171,21 @@ const toolScopeMap: Record<
   'list-custom-views': {
     mcp: ['tableau:mcp:view:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
+  },
+  'list-flows': {
+    mcp: ['tableau:mcp:flow:read'],
+    api: new Set(['tableau:flows:read', 'tableau:mcp_site_settings:read']),
+  },
+  'get-flow': {
+    mcp: ['tableau:mcp:flow:read'],
+    // Maximum scope surface for the MCP-layer OAuth gate, composed from the same
+    // constants get-flow uses to build its per-call minimum set (single source
+    // of truth — see GET_FLOW_BASE_API_SCOPES).
+    api: new Set([
+      ...GET_FLOW_BASE_API_SCOPES,
+      GET_FLOW_CONNECTIONS_API_SCOPE,
+      GET_FLOW_RUNS_API_SCOPE,
+    ]),
   },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
@@ -285,6 +342,14 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
     enabledTools.delete('get-embed-token');
     enabledTools.delete('confirm-update-cloud-extract-refresh-task');
     enabledTools.delete('confirm-delete-content');
+  }
+
+  // Flow tools are gated off by default (FLOW_TOOLS_ENABLED). When disabled they are not registered,
+  // so their scopes must not be advertised or enforced either — otherwise a client could be asked to
+  // hold scopes for tools that don't exist. Mirrors the adminToolsEnabled gating above.
+  if (!config.flowToolsEnabled) {
+    enabledTools.delete('list-flows');
+    enabledTools.delete('get-flow');
   }
 
   return enabledTools;

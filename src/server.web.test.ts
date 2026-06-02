@@ -129,6 +129,37 @@ describe('server', () => {
     }
   });
 
+  it('should not register flow tools by default (FLOW_TOOLS_ENABLED unset)', async () => {
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    // Flow tools are gated off by default...
+    expect(registeredToolNames).not.toContain('list-flows');
+    expect(registeredToolNames).not.toContain('get-flow');
+    // ...while unrelated tools stay registered.
+    expect(registeredToolNames).toContain('list-datasources');
+  });
+
+  it('should register flow tools when FLOW_TOOLS_ENABLED is "true"', async () => {
+    vi.stubEnv('FLOW_TOOLS_ENABLED', 'true');
+    const server = getServer();
+    await server.registerTools();
+
+    const registeredToolNames = vi
+      .mocked(server.mcpServer.registerTool)
+      .mock.calls.map((call) => call[0 /* tool name */]);
+
+    // The single switch turns on every flow tool...
+    expect(registeredToolNames).toContain('list-flows');
+    expect(registeredToolNames).toContain('get-flow');
+    // ...alongside the unrelated tools.
+    expect(registeredToolNames).toContain('list-datasources');
+  });
+
   it('should register tools filtered by includeTools', async () => {
     vi.stubEnv('INCLUDE_TOOLS', 'query-datasource');
     const server = getServer();

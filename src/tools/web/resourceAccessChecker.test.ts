@@ -1,5 +1,6 @@
 import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
 import { mockDatasources } from './datasources/mockDatasources.js';
+import { mockFlow, mockOutputSteps } from './flows/getFlow/mockFlow.js';
 import { exportedForTesting } from './resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
 import { mockCustomView } from './views/mockCustomView.js';
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   mockGetCustomView: vi.fn(),
   mockGetWorkbook: vi.fn(),
   mockQueryDatasource: vi.fn(),
+  mockQueryFlow: vi.fn(),
 }));
 
 vi.mock('../../restApiInstance.js', () => ({
@@ -27,6 +29,9 @@ vi.mock('../../restApiInstance.js', () => ({
       },
       datasourcesMethods: {
         queryDatasource: mocks.mockQueryDatasource,
+      },
+      flowsMethods: {
+        queryFlow: mocks.mockQueryFlow,
       },
       siteId: 'test-site-id',
     }),
@@ -243,6 +248,120 @@ describe('ResourceAccessChecker', () => {
 
           const expectedNumberOfCalls = !workbookIds && (projectIds || tags) ? 1 : 0;
           expect(mocks.mockGetWorkbook).toHaveBeenCalledTimes(expectedNumberOfCalls);
+        },
+      );
+    });
+  });
+
+  describe('isFlowAllowed', () => {
+    beforeEach(() => {
+      mocks.mockQueryFlow.mockResolvedValue({ flow: mockFlow, outputSteps: mockOutputSteps });
+    });
+
+    describe('allowed', () => {
+      // Flows are gated only by project and tag bounded contexts (there is no
+      // dedicated `flowIds` set), so datasourceIds / workbookIds are n/a here.
+      test.each(
+        getCombinationsOfBoundedContextInputs({
+          projectIds: [null, new Set([mockFlow.project.id])],
+          datasourceIds: [null], // n/a for flows
+          workbookIds: [null], // n/a for flows
+          viewIds: [null], // n/a for flows
+          tags: [null, new Set([mockFlow.tags.tag[0].label])],
+        }),
+      )(
+        'should return allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
+        async ({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
+          const resourceAccessChecker = createResourceAccessChecker({
+            projectIds,
+            datasourceIds,
+            workbookIds,
+            viewIds,
+            tags,
+          });
+
+          // The checker returns the fetched flow as `content` (so get-flow can
+          // reuse it) only when it actually had to fetch the flow to evaluate a
+          // project or tag filter.
+          const expectedContent =
+            projectIds || tags ? { flow: mockFlow, outputSteps: mockOutputSteps } : undefined;
+
+          expect(await resourceAccessChecker.isFlowAllowed({ flowId: mockFlow.id, extra })).toEqual(
+            { allowed: true, content: expectedContent },
+          );
+
+          // Call again to confirm each invocation re-evaluates the flow (the
+          // checker holds no result cache).
+          expect(await resourceAccessChecker.isFlowAllowed({ flowId: mockFlow.id, extra })).toEqual(
+            { allowed: true, content: expectedContent },
+          );
+
+          // With project or tag filtering, the flow is fetched once per invocation, so two invocations call the "Query Flow" API twice.
+          const expectedNumberOfCalls = projectIds || tags ? 2 : 0;
+          expect(mocks.mockQueryFlow).toHaveBeenCalledTimes(expectedNumberOfCalls);
+        },
+      );
+    });
+
+    describe('not allowed', () => {
+      const notAllowedCombinations = getCombinationsOfBoundedContextInputs({
+        projectIds: [null, new Set(['some-project-id'])],
+        datasourceIds: [null], // n/a for flows
+        workbookIds: [null], // n/a for flows
+        viewIds: [null], // n/a for flows
+        tags: [null, new Set(['some-tag-label'])],
+      }).filter(({ projectIds, datasourceIds, workbookIds, tags }) => {
+        // Remove the combination where they are all null
+        return (
+          projectIds !== null || datasourceIds !== null || workbookIds !== null || tags !== null
+        );
+      });
+
+      test.each(notAllowedCombinations)(
+        'should return not allowed when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
+        async ({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
+          const resourceAccessChecker = createResourceAccessChecker({
+            projectIds,
+            datasourceIds,
+            workbookIds,
+            viewIds,
+            tags,
+          });
+
+          const sentences = [
+            'The set of allowed flows that can be queried is limited by the server configuration.',
+          ];
+          // The project check runs before the tag check, so a project mismatch
+          // wins when both filters are set.
+          if (projectIds) {
+            sentences.push(
+              `The flow with LUID ${mockFlow.id} cannot be queried because it does not belong to an allowed project.`,
+            );
+          } else if (tags) {
+            sentences.push(
+              `The flow with LUID ${mockFlow.id} cannot be queried because it does not have one of the allowed tags.`,
+            );
+          }
+
+          const expectedMessage = sentences.join(' ');
+
+          expect(await resourceAccessChecker.isFlowAllowed({ flowId: mockFlow.id, extra })).toEqual(
+            {
+              allowed: false,
+              message: expectedMessage,
+            },
+          );
+
+          expect(await resourceAccessChecker.isFlowAllowed({ flowId: mockFlow.id, extra })).toEqual(
+            {
+              allowed: false,
+              message: expectedMessage,
+            },
+          );
+
+          // Project/tag filtering disables caching, so the "Query Flow" API is called each time.
+          const expectedNumberOfCalls = projectIds || tags ? 2 : 0;
+          expect(mocks.mockQueryFlow).toHaveBeenCalledTimes(expectedNumberOfCalls);
         },
       );
     });

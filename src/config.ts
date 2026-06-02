@@ -75,6 +75,7 @@ export class Config extends BaseConfig {
   featureGate: FeatureGateConfig;
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
+  flowToolsEnabled: boolean;
   cspAllowedDomains: string[];
 
   constructor() {
@@ -140,6 +141,7 @@ export class Config extends BaseConfig {
       IS_HYPERFORCE: isHyperforce,
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
+      FLOW_TOOLS_ENABLED: flowToolsEnabled,
       CSP_ALLOWED_DOMAINS: cspAllowedDomains,
     } = cleansedVars;
 
@@ -299,6 +301,9 @@ export class Config extends BaseConfig {
 
     this.breakGlassDisableGlobally = breakGlassDisableGlobally === 'true';
     this.adminToolsEnabled = adminToolsEnabled === 'true';
+    // Flow tools are gated off by default while flow rollouts are staged into
+    // production; set FLOW_TOOLS_ENABLED=true to register them.
+    this.flowToolsEnabled = flowToolsEnabled === 'true';
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
