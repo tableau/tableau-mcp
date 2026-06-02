@@ -13,7 +13,9 @@ export async function getWorkbookXml({
     args: {
       'is-json': false,
     },
-    schema: z.string(),
+    schema: z.object({
+      text: z.string(),
+    }),
     signal,
   });
 
@@ -21,5 +23,5 @@ export async function getWorkbookXml({
     return result;
   }
 
-  return Ok(result.value.parsedResult);
+  return Ok(result.value.parsedResult.text);
 }

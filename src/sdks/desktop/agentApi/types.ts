@@ -7,7 +7,7 @@ export const getCommandStatusResponseSchema = z.object({
   started_at: z.string().optional(),
   completed_at: z.string().optional(),
   duration_ms: z.number().optional(),
-  result: z.object({ text: z.string().optional() }).optional(),
+  result: z.record(z.string(), z.string()).optional(),
   error: z.object({ code: z.string(), message: z.string(), recoverable: z.boolean() }).optional(),
 });
 export type GetCommandStatusResponse = z.infer<typeof getCommandStatusResponseSchema>;

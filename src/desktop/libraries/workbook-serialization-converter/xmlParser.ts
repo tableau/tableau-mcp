@@ -1,4 +1,4 @@
-import { DOMParser } from '@xmldom/xmldom';
+import { DOMParser, Element as XmlDomElement } from '@xmldom/xmldom';
 
 import { DOM, DOMElement, DOMElementAttributes } from './dom.js';
 
@@ -11,7 +11,7 @@ export class XMLParser {
 
   parse(): DOM {
     // Parse XML string into DOM
-    let documentElement: Element | null = null;
+    let documentElement: XmlDomElement | HTMLElement | null = null;
 
     try {
       // Try using @xmldom/xmldom first (Node.js)
@@ -41,28 +41,9 @@ export class XMLParser {
         throw new Error('Invalid XML: parsing failed');
       }
 
-      if (!isElement(xmlDoc.documentElement)) {
-        throw new Error('Invalid XML: document element is not an element');
-      }
-
       documentElement = xmlDoc.documentElement;
     } catch (e: any) {
-      // Fallback: try using browser DOMParser if available
-      if (typeof window !== 'undefined' && window.DOMParser) {
-        try {
-          const domParser = new window.DOMParser();
-          const xmlDoc = domParser.parseFromString(this.xmlString, 'text/xml');
-          const parserError = xmlDoc.querySelector('parsererror');
-          if (parserError) {
-            throw new Error(`Invalid XML: ${parserError.textContent}`);
-          }
-          documentElement = xmlDoc.documentElement;
-        } catch (e2: any) {
-          throw new Error(`Invalid XML: ${e2.message || e2}`);
-        }
-      } else {
-        throw new Error(`Invalid XML: ${e.message || e}`);
-      }
+      throw new Error(`Invalid XML: ${e.message || e}`);
     }
 
     if (!documentElement) {
@@ -71,12 +52,21 @@ export class XMLParser {
 
     const dom = new DOM();
     const domElement = this.elementToDOMElement(documentElement);
+
+    if (!domElement) {
+      throw new Error('Invalid XML: no root element found');
+    }
+
     dom.getRoot().addChild(domElement);
 
     return dom;
   }
 
-  private elementToDOMElement(element: Element): DOMElement {
+  private elementToDOMElement(element: XmlDomElement): DOMElement | null {
+    if (!('attributes' in element) || !('tagName' in element)) {
+      return null;
+    }
+
     // Convert an XML element to a DOMElement
     // Get attributes
     const attributes: DOMElementAttributes = {};
@@ -91,8 +81,7 @@ export class XMLParser {
     const domElement = new DOMElement(element.tagName, attributes);
 
     // Process children and collect text
-    const childNodes =
-      [...element.childNodes].filter((node): node is Element => node instanceof Element) || [];
+    const childNodes = element.childNodes;
     const textParts: string[] = [];
 
     for (let i = 0; i < childNodes.length; i++) {
@@ -102,8 +91,10 @@ export class XMLParser {
       if (nodeType === 1) {
         // Element node - add as child
         const childElement = child;
-        const childDOM = this.elementToDOMElement(childElement);
-        domElement.addChild(childDOM);
+        const childDOM = this.elementToDOMElement(childElement as XmlDomElement);
+        if (childDOM) {
+          domElement.addChild(childDOM);
+        }
       } else if (nodeType === 4) {
         // CDATA section - preserve content verbatim (e.g. SQL, formulas)
         const cdataContent = child.nodeValue || child.textContent || '';
@@ -138,8 +129,4 @@ export class XMLParser {
 
     return domElement;
   }
-}
-
-function isElement(node: unknown): node is Element {
-  return node instanceof Element;
 }

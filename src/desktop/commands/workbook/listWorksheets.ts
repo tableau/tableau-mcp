@@ -3,7 +3,10 @@ import { z } from 'zod';
 
 import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../../toolExecutor/toolExecutor';
 
-const worksheetNamesSchema = z.array(z.object({ name: z.string() }));
+const worksheetNamesSchema = z.object({
+  count: z.number(),
+  worksheets: z.array(z.object({ name: z.string() })),
+});
 
 export async function listWorksheets({ executor, signal }: WithExecutorAndAbortSignal): Promise<
   Result<
@@ -40,7 +43,7 @@ export async function listWorksheets({ executor, signal }: WithExecutorAndAbortS
   }
 
   return Ok({
-    count: worksheetsResult.data.length,
-    worksheets: worksheetsResult.data.map((worksheet) => worksheet.name),
+    count: worksheetsResult.data.worksheets.length,
+    worksheets: worksheetsResult.data.worksheets.map((worksheet) => worksheet.name),
   });
 }

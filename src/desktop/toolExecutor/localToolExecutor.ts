@@ -116,31 +116,8 @@ export class LocalExecutor extends ToolExecutor {
       return Ok(commandResult);
     }
 
-    const resultText = commandResult.result?.text ?? '';
-    const isPrimitiveSchema = ['ZodString', 'ZodNumber', 'ZodBoolean'].includes(
-      schema._def.typeName,
-    );
-
-    let dataToValidate: unknown;
-    if (isPrimitiveSchema) {
-      // For primitive schemas, use the raw string
-      dataToValidate = resultText;
-    } else {
-      // For structured schemas (object, array, etc.), JSON parse first
-      try {
-        dataToValidate = JSON.parse(resultText || '{}');
-      } catch (error) {
-        log({
-          message: 'Failed to JSON parse command result',
-          level: 'error',
-          logger: 'LocalExecutor',
-          data: error,
-        });
-        return Err({ type: 'unknown', error });
-      }
-    }
-
-    const safeParsedResult = schema.safeParse(dataToValidate);
+    const resultObject = commandResult.result ?? {};
+    const safeParsedResult = schema.safeParse(resultObject);
     if (!safeParsedResult.success) {
       log({
         message: `Failed to parse command result with schema ${schema.toString()}.`,

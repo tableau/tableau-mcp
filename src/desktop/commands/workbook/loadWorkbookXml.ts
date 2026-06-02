@@ -116,19 +116,13 @@ async function loadUnderlyingMetadataByFilepath({
     args: {
       filepath: jsonPath,
     },
-    schema: z.object({
-      status: z.enum(['completed', 'failed']),
-    }),
   });
 
   if (result.isErr()) {
     return Err({ type: 'execute-command-error', error: result.error });
   }
 
-  const {
-    error,
-    parsedResult: { status },
-  } = result.value;
+  const { error, status } = result.value;
 
   if (status === 'completed') {
     log({

@@ -3,7 +3,10 @@ import { z } from 'zod';
 
 import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../../toolExecutor/toolExecutor';
 
-const dashboardNamesSchema = z.array(z.object({ name: z.string() }));
+const dashboardNamesSchema = z.object({
+  count: z.number(),
+  dashboards: z.array(z.object({ name: z.string() })),
+});
 
 export async function listDashboards({ executor, signal }: WithExecutorAndAbortSignal): Promise<
   Result<
@@ -40,7 +43,7 @@ export async function listDashboards({ executor, signal }: WithExecutorAndAbortS
   }
 
   return Ok({
-    count: dashboardsResult.data.length,
-    dashboards: dashboardsResult.data.map((dashboard) => dashboard.name),
+    count: dashboardsResult.data.dashboards.length,
+    dashboards: dashboardsResult.data.dashboards.map((dashboard) => dashboard.name),
   });
 }
