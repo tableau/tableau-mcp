@@ -394,6 +394,40 @@ describe('get-stale-content-report tool', () => {
     expect(neverFlagged?.neverAccessed).toBe(true);
   });
 
+  it('accepts rows where Item Parent Project Name is null (top-level content)', async () => {
+    const { Ok } = await import('ts-results-es');
+    mocks.mockQueryDatasource.mockResolvedValueOnce(
+      Ok({
+        data: [
+          {
+            'Item ID': 'wb-toplevel',
+            'Item Type': 'Workbook',
+            'Item Name': 'Top-Level WB',
+            'Item Parent Project Name': null,
+            'Owner Email': null,
+            'Created At': '2024-01-01T00:00:00Z',
+            'Last Accessed At': null,
+            'Size (bytes)': null,
+          },
+        ],
+      }),
+    );
+
+    const result = await getToolResult({ minAgeDays: 90 });
+
+    expect(result.isError).toBeFalsy();
+    if (result.content[0].type !== 'text') {
+      throw new Error('expected text content');
+    }
+    const payload = JSON.parse(result.content[0].text) as {
+      rows: Array<{ itemId: string; project: string | null; ownerEmail: string | null }>;
+    };
+    const row = payload.rows.find((r) => r.itemId === 'wb-toplevel');
+    expect(row).toBeDefined();
+    expect(row?.project).toBeNull();
+    expect(row?.ownerEmail).toBeNull();
+  });
+
   it('rejects when caller is not an admin', async () => {
     mocks.mockAssertAdmin.mockResolvedValueOnce(
       new Err('This tool requires site administrator permissions. Your site role is: Viewer'),
