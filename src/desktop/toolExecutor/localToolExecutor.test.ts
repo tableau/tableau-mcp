@@ -134,12 +134,12 @@ describe('LocalExecutor', () => {
       const result = await localExecutor.executeCommand({
         namespace: 'tabdoc',
         command: 'undo',
-        schema: z.object({ name: z.string() }),
+        schema: z.object({ text: z.string() }),
         signal: new AbortController().signal,
       });
 
       expect(result.isOk()).toBe(true);
-      expect(result.unwrap().parsedResult).toEqual({ name: 'John Doe' });
+      expect(result.unwrap().parsedResult).toEqual({ text: JSON.stringify({ name: 'John Doe' }) });
     });
 
     it('should handle command execution failure', async () => {
