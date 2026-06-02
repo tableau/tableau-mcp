@@ -62,7 +62,6 @@ describe('log', () => {
     stderrSpy.mockRestore();
   });
 
-
   it('should write JSON to console.log when transport is http and appLogger is enabled', () => {
     vi.stubEnv('TRANSPORT', 'http');
     vi.stubEnv('DANGEROUSLY_DISABLE_OAUTH', 'true');
@@ -74,7 +73,6 @@ describe('log', () => {
     expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(entry));
     consoleSpy.mockRestore();
   });
-
 
   it('should not write to stderr or console when appLogger is not enabled', () => {
     vi.stubEnv('ENABLED_LOGGERS', 'fileLogger');
