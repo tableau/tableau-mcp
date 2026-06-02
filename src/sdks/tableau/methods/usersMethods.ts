@@ -3,8 +3,14 @@ import { Zodios } from '@zodios/core';
 import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { usersApis } from '../apis/usersApi.js';
 import { RestApiCredentials } from '../restApi.js';
+import { Pagination } from '../types/pagination.js';
 import { User } from '../types/user.js';
 import AuthenticatedMethods from './authenticatedMethods.js';
+
+export interface ListUsersResult {
+  users: User[];
+  pagination?: Pagination;
+}
 
 /**
  * Users and Groups methods of the Tableau Server REST API
@@ -19,9 +25,9 @@ export default class UsersMethods extends AuthenticatedMethods<typeof usersApis>
   }
 
   /**
-   * Returns a list of users on the site.
-   * Passes includeSSOInfo=false, includeUserCount=false, includeGroups=false
-   * by default to minimize DB and SAML DDB load on large sites.
+   * Returns a list of users on the site with pagination metadata.
+   * Passes includeUserCount=true for total count, but includeSSOInfo=false
+   * and includeGroups=false to minimize DB and SAML DDB load on large sites.
    *
    * Required scopes (Tableau Cloud): `tableau:users:read`
    *
@@ -38,19 +44,22 @@ export default class UsersMethods extends AuthenticatedMethods<typeof usersApis>
     siteId: string;
     pageSize?: number;
     pageNumber?: number;
-  }): Promise<User[]> => {
+  }): Promise<ListUsersResult> => {
     const response = await this._apiClient.listUsers({
       params: { siteId },
       queries: {
         pageSize,
         pageNumber,
+        includeUserCount: true,
         includeSSOInfo: false,
-        includeUserCount: false,
         includeGroups: false,
       },
       ...this.authHeader,
     });
-    return response.users.user;
+    return {
+      users: response.users.user,
+      pagination: response.pagination,
+    };
   };
 
   /**

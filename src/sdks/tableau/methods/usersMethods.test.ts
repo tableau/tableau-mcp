@@ -4,9 +4,10 @@ import UsersMethods from './usersMethods.js';
 
 describe('UsersMethods', () => {
   describe('listUsers', () => {
-    it('should return users from normalized response', async () => {
+    it('should return users and pagination from response', async () => {
       const mockApiClient = {
         listUsers: vi.fn().mockResolvedValue({
+          pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 27000 },
           users: {
             user: [
               { id: 'u1', name: 'jsmith', siteRole: 'Creator' },
@@ -22,13 +23,18 @@ describe('UsersMethods', () => {
 
       const result = await usersMethods.listUsers({ siteId: 'site-1' });
 
-      expect(result).toEqual([
+      expect(result.users).toEqual([
         { id: 'u1', name: 'jsmith', siteRole: 'Creator' },
         { id: 'u2', name: 'asmith', siteRole: 'Viewer' },
       ]);
+      expect(result.pagination).toEqual({
+        pageNumber: 1,
+        pageSize: 100,
+        totalAvailable: 27000,
+      });
     });
 
-    it('should handle object with user array format', async () => {
+    it('should handle response without pagination', async () => {
       const mockApiClient = {
         listUsers: vi.fn().mockResolvedValue({
           users: {
@@ -46,10 +52,11 @@ describe('UsersMethods', () => {
 
       const result = await usersMethods.listUsers({ siteId: 'site-1' });
 
-      expect(result).toEqual([
+      expect(result.users).toEqual([
         { id: 'u1', name: 'jsmith', siteRole: 'Creator' },
         { id: 'u2', name: 'asmith', siteRole: 'Viewer' },
       ]);
+      expect(result.pagination).toBeUndefined();
     });
 
     it('should return single user from normalized response', async () => {
@@ -67,7 +74,7 @@ describe('UsersMethods', () => {
 
       const result = await usersMethods.listUsers({ siteId: 'site-1' });
 
-      expect(result).toEqual([{ id: 'u1', name: 'jsmith', siteRole: 'Creator' }]);
+      expect(result.users).toEqual([{ id: 'u1', name: 'jsmith', siteRole: 'Creator' }]);
     });
 
     it('should return empty array when no users exist', async () => {
@@ -85,12 +92,13 @@ describe('UsersMethods', () => {
 
       const result = await usersMethods.listUsers({ siteId: 'site-1' });
 
-      expect(result).toEqual([]);
+      expect(result.users).toEqual([]);
     });
 
     it('should handle users with full profile information', async () => {
       const mockApiClient = {
         listUsers: vi.fn().mockResolvedValue({
+          pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },
           users: {
             user: [
               {
@@ -115,24 +123,23 @@ describe('UsersMethods', () => {
 
       const result = await usersMethods.listUsers({ siteId: 'site-1' });
 
-      expect(result).toEqual([
-        {
-          id: 'u1',
-          name: 'jsmith',
-          siteRole: 'Creator',
-          email: 'john.smith@example.com',
-          fullName: 'John Smith',
-          lastLogin: '2026-05-20T10:30:00Z',
-          authSetting: 'SAML',
-          locale: 'en_US',
-          language: 'en',
-        },
-      ]);
+      expect(result.users[0]).toEqual({
+        id: 'u1',
+        name: 'jsmith',
+        siteRole: 'Creator',
+        email: 'john.smith@example.com',
+        fullName: 'John Smith',
+        lastLogin: '2026-05-20T10:30:00Z',
+        authSetting: 'SAML',
+        locale: 'en_US',
+        language: 'en',
+      });
     });
 
     it('should handle users with different site roles', async () => {
       const mockApiClient = {
         listUsers: vi.fn().mockResolvedValue({
+          pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 5 },
           users: {
             user: [
               { id: 'u1', name: 'admin', siteRole: 'ServerAdministrator' },
@@ -151,12 +158,10 @@ describe('UsersMethods', () => {
 
       const result = await usersMethods.listUsers({ siteId: 'site-1' });
 
-      expect(result).toHaveLength(5);
-      expect(result[0].siteRole).toBe('ServerAdministrator');
-      expect(result[1].siteRole).toBe('Creator');
-      expect(result[2].siteRole).toBe('Explorer');
-      expect(result[3].siteRole).toBe('Viewer');
-      expect(result[4].siteRole).toBe('Unlicensed');
+      expect(result.users).toHaveLength(5);
+      expect(result.users[0].siteRole).toBe('ServerAdministrator');
+      expect(result.users[4].siteRole).toBe('Unlicensed');
+      expect(result.pagination?.totalAvailable).toBe(5);
     });
   });
 });

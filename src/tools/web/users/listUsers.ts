@@ -82,7 +82,7 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
         extra,
         args,
         callback: async () => {
-          const users = await useRestApi({
+          const result = await useRestApi({
             ...extra,
             jwtScopes: listUsersTool.requiredApiScopes,
             callback: async (restApi) => {
@@ -100,19 +100,21 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
           });
 
           // Apply client-side filtering
-          let filteredUsers = applyUserFilters(users, args.filter);
+          let filteredUsers = applyUserFilters(result.users, args.filter);
 
           // Apply limit to cap total results returned
           if (args.limit) {
             filteredUsers = filteredUsers.slice(0, args.limit);
           }
 
-          return new Ok(filteredUsers);
+          const toolResult: ListUsersToolResult = {
+            users: filteredUsers,
+            totalAvailable: result.pagination?.totalAvailable,
+          };
+          return new Ok(toolResult);
         },
-        constrainSuccessResult: (users) =>
-          constrainUsers({
-            users,
-          }),
+        constrainSuccessResult: (toolResult) =>
+          constrainUsers({ users: toolResult.users, totalAvailable: toolResult.totalAvailable }),
       });
     },
   });
@@ -120,7 +122,18 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
   return listUsersTool;
 };
 
-export function constrainUsers({ users }: { users: Array<User> }): ConstrainedResult<Array<User>> {
+interface ListUsersToolResult {
+  users: Array<User>;
+  totalAvailable?: number;
+}
+
+export function constrainUsers({
+  users,
+  totalAvailable,
+}: {
+  users: Array<User>;
+  totalAvailable?: number;
+}): ConstrainedResult<ListUsersToolResult> {
   if (users.length === 0) {
     return {
       type: 'empty',
@@ -128,5 +141,5 @@ export function constrainUsers({ users }: { users: Array<User> }): ConstrainedRe
     };
   }
 
-  return { type: 'success', result: users };
+  return { type: 'success', result: { users, totalAvailable } };
 }

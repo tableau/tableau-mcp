@@ -1,6 +1,7 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
+import { paginationSchema } from '../types/pagination.js';
 import { userSchema } from '../types/user.js';
 
 /**
@@ -11,6 +12,7 @@ import { userSchema } from '../types/user.js';
  * - `{ users: {} }` → normalized to `{ users: { user: [] } }`
  */
 const listUsersBodySchema = z.object({
+  pagination: paginationSchema.optional(),
   users: z.union([
     z.object({
       user: z.union([z.array(userSchema), userSchema.transform((user) => [user])]),

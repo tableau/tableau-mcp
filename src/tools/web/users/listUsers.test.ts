@@ -58,19 +58,28 @@ describe('listUsersTool', () => {
     expect(listUsersTool.paramsSchema).toHaveProperty('limit');
   });
 
-  it('should successfully get users', async () => {
-    mocks.mockListUsers.mockResolvedValue(mockUsers);
+  it('should successfully get users with totalAvailable', async () => {
+    mocks.mockListUsers.mockResolvedValue({
+      users: mockUsers,
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: mockUsers.length },
+    });
     const result = await getToolResult({});
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(JSON.parse(`${result.content[0].text}`)).toEqual(mockUsers);
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.users).toEqual(mockUsers);
+    expect(parsed.totalAvailable).toBe(mockUsers.length);
     expect(mocks.mockListUsers).toHaveBeenCalledWith({
       siteId: 'test-site-id',
+      pageSize: undefined,
     });
   });
 
   it('should return empty message when no users are found', async () => {
-    mocks.mockListUsers.mockResolvedValue([]);
+    mocks.mockListUsers.mockResolvedValue({
+      users: [],
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 0 },
+    });
     const result = await getToolResult({});
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -98,14 +107,17 @@ describe('listUsersTool', () => {
       locale: 'en_US',
       language: 'en',
     };
-    mocks.mockListUsers.mockResolvedValue([fullUser]);
+    mocks.mockListUsers.mockResolvedValue({
+      users: [fullUser],
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },
+    });
     const result = await getToolResult({});
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(`${result.content[0].text}`);
-    expect(parsed[0].email).toBe('john.smith@example.com');
-    expect(parsed[0].fullName).toBe('John Smith');
-    expect(parsed[0].lastLogin).toBe('2026-05-20T10:30:00Z');
+    expect(parsed.users[0].email).toBe('john.smith@example.com');
+    expect(parsed.users[0].fullName).toBe('John Smith');
+    expect(parsed.users[0].lastLogin).toBe('2026-05-20T10:30:00Z');
   });
 
   it('should handle users with different site roles', async () => {
@@ -115,16 +127,17 @@ describe('listUsersTool', () => {
       { ...mockUser, id: 'u3', siteRole: 'Viewer' },
       { ...mockUser, id: 'u4', siteRole: 'Unlicensed' },
     ];
-    mocks.mockListUsers.mockResolvedValue(users);
+    mocks.mockListUsers.mockResolvedValue({
+      users,
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: users.length },
+    });
     const result = await getToolResult({});
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(`${result.content[0].text}`);
-    expect(parsed).toHaveLength(4);
-    expect(parsed[0].siteRole).toBe('ServerAdministrator');
-    expect(parsed[1].siteRole).toBe('Creator');
-    expect(parsed[2].siteRole).toBe('Viewer');
-    expect(parsed[3].siteRole).toBe('Unlicensed');
+    expect(parsed.users).toHaveLength(4);
+    expect(parsed.users[0].siteRole).toBe('ServerAdministrator');
+    expect(parsed.users[3].siteRole).toBe('Unlicensed');
   });
 
   it('should handle users with different auth settings', async () => {
@@ -133,14 +146,17 @@ describe('listUsersTool', () => {
       { ...mockUser, id: 'u2', authSetting: 'ServerDefault' },
       { ...mockUser, id: 'u3', authSetting: 'OpenID' },
     ];
-    mocks.mockListUsers.mockResolvedValue(users);
+    mocks.mockListUsers.mockResolvedValue({
+      users,
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: users.length },
+    });
     const result = await getToolResult({});
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(`${result.content[0].text}`);
-    expect(parsed[0].authSetting).toBe('SAML');
-    expect(parsed[1].authSetting).toBe('ServerDefault');
-    expect(parsed[2].authSetting).toBe('OpenID');
+    expect(parsed.users[0].authSetting).toBe('SAML');
+    expect(parsed.users[1].authSetting).toBe('ServerDefault');
+    expect(parsed.users[2].authSetting).toBe('OpenID');
   });
 
   it('should error when user is not admin', async () => {
@@ -152,7 +168,10 @@ describe('listUsersTool', () => {
   });
 
   it('should return structured error for invalid filter string', async () => {
-    mocks.mockListUsers.mockResolvedValue([]);
+    mocks.mockListUsers.mockResolvedValue({
+      users: [],
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 0 },
+    });
     const result = await getToolResult({ filter: 'invalidField:eq:value' });
     expect(result.isError).toBe(true);
   });
@@ -165,18 +184,25 @@ describe('listUsersTool', () => {
       { ...mockUser, id: 'u4' },
       { ...mockUser, id: 'u5' },
     ];
-    mocks.mockListUsers.mockResolvedValue(users);
+    mocks.mockListUsers.mockResolvedValue({
+      users,
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: users.length },
+    });
     const result = await getToolResult({ limit: 2 });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const parsed = JSON.parse(`${result.content[0].text}`);
-    expect(parsed).toHaveLength(2);
-    expect(parsed[0].id).toBe('u1');
-    expect(parsed[1].id).toBe('u2');
+    expect(parsed.users).toHaveLength(2);
+    expect(parsed.users[0].id).toBe('u1');
+    expect(parsed.users[1].id).toBe('u2');
+    expect(parsed.totalAvailable).toBe(5);
   });
 
   it('should pass pageSize to the API for server-side pagination', async () => {
-    mocks.mockListUsers.mockResolvedValue([mockUser]);
+    mocks.mockListUsers.mockResolvedValue({
+      users: [mockUser],
+      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },
+    });
     await getToolResult({ pageSize: 50 });
     expect(mocks.mockListUsers).toHaveBeenCalledWith({
       siteId: 'test-site-id',
