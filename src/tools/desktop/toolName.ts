@@ -3,6 +3,7 @@ export const desktopToolNames = [
   'check-for-user-changes',
   'get-workbook-xml',
   'apply-workbook',
+  'list-worksheets',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 

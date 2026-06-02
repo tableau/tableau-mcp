@@ -31,6 +31,7 @@ export type GetEventsArgs = {
 export type ExecuteCommandError =
   | { type: 'command-failed'; error: ExecuteCommandResponseError }
   | { type: 'command-timed-out'; error: string }
+  | { type: 'invalid-response'; error: unknown }
   | { type: 'unknown'; error: unknown };
 
 export type ExecuteCommandResult<Z extends z.ZodTypeAny | undefined = undefined> =
