@@ -66,7 +66,7 @@ describe('OAuth', () => {
     expect(response.status).toBe(401);
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.headers['www-authenticate']).toMatch(
-      /Bearer realm="MCP", resource_metadata="http:\/\/127\.0\.0\.1:(\d+)\/tableau-mcp\/.well-known\/oauth-protected-resource"/,
+      /Bearer realm="MCP", resource_metadata="http:\/\/127\.0\.0\.1:(\d+)\/.well-known\/oauth-protected-resource"/,
     );
     expect(response.body).toEqual({
       error: 'unauthorized',
@@ -82,7 +82,7 @@ describe('OAuth', () => {
     const response = await request(app).post(`/${serverName}`);
     expect(response.status).toBe(401);
     expect(response.headers['www-authenticate']).toContain(
-      'resource_metadata="https://mcp.example.com/tableau-mcp/.well-known/oauth-protected-resource"',
+      'resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource"',
     );
   });
 
@@ -94,7 +94,7 @@ describe('OAuth', () => {
     const response = await request(app).post(`/${serverName}`);
     expect(response.status).toBe(401);
     expect(response.headers['www-authenticate']).toContain(
-      'resource_metadata="https://mcp.example.com/tableau-mcp/.well-known/oauth-protected-resource"',
+      'resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource"',
     );
   });
 
@@ -121,7 +121,7 @@ describe('OAuth', () => {
 
     expect(response.status).toBe(401);
     expect(response.headers['www-authenticate']).toContain(
-      'resource_metadata="https://mcp.example.com/tableau-mcp/.well-known/oauth-protected-resource"',
+      'resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource"',
     );
     expect(response.headers['www-authenticate']).toContain('scope="');
     expect(response.headers['www-authenticate']).toContain('tableau:mcp:datasource:read');
@@ -130,11 +130,11 @@ describe('OAuth', () => {
   it('should provide a protected resource metadata endpoint for the OAuth 2.1 flow', async () => {
     const { app } = await startServer();
 
-    const response = await request(app).get(`/${serverName}/.well-known/oauth-protected-resource`);
+    const response = await request(app).get('/.well-known/oauth-protected-resource');
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
-      resource: `http://127.0.0.1:3927/${serverName}`,
+      resource: 'http://127.0.0.1:3927',
       authorization_servers: ['http://127.0.0.1:3927'],
       bearer_methods_supported: ['header'],
       scopes_supported: [

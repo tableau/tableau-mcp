@@ -7,7 +7,7 @@ const MOCK_ISSUER = 'https://sso.online.tableau.com';
 const MOCK_CLIENT_ID = 'https://cimd.example.com/oauth/metadata.json';
 const MOCK_RESOURCE_URI = 'https://mcp.example.com';
 const MOCK_GLOBAL_RESOURCE_URI = 'https://global.example.com';
-const EXPECTED_AUD = `${MOCK_RESOURCE_URI}/tableau-mcp`;
+const EXPECTED_AUD = MOCK_RESOURCE_URI;
 const FUTURE_EXP = Math.floor(Date.now() / 1000) + 3600;
 
 function makeBearer(payload: Record<string, unknown>): string {
@@ -213,10 +213,10 @@ describe('TableauAccessTokenValidator', () => {
       expect(result.error).toMatch(/audience/i);
     });
 
-    it('accepts a token whose aud matches the configured global resource identifier', async () => {
+    it('accepts a token whose aud matches the configured global resource URL', async () => {
       vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URI', MOCK_GLOBAL_RESOURCE_URI);
       const audValidator = new TableauAccessTokenValidator();
-      const token = makeBearer(basePayload({ aud: `${MOCK_GLOBAL_RESOURCE_URI}/tableau-mcp` }));
+      const token = makeBearer(basePayload({ aud: MOCK_GLOBAL_RESOURCE_URI }));
 
       const result = await audValidator.validate(token);
 

@@ -136,9 +136,8 @@ clients may require the `resource` field to match exactly with the URL used to a
 server. This should be the base URL of your MCP server deployment.
 
 Incoming bearer tokens are also audience-validated against this value: the token's `aud` claim must
-equal the canonical resource identifier (`<OAUTH_RESOURCE_URI>/tableau-mcp`, the same value
-advertised as `resource` in the protected resource metadata document), per
-[RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) and
+equal this resource URL (the same value advertised as `resource` in the protected resource metadata
+document), per [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) and
 [RFC 8707](https://www.rfc-editor.org/rfc/rfc8707). A token whose `aud` matches neither this value
 nor [`OAUTH_GLOBAL_RESOURCE_URI`](#oauth_global_resource_uri) is rejected with a `401`.
 
@@ -150,12 +149,13 @@ nor [`OAUTH_GLOBAL_RESOURCE_URI`](#oauth_global_resource_uri) is rejected with a
 
 ### `OAUTH_GLOBAL_RESOURCE_URI`
 
-An additional base URL whose canonical resource identifier (`<OAUTH_GLOBAL_RESOURCE_URI>/tableau-mcp`)
-is also accepted in a token's `aud` claim. Use this when clients may reach the deployment through an
-environment-wide global URL in addition to the pod-specific [`OAUTH_RESOURCE_URI`](#oauth_resource_uri).
+An additional resource URL that is also accepted in a token's `aud` claim. Use this when clients may
+reach the deployment through an environment-wide global URL in addition to the pod-specific
+[`OAUTH_RESOURCE_URI`](#oauth_resource_uri).
 
-- Optional. When unset, only the `OAUTH_RESOURCE_URI` identifier is accepted.
-- Example: `https://online.tableau.com`
+- Optional. When unset, only the `OAUTH_RESOURCE_URI` value is accepted.
+- The value is matched against `aud` exactly, so set it to the global resource URL the authorization
+  server stamps into the claim (for example `https://mcp.tableau.com`).
 - Applies only when using an external Tableau authorization server
   ([`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) is `false`).
 
@@ -373,10 +373,10 @@ sequenceDiagram
 
     %% Step 1: Initial Request (401 Unauthorized)
     Client->>MCP: 1. Request to protected resource<br/>(no Bearer token)
-    MCP->>Client: 2. 401 Unauthorized<br/>WWW-Authenticate: Bearer realm="MCP",<br />resource_metadata="/tableau-mcp/.well-known/oauth-protected-resource"
+    MCP->>Client: 2. 401 Unauthorized<br/>WWW-Authenticate: Bearer realm="MCP",<br />resource_metadata="/.well-known/oauth-protected-resource"
 
     %% Step 2: Resource Metadata Discovery
-    Client->>MCP: 3. GET /tableau-mcp/.well-known/oauth-protected-resource
+    Client->>MCP: 3. GET /.well-known/oauth-protected-resource
     MCP->>Client: 4. Resource metadata<br/>{resource, authorization_servers, bearer_methods_supported}
 
     %% Step 3: Authorization Server Metadata
@@ -524,7 +524,7 @@ The MCP server supports three OAuth 2.1 grant types:
 
 #### Endpoints
 
-- `/tableau-mcp/.well-known/oauth-protected-resource`: Resource metadata discovery
+- `/.well-known/oauth-protected-resource`: Resource metadata discovery
 - `/.well-known/oauth-authorization-server`: Authorization server metadata
 - `/oauth2/register`: Dynamic client registration
 - `/oauth2/authorize`: Authorization endpoint with PKCE (authorization code only)
