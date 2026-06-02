@@ -20,6 +20,7 @@ export type McpScope =
   | 'tableau:mcp:workbook:read'
   | 'tableau:mcp:view:read'
   | 'tableau:mcp:view:download'
+  | 'tableau:mcp:flow:read'
   | 'tableau:mcp:pulse:read'
   | 'tableau:mcp:insight:create'
   | 'tableau:mcp:tasks:read';
@@ -28,6 +29,9 @@ export type TableauApiScope =
   | 'tableau:content:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
+  | 'tableau:flows:read'
+  | 'tableau:flow_connections:read'
+  | 'tableau:flow_runs:read'
   | 'tableau:insight_definitions_metrics:read'
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
@@ -48,6 +52,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:workbook:read',
   'tableau:mcp:view:read',
   'tableau:mcp:view:download',
+  'tableau:mcp:flow:read',
   'tableau:mcp:pulse:read',
   'tableau:mcp:insight:create',
   'tableau:mcp:tasks:read',
@@ -55,6 +60,19 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
 
 export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauApiScope> = [
   'tableau:content:read',
+  'tableau:mcp_site_settings:read',
+];
+
+/**
+ * Scopes the resource access checker needs to fetch a *flow* for a
+ * bounded-context check. Flows are gated by `tableau:flows:read` (NOT
+ * `tableau:content:read`, which covers workbooks/datasources/views), so this
+ * is intentionally kept separate from RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES
+ * to avoid forcing the flow scope onto every other resource check (which would
+ * break those checks for connected apps that do not grant `tableau:flows:read`).
+ */
+export const RESOURCE_ACCESS_CHECKER_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:flows:read',
   'tableau:mcp_site_settings:read',
 ];
 
@@ -92,6 +110,19 @@ const toolScopeMap: Record<
   'list-custom-views': {
     mcp: ['tableau:mcp:view:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
+  },
+  'list-flows': {
+    mcp: ['tableau:mcp:flow:read'],
+    api: new Set(['tableau:flows:read', 'tableau:mcp_site_settings:read']),
+  },
+  'get-flow': {
+    mcp: ['tableau:mcp:flow:read'],
+    api: new Set([
+      'tableau:flows:read',
+      'tableau:flow_connections:read',
+      'tableau:flow_runs:read',
+      'tableau:mcp_site_settings:read',
+    ]),
   },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
