@@ -596,6 +596,7 @@ describe('Config', () => {
       issuer: 'https://example.com',
       redirectUri: 'https://example.com/Callback',
       resourceUri: 'http://127.0.0.1:3927',
+      globalResourceUri: '',
       lockSite: true,
       jwePrivateKey: '',
       jwePrivateKeyPath: 'path/to/private.pem',
@@ -603,7 +604,6 @@ describe('Config', () => {
       dnsServers: ['1.1.1.1', '1.0.0.1'],
       enforceScopes: true,
       advertiseApiScopes: false,
-      validateAudience: false,
       ...defaultOAuthTimeoutMs,
     } as const;
 
@@ -616,6 +616,7 @@ describe('Config', () => {
         clientIdSecretPairs: null,
         redirectUri: '',
         resourceUri: 'http://127.0.0.1:3927',
+        globalResourceUri: '',
         lockSite: true,
         jwePrivateKey: '',
         jwePrivateKeyPath: '',
@@ -623,7 +624,6 @@ describe('Config', () => {
         dnsServers: ['1.1.1.1', '1.0.0.1'],
         enforceScopes: true,
         advertiseApiScopes: false,
-        validateAudience: false,
         ...defaultOAuthTimeoutMs,
       });
     });
@@ -675,14 +675,14 @@ describe('Config', () => {
       });
     });
 
-    it('should set validateAudience to true when OAUTH_VALIDATE_AUDIENCE is "true"', () => {
+    it('should set globalResourceUri to the specified value when OAUTH_GLOBAL_RESOURCE_URI is set', () => {
       stubDefaultOAuthEnvVars();
-      vi.stubEnv('OAUTH_VALIDATE_AUDIENCE', 'true');
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URI', 'https://global.example.com');
 
       const config = new Config();
       expect(config.oauth).toEqual({
         ...defaultOAuthConfig,
-        validateAudience: true,
+        globalResourceUri: 'https://global.example.com',
       });
     });
 

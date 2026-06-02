@@ -20,6 +20,14 @@ import { AUDIENCE } from './token.js';
 
 type AccessTokenValidatorResult = Result<AuthInfo, string>;
 
+// Cap attacker-controlled claim values before logging so an oversized claim cannot bloat log sinks.
+const MAX_LOGGED_CLAIM_LENGTH = 256;
+function truncateForLog(value: string): string {
+  return value.length > MAX_LOGGED_CLAIM_LENGTH
+    ? `${value.slice(0, MAX_LOGGED_CLAIM_LENGTH)}... (truncated)`
+    : value;
+}
+
 export abstract class AccessTokenValidator {
   protected readonly config = getConfig();
 
@@ -146,42 +154,28 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
         return new Err('Invalid or expired access token');
       }
 
-      // RFC 9068 audience validation: reject tokens not minted for this MCP server's
-      // resource identifier. Without this, a token issued for one deployment (same shared
-      // SSO issuer) passes validation against another, surfacing later as an opaque 500.
-      // Gated behind oauth.validateAudience so it can ship dark and only enforce once the
-      // Tableau AS stamps aud=resource (not client_id) in every environment.
-      if (this.config.oauth.validateAudience) {
-        const expectedAudience = buildResourceIdentifier(this.config.oauth.resourceUri);
-        if (aud !== expectedAudience) {
-          log({
-            message: `Access token audience mismatch: expected '${expectedAudience}', got '${aud}'`,
-            level: 'debug',
-            logger: 'oauth',
-          });
-          return new Err('Token audience does not match this MCP server');
-        }
-
-        // Audience validation implies the new AS token contract, where client_id is always a
-        // distinct claim and aud carries the resource URL. Enforce client_id presence here so the
-        // `client_id ?? aud` fallback below can never resolve clientId to the resource URL.
-        if (!client_id) {
-          log({
-            message: 'Access token missing client_id claim while audience validation is enabled',
-            level: 'debug',
-            logger: 'oauth',
-          });
-          return new Err('Invalid or expired access token');
-        }
+      // RFC 9068 audience validation: reject tokens not minted for this MCP server's resource
+      // identifier. Without this, a token issued for one deployment (same shared SSO issuer)
+      // passes validation against another, surfacing later as an opaque 500. Both the pod-specific
+      // resource URI and (when configured) the environment's global resource URI are accepted.
+      const allowedAudiences = [
+        buildResourceIdentifier(this.config.oauth.resourceUri),
+        ...(this.config.oauth.globalResourceUri
+          ? [buildResourceIdentifier(this.config.oauth.globalResourceUri)]
+          : []),
+      ];
+      if (!allowedAudiences.includes(aud)) {
+        log({
+          message: `Access token audience mismatch: expected one of [${allowedAudiences.join(', ')}], got '${truncateForLog(aud)}'`,
+          level: 'debug',
+          logger: 'oauth',
+        });
+        return new Err('Token audience does not match this MCP server');
       }
 
-      // Prefer the explicit client_id claim introduced in the new Tableau AS token contract.
-      // Fall back to aud during the compatibility window when client_id is absent (legacy tokens).
-      // This fallback only applies on the legacy path: when oauth.validateAudience is enabled,
-      // client_id presence is enforced above, so aud (the resource URL) is never used here.
-      // TODO(cleanup): once George's AS rollout is complete and client_id is confirmed live in all
-      // environments, remove the aud fallback and update the schema to require client_id.
-      const oauthClientId = client_id ?? aud;
+      // The Tableau AS token contract carries client_id as a distinct, always-present claim
+      // (enforced by the schema). aud holds the resource URL and is never used as the client ID.
+      const oauthClientId = client_id;
 
       if (!userId) {
         const restApi = new RestApi({

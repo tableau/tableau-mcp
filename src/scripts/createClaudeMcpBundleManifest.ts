@@ -512,12 +512,12 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  OAUTH_VALIDATE_AUDIENCE: {
+  OAUTH_GLOBAL_RESOURCE_URI: {
     includeInUserConfig: false,
-    type: 'boolean',
-    title: 'OAuth Validate Audience',
+    type: 'string',
+    title: 'OAuth Global Resource URI',
     description:
-      "Reject bearer tokens whose 'aud' claim does not match this MCP server's resource URL when set to true.",
+      "An additional resource URI whose canonical identifier is accepted in a token's 'aud' claim, e.g. the environment's global Tableau URL alongside the pod-specific one.",
     required: false,
     sensitive: false,
   },

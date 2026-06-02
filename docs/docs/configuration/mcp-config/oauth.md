@@ -135,30 +135,29 @@ The base URL used in the `resource` field of the OAuth protected resource metada
 clients may require the `resource` field to match exactly with the URL used to access the MCP
 server. This should be the base URL of your MCP server deployment.
 
+Incoming bearer tokens are also audience-validated against this value: the token's `aud` claim must
+equal the canonical resource identifier (`<OAUTH_RESOURCE_URI>/tableau-mcp`, the same value
+advertised as `resource` in the protected resource metadata document), per
+[RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) and
+[RFC 8707](https://www.rfc-editor.org/rfc/rfc8707). A token whose `aud` matches neither this value
+nor [`OAUTH_GLOBAL_RESOURCE_URI`](#oauth_global_resource_uri) is rejected with a `401`.
+
 - Default: `http://127.0.0.1:3927`
 - Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for
   production)
 
 <hr />
 
-### `OAUTH_VALIDATE_AUDIENCE`
+### `OAUTH_GLOBAL_RESOURCE_URI`
 
-Reject bearer tokens whose `aud` (audience) claim does not match this MCP server's canonical
-resource identifier (`<OAUTH_RESOURCE_URI>/tableau-mcp`, the same value advertised as `resource` in
-the protected resource metadata document).
+An additional base URL whose canonical resource identifier (`<OAUTH_GLOBAL_RESOURCE_URI>/tableau-mcp`)
+is also accepted in a token's `aud` claim. Use this when clients may reach the deployment through an
+environment-wide global URL in addition to the pod-specific [`OAUTH_RESOURCE_URI`](#oauth_resource_uri).
 
-- Default: `false`
-- When `true`, the MCP server enforces [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) audience
-  validation, returning `401` for tokens issued for a different resource (for example, a token
-  minted for another deployment that shares the same SSO issuer).
-- Only enable this once the authorization server stamps the resource URL into the access token's
-  `aud` claim (per [RFC 8707](https://www.rfc-editor.org/rfc/rfc8707)) in every environment.
-  Enabling it before then will reject legacy tokens. Set it back to `false` to disable enforcement
-  immediately if needed.
+- Optional. When unset, only the `OAUTH_RESOURCE_URI` identifier is accepted.
+- Example: `https://online.tableau.com`
 - Applies only when using an external Tableau authorization server
-  ([`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) is `false`). The embedded
-  authorization server always validates the audience of the tokens it issues, so this flag is a
-  no-op in that mode.
+  ([`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) is `false`).
 
 <hr />
 
