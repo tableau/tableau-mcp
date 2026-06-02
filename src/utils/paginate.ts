@@ -21,15 +21,50 @@ type PaginateArgs<T> = {
 
 const MAX_PAGE_SIZE = 1000;
 
-export async function paginate<T>({ pageConfig, getDataFn }: PaginateArgs<T>): Promise<Array<T>> {
+/**
+ * Result of {@link paginateWithMetadata}: the items plus enough server-side
+ * metadata for the caller to detect whether a configured `limit` truncated the
+ * result.
+ *
+ * - `items` — the (possibly limit-truncated) items returned to the caller.
+ * - `totalAvailable` — the total count Tableau reported for the underlying
+ *   query (across all pages, ignoring `limit`). For multi-page paginations
+ *   this is the value Tableau returned on the last page actually fetched;
+ *   Tableau returns the same value on every page response, so for the loops
+ *   we run it's stable.
+ * - `truncatedByLimit` — `true` iff `items.length < totalAvailable`. When
+ *   `true`, the caller can confidently surface a "more results available,
+ *   but a limit cut you off" signal (e.g. an MCP warning).
+ */
+export type PaginateResult<T> = {
+  items: Array<T>;
+  totalAvailable: number;
+  truncatedByLimit: boolean;
+};
+
+/**
+ * Like {@link paginate}, but also surfaces enough metadata for the caller to
+ * detect when the configured `limit` truncated the result. Existing callers
+ * that only need the items array should keep using {@link paginate}; this
+ * function exists so individual list-* tools can opt into a "results were
+ * limited; more exist server-side" signal without forcing every other
+ * caller to migrate.
+ *
+ * The two functions share a single implementation — {@link paginate} simply
+ * returns the `items` field of this function's result.
+ */
+export async function paginateWithMetadata<T>({
+  pageConfig,
+  getDataFn,
+}: PaginateArgs<T>): Promise<PaginateResult<T>> {
   const { pageSize, limit } = pageConfigSchema.parse(pageConfig);
   const effectivePageSize = pageSize ? Math.min(pageSize, MAX_PAGE_SIZE) : pageSize;
 
   const { pagination, data } = await getDataFn({ ...pageConfig, pageSize: effectivePageSize });
-  const result = [...data];
+  const items = [...data];
 
   let { totalAvailable, pageNumber } = pagination;
-  while (totalAvailable > result.length && (!limit || limit > result.length)) {
+  while (totalAvailable > items.length && (!limit || limit > items.length)) {
     const { pagination: nextPagination, data: nextData } = await getDataFn({
       pageSize: effectivePageSize,
       pageNumber: pageNumber + 1,
@@ -38,19 +73,28 @@ export async function paginate<T>({ pageConfig, getDataFn }: PaginateArgs<T>): P
 
     if (nextData.length === 0) {
       throw new Error(
-        `No more data available. Last fetched page number: ${pageNumber}, Total available: ${totalAvailable}, Total fetched: ${result.length}`,
+        `No more data available. Last fetched page number: ${pageNumber}, Total available: ${totalAvailable}, Total fetched: ${items.length}`,
       );
     }
 
     ({ totalAvailable, pageNumber } = nextPagination);
-    result.push(...nextData);
+    items.push(...nextData);
   }
 
-  if (limit && limit < result.length) {
-    result.length = limit;
+  if (limit && limit < items.length) {
+    items.length = limit;
   }
 
-  return result;
+  return {
+    items,
+    totalAvailable,
+    truncatedByLimit: totalAvailable > items.length,
+  };
+}
+
+export async function paginate<T>(args: PaginateArgs<T>): Promise<Array<T>> {
+  const { items } = await paginateWithMetadata(args);
+  return items;
 }
 
 const pulsePaginateConfigSchema = z
