@@ -60,15 +60,15 @@ export type StaleContentRow = {
 // `.passthrough()` keeps any additional keys VDS might add without rejecting the row.
 const siteContentRowSchema = z
   .object({
-    'Item ID': z.union([z.string(), z.number()]).optional(),
-    'Item Type': z.string().optional(),
-    'Item Name': z.string().optional(),
-    'Item Parent Project Name': z.string().optional(),
-    'Owner Email': z.string().optional(),
-    'Created At': z.string().optional(),
-    'Updated At': z.string().optional(),
+    'Item ID': z.union([z.string(), z.number()]).nullable().optional(),
+    'Item Type': z.string().nullable().optional(),
+    'Item Name': z.string().nullable().optional(),
+    'Item Parent Project Name': z.string().nullable().optional(),
+    'Owner Email': z.string().nullable().optional(),
+    'Created At': z.string().nullable().optional(),
+    'Updated At': z.string().nullable().optional(),
     'Last Accessed At': z.string().nullable().optional(),
-    'Size (bytes)': z.union([z.number(), z.string()]).optional(),
+    'Size (bytes)': z.union([z.number(), z.string()]).nullable().optional(),
   })
   .passthrough();
 
