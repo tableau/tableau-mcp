@@ -82,7 +82,7 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
         extra,
         args,
         callback: async () => {
-          const result = await useRestApi({
+          const { allUsers, totalAvailable } = await useRestApi({
             ...extra,
             jwtScopes: listUsersTool.requiredApiScopes,
             callback: async (restApi) => {
@@ -92,15 +92,40 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
                 throw new Error(adminResult.error);
               }
 
-              return restApi.usersMethods.listUsers({
-                siteId: restApi.siteId,
-                pageSize: args.pageSize,
-              });
+              const pageSize = args.pageSize ?? 1000;
+              const limit = args.limit ?? Number.MAX_SAFE_INTEGER;
+              const allUsers: User[] = [];
+              let pageNumber = 1;
+              let totalAvailable: number | undefined;
+
+              while (allUsers.length < limit) {
+                const result = await restApi.usersMethods.listUsers({
+                  siteId: restApi.siteId,
+                  pageSize: Math.min(pageSize, 1000),
+                  pageNumber,
+                });
+
+                totalAvailable = result.pagination?.totalAvailable;
+                allUsers.push(...result.users);
+
+                // Stop if we got fewer than pageSize (last page) or no pagination info
+                if (
+                  result.users.length < pageSize ||
+                  !totalAvailable ||
+                  allUsers.length >= totalAvailable
+                ) {
+                  break;
+                }
+
+                pageNumber++;
+              }
+
+              return { allUsers, totalAvailable };
             },
           });
 
           // Apply client-side filtering
-          let filteredUsers = applyUserFilters(result.users, args.filter);
+          let filteredUsers = applyUserFilters(allUsers, args.filter);
 
           // Apply limit to cap total results returned
           if (args.limit) {
@@ -109,7 +134,7 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
 
           const toolResult: ListUsersToolResult = {
             users: filteredUsers,
-            totalAvailable: result.pagination?.totalAvailable,
+            totalAvailable,
           };
           return new Ok(toolResult);
         },

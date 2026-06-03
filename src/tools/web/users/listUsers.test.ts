@@ -61,7 +61,7 @@ describe('listUsersTool', () => {
   it('should successfully get users with totalAvailable', async () => {
     mocks.mockListUsers.mockResolvedValue({
       users: mockUsers,
-      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: mockUsers.length },
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: mockUsers.length },
     });
     const result = await getToolResult({});
     expect(result.isError).toBe(false);
@@ -71,7 +71,8 @@ describe('listUsersTool', () => {
     expect(parsed.totalAvailable).toBe(mockUsers.length);
     expect(mocks.mockListUsers).toHaveBeenCalledWith({
       siteId: 'test-site-id',
-      pageSize: undefined,
+      pageSize: 1000,
+      pageNumber: 1,
     });
   });
 
@@ -201,13 +202,37 @@ describe('listUsersTool', () => {
   it('should pass pageSize to the API for server-side pagination', async () => {
     mocks.mockListUsers.mockResolvedValue({
       users: [mockUser],
-      pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },
+      pagination: { pageNumber: 1, pageSize: 50, totalAvailable: 1 },
     });
     await getToolResult({ pageSize: 50 });
     expect(mocks.mockListUsers).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       pageSize: 50,
+      pageNumber: 1,
     });
+  });
+
+  it('should paginate through all pages when users exceed one page', async () => {
+    const page1Users = Array.from({ length: 100 }, (_, i) => ({ ...mockUser, id: `u-${i}` }));
+    const page2Users = Array.from({ length: 50 }, (_, i) => ({ ...mockUser, id: `u-${100 + i}` }));
+
+    mocks.mockListUsers
+      .mockResolvedValueOnce({
+        users: page1Users,
+        pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 150 },
+      })
+      .mockResolvedValueOnce({
+        users: page2Users,
+        pagination: { pageNumber: 2, pageSize: 100, totalAvailable: 150 },
+      });
+
+    const result = await getToolResult({ pageSize: 100 });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.users).toHaveLength(150);
+    expect(parsed.totalAvailable).toBe(150);
+    expect(mocks.mockListUsers).toHaveBeenCalledTimes(2);
   });
 });
 
