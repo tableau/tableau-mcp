@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
-import { getDirname } from '../utils/getDirname';
+import { getDirname } from '../utils/getDirname.js';
 
 export class DesktopCache {
   private readonly _cacheDirectory: string;

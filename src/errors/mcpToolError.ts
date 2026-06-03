@@ -2,10 +2,10 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
-import { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml';
-import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor';
-import { ExecuteCommandResponseError } from '../sdks/desktop/agentApi/types';
-import { getExceptionMessage } from '../utils/getExceptionMessage';
+import { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml.js';
+import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor.js';
+import { ExecuteCommandResponseError } from '../sdks/desktop/agentApi/types.js';
+import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
 export class McpToolError extends Error {
   readonly type: string;

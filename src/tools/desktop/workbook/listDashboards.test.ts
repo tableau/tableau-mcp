@@ -34,7 +34,7 @@ describe('listDashboardsTool', () => {
     });
     expect(listDashboardsTool.annotations).toMatchObject({
       title: 'List All Dashboards in Workbook',
-      readOnlyHint: false,
+      readOnlyHint: true,
       openWorldHint: false,
     });
   });

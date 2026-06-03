@@ -57,7 +57,9 @@ export function tdsJsonToXml(jsonString: string): string {
   const dom = parser.parse(); // Format DOM to XML
   const formatter = new XMLFormatter();
   return formatter.formatDOM(dom);
-} /**
+}
+
+/**
  * Convert TDS (Tableau Data Source) XML format to JSON format.
  *
  * TDS files contain a standalone datasource element, which is a subset

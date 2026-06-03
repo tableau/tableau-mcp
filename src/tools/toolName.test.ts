@@ -1,6 +1,6 @@
-import { desktopToolNames, isDesktopToolName } from './desktop/toolName';
-import { toolNames } from './toolName';
-import { isWebToolName, webToolNames } from './web/toolName';
+import { desktopToolNames, isDesktopToolName } from './desktop/toolName.js';
+import { toolNames } from './toolName.js';
+import { isWebToolName, webToolNames } from './web/toolName.js';
 
 describe('ToolName', () => {
   it('should verify all tool names are unique and accounted for', () => {

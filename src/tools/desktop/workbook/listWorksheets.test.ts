@@ -34,7 +34,7 @@ describe('listWorksheetsTool', () => {
     });
     expect(listWorksheetsTool.annotations).toMatchObject({
       title: 'List All Worksheets in Workbook',
-      readOnlyHint: false,
+      readOnlyHint: true,
       openWorldHint: false,
     });
   });

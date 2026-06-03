@@ -42,7 +42,7 @@ export const getGetWorkbookXmlTool = (
     description: [
       'Gets the current workbook.',
       'Default mode writes a cache file and returns the path (recommended for large workbooks).',
-      'Use mode=inline to return XML in the response (same payload shape as tableau-save-metadata-xml).',
+      'Use mode=inline to return XML in the response.',
       '⚠️ PREFERRED APPROACH: Use the field manipulation tools (add-field-to-*, etc.) instead of directly editing XML.',
       'To create new worksheets or dashboards, use batch-create-and-cache-sheets.',
       "Only edit XML directly as a last resort when the higher-level tools don't support your use case.",
@@ -51,10 +51,10 @@ export const getGetWorkbookXmlTool = (
     paramsSchema,
     annotations: {
       title,
-      readOnlyHint: false,
+      readOnlyHint: false, // Writes to a cache file
       openWorldHint: false,
-      destructiveHint: false,
-      idempotentHint: false,
+      destructiveHint: false, // A new cache file is created for each tool call
+      idempotentHint: false, // A new cache file is created for each tool call
     },
     callback: async ({ session, mode }, extra): Promise<CallToolResult> => {
       return await getWorkbookXmlTool.logAndExecute<GetWorkbookXmlToolResult>({

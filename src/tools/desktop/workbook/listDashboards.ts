@@ -25,10 +25,8 @@ export const getListDashboardsTool = (
     paramsSchema,
     annotations: {
       title,
-      readOnlyHint: false,
+      readOnlyHint: true,
       openWorldHint: false,
-      destructiveHint: false,
-      idempotentHint: false,
     },
     callback: async ({ session }, extra): Promise<CallToolResult> => {
       return await listDashboardsTool.logAndExecute({

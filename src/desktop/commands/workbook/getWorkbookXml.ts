@@ -1,7 +1,10 @@
 import { Ok, Result } from 'ts-results-es';
 import { z } from 'zod';
 
-import { ExecuteCommandError, WithExecutorAndAbortSignal } from '../../toolExecutor/toolExecutor';
+import {
+  ExecuteCommandError,
+  WithExecutorAndAbortSignal,
+} from '../../toolExecutor/toolExecutor.js';
 
 export async function getWorkbookXml({
   executor,

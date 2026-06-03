@@ -43,16 +43,16 @@ export const getApplyWorkbookTool = (
     description: [
       'Apply modified workbook back to Tableau.',
       'Default mode reads from a cache file (recommended).',
-      'Use mode=inline with workbookXml for small workbooks (same behavior as tableau-load-metadata-xml).',
+      'Use mode=inline with workbookXml for small workbooks.',
       'See expertise://tableau/tableau-tactics/data/datasources before editing datasource XML (object-graph, relationships, connections).',
     ].join(' '),
     paramsSchema,
     annotations: {
       title,
-      readOnlyHint: false,
+      readOnlyHint: false, // writes cache files and updates workbook
       openWorldHint: false,
-      destructiveHint: false,
-      idempotentHint: false,
+      destructiveHint: true, // updates active workbook
+      idempotentHint: false, // each call creates a new cache file
     },
     callback: async (
       { session, mode, workbookFile, workbookXml },
