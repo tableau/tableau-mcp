@@ -14,7 +14,6 @@ export class XMLParser {
     let documentElement: XmlDomElement | HTMLElement | null = null;
 
     try {
-      // Try using @xmldom/xmldom first (Node.js)
       let hadError = false;
       const parser = new DOMParser({
         errorHandler: (level, msg) => {
