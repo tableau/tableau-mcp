@@ -6,6 +6,7 @@ import { getConfig } from '../../../config.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { User } from '../../../sdks/tableau/types/user.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { paginate } from '../../../utils/paginate.js';
 import { assertAdmin } from '../adminGate.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 import { applyUserFilters } from './usersFilterUtils.js';
@@ -78,11 +79,13 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
       openWorldHint: false,
     },
     callback: async (args, extra): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
+
       return await listUsersTool.logAndExecute({
         extra,
         args,
         callback: async () => {
-          const { allUsers, totalAvailable } = await useRestApi({
+          const users = await useRestApi({
             ...extra,
             jwtScopes: listUsersTool.requiredApiScopes,
             callback: async (restApi) => {
@@ -92,49 +95,41 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
                 throw new Error(adminResult.error);
               }
 
-              const pageSize = args.pageSize ?? 1000;
-              const limit = args.limit ?? Number.MAX_SAFE_INTEGER;
-              const allUsers: User[] = [];
-              let pageNumber = 1;
-              let totalAvailable: number | undefined;
+              const maxResultLimit = configWithOverrides.getMaxResultLimit(listUsersTool.name);
 
-              while (allUsers.length < limit) {
-                const result = await restApi.usersMethods.listUsers({
-                  siteId: restApi.siteId,
-                  pageSize: Math.min(pageSize, 1000),
-                  pageNumber,
-                });
+              return paginate({
+                pageConfig: {
+                  pageSize: args.pageSize,
+                  limit: maxResultLimit
+                    ? Math.min(maxResultLimit, args.limit ?? Number.MAX_SAFE_INTEGER)
+                    : args.limit,
+                },
+                getDataFn: async (pageConfig) => {
+                  const result = await restApi.usersMethods.listUsers({
+                    siteId: restApi.siteId,
+                    pageSize: pageConfig.pageSize,
+                    pageNumber: pageConfig.pageNumber,
+                  });
 
-                totalAvailable = result.pagination?.totalAvailable;
-                allUsers.push(...result.users);
-
-                // Stop if we got fewer than pageSize (last page) or no pagination info
-                if (
-                  result.users.length < pageSize ||
-                  !totalAvailable ||
-                  allUsers.length >= totalAvailable
-                ) {
-                  break;
-                }
-
-                pageNumber++;
-              }
-
-              return { allUsers, totalAvailable };
+                  return {
+                    pagination: result.pagination ?? {
+                      pageNumber: pageConfig.pageNumber ?? 1,
+                      pageSize: pageConfig.pageSize ?? 100,
+                      totalAvailable: result.users.length,
+                    },
+                    data: result.users,
+                  };
+                },
+              });
             },
           });
 
           // Apply client-side filtering
-          let filteredUsers = applyUserFilters(allUsers, args.filter);
-
-          // Apply limit to cap total results returned
-          if (args.limit) {
-            filteredUsers = filteredUsers.slice(0, args.limit);
-          }
+          const filteredUsers = applyUserFilters(users, args.filter);
 
           const toolResult: ListUsersToolResult = {
             users: filteredUsers,
-            totalAvailable,
+            totalAvailable: users.length,
           };
           return new Ok(toolResult);
         },
