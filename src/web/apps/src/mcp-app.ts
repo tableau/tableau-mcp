@@ -26,9 +26,6 @@ app.ontoolcancelled = (params) => {
   console.info("Tool call cancelled:", params.reason);
 };
 
-// Register error handler
-app.onerror = console.error;
-
 // Connect to host
 app.connect().then(() => {
   // eslint-disable-next-line no-console
