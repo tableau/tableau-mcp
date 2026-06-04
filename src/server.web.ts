@@ -31,7 +31,7 @@ import { Provider } from './utils/provider.js';
 export const serverName = 'tableau-mcp';
 
 const serverVersion = pkg.version;
-const DIST_DIR = getDirname();
+const __dirname = getDirname();
 
 export class WebMcpServer extends Server {
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
@@ -166,7 +166,7 @@ export class WebMcpServer extends Server {
   ): Promise<void> => {
     invariant(tool.app, `Tool ${tool.name} is an app but no app details were provided`);
 
-    const { resourceUri, html } = tool.app;
+    const { resourceUri, htmlPath } = tool.app;
 
     // Register a tool with UI metadata. When the host calls this tool, it reads
     // `_meta.ui.resourceUri` to know which resource to fetch and render as an
@@ -196,7 +196,7 @@ export class WebMcpServer extends Server {
       resourceUri,
       { mimeType: RESOURCE_MIME_TYPE },
       async () => {
-        const htmlContent = await readFile(join(DIST_DIR, html), 'utf-8');
+        const htmlContent = await readFile(join(__dirname, htmlPath), 'utf-8');
         return {
           contents: [
             {

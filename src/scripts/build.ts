@@ -92,6 +92,11 @@ const globalValues: Record<GlobalIdentifierName, string> = {
       configFile: false, // Don't load vite.config.ts
       root: appsDir,
       plugins: [viteSingleFile()],
+      resolve: {
+        alias: {
+          '~': resolve(process.cwd()),
+        },
+      },
       build: {
         sourcemap: dev ? 'inline' : undefined,
         cssMinify: !dev,

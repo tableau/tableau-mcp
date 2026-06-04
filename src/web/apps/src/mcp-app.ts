@@ -5,8 +5,10 @@ import './mcp-app.css';
 
 import { App } from '@modelcontextprotocol/ext-apps';
 
+import pkg from '~/package.json';
+
 // Create app instance
-const app = new App({ name: 'Tableau MCP App', version: '1.0.0' });
+const app = new App({ name: 'Tableau MCP App', version: pkg.version });
 
 // Connect to host
 app.connect().then(() => {
