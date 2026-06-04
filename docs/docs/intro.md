@@ -6,8 +6,18 @@ sidebar_position: 1
 
 Tableau's official MCP Server. Helping Agents see and understand data.
 
-## Key Features
+This MCP server can be used with any Tableau edition on Cloud or Server, though specific tools may be gated by SKU. For example, Pulse tools would only be when connecting the MCP server to Tableau Cloud because Tableau Pulse is a cloud-only offering. For more information on what is available across editions and hosting environment see: [ADD link!]
 
+## Use Cases
+
+- Chat with your data: Reuse your trusted, curated data models to answer ad-hoc questions that are grounded on your pre-built data semantics and metadata. 
+- Find insights from pre-built data artifacts: Enable agents to query your published workbooks and extract data, images, custom views and more. 
+- Discover and analyze Pulse metrics: Bring 100% accuracy and deterministic AI to any agent by leveraging pulse metric definitions and the pulse insights engine. 
+
+### Coming soon! 
+- Prepare your data and manage prep flows.
+- Manage and Adminster your Tableau environment with admin-focused tools.
+- Collaboratively or Autonomously build Tableau workbooks: Leverage new tools and skills that allow local coding agents to directly work with and take action on Tableau desktop. Drag and drop your way to insights or let an agent do it for you! 
 - Provides access to Tableau published data sources through the [VizQL Data Service (VDS) API][vds].
 - Supports collecting data source metadata (columns with descriptions) through the Tableau [Metadata
   API][meta].
