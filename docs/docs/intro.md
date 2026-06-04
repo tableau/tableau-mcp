@@ -6,7 +6,10 @@ sidebar_position: 1
 
 Tableau's official MCP Server. Helping Agents see and understand data.
 
-This MCP server can be used with any Tableau edition on Cloud or Server, though specific tools may be gated by SKU. For example, Pulse tools would only be when connecting the MCP server to Tableau Cloud because Tableau Pulse is a cloud-only offering. For more information on what is available across editions and hosting environment see: [ADD link!]
+
+[Tableau MCP](https://github.com/tableau/tableau-mcp) is an open source GitHub project that uses the
+[Model Context Protocol](https://modelcontextprotocol.io/introduction) standard for simplifying
+agent-to-Tableau communication, enabling users to bring their Tableau data into AI tools. This MCP server can be used with any Tableau edition on Cloud or Server, though specific tools may be gated by SKU. For more information on what is available across editions and hosting environment see: [ADD link!]
 
 ## Use Cases
 
@@ -18,13 +21,7 @@ This MCP server can be used with any Tableau edition on Cloud or Server, though 
 - Prepare your data and manage prep flows.
 - Manage and Adminster your Tableau environment with admin-focused tools.
 - Collaboratively or Autonomously build Tableau workbooks: Leverage new tools and skills that allow local coding agents to directly work with and take action on Tableau desktop. Drag and drop your way to insights or let an agent do it for you! 
-- Provides access to Tableau published data sources through the [VizQL Data Service (VDS) API][vds].
-- Supports collecting data source metadata (columns with descriptions) through the Tableau [Metadata
-  API][meta].
-- Supports access to Pulse Metric, Pulse Metric Definitions, Pulse Subscriptions, and Pulse Metric
-  Value Insight Bundle through the [Pulse API][pulse].
-- Usable by AI tools which support MCP Tools (e.g., Claude Desktop, Cursor and others).
-- Works with any published data source on either Tableau Cloud or Tableau Server.
+
 
 ## Tool List
 
@@ -35,21 +32,21 @@ This MCP server can be used with any Tableau edition on Cloud or Server, though 
 | [list-projects](tools/projects/list-projects.md)                                                                      | Retrieves a list of projects from a specified Tableau site ([REST API][list-projects])                              |
 | [list-views](tools/views/list-views.md)                                                                               | Retrieves a list of views from a specified Tableau site ([REST API][list-views])                                    |
 | [list-custom-views](tools/views/list-custom-views.md)                                                                 | Retrieves a list of custom views for a specified Tableau workbook ([REST API][list-custom-views])                   |
-| [get-datasource-metadata](tools/data-qna/get-datasource-metadata.md)                                                  | Fetches field metadata for the specified datasource ([Metadata API][meta] & [VDS API][vds])                         |
-| [get-workbook](tools/workbooks/get-workbook.md)                                                                       | Retrieves information on a workbook from a specified Tableau site ([REST API][get-workbook])                        |
-| [get-view-data](tools/views/get-view-data.md)                                                                         | Retrieves data in CSV format for the specified view in a Tableau workbook ([REST API][get-view-data])               |
+| [get-datasource-metadata](tools/data-qna/get-datasource-metadata.md)                                                  | Fetches datasource metadata including table relationships, datasource and field descriptions, field roles and types, calculation strings, and parameters for the specified datasource ([Metadata API][meta] & [VDS API][vds])                         |
+| [get-workbook](tools/workbooks/get-workbook.md)                                                                       | Retrieves information about a workbook for a specified workbook on a Tableau site ([REST API][get-workbook])                        |
+| [get-view-data](tools/views/get-view-data.md)                                                                         | Retrieves data in CSV format for the specified view in a Tableau workbook. *Note: the get-view-data api currently has a limitation that when used on a dashboard sheet type, it will only return data for the first worksheet in the dashboard. This will be fixed starting in 26.3.*([REST API][get-view-data])               |
 | [get-view-image](tools/views/get-view-image.md)                                                                       | Retrieves an image for the specified view in a Tableau workbook ([REST API][get-view-image])                        |
-| [get-custom-view-data](tools/views/get-custom-view-data.md)                                                           | Retrieves data in CSV format for the specified custom view in a Tableau workbook ([REST API][get-custom-view-data]) |
+| [get-custom-view-data](tools/views/get-custom-view-data.md)                                                           | Retrieves data in CSV format for the specified custom view in a Tableau workbook. *Note: the same limitation of get-view-data exists for this tool.* ([REST API][get-custom-view-data]) |
 | [get-custom-view-image](tools/views/get-custom-view-image.md)                                                         | Retrieves an image for a saved custom view ([REST API][get-custom-view-image])                                      |
-| [query-datasource](tools/data-qna/query-datasource.md)                                                                | Run a Tableau VizQL query ([VDS API][vds])                                                                          |
-| [list-all-pulse-metric-definitions](tools/pulse/list-all-pulse-metric-definitions.md)                                 | List All Pulse Metric Definitions ([Pulse API][pulse])                                                              |
-| [list-pulse-metric-definitions-from-definition-ids](tools/pulse/list-pulse-metric-definitions-from-definition-ids.md) | List Pulse Metric Definitions from Metric Definition IDs ([Pulse API][pulse])                                       |
-| [list-pulse-metrics-from-metric-definition-id](tools/pulse/list-pulse-metrics-from-metric-definition-id.md)           | List Pulse Metrics from Metric Definition ID ([Pulse API][pulse])                                                   |
-| [list-pulse-metrics-from-metric-ids](tools/pulse/list-pulse-metrics-from-metric-ids.md)                               | List Pulse Metrics from Metric IDs ([Pulse API][pulse])                                                             |
-| [list-pulse-metric-subscriptions](tools/pulse/list-pulse-metric-subscriptions.md)                                     | List Pulse Metric Subscriptions for Current User ([Pulse API][pulse])                                               |
-| [generate-pulse-metric-value-insight-bundle](tools/pulse/generate-pulse-metric-value-insight-bundle.md)               | Generate Pulse Metric Value Insight Bundle ([Pulse API][pulse])                                                     |
-| [generate-pulse-insight-brief](tools/pulse/generate-pulse-insight-brief.md)                                           | Generate AI-powered Pulse Insight Brief (Discover) ([Pulse API][pulse])                                             |
-| [search-content](tools/content-exploration/search-content.md)                                                         | Searches for content in a Tableau site ([Content Exploration API][content-exploration])                             |
+| [query-datasource](tools/data-qna/query-datasource.md)                                                                | Retrieves json formatted data from a published data source by executing VizQL Data Service requests ([VDS API][vds])                                                                          |
+| [list-all-pulse-metric-definitions](tools/pulse/list-all-pulse-metric-definitions.md)                                 | Lists all Pulse metric definitions on a specific tableau cloud site. ([Pulse API][pulse])                                                              |
+| [list-pulse-metric-definitions-from-definition-ids](tools/pulse/list-pulse-metric-definitions-from-definition-ids.md) | Lists the definition JSON object(s) from Metric Definition IDs ([Pulse API][pulse])                                       |
+| [list-pulse-metrics-from-metric-definition-id](tools/pulse/list-pulse-metrics-from-metric-definition-id.md)           | Lists Pulse metrics that are the children of a Metric Definition ID ([Pulse API][pulse])                                                   |
+| [list-pulse-metrics-from-metric-ids](tools/pulse/list-pulse-metrics-from-metric-ids.md)                               | Lists pulse metric metadata from its associated Metric IDs ([Pulse API][pulse])                                                             |
+| [list-pulse-metric-subscriptions](tools/pulse/list-pulse-metric-subscriptions.md)                                     | List Pulse Metric Subscriptions for the current user ([Pulse API][pulse])                                               |
+| [generate-pulse-metric-value-insight-bundle](tools/pulse/generate-pulse-metric-value-insight-bundle.md)               | Generates a Pulse metric value insight bundle with insight types like period-over-period change, top contributers, bottom contributiors, and more. See [Pulse API][pulse] and [insight types](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#insight-types)                                                   |
+| [generate-pulse-insight-brief](tools/pulse/generate-pulse-insight-brief.md)                                           | Generates an  AI-powered Pulse [Insight Brief](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#EmbeddingsService_GenerateInsightBrief).                                          |
+| [search-content](tools/content-exploration/search-content.md)                                                         | Searches for content in a Tableau site using Tableau's [search API](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_content_exploration.htm#ContentExplorationService_getSearch)                 |
 
 [query]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources
