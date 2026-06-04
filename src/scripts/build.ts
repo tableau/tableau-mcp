@@ -1,7 +1,10 @@
 /* eslint-disable no-console */
 
 import { build, BuildOptions } from 'esbuild';
-import { chmod, mkdir, rm } from 'fs/promises';
+import { chmod, copyFile, mkdir, rm } from 'fs/promises';
+import { resolve } from 'path';
+import { build as viteBuild } from 'vite';
+import { viteSingleFile } from 'vite-plugin-singlefile';
 
 import { GlobalIdentifierName, globalIdentifiers } from './globalIdentifiers.js';
 import { isVariant, variants } from './variants.js';
@@ -81,4 +84,37 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   }
 
   await chmod(buildOptions.outfile, '755');
+
+  console.log('🏗️ Building MCP Apps...');
+  try {
+    const appsDir = resolve(process.cwd(), 'src/web/apps');
+    await viteBuild({
+      configFile: false, // Don't load vite.config.ts
+      root: appsDir,
+      plugins: [viteSingleFile()],
+      build: {
+        sourcemap: dev ? 'inline' : undefined,
+        cssMinify: !dev,
+        minify: !dev,
+        rollupOptions: {
+          input: resolve(appsDir, 'mcp-app.html'),
+        },
+        outDir: resolve(appsDir, 'dist'),
+        emptyOutDir: false,
+      },
+    });
+
+    // Copy built HTML to build directory
+    const buildWebApps = './build/web/apps/dist';
+    await mkdir(buildWebApps, { recursive: true });
+    await copyFile(
+      resolve(appsDir, 'dist/mcp-app.html'),
+      resolve(process.cwd(), buildWebApps, 'mcp-app.html'),
+    );
+
+    console.log('✅ MCP Apps built successfully');
+  } catch (error) {
+    console.error('❌ Failed to build MCP Apps:', error);
+    process.exit(1);
+  }
 })();
