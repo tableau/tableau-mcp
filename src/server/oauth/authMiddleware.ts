@@ -130,7 +130,8 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
           ...(shouldCheckApiScopes ? requiredApiScopes : []),
         ];
         const scopeParam = `scope="${formatScopes(requiredScopesForChallenge)}"`;
-        const wwwAuthenticate = `Bearer realm="MCP", error="insufficient_scope", error_description="Missing required scopes", resource_metadata="${resourceMetadataUrl}", ${scopeParam}`;
+        const errorDescription = `Missing required scopes: ${formatScopes(missingScopes)}`;
+        const wwwAuthenticate = `Bearer realm="MCP", error="insufficient_scope", error_description="${errorDescription}", resource_metadata="${resourceMetadataUrl}", ${scopeParam}`;
 
         if (req.method === 'GET' && req.headers.accept?.includes('text/event-stream')) {
           res.writeHead(403, {
@@ -141,7 +142,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
           });
           res.write('event: error\n');
           res.write(
-            'data: {"error": "insufficient_scope", "error_description": "Missing required scopes"}\n\n',
+            `data: ${JSON.stringify({ error: 'insufficient_scope', error_description: errorDescription })}\n\n`,
           );
           res.end();
           return;
@@ -149,7 +150,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
 
         res.status(403).header('WWW-Authenticate', wwwAuthenticate).json({
           error: 'insufficient_scope',
-          error_description: 'Missing required scopes',
+          error_description: errorDescription,
         });
         return;
       }
