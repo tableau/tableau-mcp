@@ -55,7 +55,7 @@ export default defineConfig({
 
   projects: [
     {
-      name: 'default',
+      name: process.env.TEST_SITE_NAME ?? 'default',
     },
   ],
 
