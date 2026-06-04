@@ -205,6 +205,31 @@ describe('listUsersTool', () => {
     );
   });
 
+  it('should clamp pageSize to 1000 when caller passes a larger value', async () => {
+    mocks.mockListUsers.mockResolvedValue({
+      users: [mockUser],
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 1 },
+    });
+    await getToolResult({ pageSize: 5000 });
+    expect(mocks.mockListUsers).toHaveBeenCalledWith(
+      expect.objectContaining({ siteId: 'test-site-id', pageSize: 1000 }),
+    );
+  });
+
+  it('should report totalAvailable from REST pagination, not array length', async () => {
+    const page1Users = Array.from({ length: 5 }, (_, i) => ({ ...mockUser, id: `u-${i}` }));
+    mocks.mockListUsers.mockResolvedValue({
+      users: page1Users,
+      pagination: { pageNumber: 1, pageSize: 1000, totalAvailable: 27034 },
+    });
+    const result = await getToolResult({ limit: 5 });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed.users).toHaveLength(5);
+    expect(parsed.totalAvailable).toBe(27034);
+  });
+
   it('should paginate through all pages when users exceed one page', async () => {
     const page1Users = Array.from({ length: 100 }, (_, i) => ({ ...mockUser, id: `u-${i}` }));
     const page2Users = Array.from({ length: 50 }, (_, i) => ({ ...mockUser, id: `u-${100 + i}` }));

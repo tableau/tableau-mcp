@@ -85,6 +85,8 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
         extra,
         args,
         callback: async () => {
+          let siteTotalAvailable: number | undefined;
+
           const users = await useRestApi({
             ...extra,
             jwtScopes: listUsersTool.requiredApiScopes,
@@ -111,14 +113,17 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
                     pageNumber: pageConfig.pageNumber,
                   });
 
-                  return {
-                    pagination: result.pagination ?? {
-                      pageNumber: pageConfig.pageNumber ?? 1,
-                      pageSize: pageConfig.pageSize ?? 100,
-                      totalAvailable: result.users.length,
-                    },
-                    data: result.users,
+                  const pagination = result.pagination ?? {
+                    pageNumber: pageConfig.pageNumber ?? 1,
+                    pageSize: pageConfig.pageSize ?? 100,
+                    totalAvailable: result.users.length,
                   };
+
+                  if (siteTotalAvailable === undefined) {
+                    siteTotalAvailable = pagination.totalAvailable;
+                  }
+
+                  return { pagination, data: result.users };
                 },
               });
             },
@@ -129,7 +134,7 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
 
           const toolResult: ListUsersToolResult = {
             users: filteredUsers,
-            totalAvailable: users.length,
+            totalAvailable: siteTotalAvailable,
           };
           return new Ok(toolResult);
         },
