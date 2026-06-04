@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(source * && npm *)",
+      "Bash(sf data query *)",
+      "Bash(sf data create *)",
+      "Bash(sf data update *)",
+      "Bash(gh *)",
+      "Read",
+      "Edit(*.ts)",
+      "Edit(*.tsx)",
+      "Edit(*.js)",
+      "Edit(*.jsx)",
+      "Edit(*.json)",
+      "Edit(*.md)",
+      "Edit(.claude/skills/*)",
+      "Edit(package.json)",
+      "Edit(tsconfig*)",
+      "Write(*.ts)",
+      "Write(*.tsx)",
+      "Write(*.js)",
+      "Write(*.jsx)",
+      "Write(*.json)",
+      "Write(*.md)",
+      "Write(.claude/skills/*)"
+    ]
+  }
+}
