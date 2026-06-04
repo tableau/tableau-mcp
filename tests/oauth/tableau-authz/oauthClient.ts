@@ -106,7 +106,10 @@ export class OAuthClient {
       if (error instanceof UnauthorizedError) {
         console.log('[OAuthClient] OAuth required - waiting for authorization');
 
-        invariant(getAuthZCodeFn, 'getAuthZCodeFn is required for authorization');
+        if (!getAuthZCodeFn) {
+          throw new Error('Authenticated transport connection failed', { cause: error });
+        }
+
         const authCode = await getAuthZCodeFn({
           authorizationUrl: await this.authUrlPromise,
           callbackUrl: this.oauthCallbackUrl,

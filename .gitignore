@@ -24,5 +24,6 @@ tableau-mcp.mcpb
 /test-results/
 /playwright-report/
 /blob-report/
+/blob-reports/
 /playwright/.cache/
 /playwright/.auth/
