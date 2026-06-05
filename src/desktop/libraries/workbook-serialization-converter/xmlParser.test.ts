@@ -1,4 +1,5 @@
-import { jsonToXml, xmlToJson } from './converter.js';
+import { DOM, DOMElement } from './dom.js';
+import { XMLFormatter } from './xmlFormatter.js';
 import { XMLParser } from './xmlParser.js';
 
 describe('XMLParser', () => {
@@ -109,22 +110,23 @@ describe('XMLParser', () => {
 
   describe('round-trip semantic-loss documentation', () => {
     it('CDATA containing ]]> round-trips correctly via split-CDATA serialization', () => {
-      const original = '<calc><![CDATA[x ]]> y]]></calc>';
-      const json = xmlToJson(original);
-      const backToXml = jsonToXml(json);
-      // Re-parse to verify the value survived
-      const reparsed = new XMLParser(backToXml).parse();
+      // Build a DOMElement directly — the literal string <calc><![CDATA[x ]]> y]]></calc>
+      // is already malformed XML so it can't be used as input to XMLParser.
+      const dom = new DOM();
+      dom.getRoot().addChild(new DOMElement('calc', {}, 'x ]]> y', true));
+      const xml = new XMLFormatter().formatDOM(dom, false);
+      // Re-parse: xmldom reassembles adjacent CDATA sections into a single text node
+      const reparsed = new XMLParser(xml).parse();
       expect(reparsed.getDocumentRoot()!.text).toBe('x ]]> y');
     });
 
-    it('attribute with newline entity (&#10;) is normalized to a space by the XML spec', () => {
-      // XML 1.0 §3.3.3: attribute-value normalization replaces &#10; with a space before
-      // the parser hands it to the application. This is spec-compliant behaviour, not a bug,
-      // but callers should be aware the literal newline is unrecoverable after a round-trip.
+    it('attribute with newline entity (&#10;) is preserved as a literal newline by @xmldom/xmldom', () => {
+      // Note: the XML 1.0 spec §3.3.3 says attribute-value normalization should replace
+      // &#10; with a space, but @xmldom/xmldom delivers the literal newline instead.
+      // Callers should not rely on either behaviour being portable across XML parsers.
       const xml = '<el caption="line1&#10;line2" />';
       const dom = new XMLParser(xml).parse();
-      // xmldom normalizes the newline entity to a space per spec
-      expect(dom.getDocumentRoot()!.attributes.caption).toBe('line1 line2');
+      expect(dom.getDocumentRoot()!.attributes.caption).toBe('line1\nline2');
     });
 
     it('XML comments are dropped — not represented in the intermediate DOM', () => {

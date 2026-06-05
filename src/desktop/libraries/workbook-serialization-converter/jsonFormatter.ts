@@ -8,6 +8,7 @@ interface JSONNode {
   type?: string;
   attrs?: DOMElementAttributes;
   content?: string;
+  encoded?: boolean;
   children?: JSONNode[];
 }
 
@@ -40,7 +41,7 @@ export class JSONFormatter {
 
   private outputDOMElement(element: DOMElement): void {
     // Output a DOM element to JSON (matching OutputDOMElement)
-    this.outputAnObject(element.name, element.attributes, element.text, element.children);
+    this.outputAnObject(element.name, element.attributes, element.text, element.encoded, element.children);
     // Note: OutputCloseTag is handled in outputAnObject
   }
 
@@ -48,6 +49,7 @@ export class JSONFormatter {
     tag: string,
     attributes: DOMElementAttributes,
     content: string,
+    encoded: boolean,
     children: DOMElement[],
   ): void {
     /**
@@ -75,6 +77,9 @@ export class JSONFormatter {
     // Add content if present
     if (content) {
       tagObj.content = content;
+      if (encoded) {
+        tagObj.encoded = true;
+      }
     }
 
     // Add to parent array

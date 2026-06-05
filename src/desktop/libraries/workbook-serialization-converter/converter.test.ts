@@ -147,7 +147,6 @@ describe('round-trip', () => {
     const original = '<formula><![CDATA[SUM([Sales]) > 0]]></formula>';
     const json = xmlToJson(original);
     const backToXml = jsonToXml(json);
-    // CDATA content should be preserved (either as CDATA or escaped text)
-    expect(backToXml).toContain('SUM([Sales]) > 0');
+    expect(backToXml).toContain('<![CDATA[SUM([Sales]) > 0]]>');
   });
 });

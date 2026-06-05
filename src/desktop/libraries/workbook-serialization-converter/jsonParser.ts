@@ -2,6 +2,7 @@ import { DOM, DOMElement, DOMElementAttributes } from './dom.js';
 
 interface SAXInterface {
   startElement(name: string, attributes: DOMElementAttributes): void;
+  setEncoded(): void;
   textContent(text: string): void;
   endElement(): void;
 }
@@ -20,6 +21,12 @@ class SAXHandler implements SAXInterface {
     const element = new DOMElement(name, attributes);
     parent.addChild(element);
     this.stack.push(element);
+  }
+
+  setEncoded(): void {
+    if (this.stack.length > 0) {
+      this.stack[this.stack.length - 1].encoded = true;
+    }
   }
 
   textContent(text: string): void {
@@ -83,6 +90,7 @@ export class JSONParser {
     const tagName = obj.type || '';
     const attrs = obj.attrs || {};
     const content = obj.content;
+    const encoded = !!obj.encoded;
     const children = obj.children;
 
     // Convert attrs dict values to strings (matching ValueToString logic)
@@ -96,6 +104,10 @@ export class JSONParser {
     }
 
     this.sax!.startElement(tagName, attributes);
+
+    if (encoded) {
+      this.sax!.setEncoded();
+    }
 
     // Parse children if present
     if (children !== undefined) {

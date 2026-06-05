@@ -31,6 +31,7 @@ describe('loadWorkbookXml', () => {
         Ok({
           command_id: 'cmd-123',
           status: 'completed',
+          submitted_at: '',
         }),
       ),
     } as unknown as LocalExecutor;
@@ -65,6 +66,7 @@ describe('loadWorkbookXml', () => {
         Ok({
           command_id: 'cmd-123',
           status: 'completed',
+          submitted_at: '',
           parsedResult: {
             status: 'completed',
           },
@@ -98,9 +100,8 @@ describe('loadWorkbookXml', () => {
       executeCommand: vi
         .fn()
         .mockResolvedValueOnce(
-          Ok({
-            command_id: 'cmd-123',
-            status: 'failed',
+          Err({
+            type: 'command-failed',
             error: { code: 'ERROR', message: 'Failed to load', recoverable: false },
           }),
         )
@@ -108,6 +109,7 @@ describe('loadWorkbookXml', () => {
           Ok({
             command_id: 'cmd-124',
             status: 'completed',
+            submitted_at: '',
             parsedResult: {
               status: 'completed',
             },
@@ -199,6 +201,7 @@ describe('loadWorkbookXml', () => {
         Ok({
           command_id: 'cmd-123',
           status: 'failed',
+          submitted_at: '',
           error: { code: 'LOAD_ERROR', message: 'Failed to load XML', recoverable: false },
           parsedResult: {
             status: 'failed',
@@ -251,6 +254,7 @@ describe('loadWorkbookXml', () => {
         Ok({
           command_id: 'cmd-123',
           status: 'completed',
+          submitted_at: '',
         }),
       ),
     } as unknown as LocalExecutor;
@@ -284,6 +288,7 @@ describe('loadWorkbookXml', () => {
         Ok({
           command_id: 'cmd-123',
           status: 'completed',
+          submitted_at: '',
         }),
       ),
     } as unknown as LocalExecutor;
@@ -318,6 +323,7 @@ describe('loadWorkbookXml', () => {
         Ok({
           command_id: 'cmd-123',
           status: 'completed',
+          submitted_at: '',
         }),
       ),
     } as unknown as LocalExecutor;
