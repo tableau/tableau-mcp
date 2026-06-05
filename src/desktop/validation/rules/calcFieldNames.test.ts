@@ -74,6 +74,8 @@ describe('calc-field-names rule — false-positive guards', () => {
 </workbook>`;
     const result = runValidation(xml, 'workbook', [calcFieldNamesRule]);
     expect(result.valid).toBe(true);
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0].severity).toBe('warning');
   });
 
   it('bin columns do not block validation', () => {
@@ -90,6 +92,8 @@ describe('calc-field-names rule — false-positive guards', () => {
 </workbook>`;
     const result = runValidation(xml, 'workbook', [calcFieldNamesRule]);
     expect(result.valid).toBe(true);
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0].severity).toBe('warning');
   });
 
   it('copy-pattern columns do not block validation', () => {
@@ -106,6 +110,8 @@ describe('calc-field-names rule — false-positive guards', () => {
 </workbook>`;
     const result = runValidation(xml, 'workbook', [calcFieldNamesRule]);
     expect(result.valid).toBe(true);
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0].severity).toBe('warning');
   });
 
   it('auto-columns do not block validation', () => {
@@ -122,6 +128,8 @@ describe('calc-field-names rule — false-positive guards', () => {
 </workbook>`;
     const result = runValidation(xml, 'workbook', [calcFieldNamesRule]);
     expect(result.valid).toBe(true);
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0].severity).toBe('warning');
   });
 });
 
