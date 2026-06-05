@@ -10,35 +10,24 @@ export class XMLParser {
   }
 
   parse(): DOM {
-    // Parse XML string into DOM
+    // Reject DOCTYPE declarations upfront — TWB/TDS files never need them,
+    // and allowing them opens the door to XXE and entity-expansion attacks.
+    if (/<!DOCTYPE/i.test(this.xmlString)) {
+      throw new Error('Invalid XML: DOCTYPE declarations are not allowed');
+    }
+
     let documentElement: XmlDomElement | HTMLElement | null = null;
 
     try {
-      let hadError = false;
       const parser = new DOMParser({
         errorHandler: (level, msg) => {
-          if (level === 'error') {
-            hadError = true;
-          } else if (level === 'fatalError') {
-            hadError = true;
+          if (level === 'error' || level === 'fatalError') {
             throw new Error(`Invalid XML: ${msg}`);
           }
         },
       });
 
       const xmlDoc = parser.parseFromString(this.xmlString, 'text/xml');
-
-      // Check for parsing errors
-      const parserError = xmlDoc.getElementsByTagName('parsererror');
-      if (parserError && parserError.length > 0) {
-        const errorText = parserError[0].textContent || 'Unknown parsing error';
-        throw new Error(`Invalid XML: ${errorText}`);
-      }
-
-      // Check if document has a valid root element
-      if (!xmlDoc.documentElement && hadError) {
-        throw new Error('Invalid XML: parsing failed');
-      }
 
       documentElement = xmlDoc.documentElement;
     } catch (e: any) {
