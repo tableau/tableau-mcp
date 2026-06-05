@@ -13,6 +13,7 @@ const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedFor
 
 const mocks = vi.hoisted(() => ({
   mockGetView: vi.fn(),
+  mockGraphql: vi.fn(),
   mockResourceAccessChecker: {
     isViewAllowed: vi.fn(),
   },
@@ -23,6 +24,9 @@ vi.mock('../../../restApiInstance.js', () => ({
     callback({
       viewsMethods: {
         getView: mocks.mockGetView,
+      },
+      metadataMethods: {
+        graphql: mocks.mockGraphql,
       },
       siteId: 'test-site-id',
     }),
@@ -154,11 +158,116 @@ describe('getViewTool', () => {
       expect(result.content[0].text).toContain('does not have one of the allowed tags');
     }
   });
+
+  it('successfully enriches view with lineage data', async () => {
+    const viewWithUsage = {
+      ...mockView,
+      usage: {
+        totalViewCount: 100,
+      },
+    };
+
+    mocks.mockGetView.mockResolvedValue(viewWithUsage);
+    mocks.mockGraphql.mockResolvedValue({
+      data: {
+        sheetsConnection: {
+          nodes: [
+            {
+              luid: mockView.id,
+              upstreamDatasources: [
+                { luid: 'ds-123', name: 'Sales Data' },
+                { luid: 'ds-456', name: 'Customer Data' },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    const result = await getToolResult({ viewId: mockView.id });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const content = JSON.parse(result.content[0].text);
+    expect(content.upstreamDatasources).toBeDefined();
+    expect(content.upstreamDatasources).toHaveLength(2);
+    expect(content.upstreamDatasources[0].luid).toBe('ds-123');
+    expect(content.totalViewCount).toBe(100);
+  });
+
+  it('returns view without lineage when Metadata API fails', async () => {
+    const viewWithUsage = {
+      ...mockView,
+      usage: {
+        totalViewCount: 50,
+      },
+    };
+
+    mocks.mockGetView.mockResolvedValue(viewWithUsage);
+    mocks.mockGraphql.mockRejectedValue(new Error('Metadata API unavailable'));
+
+    const result = await getToolResult({ viewId: mockView.id });
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const content = JSON.parse(result.content[0].text);
+    expect(content.id).toBe(mockView.id);
+    expect(content.totalViewCount).toBe(50);
+    expect(content.upstreamDatasources).toBeUndefined();
+  });
+
+  it('filters upstream datasources by allowlist', async () => {
+    const viewWithUsage = {
+      ...mockView,
+      usage: {
+        totalViewCount: 75,
+      },
+    };
+
+    mocks.mockGetView.mockResolvedValue(viewWithUsage);
+    mocks.mockGraphql.mockResolvedValue({
+      data: {
+        sheetsConnection: {
+          nodes: [
+            {
+              luid: mockView.id,
+              upstreamDatasources: [
+                { luid: 'ds-allowed', name: 'Allowed DS' },
+                { luid: 'ds-blocked', name: 'Blocked DS' },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    const result = await getToolResult(
+      { viewId: mockView.id },
+      {
+        disableMetadataApiRequests: false,
+        boundedContextOverrides: {
+          datasourceIds: new Set(['ds-allowed']),
+        },
+      }
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const content = JSON.parse(result.content[0].text);
+    expect(content.upstreamDatasources).toBeDefined();
+    expect(content.upstreamDatasources).toHaveLength(1);
+    expect(content.upstreamDatasources[0].luid).toBe('ds-allowed');
+  });
 });
 
 async function getToolResult(
   params: { viewId: string },
-  configOverrides?: { disableMetadataApiRequests?: boolean },
+  configOverrides?: {
+    disableMetadataApiRequests?: boolean;
+    boundedContextOverrides?: {
+      datasourceIds?: Set<string>;
+    };
+  },
 ): Promise<CallToolResult> {
   const getViewTool = getGetViewTool(new WebMcpServer());
   const callback = await Provider.from(getViewTool.callback);
@@ -169,7 +278,7 @@ async function getToolResult(
       disableMetadataApiRequests: configOverrides.disableMetadataApiRequests ?? false,
       boundedContext: {
         projectIds: null,
-        datasourceIds: null,
+        datasourceIds: configOverrides.boundedContextOverrides?.datasourceIds ?? null,
         workbookIds: null,
         viewIds: null,
         tags: null,
