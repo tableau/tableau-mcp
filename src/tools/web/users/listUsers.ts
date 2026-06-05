@@ -111,6 +111,9 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
                     siteId: restApi.siteId,
                     pageSize: pageConfig.pageSize,
                     pageNumber: pageConfig.pageNumber,
+                    includeUserCount: true,
+                    includeSSOInfo: false,
+                    includeGroups: false,
                   });
 
                   const pagination = result.pagination ?? {

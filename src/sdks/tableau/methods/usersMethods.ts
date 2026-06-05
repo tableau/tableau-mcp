@@ -26,33 +26,40 @@ export default class UsersMethods extends AuthenticatedMethods<typeof usersApis>
 
   /**
    * Returns a list of users on the site with pagination metadata.
-   * Passes includeUserCount=true for total count, but includeSSOInfo=false
-   * and includeGroups=false to minimize DB and SAML DDB load on large sites.
    *
    * Required scopes (Tableau Cloud): `tableau:users:read`
    *
    * @param siteId - The Tableau site ID
    * @param pageSize - Number of users per page (default 100, max 1000)
    * @param pageNumber - Page offset (default 1)
+   * @param includeUserCount - Include total user count in pagination metadata
+   * @param includeSSOInfo - Include SSO/SAML info per user
+   * @param includeGroups - Include group memberships per user
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#get_users_on_site
    */
   listUsers = async ({
     siteId,
     pageSize,
     pageNumber,
+    includeUserCount,
+    includeSSOInfo,
+    includeGroups,
   }: {
     siteId: string;
     pageSize?: number;
     pageNumber?: number;
+    includeUserCount?: boolean;
+    includeSSOInfo?: boolean;
+    includeGroups?: boolean;
   }): Promise<ListUsersResult> => {
     const response = await this._apiClient.listUsers({
       params: { siteId },
       queries: {
         pageSize,
         pageNumber,
-        includeUserCount: true,
-        includeSSOInfo: false,
-        includeGroups: false,
+        includeUserCount,
+        includeSSOInfo,
+        includeGroups,
       },
       ...this.authHeader,
     });
