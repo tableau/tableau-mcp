@@ -23,6 +23,7 @@ import { getGetViewDataTool } from './views/getViewData.js';
 import { getGetViewImageTool } from './views/getViewImage.js';
 import { getListCustomViewsTool } from './views/listCustomViews.js';
 import { getListViewsTool } from './views/listViews.js';
+import { getGetViewTool } from './views/getView.js';
 import { getGetWorkbookTool } from './workbooks/getWorkbook.js';
 import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 
@@ -40,6 +41,7 @@ export const webToolFactories = [
   getGeneratePulseMetricValueInsightBundleTool,
   getGeneratePulseInsightBriefTool,
   getGetWorkbookTool,
+  getGetViewTool,
   getGetViewDataTool,
   getGetViewImageTool,
   getListWorkbooksTool,
