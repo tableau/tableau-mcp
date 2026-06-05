@@ -115,6 +115,9 @@ export const getApplyWorkbookTool = (
                 return new WorkbookXmlLoadFailedError(error).toErr();
               case 'load-underlying-metadata-error':
                 return new LoadUnderlyingMetadataError(error).toErr();
+              default: {
+                const _: never = type;
+              }
             }
           }
 
