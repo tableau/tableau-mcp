@@ -27,28 +27,19 @@ records of extract refresh jobs, subscription jobs, flow runs, and bridge jobs o
 Cloud site. This tool is restricted to Tableau site administrators on Tableau Cloud sites with Admin
 Insights enabled.
 
-Caller supplies a fully formed VDS \`query\` object with at least one entry in \`fields\`. Each field
-uses \`fieldCaption\` matching the column names below. Common usage:
+Caller supplies a fully formed VDS \`query\` object (fields, filters, parameters). Common usage:
 - Analyze extract refresh durations and failure rates per datasource or workbook.
 - Identify extracts with high consecutive failure counts or long run times.
 - Compare scheduled frequency against actual job completion times to recommend schedule optimization.
 - Find jobs that overlap or compete for resources in the same time window.
 
-Available field captions (use exact names with \`fieldCaption\`):
-- **Job identity**: Job ID, Job LUID, Job Type, Job Result, Final Job Result
-- **Item details**: Item ID, Item LUID, Item Name, Item Type, Item Hyperlink
-- **Timing (UTC)**: Created At, Queued At, Started At, Completed At, Overflow Queued At
-- **Timing (local)**: Created At (local), Queued At (local), Started At (local), Completed At (local), Overflow Queued At (local)
-- **Durations (seconds)**: Job Duration, Job Execution Duration, Job Queued Duration, Job Overflow Queued Duration
-- **Schedule**: Schedule Name, Schedule LUID
-- **Owner/Project**: Owner Email, Parent Project Name, Parent Project Owner Email
-- **Extract**: Extract File Size
-- **Subscription**: Subscriber Email, Subscriber ID, Subscription Subject
-- **Bridge**: Agent Name, Agent Version, Agent Timezone, Agent is Pooled?, Pool Name, Bridge Started At, Bridge Completed At, Bridge Started At (Local), Bridge Completed At (Local), Bridge Refresh Duration, Bridge Extract Upload Duration, Bridge Job Result, Bridge Error Message, Bridge Error Type, Bridge Initiator User Name
-- **Flags**: Was Manual Run, Was Overflow Queued
-- **Other**: Error Message, Admin Insights Published At
+Key field captions include: Job ID, Job Type, Job Result, Item Name, Item Type, Started At,
+Completed At, Job Duration, Job Execution Duration, Schedule Name, Owner Email, Extract File Size.
+For the full list of 52 available fields, use \`get-datasource-metadata\` on the Job Performance
+datasource or see the tool documentation.
 
-Parameters: Timezone (integer offset, e.g. -7 for PDT)
+The datasource exposes a Timezone parameter that adjusts local-time fields. Pass it inside
+\`query.parameters\` as \`{ "parameterCaption": "Timezone", "dataType": "INTEGER", "value": -7 }\`.
 
 Example query:
 \`\`\`json
