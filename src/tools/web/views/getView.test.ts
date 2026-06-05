@@ -258,6 +258,35 @@ describe('getViewTool', () => {
     expect(content.upstreamDatasources).toHaveLength(1);
     expect(content.upstreamDatasources[0].luid).toBe('ds-allowed');
   });
+
+  it('flattens usage stats with zero count when usage is undefined', async () => {
+    const tool = getGetViewTool(new WebMcpServer());
+
+    mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
+      allowed: true,
+    });
+
+    const viewWithoutUsage: typeof mockView = {
+      ...mockView,
+    };
+
+    mocks.mockGetView.mockResolvedValue(viewWithoutUsage);
+
+    const result = await getToolResult(
+      { viewId: mockView.id },
+      {
+        disableMetadataApiRequests: true,
+      }
+    );
+
+    expect(result.isError).toBe(false);
+    if (!result.isError) {
+      invariant(result.content[0].type === 'text');
+      const content = JSON.parse(result.content[0].text);
+      expect(content.totalViewCount).toBe(0);
+      expect(content.usage).toBeUndefined();
+    }
+  });
 });
 
 async function getToolResult(
