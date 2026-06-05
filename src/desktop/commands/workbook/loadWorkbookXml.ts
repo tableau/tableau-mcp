@@ -122,32 +122,30 @@ async function loadUnderlyingMetadataByFilepath({
   });
 
   if (result.isErr()) {
+    const { error } = result;
+    if (error.type === 'command-failed') {
+      log({
+        level: 'warning',
+        message: 'File-path approach did not complete, falling back to text',
+        logger: 'workbookCommands',
+        data: {
+          error: error.error,
+        },
+      });
+
+      return loadUnderlyingMetadataByText({ xml, executor, signal });
+    }
+
     return Err({ type: 'execute-command-error', error: result.error });
   }
 
-  const { error, status } = result.value;
-
-  if (status === 'completed') {
-    log({
-      level: 'info',
-      message: 'load-underlying-metadata (filepath/JSON) completed',
-      logger: 'workbookCommands',
-    });
-
-    return Ok.EMPTY;
-  }
-
   log({
-    level: 'warning',
-    message: 'File-path approach did not complete, falling back to text',
+    level: 'info',
+    message: 'load-underlying-metadata (filepath/JSON) completed',
     logger: 'workbookCommands',
-    data: {
-      status,
-      error: error?.message ?? 'none',
-    },
   });
 
-  return loadUnderlyingMetadataByText({ xml, executor, signal });
+  return Ok.EMPTY;
 }
 
 async function loadUnderlyingMetadataByText({
