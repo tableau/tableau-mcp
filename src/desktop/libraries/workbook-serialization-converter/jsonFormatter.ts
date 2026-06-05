@@ -41,7 +41,13 @@ export class JSONFormatter {
 
   private outputDOMElement(element: DOMElement): void {
     // Output a DOM element to JSON (matching OutputDOMElement)
-    this.outputAnObject(element.name, element.attributes, element.text, element.encoded, element.children);
+    this.outputAnObject(
+      element.name,
+      element.attributes,
+      element.text,
+      element.encoded,
+      element.children,
+    );
     // Note: OutputCloseTag is handled in outputAnObject
   }
 
