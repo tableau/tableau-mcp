@@ -43,6 +43,9 @@ Tableau's official MCP Server. Helping Agents see and understand data.
 | [query-admin-insights-ts-events](tools/admin-insights/query-admin-insights-ts-events.md)                              | Admin-only. Issues a VDS query against the Admin Insights `TS Events` datasource ([VDS API][vds])                   |
 | [query-admin-insights-site-content](tools/admin-insights/query-admin-insights-site-content.md)                        | Admin-only. Issues a VDS query against the Admin Insights `Site Content` datasource ([VDS API][vds])                |
 | [get-stale-content-report](tools/admin-insights/get-stale-content-report.md)                                          | Admin-only. Deterministic stale-content report from `Site Content` ([VDS API][vds])                                 |
+| [list-users](tools/users/list-users.md)                                                                               | Admin-only. Retrieves a list of users on the Tableau site ([REST API][list-users])                                  |
+| [list-extract-refresh-tasks](tools/tasks/list-extract-refresh-tasks.md)                                               | Admin-only. Lists extract refresh tasks for the site ([REST API][list-extract-refresh-tasks])                       |
+| [list-schedules](tools/tasks/list-schedules.md)                                                                       | Admin-only. Lists the site's refresh schedules, aggregated from extract refresh tasks ([REST API][list-extract-refresh-tasks]) |
 
 [query]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources
@@ -50,6 +53,10 @@ Tableau's official MCP Server. Helping Agents see and understand data.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbooks_for_site
 [list-projects]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_projects.htm#query_projects
+[list-users]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#get_users_on_site
+[list-extract-refresh-tasks]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#list_extract_refresh_tasks_in_site
 [list-views]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_views_for_site
 [list-custom-views]:

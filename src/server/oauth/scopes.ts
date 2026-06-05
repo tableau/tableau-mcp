@@ -83,6 +83,12 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:users:read'],
     api: new Set(['tableau:users:read']),
   },
+  // Aggregates schedules from extract refresh tasks; reuses the tasks read scope.
+  // 'tableau:users:read' is required by adminGate.assertAdmin.
+  'list-schedules': {
+    mcp: ['tableau:mcp:tasks:read'],
+    api: new Set(['tableau:tasks:read', 'tableau:users:read']),
+  },
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
@@ -223,6 +229,7 @@ function getEnabledToolNames(): Set<WebToolName> {
   if (!config.adminToolsEnabled) {
     enabledTools.delete('list-extract-refresh-tasks');
     enabledTools.delete('list-users');
+    enabledTools.delete('list-schedules');
     enabledTools.delete('query-admin-insights-ts-events');
     enabledTools.delete('query-admin-insights-site-content');
     enabledTools.delete('get-stale-content-report');
