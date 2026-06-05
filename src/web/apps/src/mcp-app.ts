@@ -12,6 +12,5 @@ const app = new App({ name: 'Tableau MCP App', version: pkg.version });
 
 // Connect to host
 app.connect().then(() => {
-  // eslint-disable-next-line no-console
   console.info('Tableau MCP App connected!');
 });
