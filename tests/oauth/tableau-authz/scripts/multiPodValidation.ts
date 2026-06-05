@@ -6,11 +6,11 @@ import { join } from 'path';
 // https://salesforce.enterprise.slack.com/docs/T5J4Q04QG/F0B7Q4Z2QLX
 const SITES = [
   'mcp-uwc-test',
-  //'mcp-uw2a-test',
+  //'mcp-uw2a-test', Failure to create site in UW2A
   'mcp-uw2b-test',
   'mcp-10ax-test',
   'mcp-10ay-test',
-  //'mcp-10az-test',
+  //'mcp-10az-test', Unable to create site in 10AZ
   'mcp-caa-test',
   'mcp-uea-test',
   'mcp-ueb-test',
@@ -19,13 +19,13 @@ const SITES = [
   'mcp-dub01-test',
   'mcp-ew1a-test',
   'mcp-uka-test',
-  // 'mcp-cha-test',
-  // 'mcp-apsea-test',
-  // 'mcp-apseb-test',
-  // 'mcp-apsec-test',
-  // 'mcp-apnea-test',
-  // 'mcp-kra-test',
-  // 'mcp-ina-test',
+  'mcp-cha-test',
+  'mcp-apsea-test',
+  'mcp-apseb-test',
+  'mcp-apsec-test',
+  'mcp-apnea-test',
+  'mcp-kra-test',
+  'mcp-ina-test',
 ];
 
 type SiteResult = {
