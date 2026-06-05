@@ -56,7 +56,6 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
                 let view = await restApi.viewsMethods.getView({
                   viewId,
                   siteId: restApi.siteId,
-                  includeUsageStatistics: true,
                 });
 
                 if (configWithOverrides.disableMetadataApiRequests) {

@@ -73,7 +73,6 @@ describe('getViewTool', () => {
     expect(mocks.mockGetView).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       viewId: mockView.id,
-      includeUsageStatistics: true,
     });
   });
 });
