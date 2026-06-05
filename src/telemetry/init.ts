@@ -41,7 +41,6 @@ function validateTelemetryProvider(provider: unknown): asserts provider is Telem
 
 // Use global to share provider across bundles (tracing.js and index.js)
 declare global {
-  // eslint-disable-next-line no-var
   var __telemetryProvider: TelemetryProvider | undefined;
 }
 
