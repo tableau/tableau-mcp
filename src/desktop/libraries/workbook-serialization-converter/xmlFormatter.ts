@@ -42,7 +42,8 @@ export class XMLFormatter {
     } else if (element.text && element.children.length === 0) {
       // Text content only — use CDATA if flagged (preserves SQL, formulas etc.)
       if (element.encoded) {
-        line += `><![CDATA[${element.text}]]></${element.name}>`;
+        const safeText = element.text.replaceAll(']]>', ']]]]><![CDATA[>');
+        line += `><![CDATA[${safeText}]]></${element.name}>`;
       } else {
         const escapedText = this.escapeXMLContent(element.text);
         line += `>${escapedText}</${element.name}>`;

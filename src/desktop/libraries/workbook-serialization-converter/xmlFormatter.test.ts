@@ -1,5 +1,6 @@
 import { DOM, DOMElement } from './dom.js';
 import { XMLFormatter } from './xmlFormatter.js';
+import { XMLParser } from './xmlParser.js';
 
 function makeDOM(root: DOMElement): DOM {
   const dom = new DOM();
@@ -43,6 +44,23 @@ describe('XMLFormatter', () => {
       const el = new DOMElement('formula', {}, 'SELECT * FROM "table"', true);
       const result = new XMLFormatter().formatDOM(makeDOM(el), false);
       expect(result).toContain('<![CDATA[SELECT * FROM "table"]]>');
+    });
+
+    it('splits embedded ]]> terminator in CDATA to keep XML well-formed', () => {
+      const el = new DOMElement('formula', {}, 'a ]]> b', true);
+      const result = new XMLFormatter().formatDOM(makeDOM(el), false);
+      // Must not contain the raw terminator mid-stream
+      expect(result).not.toContain(']]> b]]>');
+      // Must contain the safe split sequence
+      expect(result).toContain(']]]]><![CDATA[>');
+    });
+
+    it('round-trips CDATA content containing ]]> through XML parse and reserialize', () => {
+      const el = new DOMElement('calc', {}, 'x ]]> y', true);
+      const xml = new XMLFormatter().formatDOM(makeDOM(el), false);
+      // Re-parse the split CDATA — xmldom reassembles sections into one text node
+      const reparsed = new XMLParser(xml).parse();
+      expect(reparsed.getDocumentRoot()!.text).toBe('x ]]> y');
     });
 
     it('sorts attributes alphabetically', () => {
