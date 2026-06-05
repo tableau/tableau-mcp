@@ -1,6 +1,7 @@
 export const webToolNames = [
   'list-datasources',
   'list-extract-refresh-tasks',
+  'list-users',
   'list-workbooks',
   'list-projects',
   'list-views',
@@ -36,6 +37,7 @@ export const webToolGroupNames = [
   'pulse',
   'content-exploration',
   'tasks',
+  'users',
   'token-management',
   'admin-insights',
 ] as const;
@@ -64,6 +66,7 @@ export const webToolGroups = {
   ],
   'content-exploration': ['search-content'],
   tasks: ['list-extract-refresh-tasks'],
+  users: ['list-users'],
   'token-management': ['revoke-access-token', 'reset-consent'],
   'admin-insights': [
     'query-admin-insights-ts-events',
