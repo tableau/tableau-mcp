@@ -34,31 +34,38 @@ uses \`fieldCaption\` matching the column names below. Common usage:
 - Compare scheduled frequency against actual job completion times to recommend schedule optimization.
 - Find jobs that overlap or compete for resources in the same time window.
 
-Available field captions:
-- Job ID, Job Type (e.g. "refresh_extracts", "subscription", "flow_run", "bridge_refresh")
-- Content ID, Content Name, Content Type (e.g. "Datasource", "Workbook", "Flow")
-- Started At, Completed At, Job Duration (seconds)
-- Job Status (e.g. "Success", "Failed", "Cancelled")
-- Schedule Name, Schedule Frequency, Schedule Type
-- Site LUID, Task LUID
-- Worker
-- Content Owner Email, Content Owner Name
+Available field captions (use exact names with \`fieldCaption\`):
+- **Job identity**: Job ID, Job LUID, Job Type, Job Result, Final Job Result
+- **Item details**: Item ID, Item LUID, Item Name, Item Type, Item Hyperlink
+- **Timing (UTC)**: Created At, Queued At, Started At, Completed At, Overflow Queued At
+- **Timing (local)**: Created At (local), Queued At (local), Started At (local), Completed At (local), Overflow Queued At (local)
+- **Durations (seconds)**: Job Duration, Job Execution Duration, Job Queued Duration, Job Overflow Queued Duration
+- **Schedule**: Schedule Name, Schedule LUID
+- **Owner/Project**: Owner Email, Parent Project Name, Parent Project Owner Email
+- **Extract**: Extract File Size
+- **Subscription**: Subscriber Email, Subscriber ID, Subscription Subject
+- **Bridge**: Agent Name, Agent Version, Agent Timezone, Agent is Pooled?, Pool Name, Bridge Started At, Bridge Completed At, Bridge Started At (Local), Bridge Completed At (Local), Bridge Refresh Duration, Bridge Extract Upload Duration, Bridge Job Result, Bridge Error Message, Bridge Error Type, Bridge Initiator User Name
+- **Flags**: Was Manual Run, Was Overflow Queued
+- **Other**: Error Message, Admin Insights Published At
+
+Parameters: Timezone (integer offset, e.g. -7 for PDT)
 
 Example query:
 \`\`\`json
 {
   "fields": [
-    { "fieldCaption": "Content Name" },
+    { "fieldCaption": "Item Name" },
     { "fieldCaption": "Job Type" },
-    { "fieldCaption": "Job Status" },
+    { "fieldCaption": "Job Result" },
     { "fieldCaption": "Started At" },
-    { "fieldCaption": "Job Duration (seconds)" }
+    { "fieldCaption": "Job Duration" },
+    { "fieldCaption": "Schedule Name" }
   ],
   "filters": [
     {
       "field": { "fieldCaption": "Job Type" },
       "filterType": "SET",
-      "values": ["refresh_extracts"],
+      "values": ["Refresh Extracts"],
       "exclude": false
     }
   ]
