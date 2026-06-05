@@ -256,13 +256,13 @@ export class OAuthClient {
   }
 }
 
-export function getOAuthClient(): OAuthClient {
+export function getOAuthClient(serverUrl: string): OAuthClient {
   // We masquerade the client as client.dev because we need to provide a client metadata document URL that
   // the authorization server can actually resolve.
   // AuthZ codes will be issued to the masqueraded callback URL, but that's ok,
   // we can intercept them with Playwright.
   const client = new OAuthClient({
-    serverUrl: 'http://127.0.0.1:3927/tableau-mcp',
+    serverUrl,
     clientMetadataUrl: 'https://client.dev/oauth/metadata.json',
     oauthCallbackUrl: 'https://client.dev/oauth/callback',
   });

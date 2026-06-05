@@ -17,7 +17,7 @@ export const getOAuthClientFixture: WorkerFixture<OAuthClient, { browser: Browse
   use,
 ): Promise<void> => {
   const env = getEnv();
-  const client = getOAuthClient();
+  const client = getOAuthClient(env.MCP_SERVER_URL || 'http://127.0.0.1:3927/tableau-mcp');
 
   const page = await browser.newPage();
   await connectOAuthClient({ client, page, env });

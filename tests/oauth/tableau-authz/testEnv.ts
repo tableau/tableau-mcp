@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { fromError } from 'zod-validation-error/v3';
 
 const envSchema = z.object({
+  MCP_SERVER_URL: z.string().optional().default('http://127.0.0.1:3927/tableau-mcp'),
   TEST_USER: z.string(),
   TEST_PASSWORD: z.string(),
   TEST_SITE_NAME: z.string(),

@@ -1,39 +1,18 @@
 import { spawnSync } from 'child_process';
+import dotenv from 'dotenv';
 import { copyFileSync, readdirSync, rmSync, statSync } from 'fs';
 import { join } from 'path';
 
-// Test Sites canvas:
-// https://salesforce.enterprise.slack.com/docs/T5J4Q04QG/F0B7Q4Z2QLX
-const SITES = [
-  'mcp-uwc-test',
-  //'mcp-uw2a-test', Failure to create site in UW2A
-  'mcp-uw2b-test',
-  'mcp-10ax-test',
-  'mcp-10ay-test',
-  //'mcp-10az-test', Unable to create site in 10AZ
-  'mcp-caa-test',
-  'mcp-uea-test',
-  'mcp-ueb-test',
-  'mcp-uec-test',
-  'mcp-ue1-test',
-  'mcp-dub01-test',
-  'mcp-ew1a-test',
-  'mcp-uka-test',
-  'mcp-cha-test',
-  'mcp-apsea-test',
-  'mcp-apseb-test',
-  'mcp-apsec-test',
-  'mcp-apnea-test',
-  'mcp-kra-test',
-  'mcp-ina-test',
-];
+import { SiteName, siteNames, siteToMcpServerMap } from './siteInfo';
+
+dotenv.config();
 
 type SiteResult = {
-  site: string;
+  site: SiteName;
   passed: boolean;
 };
 
-function runTestsForSite(site: string): SiteResult {
+function runTestsForSite(site: SiteName): SiteResult {
   console.log(`\n${'='.repeat(60)}`);
   console.log(`Running tests for site: ${site}`);
   console.log('='.repeat(60));
@@ -48,6 +27,10 @@ function runTestsForSite(site: string): SiteResult {
         ...process.env,
         TEST_SITE_NAME: site,
         FILL_SITE_NAME: 'true',
+        MCP_SERVER_URL:
+          process.env.MCP_SERVER_URL === 'pod-specific'
+            ? siteToMcpServerMap[site]
+            : process.env.MCP_SERVER_URL || 'http://127.0.0.1:3297',
         PLAYWRIGHT_BLOB_OUTPUT_DIR: `blob-reports/${site}`,
       },
     },
@@ -85,7 +68,7 @@ rmSync('blob-reports', { recursive: true, force: true });
 
 const results: SiteResult[] = [];
 
-for (const site of SITES) {
+for (const site of siteNames) {
   results.push(runTestsForSite(site));
 }
 
