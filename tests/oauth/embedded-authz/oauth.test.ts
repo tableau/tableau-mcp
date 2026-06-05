@@ -140,6 +140,7 @@ describe('OAuth', () => {
       scopes_supported: [
         'tableau:mcp:datasource:read',
         'tableau:mcp:tasks:read',
+        'tableau:mcp:users:read',
         'tableau:mcp:workbook:read',
         'tableau:mcp:content:read',
         'tableau:mcp:view:read',
@@ -168,6 +169,7 @@ describe('OAuth', () => {
       scopes_supported: [
         'tableau:mcp:datasource:read',
         'tableau:mcp:tasks:read',
+        'tableau:mcp:users:read',
         'tableau:mcp:workbook:read',
         'tableau:mcp:content:read',
         'tableau:mcp:view:read',
@@ -201,6 +203,7 @@ describe('OAuth', () => {
       scopes_supported: [
         'tableau:mcp:datasource:read',
         'tableau:mcp:tasks:read',
+        'tableau:mcp:users:read',
         'tableau:mcp:workbook:read',
         'tableau:mcp:content:read',
         'tableau:mcp:view:read',

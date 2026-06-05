@@ -25,7 +25,7 @@ export type ToolRules = Record<string, boolean | undefined>;
 export type AppDetails = {
   name: string;
   resourceUri: string;
-  html: string;
+  htmlPath: string;
 };
 
 export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = ToolParams<
