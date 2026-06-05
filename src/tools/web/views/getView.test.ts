@@ -92,8 +92,6 @@ describe('getViewTool', () => {
   });
 
   it('returns error when view is not in viewIds allowlist', async () => {
-    const tool = getGetViewTool(new WebMcpServer());
-
     mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
       allowed: false,
       message: 'Querying the view with LUID test-view-id is not allowed.',
@@ -104,16 +102,17 @@ describe('getViewTool', () => {
     expect(result.isError).toBe(true);
     if (result.isError) {
       invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('Querying the view with LUID test-view-id is not allowed');
+      expect(result.content[0].text).toContain(
+        'Querying the view with LUID test-view-id is not allowed',
+      );
     }
   });
 
   it('returns error when view workbook is not in workbookIds allowlist', async () => {
-    const tool = getGetViewTool(new WebMcpServer());
-
     mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
       allowed: false,
-      message: 'The view with LUID test-view-id cannot be queried because it does not belong to an allowed workbook.',
+      message:
+        'The view with LUID test-view-id cannot be queried because it does not belong to an allowed workbook.',
     });
 
     const result = await getToolResult({ viewId: 'test-view-id' });
@@ -126,11 +125,10 @@ describe('getViewTool', () => {
   });
 
   it('returns error when view project is not in projectIds allowlist', async () => {
-    const tool = getGetViewTool(new WebMcpServer());
-
     mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
       allowed: false,
-      message: 'The view with LUID test-view-id cannot be queried because it does not belong to an allowed project.',
+      message:
+        'The view with LUID test-view-id cannot be queried because it does not belong to an allowed project.',
     });
 
     const result = await getToolResult({ viewId: 'test-view-id' });
@@ -143,11 +141,10 @@ describe('getViewTool', () => {
   });
 
   it('returns error when view does not have allowed tags', async () => {
-    const tool = getGetViewTool(new WebMcpServer());
-
     mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
       allowed: false,
-      message: 'The view with LUID test-view-id cannot be queried because it does not have one of the allowed tags.',
+      message:
+        'The view with LUID test-view-id cannot be queried because it does not have one of the allowed tags.',
     });
 
     const result = await getToolResult({ viewId: 'test-view-id' });
@@ -248,7 +245,7 @@ describe('getViewTool', () => {
         boundedContextOverrides: {
           datasourceIds: new Set(['ds-allowed']),
         },
-      }
+      },
     );
 
     expect(result.isError).toBe(false);
@@ -260,8 +257,6 @@ describe('getViewTool', () => {
   });
 
   it('flattens usage stats with zero count when usage is undefined', async () => {
-    const tool = getGetViewTool(new WebMcpServer());
-
     mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
       allowed: true,
     });
@@ -276,7 +271,7 @@ describe('getViewTool', () => {
       { viewId: mockView.id },
       {
         disableMetadataApiRequests: true,
-      }
+      },
     );
 
     expect(result.isError).toBe(false);

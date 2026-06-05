@@ -64,12 +64,12 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
 
                 try {
                   const response = await restApi.metadataMethods.graphql(
-                    getViewLineageQuery([view.id])
+                    getViewLineageQuery([view.id]),
                   );
                   view = mergeViewLineage(
                     [view],
                     getViewLineageByLuid(response),
-                    configWithOverrides.boundedContext.datasourceIds
+                    configWithOverrides.boundedContext.datasourceIds,
                   )[0];
                 } catch (error) {
                   log({
@@ -82,7 +82,7 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
 
                 return view;
               },
-            })
+            }),
           );
         },
         constrainSuccessResult: (view) => ({
