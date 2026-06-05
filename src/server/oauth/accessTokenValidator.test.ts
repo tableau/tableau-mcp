@@ -7,7 +7,7 @@ const MOCK_ISSUER = 'https://sso.online.tableau.com';
 const MOCK_CLIENT_ID = 'https://cimd.example.com/oauth/metadata.json';
 const MOCK_RESOURCE_URI = 'https://mcp.example.com';
 const MOCK_GLOBAL_RESOURCE_URI = 'https://global.example.com';
-const EXPECTED_AUD = MOCK_RESOURCE_URI;
+const EXPECTED_AUD = `${MOCK_RESOURCE_URI}/tableau-mcp`;
 const FUTURE_EXP = Math.floor(Date.now() / 1000) + 3600;
 
 function makeBearer(payload: Record<string, unknown>): string {

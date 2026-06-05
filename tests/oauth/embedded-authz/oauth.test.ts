@@ -134,7 +134,7 @@ describe('OAuth', () => {
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
     expect(response.body).toEqual({
-      resource: 'http://127.0.0.1:3927',
+      resource: `http://127.0.0.1:3927/${serverName}`,
       authorization_servers: ['http://127.0.0.1:3927'],
       bearer_methods_supported: ['header'],
       scopes_supported: [

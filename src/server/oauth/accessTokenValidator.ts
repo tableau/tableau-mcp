@@ -8,6 +8,7 @@ import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
 import { RestApi } from '../../sdks/tableau/restApi.js';
 import { getSiteLuidFromAccessToken } from '../../utils/getSiteLuidFromAccessToken.js';
+import { buildResourceIdentifier } from './resourceIdentifier.js';
 import {
   mcpAccessTokenSchema,
   mcpAccessTokenUserOnlySchema,
@@ -155,10 +156,11 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
 
       // RFC 9068 audience validation: reject tokens not minted for this MCP server's resource
       // URL. Without this, a token issued for one deployment (same shared SSO issuer) passes
-      // validation against another, surfacing later as an opaque 500. Both the pod-specific
-      // resource URI and (when configured) the environment's global resource URI are accepted.
+      // validation against another, surfacing later as an opaque 500. The pod-specific resource
+      // identifier (OAUTH_RESOURCE_URI domain + /tableau-mcp path) is always accepted; the global
+      // resource URL (when configured) is matched exactly as the AS stamps it.
       const allowedAudiences = [
-        this.config.oauth.resourceUri,
+        buildResourceIdentifier(this.config.oauth.resourceUri),
         ...(this.config.oauth.globalResourceUri ? [this.config.oauth.globalResourceUri] : []),
       ];
       if (!allowedAudiences.includes(aud)) {

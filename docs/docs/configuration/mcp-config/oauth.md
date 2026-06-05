@@ -135,10 +135,12 @@ The base URL used in the `resource` field of the OAuth protected resource metada
 clients may require the `resource` field to match exactly with the URL used to access the MCP
 server. This should be the base URL of your MCP server deployment.
 
-Incoming bearer tokens are also audience-validated against this value: the token's `aud` claim must
-equal this resource URL (the same value advertised as `resource` in the protected resource metadata
-document), per [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) and
-[RFC 8707](https://www.rfc-editor.org/rfc/rfc8707). A token whose `aud` matches neither this value
+This value is the deployment domain only (no path). The MCP server is reached at
+`<OAUTH_RESOURCE_URI>/tableau-mcp`, which is the canonical resource identifier advertised as
+`resource` in the protected resource metadata document. Incoming bearer tokens are
+audience-validated against it: the token's `aud` claim must equal `<OAUTH_RESOURCE_URI>/tableau-mcp`,
+per [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) and
+[RFC 8707](https://www.rfc-editor.org/rfc/rfc8707). A token whose `aud` matches neither that value
 nor [`OAUTH_GLOBAL_RESOURCE_URI`](#oauth_global_resource_uri) is rejected with a `401`.
 
 - Default: `http://127.0.0.1:3927`
