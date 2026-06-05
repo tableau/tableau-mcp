@@ -13,6 +13,9 @@ const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedFor
 
 const mocks = vi.hoisted(() => ({
   mockGetView: vi.fn(),
+  mockResourceAccessChecker: {
+    isViewAllowed: vi.fn(),
+  },
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -26,12 +29,20 @@ vi.mock('../../../restApiInstance.js', () => ({
   ),
 }));
 
+vi.mock('../resourceAccessChecker.js', () => ({
+  resourceAccessChecker: mocks.mockResourceAccessChecker,
+  exportedForTesting: {
+    resetResourceAccessCheckerSingleton: vi.fn(),
+  },
+}));
+
 describe('getViewTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
     resetResourceAccessCheckerSingleton();
+    mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({ allowed: true });
   });
 
   afterEach(() => {
@@ -74,6 +85,74 @@ describe('getViewTool', () => {
       siteId: 'test-site-id',
       viewId: mockView.id,
     });
+  });
+
+  it('returns error when view is not in viewIds allowlist', async () => {
+    const tool = getGetViewTool(new WebMcpServer());
+
+    mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
+      allowed: false,
+      message: 'Querying the view with LUID test-view-id is not allowed.',
+    });
+
+    const result = await getToolResult({ viewId: 'test-view-id' });
+
+    expect(result.isError).toBe(true);
+    if (result.isError) {
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Querying the view with LUID test-view-id is not allowed');
+    }
+  });
+
+  it('returns error when view workbook is not in workbookIds allowlist', async () => {
+    const tool = getGetViewTool(new WebMcpServer());
+
+    mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
+      allowed: false,
+      message: 'The view with LUID test-view-id cannot be queried because it does not belong to an allowed workbook.',
+    });
+
+    const result = await getToolResult({ viewId: 'test-view-id' });
+
+    expect(result.isError).toBe(true);
+    if (result.isError) {
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('does not belong to an allowed workbook');
+    }
+  });
+
+  it('returns error when view project is not in projectIds allowlist', async () => {
+    const tool = getGetViewTool(new WebMcpServer());
+
+    mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
+      allowed: false,
+      message: 'The view with LUID test-view-id cannot be queried because it does not belong to an allowed project.',
+    });
+
+    const result = await getToolResult({ viewId: 'test-view-id' });
+
+    expect(result.isError).toBe(true);
+    if (result.isError) {
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('does not belong to an allowed project');
+    }
+  });
+
+  it('returns error when view does not have allowed tags', async () => {
+    const tool = getGetViewTool(new WebMcpServer());
+
+    mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
+      allowed: false,
+      message: 'The view with LUID test-view-id cannot be queried because it does not have one of the allowed tags.',
+    });
+
+    const result = await getToolResult({ viewId: 'test-view-id' });
+
+    expect(result.isError).toBe(true);
+    if (result.isError) {
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('does not have one of the allowed tags');
+    }
   });
 });
 
