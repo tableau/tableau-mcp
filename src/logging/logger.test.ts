@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getFileLogger } from './fileLogger.js';
 import { log, parseLogLevel, shouldLog } from './logger.js';
@@ -10,6 +10,10 @@ vi.mock('./fileLogger.js', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe('parseLoggerTypes', () => {
@@ -59,7 +63,6 @@ describe('log', () => {
     log(entry);
 
     expect(stderrSpy).toHaveBeenCalledWith(JSON.stringify(entry) + '\n');
-    stderrSpy.mockRestore();
   });
 
   it('should write JSON to console.log when transport is http and appLogger is enabled', () => {
@@ -71,7 +74,6 @@ describe('log', () => {
     log(entry);
 
     expect(consoleSpy).toHaveBeenCalledWith(JSON.stringify(entry));
-    consoleSpy.mockRestore();
   });
 
   it('should not write to stderr or console when appLogger is not enabled', () => {
@@ -84,8 +86,6 @@ describe('log', () => {
 
     expect(stderrSpy).not.toHaveBeenCalled();
     expect(consoleSpy).not.toHaveBeenCalled();
-    stderrSpy.mockRestore();
-    consoleSpy.mockRestore();
   });
 
   it('should route to file logger when fileLogger is enabled', () => {
@@ -101,12 +101,11 @@ describe('log', () => {
 
   it('should not route to file logger when fileLogger is not enabled', () => {
     vi.stubEnv('ENABLED_LOGGERS', 'appLogger');
-    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
     log(entry);
 
     expect(getFileLogger).not.toHaveBeenCalled();
-    stderrSpy.mockRestore();
   });
 
   it('should not log when entry level is below configured log level', () => {
@@ -118,7 +117,6 @@ describe('log', () => {
     log({ message: 'info message', level: 'info', logger: 'test' });
 
     expect(stderrSpy).not.toHaveBeenCalled();
-    stderrSpy.mockRestore();
   });
 
   it('should log when entry level meets configured log level', () => {
@@ -130,7 +128,44 @@ describe('log', () => {
     log({ message: 'error message', level: 'error', logger: 'test' });
 
     expect(stderrSpy).toHaveBeenCalledTimes(2);
-    stderrSpy.mockRestore();
+  });
+
+  it('should serialize Error objects with name, message, and stack only', () => {
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    // Create an actual Error instance with AxiosError properties including sensitive config
+    const mockAxiosError = Object.assign(new Error('Request failed with status code 404'), {
+      name: 'AxiosError',
+      stack: 'AxiosError: Request failed with status code 404\n    at test.js:1:1',
+      config: {
+        headers: { Authorization: 'Bearer fsdaf...' },
+        baseURL: 'https://prod-uswest-c.online.tableau.com/api/3.29',
+        method: 'get',
+      },
+      code: 'ERR_BAD_REQUEST',
+      status: 404,
+    });
+
+    log({
+      message: 'Tool execution failed',
+      level: 'error',
+      logger: 'tool',
+      data: mockAxiosError,
+    });
+
+    const loggedOutput = stderrSpy.mock.calls[0][0] as string;
+    const parsed = JSON.parse(loggedOutput.trim());
+
+    // Only name, message, stack, and cause should be serialized
+    expect(parsed.data).toEqual({
+      name: 'AxiosError',
+      message: 'Request failed with status code 404',
+      stack: 'AxiosError: Request failed with status code 404\n    at test.js:1:1',
+    });
+    // Extra fields like config, code, status should be excluded
+    expect(parsed.data.config).toBeUndefined();
+    expect(parsed.data.code).toBeUndefined();
+    expect(parsed.data.status).toBeUndefined();
   });
 });
 

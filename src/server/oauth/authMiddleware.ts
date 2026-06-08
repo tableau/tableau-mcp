@@ -3,7 +3,6 @@ import { NextFunction, RequestHandler, Response } from 'express';
 
 import { getConfig } from '../../config.js';
 import { log } from '../../logging/logger.js';
-import { serverName } from '../../server.web.js';
 import { getToolNameFromRequestBody } from '../requestUtils.js';
 import { AccessTokenValidator } from './accessTokenValidator.js';
 import {
@@ -15,7 +14,7 @@ import {
 } from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
 
-const protectedResourceMetadataPath = `/${serverName}/.well-known/oauth-protected-resource`;
+const protectedResourceMetadataPath = '/.well-known/oauth-protected-resource';
 
 /**
  * Express middleware for OAuth authentication
@@ -95,6 +94,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         message: `Access token validation failed: ${result.error}`,
         level: 'info',
         logger: 'oauth',
+        data: result.error,
       });
       res.status(401).json({
         error: 'invalid_token',

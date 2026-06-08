@@ -596,6 +596,7 @@ describe('Config', () => {
       issuer: 'https://example.com',
       redirectUri: 'https://example.com/Callback',
       resourceUri: 'http://127.0.0.1:3927',
+      globalResourceUri: '',
       lockSite: true,
       jwePrivateKey: '',
       jwePrivateKeyPath: 'path/to/private.pem',
@@ -615,6 +616,7 @@ describe('Config', () => {
         clientIdSecretPairs: null,
         redirectUri: '',
         resourceUri: 'http://127.0.0.1:3927',
+        globalResourceUri: '',
         lockSite: true,
         jwePrivateKey: '',
         jwePrivateKeyPath: '',
@@ -670,6 +672,17 @@ describe('Config', () => {
       expect(config.oauth).toEqual({
         ...defaultOAuthConfig,
         lockSite: false,
+      });
+    });
+
+    it('should set globalResourceUri to the specified value when OAUTH_GLOBAL_RESOURCE_URI is set', () => {
+      stubDefaultOAuthEnvVars();
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URI', 'https://global.example.com');
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        globalResourceUri: 'https://global.example.com',
       });
     });
 

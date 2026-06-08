@@ -140,6 +140,45 @@ describe('listExtractRefreshTasksTool', () => {
     expect(parsed[0].schedule.name).toBe('Daily Refresh');
     expect(parsed[0].schedule.frequency).toBe('Daily');
   });
+
+  it('should respect limit parameter', async () => {
+    const tasks = Array.from({ length: 5 }, (_, i) => ({
+      ...mockExtractRefreshTask,
+      id: `task-${i}`,
+    }));
+    mocks.mockListExtractRefreshTasks.mockResolvedValue(tasks);
+    const result = await getToolResult({ limit: 2 });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed).toHaveLength(2);
+  });
+
+  it('should respect pageSize parameter', async () => {
+    const tasks = Array.from({ length: 5 }, (_, i) => ({
+      ...mockExtractRefreshTask,
+      id: `task-${i}`,
+    }));
+    mocks.mockListExtractRefreshTasks.mockResolvedValue(tasks);
+    const result = await getToolResult({ pageSize: 3 });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed).toHaveLength(3);
+  });
+
+  it('should use the smaller of pageSize and limit', async () => {
+    const tasks = Array.from({ length: 5 }, (_, i) => ({
+      ...mockExtractRefreshTask,
+      id: `task-${i}`,
+    }));
+    mocks.mockListExtractRefreshTasks.mockResolvedValue(tasks);
+    const result = await getToolResult({ pageSize: 10, limit: 2 });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const parsed = JSON.parse(`${result.content[0].text}`);
+    expect(parsed).toHaveLength(2);
+  });
 });
 
 async function getToolResult(args: any = {}): Promise<CallToolResult> {

@@ -40,6 +40,12 @@ export default [
     },
   },
   {
+    files: ['src/web/**/*.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  {
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',

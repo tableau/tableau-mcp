@@ -14,6 +14,7 @@ import {
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { getAppConfig } from '../../../web/apps/appConfig.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 
@@ -33,6 +34,7 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
       readOnlyHint: true,
       openWorldHint: false,
     },
+    app: getAppConfig('get-workbook'),
     callback: async ({ workbookId }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 

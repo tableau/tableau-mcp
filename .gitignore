@@ -20,6 +20,9 @@ tableau-mcp.mcpb
 *.tar.gz
 *.zip
 
+# MCP Apps
+src/web/apps/dist/
+
 # Playwright
 /test-results/
 /playwright-report/

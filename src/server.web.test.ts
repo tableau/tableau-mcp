@@ -65,7 +65,7 @@ describe('server', () => {
       app: {
         name: 'test-app',
         resourceUri: 'tableau://app/test',
-        html: '<html><body>Test App UI</body></html>',
+        htmlPath: '<html><body>Test App UI</body></html>',
       },
     };
   }

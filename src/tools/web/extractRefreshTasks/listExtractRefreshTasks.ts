@@ -110,7 +110,16 @@ export const getListExtractRefreshTasksTool = (
           });
 
           // Apply client-side filtering
-          const filteredTasks = applyTaskFilters(tasks, args.filter);
+          let filteredTasks = applyTaskFilters(tasks, args.filter);
+
+          // Apply client-side result limiting (pageSize and limit)
+          const effectiveLimit = Math.min(
+            args.pageSize ?? Number.MAX_SAFE_INTEGER,
+            args.limit ?? Number.MAX_SAFE_INTEGER,
+          );
+          if (effectiveLimit < Number.MAX_SAFE_INTEGER) {
+            filteredTasks = filteredTasks.slice(0, effectiveLimit);
+          }
 
           return new Ok(filteredTasks);
         },
