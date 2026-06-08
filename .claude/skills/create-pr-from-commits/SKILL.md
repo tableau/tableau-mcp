@@ -45,12 +45,13 @@ digraph pr_workflow {
 
 ## Implementation
 
-### Step 1: Prompt for GUS ID
+### Step 1: Prompt for GUS ID (Internal Contributors Only)
 
-**ALWAYS ask the user for the GUS work item ID first:**
+**For internal Tableau contributors, ask for the GUS work item ID:**
 
 ```
 What is the GUS work item ID for this PR? (Format: W-12345678)
+If you're an external contributor, press Enter to skip.
 ```
 
 **GUS ID format:**
@@ -61,7 +62,7 @@ What is the GUS work item ID for this PR? (Format: W-12345678)
 If the user provides just the number (e.g., "22802840"), prepend `@W-`.
 If they provide "W-12345678", prepend `@`.
 
-**Do NOT proceed without a GUS ID.** This is required for tableau-mcp PRs.
+**If no GUS ID provided:** Continue without it - external contributors don't need GUS IDs.
 
 ### Step 2: Gather Git Context (parallel)
 
@@ -81,25 +82,20 @@ git diff main...HEAD --stat
 git branch -vv
 ```
 
-### Step 3: Find PR Template
+### Step 3: Read PR Template
 
-Common locations (check in order):
-1. `.github/pull_request_template.md`
-2. `.github/PULL_REQUEST_TEMPLATE.md`
-3. `docs/pull_request_template.md`
-4. `.gitlab/merge_request_templates/default.md` (GitLab)
-
-Read the template to identify required sections.
+Read the PR template at `.github/pull_request_template.md` to identify required sections.
 
 ### Step 4: Analyze Commits
 
 Extract information for PR title and template sections:
 
 **PR Title:**
-- Format: `@W-12345678: Short description`
-- Use the GUS ID from Step 1
+- Format: `@W-12345678: Short description` (internal contributors with GUS ID)
+- Format: `Short description` (external contributors without GUS ID)
 - Derive short description from main commit subject (50 chars max after GUS ID)
-- Example: `@W-22802840: Remove sensitive data from error logs`
+- Example with GUS: `@W-22802840: Remove sensitive data from error logs`
+- Example without GUS: `Remove sensitive data from error logs`
 
 **Description/Summary:**
 - Combine commit subjects into bullet points
@@ -213,11 +209,11 @@ If `gh pr create` fails with "pull request already exists":
 
 ## Common Mistakes
 
-### ❌ Skipping GUS ID Prompt
+### ❌ Skipping GUS ID Prompt for Internal Contributors
 
-**ALWAYS ask for GUS ID first.** Don't proceed without it.
+**ALWAYS ask for GUS ID** (but allow skipping for external contributors).
 
-Don't say: "I'll create the PR now" without getting the GUS ID.
+Don't say: "I'll create the PR now" without prompting for GUS ID first.
 
 ### ❌ Asking User for Information Already in Commits
 
@@ -256,8 +252,8 @@ Use single quotes in `<<'EOF'` to prevent variable expansion in PR body.
 **Full workflow:**
 
 ```bash
-# 1. Ask user for GUS ID
-# "What is the GUS work item ID? (Format: W-12345678)"
+# 1. Ask user for GUS ID (allow skip for external contributors)
+# "What is the GUS work item ID? (Format: W-12345678, or press Enter to skip)"
 
 # 2. Gather context (parallel)
 git log main..HEAD --format="%h %s%n%b" &
@@ -275,10 +271,10 @@ EOF
 ```
 
 **Title format examples:**
-- ✅ `@W-22802840: Remove sensitive data from error logs`
-- ✅ `@W-12345678: Add user management feature`
-- ❌ `Remove sensitive data from error logs` (missing GUS ID)
-- ❌ `W-22802840: Fix bug` (missing @ symbol)
+- ✅ `@W-22802840: Remove sensitive data from error logs` (internal)
+- ✅ `@W-12345678: Add user management feature` (internal)
+- ✅ `Remove sensitive data from error logs` (external contributor)
+- ❌ `W-22802840: Fix bug` (missing @ symbol for internal contributor)
 
 ## Real-World Impact
 
