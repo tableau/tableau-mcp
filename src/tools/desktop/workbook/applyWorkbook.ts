@@ -8,7 +8,6 @@ import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   FileReadError,
-  LoadUnderlyingMetadataError,
   WorkbookNotFoundError,
   WorkbookXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
@@ -113,8 +112,6 @@ export const getApplyWorkbookTool = (
                 return new DesktopCommandExecutionError(error).toErr();
               case 'load-workbook-xml-error':
                 return new WorkbookXmlLoadFailedError(error).toErr();
-              case 'load-underlying-metadata-error':
-                return new LoadUnderlyingMetadataError(error).toErr();
               default: {
                 const _: never = type;
               }

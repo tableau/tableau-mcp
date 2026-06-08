@@ -8,7 +8,6 @@ import {
   ArgsValidationError,
   DesktopCommandExecutionError,
   FileReadError,
-  LoadUnderlyingMetadataError,
   WorkbookXmlLoadFailedError,
 } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
@@ -234,29 +233,6 @@ describe('applyWorkbookTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toBe(new WorkbookXmlLoadFailedError(error.error).message);
-  });
-
-  it('should return error when underlying metadata load fails', async () => {
-    const mockXml = '<?xml version="1.0"?><workbook></workbook>';
-    const error = {
-      type: 'load-underlying-metadata-error' as const,
-      error: { code: 'METADATA_ERROR', message: 'Failed to load metadata', recoverable: false },
-    };
-
-    vi.spyOn(loadWorkbookXmlModule, 'loadWorkbookXml').mockResolvedValue(Err(error));
-
-    const mockExecutor = vi.fn().mockResolvedValue({});
-
-    const result = await getToolResult({
-      session: '12345',
-      mode: 'inline',
-      workbookXml: mockXml,
-      mockExecutor,
-    });
-
-    expect(result.isError).toBe(true);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toBe(new LoadUnderlyingMetadataError(error.error).message);
   });
 
   it('should pass the abort signal to loadWorkbookXml command', async () => {

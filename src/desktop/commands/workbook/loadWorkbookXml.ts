@@ -1,9 +1,7 @@
 import { writeFileSync } from 'fs';
 import { Err, Ok, Result } from 'ts-results-es';
-import { z } from 'zod';
 
 import { log } from '../../../logging/logger.js';
-import { ExecuteCommandResponseError } from '../../../sdks/desktop/agentApi/types.js';
 import { DesktopCache } from '../../cache.js';
 import { xmlToJson } from '../../libraries/workbook-serialization-converter';
 import {
@@ -27,7 +25,6 @@ export async function loadWorkbookXml({
     void,
     | { type: 'execute-command-error'; error: ExecuteCommandError }
     | { type: 'load-workbook-xml-error'; error: LoadWorkbookXmlError }
-    | { type: 'load-underlying-metadata-error'; error: ExecuteCommandResponseError }
   >
 > {
   xml = xml.trim();
@@ -73,11 +70,7 @@ async function loadUnderlyingMetadataByFilepath({
   xml: string;
   filePath?: string;
 } & WithExecutorAndAbortSignal): Promise<
-  Result<
-    void,
-    | { type: 'execute-command-error'; error: ExecuteCommandError }
-    | { type: 'load-underlying-metadata-error'; error: ExecuteCommandResponseError }
-  >
+  Result<void, { type: 'execute-command-error'; error: ExecuteCommandError }>
 > {
   let jsonContent: string | undefined;
 
@@ -155,11 +148,7 @@ async function loadUnderlyingMetadataByText({
 }: {
   xml: string;
 } & WithExecutorAndAbortSignal): Promise<
-  Result<
-    void,
-    | { type: 'execute-command-error'; error: ExecuteCommandError }
-    | { type: 'load-underlying-metadata-error'; error: ExecuteCommandResponseError }
-  >
+  Result<void, { type: 'execute-command-error'; error: ExecuteCommandError }>
 > {
   const result = await executor.executeCommand({
     namespace: 'tabui',
@@ -168,35 +157,22 @@ async function loadUnderlyingMetadataByText({
     args: {
       text: xml,
     },
-    schema: z.object({
-      status: z.enum(['completed', 'failed']),
-    }),
   });
 
   if (result.isErr()) {
+    const { error } = result;
+    if (error.type === 'command-failed') {
+      log({
+        level: 'error',
+        message: 'load-underlying-metadata (text) failed',
+        logger: 'workbookCommands',
+        data: {
+          error,
+        },
+      });
+    }
+
     return Err({ type: 'execute-command-error', error: result.error });
-  }
-
-  const {
-    error,
-    parsedResult: { status },
-  } = result.value;
-
-  if (status === 'failed') {
-    log({
-      level: 'error',
-      message: 'load-underlying-metadata (text) failed',
-      logger: 'workbookCommands',
-      data: {
-        commandId: result.value.command_id,
-        error,
-      },
-    });
-
-    return Err({
-      type: 'load-underlying-metadata-error',
-      error,
-    });
   }
 
   log({

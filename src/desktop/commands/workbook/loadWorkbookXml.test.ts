@@ -198,14 +198,9 @@ describe('loadWorkbookXml', () => {
 
     const mockExecutor = {
       executeCommand: vi.fn().mockResolvedValue(
-        Ok({
-          command_id: 'cmd-123',
-          status: 'failed',
-          submitted_at: '',
-          error: { code: 'LOAD_ERROR', message: 'Failed to load XML', recoverable: false },
-          parsedResult: {
-            status: 'failed',
-          },
+        Err({
+          type: 'command-failed',
+          error: { code: 'ERROR', message: 'Failed to load', recoverable: false },
         }),
       ),
     } as unknown as LocalExecutor;
@@ -218,7 +213,7 @@ describe('loadWorkbookXml', () => {
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
-      expect(result.error.type).toBe('load-underlying-metadata-error');
+      expect(result.error.type).toBe('execute-command-error');
     }
   });
 
