@@ -1,6 +1,6 @@
 import { Browser, TestFixture } from '@playwright/test';
 
-import { getEnv } from '../testEnv';
+import { getEnv } from '../testEnv.js';
 
 export const annotateSiteNameFixture: TestFixture<void, { browser: Browser }> = async (
   { browser: _ },
