@@ -4,7 +4,6 @@ import { fromError } from 'zod-validation-error/v3';
 
 import { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml.js';
 import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor.js';
-import { ExecuteCommandResponseError } from '../sdks/desktop/agentApi/types.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
 export class McpToolError extends Error {
@@ -214,16 +213,6 @@ export class WorkbookXmlLoadFailedError extends McpToolError {
   constructor(error: LoadWorkbookXmlError) {
     super({
       type: 'load-workbook-xml-error',
-      message: JSON.stringify(error),
-      statusCode: 500,
-    });
-  }
-}
-
-export class LoadUnderlyingMetadataError extends McpToolError {
-  constructor(error: ExecuteCommandResponseError) {
-    super({
-      type: 'load-underlying-metadata-error',
       message: JSON.stringify(error),
       statusCode: 500,
     });
