@@ -376,7 +376,8 @@ const logicalTableRelationshipSchema = z
         op: z.string().optional(),
         relationships: z.array(relationshipClauseSchema),
       })
-      .passthrough(),
+      .passthrough()
+      .optional(),
   })
   .passthrough();
 
