@@ -13,6 +13,7 @@ import {
 import { View } from '../../../sdks/tableau/types/view.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { getAppConfig } from '../../../web/apps/appConfig.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 
@@ -20,7 +21,7 @@ const paramsSchema = {
   viewId: z.string(),
 };
 
-export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+export const getViewTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const getViewTool = new WebTool({
     server,
     name: 'get-view',
@@ -32,6 +33,7 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
       readOnlyHint: true,
       openWorldHint: false,
     },
+    app: getAppConfig('get-view'),
     callback: async ({ viewId }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 
@@ -53,10 +55,14 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
               ...extra,
               jwtScopes: getViewTool.requiredApiScopes,
               callback: async (restApi) => {
-                let view = await restApi.viewsMethods.getView({
-                  viewId,
-                  siteId: restApi.siteId,
-                });
+                // Notice that we already have the view if it had been allowed by a project scope.
+                const view =
+                  isViewAllowedResult.content ??
+                  (await restApi.viewsMethods.getView({
+                    viewId,
+                    siteId: restApi.siteId,
+                    includeUsageStatistics: true,
+                  }));
 
                 if (configWithOverrides.disableMetadataApiRequests) {
                   return view;
@@ -66,7 +72,7 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
                   const response = await restApi.metadataMethods.graphql(
                     getViewLineageQuery([view.id]),
                   );
-                  view = mergeViewLineage(
+                  return mergeViewLineage(
                     [view],
                     getViewLineageByLuid(response),
                     configWithOverrides.boundedContext.datasourceIds,
@@ -78,16 +84,15 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
                     logger: 'lineage',
                     data: getExceptionMessage(error),
                   });
+                  return view;
                 }
-
-                return view;
               },
             }),
           );
         },
         constrainSuccessResult: (view) => ({
           type: 'success',
-          result: flattenViewUsage(view),
+          result: view,
         }),
       });
     },
@@ -95,11 +100,3 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
 
   return getViewTool;
 };
-
-function flattenViewUsage(view: View): View {
-  const { usage, ...rest } = view;
-  return {
-    ...rest,
-    totalViewCount: usage?.totalViewCount ?? 0,
-  };
-}

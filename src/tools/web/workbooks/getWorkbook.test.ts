@@ -10,10 +10,11 @@ import { mockView } from '../views/mockView.js';
 import { filterWorkbookViews, getGetWorkbookTool } from './getWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
 
+const { usage, ...mockViewWithoutUsage } = mockView;
 const mockWorkbookWithFlattenedViewUsage = {
   ...mockWorkbook,
   views: {
-    view: [{ ...mockView, totalViewCount: 0 }],
+    view: [{ ...mockViewWithoutUsage, totalViewCount: 42 }],
   },
 };
 

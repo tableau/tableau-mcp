@@ -6,7 +6,7 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getGetViewTool } from './getView.js';
+import { getViewTool } from './getView.js';
 import { mockView } from './mockView.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
@@ -54,117 +54,14 @@ describe('getViewTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const getViewTool = getGetViewTool(new WebMcpServer());
-    expect(getViewTool.name).toBe('get-view');
-    expect(getViewTool.description).toContain('Retrieves information about the specified view');
-    expect(getViewTool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
+    const tool = getViewTool(new WebMcpServer());
+    expect(tool.name).toBe('get-view');
+    expect(tool.description).toContain('Retrieves information about the specified view');
+    expect(tool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
   });
 
-  it('should successfully fetch view metadata without enrichment when Metadata API is disabled', async () => {
-    const viewWithUsage = {
-      ...mockView,
-      usage: {
-        totalViewCount: 42,
-      },
-    };
-
-    mocks.mockGetView.mockResolvedValue(viewWithUsage);
-
-    const result = await getToolResult(
-      { viewId: mockView.id },
-      {
-        disableMetadataApiRequests: true,
-      },
-    );
-
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    const content = JSON.parse(result.content[0].text);
-    expect(content.id).toBe(mockView.id);
-    expect(content.name).toBe(mockView.name);
-    expect(content.totalViewCount).toBe(42);
-    expect(content.usage).toBeUndefined();
-    expect(content.upstreamDatasources).toBeUndefined();
-    expect(mocks.mockGetView).toHaveBeenCalledWith({
-      siteId: 'test-site-id',
-      viewId: mockView.id,
-    });
-  });
-
-  it('returns error when view is not in viewIds allowlist', async () => {
-    mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
-      allowed: false,
-      message: 'Querying the view with LUID test-view-id is not allowed.',
-    });
-
-    const result = await getToolResult({ viewId: 'test-view-id' });
-
-    expect(result.isError).toBe(true);
-    if (result.isError) {
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain(
-        'Querying the view with LUID test-view-id is not allowed',
-      );
-    }
-  });
-
-  it('returns error when view workbook is not in workbookIds allowlist', async () => {
-    mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
-      allowed: false,
-      message:
-        'The view with LUID test-view-id cannot be queried because it does not belong to an allowed workbook.',
-    });
-
-    const result = await getToolResult({ viewId: 'test-view-id' });
-
-    expect(result.isError).toBe(true);
-    if (result.isError) {
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('does not belong to an allowed workbook');
-    }
-  });
-
-  it('returns error when view project is not in projectIds allowlist', async () => {
-    mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
-      allowed: false,
-      message:
-        'The view with LUID test-view-id cannot be queried because it does not belong to an allowed project.',
-    });
-
-    const result = await getToolResult({ viewId: 'test-view-id' });
-
-    expect(result.isError).toBe(true);
-    if (result.isError) {
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('does not belong to an allowed project');
-    }
-  });
-
-  it('returns error when view does not have allowed tags', async () => {
-    mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
-      allowed: false,
-      message:
-        'The view with LUID test-view-id cannot be queried because it does not have one of the allowed tags.',
-    });
-
-    const result = await getToolResult({ viewId: 'test-view-id' });
-
-    expect(result.isError).toBe(true);
-    if (result.isError) {
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('does not have one of the allowed tags');
-    }
-  });
-
-  it('successfully enriches view with lineage data', async () => {
-    const viewWithUsage = {
-      ...mockView,
-      usage: {
-        totalViewCount: 100,
-      },
-    };
-
-    mocks.mockGetView.mockResolvedValue(viewWithUsage);
+  it('should successfully get view', async () => {
+    mocks.mockGetView.mockResolvedValue(mockView);
     mocks.mockGraphql.mockResolvedValue({
       data: {
         sheetsConnection: {
@@ -186,21 +83,67 @@ describe('getViewTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const content = JSON.parse(result.content[0].text);
+    expect(content.id).toBe(mockView.id);
+    expect(content.name).toBe(mockView.name);
     expect(content.upstreamDatasources).toBeDefined();
     expect(content.upstreamDatasources).toHaveLength(2);
     expect(content.upstreamDatasources[0].luid).toBe('ds-123');
-    expect(content.totalViewCount).toBe(100);
+    expect(content.usage.totalViewCount).toBe(42);
   });
 
-  it('returns view without lineage when Metadata API fails', async () => {
-    const viewWithUsage = {
-      ...mockView,
-      usage: {
-        totalViewCount: 50,
-      },
-    };
+  it('should handle API errors gracefully', async () => {
+    mocks.mockGetView.mockRejectedValue(new Error('API Error'));
 
-    mocks.mockGetView.mockResolvedValue(viewWithUsage);
+    const result = await getToolResult({ viewId: mockView.id });
+
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('API Error');
+  });
+
+  it('should return view not allowed error when view is not allowed', async () => {
+    mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
+      allowed: false,
+      message: 'Querying the view with LUID test-view-id is not allowed.',
+    });
+
+    const result = await getToolResult({ viewId: 'test-view-id' });
+
+    expect(result.isError).toBe(true);
+    if (result.isError) {
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain(
+        'Querying the view with LUID test-view-id is not allowed',
+      );
+    }
+  });
+
+  it('should successfully fetch view metadata without enrichment when Metadata API is disabled', async () => {
+    mocks.mockGetView.mockResolvedValue(mockView);
+
+    const result = await getToolResult(
+      { viewId: mockView.id },
+      {
+        disableMetadataApiRequests: true,
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const content = JSON.parse(result.content[0].text);
+    expect(content.id).toBe(mockView.id);
+    expect(content.name).toBe(mockView.name);
+    expect(content.usage.totalViewCount).toBe(42);
+    expect(content.upstreamDatasources).toBeUndefined();
+    expect(mocks.mockGetView).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      viewId: mockView.id,
+      includeUsageStatistics: true,
+    });
+  });
+
+  it('should return view without lineage when Metadata API fails', async () => {
+    mocks.mockGetView.mockResolvedValue(mockView);
     mocks.mockGraphql.mockRejectedValue(new Error('Metadata API unavailable'));
 
     const result = await getToolResult({ viewId: mockView.id });
@@ -209,19 +152,12 @@ describe('getViewTool', () => {
     invariant(result.content[0].type === 'text');
     const content = JSON.parse(result.content[0].text);
     expect(content.id).toBe(mockView.id);
-    expect(content.totalViewCount).toBe(50);
+    expect(content.usage.totalViewCount).toBe(42);
     expect(content.upstreamDatasources).toBeUndefined();
   });
 
-  it('filters upstream datasources by allowlist', async () => {
-    const viewWithUsage = {
-      ...mockView,
-      usage: {
-        totalViewCount: 75,
-      },
-    };
-
-    mocks.mockGetView.mockResolvedValue(viewWithUsage);
+  it('should filter upstream datasources by allowlist', async () => {
+    mocks.mockGetView.mockResolvedValue(mockView);
     mocks.mockGraphql.mockResolvedValue({
       data: {
         sheetsConnection: {
@@ -256,14 +192,12 @@ describe('getViewTool', () => {
     expect(content.upstreamDatasources[0].luid).toBe('ds-allowed');
   });
 
-  it('flattens usage stats with zero count when usage is undefined', async () => {
+  it('should return usage as undefined when not provided by API', async () => {
     mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
       allowed: true,
     });
 
-    const viewWithoutUsage: typeof mockView = {
-      ...mockView,
-    };
+    const { usage, ...viewWithoutUsage } = mockView;
 
     mocks.mockGetView.mockResolvedValue(viewWithoutUsage);
 
@@ -278,9 +212,58 @@ describe('getViewTool', () => {
     if (!result.isError) {
       invariant(result.content[0].type === 'text');
       const content = JSON.parse(result.content[0].text);
-      expect(content.totalViewCount).toBe(0);
       expect(content.usage).toBeUndefined();
     }
+  });
+
+  describe('bounded context access control', () => {
+    it('should return error when view workbook is not in workbookIds allowlist', async () => {
+      mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
+        allowed: false,
+        message:
+          'The view with LUID test-view-id cannot be queried because it does not belong to an allowed workbook.',
+      });
+
+      const result = await getToolResult({ viewId: 'test-view-id' });
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('does not belong to an allowed workbook');
+      }
+    });
+
+    it('should return error when view project is not in projectIds allowlist', async () => {
+      mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
+        allowed: false,
+        message:
+          'The view with LUID test-view-id cannot be queried because it does not belong to an allowed project.',
+      });
+
+      const result = await getToolResult({ viewId: 'test-view-id' });
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('does not belong to an allowed project');
+      }
+    });
+
+    it('should return error when view does not have allowed tags', async () => {
+      mocks.mockResourceAccessChecker.isViewAllowed.mockResolvedValue({
+        allowed: false,
+        message:
+          'The view with LUID test-view-id cannot be queried because it does not have one of the allowed tags.',
+      });
+
+      const result = await getToolResult({ viewId: 'test-view-id' });
+
+      expect(result.isError).toBe(true);
+      if (result.isError) {
+        invariant(result.content[0].type === 'text');
+        expect(result.content[0].text).toContain('does not have one of the allowed tags');
+      }
+    });
   });
 });
 
@@ -293,8 +276,8 @@ async function getToolResult(
     };
   },
 ): Promise<CallToolResult> {
-  const getViewTool = getGetViewTool(new WebMcpServer());
-  const callback = await Provider.from(getViewTool.callback);
+  const tool = getViewTool(new WebMcpServer());
+  const callback = await Provider.from(tool.callback);
   const mockExtra = getMockRequestHandlerExtra();
 
   if (configOverrides) {

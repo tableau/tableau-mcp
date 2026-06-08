@@ -19,7 +19,7 @@ import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.
 import { getListUsersTool } from './users/listUsers.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
 import { getGetCustomViewImageTool } from './views/getCustomViewImage.js';
-import { getGetViewTool } from './views/getView.js';
+import { getViewTool } from './views/getView.js';
 import { getGetViewDataTool } from './views/getViewData.js';
 import { getGetViewImageTool } from './views/getViewImage.js';
 import { getListCustomViewsTool } from './views/listCustomViews.js';
@@ -41,7 +41,7 @@ export const webToolFactories = [
   getGeneratePulseMetricValueInsightBundleTool,
   getGeneratePulseInsightBriefTool,
   getGetWorkbookTool,
-  getGetViewTool,
+  getViewTool,
   getGetViewDataTool,
   getGetViewImageTool,
   getListWorkbooksTool,

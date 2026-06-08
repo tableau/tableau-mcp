@@ -18,6 +18,9 @@ export const mockView = {
       },
     ],
   },
+  usage: {
+    totalViewCount: 42,
+  },
 } satisfies View;
 
 export const mockView2 = {
