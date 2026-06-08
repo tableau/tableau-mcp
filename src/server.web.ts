@@ -6,6 +6,8 @@ import {
 import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
@@ -21,6 +23,7 @@ import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
+import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings.js';
 import { Provider } from './utils/provider.js';
@@ -28,6 +31,7 @@ import { Provider } from './utils/provider.js';
 export const serverName = 'tableau-mcp';
 
 const serverVersion = pkg.version;
+const __dirname = getDirname();
 
 export class WebMcpServer extends Server {
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
@@ -162,7 +166,7 @@ export class WebMcpServer extends Server {
   ): Promise<void> => {
     invariant(tool.app, `Tool ${tool.name} is an app but no app details were provided`);
 
-    const { resourceUri, html } = tool.app;
+    const { resourceUri, htmlPath } = tool.app;
 
     // Register a tool with UI metadata. When the host calls this tool, it reads
     // `_meta.ui.resourceUri` to know which resource to fetch and render as an
@@ -192,12 +196,13 @@ export class WebMcpServer extends Server {
       resourceUri,
       { mimeType: RESOURCE_MIME_TYPE },
       async () => {
+        const htmlContent = await readFile(join(__dirname, htmlPath), 'utf-8');
         return {
           contents: [
             {
               uri: resourceUri,
               mimeType: RESOURCE_MIME_TYPE,
-              text: html,
+              text: htmlContent,
             },
           ],
         };
