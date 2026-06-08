@@ -105,7 +105,7 @@ export const getJobOptimizationInformPrompt: WebPromptFactory = () => ({
     const requested = args.jobType
       ? args.jobType
           .split(',')
-          .map((value) => value.trim())
+          .map((value: string) => value.trim())
           .filter(Boolean)
       : [];
     const jobTypeValues = discover
