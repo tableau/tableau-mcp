@@ -53,7 +53,7 @@ Before beginning the deployment process, ensure the following prerequisites are 
   - [NPM package](https://www.npmjs.com/package/@tableau/mcp-server)
   - [Docker container](https://github.com/tableau/tableau-mcp/pkgs/container/tableau-mcp)
   - Node.js
-    [single executable application](../getting-started#nodejs-single-executable-applications)
+    [single executable application](../extras/node-sea.md)
   - The `build` directory from a local build of [the repo](https://github.com/tableau/tableau-mcp)
     or your fork.
 
