@@ -131,3 +131,9 @@ parameter. Pass it via the `parameters` field of the query object if you need lo
   ]
 }
 ```
+
+## Related
+
+- The MCP prompt `job-optimization-inform` invokes this tool and renders the results as a job
+  optimization report for human-in-the-loop review. It defaults to extract refresh jobs and can
+  discover and analyze every job type on the site.

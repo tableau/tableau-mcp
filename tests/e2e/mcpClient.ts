@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { Implementation } from '@modelcontextprotocol/sdk/types.js';
+import { ErrorCode, Implementation, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { Variant } from '../../src/scripts/variants.js';
@@ -48,6 +48,33 @@ export class McpClient {
 
   async listTools(): Promise<Array<string>> {
     return (await this.client.listTools()).tools.map((tool) => tool.name);
+  }
+
+  /**
+   * Lists the registered prompt names. Returns an empty array when the server
+   * registers no prompts (the prompts capability is then not advertised).
+   */
+  async listPrompts(): Promise<Array<string>> {
+    try {
+      return (await this.client.listPrompts()).prompts.map((prompt) => prompt.name);
+    } catch (error) {
+      // -32601 (Method not found) means no prompts are registered, so the
+      // prompts capability is not advertised. Surface that as an empty list.
+      if (error instanceof McpError && error.code === ErrorCode.MethodNotFound) {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Gets a prompt by name and returns the concatenated text of its messages.
+   */
+  async getPromptText(name: string, args: Record<string, string> = {}): Promise<string> {
+    const result = await this.client.getPrompt({ name, arguments: args });
+    return result.messages
+      .map((message) => (message.content.type === 'text' ? message.content.text : ''))
+      .join('\n');
   }
 
   /**
