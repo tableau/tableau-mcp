@@ -101,7 +101,7 @@ describe('log', () => {
 
   it('should not route to file logger when fileLogger is not enabled', () => {
     vi.stubEnv('ENABLED_LOGGERS', 'appLogger');
-    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
     log(entry);
 
@@ -131,13 +131,13 @@ describe('log', () => {
   });
 
   it('should serialize Error objects with name, message, and stack only', () => {
-    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const _stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const mockError = new Error('Test error');
     mockError.stack = 'Error: Test error\n    at test.js:1:1';
 
     log({ message: 'Error occurred', level: 'error', logger: 'test', data: mockError });
 
-    const loggedOutput = stderrSpy.mock.calls[0][0] as string;
+    const loggedOutput = _stderrSpy.mock.calls[0][0] as string;
     const parsed = JSON.parse(loggedOutput.trim());
 
     expect(parsed.data).toEqual({

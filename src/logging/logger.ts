@@ -42,11 +42,12 @@ export function log(entry: LogEntry): void {
   }
 
   // we are removing any unnecessary fields that may also leak sensitive data
-  entry.data = errorReplacer(entry.data)
+  entry.data = errorReplacer(entry.data);
 
   if (config.loggers.has('appLogger')) {
     const message = JSON.stringify(entry);
     if (config.transport === 'http') {
+      // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
       console.log(message);
     } else {
       process.stderr.write(message + '\n');

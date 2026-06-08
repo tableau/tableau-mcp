@@ -61,7 +61,7 @@ export class FeatureGate {
         level: 'error',
         message: `Failed to load feature config from ${filePath}: ${errorMessage}. All features disabled.`,
         logger: 'featureGate',
-        data: error
+        data: error,
       });
       return new Map<string, boolean>();
     }
