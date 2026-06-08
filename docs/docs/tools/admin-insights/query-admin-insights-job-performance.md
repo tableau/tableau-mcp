@@ -29,6 +29,10 @@ object: `fields`, `filters`, `parameters`. The schema mirrors the schema accepte
 
 The `fields` array must contain at least one entry — omitting it causes a VDS error.
 
+`Job Type` values are stored without spaces, e.g. `RefreshExtracts`, `IncrementExtracts`,
+`RefreshExtractsViaBridge`, `IncrementExtractsViaBridge`, `SendSingleSubscription`, `RunFlow`. Query
+the `Job Type` field alone to list the values present on a site.
+
 Common usage:
 
 - Analyze extract refresh durations and failure rates per datasource or workbook.
@@ -70,7 +74,7 @@ Example:
       {
         "field": { "fieldCaption": "Job Type" },
         "filterType": "SET",
-        "values": ["Refresh Extracts"],
+        "values": ["RefreshExtracts"],
         "exclude": false
       }
     ]
@@ -114,7 +118,7 @@ parameter. Pass it via the `parameters` field of the query object if you need lo
   "data": [
     {
       "Item Name": "Sales Pipeline",
-      "Job Type": "Refresh Extracts",
+      "Job Type": "RefreshExtracts",
       "Job Result": "Succeeded",
       "Started At": "2026-05-28T08:00:12Z",
       "Job Duration": 45.2,
@@ -122,7 +126,7 @@ parameter. Pass it via the `parameters` field of the query object if you need lo
     },
     {
       "Item Name": "Marketing Dashboard",
-      "Job Type": "Refresh Extracts",
+      "Job Type": "RefreshExtracts",
       "Job Result": "Failed",
       "Started At": "2026-05-28T08:15:00Z",
       "Job Duration": 120.8,

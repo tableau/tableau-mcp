@@ -4,7 +4,15 @@ import { WebPromptFactory } from '../registry.js';
 import { renderNotesFor } from './renderNotes.js';
 
 const TOOL_NAME = 'query-admin-insights-job-performance';
-const DEFAULT_JOB_TYPE = 'Refresh Extracts';
+
+// Raw `Job Type` values as stored in the datasource (no spaces). Extract refresh
+// spans direct and Bridge variants, so the default scope is all four.
+const DEFAULT_JOB_TYPES = [
+  'RefreshExtracts',
+  'IncrementExtracts',
+  'RefreshExtractsViaBridge',
+  'IncrementExtractsViaBridge',
+];
 
 // Placeholder the model substitutes per discovered job type in discovery mode.
 const JOB_TYPE_PLACEHOLDER = '__JOB_TYPE__';
@@ -28,7 +36,8 @@ const argsSchema = {
     .string()
     .optional()
     .describe(
-      `Job Type to analyze. Defaults to "${DEFAULT_JOB_TYPE}". Ignored when discover is true.`,
+      'Comma-separated raw Job Type values to analyze (e.g. "RefreshExtracts,RunFlow"). ' +
+        'Defaults to the extract refresh types. Ignored when discover is true.',
     ),
   lookbackDays: z
     .string()
@@ -48,10 +57,10 @@ const argsSchema = {
     .describe('When true, first discover the Job Type values on the site, then analyze each.'),
 } as const;
 
-// Builds the VDS query the model sends to the job-performance tool. jobType is a
-// literal value or the placeholder used in discovery mode.
+// Builds the VDS query the model sends to the job-performance tool. jobTypeValues
+// holds one or more literal values, or the single placeholder in discovery mode.
 const buildToolArgs = (
-  jobType: string,
+  jobTypeValues: ReadonlyArray<string>,
   lookbackDays?: number,
   limit?: number,
 ): Record<string, unknown> => {
@@ -59,7 +68,7 @@ const buildToolArgs = (
     {
       field: { fieldCaption: 'Job Type' },
       filterType: 'SET',
-      values: [jobType],
+      values: jobTypeValues,
       exclude: false,
     },
   ];
@@ -93,12 +102,23 @@ export const getJobOptimizationInformPrompt: WebPromptFactory = () => ({
   disabled: (config) => !config.adminToolsEnabled,
   callback: (args) => {
     const discover = args.discover === 'true';
-    const jobType = discover ? JOB_TYPE_PLACEHOLDER : args.jobType?.trim() || DEFAULT_JOB_TYPE;
+    const requested = args.jobType
+      ? args.jobType
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean)
+      : [];
+    const jobTypeValues = discover
+      ? [JOB_TYPE_PLACEHOLDER]
+      : requested.length > 0
+        ? requested
+        : DEFAULT_JOB_TYPES;
+
     const lookbackDays = args.lookbackDays ? parseInt(args.lookbackDays, 10) : undefined;
     const limit = args.limit ? parseInt(args.limit, 10) : undefined;
 
-    const toolArgs = buildToolArgs(jobType, lookbackDays, limit);
-    const notes = renderNotesFor(discover ? DEFAULT_JOB_TYPE : jobType);
+    const toolArgs = buildToolArgs(jobTypeValues, lookbackDays, limit);
+    const notes = renderNotesFor(discover ? DEFAULT_JOB_TYPES : jobTypeValues);
 
     const lines: string[] = [
       `You are running the Tableau MCP **job-optimization-inform** workflow (read-only) using \`${TOOL_NAME}\`.`,
@@ -121,7 +141,7 @@ export const getJobOptimizationInformPrompt: WebPromptFactory = () => ({
     } else {
       lines.push(
         `Call \`${TOOL_NAME}\` exactly once with the arguments below. It returns the already-filtered ` +
-          'rows for this job type.',
+          'rows for the selected job types.',
       );
     }
 

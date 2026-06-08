@@ -32,17 +32,19 @@ describe('job-optimization-inform prompt', () => {
     expect(text).toContain('Do **not** recompute');
   });
 
-  it('defaults to the Refresh Extracts job type with no discovery step', async () => {
+  it('defaults to the extract refresh job types with no discovery step', async () => {
     const text = await textOf();
-    expect(text).toContain('"Refresh Extracts"');
+    expect(text).toContain('"RefreshExtracts"');
+    expect(text).toContain('"RefreshExtractsViaBridge"');
     expect(text).not.toContain('__JOB_TYPE__');
     expect(text).not.toContain('distinct `Job Type`');
   });
 
-  it('scopes to an explicit jobType without discovery', async () => {
-    const text = await textOf({ jobType: 'Subscription' });
-    expect(text).toContain('"Subscription"');
-    expect(text).not.toContain('"Refresh Extracts"');
+  it('scopes to explicit comma-separated job types without discovery', async () => {
+    const text = await textOf({ jobType: 'SendSingleSubscription, RunFlow' });
+    expect(text).toContain('"SendSingleSubscription"');
+    expect(text).toContain('"RunFlow"');
+    expect(text).not.toContain('"RefreshExtracts"');
     expect(text).not.toContain('__JOB_TYPE__');
   });
 

@@ -46,7 +46,7 @@ describe('job-optimization-inform prompt', () => {
       const text = await client.getPromptText(PROMPT_NAME);
       expect(text).toContain(`\`${TOOL_NAME}\``);
       expect(text).toContain('exactly once');
-      expect(text).toContain('"Refresh Extracts"');
+      expect(text).toContain('"RefreshExtracts"');
       expect(text).not.toContain('__JOB_TYPE__');
     });
 
