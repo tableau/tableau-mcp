@@ -131,26 +131,9 @@ describe('log', () => {
   });
 
   it('should serialize Error objects with name, message, and stack only', () => {
-    const _stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    const mockError = new Error('Test error');
-    mockError.stack = 'Error: Test error\n    at test.js:1:1';
-
-    log({ message: 'Error occurred', level: 'error', logger: 'test', data: mockError });
-
-    const loggedOutput = _stderrSpy.mock.calls[0][0] as string;
-    const parsed = JSON.parse(loggedOutput.trim());
-
-    expect(parsed.data).toEqual({
-      name: 'Error',
-      message: 'Test error',
-      stack: 'Error: Test error\n    at test.js:1:1',
-    });
-  });
-
-  it('should remove config field from AxiosError-like objects', () => {
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
-    // Create an actual Error instance with AxiosError properties
+    // Create an actual Error instance with AxiosError properties including sensitive config
     const mockAxiosError = Object.assign(new Error('Request failed with status code 404'), {
       name: 'AxiosError',
       stack: 'AxiosError: Request failed with status code 404\n    at test.js:1:1',
@@ -173,10 +156,16 @@ describe('log', () => {
     const loggedOutput = stderrSpy.mock.calls[0][0] as string;
     const parsed = JSON.parse(loggedOutput.trim());
 
-    // Config should be removed by errorReplacer
+    // Only name, message, stack, and cause should be serialized
+    expect(parsed.data).toEqual({
+      name: 'AxiosError',
+      message: 'Request failed with status code 404',
+      stack: 'AxiosError: Request failed with status code 404\n    at test.js:1:1',
+    });
+    // Extra fields like config, code, status should be excluded
     expect(parsed.data.config).toBeUndefined();
-    expect(parsed.data.message).toBe('Request failed with status code 404');
-    expect(parsed.data.name).toBe('AxiosError');
+    expect(parsed.data.code).toBeUndefined();
+    expect(parsed.data.status).toBeUndefined();
   });
 });
 
