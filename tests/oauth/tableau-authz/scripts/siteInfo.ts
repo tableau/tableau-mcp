@@ -26,6 +26,8 @@ export const siteNames = [
 
 export type SiteName = (typeof siteNames)[number];
 
+// These are internal Tableau MCP server URLs and are not supported for public use.
+// Customers should never use these URLs and support will not be provided for them.
 export const siteToMcpServerMap: Record<SiteName, string> = {
   'mcp-uwc-test':
     'https://prod-dataplane3-tabhf-mcp-svc-tableau.sfdc-lywfpd.svc.sfdcfc.net/tableau-mcp',
