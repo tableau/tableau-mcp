@@ -45,7 +45,25 @@ digraph pr_workflow {
 
 ## Implementation
 
-### Step 1: Gather Git Context (parallel)
+### Step 1: Prompt for GUS ID
+
+**ALWAYS ask the user for the GUS work item ID first:**
+
+```
+What is the GUS work item ID for this PR? (Format: W-12345678)
+```
+
+**GUS ID format:**
+- Starts with `@W-` 
+- Followed by 8 digits
+- Example: `@W-22802840`
+
+If the user provides just the number (e.g., "22802840"), prepend `@W-`.
+If they provide "W-12345678", prepend `@`.
+
+**Do NOT proceed without a GUS ID.** This is required for tableau-mcp PRs.
+
+### Step 2: Gather Git Context (parallel)
 
 Run these commands in parallel with Bash tool:
 
@@ -63,7 +81,7 @@ git diff main...HEAD --stat
 git branch -vv
 ```
 
-### Step 2: Find PR Template
+### Step 3: Find PR Template
 
 Common locations (check in order):
 1. `.github/pull_request_template.md`
@@ -73,9 +91,15 @@ Common locations (check in order):
 
 Read the template to identify required sections.
 
-### Step 3: Analyze Commits
+### Step 4: Analyze Commits
 
-Extract information for each template section:
+Extract information for PR title and template sections:
+
+**PR Title:**
+- Format: `@W-12345678: Short description`
+- Use the GUS ID from Step 1
+- Derive short description from main commit subject (50 chars max after GUS ID)
+- Example: `@W-22802840: Remove sensitive data from error logs`
 
 **Description/Summary:**
 - Combine commit subjects into bullet points
@@ -100,12 +124,12 @@ Extract information for each template section:
 - Scan for: renamed env vars, removed APIs, changed defaults
 - Check commit bodies for "BREAKING" or "breaking change"
 
-### Step 4: Fill Template
+### Step 5: Fill Template
 
-Create PR body using HEREDOC format:
+Create PR with GUS ID in title using HEREDOC format:
 
 ```bash
-gh pr create --title "PR Title from commits" --body "$(cat <<'EOF'
+gh pr create --title "@W-12345678: Short description from commits" --body "$(cat <<'EOF'
 ## Description
 - Bullet point 1 from commit
 - Bullet point 2 from commit
@@ -143,14 +167,14 @@ EOF
 | Breaking Changes | BREAKING in commits + env var changes |
 | Checklist items | Verify against actual changes |
 
-### Step 5: Create PR
+### Step 6: Create PR
 
 ```bash
 # Push if needed
 [[ $(git branch -vv | grep 'gone\]') ]] && git push -u origin HEAD
 
-# Create PR
-gh pr create --title "..." --body "..."
+# Create PR with GUS ID in title
+gh pr create --title "@W-12345678: Description" --body "..."
 ```
 
 ## Edge Cases
@@ -189,11 +213,17 @@ If `gh pr create` fails with "pull request already exists":
 
 ## Common Mistakes
 
+### ❌ Skipping GUS ID Prompt
+
+**ALWAYS ask for GUS ID first.** Don't proceed without it.
+
+Don't say: "I'll create the PR now" without getting the GUS ID.
+
 ### ❌ Asking User for Information Already in Commits
 
 Don't ask: "What should I put in the description?"
 
-The commits contain this information. Extract it.
+The commits contain this information. Extract it (except for GUS ID).
 
 ### ❌ Generic or Vague Descriptions
 
@@ -223,23 +253,32 @@ Use single quotes in `<<'EOF'` to prevent variable expansion in PR body.
 
 ## Quick Reference
 
-**Full command sequence:**
+**Full workflow:**
 
 ```bash
-# 1. Gather context (parallel)
+# 1. Ask user for GUS ID
+# "What is the GUS work item ID? (Format: W-12345678)"
+
+# 2. Gather context (parallel)
 git log main..HEAD --format="%h %s%n%b" &
 git diff main...HEAD --stat &
 wait
 
-# 2. Find and read template
+# 3. Find and read template
 cat .github/pull_request_template.md
 
-# 3. Create PR with filled template
-gh pr create --title "..." --body "$(cat <<'EOF'
+# 4. Create PR with GUS ID in title
+gh pr create --title "@W-12345678: Short description" --body "$(cat <<'EOF'
 [filled template here]
 EOF
 )"
 ```
+
+**Title format examples:**
+- ✅ `@W-22802840: Remove sensitive data from error logs`
+- ✅ `@W-12345678: Add user management feature`
+- ❌ `Remove sensitive data from error logs` (missing GUS ID)
+- ❌ `W-22802840: Fix bug` (missing @ symbol)
 
 ## Real-World Impact
 
