@@ -21,6 +21,10 @@ const paramsSchema = {
   viewId: z.string(),
 };
 
+function constructViewWebUrl(server: string, siteName: string, contentUrl: string): string {
+  return `${server}/#/site/${siteName}/views/${contentUrl}`;
+}
+
 export const getViewTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const getViewTool = new WebTool({
     server,
@@ -92,7 +96,14 @@ export const getViewTool = (server: WebMcpServer): WebTool<typeof paramsSchema> 
         },
         constrainSuccessResult: (view) => ({
           type: 'success',
-          result: view,
+          result: {
+            ...view,
+            webUrl: constructViewWebUrl(
+              extra.config.server,
+              extra.config.siteName,
+              view.contentUrl,
+            ),
+          },
         }),
       });
     },

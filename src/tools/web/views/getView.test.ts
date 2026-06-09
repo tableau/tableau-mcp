@@ -60,6 +60,23 @@ describe('getViewTool', () => {
     expect(tool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
   });
 
+  it('should include webUrl in response', async () => {
+    mocks.mockGetView.mockResolvedValue(mockView);
+
+    const result = await getToolResult(
+      { viewId: mockView.id },
+      { disableMetadataApiRequests: true },
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const content = JSON.parse(result.content[0].text);
+    expect(content.webUrl).toBe(
+      'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview',
+    );
+    expect(content.contentUrl).toBe('Superstore/Overview');
+  });
+
   it('should successfully get view', async () => {
     mocks.mockGetView.mockResolvedValue(mockView);
     mocks.mockGraphql.mockResolvedValue({
@@ -85,6 +102,9 @@ describe('getViewTool', () => {
     const content = JSON.parse(result.content[0].text);
     expect(content.id).toBe(mockView.id);
     expect(content.name).toBe(mockView.name);
+    expect(content.webUrl).toBe(
+      'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview',
+    );
     expect(content.upstreamDatasources).toBeDefined();
     expect(content.upstreamDatasources).toHaveLength(2);
     expect(content.upstreamDatasources[0].luid).toBe('ds-123');
@@ -130,6 +150,9 @@ describe('getViewTool', () => {
     const content = JSON.parse(result.content[0].text);
     expect(content.id).toBe(mockView.id);
     expect(content.name).toBe(mockView.name);
+    expect(content.webUrl).toBe(
+      'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview',
+    );
     expect(content.usage.totalViewCount).toBe(42);
     expect(content.upstreamDatasources).toBeUndefined();
   });
@@ -144,6 +167,9 @@ describe('getViewTool', () => {
     invariant(result.content[0].type === 'text');
     const content = JSON.parse(result.content[0].text);
     expect(content.id).toBe(mockView.id);
+    expect(content.webUrl).toBe(
+      'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview',
+    );
     expect(content.usage.totalViewCount).toBe(42);
     expect(content.upstreamDatasources).toBeUndefined();
   });
@@ -179,6 +205,9 @@ describe('getViewTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const content = JSON.parse(result.content[0].text);
+    expect(content.webUrl).toBe(
+      'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview',
+    );
     expect(content.upstreamDatasources).toBeDefined();
     expect(content.upstreamDatasources).toHaveLength(1);
     expect(content.upstreamDatasources[0].luid).toBe('ds-allowed');
