@@ -8,12 +8,8 @@ plugin-based model so operations like telemetry and monitoring can be provided b
 
 ## Tableau Server
 
-Tableau Server customers should use the
 [Tableau MCP deployment guide for Tableau Server customers](./tableau-server.md).
 
 ## Tableau Cloud
 
-As part of the 2026.2 release, Tableau is planning to roll out a cloud-hosted service, available to
-all editions. The release will unlock the ability for Tableau Cloud customers to self-host Tableau
-MCP at scale using OAuth. A Tableau MCP deployment guide for Tableau Cloud customers will also be
-made available with the release.
+[Tableau MCP deployment guide for Tableau Cloud customers](./tableau-cloud.md).
