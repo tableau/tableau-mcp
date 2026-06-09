@@ -94,6 +94,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         message: `Access token validation failed: ${result.error}`,
         level: 'info',
         logger: 'oauth',
+        data: result.error,
       });
       res.status(401).json({
         error: 'invalid_token',
