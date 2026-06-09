@@ -42,6 +42,7 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   INCLUDE_PROJECT_IDS: string | undefined;
   INCLUDE_DATASOURCE_IDS: string | undefined;
   INCLUDE_WORKBOOK_IDS: string | undefined;
+  INCLUDE_VIEW_IDS: string | undefined;
   INCLUDE_TAGS: string | undefined;
   TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: string | undefined;
   PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES: string | undefined;
@@ -60,6 +61,7 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   ADVERTISE_API_SCOPES: string | undefined;
   OAUTH_REDIRECT_URI: string | undefined;
   OAUTH_RESOURCE_URI: string | undefined;
+  OAUTH_GLOBAL_RESOURCE_URI: string | undefined;
   OAUTH_LOCK_SITE: string | undefined;
   OAUTH_CLIENT_ID_SECRET_PAIRS: string | undefined;
   OAUTH_DISABLE_SCOPES: string | undefined;
@@ -73,6 +75,9 @@ export interface ProcessEnvWeb extends ProcessEnvBase {
   PRODUCT_TELEMETRY_ENDPOINT: string | undefined;
   IS_HYPERFORCE: string | undefined;
   BREAK_GLASS_DISABLE_GLOBALLY: string | undefined;
+  ADMIN_TOOLS_ENABLED: string | undefined;
+  ADMIN_GATE_CACHE_TTL_MINUTES: string | undefined;
+  STALE_CONTENT_MIN_AGE_DAYS: string | undefined;
 }
 
 export interface ProcessEnvDesktop extends ProcessEnvBase {

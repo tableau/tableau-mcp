@@ -1,11 +1,20 @@
+import {
+  registerAppResource,
+  registerAppTool,
+  RESOURCE_MIME_TYPE,
+} from '@modelcontextprotocol/ext-apps/server';
 import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 
 import pkg from '../package.json';
 import { getConfig } from './config.js';
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
+import { getFeatureGate } from './features/featureGate.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
+import { registerPrompts } from './prompts/index.js';
 import { ClientInfo, Server } from './server.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
@@ -14,11 +23,15 @@ import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
+import { getDirname } from './utils/getDirname.js';
+import invariant from './utils/invariant.js';
 import { getConfigWithOverrides } from './utils/mcpSiteSettings.js';
 import { Provider } from './utils/provider.js';
 
-const serverName = 'tableau-mcp';
+export const serverName = 'tableau-mcp';
+
 const serverVersion = pkg.version;
+const __dirname = getDirname();
 
 export class WebMcpServer extends Server {
   constructor({ mcpServer, clientInfo }: { mcpServer?: McpServer; clientInfo?: ClientInfo } = {}) {
@@ -28,15 +41,11 @@ export class WebMcpServer extends Server {
   registerTools = async (tableauAuthInfo?: TableauAuthInfo): Promise<void> => {
     const config = getConfig();
 
-    for (const {
-      name,
-      description,
-      paramsSchema,
-      annotations,
-      callback,
-    } of await this._getToolsToRegister(tableauAuthInfo)) {
-      const toolCallback: ToolCallback<typeof paramsSchema> = async (
-        args: typeof paramsSchema,
+    const mcpAppsEnabled = getFeatureGate().isFeatureEnabled('mcp-apps');
+
+    for (const tool of await this._getToolsToRegister(tableauAuthInfo)) {
+      const toolCallback: ToolCallback<typeof tool.paramsSchema> = async (
+        args: typeof tool.paramsSchema,
         extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
       ) => {
         if (config.breakGlassDisableGlobally) {
@@ -48,7 +57,7 @@ export class WebMcpServer extends Server {
         const requestOverridesHeader =
           extra.requestInfo?.headers[X_TABLEAU_MCP_CONFIG_HEADER]?.toString() ?? '';
         const requestOverrides = getRequestOverridesFromHeader(requestOverridesHeader);
-        const tableauToolCallback = await Provider.from(callback);
+        const tableauToolCallback = await Provider.from(tool.callback);
         const tableauRequestHandlerExtra: TableauWebRequestHandlerExtra = {
           ...extra,
           config,
@@ -85,16 +94,14 @@ export class WebMcpServer extends Server {
         return tableauToolCallback(args, tableauRequestHandlerExtra);
       };
 
-      this.mcpServer.registerTool(
-        name,
-        {
-          description: await Provider.from(description),
-          inputSchema: await Provider.from(paramsSchema),
-          annotations: await Provider.from(annotations),
-        },
-        toolCallback,
-      );
+      if (mcpAppsEnabled && tool.app) {
+        await this._registerAppTool(tool, toolCallback);
+      } else {
+        await this._registerTool(tool, toolCallback);
+      }
     }
+
+    registerPrompts(this);
   };
 
   protected _getToolsToRegister = async (
@@ -135,5 +142,71 @@ export class WebMcpServer extends Server {
     }
 
     return toolsToRegister;
+  };
+
+  private _registerTool = async (
+    tool: WebTool<any>,
+    toolCallback: ToolCallback<typeof tool.paramsSchema>,
+  ): Promise<void> => {
+    this.mcpServer.registerTool(
+      tool.name,
+      {
+        title: await Provider.from(tool.title),
+        description: await Provider.from(tool.description),
+        inputSchema: await Provider.from(tool.paramsSchema),
+        annotations: await Provider.from(tool.annotations),
+      },
+      toolCallback,
+    );
+  };
+
+  private _registerAppTool = async (
+    tool: WebTool<any>,
+    toolCallback: ToolCallback<typeof tool.paramsSchema>,
+  ): Promise<void> => {
+    invariant(tool.app, `Tool ${tool.name} is an app but no app details were provided`);
+
+    const { resourceUri, htmlPath } = tool.app;
+
+    // Register a tool with UI metadata. When the host calls this tool, it reads
+    // `_meta.ui.resourceUri` to know which resource to fetch and render as an
+    // interactive UI.
+    registerAppTool(
+      this.mcpServer,
+      tool.name,
+      {
+        title: (await Provider.from(tool.annotations)).title,
+        description: await Provider.from(tool.description),
+        inputSchema: await Provider.from(tool.paramsSchema),
+        annotations: await Provider.from(tool.annotations),
+        _meta: {
+          ui: {
+            resourceUri,
+          },
+        },
+      },
+      toolCallback,
+    );
+
+    // Register the resource, which returns the bundled HTML/JavaScript for the UI.
+    registerAppResource(
+      // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.
+      this.mcpServer,
+      tool.name,
+      resourceUri,
+      { mimeType: RESOURCE_MIME_TYPE },
+      async () => {
+        const htmlContent = await readFile(join(__dirname, htmlPath), 'utf-8');
+        return {
+          contents: [
+            {
+              uri: resourceUri,
+              mimeType: RESOURCE_MIME_TYPE,
+              text: htmlContent,
+            },
+          ],
+        };
+      },
+    );
   };
 }

@@ -10,6 +10,13 @@ import { mockView } from '../views/mockView.js';
 import { filterWorkbookViews, getGetWorkbookTool } from './getWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
 
+const mockWorkbookWithFlattenedViewUsage = {
+  ...mockWorkbook,
+  views: {
+    view: [{ ...mockView, totalViewCount: 0 }],
+  },
+};
+
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
 
 const mocks = vi.hoisted(() => ({
@@ -100,11 +107,12 @@ describe('getWorkbookTool', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: null,
+          viewIds: null,
           tags: null,
         },
       });
       invariant(result.type === 'success');
-      expect(result.result).toEqual(mockWorkbook);
+      expect(result.result).toEqual(mockWorkbookWithFlattenedViewUsage);
     });
 
     it('should return the views that match the tags in the bounded context', () => {
@@ -114,12 +122,13 @@ describe('getWorkbookTool', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: null,
+          viewIds: null,
           tags: new Set(['tag-1']),
         },
       });
 
       invariant(result.type === 'success');
-      expect(result.result).toEqual(mockWorkbook);
+      expect(result.result).toEqual(mockWorkbookWithFlattenedViewUsage);
     });
 
     it('should remove views from the workbook when all views were filtered out by the tags in the bounded context', () => {
@@ -129,6 +138,71 @@ describe('getWorkbookTool', () => {
           projectIds: null,
           datasourceIds: null,
           workbookIds: null,
+          viewIds: null,
+          tags: new Set(['some-other-tag']),
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual({ ...mockWorkbook, views: { view: [] } });
+    });
+
+    it('should return the views that match viewIds in the bounded context', () => {
+      const result = filterWorkbookViews({
+        workbook: mockWorkbook,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: new Set([mockView.id]),
+          tags: null,
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual(mockWorkbook);
+    });
+
+    it('should remove views from the workbook when all views are filtered out by viewIds', () => {
+      const result = filterWorkbookViews({
+        workbook: mockWorkbook,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: new Set(['some-other-view-id']),
+          tags: null,
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual({ ...mockWorkbook, views: { view: [] } });
+    });
+
+    it('should apply both viewIds and tags filters in conjunction (AND)', () => {
+      const result = filterWorkbookViews({
+        workbook: mockWorkbook,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: new Set([mockView.id]),
+          tags: new Set(['tag-1']),
+        },
+      });
+
+      invariant(result.type === 'success');
+      expect(result.result).toEqual(mockWorkbook);
+    });
+
+    it('should remove views when viewIds matches but tags do not', () => {
+      const result = filterWorkbookViews({
+        workbook: mockWorkbook,
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: new Set([mockView.id]),
           tags: new Set(['some-other-tag']),
         },
       });

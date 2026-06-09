@@ -1,4 +1,9 @@
+import { getGetStaleContentReportTool } from './adminInsights/getStaleContentReport.js';
+import { getQueryAdminInsightsJobPerformanceTool } from './adminInsights/queryJobPerformance.js';
+import { getQueryAdminInsightsSiteContentTool } from './adminInsights/querySiteContent.js';
+import { getQueryAdminInsightsTsEventsTool } from './adminInsights/queryTsEvents.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
+import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
 import { getListProjectsTool } from './projects/listProjects.js';
@@ -12,6 +17,7 @@ import { getListPulseMetricSubscriptionsTool } from './pulse/listMetricSubscript
 import { getQueryDatasourceTool } from './queryDatasource/queryDatasource.js';
 import { getResetConsentTool } from './resetConsent/resetConsent.js';
 import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.js';
+import { getListUsersTool } from './users/listUsers.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
 import { getGetCustomViewImageTool } from './views/getCustomViewImage.js';
 import { getGetViewDataTool } from './views/getViewData.js';
@@ -24,6 +30,8 @@ import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 export const webToolFactories = [
   getGetDatasourceMetadataTool,
   getListDatasourcesTool,
+  getListExtractRefreshTasksTool,
+  getListUsersTool,
   getQueryDatasourceTool,
   getListAllPulseMetricDefinitionsTool,
   getListPulseMetricDefinitionsFromDefinitionIdsTool,
@@ -44,4 +52,8 @@ export const webToolFactories = [
   getSearchContentTool,
   getRevokeAccessTokenTool,
   getResetConsentTool,
+  getQueryAdminInsightsTsEventsTool,
+  getQueryAdminInsightsSiteContentTool,
+  getQueryAdminInsightsJobPerformanceTool,
+  getGetStaleContentReportTool,
 ];

@@ -14,6 +14,8 @@ import {
 } from './scopes.js';
 import { AuthenticatedRequest } from './types.js';
 
+const protectedResourceMetadataPath = '/.well-known/oauth-protected-resource';
+
 /**
  * Express middleware for OAuth authentication
  *
@@ -51,6 +53,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
 
       const { enforceScopes, advertiseApiScopes, resourceUri } = getConfig().oauth;
       const baseUrl = new URL(resourceUri).origin;
+      const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;
       const requiredMcpScopes = getRequiredMcpScopesForRequest(req.body);
       const requiredApiScopes = getRequiredApiScopesForRequest(req.body, advertiseApiScopes);
       const scopeParam =
@@ -61,7 +64,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         .status(401)
         .header(
           'WWW-Authenticate',
-          `Bearer realm="MCP", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"${scopeParam}`,
+          `Bearer realm="MCP", resource_metadata="${resourceMetadataUrl}"${scopeParam}`,
         )
         .json({
           error: 'unauthorized',
@@ -91,6 +94,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         message: `Access token validation failed: ${result.error}`,
         level: 'info',
         logger: 'oauth',
+        data: result.error,
       });
       res.status(401).json({
         error: 'invalid_token',
@@ -120,12 +124,13 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
         });
         const { resourceUri } = getConfig().oauth;
         const baseUrl = new URL(resourceUri).origin;
+        const resourceMetadataUrl = `${baseUrl}${protectedResourceMetadataPath}`;
         const requiredScopesForChallenge = [
           ...requiredMcpScopes,
           ...(shouldCheckApiScopes ? requiredApiScopes : []),
         ];
         const scopeParam = `scope="${formatScopes(requiredScopesForChallenge)}"`;
-        const wwwAuthenticate = `Bearer realm="MCP", error="insufficient_scope", error_description="Missing required scopes", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource", ${scopeParam}`;
+        const wwwAuthenticate = `Bearer realm="MCP", error="insufficient_scope", error_description="Missing required scopes", resource_metadata="${resourceMetadataUrl}", ${scopeParam}`;
 
         if (req.method === 'GET' && req.headers.accept?.includes('text/event-stream')) {
           res.writeHead(403, {

@@ -126,6 +126,19 @@ const mockDatasourceModelResponses = vi.hoisted(() => ({
       },
     ],
   },
+  // Reproduces tableau/tableau-mcp#364: relationships without an `expression` key.
+  noExpression: {
+    logicalTables: [
+      { logicalTableId: 'Orders_123456789', caption: 'Orders' },
+      { logicalTableId: 'Returns_987654321', caption: 'Returns' },
+    ],
+    logicalTableRelationships: [
+      {
+        fromLogicalTable: { logicalTableId: 'Orders_123456789' },
+        toLogicalTable: { logicalTableId: 'Returns_987654321' },
+      },
+    ],
+  },
 }));
 
 const mockListFieldsResponses = vi.hoisted(() => ({
@@ -391,6 +404,29 @@ describe('getDatasourceMetadataTool', () => {
       },
     });
     expect(mocks.mockGraphql).toHaveBeenCalledWith(expect.stringContaining('datasourceFieldInfo'));
+  });
+
+  it('should return metadata for a multi-table model whose relationships omit expression', async () => {
+    // Regression test for tableau/tableau-mcp#364.
+    mocks.mockReadMetadata.mockResolvedValue(new Ok(mockReadMetadataResponses.success));
+    mocks.mockGetDatasourceModel.mockResolvedValue(
+      new Ok(mockDatasourceModelResponses.noExpression),
+    );
+    mocks.mockGraphql.mockResolvedValue(mockListFieldsResponses.success);
+
+    const result = await getToolResult();
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const responseData = JSON.parse(result.content[0].text);
+
+    expect(responseData.datasourceModel).toMatchObject(mockDatasourceModelResponses.noExpression);
+    // The missing expression must remain absent, not be synthesized into an empty object.
+    expect(responseData.datasourceModel.logicalTableRelationships[0]).not.toHaveProperty(
+      'expression',
+    );
+    expect(responseData.fieldGroups.length).toBeGreaterThan(0);
+    expect(responseData.parameters.length).toBeGreaterThan(0);
   });
 
   it('should handle empty readMetadata response gracefully', async () => {

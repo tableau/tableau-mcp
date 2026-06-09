@@ -135,9 +135,31 @@ The base URL used in the `resource` field of the OAuth protected resource metada
 clients may require the `resource` field to match exactly with the URL used to access the MCP
 server. This should be the base URL of your MCP server deployment.
 
+This value is the deployment domain only (no path). The MCP server is reached at
+`<OAUTH_RESOURCE_URI>/tableau-mcp`, which is the canonical resource identifier advertised as
+`resource` in the protected resource metadata document. Incoming bearer tokens are
+audience-validated against it: the token's `aud` claim must equal `<OAUTH_RESOURCE_URI>/tableau-mcp`,
+per [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) and
+[RFC 8707](https://www.rfc-editor.org/rfc/rfc8707). A token whose `aud` matches neither that value
+nor [`OAUTH_GLOBAL_RESOURCE_URI`](#oauth_global_resource_uri) is rejected with a `401`.
+
 - Default: `http://127.0.0.1:3927`
 - Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for
   production)
+
+<hr />
+
+### `OAUTH_GLOBAL_RESOURCE_URI`
+
+An additional resource URL that is also accepted in a token's `aud` claim. Use this when clients may
+reach the deployment through an environment-wide global URL in addition to the pod-specific
+[`OAUTH_RESOURCE_URI`](#oauth_resource_uri).
+
+- Optional. When unset, only the `OAUTH_RESOURCE_URI` value is accepted.
+- The value is matched against `aud` exactly, so set it to the global resource URL the authorization
+  server stamps into the claim (for example `https://mcp.tableau.com`).
+- Applies only when using an external Tableau authorization server
+  ([`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) is `false`).
 
 <hr />
 
@@ -511,3 +533,8 @@ The MCP server supports three OAuth 2.1 grant types:
 - `/Callback`: OAuth callback handler (authorization code only)
 - `/oauth2/token`: Token exchange and refresh (all grant types)
 - `/oauth2/revoke`: Token revocation
+
+For MCP client-facing token and consent cleanup, see the
+[`reset-consent`](../../tools/token-management/reset-consent.md) and
+[`revoke-access-token`](../../tools/token-management/revoke-access-token.md) tools. For full cleanup,
+call `reset-consent` before `revoke-access-token`.

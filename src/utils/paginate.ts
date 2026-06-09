@@ -19,15 +19,19 @@ type PaginateArgs<T> = {
   getDataFn: (pagination: PageConfig) => Promise<{ pagination: Pagination; data: Array<T> }>;
 };
 
+const MAX_PAGE_SIZE = 1000;
+
 export async function paginate<T>({ pageConfig, getDataFn }: PaginateArgs<T>): Promise<Array<T>> {
   const { pageSize, limit } = pageConfigSchema.parse(pageConfig);
-  const { pagination, data } = await getDataFn(pageConfig);
+  const effectivePageSize = pageSize ? Math.min(pageSize, MAX_PAGE_SIZE) : pageSize;
+
+  const { pagination, data } = await getDataFn({ ...pageConfig, pageSize: effectivePageSize });
   const result = [...data];
 
   let { totalAvailable, pageNumber } = pagination;
   while (totalAvailable > result.length && (!limit || limit > result.length)) {
     const { pagination: nextPagination, data: nextData } = await getDataFn({
-      pageSize,
+      pageSize: effectivePageSize,
       pageNumber: pageNumber + 1,
       limit,
     });

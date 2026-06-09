@@ -174,6 +174,50 @@ describe('paginate', () => {
     expect(getDataFn).not.toHaveBeenCalled();
   });
 
+  it('should clamp pageSize to 1000 when a larger value is provided', async () => {
+    const mockData = [{ id: 1 }];
+    const mockPagination: Pagination = {
+      pageNumber: 1,
+      pageSize: 1000,
+      totalAvailable: 1,
+    };
+
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: mockPagination,
+      data: mockData,
+    });
+
+    const result = await paginate({
+      pageConfig: { pageSize: 5000, pageNumber: 1 },
+      getDataFn,
+    });
+
+    expect(result).toEqual(mockData);
+    expect(getDataFn).toHaveBeenCalledWith({ pageSize: 1000, pageNumber: 1 });
+  });
+
+  it('should not clamp pageSize when it is at or below 1000', async () => {
+    const mockData = [{ id: 1 }];
+    const mockPagination: Pagination = {
+      pageNumber: 1,
+      pageSize: 500,
+      totalAvailable: 1,
+    };
+
+    const getDataFn = vi.fn().mockResolvedValue({
+      pagination: mockPagination,
+      data: mockData,
+    });
+
+    const result = await paginate({
+      pageConfig: { pageSize: 500, pageNumber: 1 },
+      getDataFn,
+    });
+
+    expect(result).toEqual(mockData);
+    expect(getDataFn).toHaveBeenCalledWith({ pageSize: 500, pageNumber: 1 });
+  });
+
   it('should handle case where totalAvailable equals data length after first page', async () => {
     const mockData = [{ id: 1 }, { id: 2 }];
     const mockPagination: Pagination = {

@@ -80,7 +80,7 @@ async function startServer(): Promise<void> {
       if (!config.oauth.enabled) {
         log({
           message:
-            '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access! By having explicitly disabled OAuth by setting the DANGEROUSLY_DISABLE_OAUTH environment variable to "true", you accept any and all risks associated with this decision.',
+            '⚠️ TRANSPORT is "http" but OAuth is disabled! Your MCP server may not be protected from unauthorized access. Non-OAuth HTTP usage is intended only for testing/prototyping or deployments that are licensed and approved for user-based licensing (UBL). For general multi-user HTTP deployments, prefer OAuth. By explicitly disabling OAuth with DANGEROUSLY_DISABLE_OAUTH="true", confirm this matches your Tableau licensing/security guidance.',
           level: 'info',
           logger: 'startup',
         });

@@ -274,6 +274,14 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  INCLUDE_VIEW_IDS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'IDs of views to constrain tool results by',
+    description: 'A comma-separated list of view IDs to constrain tool results by.',
+    required: false,
+    sensitive: false,
+  },
   INCLUDE_TAGS: {
     includeInUserConfig: false,
     type: 'string',
@@ -504,6 +512,15 @@ const envVars = {
     required: false,
     sensitive: false,
   },
+  OAUTH_GLOBAL_RESOURCE_URI: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'OAuth Global Resource URI',
+    description:
+      "An additional resource URI whose canonical identifier is accepted in a token's 'aud' claim, e.g. the environment's global Tableau URL alongside the pod-specific one.",
+    required: false,
+    sensitive: false,
+  },
   OAUTH_LOCK_SITE: {
     includeInUserConfig: false,
     type: 'boolean',
@@ -600,6 +617,33 @@ const envVars = {
     type: 'boolean',
     title: 'Break Glass Disable Globally',
     description: 'Force all MCP tools to return a "service unavailable" error message.',
+    required: false,
+    sensitive: false,
+  },
+  ADMIN_TOOLS_ENABLED: {
+    includeInUserConfig: false,
+    type: 'boolean',
+    title: 'Enable admin-only MCP tools',
+    description:
+      'When "true", registers admin-only MCP tools and prompts (e.g. Admin Insights queries, stale-content cleanup). Defaults to "false".',
+    required: false,
+    sensitive: false,
+  },
+  ADMIN_GATE_CACHE_TTL_MINUTES: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Admin tools cache TTL (minutes)',
+    description:
+      'TTL for caches used by admin-only tools (assertAdmin, Admin Insights dataset LUID, project name resolution). Defaults to 5; range 1-1440.',
+    required: false,
+    sensitive: false,
+  },
+  STALE_CONTENT_MIN_AGE_DAYS: {
+    includeInUserConfig: false,
+    type: 'string',
+    title: 'Stale content min age (days)',
+    description:
+      'Minimum days since last access for content to be considered stale by the stale-content-cleanup-inform prompt. Defaults to 90.',
     required: false,
     sensitive: false,
   },

@@ -106,20 +106,22 @@ describe('OverridableConfig', () => {
   });
 
   describe('Bounded context parsing', () => {
-    it('should set boundedContext to null sets when no project, datasource, or workbook IDs are provided', () => {
+    it('should set boundedContext to null sets when no project, datasource, workbook, or view IDs are provided', () => {
       const config = new OverridableConfig({});
       expect(config.boundedContext).toEqual({
         projectIds: null,
         datasourceIds: null,
         workbookIds: null,
+        viewIds: null,
         tags: null,
       });
     });
 
-    it('should set boundedContext to the specified tags and project, datasource, and workbook IDs when provided', () => {
+    it('should set boundedContext to the specified tags and project, datasource, workbook, and view IDs when provided', () => {
       vi.stubEnv('INCLUDE_PROJECT_IDS', ' 123, 456, 123   '); // spacing is intentional here to test trimming
       vi.stubEnv('INCLUDE_DATASOURCE_IDS', '789,101');
       vi.stubEnv('INCLUDE_WORKBOOK_IDS', '112,113');
+      vi.stubEnv('INCLUDE_VIEW_IDS', 'v1,v2');
       vi.stubEnv('INCLUDE_TAGS', 'tag1,tag2');
 
       const config = new OverridableConfig({});
@@ -127,6 +129,7 @@ describe('OverridableConfig', () => {
         projectIds: new Set(['123', '456']),
         datasourceIds: new Set(['789', '101']),
         workbookIds: new Set(['112', '113']),
+        viewIds: new Set(['v1', 'v2']),
         tags: new Set(['tag1', 'tag2']),
       });
     });
@@ -152,6 +155,14 @@ describe('OverridableConfig', () => {
 
       expect(() => new OverridableConfig({})).toThrow(
         'When set, the environment variable INCLUDE_WORKBOOK_IDS must have at least one value',
+      );
+    });
+
+    it('should throw error when INCLUDE_VIEW_IDS is set to an empty string', () => {
+      vi.stubEnv('INCLUDE_VIEW_IDS', '');
+
+      expect(() => new OverridableConfig({})).toThrow(
+        'When set, the environment variable INCLUDE_VIEW_IDS must have at least one value',
       );
     });
 
@@ -371,6 +382,28 @@ describe('OverridableConfig', () => {
         INCLUDE_WORKBOOK_IDS: ',,,,,,,',
       });
       expect(config3.boundedContext.workbookIds).toEqual(new Set(['999']));
+    });
+
+    it('should override INCLUDE_VIEW_IDS', () => {
+      vi.stubEnv('INCLUDE_VIEW_IDS', '999');
+
+      const config = new OverridableConfig({
+        INCLUDE_VIEW_IDS: '123,456',
+      });
+
+      expect(config.boundedContext.viewIds).toEqual(new Set(['123', '456']));
+
+      // should clear view IDs with empty string
+      const config2 = new OverridableConfig({
+        INCLUDE_VIEW_IDS: '',
+      });
+      expect(config2.boundedContext.viewIds).toEqual(null);
+
+      // should fall back to environment variable resulting override set is empty
+      const config3 = new OverridableConfig({
+        INCLUDE_VIEW_IDS: ',,,,,,,',
+      });
+      expect(config3.boundedContext.viewIds).toEqual(new Set(['999']));
     });
 
     it('should override INCLUDE_TAGS', () => {
@@ -694,6 +727,36 @@ describe('OverridableConfig', () => {
 
         const config = new OverridableConfig({}, { INCLUDE_WORKBOOK_IDS: 'w1,w2' });
         expect(config.boundedContext.workbookIds).toEqual(new Set(['w1', 'w2']));
+      });
+
+      it('should throw when INCLUDE_VIEW_IDS request override is not allowed', () => {
+        expect(() => new OverridableConfig({}, { INCLUDE_VIEW_IDS: 'v1' })).toThrow(
+          'INCLUDE_VIEW_IDS is not an allowed request override',
+        );
+      });
+
+      it('should apply INCLUDE_VIEW_IDS request override when allowed', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'INCLUDE_VIEW_IDS:unrestricted');
+
+        const config = new OverridableConfig({}, { INCLUDE_VIEW_IDS: 'v1,v2' });
+        expect(config.boundedContext.viewIds).toEqual(new Set(['v1', 'v2']));
+      });
+
+      it('should restrict INCLUDE_VIEW_IDS to a subset of current bounds', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'INCLUDE_VIEW_IDS');
+        vi.stubEnv('INCLUDE_VIEW_IDS', 'v1,v2,v3');
+
+        const config = new OverridableConfig({}, { INCLUDE_VIEW_IDS: 'v1,v2' });
+        expect(config.boundedContext.viewIds).toEqual(new Set(['v1', 'v2']));
+      });
+
+      it('should throw when restricted INCLUDE_VIEW_IDS override is not a subset of current bounds', () => {
+        vi.stubEnv('ALLOWED_REQUEST_OVERRIDES', 'INCLUDE_VIEW_IDS');
+        vi.stubEnv('INCLUDE_VIEW_IDS', 'v1,v2');
+
+        expect(() => new OverridableConfig({}, { INCLUDE_VIEW_IDS: 'v1,v99' })).toThrow(
+          'INCLUDE_VIEW_IDS can only be overridden to a subset of the current bounds',
+        );
       });
 
       it('should throw when INCLUDE_TAGS request override is not allowed', () => {

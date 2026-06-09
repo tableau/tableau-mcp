@@ -72,6 +72,7 @@ async function connectOAuthClient({
       username: env.TEST_USER,
       password: env.TEST_PASSWORD,
       siteName: env.TEST_SITE_NAME,
+      fillSiteName: env.FILL_SITE_NAME,
     });
 
     await consentFlow.grantConsentIfNecessary();

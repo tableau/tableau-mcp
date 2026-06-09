@@ -98,6 +98,35 @@ describe('OAuth', () => {
     );
   });
 
+  it('should preserve scope guidance in 401 resource_metadata challenges', async () => {
+    vi.stubEnv('OAUTH_RESOURCE_URI', 'https://mcp.example.com');
+
+    const { app } = await startServer();
+
+    const response = await request(app)
+      .post(`/${serverName}`)
+      .send({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: {
+            name: 'test-client',
+            version: '1.0.0',
+          },
+        },
+      });
+
+    expect(response.status).toBe(401);
+    expect(response.headers['www-authenticate']).toContain(
+      'resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource"',
+    );
+    expect(response.headers['www-authenticate']).toContain('scope="');
+    expect(response.headers['www-authenticate']).toContain('tableau:mcp:datasource:read');
+  });
+
   it('should provide a protected resource metadata endpoint for the OAuth 2.1 flow', async () => {
     const { app } = await startServer();
 
@@ -110,6 +139,8 @@ describe('OAuth', () => {
       bearer_methods_supported: ['header'],
       scopes_supported: [
         'tableau:mcp:datasource:read',
+        'tableau:mcp:tasks:read',
+        'tableau:mcp:users:read',
         'tableau:mcp:workbook:read',
         'tableau:mcp:content:read',
         'tableau:mcp:view:read',
@@ -137,6 +168,8 @@ describe('OAuth', () => {
       code_challenge_methods_supported: ['S256'],
       scopes_supported: [
         'tableau:mcp:datasource:read',
+        'tableau:mcp:tasks:read',
+        'tableau:mcp:users:read',
         'tableau:mcp:workbook:read',
         'tableau:mcp:content:read',
         'tableau:mcp:view:read',
@@ -169,6 +202,8 @@ describe('OAuth', () => {
       code_challenge_methods_supported: ['S256'],
       scopes_supported: [
         'tableau:mcp:datasource:read',
+        'tableau:mcp:tasks:read',
+        'tableau:mcp:users:read',
         'tableau:mcp:workbook:read',
         'tableau:mcp:content:read',
         'tableau:mcp:view:read',

@@ -2,10 +2,17 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import {
+  getViewLineageByLuid,
+  getViewLineageQuery,
+  mergeViewLineage,
+} from '../../../sdks/tableau/methods/lineageUtils.js';
 import { View } from '../../../sdks/tableau/types/view.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { paginate } from '../../../utils/paginate.js';
 import { genericFilterDescription } from '../genericFilterDescription.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
@@ -100,7 +107,30 @@ export const getListViewsTool = (server: WebMcpServer): WebTool<typeof paramsSch
                   },
                 });
 
-                return views;
+                if (configWithOverrides.disableMetadataApiRequests || views.length === 0) {
+                  return flattenViewUsage(views);
+                }
+
+                try {
+                  const response = await restApi.metadataMethods.graphql(
+                    getViewLineageQuery(views.map((view) => view.id)),
+                  );
+                  return flattenViewUsage(
+                    mergeViewLineage(
+                      views,
+                      getViewLineageByLuid(response),
+                      configWithOverrides.boundedContext.datasourceIds,
+                    ),
+                  );
+                } catch (error) {
+                  log({
+                    message: 'Failed to enrich views with lineage metadata',
+                    level: 'warning',
+                    logger: 'lineage',
+                    data: getExceptionMessage(error),
+                  });
+                  return flattenViewUsage(views);
+                }
               },
             }),
           );
@@ -128,7 +158,11 @@ export function constrainViews({
     };
   }
 
-  const { projectIds, workbookIds, tags } = boundedContext;
+  const { projectIds, workbookIds, viewIds, tags } = boundedContext;
+  if (viewIds) {
+    views = views.filter((view) => viewIds.has(view.id));
+  }
+
   if (projectIds) {
     views = views.filter((view) => (view.project?.id ? projectIds.has(view.project.id) : false));
   }
@@ -155,4 +189,11 @@ export function constrainViews({
     type: 'success',
     result: views,
   };
+}
+
+function flattenViewUsage(views: Array<View>): Array<View> {
+  return views.map(({ usage, ...view }) => ({
+    ...view,
+    totalViewCount: usage?.totalViewCount ?? 0,
+  }));
 }

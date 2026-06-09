@@ -45,18 +45,6 @@ export default abstract class AuthenticatedMethods<
     };
   }
 
-  protected get userId(): string {
-    if (!this._creds) {
-      throw new Error('Authenticate by calling signIn() first');
-    }
-
-    if (this._creds.type === 'X-Tableau-Auth') {
-      return this._creds.user.id;
-    }
-
-    throw new Error('User ID can not be determined from the Bearer token alone');
-  }
-
   constructor(apiClient: ZodiosInstance<T>, creds: RestApiCredentials) {
     super(apiClient);
     this._creds = creds;

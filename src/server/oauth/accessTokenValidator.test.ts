@@ -1,9 +1,13 @@
+import { Err, Ok } from 'ts-results-es';
+
+import { RestApi } from '../../sdks/tableau/restApi.js';
 import { TableauAccessTokenValidator } from './accessTokenValidator.js';
 
 const MOCK_ISSUER = 'https://sso.online.tableau.com';
 const MOCK_CLIENT_ID = 'https://cimd.example.com/oauth/metadata.json';
-const MOCK_AUD_LEGACY = 'https://legacy-client.example.com/oauth/metadata.json';
-const MOCK_RESOURCE_URL = 'https://mcp.example.com';
+const MOCK_RESOURCE_URI = 'https://mcp.example.com';
+const MOCK_GLOBAL_RESOURCE_URI = 'https://global.example.com';
+const EXPECTED_AUD = `${MOCK_RESOURCE_URI}/tableau-mcp`;
 const FUTURE_EXP = Math.floor(Date.now() / 1000) + 3600;
 
 function makeBearer(payload: Record<string, unknown>): string {
@@ -15,10 +19,11 @@ function makeBearer(payload: Record<string, unknown>): string {
 function basePayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     iss: MOCK_ISSUER,
-    aud: MOCK_AUD_LEGACY,
+    aud: EXPECTED_AUD,
     exp: FUTURE_EXP,
     sub: 'user@example.com',
     scope: 'tableau:views:read tableau:datasources:read',
+    client_id: MOCK_CLIENT_ID,
     'https://tableau.com/siteId': 'abc123',
     'https://tableau.com/userId': 'uid-1',
     'https://tableau.com/targetUrl': 'https://my-tableau.example.com',
@@ -33,6 +38,7 @@ describe('TableauAccessTokenValidator', () => {
     vi.stubEnv('AUTH', 'oauth');
     vi.stubEnv('OAUTH_ISSUER', MOCK_ISSUER);
     vi.stubEnv('OAUTH_EMBEDDED_AUTHZ_SERVER', 'false');
+    vi.stubEnv('OAUTH_RESOURCE_URI', MOCK_RESOURCE_URI);
     validator = new TableauAccessTokenValidator();
   });
 
@@ -40,9 +46,9 @@ describe('TableauAccessTokenValidator', () => {
     vi.unstubAllEnvs();
   });
 
-  describe('client_id claim resolution (migration matrix)', () => {
-    it('uses client_id when present (new contract)', async () => {
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID, aud: MOCK_RESOURCE_URL }));
+  describe('client_id claim resolution', () => {
+    it('uses the client_id claim as the OAuth client ID', async () => {
+      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
       const result = await validator.validate(token);
 
       expect(result.isOk()).toBe(true);
@@ -51,25 +57,24 @@ describe('TableauAccessTokenValidator', () => {
       expect(extra.clientId).toBe(MOCK_CLIENT_ID);
     });
 
-    it('falls back to aud when client_id is absent (legacy compat)', async () => {
-      const token = makeBearer(basePayload({ aud: MOCK_AUD_LEGACY }));
+    it('never derives the client ID from aud (the resource URL)', async () => {
+      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
       const result = await validator.validate(token);
 
       expect(result.isOk()).toBe(true);
       if (!result.isOk()) return;
       const extra = result.value.extra as { clientId?: string };
-      expect(extra.clientId).toBe(MOCK_AUD_LEGACY);
+      expect(extra.clientId).not.toBe(EXPECTED_AUD);
     });
 
-    it('prefers client_id over aud when both are present and differ', async () => {
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID, aud: MOCK_RESOURCE_URL }));
+    it('rejects token when client_id is missing (schema enforcement)', async () => {
+      const { client_id: _clientId, ...withoutClientId } = basePayload() as Record<string, unknown>;
+      const token = makeBearer(withoutClientId);
       const result = await validator.validate(token);
 
-      expect(result.isOk()).toBe(true);
-      if (!result.isOk()) return;
-      const extra = result.value.extra as { clientId?: string };
-      expect(extra.clientId).toBe(MOCK_CLIENT_ID);
-      expect(extra.clientId).not.toBe(MOCK_RESOURCE_URL);
+      expect(result.isErr()).toBe(true);
+      if (!result.isErr()) return;
+      expect(result.error).toMatch(/Invalid access token/);
     });
 
     it('rejects token when aud is missing (schema enforcement)', async () => {
@@ -85,21 +90,12 @@ describe('TableauAccessTokenValidator', () => {
 
   describe('standard validation', () => {
     it('returns AuthInfo.clientId as the resolved OAuth client_id', async () => {
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID, aud: MOCK_RESOURCE_URL }));
+      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
       const result = await validator.validate(token);
 
       expect(result.isOk()).toBe(true);
       if (!result.isOk()) return;
       expect(result.value.clientId).toBe(MOCK_CLIENT_ID);
-    });
-
-    it('returns AuthInfo.clientId as aud when client_id claim is absent (legacy compat)', async () => {
-      const token = makeBearer(basePayload());
-      const result = await validator.validate(token);
-
-      expect(result.isOk()).toBe(true);
-      if (!result.isOk()) return;
-      expect(result.value.clientId).toBe(MOCK_AUD_LEGACY);
     });
 
     it('rejects token with wrong issuer', async () => {
@@ -137,6 +133,104 @@ describe('TableauAccessTokenValidator', () => {
       expect(extra.username).toBe('user@example.com');
       expect(extra.siteId).toBe('abc123');
       expect(extra.userId).toBe('uid-1');
+    });
+
+    it('resolves tableauAuthInfo.userId from the current session when the bearer token claim is absent', async () => {
+      const mockSetBearerToken = vi.fn();
+      const mockGetCurrentServerSession = vi.fn().mockResolvedValue(
+        new Ok({
+          site: { id: 'abc123', name: 'site-name' },
+          user: { id: 'session-user-id', name: 'user@example.com' },
+        }),
+      );
+      vi.mocked(RestApi).mockImplementationOnce(
+        () =>
+          ({
+            setBearerToken: mockSetBearerToken,
+            authenticatedServerMethods: {
+              getCurrentServerSession: mockGetCurrentServerSession,
+            },
+          }) as unknown as RestApi,
+      );
+      const { 'https://tableau.com/userId': _userId, ...payloadWithoutUserId } = basePayload({
+        client_id: MOCK_CLIENT_ID,
+      });
+      const token = makeBearer(payloadWithoutUserId);
+
+      const result = await validator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+      expect(mockSetBearerToken).toHaveBeenCalledWith(token);
+      expect(mockGetCurrentServerSession).toHaveBeenCalledOnce();
+      const extra = result.value.extra as Record<string, unknown>;
+      expect(extra.userId).toBe('session-user-id');
+    });
+
+    it('rejects the token when current session userId resolution fails', async () => {
+      const mockGetCurrentServerSession = vi
+        .fn()
+        .mockResolvedValue(new Err({ type: 'unauthorized', message: 'unauthorized' }));
+      vi.mocked(RestApi).mockImplementationOnce(
+        () =>
+          ({
+            setBearerToken: vi.fn(),
+            authenticatedServerMethods: {
+              getCurrentServerSession: mockGetCurrentServerSession,
+            },
+          }) as unknown as RestApi,
+      );
+      const { 'https://tableau.com/userId': _userId, ...payloadWithoutUserId } = basePayload({
+        client_id: MOCK_CLIENT_ID,
+      });
+      const token = makeBearer(payloadWithoutUserId);
+
+      const result = await validator.validate(token);
+
+      expect(result.isErr()).toBe(true);
+      if (!result.isErr()) return;
+      expect(result.error).toBe('Invalid or expired access token');
+      expect(mockGetCurrentServerSession).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('audience validation (RFC 9068)', () => {
+    it('accepts a token whose aud matches the pod resource identifier', async () => {
+      const token = makeBearer(basePayload({ aud: EXPECTED_AUD }));
+
+      const result = await validator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+    });
+
+    it('rejects a token minted for another deployment (cross-pod)', async () => {
+      const token = makeBearer(basePayload({ aud: 'https://other-pod.example.com/tableau-mcp' }));
+
+      const result = await validator.validate(token);
+
+      expect(result.isErr()).toBe(true);
+      if (!result.isErr()) return;
+      expect(result.error).toMatch(/audience/i);
+    });
+
+    it('accepts a token whose aud matches the configured global resource URL', async () => {
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URI', MOCK_GLOBAL_RESOURCE_URI);
+      const audValidator = new TableauAccessTokenValidator();
+      const token = makeBearer(basePayload({ aud: MOCK_GLOBAL_RESOURCE_URI }));
+
+      const result = await audValidator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+    });
+
+    it('still accepts the pod resource identifier when a global resource URI is configured', async () => {
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URI', MOCK_GLOBAL_RESOURCE_URI);
+      const audValidator = new TableauAccessTokenValidator();
+      const token = makeBearer(basePayload({ aud: EXPECTED_AUD }));
+
+      const result = await audValidator.validate(token);
+
+      expect(result.isOk()).toBe(true);
     });
   });
 });

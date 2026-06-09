@@ -73,7 +73,13 @@ describe('listWorkbooksTool', () => {
     it('should return empty result when no workbooks are found', () => {
       const result = constrainWorkbooks({
         workbooks: [],
-        boundedContext: { projectIds: null, datasourceIds: null, workbookIds: null, tags: null },
+        boundedContext: {
+          projectIds: null,
+          datasourceIds: null,
+          workbookIds: null,
+          viewIds: null,
+          tags: null,
+        },
       });
 
       invariant(result.type === 'empty');
@@ -89,6 +95,7 @@ describe('listWorkbooksTool', () => {
           projectIds: new Set(['123']),
           datasourceIds: null,
           workbookIds: null,
+          viewIds: null,
           tags: null,
         },
       });
@@ -107,17 +114,19 @@ describe('listWorkbooksTool', () => {
         projectIds: [null, new Set([mockWorkbook.project.id])],
         datasourceIds: [null], // n/a for workbooks
         workbookIds: [null, new Set([mockWorkbook.id])],
+        viewIds: [null], // n/a for workbooks
         tags: [null, new Set([mockWorkbook.tags.tag[0].label])],
       }),
     )(
-      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, tags: $tags',
-      async ({ projectIds, datasourceIds, workbookIds, tags }) => {
+      'should return success result when the bounded context is projectIds: $projectIds, datasourceIds: $datasourceIds, workbookIds: $workbookIds, viewIds: $viewIds, tags: $tags',
+      async ({ projectIds, datasourceIds, workbookIds, viewIds, tags }) => {
         const result = constrainWorkbooks({
           workbooks: [mockWorkbook, mockWorkbook2],
           boundedContext: {
             projectIds,
             datasourceIds,
             workbookIds,
+            viewIds,
             tags,
           },
         });

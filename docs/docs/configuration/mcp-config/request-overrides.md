@@ -104,6 +104,15 @@ Overrides which workbook IDs constrain tool arguments and results.
 | `restricted` | If there are any current bounds set, the override value must be a **subset** of the current bounds. Cannot clear existing bounds. |
 | `unrestricted` | Override value can be any valid set of workbook IDs, including values not in the current bounds. Can clear existing bounds with an empty value. |
 
+### [`INCLUDE_VIEW_IDS`](tool-scoping.md#include_view_ids)
+
+Overrides which view IDs constrain tool arguments and results.
+
+| Restriction Type | Behavior |
+|---|---|
+| `restricted` | If there are any current bounds set, the override value must be a **subset** of the current bounds. Cannot clear existing bounds. |
+| `unrestricted` | Override value can be any valid set of view IDs, including values not in the current bounds. Can clear existing bounds with an empty value. |
+
 ### [`INCLUDE_TAGS`](tool-scoping.md#include_tags)
 
 Overrides which tags constrain tool arguments and results.
@@ -148,6 +157,15 @@ Overrides whether Metadata API requests are disabled.
 |---|---|
 | `restricted` | Can only be overridden to `true`. |
 | `unrestricted` | Can be overridden to `true` or `false`. |
+
+### [`STALE_CONTENT_MIN_AGE_DAYS`](env-vars.md#stale_content_min_age_days)
+
+Overrides the default threshold (in days) used by the `get-stale-content-report` tool to flag stale workbooks and published datasources. Override value must be an integer in the range `1`–`3650`. Empty string reverts to the default (`90`).
+
+| Restriction Type | Behavior |
+|---|---|
+| `restricted` | Override value must be a valid integer in the range `1`–`3650`. |
+| `unrestricted` | Override value must be a valid integer in the range `1`–`3650`. |
 
 ## Override Hierarchy
 

@@ -1,0 +1,8 @@
+{
+  "label": "Admin Insights",
+  "position": 7,
+  "link": {
+    "type": "generated-index",
+    "description": "Admin-only tools that query Tableau Cloud Admin Insights datasources via the VizQL Data Service. Gated by the `ADMIN_TOOLS_ENABLED` environment variable and a request-time site-role check."
+  }
+}

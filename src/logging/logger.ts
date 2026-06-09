@@ -1,5 +1,4 @@
 import { getBaseConfig } from '../config.shared.js';
-import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 import { getFileLogger } from './fileLogger.js';
 import { LogEntry, LogLevel, logLevelSeverity } from './types.js';
 
@@ -19,32 +18,39 @@ export function parseLogLevel(value: string | undefined): LogLevel {
   return 'info';
 }
 
+/**
+ * Custom JSON.stringify replacer that serializes Error objects properly.
+ * Removes the config field from AxiosError to avoid logging sensitive headers.
+ */
+function errorReplacer(data: unknown): unknown {
+  if (data instanceof Error) {
+    return {
+      name: data.name,
+      message: data.message,
+      stack: data.stack,
+      ...(data.cause !== undefined && { cause: data.cause }),
+    };
+  }
+
+  return data;
+}
+
 export function log(entry: LogEntry): void {
   const config = getBaseConfig();
   if (!shouldLog(entry.level, config.logLevel)) {
     return;
   }
+
+  // we are removing any unnecessary fields that may also leak sensitive data
+  entry.data = errorReplacer(entry.data);
+
   if (config.loggers.has('appLogger')) {
-    // Remove data from the entry to avoid double logging.
-    const { data, ...rest } = entry;
-    const message = JSON.stringify(rest);
+    const message = JSON.stringify(entry);
     if (config.transport === 'http') {
-      if (data !== undefined) {
-        // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
-        console.log(message, data);
-      } else {
-        // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
-        console.log(message);
-      }
+      // eslint-disable-next-line no-console -- console.log is intentional here since the transport is not stdio.
+      console.log(message);
     } else {
-      process.stderr.write(message.endsWith('\n') ? message : `${message}\n`);
-      if (data !== undefined) {
-        try {
-          process.stderr.write(JSON.stringify(data) + '\n');
-        } catch (error) {
-          process.stderr.write(`Failed to write data to stderr: ${getExceptionMessage(error)}\n`);
-        }
-      }
+      process.stderr.write(message + '\n');
     }
   }
   if (config.loggers.has('fileLogger')) {

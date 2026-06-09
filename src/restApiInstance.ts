@@ -31,7 +31,9 @@ type JwtScopes =
   | 'tableau:insights:read'
   | 'tableau:views:download'
   | 'tableau:insight_brief:create'
-  | 'tableau:mcp_site_settings:read';
+  | 'tableau:mcp_site_settings:read'
+  | 'tableau:tasks:read'
+  | 'tableau:users:read';
 
 export type RestApiArgs = Pick<
   TableauWebRequestHandlerExtra,
@@ -196,7 +198,7 @@ export const useRestApi = async <T>(
 export const getRequestInterceptor =
   (server: Server, requestId: RequestId): RequestInterceptor =>
   (request) => {
-    request.headers['User-Agent'] = getUserAgent(server);
+    request.headers['User-Agent'] = server.userAgent;
     logRequest(server, request, requestId);
     return request;
   };
@@ -320,17 +322,6 @@ function logResponse(
   } as const;
 
   notifier.info(server.mcpServer, messageObj, { notifier: 'rest-api', requestId });
-}
-
-function getUserAgent(server: Server): string {
-  const userAgentParts = [server.userAgent];
-  if (server.clientInfo) {
-    const { name, version } = server.clientInfo;
-    if (name) {
-      userAgentParts.push(version ? `(${name} ${version})` : `(${name})`);
-    }
-  }
-  return userAgentParts.join(' ');
 }
 
 function getJwtUsername(config: Config, authInfo: TableauAuthInfo | undefined): string {

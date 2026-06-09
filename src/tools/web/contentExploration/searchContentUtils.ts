@@ -146,6 +146,7 @@ type SearchItemContent =
   | 'tags'
   | 'title'
   | 'totalViewCount'
+  | 'upstreamDatasources'
   | 'viewCountLastMonth'
   | 'type'
   | 'workbookDescription';
@@ -269,7 +270,7 @@ export function constrainSearchContent({
     };
   }
 
-  const { projectIds, datasourceIds, workbookIds, tags } = boundedContext;
+  const { projectIds, datasourceIds, workbookIds, viewIds, tags } = boundedContext;
 
   if (projectIds) {
     items = items.filter((item) => {
@@ -305,6 +306,16 @@ export function constrainSearchContent({
         typeof item.luid === 'string' &&
         !workbookIds.has(item.luid)
       ) {
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  if (viewIds) {
+    items = items.filter((item) => {
+      if (item.type === 'view' && typeof item.luid === 'string' && !viewIds.has(item.luid)) {
         return false;
       }
 

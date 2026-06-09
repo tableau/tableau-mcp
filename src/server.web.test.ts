@@ -1,8 +1,9 @@
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
-import { WebMcpServer } from './server.web.js';
+import { serverName, WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 import { exportedForTesting } from './tools/web/listDatasources/listDatasources.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
+import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
 import { getMockRequestHandlerExtra } from './tools/web/toolContext.mock.js';
 import { webToolNames } from './tools/web/toolName.js';
@@ -10,15 +11,64 @@ import { webToolFactories } from './tools/web/tools.js';
 import invariant from './utils/invariant.js';
 import { Provider } from './utils/provider.js';
 
+const mocks = vi.hoisted(() => ({
+  mockRegisterAppTool: vi.fn(),
+  mockRegisterAppResource: vi.fn(),
+  mockFeatureGate: {
+    isFeatureEnabled: vi.fn(() => false),
+  },
+}));
+
+vi.mock('@modelcontextprotocol/ext-apps/server', () => ({
+  registerAppTool: mocks.mockRegisterAppTool,
+  registerAppResource: mocks.mockRegisterAppResource,
+  RESOURCE_MIME_TYPE: 'text/html',
+}));
+
+vi.mock('./features/featureGate.js', () => ({
+  getFeatureGate: vi.fn(() => mocks.mockFeatureGate),
+}));
+
 describe('server', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     stubDefaultEnvVars();
+    mocks.mockRegisterAppTool.mockClear();
+    mocks.mockRegisterAppResource.mockClear();
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
   });
+
+  // Helper functions
+  function getServer(): WebMcpServer {
+    const server = new WebMcpServer();
+    server.mcpServer.registerTool = vi.fn();
+    return server;
+  }
+
+  function createMockAppTool(): WebTool<any> {
+    return {
+      name: 'get-workbook',
+      server: {} as any,
+      title: 'Test App Tool',
+      description: 'Test App Tool',
+      paramsSchema: {},
+      annotations: { title: 'Test App Tool' },
+      callback: vi.fn(),
+      disabled: false,
+      requiredApiScopes: [],
+      logAndExecute: vi.fn(),
+      notifyInvocation: vi.fn(),
+      app: {
+        name: 'test-app',
+        resourceUri: 'tableau://app/test',
+        htmlPath: '<html><body>Test App UI</body></html>',
+      },
+    };
+  }
 
   it('should register tools', async () => {
     const server = getServer();
@@ -31,6 +81,7 @@ describe('server', () => {
       expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
         tool.name,
         {
+          title: await Provider.from(tool.title),
           description: await Provider.from(tool.description),
           inputSchema: await Provider.from(tool.paramsSchema),
           annotations: await Provider.from(tool.annotations),
@@ -38,6 +89,10 @@ describe('server', () => {
         expect.any(Function),
       );
     }
+  });
+
+  it('should use the web variant server name', () => {
+    expect(new WebMcpServer().name).toBe(serverName);
   });
 
   it('should not register disabled tools', async () => {
@@ -69,6 +124,7 @@ describe('server', () => {
     expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
       tool.name,
       {
+        title: await Provider.from(tool.title),
         description: await Provider.from(tool.description),
         inputSchema: await Provider.from(tool.paramsSchema),
         annotations: await Provider.from(tool.annotations),
@@ -97,6 +153,7 @@ describe('server', () => {
         expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
           tool.name,
           {
+            title: await Provider.from(tool.title),
             description: await Provider.from(tool.description),
             inputSchema: await Provider.from(tool.paramsSchema),
             annotations: await Provider.from(tool.annotations),
@@ -149,10 +206,65 @@ describe('server', () => {
           'The Tableau MCP server is temporarily unavailable. Please try again later.',
     );
   });
-});
 
-function getServer(): WebMcpServer {
-  const server = new WebMcpServer();
-  server.mcpServer.registerTool = vi.fn();
-  return server;
-}
+  it('should register app tools when tool has app property', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
+
+    const server = getServer();
+    const mockAppTool = createMockAppTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    expect(mocks.mockRegisterAppTool).toHaveBeenCalledWith(
+      server.mcpServer,
+      'get-workbook',
+      {
+        title: 'Test App Tool',
+        description: 'Test App Tool',
+        inputSchema: {},
+        annotations: { title: 'Test App Tool' },
+        _meta: {
+          ui: {
+            resourceUri: 'tableau://app/test',
+          },
+        },
+      },
+      expect.any(Function),
+    );
+
+    expect(mocks.mockRegisterAppResource).toHaveBeenCalledWith(
+      server.mcpServer,
+      'get-workbook',
+      'tableau://app/test',
+      expect.objectContaining({ mimeType: expect.any(String) }),
+      expect.any(Function),
+    );
+  });
+
+  it('should register as standard tool when mcp-apps feature flag is disabled', async () => {
+    mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+
+    const server = getServer();
+    const mockAppTool = createMockAppTool();
+    vi.spyOn(webToolFactories, 'map').mockReturnValueOnce([mockAppTool]);
+
+    await server.registerTools();
+
+    // Should register as standard tool, not app tool
+    expect(server.mcpServer.registerTool).toHaveBeenCalledWith(
+      'get-workbook',
+      {
+        title: 'Test App Tool',
+        description: 'Test App Tool',
+        inputSchema: {},
+        annotations: { title: 'Test App Tool' },
+      },
+      expect.any(Function),
+    );
+
+    // Should NOT register as app tool
+    expect(mocks.mockRegisterAppTool).not.toHaveBeenCalled();
+    expect(mocks.mockRegisterAppResource).not.toHaveBeenCalled();
+  });
+});

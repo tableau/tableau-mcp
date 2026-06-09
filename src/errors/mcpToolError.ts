@@ -2,6 +2,8 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
+import { getExceptionMessage } from '../utils/getExceptionMessage';
+
 export class McpToolError extends Error {
   readonly type: string;
   readonly statusCode: number;
@@ -70,6 +72,20 @@ export class PulseDisabledError extends McpToolError {
   }
 }
 
+export class PulseInsightsDisabledError extends McpToolError {
+  constructor() {
+    super({
+      type: 'pulse-insights-disabled',
+      message: 'Pulse AI insights are disabled',
+      statusCode: 403,
+    });
+  }
+
+  override getErrorText(): string {
+    return 'AI-powered Pulse insights are not enabled on this Tableau Cloud site. This feature requires Tableau+ to be enabled by a site administrator.';
+  }
+}
+
 export class PulseNotAvailableError extends McpToolError {
   constructor() {
     super({
@@ -135,5 +151,48 @@ export class ServiceUnavailableError extends McpToolError {
 export class UnknownError extends McpToolError {
   constructor(message: string, statusCode = 500) {
     super({ type: 'unknown', message, statusCode });
+  }
+}
+
+export class NoDesktopInstancesFoundError extends McpToolError {
+  constructor() {
+    super({
+      type: 'no-desktop-instances-found',
+      message: [
+        'No running Tableau Desktop instances found.',
+        'Make sure:',
+        '  1. Tableau Desktop is running',
+        '  2. Agent API is enabled',
+        '  3. The manifest file exists in the expected location',
+      ].join('\n'),
+      statusCode: 404,
+    });
+  }
+}
+
+export class GetEventsFailedError extends McpToolError {
+  constructor(error: unknown) {
+    super({
+      type: 'get-events-failed',
+      message: [
+        `Failed to get events: ${getExceptionMessage(error)}.`,
+        'Make sure:',
+        '  1. Tableau Desktop is running',
+        '  2. Agent API is enabled',
+      ].join('\n'),
+      statusCode: 500,
+    });
+  }
+}
+
+export class AdminOnlyError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'admin-only', message, statusCode: 403 });
+  }
+}
+
+export class AdminInsightsUnavailableError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'admin-insights-unavailable', message, statusCode: 404 });
   }
 }

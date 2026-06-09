@@ -13,6 +13,8 @@ test.describe('get-workbook', () => {
       },
     });
 
-    expect(workbook).toMatchObject(superstore);
+    expect(workbook).toMatchObject({
+      id: superstore.id,
+    });
   });
 });

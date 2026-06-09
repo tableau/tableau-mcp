@@ -3,10 +3,18 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
+import { log } from '../../../logging/logger.js';
 import { BoundedContext } from '../../../overridableConfig.js';
 import { useRestApi } from '../../../restApiInstance.js';
+import {
+  getWorkbookLineageByLuid,
+  getWorkbookLineageQuery,
+  mergeWorkbookLineage,
+} from '../../../sdks/tableau/methods/lineageUtils.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
+import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { getAppConfig } from '../../../web/apps/appConfig.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
 
@@ -26,6 +34,7 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
       readOnlyHint: true,
       openWorldHint: false,
     },
+    app: getAppConfig('get-workbook'),
     callback: async ({ workbookId }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 
@@ -67,7 +76,28 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
                   workbook.views.view = views;
                 }
 
-                return workbook;
+                if (configWithOverrides.disableMetadataApiRequests) {
+                  return workbook;
+                }
+
+                try {
+                  const response = await restApi.metadataMethods.graphql(
+                    getWorkbookLineageQuery([workbook.id]),
+                  );
+                  return mergeWorkbookLineage(
+                    [workbook],
+                    getWorkbookLineageByLuid(response),
+                    configWithOverrides.boundedContext.datasourceIds,
+                  )[0];
+                } catch (error) {
+                  log({
+                    message: `Failed to enrich workbook ${workbook.id} with lineage metadata`,
+                    level: 'warning',
+                    logger: 'lineage',
+                    data: getExceptionMessage(error),
+                  });
+                  return workbook;
+                }
               },
             }),
           );
@@ -88,24 +118,48 @@ export function filterWorkbookViews({
   workbook: Workbook;
   boundedContext: BoundedContext;
 }): ConstrainedResult<Workbook> {
-  const { tags } = boundedContext;
+  const { viewIds, tags } = boundedContext;
 
   // We don't need to check the tags on the workbook since we already
   // did that before getting the detailed workbook information.
-  // We only need to check the tags on the workbook's views.
-  if (!workbook.views || !tags) {
+  // We only need to check the views on the workbook against viewIds and tags.
+  if (!workbook.views || (!viewIds && !tags)) {
     return {
       type: 'success',
-      result: workbook,
+      result: flattenWorkbookViewUsage(workbook),
     };
   }
 
-  workbook.views.view = workbook.views.view.filter((view) =>
-    view.tags?.tag?.some((tag) => tags.has(tag.label)),
-  );
+  let views = workbook.views.view;
+
+  if (viewIds) {
+    views = views.filter((view) => (view.id ? viewIds.has(view.id) : false));
+  }
+
+  if (tags) {
+    views = views.filter((view) => view.tags?.tag?.some((tag) => tags.has(tag.label)));
+  }
+
+  workbook.views.view = views;
 
   return {
     type: 'success',
-    result: workbook,
+    result: flattenWorkbookViewUsage(workbook),
+  };
+}
+
+function flattenWorkbookViewUsage(workbook: Workbook): Workbook {
+  if (!workbook.views) {
+    return workbook;
+  }
+
+  return {
+    ...workbook,
+    views: {
+      view: workbook.views.view.map(({ usage, ...view }) => ({
+        ...view,
+        totalViewCount: usage?.totalViewCount ?? 0,
+      })),
+    },
   };
 }
