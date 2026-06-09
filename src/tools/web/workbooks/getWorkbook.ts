@@ -27,6 +27,24 @@ export function constructViewWebUrl(server: string, siteName: string, contentUrl
   return `${server}/#/site/${siteName}/views/${urlPath}`;
 }
 
+function getDefaultViewWebUrl(
+  workbook: Workbook,
+  flattenedViews: View[],
+  server: string,
+  siteName: string,
+): string | undefined {
+  if (!workbook.defaultViewId) {
+    return undefined;
+  }
+
+  const defaultView = flattenedViews.find((view) => view.id === workbook.defaultViewId);
+  if (!defaultView?.contentUrl) {
+    return undefined;
+  }
+
+  return constructViewWebUrl(server, siteName, defaultView.contentUrl);
+}
+
 export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const getWorkbookTool = new WebTool({
     server,
@@ -172,24 +190,13 @@ function flattenWorkbookViewUsage(workbook: Workbook, server: string, siteName: 
     totalViewCount: usage?.totalViewCount ?? 0,
   }));
 
-  const flattenedWorkbook: Workbook = {
+  const defaultViewWebUrl = getDefaultViewWebUrl(workbook, flattenedViews, server, siteName);
+
+  return {
     ...workbook,
     views: {
       view: flattenedViews,
     },
+    ...(defaultViewWebUrl && { defaultViewWebUrl }),
   };
-
-  // Add defaultViewWebUrl if defaultViewId exists and matches a view in the flattened views
-  if (workbook.defaultViewId) {
-    const defaultView = flattenedViews.find((view) => view.id === workbook.defaultViewId);
-    if (defaultView?.contentUrl) {
-      flattenedWorkbook.defaultViewWebUrl = constructViewWebUrl(
-        server,
-        siteName,
-        defaultView.contentUrl,
-      );
-    }
-  }
-
-  return flattenedWorkbook;
 }
