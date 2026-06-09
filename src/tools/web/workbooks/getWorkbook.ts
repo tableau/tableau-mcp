@@ -11,6 +11,7 @@ import {
   getWorkbookLineageQuery,
   mergeWorkbookLineage,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
+import { View } from '../../../sdks/tableau/types/view.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -156,9 +157,20 @@ export function filterWorkbookViews({
   // did that before getting the detailed workbook information.
   // We only need to check the views on the workbook against viewIds and tags.
   if (!workbook.views || (!viewIds && !tags)) {
+    const flattened = flattenWorkbookViewUsage(workbook);
+    const defaultViewWebUrl = getDefaultViewWebUrl(
+      workbook,
+      flattened.views?.view ?? [],
+      server,
+      siteName,
+    );
+
     return {
       type: 'success',
-      result: flattenWorkbookViewUsage(workbook, server, siteName),
+      result: {
+        ...flattened,
+        ...(defaultViewWebUrl && { defaultViewWebUrl }),
+      },
     };
   }
 
@@ -174,29 +186,35 @@ export function filterWorkbookViews({
 
   workbook.views.view = views;
 
+  const flattened = flattenWorkbookViewUsage(workbook);
+  const defaultViewWebUrl = getDefaultViewWebUrl(
+    workbook,
+    flattened.views?.view ?? [],
+    server,
+    siteName,
+  );
+
   return {
     type: 'success',
-    result: flattenWorkbookViewUsage(workbook, server, siteName),
+    result: {
+      ...flattened,
+      ...(defaultViewWebUrl && { defaultViewWebUrl }),
+    },
   };
 }
 
-function flattenWorkbookViewUsage(workbook: Workbook, server: string, siteName: string): Workbook {
+function flattenWorkbookViewUsage(workbook: Workbook): Workbook {
   if (!workbook.views) {
     return workbook;
   }
 
-  const flattenedViews = workbook.views.view.map(({ usage, ...view }) => ({
-    ...view,
-    totalViewCount: usage?.totalViewCount ?? 0,
-  }));
-
-  const defaultViewWebUrl = getDefaultViewWebUrl(workbook, flattenedViews, server, siteName);
-
   return {
     ...workbook,
     views: {
-      view: flattenedViews,
+      view: workbook.views.view.map(({ usage, ...view }) => ({
+        ...view,
+        totalViewCount: usage?.totalViewCount ?? 0,
+      })),
     },
-    ...(defaultViewWebUrl && { defaultViewWebUrl }),
   };
 }
