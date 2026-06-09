@@ -18,6 +18,7 @@ export const workbookSchema = z.object({
   project: projectSchema.optional(),
   showTabs: z.coerce.boolean(),
   defaultViewId: z.string().optional(),
+  defaultViewWebUrl: z.string().optional(),
   tags: tagsSchema,
   upstreamDatasources: z.array(lineageContentSchema).optional(),
   views: z.optional(
