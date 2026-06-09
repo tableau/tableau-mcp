@@ -111,6 +111,12 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
+  // Token retrieval: no Tableau REST API calls, no content scope required.
+  // Any authenticated user may retrieve their own token regardless of granted scopes.
+  'get-oauth-token': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES]),

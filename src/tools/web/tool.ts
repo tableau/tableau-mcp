@@ -10,6 +10,7 @@ import { getTelemetryProvider } from '../../telemetry/init.js';
 import { getProductTelemetry } from '../../telemetry/productTelemetry/telemetryForwarder.js';
 import { getExceptionMessage } from '../../utils/getExceptionMessage.js';
 import { getHttpStatus } from '../../utils/getHttpStatus.js';
+import { TypeOrProvider } from '../../utils/provider.js';
 import { LogAndExecuteParams, Tool, ToolParams } from '../tool.js';
 import { TableauWebRequestHandlerExtra, TableauWebToolCallback } from './toolContext.js';
 import { WebToolName } from './toolName.js';
@@ -28,6 +29,12 @@ export type AppDetails = {
   htmlPath: string;
 };
 
+export type ToolMeta = {
+  ui?: {
+    visibility?: Array<'model' | 'app'>;
+  };
+};
+
 export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = ToolParams<
   WebMcpServer,
   WebToolName,
@@ -36,6 +43,7 @@ export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = To
   Args
 > & {
   app?: AppDetails;
+  meta?: TypeOrProvider<ToolMeta>;
 };
 
 export type ConstrainedResult<T> =
@@ -76,6 +84,7 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
 > {
   requiredApiScopes: ReadonlyArray<TableauApiScope>;
   app?: AppDetails;
+  meta?: TypeOrProvider<ToolMeta>;
 
   constructor({
     server,
@@ -86,11 +95,13 @@ export class WebTool<Args extends ZodRawShape | undefined = undefined> extends T
     callback,
     disabled,
     app,
+    meta,
   }: WebToolParams<Args>) {
     super({ server, name, description, paramsSchema, annotations, callback, disabled });
 
     this.requiredApiScopes = getRequiredApiScopesForTool(name as WebToolName);
     this.app = app;
+    this.meta = meta;
   }
 
   async logAndExecute<T>({
