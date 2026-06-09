@@ -12,6 +12,7 @@ export const viewSchema = z.object({
   name: z.string(),
   contentUrl: z.string(),
   viewUrlName: z.string().optional(),
+  webUrl: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   workbook: z

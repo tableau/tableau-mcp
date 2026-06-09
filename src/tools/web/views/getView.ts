@@ -70,6 +70,13 @@ export const getViewTool = (server: WebMcpServer): WebTool<typeof paramsSchema> 
                     includeUsageStatistics: true,
                   }));
 
+                // Add webUrl to the view
+                view.webUrl = constructViewWebUrl(
+                  extra.config.server,
+                  extra.config.siteName,
+                  view.contentUrl,
+                );
+
                 if (configWithOverrides.disableMetadataApiRequests) {
                   return view;
                 }
@@ -98,14 +105,7 @@ export const getViewTool = (server: WebMcpServer): WebTool<typeof paramsSchema> 
         },
         constrainSuccessResult: (view) => ({
           type: 'success',
-          result: {
-            ...view,
-            webUrl: constructViewWebUrl(
-              extra.config.server,
-              extra.config.siteName,
-              view.contentUrl,
-            ),
-          },
+          result: view,
         }),
       });
     },
