@@ -75,16 +75,18 @@ export const datasourceModelSchema = z.object({
       toLogicalTable: z.object({
         logicalTableId: z.string(),
       }),
-      expression: z.object({
-        op: z.string().optional(),
-        relationships: z.array(
-          z.object({
-            operator: z.string(),
-            fromField: z.string(),
-            toField: z.string(),
-          }),
-        ),
-      }),
+      expression: z
+        .object({
+          op: z.string().optional(),
+          relationships: z.array(
+            z.object({
+              operator: z.string(),
+              fromField: z.string(),
+              toField: z.string(),
+            }),
+          ),
+        })
+        .optional(),
     }),
   ),
 });
