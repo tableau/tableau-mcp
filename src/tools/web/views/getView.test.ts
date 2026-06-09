@@ -77,6 +77,25 @@ describe('getViewTool', () => {
     expect(content.contentUrl).toBe('Superstore/Overview');
   });
 
+  it('should remove /sheets/ from contentUrl when constructing webUrl', async () => {
+    const viewWithSheets = {
+      ...mockView,
+      contentUrl: 'AZPRDWB/sheets/Sheet1',
+    };
+    mocks.mockGetView.mockResolvedValue(viewWithSheets);
+
+    const result = await getToolResult(
+      { viewId: mockView.id },
+      { disableMetadataApiRequests: true },
+    );
+
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    const content = JSON.parse(result.content[0].text);
+    expect(content.webUrl).toBe('https://my-tableau-server.com/#/site/tc25/views/AZPRDWB/Sheet1');
+    expect(content.contentUrl).toBe('AZPRDWB/sheets/Sheet1'); // Original contentUrl unchanged
+  });
+
   it('should successfully get view', async () => {
     mocks.mockGetView.mockResolvedValue(mockView);
     mocks.mockGraphql.mockResolvedValue({

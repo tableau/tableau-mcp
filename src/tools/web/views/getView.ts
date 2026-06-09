@@ -22,7 +22,9 @@ const paramsSchema = {
 };
 
 function constructViewWebUrl(server: string, siteName: string, contentUrl: string): string {
-  return `${server}/#/site/${siteName}/views/${contentUrl}`;
+  // Remove '/sheets/' from contentUrl if present (API returns 'workbook/sheets/Sheet1', URL uses 'workbook/Sheet1')
+  const urlPath = contentUrl.replace(/\/sheets\//, '/');
+  return `${server}/#/site/${siteName}/views/${urlPath}`;
 }
 
 export const getViewTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
