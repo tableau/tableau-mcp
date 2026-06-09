@@ -25,6 +25,7 @@ export const webToolNames = [
   'reset-consent',
   'query-admin-insights-ts-events',
   'query-admin-insights-site-content',
+  'query-admin-insights-job-performance',
   'get-stale-content-report',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
@@ -71,6 +72,7 @@ export const webToolGroups = {
   'admin-insights': [
     'query-admin-insights-ts-events',
     'query-admin-insights-site-content',
+    'query-admin-insights-job-performance',
     'get-stale-content-report',
   ],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
