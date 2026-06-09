@@ -7,7 +7,7 @@ import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockView } from '../views/mockView.js';
-import { filterWorkbookViews, getGetWorkbookTool } from './getWorkbook.js';
+import { constructViewWebUrl, filterWorkbookViews, getGetWorkbookTool } from './getWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
 
 const mockWorkbookWithFlattenedViewUsage = {
@@ -210,6 +210,35 @@ describe('getWorkbookTool', () => {
       invariant(result.type === 'success');
       expect(result.result).toEqual({ ...mockWorkbook, views: { view: [] } });
     });
+  });
+});
+
+describe('constructViewWebUrl', () => {
+  it('constructs correct URL from server, site, and contentUrl', () => {
+    const result = constructViewWebUrl(
+      'https://tableau.example.com',
+      'my-site',
+      'workbook/sheets/Sheet1',
+    );
+    expect(result).toBe('https://tableau.example.com/#/site/my-site/views/workbook/Sheet1');
+  });
+
+  it('removes /sheets/ segment from contentUrl', () => {
+    const result = constructViewWebUrl(
+      'https://tableau.example.com',
+      'my-site',
+      'Superstore/sheets/Overview',
+    );
+    expect(result).toBe('https://tableau.example.com/#/site/my-site/views/Superstore/Overview');
+  });
+
+  it('handles contentUrl without /sheets/ segment', () => {
+    const result = constructViewWebUrl(
+      'https://tableau.example.com',
+      'my-site',
+      'workbook/Dashboard1',
+    );
+    expect(result).toBe('https://tableau.example.com/#/site/my-site/views/workbook/Dashboard1');
   });
 });
 

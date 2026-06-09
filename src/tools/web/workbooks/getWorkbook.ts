@@ -22,6 +22,15 @@ const paramsSchema = {
   workbookId: z.string(),
 };
 
+export function constructViewWebUrl(
+  server: string,
+  siteName: string,
+  contentUrl: string,
+): string {
+  const urlPath = contentUrl.replace(/\/sheets\//, '/');
+  return `${server}/#/site/${siteName}/views/${urlPath}`;
+}
+
 export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const getWorkbookTool = new WebTool({
     server,
