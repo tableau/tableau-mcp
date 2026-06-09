@@ -112,7 +112,12 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
           );
         },
         constrainSuccessResult: (workbook) =>
-          filterWorkbookViews({ workbook, boundedContext: configWithOverrides.boundedContext }),
+          filterWorkbookViews({
+            workbook,
+            boundedContext: configWithOverrides.boundedContext,
+            server: extra.config.server,
+            siteName: extra.config.siteName,
+          }),
       });
     },
   });
@@ -123,9 +128,13 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
 export function filterWorkbookViews({
   workbook,
   boundedContext,
+  server,
+  siteName,
 }: {
   workbook: Workbook;
   boundedContext: BoundedContext;
+  server: string;
+  siteName: string;
 }): ConstrainedResult<Workbook> {
   const { viewIds, tags } = boundedContext;
 
@@ -135,7 +144,7 @@ export function filterWorkbookViews({
   if (!workbook.views || (!viewIds && !tags)) {
     return {
       type: 'success',
-      result: flattenWorkbookViewUsage(workbook),
+      result: flattenWorkbookViewUsage(workbook, server, siteName),
     };
   }
 
@@ -153,22 +162,42 @@ export function filterWorkbookViews({
 
   return {
     type: 'success',
-    result: flattenWorkbookViewUsage(workbook),
+    result: flattenWorkbookViewUsage(workbook, server, siteName),
   };
 }
 
-function flattenWorkbookViewUsage(workbook: Workbook): Workbook {
+function flattenWorkbookViewUsage(
+  workbook: Workbook,
+  server: string,
+  siteName: string,
+): Workbook {
   if (!workbook.views) {
     return workbook;
   }
 
-  return {
+  const flattenedViews = workbook.views.view.map(({ usage, ...view }) => ({
+    ...view,
+    totalViewCount: usage?.totalViewCount ?? 0,
+  }));
+
+  const flattenedWorkbook: Workbook = {
     ...workbook,
     views: {
-      view: workbook.views.view.map(({ usage, ...view }) => ({
-        ...view,
-        totalViewCount: usage?.totalViewCount ?? 0,
-      })),
+      view: flattenedViews,
     },
   };
+
+  // Add defaultViewWebUrl if defaultViewId exists and matches a view in the flattened views
+  if (workbook.defaultViewId) {
+    const defaultView = flattenedViews.find((view) => view.id === workbook.defaultViewId);
+    if (defaultView?.contentUrl) {
+      flattenedWorkbook.defaultViewWebUrl = constructViewWebUrl(
+        server,
+        siteName,
+        defaultView.contentUrl,
+      );
+    }
+  }
+
+  return flattenedWorkbook;
 }
