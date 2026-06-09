@@ -39,6 +39,7 @@ describe('server', () => {
         'list-users',
         'query-admin-insights-ts-events',
         'query-admin-insights-site-content',
+        'query-admin-insights-job-performance',
         'get-stale-content-report',
       ];
       let expectedToolNames = [...webToolNames];
@@ -114,6 +115,7 @@ describe('server', () => {
         'list-users',
         'query-admin-insights-ts-events',
         'query-admin-insights-site-content',
+        'query-admin-insights-job-performance',
         'get-stale-content-report',
       ];
       let expectedWebToolNames = [...webToolNames];
