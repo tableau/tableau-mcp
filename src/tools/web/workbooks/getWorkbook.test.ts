@@ -6,7 +6,7 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { mockView } from '../views/mockView.js';
+import { mockView, mockView2 } from '../views/mockView.js';
 import { constructViewWebUrl, filterWorkbookViews, getGetWorkbookTool } from './getWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
 
@@ -281,6 +281,121 @@ describe('defaultViewWebUrl', () => {
       expect(result.result.defaultViewWebUrl).toBe(
         'https://tableau.example.com/#/site/test-site/views/Superstore/Overview',
       );
+    }
+  });
+
+  it('does not add defaultViewWebUrl when defaultViewId is missing', () => {
+    const workbook = {
+      ...mockWorkbook,
+      defaultViewId: undefined,
+      views: {
+        view: [mockView],
+      },
+    };
+
+    const result = filterWorkbookViews({
+      workbook,
+      boundedContext: { datasourceIds: null, projectIds: null, workbookIds: null, viewIds: null, tags: null },
+      server: 'https://tableau.example.com',
+      siteName: 'test-site',
+    });
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.result.defaultViewWebUrl).toBeUndefined();
+    }
+  });
+
+  it('does not add defaultViewWebUrl when views array is missing', () => {
+    const workbook = {
+      ...mockWorkbook,
+      defaultViewId: mockView.id,
+      views: undefined,
+    };
+
+    const result = filterWorkbookViews({
+      workbook,
+      boundedContext: { datasourceIds: null, projectIds: null, workbookIds: null, viewIds: null, tags: null },
+      server: 'https://tableau.example.com',
+      siteName: 'test-site',
+    });
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.result.defaultViewWebUrl).toBeUndefined();
+    }
+  });
+
+  it('does not add defaultViewWebUrl when defaultViewId does not match any view', () => {
+    const workbook = {
+      ...mockWorkbook,
+      defaultViewId: 'non-existent-view-id',
+      views: {
+        view: [mockView],
+      },
+    };
+
+    const result = filterWorkbookViews({
+      workbook,
+      boundedContext: { datasourceIds: null, projectIds: null, workbookIds: null, viewIds: null, tags: null },
+      server: 'https://tableau.example.com',
+      siteName: 'test-site',
+    });
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.result.defaultViewWebUrl).toBeUndefined();
+    }
+  });
+
+  it('does not add defaultViewWebUrl when default view is filtered by access control (viewIds)', () => {
+    const workbook = {
+      ...mockWorkbook,
+      defaultViewId: mockView.id,
+      views: {
+        view: [mockView, mockView2],
+      },
+    };
+
+    const result = filterWorkbookViews({
+      workbook,
+      boundedContext: { datasourceIds: null, projectIds: null, workbookIds: null, viewIds: new Set([mockView2.id]), tags: null },
+      server: 'https://tableau.example.com',
+      siteName: 'test-site',
+    });
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.result.defaultViewWebUrl).toBeUndefined();
+      expect(result.result.views?.view).toHaveLength(1);
+      expect(result.result.views?.view[0].id).toBe(mockView2.id);
+    }
+  });
+
+  it('does not add defaultViewWebUrl when default view has no contentUrl', () => {
+    const viewWithoutContentUrl = {
+      ...mockView,
+      contentUrl: undefined,
+    };
+
+    const workbook = {
+      ...mockWorkbook,
+      defaultViewId: mockView.id,
+      views: {
+        view: [viewWithoutContentUrl],
+      },
+    };
+
+    const result = filterWorkbookViews({
+      workbook,
+      boundedContext: { datasourceIds: null, projectIds: null, workbookIds: null, viewIds: null, tags: null },
+      server: 'https://tableau.example.com',
+      siteName: 'test-site',
+    });
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.result.defaultViewWebUrl).toBeUndefined();
     }
   });
 });
