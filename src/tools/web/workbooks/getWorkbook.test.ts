@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
@@ -100,7 +101,7 @@ describe('getWorkbookTool', () => {
   });
 
   describe('filterWorkbookViews', () => {
-    const createTestWorkbook = () => JSON.parse(JSON.stringify(mockWorkbook));
+    const createTestWorkbook = (): Workbook => JSON.parse(JSON.stringify(mockWorkbook));
 
     it('should return the workbook when no filtering occurs', () => {
       const result = filterWorkbookViews({
@@ -271,7 +272,13 @@ describe('defaultViewWebUrl', () => {
 
     const result = filterWorkbookViews({
       workbook,
-      boundedContext: { datasourceIds: null, projectIds: null, workbookIds: null, viewIds: null, tags: null },
+      boundedContext: {
+        datasourceIds: null,
+        projectIds: null,
+        workbookIds: null,
+        viewIds: null,
+        tags: null,
+      },
       server: 'https://tableau.example.com',
       siteName: 'test-site',
     });
@@ -295,7 +302,13 @@ describe('defaultViewWebUrl', () => {
 
     const result = filterWorkbookViews({
       workbook,
-      boundedContext: { datasourceIds: null, projectIds: null, workbookIds: null, viewIds: null, tags: null },
+      boundedContext: {
+        datasourceIds: null,
+        projectIds: null,
+        workbookIds: null,
+        viewIds: null,
+        tags: null,
+      },
       server: 'https://tableau.example.com',
       siteName: 'test-site',
     });
@@ -315,7 +328,13 @@ describe('defaultViewWebUrl', () => {
 
     const result = filterWorkbookViews({
       workbook,
-      boundedContext: { datasourceIds: null, projectIds: null, workbookIds: null, viewIds: null, tags: null },
+      boundedContext: {
+        datasourceIds: null,
+        projectIds: null,
+        workbookIds: null,
+        viewIds: null,
+        tags: null,
+      },
       server: 'https://tableau.example.com',
       siteName: 'test-site',
     });
@@ -337,7 +356,13 @@ describe('defaultViewWebUrl', () => {
 
     const result = filterWorkbookViews({
       workbook,
-      boundedContext: { datasourceIds: null, projectIds: null, workbookIds: null, viewIds: null, tags: null },
+      boundedContext: {
+        datasourceIds: null,
+        projectIds: null,
+        workbookIds: null,
+        viewIds: null,
+        tags: null,
+      },
       server: 'https://tableau.example.com',
       siteName: 'test-site',
     });
@@ -359,7 +384,13 @@ describe('defaultViewWebUrl', () => {
 
     const result = filterWorkbookViews({
       workbook,
-      boundedContext: { datasourceIds: null, projectIds: null, workbookIds: null, viewIds: new Set([mockView2.id]), tags: null },
+      boundedContext: {
+        datasourceIds: null,
+        projectIds: null,
+        workbookIds: null,
+        viewIds: new Set([mockView2.id]),
+        tags: null,
+      },
       server: 'https://tableau.example.com',
       siteName: 'test-site',
     });
@@ -388,7 +419,13 @@ describe('defaultViewWebUrl', () => {
 
     const result = filterWorkbookViews({
       workbook,
-      boundedContext: { datasourceIds: null, projectIds: null, workbookIds: null, viewIds: null, tags: null },
+      boundedContext: {
+        datasourceIds: null,
+        projectIds: null,
+        workbookIds: null,
+        viewIds: null,
+        tags: null,
+      },
       server: 'https://tableau.example.com',
       siteName: 'test-site',
     });

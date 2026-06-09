@@ -22,11 +22,7 @@ const paramsSchema = {
   workbookId: z.string(),
 };
 
-export function constructViewWebUrl(
-  server: string,
-  siteName: string,
-  contentUrl: string,
-): string {
+export function constructViewWebUrl(server: string, siteName: string, contentUrl: string): string {
   const urlPath = contentUrl.replace(/\/sheets\//g, '/');
   return `${server}/#/site/${siteName}/views/${urlPath}`;
 }
@@ -166,11 +162,7 @@ export function filterWorkbookViews({
   };
 }
 
-function flattenWorkbookViewUsage(
-  workbook: Workbook,
-  server: string,
-  siteName: string,
-): Workbook {
+function flattenWorkbookViewUsage(workbook: Workbook, server: string, siteName: string): Workbook {
   if (!workbook.views) {
     return workbook;
   }
