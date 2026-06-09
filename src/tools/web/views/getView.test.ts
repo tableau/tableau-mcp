@@ -197,7 +197,7 @@ describe('getViewTool', () => {
       allowed: true,
     });
 
-    const { usage, ...viewWithoutUsage } = mockView;
+    const { usage: _usage, ...viewWithoutUsage } = mockView;
 
     mocks.mockGetView.mockResolvedValue(viewWithoutUsage);
 

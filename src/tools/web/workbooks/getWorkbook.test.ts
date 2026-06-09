@@ -10,7 +10,7 @@ import { mockView } from '../views/mockView.js';
 import { filterWorkbookViews, getGetWorkbookTool } from './getWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
 
-const { usage, ...mockViewWithoutUsage } = mockView;
+const { usage: _usage, ...mockViewWithoutUsage } = mockView;
 const mockWorkbookWithFlattenedViewUsage = {
   ...mockWorkbook,
   views: {
