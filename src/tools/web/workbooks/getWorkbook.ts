@@ -27,7 +27,7 @@ export function constructViewWebUrl(
   siteName: string,
   contentUrl: string,
 ): string {
-  const urlPath = contentUrl.replace(/\/sheets\//, '/');
+  const urlPath = contentUrl.replace(/\/sheets\//g, '/');
   return `${server}/#/site/${siteName}/views/${urlPath}`;
 }
 
