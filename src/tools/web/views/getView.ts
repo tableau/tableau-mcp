@@ -21,7 +21,7 @@ const paramsSchema = {
   viewId: z.string(),
 };
 
-export const getViewTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const getViewTool = new WebTool({
     server,
     name: 'get-view',

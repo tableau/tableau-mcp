@@ -6,7 +6,7 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getViewTool } from './getView.js';
+import { getGetViewTool } from './getView.js';
 import { mockView } from './mockView.js';
 
 const { resetResourceAccessCheckerSingleton } = resourceAccessCheckerExportedForTesting;
@@ -54,7 +54,7 @@ describe('getViewTool', () => {
   });
 
   it('should create a tool instance with correct properties', () => {
-    const tool = getViewTool(new WebMcpServer());
+    const tool = getGetViewTool(new WebMcpServer());
     expect(tool.name).toBe('get-view');
     expect(tool.description).toContain('Retrieves information about the specified view');
     expect(tool.paramsSchema).toMatchObject({ viewId: expect.any(Object) });
@@ -194,7 +194,7 @@ async function getToolResult(
     };
   },
 ): Promise<CallToolResult> {
-  const tool = getViewTool(new WebMcpServer());
+  const tool = getGetViewTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   const mockExtra = getMockRequestHandlerExtra();
 
