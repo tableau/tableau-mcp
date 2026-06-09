@@ -31,7 +31,6 @@ describe('get-view', () => {
       name: 'Overview',
       workbook: {
         id: superstore.id,
-        name: 'Superstore',
       },
     });
   });
