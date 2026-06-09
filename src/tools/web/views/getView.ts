@@ -21,12 +21,6 @@ const paramsSchema = {
   viewId: z.string(),
 };
 
-function constructViewWebUrl(server: string, siteName: string, contentUrl: string): string {
-  // Remove '/sheets/' from contentUrl if present (API returns 'workbook/sheets/Sheet1', URL uses 'workbook/Sheet1')
-  const urlPath = contentUrl.replace(/\/sheets\//, '/');
-  return `${server}/#/site/${siteName}/views/${urlPath}`;
-}
-
 export const getViewTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const getViewTool = new WebTool({
     server,
@@ -69,13 +63,6 @@ export const getViewTool = (server: WebMcpServer): WebTool<typeof paramsSchema> 
                     siteId: restApi.siteId,
                     includeUsageStatistics: true,
                   }));
-
-                // Add webUrl to the view
-                view.webUrl = constructViewWebUrl(
-                  extra.config.server,
-                  extra.config.siteName,
-                  view.contentUrl,
-                );
 
                 if (configWithOverrides.disableMetadataApiRequests) {
                   return view;
