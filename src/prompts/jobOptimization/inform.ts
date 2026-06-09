@@ -29,6 +29,7 @@ const FIELDS = [
   'Schedule Name',
   'Was Manual Run',
   'Error Message',
+  'Extract File Size',
 ];
 
 const argsSchema = {
