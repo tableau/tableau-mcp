@@ -26,6 +26,7 @@ const config: Config = {
   deploymentBranch: 'main',
 
   onBrokenLinks: 'throw',
+  onBrokenAnchors: 'throw',
   markdown: {
     mermaid: true,
     hooks: {

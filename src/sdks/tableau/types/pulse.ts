@@ -348,9 +348,9 @@ export const pulseBundleRequestSchema = z.object({
     }),
     input: z.object({
       metadata: z.object({
-        name: z.string().nonempty(),
-        metric_id: z.string().nonempty(),
-        definition_id: z.string().nonempty(),
+        name: z.string().optional(),
+        metric_id: z.string().optional(),
+        definition_id: z.string().optional(),
       }),
       metric: z.object({
         definition: z.object({
