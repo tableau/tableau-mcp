@@ -128,7 +128,7 @@ class ResourceAccessChecker {
   }: {
     viewId: string;
     extra: TableauWebRequestHandlerExtra;
-  }): Promise<AllowedResult> {
+  }): Promise<AllowedResult<View>> {
     const result = await this._isViewAllowed({
       viewId,
       extra,
@@ -357,7 +357,7 @@ class ResourceAccessChecker {
   }: {
     viewId: string;
     extra: TableauWebRequestHandlerExtra;
-  }): Promise<AllowedResult> {
+  }): Promise<AllowedResult<View>> {
     const allowedViewIds = await this.getAllowedViewIds({ extra });
     if (allowedViewIds && !allowedViewIds.has(viewId)) {
       return {
@@ -479,7 +479,7 @@ class ResourceAccessChecker {
       }
     }
 
-    return { allowed: true };
+    return { allowed: true, content: view };
   }
 
   private async _isCustomViewAllowed({

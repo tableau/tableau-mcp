@@ -9,6 +9,7 @@ export const webToolNames = [
   'query-datasource',
   'get-datasource-metadata',
   'get-workbook',
+  'get-view',
   'get-view-data',
   'get-view-image',
   'get-custom-view-data',
@@ -25,6 +26,7 @@ export const webToolNames = [
   'reset-consent',
   'query-admin-insights-ts-events',
   'query-admin-insights-site-content',
+  'query-admin-insights-job-performance',
   'get-stale-content-report',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
@@ -50,6 +52,7 @@ export const webToolGroups = {
   view: [
     'list-views',
     'list-custom-views',
+    'get-view',
     'get-view-data',
     'get-view-image',
     'get-custom-view-data',
@@ -71,6 +74,7 @@ export const webToolGroups = {
   'admin-insights': [
     'query-admin-insights-ts-events',
     'query-admin-insights-site-content',
+    'query-admin-insights-job-performance',
     'get-stale-content-report',
   ],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
