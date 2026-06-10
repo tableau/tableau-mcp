@@ -51,7 +51,7 @@ This tool requires no input — it operates on the token already associated with
         visibility: ['app'], // Only visible to the app, not the model
       },
     },
-    disabled: config.auth !== 'oauth',
+    disabled: !config.oauth.enabled || config.oauth.embeddedAuthzServer,
     callback: async (_args, extra): Promise<CallToolResult> => {
       return getOAuthTokenTool.logAndExecute<{ token: string; tokenType: string }>({
         extra,
