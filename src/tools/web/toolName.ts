@@ -80,9 +80,9 @@ export const webToolGroups = {
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 
 export function isWebToolName(value: unknown): value is WebToolName {
-  return !!webToolNames.find((name) => name === value);
+  return webToolNames.some((name) => name === value);
 }
 
 export function isWebToolGroupName(value: unknown): value is WebToolGroupName {
-  return !!webToolGroupNames.find((name) => name === value);
+  return webToolGroupNames.some((name) => name === value);
 }

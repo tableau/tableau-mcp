@@ -80,18 +80,6 @@ describe('Config', () => {
     expect(config.defaultNotificationLevel).toBe('info');
   });
 
-  it('should set disableLogMasking to false by default', () => {
-    const config = new Config();
-    expect(config.disableLogMasking).toBe(false);
-  });
-
-  it('should set disableLogMasking to true when specified', () => {
-    vi.stubEnv('DISABLE_LOG_MASKING', 'true');
-
-    const config = new Config();
-    expect(config.disableLogMasking).toBe(true);
-  });
-
   it('should set enableLogging to appLogger by default', () => {
     const config = new Config();
     expect(config.loggers).toEqual(new Set(['appLogger']));

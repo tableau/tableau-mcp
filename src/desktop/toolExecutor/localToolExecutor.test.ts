@@ -134,12 +134,12 @@ describe('LocalExecutor', () => {
       const result = await localExecutor.executeCommand({
         namespace: 'tabdoc',
         command: 'undo',
-        schema: z.object({ name: z.string() }),
+        schema: z.object({ text: z.string() }),
         signal: new AbortController().signal,
       });
 
       expect(result.isOk()).toBe(true);
-      expect(result.unwrap().parsedResult).toEqual({ name: 'John Doe' });
+      expect(result.unwrap().parsedResult).toEqual({ text: JSON.stringify({ name: 'John Doe' }) });
     });
 
     it('should handle command execution failure', async () => {
@@ -186,12 +186,15 @@ describe('LocalExecutor', () => {
       });
 
       expect(result.isErr()).toBe(true);
-      expect(result.unwrapErr()).toEqual({ type: 'command-timed-out' });
+      expect(result.unwrapErr()).toEqual({
+        type: 'command-timed-out',
+        error: 'Command cmd_2026-01-01T00:00:00Z_1 timed out',
+      });
       expect(logger.log).toHaveBeenCalledWith({
         message: 'Command cmd_2026-01-01T00:00:00Z_1 timed out',
         level: 'error',
         logger: 'LocalExecutor',
-        data: { type: 'command-timed-out' },
+        data: { type: 'command-timed-out', error: 'Command cmd_2026-01-01T00:00:00Z_1 timed out' },
       });
     });
 

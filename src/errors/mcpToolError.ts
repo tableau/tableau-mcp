@@ -2,7 +2,9 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
-import { getExceptionMessage } from '../utils/getExceptionMessage';
+import { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml.js';
+import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor.js';
+import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
 export class McpToolError extends Error {
   readonly type: string;
@@ -194,5 +196,35 @@ export class AdminOnlyError extends McpToolError {
 export class AdminInsightsUnavailableError extends McpToolError {
   constructor(message: string) {
     super({ type: 'admin-insights-unavailable', message, statusCode: 404 });
+  }
+}
+
+export class DesktopCommandExecutionError extends McpToolError {
+  constructor(error: ExecuteCommandError) {
+    super({
+      type: 'desktop-command-execution-error',
+      message: JSON.stringify(error),
+      statusCode: 500,
+    });
+  }
+}
+
+export class WorkbookXmlLoadFailedError extends McpToolError {
+  constructor(error: LoadWorkbookXmlError) {
+    super({
+      type: 'load-workbook-xml-error',
+      message: JSON.stringify(error),
+      statusCode: 500,
+    });
+  }
+}
+
+export class FileReadError extends McpToolError {
+  constructor(error: unknown) {
+    super({
+      type: 'file-read-error',
+      message: `Failed to read file: ${getExceptionMessage(error)}. Make sure the file exists and is readable.`,
+      statusCode: 500,
+    });
   }
 }
