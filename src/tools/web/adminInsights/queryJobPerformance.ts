@@ -56,7 +56,7 @@ Example query:
     {
       "field": { "fieldCaption": "Job Type" },
       "filterType": "SET",
-      "values": ["Refresh Extracts"],
+      "values": ["RefreshExtracts"],
       "exclude": false
     }
   ]
