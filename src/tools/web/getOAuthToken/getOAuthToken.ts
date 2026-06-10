@@ -4,7 +4,6 @@ import { Err, Ok } from 'ts-results-es';
 import { getConfig } from '../../../config.js';
 import { McpToolError } from '../../../errors/mcpToolError.js';
 import { WebMcpServer } from '../../../server.web.js';
-import invariant from '../../../utils/invariant.js';
 import { WebTool } from '../tool.js';
 
 const paramsSchema = {};
@@ -59,16 +58,14 @@ This tool requires no input — it operates on the token already associated with
         args: {},
         callback: async () => {
           const { tableauAuthInfo } = extra;
-          invariant(tableauAuthInfo, 'tableauAuthInfo must be set in OAuth mode');
 
-          if (tableauAuthInfo.type !== 'Bearer') {
+          if (!tableauAuthInfo || tableauAuthInfo.type !== 'Bearer') {
             // Only Bearer tokens (Tableau OAuth JWT) are supported.
             return new Err(
               new McpToolError({
                 type: 'not-supported',
                 message:
-                  'OAuth Bearer token retrieval is only available for Bearer authentication (Tableau OAuth server mode). ' +
-                  `Current auth type: ${tableauAuthInfo.type}`,
+                  'OAuth Bearer token retrieval is only available for Bearer authentication (Tableau OAuth server mode).',
                 statusCode: 400,
               }),
             );

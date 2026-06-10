@@ -27,32 +27,15 @@ describe('getOAuthTokenTool', () => {
     expect(meta?.ui?.visibility).toEqual(['app']);
   });
 
-  describe('disabled property', () => {
-    let savedEnv: NodeJS.ProcessEnv;
+  it('should return an error when tableauAuthInfo is missing', async () => {
+    const extra = getMockRequestHandlerExtra();
+    extra.tableauAuthInfo = undefined;
+    const result = await getToolResult(extra);
 
-    beforeEach(() => {
-      savedEnv = { ...process.env };
-    });
-
-    afterEach(() => {
-      process.env = savedEnv;
-    });
-
-    it('should be disabled when AUTH is not oauth (default PAT mode)', async () => {
-      // Default test env uses PAT auth, not oauth
-      delete process.env.OAUTH_ISSUER;
-      const tool = getOAuthTokenTool(new WebMcpServer());
-      expect(await Provider.from(tool.disabled)).toBe(true);
-    });
-
-    it('should be enabled when AUTH=oauth', async () => {
-      // Use OAUTH_EMBEDDED_AUTHZ_SERVER=false to avoid the JWE private key requirement
-      process.env.AUTH = 'oauth';
-      process.env.OAUTH_ISSUER = MOCK_ISSUER;
-      process.env.OAUTH_EMBEDDED_AUTHZ_SERVER = 'false';
-      const tool = getOAuthTokenTool(new WebMcpServer());
-      expect(await Provider.from(tool.disabled)).toBe(false);
-    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Bearer authentication');
+    expect(result.content[0].text).toContain('Tableau OAuth server mode');
   });
 
   describe('Bearer auth (Tableau authZ server mode)', () => {
@@ -81,7 +64,7 @@ describe('getOAuthTokenTool', () => {
     });
   });
 
-  describe('X-Tableau-Auth (embedded authZ mode - not supported)', () => {
+  describe('unsupported auth', () => {
     it('should return an error for X-Tableau-Auth', async () => {
       const extra = getMockRequestHandlerExtra();
       extra.config.oauth.issuer = MOCK_ISSUER;
@@ -98,27 +81,7 @@ describe('getOAuthTokenTool', () => {
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Bearer authentication');
-      expect(result.content[0].text).toContain('X-Tableau-Auth');
-    });
-  });
-
-  describe('Passthrough auth (not supported)', () => {
-    it('should return an error for Passthrough auth', async () => {
-      const extra = getMockRequestHandlerExtra();
-      extra.tableauAuthInfo = {
-        type: 'Passthrough',
-        username: 'test-user',
-        userId: 'user-id',
-        server: MOCK_SERVER,
-        siteId: 'site-id',
-        raw: 'x-tableau-auth-session-token',
-      };
-      const result = await getToolResult(extra);
-
-      expect(result.isError).toBe(true);
-      invariant(result.content[0].type === 'text');
-      expect(result.content[0].text).toContain('Bearer authentication');
-      expect(result.content[0].text).toContain('Passthrough');
+      expect(result.content[0].text).toContain('Tableau OAuth server mode');
     });
   });
 });
