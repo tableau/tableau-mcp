@@ -18,15 +18,11 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { ConstrainedResult, WebTool } from '../tool.js';
+import { constructViewWebUrl } from '../utils/viewUrlUtils.js';
 
 const paramsSchema = {
   workbookId: z.string(),
 };
-
-export function constructViewWebUrl(server: string, siteName: string, contentUrl: string): string {
-  const urlPath = contentUrl.replace(/\/sheets\//g, '/');
-  return `${server}/#/site/${siteName}/views/${urlPath}`;
-}
 
 function getDefaultViewWebUrl(
   workbook: Workbook,
