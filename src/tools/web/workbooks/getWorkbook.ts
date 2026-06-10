@@ -126,13 +126,19 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
             }),
           );
         },
-        constrainSuccessResult: (workbook) =>
-          filterWorkbookViews({
+        constrainSuccessResult: (workbook) => {
+          workbook.defaultViewWebUrl = getDefaultViewWebUrl(
+            workbook,
+            workbook.views?.view ?? [],
+            extra.config.server,
+            extra.config.siteName,
+          );
+
+          return filterWorkbookViews({
             workbook,
             boundedContext: configWithOverrides.boundedContext,
-            server: extra.config.server,
-            siteName: extra.config.siteName,
-          }),
+          });
+        },
       });
     },
   });
@@ -143,13 +149,9 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
 export function filterWorkbookViews({
   workbook,
   boundedContext,
-  server,
-  siteName,
 }: {
   workbook: Workbook;
   boundedContext: BoundedContext;
-  server: string;
-  siteName: string;
 }): ConstrainedResult<Workbook> {
   const { viewIds, tags } = boundedContext;
 
@@ -157,20 +159,9 @@ export function filterWorkbookViews({
   // did that before getting the detailed workbook information.
   // We only need to check the views on the workbook against viewIds and tags.
   if (!workbook.views || (!viewIds && !tags)) {
-    const flattened = flattenWorkbookViewUsage(workbook);
-    const defaultViewWebUrl = getDefaultViewWebUrl(
-      workbook,
-      flattened.views?.view ?? [],
-      server,
-      siteName,
-    );
-
     return {
       type: 'success',
-      result: {
-        ...flattened,
-        ...(defaultViewWebUrl && { defaultViewWebUrl }),
-      },
+      result: flattenWorkbookViewUsage(workbook),
     };
   }
 
@@ -186,20 +177,9 @@ export function filterWorkbookViews({
 
   workbook.views.view = views;
 
-  const flattened = flattenWorkbookViewUsage(workbook);
-  const defaultViewWebUrl = getDefaultViewWebUrl(
-    workbook,
-    flattened.views?.view ?? [],
-    server,
-    siteName,
-  );
-
   return {
     type: 'success',
-    result: {
-      ...flattened,
-      ...(defaultViewWebUrl && { defaultViewWebUrl }),
-    },
+    result: flattenWorkbookViewUsage(workbook),
   };
 }
 

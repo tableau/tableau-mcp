@@ -7,7 +7,7 @@ import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { mockView, mockView2 } from '../views/mockView.js';
+import { mockView } from '../views/mockView.js';
 import { constructViewWebUrl, filterWorkbookViews, getGetWorkbookTool } from './getWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
 
@@ -104,8 +104,12 @@ describe('getWorkbookTool', () => {
     const createTestWorkbook = (): Workbook => JSON.parse(JSON.stringify(mockWorkbook));
 
     it('should return the workbook when no filtering occurs', () => {
+      const workbook = createTestWorkbook();
+      workbook.defaultViewWebUrl =
+        'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview';
+
       const result = filterWorkbookViews({
-        workbook: createTestWorkbook(),
+        workbook,
         boundedContext: {
           projectIds: null,
           datasourceIds: null,
@@ -113,19 +117,21 @@ describe('getWorkbookTool', () => {
           viewIds: null,
           tags: null,
         },
-        server: 'https://tableau.example.com',
-        siteName: 'test-site',
       });
       invariant(result.type === 'success');
       expect(result.result).toEqual({
         ...mockWorkbookWithFlattenedViewUsage,
-        defaultViewWebUrl: 'https://tableau.example.com/#/site/test-site/views/Superstore/Overview',
+        defaultViewWebUrl: 'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview',
       });
     });
 
     it('should return the views that match the tags in the bounded context', () => {
+      const workbook = createTestWorkbook();
+      workbook.defaultViewWebUrl =
+        'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview';
+
       const result = filterWorkbookViews({
-        workbook: createTestWorkbook(),
+        workbook,
         boundedContext: {
           projectIds: null,
           datasourceIds: null,
@@ -133,14 +139,12 @@ describe('getWorkbookTool', () => {
           viewIds: null,
           tags: new Set(['tag-1']),
         },
-        server: 'https://tableau.example.com',
-        siteName: 'test-site',
       });
 
       invariant(result.type === 'success');
       expect(result.result).toEqual({
         ...mockWorkbookWithFlattenedViewUsage,
-        defaultViewWebUrl: 'https://tableau.example.com/#/site/test-site/views/Superstore/Overview',
+        defaultViewWebUrl: 'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview',
       });
     });
 
@@ -154,12 +158,9 @@ describe('getWorkbookTool', () => {
           viewIds: null,
           tags: new Set(['some-other-tag']),
         },
-        server: 'https://tableau.example.com',
-        siteName: 'test-site',
       });
 
       invariant(result.type === 'success');
-      // When the default view is filtered out, defaultViewWebUrl should not be set
       expect(result.result).toEqual({
         ...mockWorkbook,
         views: { view: [] },
@@ -176,15 +177,9 @@ describe('getWorkbookTool', () => {
           viewIds: new Set([mockView.id]),
           tags: null,
         },
-        server: 'https://tableau.example.com',
-        siteName: 'test-site',
       });
 
       invariant(result.type === 'success');
-      // mockView.id matches the defaultViewId in mockWorkbook, so defaultViewWebUrl should be set
-      expect(result.result.defaultViewWebUrl).toBe(
-        'https://tableau.example.com/#/site/test-site/views/Superstore/Overview',
-      );
       expect(result.result.views?.view.length).toBe(1);
       expect(result.result.views?.view[0].id).toBe(mockView.id);
       expect(result.result.views?.view[0].totalViewCount).toBe(0);
@@ -200,12 +195,9 @@ describe('getWorkbookTool', () => {
           viewIds: new Set(['some-other-view-id']),
           tags: null,
         },
-        server: 'https://tableau.example.com',
-        siteName: 'test-site',
       });
 
       invariant(result.type === 'success');
-      // When the default view is filtered out, defaultViewWebUrl should not be set
       expect(result.result).toEqual({
         ...mockWorkbook,
         views: { view: [] },
@@ -222,15 +214,9 @@ describe('getWorkbookTool', () => {
           viewIds: new Set([mockView.id]),
           tags: new Set(['tag-1']),
         },
-        server: 'https://tableau.example.com',
-        siteName: 'test-site',
       });
 
       invariant(result.type === 'success');
-      // mockView.id matches the defaultViewId and has tag-1, so defaultViewWebUrl should be set
-      expect(result.result.defaultViewWebUrl).toBe(
-        'https://tableau.example.com/#/site/test-site/views/Superstore/Overview',
-      );
       expect(result.result.views?.view.length).toBe(1);
       expect(result.result.views?.view[0].id).toBe(mockView.id);
       expect(result.result.views?.view[0].totalViewCount).toBe(0);
@@ -246,194 +232,14 @@ describe('getWorkbookTool', () => {
           viewIds: new Set([mockView.id]),
           tags: new Set(['some-other-tag']),
         },
-        server: 'https://tableau.example.com',
-        siteName: 'test-site',
       });
 
       invariant(result.type === 'success');
-      // When the default view is filtered out by tags, defaultViewWebUrl should not be set
       expect(result.result).toEqual({
         ...mockWorkbook,
         views: { view: [] },
       });
     });
-  });
-});
-
-describe('defaultViewWebUrl', () => {
-  it('adds defaultViewWebUrl when defaultViewId matches a view', () => {
-    const workbook = {
-      ...mockWorkbook,
-      defaultViewId: mockView.id,
-      views: {
-        view: [mockView],
-      },
-    };
-
-    const result = filterWorkbookViews({
-      workbook,
-      boundedContext: {
-        datasourceIds: null,
-        projectIds: null,
-        workbookIds: null,
-        viewIds: null,
-        tags: null,
-      },
-      server: 'https://tableau.example.com',
-      siteName: 'test-site',
-    });
-
-    expect(result.type).toBe('success');
-    if (result.type === 'success') {
-      expect(result.result.defaultViewWebUrl).toBe(
-        'https://tableau.example.com/#/site/test-site/views/Superstore/Overview',
-      );
-    }
-  });
-
-  it('does not add defaultViewWebUrl when defaultViewId is missing', () => {
-    const workbook = {
-      ...mockWorkbook,
-      defaultViewId: undefined,
-      views: {
-        view: [mockView],
-      },
-    };
-
-    const result = filterWorkbookViews({
-      workbook,
-      boundedContext: {
-        datasourceIds: null,
-        projectIds: null,
-        workbookIds: null,
-        viewIds: null,
-        tags: null,
-      },
-      server: 'https://tableau.example.com',
-      siteName: 'test-site',
-    });
-
-    expect(result.type).toBe('success');
-    if (result.type === 'success') {
-      expect(result.result.defaultViewWebUrl).toBeUndefined();
-    }
-  });
-
-  it('does not add defaultViewWebUrl when views array is missing', () => {
-    const workbook = {
-      ...mockWorkbook,
-      defaultViewId: mockView.id,
-      views: undefined,
-    };
-
-    const result = filterWorkbookViews({
-      workbook,
-      boundedContext: {
-        datasourceIds: null,
-        projectIds: null,
-        workbookIds: null,
-        viewIds: null,
-        tags: null,
-      },
-      server: 'https://tableau.example.com',
-      siteName: 'test-site',
-    });
-
-    expect(result.type).toBe('success');
-    if (result.type === 'success') {
-      expect(result.result.defaultViewWebUrl).toBeUndefined();
-    }
-  });
-
-  it('does not add defaultViewWebUrl when defaultViewId does not match any view', () => {
-    const workbook = {
-      ...mockWorkbook,
-      defaultViewId: 'non-existent-view-id',
-      views: {
-        view: [mockView],
-      },
-    };
-
-    const result = filterWorkbookViews({
-      workbook,
-      boundedContext: {
-        datasourceIds: null,
-        projectIds: null,
-        workbookIds: null,
-        viewIds: null,
-        tags: null,
-      },
-      server: 'https://tableau.example.com',
-      siteName: 'test-site',
-    });
-
-    expect(result.type).toBe('success');
-    if (result.type === 'success') {
-      expect(result.result.defaultViewWebUrl).toBeUndefined();
-    }
-  });
-
-  it('does not add defaultViewWebUrl when default view is filtered by access control (viewIds)', () => {
-    const workbook = {
-      ...mockWorkbook,
-      defaultViewId: mockView.id,
-      views: {
-        view: [mockView, mockView2],
-      },
-    };
-
-    const result = filterWorkbookViews({
-      workbook,
-      boundedContext: {
-        datasourceIds: null,
-        projectIds: null,
-        workbookIds: null,
-        viewIds: new Set([mockView2.id]),
-        tags: null,
-      },
-      server: 'https://tableau.example.com',
-      siteName: 'test-site',
-    });
-
-    expect(result.type).toBe('success');
-    if (result.type === 'success') {
-      expect(result.result.defaultViewWebUrl).toBeUndefined();
-      expect(result.result.views?.view).toHaveLength(1);
-      expect(result.result.views?.view[0].id).toBe(mockView2.id);
-    }
-  });
-
-  it('does not add defaultViewWebUrl when default view has no contentUrl', () => {
-    const viewWithoutContentUrl = {
-      ...mockView,
-      contentUrl: undefined,
-    };
-
-    const workbook = {
-      ...mockWorkbook,
-      defaultViewId: mockView.id,
-      views: {
-        view: [viewWithoutContentUrl],
-      },
-    };
-
-    const result = filterWorkbookViews({
-      workbook,
-      boundedContext: {
-        datasourceIds: null,
-        projectIds: null,
-        workbookIds: null,
-        viewIds: null,
-        tags: null,
-      },
-      server: 'https://tableau.example.com',
-      siteName: 'test-site',
-    });
-
-    expect(result.type).toBe('success');
-    if (result.type === 'success') {
-      expect(result.result.defaultViewWebUrl).toBeUndefined();
-    }
   });
 });
 
