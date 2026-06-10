@@ -132,15 +132,6 @@ export class WebMcpServer extends Server {
       toolsToRegister.push(tool);
     }
 
-    if (toolsToRegister.length === 0) {
-      throw new Error(`
-          No tools to register.
-          Tools available = [${webToolNames.join(', ')}].
-          EXCLUDE_TOOLS = [${excludeTools.join(', ')}].
-          INCLUDE_TOOLS = [${includeTools.join(', ')}]
-        `);
-    }
-
     return toolsToRegister;
   };
 
