@@ -9,6 +9,7 @@ export const webToolNames = [
   'query-datasource',
   'get-datasource-metadata',
   'get-workbook',
+  'get-view',
   'get-view-data',
   'get-view-image',
   'get-custom-view-data',
@@ -51,6 +52,7 @@ export const webToolGroups = {
   view: [
     'list-views',
     'list-custom-views',
+    'get-view',
     'get-view-data',
     'get-view-image',
     'get-custom-view-data',

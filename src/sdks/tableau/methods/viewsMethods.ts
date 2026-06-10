@@ -31,10 +31,25 @@ export default class ViewsMethods extends AuthenticatedMethods<typeof viewsApis>
    *
    * @param {string} viewId The ID of the view to get.
    * @param {string} siteId - The Tableau site ID
+   * @param {boolean} includeUsageStatistics - (Optional) true to return usage statistics. The default is false.
    * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_view
    */
-  getView = async ({ viewId, siteId }: { viewId: string; siteId: string }): Promise<View> => {
-    return (await this._apiClient.getView({ params: { siteId, viewId }, ...this.authHeader })).view;
+  getView = async ({
+    viewId,
+    siteId,
+    includeUsageStatistics,
+  }: {
+    viewId: string;
+    siteId: string;
+    includeUsageStatistics?: boolean;
+  }): Promise<View> => {
+    return (
+      await this._apiClient.getView({
+        params: { siteId, viewId },
+        queries: { includeUsageStatistics },
+        ...this.authHeader,
+      })
+    ).view;
   };
 
   /**
