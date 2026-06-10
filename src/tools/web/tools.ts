@@ -1,4 +1,5 @@
 import { getGetStaleContentReportTool } from './adminInsights/getStaleContentReport.js';
+import { getQueryAdminInsightsJobPerformanceTool } from './adminInsights/queryJobPerformance.js';
 import { getQueryAdminInsightsSiteContentTool } from './adminInsights/querySiteContent.js';
 import { getQueryAdminInsightsTsEventsTool } from './adminInsights/queryTsEvents.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
@@ -20,6 +21,7 @@ import { getRevokeAccessTokenTool } from './revokeAccessToken/revokeAccessToken.
 import { getListUsersTool } from './users/listUsers.js';
 import { getGetCustomViewDataTool } from './views/getCustomViewData.js';
 import { getGetCustomViewImageTool } from './views/getCustomViewImage.js';
+import { getGetViewTool } from './views/getView.js';
 import { getGetViewDataTool } from './views/getViewData.js';
 import { getGetViewImageTool } from './views/getViewImage.js';
 import { getListCustomViewsTool } from './views/listCustomViews.js';
@@ -42,6 +44,7 @@ export const webToolFactories = [
   getGeneratePulseMetricValueInsightBundleTool,
   getGeneratePulseInsightBriefTool,
   getGetWorkbookTool,
+  getGetViewTool,
   getGetViewDataTool,
   getGetViewImageTool,
   getListWorkbooksTool,
@@ -55,5 +58,6 @@ export const webToolFactories = [
   getResetConsentTool,
   getQueryAdminInsightsTsEventsTool,
   getQueryAdminInsightsSiteContentTool,
+  getQueryAdminInsightsJobPerformanceTool,
   getGetStaleContentReportTool,
 ];
