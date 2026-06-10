@@ -17,7 +17,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { ConstrainedResult, WebTool } from '../tool.js';
+import { AppToolResult, WebTool } from '../tool.js';
 import { constructViewWebUrl } from '../utils/viewUrlUtils.js';
 
 const paramsSchema = {
@@ -58,7 +58,7 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
     callback: async ({ workbookId }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 
-      return await getWorkbookTool.logAndExecute<Workbook>({
+      return await getWorkbookTool.logAndExecute<AppToolResult<Workbook>>({
         extra,
         args: { workbookId },
         callback: async () => {
@@ -71,69 +71,85 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
             return new WorkbookNotAllowedError(isWorkbookAllowedResult.message).toErr();
           }
 
-          return new Ok(
-            await useRestApi({
-              ...extra,
-              jwtScopes: getWorkbookTool.requiredApiScopes,
-              callback: async (restApi) => {
-                // Notice that we already have the workbook if it had been allowed by a project scope.
-                const workbook =
-                  isWorkbookAllowedResult.content ??
-                  (await restApi.workbooksMethods.getWorkbook({
-                    workbookId,
-                    siteId: restApi.siteId,
-                  }));
+          const workbook = await useRestApi({
+            ...extra,
+            jwtScopes: getWorkbookTool.requiredApiScopes,
+            callback: async (restApi) => {
+              // Notice that we already have the workbook if it had been allowed by a project scope.
+              const workbook =
+                isWorkbookAllowedResult.content ??
+                (await restApi.workbooksMethods.getWorkbook({
+                  workbookId,
+                  siteId: restApi.siteId,
+                }));
 
-                // The views returned by the getWorkbook API do not include usage statistics.
-                // Query the views for the workbook to get each view's usage statistics.
-                if (workbook.views) {
-                  const views = await restApi.viewsMethods.queryViewsForWorkbook({
-                    workbookId,
-                    siteId: restApi.siteId,
-                    includeUsageStatistics: true,
-                  });
+              // The views returned by the getWorkbook API do not include usage statistics.
+              // Query the views for the workbook to get each view's usage statistics.
+              if (workbook.views) {
+                const views = await restApi.viewsMethods.queryViewsForWorkbook({
+                  workbookId,
+                  siteId: restApi.siteId,
+                  includeUsageStatistics: true,
+                });
 
-                  workbook.views.view = views;
-                }
+                workbook.views.view = views;
+              }
 
-                if (configWithOverrides.disableMetadataApiRequests) {
-                  return workbook;
-                }
+              if (configWithOverrides.disableMetadataApiRequests) {
+                return workbook;
+              }
 
-                try {
-                  const response = await restApi.metadataMethods.graphql(
-                    getWorkbookLineageQuery([workbook.id]),
-                  );
-                  return mergeWorkbookLineage(
-                    [workbook],
-                    getWorkbookLineageByLuid(response),
-                    configWithOverrides.boundedContext.datasourceIds,
-                  )[0];
-                } catch (error) {
-                  log({
-                    message: `Failed to enrich workbook ${workbook.id} with lineage metadata`,
-                    level: 'warning',
-                    logger: 'lineage',
-                    data: getExceptionMessage(error),
-                  });
-                  return workbook;
-                }
-              },
-            }),
-          );
+              try {
+                const response = await restApi.metadataMethods.graphql(
+                  getWorkbookLineageQuery([workbook.id]),
+                );
+                return mergeWorkbookLineage(
+                  [workbook],
+                  getWorkbookLineageByLuid(response),
+                  configWithOverrides.boundedContext.datasourceIds,
+                )[0];
+              } catch (error) {
+                log({
+                  message: `Failed to enrich workbook ${workbook.id} with lineage metadata`,
+                  level: 'warning',
+                  logger: 'lineage',
+                  data: getExceptionMessage(error),
+                });
+                return workbook;
+              }
+            },
+          });
+
+          const url =
+            getDefaultViewWebUrl(
+              workbook,
+              workbook.views?.view ?? [],
+              extra.config.server, // reminder to use auth
+              extra.config.siteName,
+            ) ??
+            workbook.webpageUrl ??
+            '';
+
+          return new Ok({
+            data: workbook,
+            url,
+          });
         },
-        constrainSuccessResult: (workbook) => {
-          workbook.defaultViewWebUrl = getDefaultViewWebUrl(
-            workbook,
-            workbook.views?.view ?? [],
-            extra.config.server,
-            extra.config.siteName,
-          );
+        constrainSuccessResult: (result) => {
+          const { data: workbook, url } = result;
 
-          return filterWorkbookViews({
+          const filteredWorkbook = filterWorkbookViews({
             workbook,
             boundedContext: configWithOverrides.boundedContext,
           });
+
+          return {
+            type: 'success',
+            result: {
+              data: filteredWorkbook,
+              url,
+            },
+          };
         },
       });
     },
@@ -148,17 +164,14 @@ export function filterWorkbookViews({
 }: {
   workbook: Workbook;
   boundedContext: BoundedContext;
-}): ConstrainedResult<Workbook> {
+}): Workbook {
   const { viewIds, tags } = boundedContext;
 
   // We don't need to check the tags on the workbook since we already
   // did that before getting the detailed workbook information.
   // We only need to check the views on the workbook against viewIds and tags.
   if (!workbook.views || (!viewIds && !tags)) {
-    return {
-      type: 'success',
-      result: flattenWorkbookViewUsage(workbook),
-    };
+    return flattenWorkbookViewUsage(workbook);
   }
 
   let views = workbook.views.view;
@@ -173,10 +186,7 @@ export function filterWorkbookViews({
 
   workbook.views.view = views;
 
-  return {
-    type: 'success',
-    result: flattenWorkbookViewUsage(workbook),
-  };
+  return flattenWorkbookViewUsage(workbook);
 }
 
 function flattenWorkbookViewUsage(workbook: Workbook): Workbook {

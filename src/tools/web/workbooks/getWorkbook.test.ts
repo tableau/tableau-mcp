@@ -69,15 +69,17 @@ describe('getWorkbookTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
 
-    const workbook = JSON.parse(result.content[0].text);
-    expect(workbook.id).toBe('96a43833-27db-40b6-aa80-751efc776b9a');
-    expect(workbook.name).toBe('Superstore');
-    expect(workbook.defaultViewWebUrl).toBe(
+    const response = JSON.parse(result.content[0].text);
+    expect(response.data).toBeDefined();
+    expect(response.url).toBeDefined();
+    expect(response.data.id).toBe('96a43833-27db-40b6-aa80-751efc776b9a');
+    expect(response.data.name).toBe('Superstore');
+    expect(response.data.views.view).toHaveLength(1);
+    expect(response.data.views.view[0].totalViewCount).toBe(42);
+    expect(response.data.views.view[0].usage).toBeUndefined(); // should be flattened
+    expect(response.url).toBe(
       'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview',
     );
-    expect(workbook.views.view).toHaveLength(1);
-    expect(workbook.views.view[0].totalViewCount).toBe(0);
-    expect(workbook.views.view[0].usage).toBeUndefined(); // should be flattened
 
     expect(mocks.mockGetWorkbook).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -119,11 +121,7 @@ describe('getWorkbookTool', () => {
 
   describe('filterWorkbookViews', () => {
     const createTestWorkbook = (): Workbook => {
-      const workbook = JSON.parse(JSON.stringify(mockWorkbook));
-      // In production, defaultViewWebUrl is set before filterWorkbookViews is called
-      workbook.defaultViewWebUrl =
-        'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview';
-      return workbook;
+      return JSON.parse(JSON.stringify(mockWorkbook));
     };
 
     it('should return the workbook when no filtering occurs', () => {
@@ -137,11 +135,7 @@ describe('getWorkbookTool', () => {
           tags: null,
         },
       });
-      invariant(result.type === 'success');
-      expect(result.result).toEqual({
-        ...mockWorkbookWithFlattenedViewUsage,
-        defaultViewWebUrl: 'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview',
-      });
+      expect(result).toEqual(mockWorkbookWithFlattenedViewUsage);
     });
 
     it('should return the views that match the tags in the bounded context', () => {
@@ -156,11 +150,7 @@ describe('getWorkbookTool', () => {
         },
       });
 
-      invariant(result.type === 'success');
-      expect(result.result).toEqual({
-        ...mockWorkbookWithFlattenedViewUsage,
-        defaultViewWebUrl: 'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview',
-      });
+      expect(result).toEqual(mockWorkbookWithFlattenedViewUsage);
     });
 
     it('should remove views from the workbook when all views were filtered out by the tags in the bounded context', () => {
@@ -175,8 +165,7 @@ describe('getWorkbookTool', () => {
         },
       });
 
-      invariant(result.type === 'success');
-      expect(result.result).toEqual({
+      expect(result).toEqual({
         ...mockWorkbook,
         views: { view: [] },
       });
@@ -194,10 +183,9 @@ describe('getWorkbookTool', () => {
         },
       });
 
-      invariant(result.type === 'success');
-      expect(result.result.views?.view.length).toBe(1);
-      expect(result.result.views?.view[0].id).toBe(mockView.id);
-      expect(result.result.views?.view[0].totalViewCount).toBe(0);
+      expect(result.views?.view.length).toBe(1);
+      expect(result.views?.view[0].id).toBe(mockView.id);
+      expect(result.views?.view[0].totalViewCount).toBe(42);
     });
 
     it('should remove views from the workbook when all views are filtered out by viewIds', () => {
@@ -212,8 +200,7 @@ describe('getWorkbookTool', () => {
         },
       });
 
-      invariant(result.type === 'success');
-      expect(result.result).toEqual({
+      expect(result).toEqual({
         ...mockWorkbook,
         views: { view: [] },
       });
@@ -231,10 +218,9 @@ describe('getWorkbookTool', () => {
         },
       });
 
-      invariant(result.type === 'success');
-      expect(result.result.views?.view.length).toBe(1);
-      expect(result.result.views?.view[0].id).toBe(mockView.id);
-      expect(result.result.views?.view[0].totalViewCount).toBe(0);
+      expect(result.views?.view.length).toBe(1);
+      expect(result.views?.view[0].id).toBe(mockView.id);
+      expect(result.views?.view[0].totalViewCount).toBe(42);
     });
 
     it('should remove views when viewIds matches but tags do not', () => {
@@ -249,8 +235,7 @@ describe('getWorkbookTool', () => {
         },
       });
 
-      invariant(result.type === 'success');
-      expect(result.result).toEqual({
+      expect(result).toEqual({
         ...mockWorkbook,
         views: { view: [] },
       });
