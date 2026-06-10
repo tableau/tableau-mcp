@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { copyFileSync, readdirSync, rmSync, statSync } from 'fs';
 import { join } from 'path';
 
+import { DEFAULT_MCP_SERVER_URL } from '../constants';
 import { SiteName, siteNames, siteToMcpServerMap } from './siteInfo';
 
 dotenv.config();
@@ -30,7 +31,7 @@ function runTestsForSite(site: SiteName): SiteResult {
         MCP_SERVER_URL:
           process.env.MCP_SERVER_URL === 'pod-specific'
             ? siteToMcpServerMap[site]
-            : process.env.MCP_SERVER_URL || 'http://127.0.0.1:3297/tableau-mcp',
+            : process.env.MCP_SERVER_URL || DEFAULT_MCP_SERVER_URL,
         PLAYWRIGHT_BLOB_OUTPUT_DIR: `blob-reports/${site}`,
       },
     },
