@@ -82,14 +82,19 @@ describe('getViewTool', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    const content = JSON.parse(result.content[0].text);
-    expect(content.id).toBe(mockView.id);
-    expect(content.name).toBe(mockView.name);
-    expect(content.upstreamDatasources).toBeDefined();
-    expect(content.upstreamDatasources).toHaveLength(2);
-    expect(content.upstreamDatasources[0].luid).toBe('ds-123');
-    expect(content.upstreamDatasources[1].luid).toBe('ds-456');
-    expect(content.usage.totalViewCount).toBe(42);
+    const response = JSON.parse(result.content[0].text);
+    expect(response.data).toBeDefined();
+    expect(response.url).toBeDefined();
+    expect(response.data.id).toBe(mockView.id);
+    expect(response.data.name).toBe(mockView.name);
+    expect(response.data.upstreamDatasources).toBeDefined();
+    expect(response.data.upstreamDatasources).toHaveLength(2);
+    expect(response.data.upstreamDatasources[0].luid).toBe('ds-123');
+    expect(response.data.upstreamDatasources[1].luid).toBe('ds-456');
+    expect(response.data.usage.totalViewCount).toBe(42);
+    expect(response.url).toBe(
+      'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview',
+    );
   });
 
   it('should handle API errors gracefully', async () => {
@@ -127,11 +132,13 @@ describe('getViewTool', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    const content = JSON.parse(result.content[0].text);
-    expect(content.id).toBe(mockView.id);
-    expect(content.name).toBe(mockView.name);
-    expect(content.usage.totalViewCount).toBe(42);
-    expect(content.upstreamDatasources).toBeUndefined();
+    const response = JSON.parse(result.content[0].text);
+    expect(response.data).toBeDefined();
+    expect(response.url).toBeDefined();
+    expect(response.data.id).toBe(mockView.id);
+    expect(response.data.name).toBe(mockView.name);
+    expect(response.data.usage.totalViewCount).toBe(42);
+    expect(response.data.upstreamDatasources).toBeUndefined();
   });
 
   it('should return view without lineage when Metadata API fails', async () => {
@@ -142,10 +149,12 @@ describe('getViewTool', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    const content = JSON.parse(result.content[0].text);
-    expect(content.id).toBe(mockView.id);
-    expect(content.usage.totalViewCount).toBe(42);
-    expect(content.upstreamDatasources).toBeUndefined();
+    const response = JSON.parse(result.content[0].text);
+    expect(response.data).toBeDefined();
+    expect(response.url).toBeDefined();
+    expect(response.data.id).toBe(mockView.id);
+    expect(response.data.usage.totalViewCount).toBe(42);
+    expect(response.data.upstreamDatasources).toBeUndefined();
   });
 
   it('should filter upstream datasources by allowlist', async () => {
@@ -178,10 +187,12 @@ describe('getViewTool', () => {
 
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    const content = JSON.parse(result.content[0].text);
-    expect(content.upstreamDatasources).toBeDefined();
-    expect(content.upstreamDatasources).toHaveLength(1);
-    expect(content.upstreamDatasources[0].luid).toBe('ds-allowed');
+    const response = JSON.parse(result.content[0].text);
+    expect(response.data).toBeDefined();
+    expect(response.url).toBeDefined();
+    expect(response.data.upstreamDatasources).toBeDefined();
+    expect(response.data.upstreamDatasources).toHaveLength(1);
+    expect(response.data.upstreamDatasources[0].luid).toBe('ds-allowed');
   });
 });
 

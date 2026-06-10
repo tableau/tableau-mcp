@@ -15,7 +15,8 @@ import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { WebTool } from '../tool.js';
+import { AppToolResult, WebTool } from '../tool.js';
+import { constructViewWebUrl } from '../utils/viewUrlUtils.js';
 
 const paramsSchema = {
   viewId: z.string(),
@@ -37,7 +38,7 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
     callback: async ({ viewId }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 
-      return await getViewTool.logAndExecute<View>({
+      return await getViewTool.logAndExecute<AppToolResult<View>>({
         extra,
         args: { viewId },
         callback: async () => {
@@ -50,49 +51,53 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
             return new ViewNotAllowedError(isViewAllowedResult.message).toErr();
           }
 
-          return new Ok(
-            await useRestApi({
-              ...extra,
-              jwtScopes: getViewTool.requiredApiScopes,
-              callback: async (restApi) => {
-                // Notice that we already have the view if it had been allowed by a project scope.
-                const view =
-                  isViewAllowedResult.content ??
-                  (await restApi.viewsMethods.getView({
-                    viewId,
-                    siteId: restApi.siteId,
-                    includeUsageStatistics: true,
-                  }));
+          const view = await useRestApi({
+            ...extra,
+            jwtScopes: getViewTool.requiredApiScopes,
+            callback: async (restApi) => {
+              // Notice that we already have the view if it had been allowed by a project scope.
+              const view =
+                isViewAllowedResult.content ??
+                (await restApi.viewsMethods.getView({
+                  viewId,
+                  siteId: restApi.siteId,
+                  includeUsageStatistics: true,
+                }));
 
-                if (configWithOverrides.disableMetadataApiRequests) {
-                  return view;
-                }
+              if (configWithOverrides.disableMetadataApiRequests) {
+                return view;
+              }
 
-                try {
-                  const response = await restApi.metadataMethods.graphql(
-                    getViewLineageQuery([view.id]),
-                  );
-                  return mergeViewLineage(
-                    [view],
-                    getViewLineageByLuid(response),
-                    configWithOverrides.boundedContext.datasourceIds,
-                  )[0];
-                } catch (error) {
-                  log({
-                    message: `Failed to enrich view ${view.id} with lineage metadata`,
-                    level: 'warning',
-                    logger: 'lineage',
-                    data: getExceptionMessage(error),
-                  });
-                  return view;
-                }
-              },
-            }),
-          );
+              try {
+                const response = await restApi.metadataMethods.graphql(
+                  getViewLineageQuery([view.id]),
+                );
+                return mergeViewLineage(
+                  [view],
+                  getViewLineageByLuid(response),
+                  configWithOverrides.boundedContext.datasourceIds,
+                )[0];
+              } catch (error) {
+                log({
+                  message: `Failed to enrich view ${view.id} with lineage metadata`,
+                  level: 'warning',
+                  logger: 'lineage',
+                  data: getExceptionMessage(error),
+                });
+                return view;
+              }
+            },
+          });
+
+          const url = constructViewWebUrl(extra.config.server, extra.config.siteName, view.contentUrl)
+          return new Ok({
+            data: view,
+            url,
+          });
         },
-        constrainSuccessResult: (view) => ({
+        constrainSuccessResult: (result) => ({
           type: 'success',
-          result: view,
+          result,
         }),
       });
     },
