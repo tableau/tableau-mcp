@@ -101,15 +101,16 @@ describe('getWorkbookTool', () => {
   });
 
   describe('filterWorkbookViews', () => {
-    const createTestWorkbook = (): Workbook => JSON.parse(JSON.stringify(mockWorkbook));
+    const createTestWorkbook = (): Workbook => {
+      const workbook = JSON.parse(JSON.stringify(mockWorkbook));
+      // In production, defaultViewWebUrl is set before filterWorkbookViews is called
+      workbook.defaultViewWebUrl = 'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview';
+      return workbook;
+    };
 
     it('should return the workbook when no filtering occurs', () => {
-      const workbook = createTestWorkbook();
-      workbook.defaultViewWebUrl =
-        'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview';
-
       const result = filterWorkbookViews({
-        workbook,
+        workbook: createTestWorkbook(),
         boundedContext: {
           projectIds: null,
           datasourceIds: null,
@@ -126,12 +127,8 @@ describe('getWorkbookTool', () => {
     });
 
     it('should return the views that match the tags in the bounded context', () => {
-      const workbook = createTestWorkbook();
-      workbook.defaultViewWebUrl =
-        'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview';
-
       const result = filterWorkbookViews({
-        workbook,
+        workbook: createTestWorkbook(),
         boundedContext: {
           projectIds: null,
           datasourceIds: null,
