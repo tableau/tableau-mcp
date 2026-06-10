@@ -42,14 +42,14 @@ const argsSchema = {
     ),
   lookbackDays: z
     .string()
-    .regex(/^\d+$/, 'lookbackDays must be a positive integer')
+    .regex(/^[1-9]\d*$/, 'lookbackDays must be a positive integer')
     .optional()
     .describe(
       'Window on Started At, in days. Tableau Cloud caps lookback at 90 (365 with Advanced Management).',
     ),
   limit: z
     .string()
-    .regex(/^\d+$/, 'limit must be a positive integer')
+    .regex(/^[1-9]\d*$/, 'limit must be a positive integer')
     .optional()
     .describe('Maximum rows to return per job-type query.'),
   discover: z

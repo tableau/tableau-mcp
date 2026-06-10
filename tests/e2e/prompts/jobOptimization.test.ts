@@ -63,6 +63,16 @@ describe('job-optimization-inform prompt', () => {
       expect(text).toContain('"limit": 100');
     });
 
+    it('scopes to an explicit jobType without discovery', async () => {
+      if (!promptAvailable) {
+        return;
+      }
+      const text = await client.getPromptText(PROMPT_NAME, { jobType: 'RunFlow' });
+      expect(text).toContain('"RunFlow"');
+      expect(text).not.toContain('"RefreshExtracts"');
+      expect(text).not.toContain('__JOB_TYPE__');
+    });
+
     it('enters discovery mode when discover is true', async () => {
       if (!promptAvailable) {
         return;
