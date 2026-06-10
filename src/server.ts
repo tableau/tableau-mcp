@@ -46,6 +46,7 @@ export abstract class Server {
           capabilities: {
             logging: {},
             tools: {},
+            prompts: {},
           },
         },
       );
