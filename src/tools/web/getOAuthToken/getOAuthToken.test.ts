@@ -18,10 +18,9 @@ describe('getOAuthTokenTool', () => {
     expect(annotations?.openWorldHint).toBe(false);
   });
 
-  it('should set visibility to app-only', async () => {
+  it('should set visibility to app-only', () => {
     const tool = getOAuthTokenTool(new WebMcpServer());
-    const meta = await Provider.from(tool.meta);
-    expect(meta?.ui?.visibility).toEqual(['app']);
+    expect(tool.meta?.ui?.visibility).toEqual(['app']);
   });
 
   it('should return an error when tableauAuthInfo is missing', async () => {
