@@ -40,16 +40,17 @@ export type WebToolParams<Args extends ZodRawShape | undefined = undefined> = To
   TableauWebRequestHandlerExtra,
   TableauWebToolCallback<Args>,
   Args
-> & (
-  | {
-      app?: AppDetails;
-      meta?: never;
-    }
-  | {
-      app?: never;
-      meta?: ToolMeta;
-    }
-);
+> &
+  (
+    | {
+        app?: AppDetails;
+        meta?: never;
+      }
+    | {
+        app?: never;
+        meta?: ToolMeta;
+      }
+  );
 
 export type ConstrainedResult<T> =
   | {
