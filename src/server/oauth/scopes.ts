@@ -202,6 +202,15 @@ const toolScopeMap: Record<
       'tableau:users:read',
     ]),
   },
+  'query-admin-insights-job-performance': {
+    mcp: ['tableau:mcp:datasource:read'],
+    api: new Set([
+      'tableau:viz_data_service:read',
+      'tableau:content:read',
+      'tableau:mcp_site_settings:read',
+      'tableau:users:read',
+    ]),
+  },
   // Server-side anti-join: runs TS Events + Site Content VDS queries internally,
   // applies threshold, returns final filtered rows. Deterministic — no LLM math.
   'get-stale-content-report': {
@@ -225,6 +234,7 @@ function getEnabledToolNames(): Set<WebToolName> {
     enabledTools.delete('list-users');
     enabledTools.delete('query-admin-insights-ts-events');
     enabledTools.delete('query-admin-insights-site-content');
+    enabledTools.delete('query-admin-insights-job-performance');
     enabledTools.delete('get-stale-content-report');
   }
 
