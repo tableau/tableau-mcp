@@ -64,12 +64,28 @@ describe('getWorkbookTool', () => {
     mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
     mocks.mockQueryViewsForWorkbook.mockResolvedValue([mockView]);
     const result = await getToolResult({ workbookId: '96a43833-27db-40b6-aa80-751efc776b9a' });
+
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Superstore');
+
+    const workbook = JSON.parse(result.content[0].text);
+    expect(workbook.id).toBe('96a43833-27db-40b6-aa80-751efc776b9a');
+    expect(workbook.name).toBe('Superstore');
+    expect(workbook.defaultViewWebUrl).toBe(
+      'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview',
+    );
+    expect(workbook.views.view).toHaveLength(1);
+    expect(workbook.views.view[0].totalViewCount).toBe(0);
+    expect(workbook.views.view[0].usage).toBeUndefined(); // should be flattened
+
     expect(mocks.mockGetWorkbook).toHaveBeenCalledWith({
       siteId: 'test-site-id',
       workbookId: '96a43833-27db-40b6-aa80-751efc776b9a',
+    });
+    expect(mocks.mockQueryViewsForWorkbook).toHaveBeenCalledWith({
+      siteId: 'test-site-id',
+      workbookId: '96a43833-27db-40b6-aa80-751efc776b9a',
+      includeUsageStatistics: true,
     });
   });
 
@@ -104,7 +120,8 @@ describe('getWorkbookTool', () => {
     const createTestWorkbook = (): Workbook => {
       const workbook = JSON.parse(JSON.stringify(mockWorkbook));
       // In production, defaultViewWebUrl is set before filterWorkbookViews is called
-      workbook.defaultViewWebUrl = 'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview';
+      workbook.defaultViewWebUrl =
+        'https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview';
       return workbook;
     };
 
