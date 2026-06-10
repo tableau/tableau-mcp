@@ -6,10 +6,7 @@ import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getOAuthTokenTool } from './getOAuthToken.js';
 
-const MOCK_ISSUER = 'https://sso.online.tableau.com';
 const MOCK_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.dGVzdC1wYXlsb2Fk.signature';
-const MOCK_SERVER = 'https://my-tableau-server.com';
-const MOCK_CLIENT_ID = 'https://client.dev/oauth/metadata.json';
 
 describe('getOAuthTokenTool', () => {
   it('should create a tool instance with correct properties', async () => {
@@ -41,14 +38,14 @@ describe('getOAuthTokenTool', () => {
   describe('Bearer auth (Tableau authZ server mode)', () => {
     function makeBearerExtra(): ReturnType<typeof getMockRequestHandlerExtra> {
       const extra = getMockRequestHandlerExtra();
-      extra.config.oauth.issuer = MOCK_ISSUER;
+      extra.config.oauth.issuer = 'https://example.com';
       extra.tableauAuthInfo = {
         type: 'Bearer',
         raw: MOCK_TOKEN,
         username: 'test@example.com',
-        server: MOCK_ISSUER,
+        server: 'https://example.com',
         siteId: 'test-site-id',
-        clientId: MOCK_CLIENT_ID,
+        clientId: 'test-client-id',
       };
       return extra;
     }
@@ -67,11 +64,10 @@ describe('getOAuthTokenTool', () => {
   describe('unsupported auth', () => {
     it('should return an error for X-Tableau-Auth', async () => {
       const extra = getMockRequestHandlerExtra();
-      extra.config.oauth.issuer = MOCK_ISSUER;
       extra.tableauAuthInfo = {
         type: 'X-Tableau-Auth',
         username: 'test-user',
-        server: MOCK_SERVER,
+        server: 'https://example.com',
         siteId: 'site-id',
         accessToken: 'tableau-access-token',
         refreshToken: 'tableau-refresh-token',
