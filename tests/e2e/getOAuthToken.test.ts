@@ -9,9 +9,6 @@ const tokenResponseSchema = z.object({
 });
 
 describe('get-oauth-token', () => {
-  beforeAll(setEnv);
-  afterAll(resetEnv);
-
   it('should return Bearer token in OAuth Bearer mode', async () => {
     // Skip this test if not in OAuth Bearer mode
     // In a real OAuth E2E test, you would:
