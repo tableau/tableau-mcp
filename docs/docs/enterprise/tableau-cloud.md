@@ -98,9 +98,11 @@ flowchart TB
 ### Step 1: Determine your authentication approach
 
 The tools exposed by the Tableau MCP server call the Tableau Cloud REST APIs which require signing
-in with a Tableau Cloud user. Tableau MCP provides several options for specifying which credential
-is used when it signs in to the REST APIs. Using the below decision tree, determine which
-authentication option is most appropriate.
+in with a Tableau Cloud user. **OAuth is the recommended, most secure, and fully supported
+authentication method for production deployments.** It provides per-user authentication and proper
+authorization scoping, and is the only method designed for general multi-user HTTP deployments.
+Alternative options are available only for testing, prototyping, or specific licensed scenarios.
+Using the below decision tree, determine which authentication option is most appropriate.
 
 ```mermaid
 flowchart TD
@@ -136,15 +138,48 @@ are provided below and assume the use of a `.env` file in the working directory 
 
 <hr />
 
-#### Example: Authentication with Personal Access Token (PAT)
+#### Example: Authentication with OAuth (Recommended)
+
+With OAuth enabled, when connecting to the MCP server the first time, each user will be required to
+sign in to their Tableau Cloud site the same way they would when viewing a dashboard in their web
+browser. Once a user successfully connects, the MCP server will make its requests to the underlying
+Tableau REST APIs as the user themself. The Tableau authorization server will issue the MCP client
+an access token which will be included with each subsequent request when calling MCP tools, where it
+will be validated before allowing the tool to be executed.
+
+This is the **recommended method for all production deployments**. It is the only approach that
+provides proper per-user authentication and authorization scoping.
+
+##### Environment Variables
+
+```
+SERVER=https://10ax.online.tableau.com
+SITE_NAME=MySite
+
+OAUTH_ISSUER=https://sso.online.tableau.com
+OAUTH_RESOURCE_URI=https://tableau-mcp.superstore.com
+ADVERTISE_API_SCOPES=true
+OAUTH_EMBEDDED_AUTHZ_SERVER=false
+
+```
+
+<hr />
+
+#### Example: Authentication with Personal Access Token (PAT) — Testing/prototyping only
+
+:::warning
+
+PAT-based authentication is **not recommended for production deployments**. Use OAuth for
+multi-user HTTP deployments. PATs cannot be used concurrently, so simultaneous requests from
+multiple clients will fail.
+
+:::
 
 Create a PAT using the instructions provided in
 [Personal Access Tokens - Tableau](https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm).
 All requests made to the MCP server will use the PAT to authenticate to the underlying Tableau REST
-APIs. For general multi-user HTTP deployments, prefer OAuth. PAT-based HTTP configurations are
-intended for testing/prototyping or licensed and approved UBL scenarios. ⚠️ PATs also should not be
-used when you expect simultaneous requests from multiple clients since they cannot be used
-concurrently.
+APIs. PAT-based HTTP configurations are intended for testing/prototyping or licensed and approved
+UBL scenarios only.
 
 ```
 SERVER=https://10ax.online.tableau.com
@@ -162,16 +197,23 @@ DANGEROUSLY_DISABLE_OAUTH=true
 
 <hr />
 
-#### Example: Authentication with Direct Trust
+#### Example: Authentication with Direct Trust — Licensed/approved UBL scenarios only
+
+:::warning
+
+Direct Trust with OAuth disabled is **not recommended for general deployments**. Use OAuth for
+multi-user HTTP deployments. This configuration is intended only for deployments that are licensed
+and approved for user-based licensing (UBL). Confirm with your Tableau licensing and security
+guidance before use.
+
+:::
 
 Create a Direct Trust Connected App using the instructions provided in
 [Configure Connected Apps with Direct Trust - Tableau](https://help.tableau.com/current/online/en-us/connected_apps_direct.htm).
 All requests made to the MCP server will use the provided details of the Connected App to generate a
 scoped
 [JSON Web Token (JWT)](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#jwt)
-and use it to authenticate to the Tableau REST APIs. For general multi-user HTTP deployments, prefer
-OAuth. Direct Trust with OAuth disabled is intended for testing/prototyping or deployments that are
-licensed and approved for UBL, not as the default shared-account end-user deployment path.
+and use it to authenticate to the Tableau REST APIs.
 
 ```
 SERVER=https://10ax.online.tableau.com
@@ -187,30 +229,6 @@ CONNECTED_APP_SECRET_VALUE=DeF...
 # When TRANSPORT=http, requiring OAuth is the default
 # It must be disabled explicitly to use a different auth mechanism
 DANGEROUSLY_DISABLE_OAUTH=true
-```
-
-<hr />
-
-#### Example: Authentication with OAuth
-
-With OAuth enabled, when connecting to the MCP server the first time, each user will be required to
-sign in to their Tableau Cloud site the same way they would when viewing a dashboard in their web
-browser. Once a user successfully connects, the MCP server will make its requests to the underlying
-Tableau REST APIs as the user themself. The Tableau authorization server will issue the MCP client
-an access token which will be included with each subsequent request when calling MCP tools, where it
-will be validated before allowing the tool to be executed.
-
-##### Environment Variables
-
-```
-SERVER=https://10ax.online.tableau.com
-SITE_NAME=MySite
-
-OAUTH_ISSUER=https://sso.online.tableau.com
-OAUTH_RESOURCE_URI=https://tableau-mcp.superstore.com
-ADVERTISE_API_SCOPES=true
-OAUTH_EMBEDDED_AUTHZ_SERVER=false
-
 ```
 
 ### Step 3: Run the MCP Server
