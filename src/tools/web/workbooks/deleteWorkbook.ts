@@ -82,26 +82,29 @@ run the preview first and confirm the workbook identity before deleting.
 
               const siteId = restApi.siteId;
 
+              // Resolve identity first in both phases so the response (preview AND the final
+              // delete confirmation) always names the workbook, project, and owner for an
+              // auditable record of exactly what was acted on.
+              const workbook = await restApi.workbooksMethods.getWorkbook({ workbookId, siteId });
+              const ownerEmail = await resolveOwnerEmail(restApi, siteId, workbook.owner?.id);
+              const projectName = workbook.project?.name ?? 'unknown project';
+              const ownerText = ownerEmail ? `owner ${ownerEmail}` : 'owner unknown';
+
               if (confirm) {
                 await restApi.workbooksMethods.deleteWorkbook({ workbookId, siteId });
                 return new Ok(
-                  `Workbook '${workbookId}' deleted. It can be restored from the Tableau ` +
-                    `recycle bin (${RECYCLE_BIN_DOC_URL}) for a limited time before permanent removal.`,
+                  `Deleted workbook '${workbook.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
+                    `It can be restored from the Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) for a ` +
+                    'limited time before permanent removal.',
                 );
               }
 
-              // Preview phase: resolve details, tag as pending deletion, report. No deletion.
-              const workbook = await restApi.workbooksMethods.getWorkbook({ workbookId, siteId });
-              const ownerEmail = await resolveOwnerEmail(restApi, siteId, workbook.owner?.id);
-
+              // Preview phase: tag as pending deletion and report. No deletion.
               await restApi.workbooksMethods.addTagsToWorkbook({
                 workbookId,
                 siteId,
                 tagLabels: [STALE_PENDING_DELETION_TAG],
               });
-
-              const projectName = workbook.project?.name ?? 'unknown project';
-              const ownerText = ownerEmail ? `owner ${ownerEmail}` : 'owner unknown';
 
               return new Ok(
                 `Preview — workbook '${workbook.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +

@@ -144,17 +144,21 @@ describe('deleteWorkbookTool', () => {
 
   // --- Delete phase (confirm: true) ---
 
-  it('should delete the workbook when confirm is true', async () => {
+  it('should delete the workbook when confirm is true and report its identity', async () => {
     const result = await getToolResult({ workbookId: 'wb-1', confirm: true });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('deleted');
-    expect(result.content[0].text).toContain('recycle_bin');
+    const text = result.content[0].text;
+    expect(text).toContain('Deleted');
+    expect(text).toContain(mockWorkbook.name);
+    expect(text).toContain('owner@example.com');
+    expect(text).toContain('recycle_bin');
     expect(mocks.mockDeleteWorkbook).toHaveBeenCalledWith({
       workbookId: 'wb-1',
       siteId: 'test-site-id',
     });
-    expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
+    // Identity is resolved for the confirmation record, but the workbook is NOT tagged on delete.
+    expect(mocks.mockGetWorkbook).toHaveBeenCalled();
     expect(mocks.mockAddTagsToWorkbook).not.toHaveBeenCalled();
   });
 
