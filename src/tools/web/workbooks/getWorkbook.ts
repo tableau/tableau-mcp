@@ -124,8 +124,8 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
             getDefaultViewWebUrl(
               workbook,
               workbook.views?.view ?? [],
-              extra.config.server, // reminder to use auth
-              extra.config.siteName,
+              extra.config.server,
+              extra.getSiteName(),
             ) ??
             workbook.webpageUrl ??
             '';

@@ -192,6 +192,93 @@ describe('TableauAccessTokenValidator', () => {
       expect(result.error).toBe('Invalid or expired access token');
       expect(mockGetCurrentServerSession).toHaveBeenCalledOnce();
     });
+
+    it('resolves tableauAuthInfo.siteName from the current session contentUrl when present', async () => {
+      const mockSetBearerToken = vi.fn();
+      const mockGetCurrentServerSession = vi.fn().mockResolvedValue(
+        new Ok({
+          site: { id: 'abc123', name: 'site-name', contentUrl: 'my-site' },
+          user: { id: 'uid-1', name: 'user@example.com' },
+        }),
+      );
+      vi.mocked(RestApi).mockImplementationOnce(
+        () =>
+          ({
+            setBearerToken: mockSetBearerToken,
+            authenticatedServerMethods: {
+              getCurrentServerSession: mockGetCurrentServerSession,
+            },
+          }) as unknown as RestApi,
+      );
+      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+
+      const result = await validator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+      expect(mockSetBearerToken).toHaveBeenCalledWith(token);
+      expect(mockGetCurrentServerSession).toHaveBeenCalledOnce();
+      const extra = result.value.extra as Record<string, unknown>;
+      expect(extra.siteName).toBe('my-site');
+    });
+
+    it('defaults tableauAuthInfo.siteName to empty string when contentUrl is missing', async () => {
+      const mockSetBearerToken = vi.fn();
+      const mockGetCurrentServerSession = vi.fn().mockResolvedValue(
+        new Ok({
+          site: { id: 'abc123', name: 'site-name' },
+          user: { id: 'uid-1', name: 'user@example.com' },
+        }),
+      );
+      vi.mocked(RestApi).mockImplementationOnce(
+        () =>
+          ({
+            setBearerToken: mockSetBearerToken,
+            authenticatedServerMethods: {
+              getCurrentServerSession: mockGetCurrentServerSession,
+            },
+          }) as unknown as RestApi,
+      );
+      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+
+      const result = await validator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+      expect(mockSetBearerToken).toHaveBeenCalledWith(token);
+      expect(mockGetCurrentServerSession).toHaveBeenCalledOnce();
+      const extra = result.value.extra as Record<string, unknown>;
+      expect(extra.siteName).toBe('');
+    });
+
+    it('defaults tableauAuthInfo.siteName to empty string when contentUrl is empty', async () => {
+      const mockSetBearerToken = vi.fn();
+      const mockGetCurrentServerSession = vi.fn().mockResolvedValue(
+        new Ok({
+          site: { id: 'abc123', name: 'site-name', contentUrl: '' },
+          user: { id: 'uid-1', name: 'user@example.com' },
+        }),
+      );
+      vi.mocked(RestApi).mockImplementationOnce(
+        () =>
+          ({
+            setBearerToken: mockSetBearerToken,
+            authenticatedServerMethods: {
+              getCurrentServerSession: mockGetCurrentServerSession,
+            },
+          }) as unknown as RestApi,
+      );
+      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+
+      const result = await validator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+      expect(mockSetBearerToken).toHaveBeenCalledWith(token);
+      expect(mockGetCurrentServerSession).toHaveBeenCalledOnce();
+      const extra = result.value.extra as Record<string, unknown>;
+      expect(extra.siteName).toBe('');
+    });
   });
 
   describe('audience validation (RFC 9068)', () => {

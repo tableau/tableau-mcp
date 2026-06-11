@@ -1,3 +1,5 @@
+import { Ok } from 'ts-results-es';
+
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 
 stubDefaultEnvVars();
@@ -33,6 +35,14 @@ vi.mock('./sdks/tableau/restApi.js', async (importOriginal) => {
         getServerInfo: vi.fn().mockResolvedValue({
           productVersion: testProductVersion,
         }),
+      },
+      authenticatedServerMethods: {
+        getCurrentServerSession: vi.fn().mockResolvedValue(
+          new Ok({
+            site: { id: 'abc123', name: 'site-name', contentUrl: 'default-site' },
+            user: { id: 'default-user-id', name: 'user@example.com' },
+          }),
+        ),
       },
     })),
     { versionIsAtLeast: vi.fn().mockReturnValue(true) },

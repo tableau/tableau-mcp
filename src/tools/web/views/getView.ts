@@ -89,7 +89,11 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
             },
           });
 
-          const url = constructViewWebUrl(extra.config.server, extra.config.siteName, view.contentUrl)
+          const url = constructViewWebUrl(
+            extra.config.server,
+            extra.getSiteName(),
+            view.contentUrl,
+          );
           return new Ok({
             data: view,
             url,
