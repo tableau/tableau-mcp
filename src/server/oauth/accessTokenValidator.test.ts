@@ -48,7 +48,7 @@ describe('TableauAccessTokenValidator', () => {
 
   describe('client_id claim resolution', () => {
     it('uses the client_id claim as the OAuth client ID', async () => {
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+      const token = makeBearer(basePayload());
       const result = await validator.validate(token);
 
       expect(result.isOk()).toBe(true);
@@ -58,7 +58,7 @@ describe('TableauAccessTokenValidator', () => {
     });
 
     it('never derives the client ID from aud (the resource URL)', async () => {
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+      const token = makeBearer(basePayload());
       const result = await validator.validate(token);
 
       expect(result.isOk()).toBe(true);
@@ -90,7 +90,7 @@ describe('TableauAccessTokenValidator', () => {
 
   describe('standard validation', () => {
     it('returns AuthInfo.clientId as the resolved OAuth client_id', async () => {
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+      const token = makeBearer(basePayload());
       const result = await validator.validate(token);
 
       expect(result.isOk()).toBe(true);
@@ -123,7 +123,7 @@ describe('TableauAccessTokenValidator', () => {
     });
 
     it('maps token claims to tableauAuthInfo correctly', async () => {
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+      const token = makeBearer(basePayload());
       const result = await validator.validate(token);
 
       expect(result.isOk()).toBe(true);
@@ -152,9 +152,7 @@ describe('TableauAccessTokenValidator', () => {
             },
           }) as unknown as RestApi,
       );
-      const { 'https://tableau.com/userId': _userId, ...payloadWithoutUserId } = basePayload({
-        client_id: MOCK_CLIENT_ID,
-      });
+      const { 'https://tableau.com/userId': _userId, ...payloadWithoutUserId } = basePayload();
       const token = makeBearer(payloadWithoutUserId);
 
       const result = await validator.validate(token);
@@ -180,9 +178,7 @@ describe('TableauAccessTokenValidator', () => {
             },
           }) as unknown as RestApi,
       );
-      const { 'https://tableau.com/userId': _userId, ...payloadWithoutUserId } = basePayload({
-        client_id: MOCK_CLIENT_ID,
-      });
+      const { 'https://tableau.com/userId': _userId, ...payloadWithoutUserId } = basePayload();
       const token = makeBearer(payloadWithoutUserId);
 
       const result = await validator.validate(token);
@@ -210,7 +206,7 @@ describe('TableauAccessTokenValidator', () => {
             },
           }) as unknown as RestApi,
       );
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+      const token = makeBearer(basePayload());
 
       const result = await validator.validate(token);
 
@@ -239,7 +235,7 @@ describe('TableauAccessTokenValidator', () => {
             },
           }) as unknown as RestApi,
       );
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+      const token = makeBearer(basePayload());
 
       const result = await validator.validate(token);
 
@@ -268,7 +264,7 @@ describe('TableauAccessTokenValidator', () => {
             },
           }) as unknown as RestApi,
       );
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+      const token = makeBearer(basePayload());
 
       const result = await validator.validate(token);
 
