@@ -198,7 +198,7 @@ export default class PulseMethods extends AuthenticatedMethods<typeof pulseApis>
 export type PulseResult<T> = Result<T, McpToolError>;
 
 // These Tableau error codes indicate AI-powered Pulse insights are disabled for the site.
-const PULSE_INSIGHTS_DISABLED_ERROR_CODES = ['0x62c06627', '0x8c454877'] as const;
+const PULSE_INSIGHTS_DISABLED_ERROR_CODES = ['0x62c06627', '0x8c454877', '0xd0495c24'] as const;
 
 export function hasPulseInsightsDisabledErrorCode(value: unknown): boolean {
   if (typeof value !== 'string') {
