@@ -16,6 +16,11 @@ export const workbookSchema = z.object({
   webpageUrl: z.string().optional(),
   contentUrl: z.string(),
   project: projectSchema.optional(),
+  owner: z
+    .object({
+      id: z.string(),
+    })
+    .optional(),
   showTabs: z.coerce.boolean(),
   defaultViewId: z.string().optional(),
   tags: tagsSchema,

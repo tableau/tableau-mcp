@@ -6,6 +6,7 @@ export const mockWorkbook = {
   name: 'Superstore',
   contentUrl: 'Superstore',
   project: { name: 'Samples', id: 'ae5e9374-2a58-40ab-93e4-a2fd1b07cf7d' },
+  owner: { id: 'owner-1' },
   showTabs: true,
   defaultViewId: mockView.id,
   views: {

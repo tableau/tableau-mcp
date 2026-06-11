@@ -75,4 +75,57 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
       workbooks: response.workbooks.workbook ?? [],
     };
   };
+
+  /**
+   * Deletes the specified workbook from the site.
+   *
+   * On Tableau Cloud the workbook is moved to the recycle bin and can be restored
+   * for a limited time before permanent removal.
+   *
+   * Required scopes (Tableau Cloud): `tableau:content:delete`
+   *
+   * @param workbookId - The ID of the workbook to delete.
+   * @param siteId - The Tableau site ID
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#delete_workbook
+   */
+  deleteWorkbook = async ({
+    workbookId,
+    siteId,
+  }: {
+    workbookId: string;
+    siteId: string;
+  }): Promise<void> => {
+    await this._apiClient.deleteWorkbook(undefined, {
+      params: { siteId, workbookId },
+      ...this.authHeader,
+    });
+  };
+
+  /**
+   * Adds one or more tags to the specified workbook.
+   *
+   * Required scopes (Tableau Cloud): `tableau:content:write`
+   *
+   * @param workbookId - The ID of the workbook to tag.
+   * @param siteId - The Tableau site ID
+   * @param tagLabels - The tag labels to add.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#add_tags_to_workbook
+   */
+  addTagsToWorkbook = async ({
+    workbookId,
+    siteId,
+    tagLabels,
+  }: {
+    workbookId: string;
+    siteId: string;
+    tagLabels: ReadonlyArray<string>;
+  }): Promise<void> => {
+    await this._apiClient.addTagsToWorkbook(
+      { tags: { tag: tagLabels.map((label) => ({ label })) } },
+      {
+        params: { siteId, workbookId },
+        ...this.authHeader,
+      },
+    );
+  };
 }

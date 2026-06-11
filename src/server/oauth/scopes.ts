@@ -23,6 +23,7 @@ export type McpScope =
   | 'tableau:mcp:pulse:read'
   | 'tableau:mcp:insight:create'
   | 'tableau:mcp:tasks:read'
+  | 'tableau:mcp:workbook:delete'
   | 'tableau:mcp:users:read';
 
 export type TableauApiScope =
@@ -36,6 +37,8 @@ export type TableauApiScope =
   | 'tableau:insight_brief:create'
   | 'tableau:mcp_site_settings:read'
   | 'tableau:tasks:read'
+  | 'tableau:content:write'
+  | 'tableau:content:delete'
   | 'tableau:users:read';
 
 /**
@@ -52,6 +55,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:pulse:read',
   'tableau:mcp:insight:create',
   'tableau:mcp:tasks:read',
+  'tableau:mcp:workbook:delete',
   'tableau:mcp:users:read',
 ];
 
@@ -86,6 +90,18 @@ const toolScopeMap: Record<
   'list-workbooks': {
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
+  },
+  // Admin-only destructive tool. Two-phase: preview tags the workbook (content:write) and
+  // resolves the owner (users:read); confirm deletes it (content:delete). getWorkbook → content:read.
+  // adminGate.assertAdmin → GET /sites/{siteId}/users/{userId} → users:read.
+  'delete-workbook': {
+    mcp: ['tableau:mcp:workbook:delete'],
+    api: new Set([
+      'tableau:content:delete',
+      'tableau:content:write',
+      'tableau:content:read',
+      'tableau:users:read',
+    ]),
   },
   'list-projects': {
     mcp: ['tableau:mcp:content:read'],
@@ -235,6 +251,7 @@ function getEnabledToolNames(): Set<WebToolName> {
   // Remove disabled tools based on feature flags
   if (!config.adminToolsEnabled) {
     enabledTools.delete('list-extract-refresh-tasks');
+    enabledTools.delete('delete-workbook');
     enabledTools.delete('list-users');
     enabledTools.delete('query-admin-insights-ts-events');
     enabledTools.delete('query-admin-insights-site-content');

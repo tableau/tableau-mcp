@@ -1,0 +1,54 @@
+---
+sidebar_position: 3
+---
+
+# Delete Workbook
+
+Deletes a workbook from the current Tableau Cloud site as the destructive step of the Stale Content
+Cleanup workflow.
+
+This tool is **admin-only** and is registered only when the `ADMIN_TOOLS_ENABLED` feature flag is
+enabled. Non-administrator callers are rejected before any action is taken.
+
+The tool is **two-phase** to keep the destructive action safe:
+
+1. **Preview** (default — `confirm` omitted or `false`): tags the workbook with
+   `stale-pending-deletion` (reversible, visible in the Tableau UI), reports the workbook name,
+   project, and owner, and does **not** delete anything.
+2. **Delete** (`confirm: true`): permanently removes the workbook. On Tableau Cloud the workbook is
+   moved to the [recycle bin](https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm)
+   and can be restored for a limited time before permanent removal.
+
+## APIs called
+
+- [Add Tags to Workbook](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#add_tags_to_workbook) (preview phase)
+- [Query Workbook](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbook) (preview phase)
+- [Query User On Site](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#query_user_on_site) (owner lookup + admin check)
+- [Delete Workbook](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#delete_workbook) (delete phase)
+
+## Required arguments
+
+### `workbookId`
+
+The LUID of the workbook to delete, potentially retrieved by the [List Workbooks](list-workbooks.md)
+tool.
+
+Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
+
+## Optional arguments
+
+### `confirm`
+
+When omitted or `false`, runs the non-destructive preview (tags and reports). When `true`,
+permanently deletes the workbook.
+
+Example: `true`
+
+## Side effects
+
+- **Preview** adds the `stale-pending-deletion` tag to the workbook. This is reversible and visible
+  in the Tableau UI.
+- **Delete** removes the workbook. On Tableau Cloud the workbook is moved to the recycle bin and can
+  be [restored](https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm) for a limited
+  time before it is permanently purged. Always run the preview first and confirm the workbook
+  identity before deleting.

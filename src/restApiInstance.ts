@@ -33,6 +33,8 @@ type JwtScopes =
   | 'tableau:insight_brief:create'
   | 'tableau:mcp_site_settings:read'
   | 'tableau:tasks:read'
+  | 'tableau:content:write'
+  | 'tableau:content:delete'
   | 'tableau:users:read';
 
 export type RestApiArgs = Pick<
