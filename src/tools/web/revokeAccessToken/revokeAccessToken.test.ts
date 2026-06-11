@@ -74,6 +74,7 @@ describe('revokeAccessTokenTool', () => {
         username: 'test@example.com',
         server: MOCK_ISSUER,
         siteId: 'test-site-id',
+        siteName: 'test-site',
         clientId: MOCK_CLIENT_ID, // OAuth client_id resolved from the Tableau JWT (client_id claim, or aud during compatibility window)
       };
       return extra;
@@ -112,6 +113,7 @@ describe('revokeAccessTokenTool', () => {
         username: 'test@example.com',
         server: MOCK_ISSUER,
         siteId: 'test-site-id',
+        siteName: 'test-site',
         clientId: TABLEAU_DERIVED_CLIENT_ID,
       };
       await getToolResult(extra);
@@ -136,6 +138,7 @@ describe('revokeAccessTokenTool', () => {
         username: 'test@example.com',
         server: MOCK_ISSUER,
         siteId: 'test-site-id',
+        siteName: 'test-site',
         // clientId absent: no OAuth client_id could be resolved from the JWT
       };
 

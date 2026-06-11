@@ -68,6 +68,7 @@ describe('resetConsentTool', () => {
         username: 'test@example.com',
         server: MOCK_ISSUER,
         siteId: 'test-site-id',
+        siteName: 'test-site',
       };
       return extra;
     }

@@ -141,6 +141,7 @@ describe('restApiInstance', () => {
           username: 'test-user',
           server: 'https://my-tableau-server.com',
           siteId: 'site-luid',
+          siteName: 'test-site',
           raw: 'abc123|xyz789|site-luid',
         },
         jwtScopes: [],
