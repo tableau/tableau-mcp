@@ -56,7 +56,7 @@ export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis>
     siteId: string;
     taskId: string;
   }): Promise<void> => {
-    await this._apiClient.deleteExtractRefreshTask({
+    await this._apiClient.deleteExtractRefreshTask(undefined, {
       params: { siteId, taskId },
       ...this.authHeader,
     });
