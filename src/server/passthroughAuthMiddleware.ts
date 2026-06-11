@@ -17,6 +17,7 @@ export const passthroughAuthInfoSchema = z.object({
   userId: z.string(),
   server: z.string(),
   siteId: z.string(),
+  siteName: z.string().optional(), // Optional - not populated (no MCP apps support)
   raw: z.string(),
 });
 
