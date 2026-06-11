@@ -2,7 +2,9 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
+import { GetWorksheetXmlError } from '../desktop/commands/workbook/getWorksheetXml.js';
 import { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml.js';
+import { LoadWorksheetXmlError } from '../desktop/commands/workbook/loadWorksheetXml.js';
 import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor.js';
 import { getExceptionMessage } from '../utils/getExceptionMessage.js';
 
@@ -132,6 +134,12 @@ export class WorkbookNotFoundError extends McpToolError {
   }
 }
 
+export class WorksheetNotFoundError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'worksheet-not-found', message, statusCode: 404 });
+  }
+}
+
 export class ZodiosValidationError extends McpToolError {
   constructor(error: ZodiosError) {
     super({
@@ -213,6 +221,26 @@ export class WorkbookXmlLoadFailedError extends McpToolError {
   constructor(error: LoadWorkbookXmlError) {
     super({
       type: 'load-workbook-xml-error',
+      message: JSON.stringify(error),
+      statusCode: 500,
+    });
+  }
+}
+
+export class WorksheetXmlLoadFailedError extends McpToolError {
+  constructor(error: LoadWorksheetXmlError) {
+    super({
+      type: 'load-worksheet-xml-error',
+      message: JSON.stringify(error),
+      statusCode: 500,
+    });
+  }
+}
+
+export class GetWorksheetXmlFailedError extends McpToolError {
+  constructor(error: GetWorksheetXmlError) {
+    super({
+      type: 'get-worksheet-xml-error',
       message: JSON.stringify(error),
       statusCode: 500,
     });

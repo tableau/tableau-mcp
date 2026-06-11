@@ -5,6 +5,8 @@ export const desktopToolNames = [
   'apply-workbook',
   'list-worksheets',
   'list-dashboards',
+  'get-worksheet-xml',
+  'apply-worksheet',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 
