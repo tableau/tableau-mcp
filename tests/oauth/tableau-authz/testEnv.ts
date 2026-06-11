@@ -2,7 +2,10 @@ import dotenv from 'dotenv';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error/v3';
 
+import { DEFAULT_MCP_SERVER_URL } from './constants';
+
 const envSchema = z.object({
+  MCP_SERVER_URL: z.string().optional().default(DEFAULT_MCP_SERVER_URL),
   TEST_USER: z.string(),
   TEST_PASSWORD: z.string(),
   TEST_SITE_NAME: z.string(),

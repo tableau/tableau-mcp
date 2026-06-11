@@ -1,6 +1,7 @@
 import { Browser, expect, Page, WorkerFixture } from '@playwright/test';
 import { z } from 'zod';
 
+import { DEFAULT_MCP_SERVER_URL } from '../constants.js';
 import { ConsentFlow } from '../flows/consentFlow.js';
 import { LoginFlow } from '../flows/loginFlow.js';
 import { GetAuthZCodeFn, getOAuthClient, OAuthClient } from '../oauthClient.js';
@@ -17,7 +18,7 @@ export const getOAuthClientFixture: WorkerFixture<OAuthClient, { browser: Browse
   use,
 ): Promise<void> => {
   const env = getEnv();
-  const client = getOAuthClient();
+  const client = getOAuthClient(env.MCP_SERVER_URL || DEFAULT_MCP_SERVER_URL);
 
   const page = await browser.newPage();
   await connectOAuthClient({ client, page, env });

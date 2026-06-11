@@ -6,10 +6,11 @@ runs:
     - name: OAuth Tableau Authorization Tests
       shell: bash
       run: |
-        npx playwright install --with-deps
+        npx playwright install --with-deps chromium
         npm run test:oauth:tableau
       env:
         OAUTH_ISSUER: https://sso.online.tableau.com
         ADVERTISE_API_SCOPES: true
         OAUTH_EMBEDDED_AUTHZ_SERVER: false
         TABLEAU_AI_DISABLED: true
+        FILL_SITE_NAME: true # test user can access many sites so it will be prompted to enter the site name

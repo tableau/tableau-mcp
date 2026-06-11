@@ -1,5 +1,8 @@
 import { getDesktopConfig } from '../config.desktop.js';
+import { getBaseConfig } from '../config.shared.js';
 import { log } from '../logging/logger.js';
+import { sanitizeValue } from '../logging/sanitize.js';
+import { maskRequest, maskResponse } from '../logging/secretMask.js';
 import { AgentApiClient } from '../sdks/desktop/agentApi/client.js';
 import {
   ErrorInterceptor,
@@ -84,43 +87,59 @@ export const getResponseErrorInterceptor = (): ErrorInterceptor => (error, baseU
 };
 
 function logRequest(request: RequestInterceptorConfig): void {
+  const config = getBaseConfig();
+  const maskedRequest = config.disableLogMasking ? request : maskRequest(request);
+
   const url = new URL(
-    `${request.baseUrl.replace(/\/$/, '')}/${request.url?.replace(/^\//, '') ?? ''}`,
+    `${maskedRequest.baseUrl.replace(/\/$/, '')}/${maskedRequest.url?.replace(/^\//, '') ?? ''}`,
   );
-  if (request.params && Object.keys(request.params).length > 0) {
-    url.search = new URLSearchParams(request.params).toString();
+  if (maskedRequest.params && Object.keys(maskedRequest.params).length > 0) {
+    url.search = new URLSearchParams(maskedRequest.params).toString();
   }
+  const data = {
+    method: maskedRequest.method,
+    url: url.toString(),
+    headers: maskedRequest.headers,
+    params: maskedRequest.params,
+    data: sanitize(maskedRequest.data),
+  } as const;
 
   log({
     message: 'Agent API request',
     level: 'debug',
     logger: 'AgentApiClient',
-    data: {
-      method: request.method,
-      url: url.toString(),
-      headers: request.headers,
-      data: request.data,
-    },
+    data,
   });
 }
 
 function logResponse(response: ResponseInterceptorConfig): void {
+  const config = getBaseConfig();
+  const maskedResponse = config.disableLogMasking ? response : maskResponse(response);
   const url = new URL(
-    `${response.baseUrl.replace(/\/$/, '')}/${response.url?.replace(/^\//, '') ?? ''}`,
+    `${maskedResponse.baseUrl.replace(/\/$/, '')}/${maskedResponse.url?.replace(/^\//, '') ?? ''}`,
   );
-  if (response.params && Object.keys(response.params).length > 0) {
-    url.search = new URLSearchParams(response.params).toString();
+  if (maskedResponse.params && Object.keys(maskedResponse.params).length > 0) {
+    url.search = new URLSearchParams(maskedResponse.params).toString();
   }
+
+  const data = {
+    url: url.toString(),
+    status: maskedResponse.status,
+    headers: maskedResponse.headers,
+    data: sanitize(maskedResponse.data),
+  } as const;
 
   log({
     message: 'Agent API response',
     level: 'debug',
     logger: 'AgentApiClient',
-    data: {
-      status: response.status,
-      url: url.toString(),
-      headers: response.headers,
-      data: response.data,
-    },
+    data,
+  });
+}
+
+function sanitize(value: unknown): unknown {
+  return sanitizeValue(value, {
+    seen: new WeakSet<object>(),
+    depth: 0,
   });
 }
