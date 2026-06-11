@@ -14,10 +14,12 @@ The tool is **two-phase** to keep the destructive action safe:
 
 1. **Preview** (default — `confirm` omitted or `false`): tags the workbook with
    `stale-pending-deletion` (reversible, visible in the Tableau UI), reports the workbook name,
-   project, and owner, and does **not** delete anything.
-2. **Delete** (`confirm: true`): permanently removes the workbook. On Tableau Cloud the workbook is
-   moved to the [recycle bin](https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm)
-   and can be restored for a limited time before permanent removal.
+   project, and owner, returns a `confirmationToken`, and does **not** delete anything.
+2. **Delete** (`confirm: true` + `confirmationToken`): permanently removes the workbook. The token
+   from the preview step is **required** — deletion is rejected without a matching token, which
+   guarantees the preview was run first for this workbook. On Tableau Cloud the workbook is moved to
+   the [recycle bin](https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm) and can be
+   restored for a limited time before permanent removal.
 
 ## APIs called
 
@@ -40,9 +42,17 @@ Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
 ### `confirm`
 
 When omitted or `false`, runs the non-destructive preview (tags and reports). When `true`,
-permanently deletes the workbook.
+permanently deletes the workbook (also requires `confirmationToken`).
 
 Example: `true`
+
+### `confirmationToken`
+
+Required when `confirm` is `true`. The `confirmationToken` value returned by the preview step for
+this workbook. Deletion is rejected without a matching token, which enforces a genuine
+preview-then-confirm flow and prevents a blind single-call delete.
+
+Example: `3a7f9c2e1b04`
 
 ## Side effects
 

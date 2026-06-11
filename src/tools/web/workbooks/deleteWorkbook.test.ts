@@ -5,8 +5,16 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getDeleteWorkbookTool, STALE_PENDING_DELETION_TAG } from './deleteWorkbook.js';
+import {
+  computeConfirmationToken,
+  getDeleteWorkbookTool,
+  STALE_PENDING_DELETION_TAG,
+} from './deleteWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
+
+const TEST_SITE_ID = 'test-site-id';
+const validToken = (workbookId: string): string =>
+  computeConfirmationToken(TEST_SITE_ID, workbookId);
 
 const mocks = vi.hoisted(() => ({
   mockGetWorkbook: vi.fn(),
@@ -97,12 +105,56 @@ describe('deleteWorkbookTool', () => {
 
   it('should fail when user is not admin and perform no side effects', async () => {
     mocks.mockAssertAdmin.mockResolvedValue(new Err('User is not a site administrator'));
-    const result = await getToolResult({ workbookId: 'wb-1', confirm: true });
+    const result = await getToolResult({
+      workbookId: 'wb-1',
+      confirm: true,
+      confirmationToken: validToken('wb-1'),
+    });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('site administrator');
     expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
     expect(mocks.mockAddTagsToWorkbook).not.toHaveBeenCalled();
+    expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+  });
+
+  // --- Confirmation token (double-confirm gate) ---
+
+  it('should return a confirmation token on preview', async () => {
+    const result = await getToolResult({ workbookId: 'wb-1' });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(validToken('wb-1'));
+  });
+
+  it('should reject delete when confirmationToken is missing', async () => {
+    const result = await getToolResult({ workbookId: 'wb-1', confirm: true });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('confirmationToken');
+    expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
+    expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('should reject delete when confirmationToken is wrong', async () => {
+    const result = await getToolResult({
+      workbookId: 'wb-1',
+      confirm: true,
+      confirmationToken: 'not-the-right-token',
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('confirmationToken');
+    expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('should reject a token computed for a different workbook', async () => {
+    const result = await getToolResult({
+      workbookId: 'wb-1',
+      confirm: true,
+      confirmationToken: validToken('wb-OTHER'),
+    });
+    expect(result.isError).toBe(true);
     expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
   });
 
@@ -145,7 +197,11 @@ describe('deleteWorkbookTool', () => {
   // --- Delete phase (confirm: true) ---
 
   it('should delete the workbook when confirm is true and report its identity', async () => {
-    const result = await getToolResult({ workbookId: 'wb-1', confirm: true });
+    const result = await getToolResult({
+      workbookId: 'wb-1',
+      confirm: true,
+      confirmationToken: validToken('wb-1'),
+    });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const text = result.content[0].text;
@@ -165,7 +221,11 @@ describe('deleteWorkbookTool', () => {
   it('should handle API errors gracefully', async () => {
     const errorMessage = 'Workbook not found';
     mocks.mockDeleteWorkbook.mockRejectedValue(new Error(errorMessage));
-    const result = await getToolResult({ workbookId: 'nonexistent', confirm: true });
+    const result = await getToolResult({
+      workbookId: 'nonexistent',
+      confirm: true,
+      confirmationToken: validToken('nonexistent'),
+    });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
@@ -175,6 +235,7 @@ describe('deleteWorkbookTool', () => {
 async function getToolResult(args: {
   workbookId: string;
   confirm?: boolean;
+  confirmationToken?: string;
 }): Promise<CallToolResult> {
   const tool = getDeleteWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);

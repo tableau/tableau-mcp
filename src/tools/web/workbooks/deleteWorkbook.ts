@@ -1,9 +1,10 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { createHash } from 'crypto';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { AdminOnlyError } from '../../../errors/mcpToolError.js';
+import { AdminOnlyError, ArgsValidationError } from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
@@ -18,6 +19,16 @@ const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/
 // visible in the Tableau UI, giving owners a window to object before the confirmed delete.
 export const STALE_PENDING_DELETION_TAG = 'stale-pending-deletion';
 
+/**
+ * Deterministic confirmation token derived from the site + workbook. The preview phase returns it;
+ * the delete phase requires it. Because the value is only obtainable by running the preview, this
+ * forces a genuine two-step (preview → confirm) flow and prevents a blind single-call delete.
+ * Stateless by design (no server-side nonce store) so it works across server instances and restarts.
+ */
+export function computeConfirmationToken(siteId: string, workbookId: string): string {
+  return createHash('sha256').update(`${siteId}:${workbookId}`).digest('hex').slice(0, 12);
+}
+
 const paramsSchema = {
   workbookId: z.string().describe('The LUID of the workbook to delete.'),
   confirm: z
@@ -27,6 +38,14 @@ const paramsSchema = {
       'When omitted or false, runs a non-destructive preview: tags the workbook as pending ' +
         'deletion and reports what would be deleted. When true, permanently deletes the workbook ' +
         '(recoverable from the Tableau recycle bin for a limited time).',
+    ),
+  confirmationToken: z
+    .string()
+    .optional()
+    .describe(
+      'Required when confirm is true. The confirmationToken returned by the preview step ' +
+        '(confirm omitted/false) for this workbook. Deletion is rejected without a matching token, ' +
+        'which guarantees a preview was run first.',
     ),
 };
 
@@ -46,14 +65,17 @@ This tool is **two-phase** to keep the destructive action safe:
 
 1. **Preview (default — \`confirm\` omitted or false):** tags the workbook with
    \`${STALE_PENDING_DELETION_TAG}\` (reversible, visible in the Tableau UI), reports the
-   workbook name, project, and owner, and does **not** delete anything.
-2. **Delete (\`confirm: true\`):** permanently removes the workbook. On Tableau Cloud the
-   workbook is moved to the recycle bin and can be restored for a limited time before
-   permanent removal (see ${RECYCLE_BIN_DOC_URL}).
+   workbook name, project, and owner, returns a \`confirmationToken\`, and does **not** delete
+   anything.
+2. **Delete (\`confirm: true\` + \`confirmationToken\`):** permanently removes the workbook. The
+   token from step 1 is required — deletion is rejected without it, which guarantees the preview
+   was run first. On Tableau Cloud the workbook is moved to the recycle bin and can be restored
+   for a limited time before permanent removal (see ${RECYCLE_BIN_DOC_URL}).
 
 **Parameters:**
 - \`workbookId\` (required) – The LUID of the workbook. Obtain it from \`list-workbooks\`.
 - \`confirm\` (optional) – Set \`true\` to perform the deletion. Defaults to preview.
+- \`confirmationToken\` (optional) – Required when \`confirm\` is true; the token from the preview step.
 
 **Note:** Deletion is reversible only via the recycle bin and only for a limited window. Always
 run the preview first and confirm the workbook identity before deleting.
@@ -66,10 +88,13 @@ run the preview first and confirm the workbook identity before deleting.
       idempotentHint: true,
       openWorldHint: false,
     },
-    callback: async ({ workbookId, confirm }, extra): Promise<CallToolResult> => {
+    callback: async (
+      { workbookId, confirm, confirmationToken },
+      extra,
+    ): Promise<CallToolResult> => {
       return await deleteWorkbookTool.logAndExecute<string>({
         extra,
-        args: { workbookId, confirm },
+        args: { workbookId, confirm, confirmationToken },
         callback: async () => {
           return await useRestApi({
             ...extra,
@@ -81,10 +106,22 @@ run the preview first and confirm the workbook identity before deleting.
               }
 
               const siteId = restApi.siteId;
+              const expectedToken = computeConfirmationToken(siteId, workbookId);
 
-              // Resolve identity first in both phases so the response (preview AND the final
-              // delete confirmation) always names the workbook, project, and owner for an
-              // auditable record of exactly what was acted on.
+              // Gate the destructive path on the preview-issued token BEFORE any read or write.
+              // The token is only obtainable by running the preview, so a missing/mismatched
+              // token means no preview was run for this workbook — reject without side effects.
+              if (confirm && confirmationToken !== expectedToken) {
+                return new ArgsValidationError(
+                  'Deletion requires the confirmationToken returned by the preview step. ' +
+                    'Run delete-workbook with confirm omitted (or false) for this workbookId first, ' +
+                    'then call again with confirm: true and the confirmationToken from that response.',
+                ).toErr();
+              }
+
+              // Resolve identity in both phases so the response (preview AND the final delete
+              // confirmation) always names the workbook, project, and owner for an auditable
+              // record of exactly what was acted on.
               const workbook = await restApi.workbooksMethods.getWorkbook({ workbookId, siteId });
               const ownerEmail = await resolveOwnerEmail(restApi, siteId, workbook.owner?.id);
               const projectName = workbook.project?.name ?? 'unknown project';
@@ -109,8 +146,9 @@ run the preview first and confirm the workbook identity before deleting.
               return new Ok(
                 `Preview — workbook '${workbook.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
                   `It has been tagged '${STALE_PENDING_DELETION_TAG}' (reversible). ` +
-                  'Call again with confirm: true to delete it. Deleted workbooks are recoverable from the ' +
-                  `Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) for a limited time.`,
+                  `To delete it, call again with confirm: true and confirmationToken: ${expectedToken}. ` +
+                  `Deleted workbooks are recoverable from the Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) ` +
+                  'for a limited time.',
               );
             },
           });

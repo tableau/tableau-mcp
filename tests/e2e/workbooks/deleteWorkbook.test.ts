@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import invariant from '../../../src/utils/invariant.js';
 import { getDefaultEnv, resetEnv, setEnv } from '../../testEnv.js';
 import { McpClient } from '../mcpClient.js';
 
@@ -49,7 +50,7 @@ describe('delete-workbook', () => {
     }
   });
 
-  it('should preview (tag, no delete) for a known workbook', async () => {
+  it('should preview (tag, no delete) and return a confirmation token', async () => {
     if (!toolsAvailable) {
       return;
     }
@@ -66,10 +67,33 @@ describe('delete-workbook', () => {
 
     expect(message).toContain('Preview');
     expect(message).toContain('stale-pending-deletion');
-    expect(message).toContain('confirm: true');
+    expect(message).toContain('confirmationToken');
   });
 
-  it('should delete a disposable workbook when confirm is true (opt-in)', async () => {
+  it('should reject a confirmed delete without the confirmation token', async () => {
+    if (!toolsAvailable) {
+      return;
+    }
+    const previewId = process.env.DELETE_WORKBOOK_E2E_ID;
+    if (!previewId) {
+      return;
+    }
+
+    // Destructive path is gated: confirm without a token must error, not delete.
+    let threw = false;
+    try {
+      await client.callTool('delete-workbook', {
+        schema: z.string(),
+        toolArgs: { workbookId: previewId, confirm: true },
+      });
+    } catch (e) {
+      threw = true;
+      expect(String(e)).toContain('confirmationToken');
+    }
+    expect(threw).toBe(true);
+  });
+
+  it('should delete a disposable workbook via preview → token → confirm (opt-in)', async () => {
     if (!toolsAvailable) {
       return;
     }
@@ -79,12 +103,22 @@ describe('delete-workbook', () => {
       return;
     }
 
+    // 1. Preview to obtain the confirmation token.
+    const preview = await client.callTool('delete-workbook', {
+      schema: z.string(),
+      toolArgs: { workbookId: disposableId },
+    });
+    const match = preview.match(/confirmationToken:\s*([a-f0-9]+)/i);
+    invariant(match, `Preview did not return a confirmationToken: ${preview}`);
+    const confirmationToken = match[1];
+
+    // 2. Confirm the delete with the token.
     const message = await client.callTool('delete-workbook', {
       schema: z.string(),
-      toolArgs: { workbookId: disposableId, confirm: true },
+      toolArgs: { workbookId: disposableId, confirm: true, confirmationToken },
     });
 
-    expect(message).toContain('deleted');
+    expect(message).toContain('Deleted');
     expect(message).toContain('recycle');
   });
 });
