@@ -58,7 +58,7 @@ const listExtractRefreshTasksEndpoint = makeEndpoint({
  * Delete Extract Refresh Task
  * DELETE /api/api-version/sites/site-id/tasks/extractRefreshes/task-id
  * Deletes an extract refresh task.
- * Tableau Cloud scope: tableau:tasks:write
+ * Tableau Cloud scope: tableau:tasks:delete
  * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#delete_extract_refresh_task
  */
 const deleteExtractRefreshTaskEndpoint = makeEndpoint({

@@ -43,7 +43,7 @@ export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis>
   /**
    * Deletes an extract refresh task from the site.
    *
-   * Required scopes (Tableau Cloud): `tableau:tasks:write`
+   * Required scopes (Tableau Cloud): `tableau:tasks:delete`
    *
    * @param siteId - The Tableau site ID
    * @param taskId - The extract refresh task ID to delete

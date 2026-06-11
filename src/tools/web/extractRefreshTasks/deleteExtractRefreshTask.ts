@@ -37,7 +37,7 @@ export const getDeleteExtractRefreshTaskTool = (
 
   **Response:** A confirmation message indicating the task was successfully deleted.
 
-  **Note:** This operation is irreversible. The extract refresh task cannot be recovered once deleted. To re-enable scheduled refreshes, a new task must be created. Tableau Cloud uses \`tableau:tasks:write\` scope.
+  **Note:** This operation is irreversible. The extract refresh task cannot be recovered once deleted. To re-enable scheduled refreshes, a new task must be created. Tableau Cloud uses \`tableau:tasks:delete\` scope.
   `,
     paramsSchema,
     annotations: {
