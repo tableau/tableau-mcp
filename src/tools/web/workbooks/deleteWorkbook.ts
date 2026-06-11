@@ -72,13 +72,21 @@ This tool is **two-phase** to keep the destructive action safe:
    was run first. On Tableau Cloud the workbook is moved to the recycle bin and can be restored
    for a limited time before permanent removal (see ${RECYCLE_BIN_DOC_URL}).
 
+**Required human confirmation (do not skip):** This permanently deletes content. After the
+preview step you MUST present its result to the user — the workbook name, project, and owner —
+and ask the user to explicitly confirm deletion of that specific workbook. Only after the user
+approves should you call again with \`confirm: true\` and the \`confirmationToken\`. Never run the
+preview and the delete back-to-back on your own, never auto-confirm, and never fabricate or
+compute the \`confirmationToken\` yourself — always use the exact value returned by the preview.
+If the user does not clearly approve, stop and do not delete.
+
 **Parameters:**
 - \`workbookId\` (required) – The LUID of the workbook. Obtain it from \`list-workbooks\`.
 - \`confirm\` (optional) – Set \`true\` to perform the deletion. Defaults to preview.
 - \`confirmationToken\` (optional) – Required when \`confirm\` is true; the token from the preview step.
 
 **Note:** Deletion is reversible only via the recycle bin and only for a limited window. Always
-run the preview first and confirm the workbook identity before deleting.
+run the preview first, surface it to the user, and obtain explicit approval before deleting.
 `.trim(),
     paramsSchema,
     annotations: {
@@ -146,7 +154,9 @@ run the preview first and confirm the workbook identity before deleting.
               return new Ok(
                 `Preview — workbook '${workbook.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
                   `It has been tagged '${STALE_PENDING_DELETION_TAG}' (reversible). ` +
-                  `To delete it, call again with confirm: true and confirmationToken: ${expectedToken}. ` +
+                  'NEXT STEP — REQUIRED: show this workbook (name, project, owner) to the user and ask them ' +
+                  'to explicitly confirm deleting it. Do NOT delete without the user’s approval. ' +
+                  `Once approved, call again with confirm: true and confirmationToken: ${expectedToken}. ` +
                   `Deleted workbooks are recoverable from the Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) ` +
                   'for a limited time.',
               );

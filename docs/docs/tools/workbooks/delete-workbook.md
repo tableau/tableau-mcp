@@ -21,6 +21,13 @@ The tool is **two-phase** to keep the destructive action safe:
    the [recycle bin](https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm) and can be
    restored for a limited time before permanent removal.
 
+:::warning Human confirmation required
+Between the preview and the delete, the calling agent is instructed (via the tool description and
+the preview response) to surface the workbook identity to the user and obtain explicit approval
+before deleting. The `confirmationToken` enforces that a preview ran, but the **human approval**
+step is a prompt-level expectation — agents must not auto-confirm or compute the token themselves.
+:::
+
 ## APIs called
 
 - [Add Tags to Workbook](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#add_tags_to_workbook) (preview phase)
