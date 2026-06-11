@@ -66,8 +66,26 @@ jobs:
           OAUTH_JWE_PRIVATE_KEY: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY }}
           OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.OAUTH_TEST_OAUTH_JWE_PRIVATE_KEY_PASSPHRASE }}
 
+      # Skipped on Node 24: Playwright browser launch stalls indefinitely under that runtime.
+      # I gave Claude the CI logs and it said:
+      # Root cause: Node.js 24 ships with an updated undici-backed fetch and changed AbortSignal propagation behaviour.
+      #   Playwright's browser installer pipes the download stream directly into an extraction process (unzip/tar). On Node
+      #   24, the internal AbortController that Playwright uses to manage the download lifetime fires during the hand-off
+      #   between the completed download stream and the extraction subprocess — canceling the operation even though the bytes
+      #   arrived.
+
+      #   The result is an error that looks like a network failure but is actually a signal-propagation race in the install
+      #   script between Node 24's new stream/abort semantics and Playwright's child_process usage for extraction.
+
+      #   Why it appeared to "stall" rather than fail fast: GitHub Actions has a default job timeout of 6 hours. If the cancel
+      #    error was swallowed or the extraction process hung instead of exiting, the job would sit silently until that
+      #   timeout — which matches the "stalls indefinitely" symptom you saw.
+
+      #   The fix you already applied is correct: pinning to >=22.7.5 <23 sidesteps the Node 24 regression entirely. Once
+      #   Playwright ships a version that handles Node 24's abort semantics correctly you can re-enable it, but there's
+      #   nothing to change on your side right now.
       - name: OAuth Tests (Tableau authz server)
-        if: false
+        if: matrix.node-version == '>=22.7.5 <23' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
         uses: ./.github/actions/run-oauth-tableau-authz-tests
         env:
           SERVER: ${{ secrets.E2E_TEST_SERVER }}
@@ -82,7 +100,7 @@ jobs:
           npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb
 
       - name: Report code coverage
-        if: matrix.node-version == '>=22.7.5 <23'
+        if: always() && matrix.node-version == '>=22.7.5 <23'
         uses: irongut/CodeCoverageSummary@v1.3.0
         with:
           filename: coverage/**/cobertura-coverage.xml
@@ -96,6 +114,7 @@ jobs:
           thresholds: '60 80'
 
       - name: Upload artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: artifacts-node${{ matrix.node-version == '>=22.7.5 <23' && '22.x' || matrix.node-version }}

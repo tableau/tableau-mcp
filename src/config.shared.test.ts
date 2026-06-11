@@ -22,4 +22,16 @@ describe('BaseConfig', () => {
 
     expect(config.notificationPayloadMaxBytes).toBe(4096);
   });
+
+  it('should set disableLogMasking to false by default', () => {
+    const config = new BaseConfig();
+    expect(config.disableLogMasking).toBe(false);
+  });
+
+  it('should set disableLogMasking to true when specified', () => {
+    vi.stubEnv('DISABLE_LOG_MASKING', 'true');
+
+    const config = new BaseConfig();
+    expect(config.disableLogMasking).toBe(true);
+  });
 });

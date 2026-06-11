@@ -3,6 +3,7 @@
 .env.*
 .vscode/
 build/
+cache/
 node_modules/
 junit/
 coverage/
@@ -27,5 +28,6 @@ src/web/apps/dist/
 /test-results/
 /playwright-report/
 /blob-report/
+/blob-reports/
 /playwright/.cache/
 /playwright/.auth/

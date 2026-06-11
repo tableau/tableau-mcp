@@ -36,7 +36,6 @@ export class Config extends BaseConfig {
   uatKeyId: string;
   jwtAdditionalPayload: string;
   datasourceCredentials: string;
-  disableLogMasking: boolean;
   disableSessionManagement: boolean;
   tableauServerVersionCheckIntervalInHours: number;
   passthroughAuthUserSessionCheckIntervalInMinutes: number;
@@ -99,7 +98,6 @@ export class Config extends BaseConfig {
       UAT_KEY_ID: uatKeyId,
       JWT_ADDITIONAL_PAYLOAD: jwtAdditionalPayload,
       DATASOURCE_CREDENTIALS: datasourceCredentials,
-      DISABLE_LOG_MASKING: disableLogMasking,
       DISABLE_SESSION_MANAGEMENT: disableSessionManagement,
       TABLEAU_SERVER_VERSION_CHECK_INTERVAL_IN_HOURS: tableauServerVersionCheckIntervalInHours,
       PASSTHROUGH_AUTH_USER_SESSION_CHECK_INTERVAL_IN_MINUTES:
@@ -148,7 +146,6 @@ export class Config extends BaseConfig {
     });
     this.corsOriginConfig = getCorsOriginConfig(corsOriginConfig?.trim() ?? '');
     this.datasourceCredentials = datasourceCredentials ?? '';
-    this.disableLogMasking = disableLogMasking === 'true';
     this.disableSessionManagement = disableSessionManagement === 'true';
 
     this.tableauServerVersionCheckIntervalInHours = parseNumber(
