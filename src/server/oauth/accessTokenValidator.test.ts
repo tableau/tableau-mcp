@@ -132,6 +132,7 @@ describe('TableauAccessTokenValidator', () => {
       expect(extra.type).toBe('Bearer');
       expect(extra.username).toBe('user@example.com');
       expect(extra.siteId).toBe('abc123');
+      expect(extra.siteName).toBe('default-site');
       expect(extra.userId).toBe('uid-1');
     });
 

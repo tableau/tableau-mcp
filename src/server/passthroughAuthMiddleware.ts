@@ -79,7 +79,6 @@ export function passthroughAuthMiddleware(): RequestHandler {
         userId: sessionResult.value.user.id,
         server,
         siteId: sessionResult.value.site.id,
-        siteName: sessionResult.value.site.contentUrl || '',
         raw: tableauAccessToken,
       };
 
