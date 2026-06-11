@@ -3,6 +3,8 @@ import { View } from '../../../sdks/tableau/types/view.js';
 export const mockView = {
   id: '4d18c547-bbb1-4187-ae5a-7f78b35adf2d',
   name: 'Overview',
+  contentUrl: 'Superstore/Overview',
+  viewUrlName: 'Overview',
   createdAt: '2024-06-10T23:23:23Z',
   updatedAt: '2024-06-10T23:23:23Z',
   project: {
@@ -18,11 +20,16 @@ export const mockView = {
       },
     ],
   },
+  usage: {
+    totalViewCount: 42,
+  },
 } satisfies View;
 
 export const mockView2 = {
   id: '957f9629-1947-4a70-b52d-dc1b3ff997f3',
   name: 'Finance',
+  contentUrl: 'FinancialReports/Finance',
+  viewUrlName: 'Finance',
   createdAt: '2024-06-10T23:23:23Z',
   updatedAt: '2024-06-10T23:23:23Z',
   project: {

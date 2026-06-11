@@ -276,7 +276,10 @@ describe('ResourceAccessChecker', () => {
               viewId: mockView.id,
               extra,
             }),
-          ).toEqual({ allowed: true });
+          ).toEqual({
+            allowed: true,
+            content: workbookIds || projectIds || tags ? mockView : undefined,
+          });
 
           // viewIds is a synchronous Set lookup; only workbook/project/tag checks fetch the view.
           const expectedNumberOfCalls = workbookIds || projectIds || tags ? 1 : 0;

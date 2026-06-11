@@ -1,5 +1,6 @@
 import { Zodios, ZodiosInstance } from '@zodios/core';
 import { existsSync, readFileSync } from 'fs';
+import { Agent } from 'http';
 import { homedir } from 'os';
 import { join } from 'path';
 import { Err, Ok, Result } from 'ts-results-es';
@@ -46,7 +47,14 @@ export class AgentApiClient {
         : join(homedir(), '.tableau', 'agent-token.txt');
 
     this._apiClient = new Zodios(baseUrl, agentApis, {
-      axiosConfig: { timeout: options.maxRequestTimeoutMs, signal: options.signal },
+      axiosConfig: {
+        timeout: options.maxRequestTimeoutMs,
+        signal: options.signal,
+        // Disable keep-alive because the Tableau Desktop Agent API server
+        // closes connections after each request, causing ECONNRESET errors
+        // on subsequent requests when Axios tries to reuse the connection
+        httpAgent: new Agent({ keepAlive: false }),
+      },
     });
 
     this._apiClient.axios.interceptors.request.use(

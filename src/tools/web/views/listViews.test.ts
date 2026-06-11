@@ -51,8 +51,9 @@ describe('listViewsTool', () => {
     const result = await getToolResult({ filter: 'name:eq:Overview' });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
+    const { usage: _usage, ...mockViewWithoutUsage } = mockView;
     expect(JSON.parse(`${result.content[0].text}`)).toMatchObject([
-      { ...mockView, totalViewCount: 0 },
+      { ...mockViewWithoutUsage, totalViewCount: 42 },
     ]);
     expect(mocks.mockQueryViewsForSiteData).toHaveBeenCalledWith({
       siteId: 'test-site-id',

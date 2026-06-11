@@ -11,6 +11,14 @@ const getViewEndpoint = makeEndpoint({
   path: '/sites/:siteId/views/:viewId',
   alias: 'getView',
   description: 'Gets the details of a specific view.',
+  parameters: [
+    {
+      name: 'includeUsageStatistics',
+      type: 'Query',
+      schema: z.boolean().optional(),
+      description: 'true to return usage statistics. The default is false.',
+    },
+  ],
   response: z.object({ view: viewSchema }),
 });
 

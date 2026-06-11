@@ -16,6 +16,7 @@ export class BaseConfig {
   logLevel: LogLevel;
   loggers: Set<LoggerType>;
   fileLoggerDirectory: string;
+  disableLogMasking: boolean;
   maxRequestTimeoutMs: number;
   notificationPayloadMaxBytes: number;
 
@@ -27,6 +28,7 @@ export class BaseConfig {
       LOG_LEVEL: logLevel,
       ENABLED_LOGGERS: logging,
       FILE_LOGGER_DIRECTORY: fileLoggerDirectory,
+      DISABLE_LOG_MASKING: disableLogMasking,
       MAX_REQUEST_TIMEOUT_MS: maxRequestTimeoutMs,
       NOTIFICATION_PAYLOAD_MAX_BYTES: notificationPayloadMaxBytes,
     } = cleansedVars;
@@ -36,6 +38,7 @@ export class BaseConfig {
     this.logLevel = parseLogLevel(logLevel);
     this.loggers = parseLoggerTypes(logging);
     this.fileLoggerDirectory = fileLoggerDirectory || join(__dirname, 'logs');
+    this.disableLogMasking = disableLogMasking === 'true';
     this.maxRequestTimeoutMs = parseNumber(maxRequestTimeoutMs, {
       defaultValue: milliseconds.fromMinutes(10),
       minValue: 5000,
