@@ -7,7 +7,7 @@ export const wellFormedXmlRule: ValidationRule = {
   id: 'well-formed-xml',
   description:
     'XML must be well-formed — unclosed tags, mismatched elements, and invalid entities are rejected before sending to Tableau.',
-  contexts: ['worksheet'],
+  contexts: ['worksheet', 'dashboard'],
 
   validate(xml: string): ValidationIssue[] {
     const issues: ValidationIssue[] = [];

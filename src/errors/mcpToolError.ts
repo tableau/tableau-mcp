@@ -2,7 +2,9 @@ import { ZodiosError } from '@zodios/core';
 import { Err } from 'ts-results-es';
 import { fromError } from 'zod-validation-error/v3';
 
+import { GetDashboardXmlError } from '../desktop/commands/workbook/getDashboardXml.js';
 import { GetWorksheetXmlError } from '../desktop/commands/workbook/getWorksheetXml.js';
+import { LoadDashboardXmlError } from '../desktop/commands/workbook/loadDashboardXml.js';
 import { LoadWorkbookXmlError } from '../desktop/commands/workbook/loadWorkbookXml.js';
 import { LoadWorksheetXmlError } from '../desktop/commands/workbook/loadWorksheetXml.js';
 import { ExecuteCommandError } from '../desktop/toolExecutor/toolExecutor.js';
@@ -241,6 +243,26 @@ export class GetWorksheetXmlFailedError extends McpToolError {
   constructor(error: GetWorksheetXmlError) {
     super({
       type: 'get-worksheet-xml-error',
+      message: JSON.stringify(error),
+      statusCode: 500,
+    });
+  }
+}
+
+export class GetDashboardXmlFailedError extends McpToolError {
+  constructor(error: GetDashboardXmlError) {
+    super({
+      type: 'get-dashboard-xml-error',
+      message: JSON.stringify(error),
+      statusCode: 500,
+    });
+  }
+}
+
+export class DashboardXmlLoadFailedError extends McpToolError {
+  constructor(error: LoadDashboardXmlError) {
+    super({
+      type: 'load-dashboard-xml-error',
       message: JSON.stringify(error),
       statusCode: 500,
     });

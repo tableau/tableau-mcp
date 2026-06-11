@@ -7,6 +7,10 @@ export const desktopToolNames = [
   'list-dashboards',
   'get-worksheet-xml',
   'apply-worksheet',
+  'get-dashboard-xml',
+  'apply-dashboard',
+  'apply-dashboard-with-viewpoints',
+  'build-and-apply-dashboard',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 
