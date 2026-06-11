@@ -3,6 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
+import { AdminOnlyError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { assertAdmin } from '../adminGate.js';
@@ -51,25 +52,25 @@ export const getDeleteExtractRefreshTaskTool = (
         extra,
         args,
         callback: async () => {
-          await useRestApi({
+          return await useRestApi({
             ...extra,
             jwtScopes: deleteExtractRefreshTaskTool.requiredApiScopes,
             callback: async (restApi) => {
               const adminResult = await assertAdmin(restApi, extra);
               if (adminResult.isErr()) {
-                throw new Error(adminResult.error);
+                return new AdminOnlyError(adminResult.error).toErr();
               }
 
               await restApi.tasksMethods.deleteExtractRefreshTask({
                 siteId: restApi.siteId,
                 taskId: args.taskId,
               });
+
+              return new Ok(
+                `Extract refresh task '${args.taskId}' has been successfully deleted. The underlying data source or workbook is unaffected, but it will no longer be refreshed on this schedule.`,
+              );
             },
           });
-
-          return new Ok(
-            `Extract refresh task '${args.taskId}' has been successfully deleted. The underlying data source or workbook is unaffected, but it will no longer be refreshed on this schedule.`,
-          );
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });
