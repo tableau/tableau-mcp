@@ -1,6 +1,7 @@
 export const webToolNames = [
   'list-datasources',
   'list-extract-refresh-tasks',
+  'list-jobs',
   'list-workbooks',
   'list-projects',
   'list-views',
@@ -63,7 +64,7 @@ export const webToolGroups = {
     'generate-pulse-insight-brief',
   ],
   'content-exploration': ['search-content'],
-  tasks: ['list-extract-refresh-tasks'],
+  tasks: ['list-extract-refresh-tasks', 'list-jobs'],
   'token-management': ['revoke-access-token', 'reset-consent'],
   'admin-insights': [
     'query-admin-insights-ts-events',

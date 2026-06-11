@@ -3,6 +3,7 @@ import { expect, test } from './base.js';
 
 const ADMIN_GATED_TOOL_NAMES: ReadonlyArray<string> = [
   'list-extract-refresh-tasks',
+  'list-jobs',
   'query-admin-insights-ts-events',
   'query-admin-insights-site-content',
   'get-stale-content-report',
