@@ -85,6 +85,24 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
           return new Err('Invalid or expired access token');
         }
 
+        const restApi = new RestApi({
+          maxRequestTimeoutMs: this.config.maxRequestTimeoutMs,
+        });
+
+        restApi.setCredentials(tableauAccessToken, tableauUserId);
+        const sessionResult = await restApi.authenticatedServerMethods.getCurrentServerSession();
+        if (sessionResult.isErr()) {
+          log({
+            message: 'Embedded access token validation error',
+            level: 'error',
+            logger: 'oauth',
+            data: sessionResult.error,
+          });
+          return new Err('Invalid or expired access token');
+        }
+
+        const siteName = sessionResult.value.site.contentUrl || '';
+
         tableauAuthInfo = {
           type: 'X-Tableau-Auth',
           username: sub,
@@ -93,6 +111,7 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
           server: tableauServer,
           accessToken: tableauAccessToken,
           refreshToken: tableauRefreshToken,
+          siteName,
         };
       } else {
         const { tableauUserId, tableauSiteId, tableauServer, sub } = mcpAccessToken.data;
@@ -185,7 +204,7 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
       if (sessionResult.isErr()) {
         log({
           message: 'Tableau access token validation error',
-          level: 'debug',
+          level: 'error',
           logger: 'oauth',
           data: sessionResult.error,
         });
