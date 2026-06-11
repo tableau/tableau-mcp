@@ -55,17 +55,19 @@ export default defineConfig({
 
   projects: [
     {
-      name: 'default',
+      name: process.env.TEST_SITE_NAME ?? 'default',
     },
   ],
 
-  webServer: [
-    {
-      command: 'npm run start:http',
-      reuseExistingServer: !process.env.CI,
-      stdout: 'pipe',
-      stderr: 'pipe',
-      env,
-    },
-  ],
+  webServer: ['', 'http://127.0.0.1:3927/tableau-mcp'].includes(process.env.MCP_SERVER_URL ?? '')
+    ? [
+        {
+          command: 'npm run start:http',
+          reuseExistingServer: !process.env.CI,
+          stdout: 'pipe',
+          stderr: 'pipe',
+          env,
+        },
+      ]
+    : undefined,
 });

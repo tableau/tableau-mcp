@@ -1,4 +1,5 @@
-import { DesktopToolName } from './desktop/toolName.js';
-import { WebToolName } from './web/toolName.js';
+import { desktopToolNames } from './desktop/toolName.js';
+import { webToolNames } from './web/toolName.js';
 
-export type ToolName = WebToolName | DesktopToolName;
+export const toolNames = [...webToolNames, ...desktopToolNames];
+export type ToolName = (typeof toolNames)[number];
