@@ -17,7 +17,6 @@ export const passthroughAuthInfoSchema = z.object({
   userId: z.string(),
   server: z.string(),
   siteId: z.string(),
-  siteName: z.string().optional(),
   raw: z.string(),
 });
 

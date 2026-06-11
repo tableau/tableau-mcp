@@ -130,7 +130,6 @@ export const tableauAuthInfoSchema = z.discriminatedUnion('type', [
     username: z.string(),
     server: z.string(),
     siteId: z.string().optional(),
-    siteName: z.string().optional(),
     userId: z.string().optional(),
     accessToken: z.string().optional(),
     refreshToken: z.string().optional(),
@@ -140,7 +139,7 @@ export const tableauAuthInfoSchema = z.discriminatedUnion('type', [
     username: z.string(),
     server: z.string(),
     siteId: z.string(),
-    siteName: z.string(), // Required for Bearer (MCP apps support)
+    siteName: z.string(),
     userId: z.string().optional(),
     raw: z.string(),
     clientId: z.string().optional(),

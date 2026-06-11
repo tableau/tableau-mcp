@@ -88,7 +88,8 @@ export class WebMcpServer extends Server {
             tableauRequestHandlerExtra._siteLuid = siteLuid;
           },
           getSiteName() {
-            return getTableauAuthInfo(extra.authInfo)?.siteName ?? '';
+            const authInfo = getTableauAuthInfo(extra.authInfo);
+            return authInfo?.type === 'Bearer' ? authInfo.siteName : '';
           },
           getConfigWithOverrides: async () =>
             getConfigWithOverrides({ restApiArgs: tableauRequestHandlerExtra, requestOverrides }),
