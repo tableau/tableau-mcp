@@ -72,21 +72,14 @@ This tool is **two-phase** to keep the destructive action safe:
    was run first. On Tableau Cloud the workbook is moved to the recycle bin and can be restored
    for a limited time before permanent removal (see ${RECYCLE_BIN_DOC_URL}).
 
-**Required human confirmation (do not skip):** This permanently deletes content. After the
-preview step you MUST present its result to the user — the workbook name, project, and owner —
-and ask the user to explicitly confirm deletion of that specific workbook. Only after the user
-approves should you call again with \`confirm: true\` and the \`confirmationToken\`. Never run the
-preview and the delete back-to-back on your own, never auto-confirm, and never fabricate or
-compute the \`confirmationToken\` yourself — always use the exact value returned by the preview.
-If the user does not clearly approve, stop and do not delete.
+**Required human confirmation:** After preview, present the workbook (name, project, owner) to the
+user and get explicit approval before deleting. Do not auto-confirm or compute the
+\`confirmationToken\` yourself — use the exact value the preview returned.
 
 **Parameters:**
 - \`workbookId\` (required) – The LUID of the workbook. Obtain it from \`list-workbooks\`.
 - \`confirm\` (optional) – Set \`true\` to perform the deletion. Defaults to preview.
 - \`confirmationToken\` (optional) – Required when \`confirm\` is true; the token from the preview step.
-
-**Note:** Deletion is reversible only via the recycle bin and only for a limited window. Always
-run the preview first, surface it to the user, and obtain explicit approval before deleting.
 `.trim(),
     paramsSchema,
     annotations: {
