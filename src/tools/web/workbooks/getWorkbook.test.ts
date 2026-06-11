@@ -1,6 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../testShared.js';
 import invariant from '../../../utils/invariant.js';
@@ -120,13 +119,9 @@ describe('getWorkbookTool', () => {
   });
 
   describe('filterWorkbookViews', () => {
-    const createTestWorkbook = (): Workbook => {
-      return JSON.parse(JSON.stringify(mockWorkbook));
-    };
-
     it('should return the workbook when no filtering occurs', () => {
       const result = filterWorkbookViews({
-        workbook: createTestWorkbook(),
+        workbook: mockWorkbook,
         boundedContext: {
           projectIds: null,
           datasourceIds: null,
@@ -140,7 +135,7 @@ describe('getWorkbookTool', () => {
 
     it('should return the views that match the tags in the bounded context', () => {
       const result = filterWorkbookViews({
-        workbook: createTestWorkbook(),
+        workbook: mockWorkbook,
         boundedContext: {
           projectIds: null,
           datasourceIds: null,
@@ -155,7 +150,7 @@ describe('getWorkbookTool', () => {
 
     it('should remove views from the workbook when all views were filtered out by the tags in the bounded context', () => {
       const result = filterWorkbookViews({
-        workbook: createTestWorkbook(),
+        workbook: mockWorkbook,
         boundedContext: {
           projectIds: null,
           datasourceIds: null,
@@ -173,7 +168,7 @@ describe('getWorkbookTool', () => {
 
     it('should return the views that match viewIds in the bounded context', () => {
       const result = filterWorkbookViews({
-        workbook: createTestWorkbook(),
+        workbook: mockWorkbook,
         boundedContext: {
           projectIds: null,
           datasourceIds: null,
@@ -190,7 +185,7 @@ describe('getWorkbookTool', () => {
 
     it('should remove views from the workbook when all views are filtered out by viewIds', () => {
       const result = filterWorkbookViews({
-        workbook: createTestWorkbook(),
+        workbook: mockWorkbook,
         boundedContext: {
           projectIds: null,
           datasourceIds: null,
@@ -208,7 +203,7 @@ describe('getWorkbookTool', () => {
 
     it('should apply both viewIds and tags filters in conjunction (AND)', () => {
       const result = filterWorkbookViews({
-        workbook: createTestWorkbook(),
+        workbook: mockWorkbook,
         boundedContext: {
           projectIds: null,
           datasourceIds: null,

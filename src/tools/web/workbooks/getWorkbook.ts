@@ -184,9 +184,10 @@ export function filterWorkbookViews({
     views = views.filter((view) => view.tags?.tag?.some((tag) => tags.has(tag.label)));
   }
 
-  workbook.views.view = views;
-
-  return flattenWorkbookViewUsage(workbook);
+  return flattenWorkbookViewUsage({
+    ...workbook,
+    views: { view: views },
+  });
 }
 
 function flattenWorkbookViewUsage(workbook: Workbook): Workbook {
