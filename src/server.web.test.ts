@@ -164,21 +164,13 @@ describe('server', () => {
     }
   });
 
-  it('should throw error when no tools are registered', async () => {
+  it('should not throw and not register any tools when all are excluded', async () => {
     const sortedToolNames = [...webToolNames].sort((a, b) => a.localeCompare(b)).join(', ');
     vi.stubEnv('EXCLUDE_TOOLS', sortedToolNames);
     const server = getServer();
 
-    const sentences = [
-      'No tools to register',
-      `Tools available = [${webToolNames.join(', ')}]`,
-      `EXCLUDE_TOOLS = [${sortedToolNames}]`,
-      'INCLUDE_TOOLS = []',
-    ];
-
-    for (const sentence of sentences) {
-      await expect(server.registerTools).rejects.toThrow(sentence);
-    }
+    await expect(server.registerTools()).resolves.toBeUndefined();
+    expect(server.mcpServer.registerTool).not.toHaveBeenCalled();
   });
 
   it('should reject tool calls with service unavailable error when BREAK_GLASS_DISABLE_GLOBALLY is true', async () => {

@@ -40,6 +40,9 @@ Tableau's official MCP Server. Helping Agents see and understand data.
 | [generate-pulse-metric-value-insight-bundle](tools/pulse/generate-pulse-metric-value-insight-bundle.md)               | Generate Pulse Metric Value Insight Bundle ([Pulse API][pulse])                                                     |
 | [generate-pulse-insight-brief](tools/pulse/generate-pulse-insight-brief.md)                                           | Generate AI-powered Pulse Insight Brief (Discover) ([Pulse API][pulse])                                             |
 | [search-content](tools/content-exploration/search-content.md)                                                         | Searches for content in a Tableau site ([Content Exploration API][content-exploration])                             |
+| [list-extract-refresh-tasks](tools/tasks/list-extract-refresh-tasks.md)                                               | Admin-only. Retrieves a list of extract refresh tasks for the site ([REST API][list-extract-refresh-tasks])          |
+| [delete-extract-refresh-task](tools/tasks/delete-extract-refresh-task.md)                                             | Admin-only. Deletes an extract refresh task ([REST API][delete-extract-refresh-task])                                |
+| [list-users](tools/users/list-users.md)                                                                              | Admin-only. Retrieves a list of users on the site ([REST API][list-users-api])                                      |
 | [query-admin-insights-ts-events](tools/admin-insights/query-admin-insights-ts-events.md)                              | Admin-only. Issues a VDS query against the Admin Insights `TS Events` datasource ([VDS API][vds])                   |
 | [query-admin-insights-site-content](tools/admin-insights/query-admin-insights-site-content.md)                        | Admin-only. Issues a VDS query against the Admin Insights `Site Content` datasource ([VDS API][vds])                |
 | [query-admin-insights-job-performance](tools/admin-insights/query-admin-insights-job-performance.md)                  | Admin-only. Issues a VDS query against the Admin Insights `Job Performance` datasource ([VDS API][vds])             |
@@ -70,3 +73,9 @@ Tableau's official MCP Server. Helping Agents see and understand data.
 [pulse]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm
 [content-exploration]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_content_exploration.htm
+[list-extract-refresh-tasks]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_jobs_tasks_and_schedules.htm#list_extract_refresh_tasks
+[delete-extract-refresh-task]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#delete_extract_refresh_task
+[list-users-api]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#get_users_on_site

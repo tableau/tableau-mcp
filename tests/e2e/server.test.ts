@@ -40,6 +40,7 @@ describe('server', () => {
       ];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
         'list-extract-refresh-tasks',
+        'delete-extract-refresh-task',
         'list-users',
         'query-admin-insights-ts-events',
         'query-admin-insights-site-content',
@@ -120,6 +121,7 @@ describe('server', () => {
       ];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
         'list-extract-refresh-tasks',
+        'delete-extract-refresh-task',
         'list-users',
         'query-admin-insights-ts-events',
         'query-admin-insights-site-content',
