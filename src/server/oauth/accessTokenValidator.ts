@@ -119,6 +119,7 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
           type: 'X-Tableau-Auth',
           username: sub,
           server: tableauServer,
+          siteName: this.config.siteName,
           ...(tableauUserId ? { userId: tableauUserId } : {}),
           ...(tableauSiteId ? { siteId: tableauSiteId } : {}),
         };
