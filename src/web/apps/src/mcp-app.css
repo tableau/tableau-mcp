@@ -2,15 +2,18 @@
   box-sizing: border-box;
 }
 
-body {
-  font-family: system-ui, -apple-system, sans-serif;
+html, body {
+  height: 100%;
   margin: 0;
   padding: 0;
 }
 
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
 .main {
   width: 100%;
-  max-width: 425px;
   display: flex;
   align-items: center;
   justify-content: center;

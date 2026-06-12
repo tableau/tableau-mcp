@@ -29,6 +29,7 @@ export type TableauApiScope =
   | 'tableau:content:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
+  | 'tableau:views:embed'
   | 'tableau:insight_definitions_metrics:read'
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
@@ -111,11 +112,11 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
-  // Token retrieval: no Tableau REST API calls, no content scope required.
-  // Any authenticated user may retrieve their own token regardless of granted scopes.
+  // Token retrieval: no Tableau REST API calls, but requires tableau:views:embed scope
+  // for embedding visualizations in MCP apps.
   'get-oauth-token': {
     mcp: [],
-    api: new Set<TableauApiScope>(),
+    api: new Set<TableauApiScope>(['tableau:views:embed']),
   },
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
