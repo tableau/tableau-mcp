@@ -3,6 +3,7 @@ import { getQueryAdminInsightsJobPerformanceTool } from './adminInsights/queryJo
 import { getQueryAdminInsightsSiteContentTool } from './adminInsights/querySiteContent.js';
 import { getQueryAdminInsightsTsEventsTool } from './adminInsights/queryTsEvents.js';
 import { getSearchContentTool } from './contentExploration/searchContent.js';
+import { getDeleteExtractRefreshTaskTool } from './extractRefreshTasks/deleteExtractRefreshTask.js';
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
@@ -33,6 +34,7 @@ export const webToolFactories = [
   getGetDatasourceMetadataTool,
   getListDatasourcesTool,
   getListExtractRefreshTasksTool,
+  getDeleteExtractRefreshTaskTool,
   getListUsersTool,
   getQueryDatasourceTool,
   getListAllPulseMetricDefinitionsTool,

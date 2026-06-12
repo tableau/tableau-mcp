@@ -36,6 +36,7 @@ describe('server', () => {
       const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
         'list-extract-refresh-tasks',
+        'delete-extract-refresh-task',
         'list-users',
         'query-admin-insights-ts-events',
         'query-admin-insights-site-content',
@@ -112,6 +113,7 @@ describe('server', () => {
       const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
         'list-extract-refresh-tasks',
+        'delete-extract-refresh-task',
         'list-users',
         'query-admin-insights-ts-events',
         'query-admin-insights-site-content',

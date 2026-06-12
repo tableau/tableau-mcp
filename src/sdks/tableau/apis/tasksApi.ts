@@ -36,7 +36,7 @@ export function parseListExtractRefreshTasksResponse(raw: unknown): ListExtractR
  * GET /api/api-version/sites/site-id/tasks/extractRefreshes
  * Returns a list of extract refresh tasks for the site (datasource and workbook extracts).
  * Tableau Cloud scope: tableau:tasks:read
- * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_jobs_tasks_and_schedules.htm#list_extract_refresh_tasks_in_site
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_jobs_tasks_and_schedules.htm#list_extract_refresh_tasks
  */
 const listExtractRefreshTasksEndpoint = makeEndpoint({
   method: 'get',
@@ -54,5 +54,32 @@ const listExtractRefreshTasksEndpoint = makeEndpoint({
   response: listExtractRefreshTasksBodySchema,
 });
 
-const tasksApi = makeApi([listExtractRefreshTasksEndpoint]);
+/**
+ * Delete Extract Refresh Task
+ * DELETE /api/api-version/sites/site-id/tasks/extractRefreshes/task-id
+ * Deletes an extract refresh task.
+ * Tableau Cloud scope: tableau:tasks:delete
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#delete_extract_refresh_task
+ */
+const deleteExtractRefreshTaskEndpoint = makeEndpoint({
+  method: 'delete',
+  path: '/sites/:siteId/tasks/extractRefreshes/:taskId',
+  alias: 'deleteExtractRefreshTask',
+  description: 'Deletes an extract refresh task on the specified site.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'taskId',
+      type: 'Path',
+      schema: z.string(),
+    },
+  ],
+  response: z.void(),
+});
+
+const tasksApi = makeApi([listExtractRefreshTasksEndpoint, deleteExtractRefreshTaskEndpoint]);
 export const tasksApis = [...tasksApi] as const satisfies ZodiosEndpointDefinitions;
