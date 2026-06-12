@@ -253,5 +253,13 @@ async function getToolResult(args: {
 }): Promise<CallToolResult> {
   const tool = getDeleteWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
-  return await callback(args, getMockRequestHandlerExtra());
+  return await callback(
+    {
+      workbookId: args.workbookId,
+      confirm: args.confirm,
+      confirmationToken: args.confirmationToken,
+      tag: args.tag,
+    },
+    getMockRequestHandlerExtra(),
+  );
 }
