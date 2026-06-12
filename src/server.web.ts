@@ -21,7 +21,6 @@ import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { getRequestOverridesFromHeader, X_TABLEAU_MCP_CONFIG_HEADER } from './server/requestUtils';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
-import { webToolNames } from './tools/web/toolName.js';
 import { webToolFactories } from './tools/web/tools.js';
 import { getDirname } from './utils/getDirname.js';
 import invariant from './utils/invariant.js';
@@ -130,15 +129,6 @@ export class WebMcpServer extends Server {
       if (includeTools.length > 0 && !includeTools.includes(tool.name)) continue;
       if (excludeTools.length > 0 && excludeTools.includes(tool.name)) continue;
       toolsToRegister.push(tool);
-    }
-
-    if (toolsToRegister.length === 0) {
-      throw new Error(`
-          No tools to register.
-          Tools available = [${webToolNames.join(', ')}].
-          EXCLUDE_TOOLS = [${excludeTools.join(', ')}].
-          INCLUDE_TOOLS = [${includeTools.join(', ')}]
-        `);
     }
 
     return toolsToRegister;
