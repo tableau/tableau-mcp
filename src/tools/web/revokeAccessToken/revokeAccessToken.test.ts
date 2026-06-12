@@ -200,6 +200,7 @@ describe('revokeAccessTokenTool', () => {
         username: 'test-user',
         server: MOCK_SERVER,
         siteId: 'site-id',
+        siteName: 'test-site',
         accessToken: 'tableau-access-token',
         refreshToken: 'tableau-refresh-token',
       };
@@ -265,6 +266,7 @@ describe('revokeAccessTokenTool', () => {
         userId: 'user-id',
         server: MOCK_SERVER,
         siteId: 'site-id',
+        siteName: 'test-site',
         raw: 'x-tableau-auth-session-token',
       };
       const result = await getToolResult(extra);
