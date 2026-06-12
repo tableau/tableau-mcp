@@ -10,7 +10,7 @@ import { assertAdmin } from '../adminGate.js';
 import { WebTool } from '../tool.js';
 
 const paramsSchema = {
-  taskId: z.string(),
+  taskId: z.string().uuid('taskId must be a valid UUID'),
 };
 
 export const getDeleteExtractRefreshTaskTool = (
@@ -44,7 +44,7 @@ export const getDeleteExtractRefreshTaskTool = (
       title: 'Delete Extract Refresh Task',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     },
     callback: async (args, extra): Promise<CallToolResult> => {

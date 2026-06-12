@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Ok } from 'ts-results-es';
+import { Err, Ok } from 'ts-results-es';
 
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
@@ -64,7 +64,7 @@ describe('deleteExtractRefreshTaskTool', () => {
       title: 'Delete Extract Refresh Task',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     });
   });
@@ -86,15 +86,15 @@ describe('deleteExtractRefreshTaskTool', () => {
     expect(mocks.mockAssertAdmin).toHaveBeenCalled();
   });
 
-  it('should fail when user is not admin', async () => {
-    mocks.mockAssertAdmin.mockResolvedValue({
-      isErr: () => true,
-      error: 'User is not a site administrator',
-    });
+  it('should fail when user is not admin and not call delete', async () => {
+    mocks.mockAssertAdmin.mockResolvedValue(
+      new Err('This tool requires site administrator permissions. Your site role is: Viewer'),
+    );
     const result = await getToolResult({ taskId: 'task-123' });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('not a site administrator');
+    expect(result.content[0].text).toContain('requires site administrator permissions');
+    expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
   });
 
   it('should handle API errors gracefully', async () => {

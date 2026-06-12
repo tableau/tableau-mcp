@@ -47,7 +47,7 @@ export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis>
    *
    * @param siteId - The Tableau site ID
    * @param taskId - The extract refresh task ID to delete
-   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_jobs_tasks_and_schedules.htm#delete_extract_refresh_task
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#delete_extract_refresh_task
    */
   deleteExtractRefreshTask = async ({
     siteId,

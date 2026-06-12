@@ -28,7 +28,6 @@ Use this tool when you need to:
 ## Required permissions
 
 - **Tableau Cloud**: Requires `tableau:tasks:delete` OAuth scope
-- **Tableau Server**: Non-admin users can delete tasks for which they have Read and Delete permissions
 - **Site Role**: Must be one of:
   - SiteAdministratorCreator
   - SiteAdministratorExplorer
