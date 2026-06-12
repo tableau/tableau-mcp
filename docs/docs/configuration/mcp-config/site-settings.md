@@ -4,7 +4,7 @@ sidebar_position: 6
 
 # Site Settings
 
-Tableau MCP supports configuration on a per-site basis via REST API. When a Tableau MCP user is authenticated to a given site, the site's configuration is fetched and applied to their session such that each setting will override any current value set by the Tableau MCP server.
+Tableau MCP supports configuration on a per-site basis via [REST API](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_tableau_mcp.htm). When a Tableau MCP user is authenticated to a given site, the site's configuration is fetched and applied to their session such that each setting will override any current value set by the Tableau MCP server.
 
 ## Enabling Site Settings
 
