@@ -6,6 +6,7 @@ import { getSearchContentTool } from './contentExploration/searchContent.js';
 import { getDeleteExtractRefreshTaskTool } from './extractRefreshTasks/deleteExtractRefreshTask.js';
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
+import { getOAuthTokenTool } from './getOAuthToken/getOAuthToken.js';
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
 import { getListProjectsTool } from './projects/listProjects.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
@@ -31,6 +32,7 @@ import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 
 export const webToolFactories = [
   getGetDatasourceMetadataTool,
+  getOAuthTokenTool,
   getListDatasourcesTool,
   getListExtractRefreshTasksTool,
   getDeleteExtractRefreshTaskTool,
