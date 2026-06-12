@@ -7,8 +7,8 @@ import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import {
   computeConfirmationToken,
+  DEFAULT_PENDING_DELETION_TAG,
   getDeleteWorkbookTool,
-  STALE_PENDING_DELETION_TAG,
 } from './deleteWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
 
@@ -71,7 +71,7 @@ describe('deleteWorkbookTool', () => {
   it('should create a tool instance with correct properties', () => {
     const tool = getDeleteWorkbookTool(new WebMcpServer());
     expect(tool.name).toBe('delete-workbook');
-    expect(tool.description).toContain('Deletes a workbook');
+    expect(tool.description).toContain('deletes a workbook');
     expect(tool.paramsSchema).toHaveProperty('workbookId');
     expect(tool.paramsSchema).toHaveProperty('confirm');
   });
@@ -160,7 +160,7 @@ describe('deleteWorkbookTool', () => {
 
   // --- Preview phase (confirm omitted/false) ---
 
-  it('should tag and report on preview without deleting', async () => {
+  it('should tag with the default tag and report on preview without deleting', async () => {
     const result = await getToolResult({ workbookId: 'wb-1' });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -168,7 +168,7 @@ describe('deleteWorkbookTool', () => {
     expect(text).toContain('Preview');
     expect(text).toContain(mockWorkbook.name);
     expect(text).toContain('owner@example.com');
-    expect(text).toContain(STALE_PENDING_DELETION_TAG);
+    expect(text).toContain(DEFAULT_PENDING_DELETION_TAG);
     expect(text).toContain('confirm: true');
     expect(text).toContain('recycle_bin');
 
@@ -179,7 +179,20 @@ describe('deleteWorkbookTool', () => {
     expect(mocks.mockAddTagsToWorkbook).toHaveBeenCalledWith({
       workbookId: 'wb-1',
       siteId: 'test-site-id',
-      tagLabels: [STALE_PENDING_DELETION_TAG],
+      tagLabels: [DEFAULT_PENDING_DELETION_TAG],
+    });
+    expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('should use a caller-provided tag on preview', async () => {
+    const result = await getToolResult({ workbookId: 'wb-1', tag: 'stale-pending-deletion' });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('stale-pending-deletion');
+    expect(mocks.mockAddTagsToWorkbook).toHaveBeenCalledWith({
+      workbookId: 'wb-1',
+      siteId: 'test-site-id',
+      tagLabels: ['stale-pending-deletion'],
     });
     expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
   });
@@ -236,6 +249,7 @@ async function getToolResult(args: {
   workbookId: string;
   confirm?: boolean;
   confirmationToken?: string;
+  tag?: string;
 }): Promise<CallToolResult> {
   const tool = getDeleteWorkbookTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);

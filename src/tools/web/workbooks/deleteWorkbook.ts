@@ -15,9 +15,11 @@ import { WebTool } from '../tool.js';
 
 const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
 
-// Tag applied during the preview phase to mark a workbook as pending deletion. Reversible and
-// visible in the Tableau UI, giving owners a window to object before the confirmed delete.
-export const STALE_PENDING_DELETION_TAG = 'stale-pending-deletion';
+// Default tag applied during the preview phase to mark a workbook as pending deletion. Reversible
+// and visible in the Tableau UI, giving owners a window to object before the confirmed delete.
+// Generic by design — callers (e.g. the Stale Content Cleanup prompt) can override via the `tag`
+// argument to use their own vocabulary.
+export const DEFAULT_PENDING_DELETION_TAG = 'pending-deletion';
 
 /**
  * Deterministic confirmation token derived from the site + workbook. The preview phase returns it;
@@ -47,6 +49,13 @@ const paramsSchema = {
         '(confirm omitted/false) for this workbook. Deletion is rejected without a matching token, ' +
         'which guarantees a preview was run first.',
     ),
+  tag: z
+    .string()
+    .optional()
+    .describe(
+      'Label applied to the workbook during the preview phase to mark it as pending deletion ' +
+        `(reversible, visible in the Tableau UI). Defaults to '${DEFAULT_PENDING_DELETION_TAG}'.`,
+    ),
 };
 
 export const getDeleteWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
@@ -57,16 +66,15 @@ export const getDeleteWorkbookTool = (server: WebMcpServer): WebTool<typeof para
     name: 'delete-workbook',
     disabled: !config.adminToolsEnabled,
     description: `
-Deletes a workbook from the current Tableau Cloud site as the destructive step of the Stale
-Content Cleanup workflow. Restricted to Tableau site administrators and requires the
-\`ADMIN_TOOLS_ENABLED\` feature flag.
+Permanently deletes a workbook from the current Tableau Cloud site. Restricted to Tableau site
+administrators and requires the \`ADMIN_TOOLS_ENABLED\` feature flag.
 
 This tool is **two-phase** to keep the destructive action safe:
 
-1. **Preview (default — \`confirm\` omitted or false):** tags the workbook with
-   \`${STALE_PENDING_DELETION_TAG}\` (reversible, visible in the Tableau UI), reports the
-   workbook name, project, and owner, returns a \`confirmationToken\`, and does **not** delete
-   anything.
+1. **Preview (default — \`confirm\` omitted or false):** tags the workbook as pending deletion
+   (reversible, visible in the Tableau UI; label configurable via \`tag\`, default
+   \`${DEFAULT_PENDING_DELETION_TAG}\`), reports the workbook name, project, and owner, returns a
+   \`confirmationToken\`, and does **not** delete anything.
 2. **Delete (\`confirm: true\` + \`confirmationToken\`):** permanently removes the workbook. The
    token from step 1 is required — deletion is rejected without it, which guarantees the preview
    was run first. On Tableau Cloud the workbook is moved to the recycle bin and can be restored
@@ -80,6 +88,7 @@ user and get explicit approval before deleting. Do not auto-confirm or compute t
 - \`workbookId\` (required) – The LUID of the workbook. Obtain it from \`list-workbooks\`.
 - \`confirm\` (optional) – Set \`true\` to perform the deletion. Defaults to preview.
 - \`confirmationToken\` (optional) – Required when \`confirm\` is true; the token from the preview step.
+- \`tag\` (optional) – Preview tag label. Defaults to \`${DEFAULT_PENDING_DELETION_TAG}\`.
 `.trim(),
     paramsSchema,
     annotations: {
@@ -90,12 +99,12 @@ user and get explicit approval before deleting. Do not auto-confirm or compute t
       openWorldHint: false,
     },
     callback: async (
-      { workbookId, confirm, confirmationToken },
+      { workbookId, confirm, confirmationToken, tag },
       extra,
     ): Promise<CallToolResult> => {
       return await deleteWorkbookTool.logAndExecute<string>({
         extra,
-        args: { workbookId, confirm, confirmationToken },
+        args: { workbookId, confirm, confirmationToken, tag },
         callback: async () => {
           return await useRestApi({
             ...extra,
@@ -138,15 +147,16 @@ user and get explicit approval before deleting. Do not auto-confirm or compute t
               }
 
               // Preview phase: tag as pending deletion and report. No deletion.
+              const pendingTag = tag ?? DEFAULT_PENDING_DELETION_TAG;
               await restApi.workbooksMethods.addTagsToWorkbook({
                 workbookId,
                 siteId,
-                tagLabels: [STALE_PENDING_DELETION_TAG],
+                tagLabels: [pendingTag],
               });
 
               return new Ok(
                 `Preview — workbook '${workbook.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
-                  `It has been tagged '${STALE_PENDING_DELETION_TAG}' (reversible). ` +
+                  `It has been tagged '${pendingTag}' (reversible). ` +
                   'NEXT STEP — REQUIRED: show this workbook (name, project, owner) to the user and ask them ' +
                   'to explicitly confirm deleting it. Do NOT delete without the user’s approval. ' +
                   `Once approved, call again with confirm: true and confirmationToken: ${expectedToken}. ` +

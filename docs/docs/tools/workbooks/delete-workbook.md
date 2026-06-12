@@ -13,8 +13,9 @@ enabled. Non-administrator callers are rejected before any action is taken.
 The tool is **two-phase** to keep the destructive action safe:
 
 1. **Preview** (default — `confirm` omitted or `false`): tags the workbook with
-   `stale-pending-deletion` (reversible, visible in the Tableau UI), reports the workbook name,
-   project, and owner, returns a `confirmationToken`, and does **not** delete anything.
+   `pending-deletion` (reversible, visible in the Tableau UI; label configurable via the `tag`
+   argument), reports the workbook name, project, and owner, returns a `confirmationToken`, and does
+   **not** delete anything.
 2. **Delete** (`confirm: true` + `confirmationToken`): permanently removes the workbook. The token
    from the preview step is **required** — deletion is rejected without a matching token, which
    guarantees the preview was run first for this workbook. On Tableau Cloud the workbook is moved to
@@ -61,10 +62,18 @@ preview-then-confirm flow and prevents a blind single-call delete.
 
 Example: `3a7f9c2e1b04`
 
+### `tag`
+
+The label applied to the workbook during the preview phase to mark it as pending deletion.
+Reversible and visible in the Tableau UI. Defaults to `pending-deletion`; callers (for example a
+stale-content cleanup workflow) can override it with their own vocabulary.
+
+Example: `stale-pending-deletion`
+
 ## Side effects
 
-- **Preview** adds the `stale-pending-deletion` tag to the workbook. This is reversible and visible
-  in the Tableau UI.
+- **Preview** adds the pending-deletion tag (`pending-deletion` by default, or the `tag` value) to
+  the workbook. This is reversible and visible in the Tableau UI.
 - **Delete** removes the workbook. On Tableau Cloud the workbook is moved to the recycle bin and can
   be [restored](https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm) for a limited
   time before it is permanently purged. Always run the preview first and confirm the workbook
