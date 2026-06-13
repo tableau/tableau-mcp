@@ -8,6 +8,11 @@ export const dataSourceSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   project: projectSchema,
+  owner: z
+    .object({
+      id: z.string(),
+    })
+    .optional(),
   tags: tagsSchema,
 });
 

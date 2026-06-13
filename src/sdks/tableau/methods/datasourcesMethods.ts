@@ -75,4 +75,57 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
       })
     ).datasource;
   };
+
+  /**
+   * Deletes the specified published data source from the site.
+   *
+   * On Tableau Cloud the data source is moved to the recycle bin and can be restored
+   * for a limited time before permanent removal.
+   *
+   * Required scopes (Tableau Cloud): `tableau:content:delete`
+   *
+   * @param datasourceId - The ID of the data source to delete.
+   * @param siteId - The Tableau site ID
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#delete_data_source
+   */
+  deleteDatasource = async ({
+    datasourceId,
+    siteId,
+  }: {
+    datasourceId: string;
+    siteId: string;
+  }): Promise<void> => {
+    await this._apiClient.deleteDatasource(undefined, {
+      params: { siteId, datasourceId },
+      ...this.authHeader,
+    });
+  };
+
+  /**
+   * Adds one or more tags to the specified data source.
+   *
+   * Required scopes (Tableau Cloud): `tableau:content:write`
+   *
+   * @param datasourceId - The ID of the data source to tag.
+   * @param siteId - The Tableau site ID
+   * @param tagLabels - The tag labels to add.
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#add_tags_to_data_source
+   */
+  addTagsToDatasource = async ({
+    datasourceId,
+    siteId,
+    tagLabels,
+  }: {
+    datasourceId: string;
+    siteId: string;
+    tagLabels: ReadonlyArray<string>;
+  }): Promise<void> => {
+    await this._apiClient.addTagsToDatasource(
+      { tags: { tag: tagLabels.map((label) => ({ label })) } },
+      {
+        params: { siteId, datasourceId },
+        ...this.authHeader,
+      },
+    );
+  };
 }
