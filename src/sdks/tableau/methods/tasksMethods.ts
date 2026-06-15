@@ -39,4 +39,26 @@ export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis>
     const response = parseListExtractRefreshTasksResponse(raw);
     return response.tasks.task.map((t) => t.extractRefresh);
   };
+
+  /**
+   * Deletes an extract refresh task from the site.
+   *
+   * Required scopes (Tableau Cloud): `tableau:tasks:delete`
+   *
+   * @param siteId - The Tableau site ID
+   * @param taskId - The extract refresh task ID to delete
+   * @link https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#delete_extract_refresh_task
+   */
+  deleteExtractRefreshTask = async ({
+    siteId,
+    taskId,
+  }: {
+    siteId: string;
+    taskId: string;
+  }): Promise<void> => {
+    await this._apiClient.deleteExtractRefreshTask(undefined, {
+      params: { siteId, taskId },
+      ...this.authHeader,
+    });
+  };
 }

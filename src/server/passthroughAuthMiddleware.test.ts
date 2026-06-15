@@ -12,6 +12,9 @@ import { getRequiredApiScopesForTool } from './oauth/scopes.js';
  * See: https://github.com/tableau/tableau-mcp/pull/241/changes#r2942474421
  */
 const TOOLS_WITHOUT_API_SCOPES_WITH_PASSTHROUGH_GUARD: ReadonlyArray<WebToolName> = [
+  // OAuth token retrieval tool: no Tableau REST API call. The tool callback explicitly returns
+  // an error for Passthrough auth (not OAuth), so passthrough callers are rejected.
+  'get-oauth-token',
   // Token lifecycle tool: no Tableau REST API call. The tool callback explicitly returns an error
   // for Passthrough auth and undefined tableauAuthInfo, so passthrough callers are rejected.
   'revoke-access-token',

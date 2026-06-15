@@ -33,9 +33,14 @@ describe('server', () => {
 
     it('should list tools', async () => {
       const names = await client.listTools();
-      const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
+      const oauthOnlyTools: ReadonlyArray<WebToolName> = [
+        'get-oauth-token',
+        'revoke-access-token',
+        'reset-consent',
+      ];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
         'list-extract-refresh-tasks',
+        'delete-extract-refresh-task',
         'list-users',
         'query-admin-insights-ts-events',
         'query-admin-insights-site-content',
@@ -109,9 +114,14 @@ describe('server', () => {
 
     it('should list tools', async () => {
       const names = await client.listTools();
-      const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
+      const oauthOnlyTools: ReadonlyArray<WebToolName> = [
+        'get-oauth-token',
+        'revoke-access-token',
+        'reset-consent',
+      ];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
         'list-extract-refresh-tasks',
+        'delete-extract-refresh-task',
         'list-users',
         'query-admin-insights-ts-events',
         'query-admin-insights-site-content',
