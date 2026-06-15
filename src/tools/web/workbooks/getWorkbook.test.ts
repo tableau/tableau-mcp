@@ -249,9 +249,7 @@ describe('getWorkbookTool', () => {
         },
       });
 
-      expect(result.views?.view.length).toBe(1);
-      expect(result.views?.view[0].id).toBe(mockView.id);
-      expect(result.views?.view[0].totalViewCount).toBe(42);
+      expect(result).toEqual(mockWorkbookWithFlattenedViewUsage);
     });
 
     it('should remove views from the workbook when all views are filtered out by viewIds', () => {
@@ -284,9 +282,7 @@ describe('getWorkbookTool', () => {
         },
       });
 
-      expect(result.views?.view.length).toBe(1);
-      expect(result.views?.view[0].id).toBe(mockView.id);
-      expect(result.views?.view[0].totalViewCount).toBe(42);
+      expect(result).toEqual(mockWorkbookWithFlattenedViewUsage);
     });
 
     it('should remove views when viewIds matches but tags do not', () => {
