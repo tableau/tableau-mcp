@@ -28,6 +28,21 @@ export type AppDetails = {
   htmlPath: string;
 };
 
+/**
+ * Result wrapper for MCP App tools
+ *
+ * Tools that provide an MCP app (interactive UI) should return this structure
+ * to ensure they provide both the data AND a URL for the app to display.
+ *
+ * @typeParam T - The actual data type your tool returns
+ */
+export type AppToolResult<T> = {
+  /** The actual data/content returned by the tool */
+  data: T;
+  /** A URL that the MCP app can use (e.g., for embedding or navigation) */
+  url: string;
+};
+
 export type ToolMeta = {
   ui?: {
     visibility?: Array<'model' | 'app'>;

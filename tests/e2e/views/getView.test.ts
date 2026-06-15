@@ -1,6 +1,13 @@
+import { z } from 'zod';
+
 import { viewSchema } from '../../../src/sdks/tableau/types/view.js';
 import { getDefaultEnv, getSuperstoreWorkbook, resetEnv, setEnv } from '../../testEnv.js';
 import { McpClient } from '../mcpClient.js';
+
+const appToolResultSchema = z.object({
+  data: viewSchema,
+  url: z.string(),
+});
 
 describe('get-view', () => {
   let client: McpClient;
@@ -21,17 +28,20 @@ describe('get-view', () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
-    const view = await client.callTool('get-view', {
-      schema: viewSchema,
+    const result = await client.callTool('get-view', {
+      schema: appToolResultSchema,
       toolArgs: { viewId: superstore.defaultView.id },
     });
 
-    expect(view).toMatchObject({
-      id: superstore.defaultView.id,
-      name: 'Overview',
-      workbook: {
-        id: superstore.id,
+    expect(result).toMatchObject({
+      data: {
+        id: superstore.defaultView.id,
+        name: 'Overview',
+        workbook: {
+          id: superstore.id,
+        },
       },
+      url: expect.any(String),
     });
   });
 });

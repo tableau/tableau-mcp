@@ -17,6 +17,7 @@ export const passthroughAuthInfoSchema = z.object({
   userId: z.string(),
   server: z.string(),
   siteId: z.string(),
+  siteName: z.string(), // Always populated from getCurrentServerSession
   raw: z.string(),
 });
 
@@ -72,12 +73,15 @@ export function passthroughAuthMiddleware(): RequestHandler {
         return;
       }
 
+      const siteName = sessionResult.value.site.contentUrl || '';
+
       passthroughAuthInfo = {
         type: 'Passthrough',
         username: sessionResult.value.user.name,
         userId: sessionResult.value.user.id,
         server,
         siteId: sessionResult.value.site.id,
+        siteName,
         raw: tableauAccessToken,
       };
 

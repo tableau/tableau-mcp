@@ -68,6 +68,7 @@ describe('resetConsentTool', () => {
         username: 'test@example.com',
         server: MOCK_ISSUER,
         siteId: 'test-site-id',
+        siteName: 'test-site',
       };
       return extra;
     }
@@ -141,6 +142,7 @@ describe('resetConsentTool', () => {
         userId: 'user-id',
         server: MOCK_SERVER,
         siteId: 'site-id',
+        siteName: 'test-site',
         raw: 'x-tableau-auth-session-token',
       };
       const result = await getToolResult(extra);

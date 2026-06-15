@@ -15,6 +15,7 @@ const validAuth: AuthInfo = {
     username: 'user@example.com',
     server: 'https://my-server.com',
     siteId: 'site-123',
+    siteName: 'test-site',
     userId: 'user-456',
   },
 };
