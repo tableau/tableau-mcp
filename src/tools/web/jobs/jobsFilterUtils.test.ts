@@ -54,6 +54,14 @@ describe('jobsFilterUtils', () => {
       expect(result).toBe('completedAt:lt:2026-05-25T00:00:00Z');
     });
 
+    it('should throw on a date field with a non-ISO 8601 value', () => {
+      expect(() => parseAndValidateJobsFilterString('createdAt:gt:2026-05-01')).toThrow();
+    });
+
+    it('should throw on a date field with a non-date value', () => {
+      expect(() => parseAndValidateJobsFilterString('startedAt:gt:yesterday')).toThrow();
+    });
+
     it('should parse has operator for title', () => {
       const result = parseAndValidateJobsFilterString('title:has:Superstore');
       expect(result).toBe('title:has:Superstore');

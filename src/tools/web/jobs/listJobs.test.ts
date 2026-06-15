@@ -62,6 +62,13 @@ describe('listJobsTool', () => {
     expect(listJobsTool.paramsSchema).toHaveProperty('pageNumber');
   });
 
+  it('should cap pageSize at 1000', async () => {
+    const listJobsTool = getListJobsTool(new WebMcpServer());
+    const paramsSchema = await Provider.from(listJobsTool.paramsSchema);
+    expect(paramsSchema.pageSize.safeParse(1000).success).toBe(true);
+    expect(paramsSchema.pageSize.safeParse(1001).success).toBe(false);
+  });
+
   it('should successfully get jobs', async () => {
     mocks.mockListJobs.mockResolvedValue({
       pagination: { pageNumber: 1, pageSize: 100, totalAvailable: 1 },

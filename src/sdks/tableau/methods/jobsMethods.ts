@@ -1,7 +1,7 @@
 import { Zodios } from '@zodios/core';
 
 import { AxiosRequestConfig } from '../../../utils/axios.js';
-import { jobsApis, parseListJobsResponse } from '../apis/jobsApi.js';
+import { jobsApis } from '../apis/jobsApi.js';
 import { RestApiCredentials } from '../restApi.js';
 import { Job } from '../types/job.js';
 import { Pagination } from '../types/pagination.js';
@@ -41,17 +41,14 @@ export default class JobsMethods extends AuthenticatedMethods<typeof jobsApis> {
     pageSize?: number;
     pageNumber?: number;
   }): Promise<{ pagination: Pagination; jobs: Job[] }> => {
-    const raw = await this._apiClient.listJobs({
+    const response = await this._apiClient.listJobs({
       params: { siteId },
       queries: { filter, pageSize, pageNumber },
       ...this.authHeader,
     });
-    const response = parseListJobsResponse(raw);
-    const jobs =
-      'backgroundJob' in response.backgroundJobs ? response.backgroundJobs.backgroundJob : [];
     return {
       pagination: response.pagination,
-      jobs,
+      jobs: response.backgroundJobs.backgroundJob,
     };
   };
 }

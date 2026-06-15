@@ -32,30 +32,13 @@ describe('JobsMethods', () => {
       ]);
     });
 
-    it('should handle a single backgroundJob object format', async () => {
-      const mockApiClient = {
-        listJobs: vi.fn().mockResolvedValue({
-          pagination: { ...pagination, totalAvailable: 1 },
-          backgroundJobs: {
-            backgroundJob: { id: 'j1', status: 'Success', jobType: 'refresh_extracts' },
-          },
-        }),
-      };
-
-      const jobsMethods = new JobsMethods('http://test', { type: 'Bearer', token: 'test' }, {});
-      // @ts-expect-error - Mocking private property
-      jobsMethods._apiClient = mockApiClient;
-
-      const result = await jobsMethods.listJobs({ siteId: 'site-1' });
-
-      expect(result.jobs).toEqual([{ id: 'j1', status: 'Success', jobType: 'refresh_extracts' }]);
-    });
-
-    it('should handle empty backgroundJobs object format', async () => {
+    it('should return an empty jobs array when the API returns no jobs', async () => {
+      // _apiClient.listJobs returns the post-Zodios-transform shape, where the
+      // empty-result case is already normalized to { backgroundJob: [] }.
       const mockApiClient = {
         listJobs: vi.fn().mockResolvedValue({
           pagination: { ...pagination, totalAvailable: 0 },
-          backgroundJobs: {},
+          backgroundJobs: { backgroundJob: [] },
         }),
       };
 
@@ -66,26 +49,6 @@ describe('JobsMethods', () => {
       const result = await jobsMethods.listJobs({ siteId: 'site-1' });
 
       expect(result.jobs).toEqual([]);
-    });
-
-    it('should coerce numeric priority and progress fields', async () => {
-      const mockApiClient = {
-        listJobs: vi.fn().mockResolvedValue({
-          pagination: { ...pagination, totalAvailable: 1 },
-          backgroundJobs: {
-            backgroundJob: { id: 'j1', priority: '50', progress: '100' },
-          },
-        }),
-      };
-
-      const jobsMethods = new JobsMethods('http://test', { type: 'Bearer', token: 'test' }, {});
-      // @ts-expect-error - Mocking private property
-      jobsMethods._apiClient = mockApiClient;
-
-      const result = await jobsMethods.listJobs({ siteId: 'site-1' });
-
-      expect(result.jobs[0].priority).toBe(50);
-      expect(result.jobs[0].progress).toBe(100);
     });
 
     it('should pass siteId, filter, and paging through to the API client', async () => {

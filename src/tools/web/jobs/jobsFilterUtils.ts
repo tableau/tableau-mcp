@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   FilterOperator,
   FilterOperatorSchema,
+  isISO8601DateTime,
 } from '../../../utils/parseAndValidateFilterString.js';
 
 // Fields and operators the Tableau REST API documents as filterable for the Jobs
@@ -28,6 +29,9 @@ type FilterField = z.infer<typeof FilterFieldSchema>;
 
 const DATE_OPERATORS: (FilterOperator | 'has')[] = ['eq', 'gt', 'gte', 'lt', 'lte'];
 const NUMERIC_OPERATORS: (FilterOperator | 'has')[] = ['eq', 'gt', 'gte', 'lt', 'lte'];
+
+// Fields whose values must be ISO 8601 date-time strings (e.g. 2026-05-04T21:24:49Z).
+const DATE_FIELDS: ReadonlySet<FilterField> = new Set(['completedAt', 'createdAt', 'startedAt']);
 
 const allowedOperatorsByField: Record<FilterField, (FilterOperator | 'has')[]> = {
   args: ['has'],
@@ -110,6 +114,13 @@ export function parseAndValidateJobsFilterString(filterString: string): string {
     if (operator === 'in' && !(value.startsWith('[') && value.endsWith(']'))) {
       throw new Error(
         `The 'in' operator for field '${field}' requires a bracketed value list, e.g. ${field}:in:[value1,value2].`,
+      );
+    }
+
+    // Validate ISO 8601 for date-time fields.
+    if (DATE_FIELDS.has(field) && !isISO8601DateTime(value)) {
+      throw new Error(
+        `Value for field '${field}' must be a valid ISO 8601 date-time string (e.g., 2016-05-04T21:24:49Z)`,
       );
     }
 

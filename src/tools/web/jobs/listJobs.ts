@@ -12,7 +12,7 @@ import { parseAndValidateJobsFilterString } from './jobsFilterUtils.js';
 
 const paramsSchema = {
   filter: z.string().optional(),
-  pageSize: z.number().int().positive().optional(),
+  pageSize: z.number().int().positive().max(1000).optional(),
   pageNumber: z.number().int().positive().optional(),
 };
 
