@@ -1,3 +1,4 @@
+// MCP tool: list background jobs (extract refreshes, subscriptions, flow runs).
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
