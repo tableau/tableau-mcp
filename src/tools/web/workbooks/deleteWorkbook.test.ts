@@ -197,6 +197,19 @@ describe('deleteWorkbookTool', () => {
     expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
   });
 
+  it('should fall back to the default tag when the caller passes an empty or whitespace tag', async () => {
+    const result = await getToolResult({ workbookId: 'wb-1', tag: '   ' });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(DEFAULT_PENDING_DELETION_TAG);
+    expect(mocks.mockAddTagsToWorkbook).toHaveBeenCalledWith({
+      workbookId: 'wb-1',
+      siteId: 'test-site-id',
+      tagLabels: [DEFAULT_PENDING_DELETION_TAG],
+    });
+    expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+  });
+
   it('should still preview when owner cannot be resolved', async () => {
     mocks.mockQueryUserOnSite.mockRejectedValue(new Error('owner lookup failed'));
     const result = await getToolResult({ workbookId: 'wb-1' });

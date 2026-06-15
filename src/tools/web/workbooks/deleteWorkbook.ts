@@ -147,7 +147,9 @@ user and get explicit approval before deleting. Do not auto-confirm or compute t
               }
 
               // Preview phase: tag as pending deletion and report. No deletion.
-              const pendingTag = tag ?? DEFAULT_PENDING_DELETION_TAG;
+              // Treat undefined, empty, and whitespace-only tags as "use the default" so a
+              // blank label never gets applied to the workbook.
+              const pendingTag = tag?.trim() ? tag : DEFAULT_PENDING_DELETION_TAG;
               await restApi.workbooksMethods.addTagsToWorkbook({
                 workbookId,
                 siteId,
