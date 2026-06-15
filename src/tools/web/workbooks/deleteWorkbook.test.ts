@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   mockDeleteWorkbook: vi.fn(),
   mockQueryUserOnSite: vi.fn(),
   mockAssertAdmin: vi.fn(),
+  mockIsWorkbookAllowed: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -45,6 +46,12 @@ vi.mock('../adminGate.js', () => ({
   assertAdmin: mocks.mockAssertAdmin,
 }));
 
+vi.mock('../resourceAccessChecker.js', () => ({
+  resourceAccessChecker: {
+    isWorkbookAllowed: mocks.mockIsWorkbookAllowed,
+  },
+}));
+
 vi.mock('../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     adminToolsEnabled: true,
@@ -58,6 +65,7 @@ describe('deleteWorkbookTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
+    mocks.mockIsWorkbookAllowed.mockResolvedValue({ allowed: true });
     mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
     mocks.mockQueryUserOnSite.mockResolvedValue({
       id: 'owner-1',
@@ -116,6 +124,50 @@ describe('deleteWorkbookTool', () => {
     expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
     expect(mocks.mockAddTagsToWorkbook).not.toHaveBeenCalled();
     expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+  });
+
+  // --- Tool scoping (bounded context) ---
+
+  it('should reject preview when the workbook is out of scope and perform no side effects', async () => {
+    mocks.mockIsWorkbookAllowed.mockResolvedValue({
+      allowed: false,
+      message: 'Querying the workbook with LUID wb-1 is not allowed.',
+    });
+    const result = await getToolResult({ workbookId: 'wb-1' });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('not allowed');
+    expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
+    expect(mocks.mockAddTagsToWorkbook).not.toHaveBeenCalled();
+    expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('should reject delete when the workbook is out of scope and perform no side effects', async () => {
+    mocks.mockIsWorkbookAllowed.mockResolvedValue({
+      allowed: false,
+      message: 'Querying the workbook with LUID wb-1 is not allowed.',
+    });
+    const result = await getToolResult({
+      workbookId: 'wb-1',
+      confirm: true,
+      confirmationToken: validToken('wb-1'),
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('not allowed');
+    expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
+    expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('should reuse the workbook returned by the access check instead of fetching it again', async () => {
+    mocks.mockIsWorkbookAllowed.mockResolvedValue({ allowed: true, content: mockWorkbook });
+    const result = await getToolResult({ workbookId: 'wb-1' });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(mockWorkbook.name);
+    // The access check already resolved the workbook, so no second fetch is made.
+    expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
+    expect(mocks.mockAddTagsToWorkbook).toHaveBeenCalled();
   });
 
   // --- Confirmation token (double-confirm gate) ---

@@ -4,13 +4,18 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { AdminOnlyError, ArgsValidationError } from '../../../errors/mcpToolError.js';
+import {
+  AdminOnlyError,
+  ArgsValidationError,
+  WorkbookNotAllowedError,
+} from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { assertAdmin } from '../adminGate.js';
+import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 
 const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
@@ -129,10 +134,24 @@ user and get explicit approval before deleting. Do not auto-confirm or compute t
                 ).toErr();
               }
 
+              // Honor the same tool-scoping rules the read tools enforce (e.g. get-workbook):
+              // a workbook outside the configured bounded context cannot be tagged or deleted.
+              // Runs before any read/write so a rejected call has zero side effects.
+              const isWorkbookAllowedResult = await resourceAccessChecker.isWorkbookAllowed({
+                workbookId,
+                extra,
+              });
+              if (!isWorkbookAllowedResult.allowed) {
+                return new WorkbookNotAllowedError(isWorkbookAllowedResult.message).toErr();
+              }
+
               // Resolve identity in both phases so the response (preview AND the final delete
               // confirmation) always names the workbook, project, and owner for an auditable
-              // record of exactly what was acted on.
-              const workbook = await restApi.workbooksMethods.getWorkbook({ workbookId, siteId });
+              // record of exactly what was acted on. Reuse the workbook already fetched by the
+              // access check when a project scope forced it, otherwise fetch it now.
+              const workbook =
+                isWorkbookAllowedResult.content ??
+                (await restApi.workbooksMethods.getWorkbook({ workbookId, siteId }));
               const ownerEmail = await resolveOwnerEmail(restApi, siteId, workbook.owner?.id);
               const projectName = workbook.project?.name ?? 'unknown project';
               const ownerText = ownerEmail ? `owner ${ownerEmail}` : 'owner unknown';

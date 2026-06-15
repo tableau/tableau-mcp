@@ -29,6 +29,14 @@ before deleting. The `confirmationToken` enforces that a preview ran, but the **
 step is a prompt-level expectation — agents must not auto-confirm or compute the token themselves.
 :::
 
+## Tool scoping
+
+This tool honors the same [tool-scoping](../../configuration/mcp-config/tool-scoping.md) rules as the
+read tools (for example [Get Workbook](get-workbook.md)). If the server is configured with a bounded
+context (such as `INCLUDE_WORKBOOK_IDS`, `INCLUDE_PROJECT_IDS`, or `INCLUDE_TAGS`), a workbook that
+falls outside that scope cannot be previewed or deleted — the request is rejected before any tag or
+delete, so there are no side effects. Being an administrator does not bypass tool scoping.
+
 ## APIs called
 
 - [Add Tags to Workbook](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#add_tags_to_workbook) (preview phase)
