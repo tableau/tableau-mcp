@@ -11,10 +11,14 @@ export function constructViewWebUrl(server: string, siteName: string, contentUrl
   // API returns 'workbook/sheets/Sheet1', URL uses 'workbook/Sheet1'
   const urlPath = contentUrl.replace(/\/sheets\//g, '/');
 
+  const url = new URL(server);
+
   // Default site uses a different URL structure without /site/{siteName}
   if (!siteName || siteName === 'Default') {
-    return `${server}/#/views/${urlPath}`;
+    url.hash = `#/views/${urlPath}`;
+  } else {
+    url.hash = `#/site/${siteName}/views/${urlPath}`;
   }
 
-  return `${server}/#/site/${siteName}/views/${urlPath}`;
+  return url.toString();
 }

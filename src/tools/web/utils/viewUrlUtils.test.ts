@@ -32,4 +32,13 @@ describe('constructViewWebUrl', () => {
     );
     expect(result).toBe('https://tableau.example.com/#/views/Superstore/Overview');
   });
+
+  it('handles server URL with trailing slash', () => {
+    const result = constructViewWebUrl(
+      'https://tableau.example.com/',
+      'my-site',
+      'workbook/sheets/Sheet1',
+    );
+    expect(result).toBe('https://tableau.example.com/#/site/my-site/views/workbook/Sheet1');
+  });
 });
