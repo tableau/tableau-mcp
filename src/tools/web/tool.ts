@@ -41,7 +41,7 @@ export type AppToolResult<T> = {
   data: T;
   /** A URL that the MCP app can use (e.g., for embedding or navigation) */
   url: string;
-}
+};
 
 export type ToolMeta = {
   ui?: {

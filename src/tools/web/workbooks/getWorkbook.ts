@@ -11,7 +11,6 @@ import {
   getWorkbookLineageQuery,
   mergeWorkbookLineage,
 } from '../../../sdks/tableau/methods/lineageUtils.js';
-import { View } from '../../../sdks/tableau/types/view.js';
 import { Workbook } from '../../../sdks/tableau/types/workbook.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
@@ -29,16 +28,26 @@ function getDefaultViewWebUrl(
   server: string,
   siteName: string,
 ): string | undefined {
-  if (!workbook.defaultViewId) {
+  const views = workbook.views?.view;
+  if (!views || views.length === 0) {
     return undefined;
   }
 
-  const defaultView = workbook.views?.view.find((view) => view.id === workbook.defaultViewId);
-  if (!defaultView?.contentUrl) {
+  // Try to find the default view first
+  let targetView = workbook.defaultViewId
+    ? views.find((view) => view.id === workbook.defaultViewId)
+    : undefined;
+
+  // If default view was filtered out, fall back to the first view
+  if (!targetView) {
+    targetView = views[0];
+  }
+
+  if (!targetView?.contentUrl) {
     return undefined;
   }
 
-  return constructViewWebUrl(server, siteName, defaultView.contentUrl);
+  return constructViewWebUrl(server, siteName, targetView.contentUrl);
 }
 
 export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
@@ -133,11 +142,7 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
           });
 
           const url =
-            getDefaultViewWebUrl(
-              filteredWorkbook,
-              extra.config.server,
-              extra.getSiteName(),
-            ) ??
+            getDefaultViewWebUrl(filteredWorkbook, extra.config.server, extra.getSiteName()) ??
             filteredWorkbook.webpageUrl ??
             '';
 
@@ -203,3 +208,7 @@ function flattenWorkbookViewUsage(workbook: Workbook): Workbook {
     },
   };
 }
+
+export const exportedForTesting = {
+  getDefaultViewWebUrl,
+};

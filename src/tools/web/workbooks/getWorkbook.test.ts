@@ -7,8 +7,10 @@ import { Provider } from '../../../utils/provider.js';
 import { exportedForTesting as resourceAccessCheckerExportedForTesting } from '../resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { mockView } from '../views/mockView.js';
-import { filterWorkbookViews, getGetWorkbookTool } from './getWorkbook.js';
+import { exportedForTesting, filterWorkbookViews, getGetWorkbookTool } from './getWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
+
+const { getDefaultViewWebUrl } = exportedForTesting;
 
 const { usage: _usage, ...mockViewWithoutUsage } = mockView;
 const mockWorkbookWithFlattenedViewUsage = {
@@ -116,6 +118,75 @@ describe('getWorkbookTool', () => {
 
     expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
     expect(mocks.mockQueryViewsForWorkbook).not.toHaveBeenCalled();
+  });
+
+  describe('getDefaultViewWebUrl', () => {
+    const server = 'https://my-tableau-server.com';
+    const siteName = 'tc25';
+
+    it('should return URL for default view when it exists', () => {
+      const workbook = {
+        ...mockWorkbook,
+        defaultViewId: mockView.id,
+        views: { view: [mockView] },
+      };
+
+      const url = getDefaultViewWebUrl(workbook, server, siteName);
+
+      expect(url).toBe('https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview');
+    });
+
+    it('should fall back to first view when default view is not found', () => {
+      const mockView2 = {
+        ...mockView,
+        id: 'other-view-id',
+        contentUrl: 'Superstore/OtherView',
+      };
+
+      const workbook = {
+        ...mockWorkbook,
+        defaultViewId: 'non-existent-view-id', // Default view not in the list
+        views: { view: [mockView2] },
+      };
+
+      const url = getDefaultViewWebUrl(workbook, server, siteName);
+
+      expect(url).toBe('https://my-tableau-server.com/#/site/tc25/views/Superstore/OtherView');
+    });
+
+    it('should use first view when workbook has no defaultViewId', () => {
+      const workbook = {
+        ...mockWorkbook,
+        defaultViewId: undefined,
+        views: { view: [mockView] },
+      };
+
+      const url = getDefaultViewWebUrl(workbook, server, siteName);
+
+      expect(url).toBe('https://my-tableau-server.com/#/site/tc25/views/Superstore/Overview');
+    });
+
+    it('should return undefined when workbook has no views', () => {
+      const workbook = {
+        ...mockWorkbook,
+        views: { view: [] },
+      };
+
+      const url = getDefaultViewWebUrl(workbook, server, siteName);
+
+      expect(url).toBeUndefined();
+    });
+
+    it('should return undefined when workbook views is undefined', () => {
+      const workbook = {
+        ...mockWorkbook,
+        views: undefined,
+      };
+
+      const url = getDefaultViewWebUrl(workbook, server, siteName);
+
+      expect(url).toBeUndefined();
+    });
   });
 
   describe('filterWorkbookViews', () => {
