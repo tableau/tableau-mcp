@@ -10,6 +10,7 @@ export const webToolNames = [
   'list-custom-views',
   'query-datasource',
   'get-datasource-metadata',
+  'get-oauth-token',
   'get-workbook',
   'get-view',
   'get-view-data',
@@ -72,7 +73,7 @@ export const webToolGroups = {
   'content-exploration': ['search-content'],
   tasks: ['list-extract-refresh-tasks', 'delete-extract-refresh-task'],
   users: ['list-users'],
-  'token-management': ['revoke-access-token', 'reset-consent'],
+  'token-management': ['get-oauth-token', 'revoke-access-token', 'reset-consent'],
   'admin-insights': [
     'query-admin-insights-ts-events',
     'query-admin-insights-site-content',

@@ -145,6 +145,7 @@ export class WebMcpServer extends Server {
         description: await Provider.from(tool.description),
         inputSchema: await Provider.from(tool.paramsSchema),
         annotations: await Provider.from(tool.annotations),
+        _meta: await Provider.from(tool.meta),
       },
       toolCallback,
     );
