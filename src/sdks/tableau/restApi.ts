@@ -16,6 +16,7 @@ import {
 } from './methods/authenticationMethods.js';
 import ContentExplorationMethods from './methods/contentExplorationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
+import JobsMethods from './methods/jobsMethods.js';
 import McpSettingsMethods from './methods/mcpSettingsMethods.js';
 import MetadataMethods from './methods/metadataMethods.js';
 import ProjectsMethods from './methods/projectsMethods.js';
@@ -224,6 +225,15 @@ export class RestApi {
     });
     this._addInterceptors(RestApi.baseUrl, tasksMethods.interceptors);
     return tasksMethods;
+  }
+
+  get jobsMethods(): JobsMethods {
+    const jobsMethods = new JobsMethods(RestApi.baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(RestApi.baseUrl, jobsMethods.interceptors);
+    return jobsMethods;
   }
 
   get usersMethods(): UsersMethods {

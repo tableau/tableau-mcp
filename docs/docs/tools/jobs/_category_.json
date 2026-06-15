@@ -1,0 +1,8 @@
+{
+  "label": "Jobs",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for monitoring background jobs such as extract refreshes, subscriptions, and flow runs."
+  }
+}
