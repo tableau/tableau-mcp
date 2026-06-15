@@ -11,6 +11,15 @@ export const desktopToolNames = [
   'apply-dashboard',
   'apply-dashboard-with-viewpoints',
   'build-and-apply-dashboard',
+  'list-available-fields',
+  'list-fields',
+  'add-field-to-encoding',
+  'add-field-to-rows',
+  'add-field-to-cols',
+  'remove-field-from-encoding',
+  'remove-field-from-rows',
+  'remove-field-from-cols',
+  'resolve-field',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 

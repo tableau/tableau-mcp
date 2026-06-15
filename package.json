@@ -65,6 +65,8 @@
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "fast-levenshtein": "^3.0.0",
+    "fast-xml-parser": "^5.9.0",
+    "fuse.js": "^7.4.2",
     "jose": "^6.0.12",
     "ssrfcheck": "^1.2.0",
     "ts-results-es": "^5.0.1",

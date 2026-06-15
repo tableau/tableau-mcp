@@ -278,3 +278,30 @@ export class FileReadError extends McpToolError {
     });
   }
 }
+
+export class FileNotFoundError extends McpToolError {
+  constructor(filePath: string) {
+    super({
+      type: 'file-not-found',
+      message: `File not found: ${filePath}. Make sure the path was returned from the appropriate get-*-xml tool.`,
+      statusCode: 404,
+    });
+  }
+}
+
+export class XmlModificationError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'xml-modification-error', message, statusCode: 422 });
+  }
+}
+
+export class XmlValidationError extends McpToolError {
+  constructor(errors: string[]) {
+    const errorList = errors.map((e, i) => `${i + 1}. ${e}`).join('\n');
+    super({
+      type: 'xml-validation-error',
+      message: `Modified XML failed validation with ${errors.length} error(s):\n\n${errorList}\n\nThis is likely a bug in the MCP. Please report this issue.`,
+      statusCode: 422,
+    });
+  }
+}
