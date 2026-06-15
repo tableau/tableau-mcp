@@ -8,15 +8,6 @@ title: Deployment Guide for Tableau Server Customers
 This guide provides step-by-step instructions for Tableau Server customers to deploy the Tableau MCP
 server in a self-hosted environment.
 
-:::info
-
-For Tableau Cloud customers, as part of the 2026.2 release, Tableau is planning to roll out a
-cloud-hosted service, available to all editions. The release will unlock the ability for Tableau
-Cloud customers to self-host Tableau MCP at scale using OAuth. A Tableau MCP deployment guide for
-Tableau Cloud customers will also be made available with the release.
-
-:::
-
 ## Overview
 
 The Tableau MCP server is a lightweight [Node.js](https://nodejs.org/) web application that uses
@@ -52,8 +43,7 @@ Before beginning the deployment process, ensure the following prerequisites are 
 - **Tableau MCP build**: One of the following:
   - [NPM package](https://www.npmjs.com/package/@tableau/mcp-server)
   - [Docker container](https://github.com/tableau/tableau-mcp/pkgs/container/tableau-mcp)
-  - Node.js
-    [single executable application](../extras/node-sea.md)
+  - Node.js [single executable application](../extras/node-sea.md)
   - The `build` directory from a local build of [the repo](https://github.com/tableau/tableau-mcp)
     or your fork.
 
@@ -372,8 +362,9 @@ Examples:
 #### Tool Scoping
 
 The Tableau MCP server can be configured to limit the scope of its tools to a set of data sources,
-workbooks, views, projects, or tags. For example, this can be helpful if your sites have hundreds of data
-sources but you only want a select few to be made available when constructing MCP tool call results.
+workbooks, views, projects, or tags. For example, this can be helpful if your sites have hundreds of
+data sources but you only want a select few to be made available when constructing MCP tool call
+results.
 
 Each value is a comma-separated list. For more information, see
 [Tool Scoping | Tableau MCP](../configuration/mcp-config/tool-scoping).
@@ -465,7 +456,7 @@ workflow.
 The `AUTH` environment variable can still be set to any of the non-OAuth authentication mechanisms,
 e.g. `direct-trust`. In the below example, the MCP server will still be protected from unauthorized
 access by OAuth—requiring users to first sign in to their Tableau site—but the user and site context
-will be mostly* ignored from then on by the MCP server. Authentication to the underlying REST API
+will be mostly\* ignored from then on by the MCP server. Authentication to the underlying REST API
 requests will use the Direct Trust Connected App instead. For OAuth-backed per-user access, set the
 generated JWT's `sub` claim to the signed-in Tableau user with `JWT_SUB_CLAIM={OAUTH_USERNAME}`. A
 hard-coded `sub` claim should only be used for deployments that are licensed and approved for that
