@@ -26,7 +26,6 @@ const paramsSchema = {
 
 function getDefaultViewWebUrl(
   workbook: Workbook,
-  flattenedViews: View[],
   server: string,
   siteName: string,
 ): string | undefined {
@@ -34,7 +33,7 @@ function getDefaultViewWebUrl(
     return undefined;
   }
 
-  const defaultView = flattenedViews.find((view) => view.id === workbook.defaultViewId);
+  const defaultView = workbook.views?.view.find((view) => view.id === workbook.defaultViewId);
   if (!defaultView?.contentUrl) {
     return undefined;
   }
@@ -120,28 +119,27 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
             },
           });
 
-          const url =
-            getDefaultViewWebUrl(
-              workbook,
-              workbook.views?.view ?? [],
-              extra.config.server,
-              extra.getSiteName(),
-            ) ??
-            workbook.webpageUrl ??
-            '';
-
           return new Ok({
             data: workbook,
-            url,
+            url: '', // Placeholder, will be computed in constrainSuccessResult
           });
         },
         constrainSuccessResult: (result) => {
-          const { data: workbook, url } = result;
+          const { data: workbook } = result;
 
           const filteredWorkbook = filterWorkbookViews({
             workbook,
             boundedContext: configWithOverrides.boundedContext,
           });
+
+          const url =
+            getDefaultViewWebUrl(
+              filteredWorkbook,
+              extra.config.server,
+              extra.getSiteName(),
+            ) ??
+            filteredWorkbook.webpageUrl ??
+            '';
 
           return {
             type: 'success',
