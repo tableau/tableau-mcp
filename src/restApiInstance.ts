@@ -36,6 +36,7 @@ type JwtScopes =
   | 'tableau:tasks:delete'
   | 'tableau:workbook_tags:update'
   | 'tableau:workbooks:delete'
+  | 'tableau:jobs:read'
   | 'tableau:users:read';
 
 export type RestApiArgs = Pick<

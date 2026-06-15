@@ -48,7 +48,7 @@ describe('TableauAccessTokenValidator', () => {
 
   describe('client_id claim resolution', () => {
     it('uses the client_id claim as the OAuth client ID', async () => {
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+      const token = makeBearer(basePayload());
       const result = await validator.validate(token);
 
       expect(result.isOk()).toBe(true);
@@ -58,7 +58,7 @@ describe('TableauAccessTokenValidator', () => {
     });
 
     it('never derives the client ID from aud (the resource URL)', async () => {
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+      const token = makeBearer(basePayload());
       const result = await validator.validate(token);
 
       expect(result.isOk()).toBe(true);
@@ -90,7 +90,7 @@ describe('TableauAccessTokenValidator', () => {
 
   describe('standard validation', () => {
     it('returns AuthInfo.clientId as the resolved OAuth client_id', async () => {
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+      const token = makeBearer(basePayload());
       const result = await validator.validate(token);
 
       expect(result.isOk()).toBe(true);
@@ -123,7 +123,7 @@ describe('TableauAccessTokenValidator', () => {
     });
 
     it('maps token claims to tableauAuthInfo correctly', async () => {
-      const token = makeBearer(basePayload({ client_id: MOCK_CLIENT_ID }));
+      const token = makeBearer(basePayload());
       const result = await validator.validate(token);
 
       expect(result.isOk()).toBe(true);
@@ -132,6 +132,7 @@ describe('TableauAccessTokenValidator', () => {
       expect(extra.type).toBe('Bearer');
       expect(extra.username).toBe('user@example.com');
       expect(extra.siteId).toBe('abc123');
+      expect(extra.siteName).toBe('default-site');
       expect(extra.userId).toBe('uid-1');
     });
 
@@ -152,9 +153,7 @@ describe('TableauAccessTokenValidator', () => {
             },
           }) as unknown as RestApi,
       );
-      const { 'https://tableau.com/userId': _userId, ...payloadWithoutUserId } = basePayload({
-        client_id: MOCK_CLIENT_ID,
-      });
+      const { 'https://tableau.com/userId': _userId, ...payloadWithoutUserId } = basePayload();
       const token = makeBearer(payloadWithoutUserId);
 
       const result = await validator.validate(token);
@@ -180,9 +179,7 @@ describe('TableauAccessTokenValidator', () => {
             },
           }) as unknown as RestApi,
       );
-      const { 'https://tableau.com/userId': _userId, ...payloadWithoutUserId } = basePayload({
-        client_id: MOCK_CLIENT_ID,
-      });
+      const { 'https://tableau.com/userId': _userId, ...payloadWithoutUserId } = basePayload();
       const token = makeBearer(payloadWithoutUserId);
 
       const result = await validator.validate(token);
@@ -191,6 +188,93 @@ describe('TableauAccessTokenValidator', () => {
       if (!result.isErr()) return;
       expect(result.error).toBe('Invalid or expired access token');
       expect(mockGetCurrentServerSession).toHaveBeenCalledOnce();
+    });
+
+    it('resolves tableauAuthInfo.siteName from the current session contentUrl when present', async () => {
+      const mockSetBearerToken = vi.fn();
+      const mockGetCurrentServerSession = vi.fn().mockResolvedValue(
+        new Ok({
+          site: { id: 'abc123', name: 'site-name', contentUrl: 'my-site' },
+          user: { id: 'uid-1', name: 'user@example.com' },
+        }),
+      );
+      vi.mocked(RestApi).mockImplementationOnce(
+        () =>
+          ({
+            setBearerToken: mockSetBearerToken,
+            authenticatedServerMethods: {
+              getCurrentServerSession: mockGetCurrentServerSession,
+            },
+          }) as unknown as RestApi,
+      );
+      const token = makeBearer(basePayload());
+
+      const result = await validator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+      expect(mockSetBearerToken).toHaveBeenCalledWith(token);
+      expect(mockGetCurrentServerSession).toHaveBeenCalledOnce();
+      const extra = result.value.extra as Record<string, unknown>;
+      expect(extra.siteName).toBe('my-site');
+    });
+
+    it('defaults tableauAuthInfo.siteName to empty string when contentUrl is missing', async () => {
+      const mockSetBearerToken = vi.fn();
+      const mockGetCurrentServerSession = vi.fn().mockResolvedValue(
+        new Ok({
+          site: { id: 'abc123', name: 'site-name' },
+          user: { id: 'uid-1', name: 'user@example.com' },
+        }),
+      );
+      vi.mocked(RestApi).mockImplementationOnce(
+        () =>
+          ({
+            setBearerToken: mockSetBearerToken,
+            authenticatedServerMethods: {
+              getCurrentServerSession: mockGetCurrentServerSession,
+            },
+          }) as unknown as RestApi,
+      );
+      const token = makeBearer(basePayload());
+
+      const result = await validator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+      expect(mockSetBearerToken).toHaveBeenCalledWith(token);
+      expect(mockGetCurrentServerSession).toHaveBeenCalledOnce();
+      const extra = result.value.extra as Record<string, unknown>;
+      expect(extra.siteName).toBe('');
+    });
+
+    it('defaults tableauAuthInfo.siteName to empty string when contentUrl is empty', async () => {
+      const mockSetBearerToken = vi.fn();
+      const mockGetCurrentServerSession = vi.fn().mockResolvedValue(
+        new Ok({
+          site: { id: 'abc123', name: 'site-name', contentUrl: '' },
+          user: { id: 'uid-1', name: 'user@example.com' },
+        }),
+      );
+      vi.mocked(RestApi).mockImplementationOnce(
+        () =>
+          ({
+            setBearerToken: mockSetBearerToken,
+            authenticatedServerMethods: {
+              getCurrentServerSession: mockGetCurrentServerSession,
+            },
+          }) as unknown as RestApi,
+      );
+      const token = makeBearer(basePayload());
+
+      const result = await validator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+      if (!result.isOk()) return;
+      expect(mockSetBearerToken).toHaveBeenCalledWith(token);
+      expect(mockGetCurrentServerSession).toHaveBeenCalledOnce();
+      const extra = result.value.extra as Record<string, unknown>;
+      expect(extra.siteName).toBe('');
     });
   });
 

@@ -13,6 +13,9 @@ export function getMockRequestHandlerExtra(): TableauWebRequestHandlerExtra {
     getSiteLuid() {
       return this._siteLuid ?? '';
     },
+    getSiteName() {
+      return 'tc25';
+    },
     getUserLuid() {
       return this._userLuid ?? '';
     },

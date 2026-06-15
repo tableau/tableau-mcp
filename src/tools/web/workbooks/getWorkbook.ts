@@ -16,11 +16,39 @@ import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { getAppConfig } from '../../../web/apps/appConfig.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { ConstrainedResult, WebTool } from '../tool.js';
+import { AppToolResult, WebTool } from '../tool.js';
+import { constructViewWebUrl } from '../utils/viewUrlUtils.js';
 
 const paramsSchema = {
   workbookId: z.string(),
 };
+
+function getDefaultViewWebUrl(
+  workbook: Workbook,
+  server: string,
+  siteName: string,
+): string | undefined {
+  const views = workbook.views?.view;
+  if (!views || views.length === 0) {
+    return undefined;
+  }
+
+  // Try to find the default view first
+  let targetView = workbook.defaultViewId
+    ? views.find((view) => view.id === workbook.defaultViewId)
+    : undefined;
+
+  // If default view was filtered out, fall back to the first view
+  if (!targetView) {
+    targetView = views[0];
+  }
+
+  if (!targetView?.contentUrl) {
+    return undefined;
+  }
+
+  return constructViewWebUrl(server, siteName, targetView.contentUrl);
+}
 
 export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const getWorkbookTool = new WebTool({
@@ -38,7 +66,7 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
     callback: async ({ workbookId }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 
-      return await getWorkbookTool.logAndExecute<Workbook>({
+      return await getWorkbookTool.logAndExecute<AppToolResult<Workbook>>({
         extra,
         args: { workbookId },
         callback: async () => {
@@ -51,59 +79,81 @@ export const getGetWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsS
             return new WorkbookNotAllowedError(isWorkbookAllowedResult.message).toErr();
           }
 
-          return new Ok(
-            await useRestApi({
-              ...extra,
-              jwtScopes: getWorkbookTool.requiredApiScopes,
-              callback: async (restApi) => {
-                // Notice that we already have the workbook if it had been allowed by a project scope.
-                const workbook =
-                  isWorkbookAllowedResult.content ??
-                  (await restApi.workbooksMethods.getWorkbook({
-                    workbookId,
-                    siteId: restApi.siteId,
-                  }));
+          const workbook = await useRestApi({
+            ...extra,
+            jwtScopes: getWorkbookTool.requiredApiScopes,
+            callback: async (restApi) => {
+              // Notice that we already have the workbook if it had been allowed by a project scope.
+              const workbook =
+                isWorkbookAllowedResult.content ??
+                (await restApi.workbooksMethods.getWorkbook({
+                  workbookId,
+                  siteId: restApi.siteId,
+                }));
 
-                // The views returned by the getWorkbook API do not include usage statistics.
-                // Query the views for the workbook to get each view's usage statistics.
-                if (workbook.views) {
-                  const views = await restApi.viewsMethods.queryViewsForWorkbook({
-                    workbookId,
-                    siteId: restApi.siteId,
-                    includeUsageStatistics: true,
-                  });
+              // The views returned by the getWorkbook API do not include usage statistics.
+              // Query the views for the workbook to get each view's usage statistics.
+              if (workbook.views) {
+                const views = await restApi.viewsMethods.queryViewsForWorkbook({
+                  workbookId,
+                  siteId: restApi.siteId,
+                  includeUsageStatistics: true,
+                });
 
-                  workbook.views.view = views;
-                }
+                workbook.views.view = views;
+              }
 
-                if (configWithOverrides.disableMetadataApiRequests) {
-                  return workbook;
-                }
+              if (configWithOverrides.disableMetadataApiRequests) {
+                return workbook;
+              }
 
-                try {
-                  const response = await restApi.metadataMethods.graphql(
-                    getWorkbookLineageQuery([workbook.id]),
-                  );
-                  return mergeWorkbookLineage(
-                    [workbook],
-                    getWorkbookLineageByLuid(response),
-                    configWithOverrides.boundedContext.datasourceIds,
-                  )[0];
-                } catch (error) {
-                  log({
-                    message: `Failed to enrich workbook ${workbook.id} with lineage metadata`,
-                    level: 'warning',
-                    logger: 'lineage',
-                    data: getExceptionMessage(error),
-                  });
-                  return workbook;
-                }
-              },
-            }),
-          );
+              try {
+                const response = await restApi.metadataMethods.graphql(
+                  getWorkbookLineageQuery([workbook.id]),
+                );
+                return mergeWorkbookLineage(
+                  [workbook],
+                  getWorkbookLineageByLuid(response),
+                  configWithOverrides.boundedContext.datasourceIds,
+                )[0];
+              } catch (error) {
+                log({
+                  message: `Failed to enrich workbook ${workbook.id} with lineage metadata`,
+                  level: 'warning',
+                  logger: 'lineage',
+                  data: getExceptionMessage(error),
+                });
+                return workbook;
+              }
+            },
+          });
+
+          return new Ok({
+            data: workbook,
+            url: '', // Placeholder, will be computed in constrainSuccessResult
+          });
         },
-        constrainSuccessResult: (workbook) =>
-          filterWorkbookViews({ workbook, boundedContext: configWithOverrides.boundedContext }),
+        constrainSuccessResult: (result) => {
+          const { data: workbook } = result;
+
+          const filteredWorkbook = filterWorkbookViews({
+            workbook,
+            boundedContext: configWithOverrides.boundedContext,
+          });
+
+          const url =
+            getDefaultViewWebUrl(filteredWorkbook, extra.config.server, extra.getSiteName()) ??
+            filteredWorkbook.webpageUrl ??
+            '';
+
+          return {
+            type: 'success',
+            result: {
+              data: filteredWorkbook,
+              url,
+            },
+          };
+        },
       });
     },
   });
@@ -117,17 +167,14 @@ export function filterWorkbookViews({
 }: {
   workbook: Workbook;
   boundedContext: BoundedContext;
-}): ConstrainedResult<Workbook> {
+}): Workbook {
   const { viewIds, tags } = boundedContext;
 
   // We don't need to check the tags on the workbook since we already
   // did that before getting the detailed workbook information.
   // We only need to check the views on the workbook against viewIds and tags.
   if (!workbook.views || (!viewIds && !tags)) {
-    return {
-      type: 'success',
-      result: flattenWorkbookViewUsage(workbook),
-    };
+    return flattenWorkbookViewUsage(workbook);
   }
 
   let views = workbook.views.view;
@@ -140,12 +187,10 @@ export function filterWorkbookViews({
     views = views.filter((view) => view.tags?.tag?.some((tag) => tags.has(tag.label)));
   }
 
-  workbook.views.view = views;
-
-  return {
-    type: 'success',
-    result: flattenWorkbookViewUsage(workbook),
-  };
+  return flattenWorkbookViewUsage({
+    ...workbook,
+    views: { view: views },
+  });
 }
 
 function flattenWorkbookViewUsage(workbook: Workbook): Workbook {
@@ -163,3 +208,7 @@ function flattenWorkbookViewUsage(workbook: Workbook): Workbook {
     },
   };
 }
+
+export const exportedForTesting = {
+  getDefaultViewWebUrl,
+};

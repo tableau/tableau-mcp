@@ -7,6 +7,7 @@ import { getDeleteExtractRefreshTaskTool } from './extractRefreshTasks/deleteExt
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getOAuthTokenTool } from './getOAuthToken/getOAuthToken.js';
+import { getListJobsTool } from './jobs/listJobs.js';
 import { getListDatasourcesTool } from './listDatasources/listDatasources.js';
 import { getListProjectsTool } from './projects/listProjects.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
@@ -37,6 +38,7 @@ export const webToolFactories = [
   getListDatasourcesTool,
   getListExtractRefreshTasksTool,
   getDeleteExtractRefreshTaskTool,
+  getListJobsTool,
   getListUsersTool,
   getQueryDatasourceTool,
   getListAllPulseMetricDefinitionsTool,

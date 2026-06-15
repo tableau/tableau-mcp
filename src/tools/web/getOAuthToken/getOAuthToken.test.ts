@@ -44,6 +44,7 @@ describe('getOAuthTokenTool', () => {
         username: 'test@example.com',
         server: 'https://example.com',
         siteId: 'test-site-id',
+        siteName: 'test-site',
         clientId: 'test-client-id',
       };
       return extra;
@@ -68,6 +69,7 @@ describe('getOAuthTokenTool', () => {
         username: 'test-user',
         server: 'https://example.com',
         siteId: 'site-id',
+        siteName: 'test-site',
         accessToken: 'tableau-access-token',
         refreshToken: 'tableau-refresh-token',
       };
