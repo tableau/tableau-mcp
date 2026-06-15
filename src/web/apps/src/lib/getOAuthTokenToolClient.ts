@@ -9,24 +9,17 @@ import { App } from '@modelcontextprotocol/ext-apps';
  * @returns Promise containing the OAuth token string
  */
 export async function callGetOAuthTokenTool(app: App): Promise<string> {
-  try {
-    const result = await app.callServerTool({
-      name: 'get-oauth-token',
-      arguments: {},
-    });
+  const result = await app.callServerTool({
+    name: 'get-oauth-token',
+    arguments: {},
+  });
 
-    // Parse the result to extract the token
-    const content = result.content[0];
-    if (content.type === 'text') {
-      const data = JSON.parse(content.text);
-      const token = data.token;
-      console.info('OAuth token retrieved');
-      return token;
-    }
-
-    throw new Error('Unexpected response format from get-oauth-token');
-  } catch (error) {
-    console.error('Failed to retrieve OAuth token:', error);
-    throw error;
+  // Parse the result to extract the token
+  const content = result.content[0];
+  if (content.type === 'text') {
+    const data = JSON.parse(content.text);
+    return data.token;
   }
+
+  throw new Error('Unexpected response format from get-oauth-token');
 }

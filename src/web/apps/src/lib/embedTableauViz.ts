@@ -51,8 +51,6 @@ export function embedTableauViz(containerId: string, vizUrl: string, token: stri
   // Create and append the viz element
   const viz = createTableauVizElement(vizUrl, token);
   container.appendChild(viz);
-
-  console.info('Tableau viz embedded successfully');
 }
 
 /**
@@ -69,8 +67,8 @@ export function extractViewUrlFromResult(result: any): string | null {
       // Check for various possible URL fields
       return data.viewUrl || data.contentUrl || data.webpageUrl || data.url || null;
     }
-  } catch (error) {
-    console.error('Failed to extract view URL from result:', error);
+  } catch {
+    // Silently handle parsing errors
   }
 
   return null;
