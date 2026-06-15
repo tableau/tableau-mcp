@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
-import { parseListJobsResponse } from './jobsApi.js';
+import { listJobsResponseSchema } from './jobsApi.js';
+
+const parseListJobsResponse = (raw: unknown): z.infer<typeof listJobsResponseSchema> =>
+  listJobsResponseSchema.parse(raw);
 
 const pagination = { pageNumber: '1', pageSize: '100', totalAvailable: '0' };
 

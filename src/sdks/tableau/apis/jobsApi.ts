@@ -16,7 +16,7 @@ const tolerantJobArray = z.array(z.unknown()).transform((jobs) =>
   }),
 );
 
-const listJobsResponseSchema = z.object({
+export const listJobsResponseSchema = z.object({
   pagination: paginationSchema,
   backgroundJobs: z.union([
     z.object({
@@ -25,12 +25,6 @@ const listJobsResponseSchema = z.object({
     z.object({}).transform(() => ({ backgroundJob: [] })),
   ]),
 });
-
-export type ListJobsResponse = z.infer<typeof listJobsResponseSchema>;
-
-export function parseListJobsResponse(raw: unknown): ListJobsResponse {
-  return listJobsResponseSchema.parse(raw);
-}
 
 /**
  * Query Jobs
