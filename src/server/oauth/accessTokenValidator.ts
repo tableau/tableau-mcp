@@ -85,6 +85,24 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
           return new Err('Invalid or expired access token');
         }
 
+        const restApi = new RestApi({
+          maxRequestTimeoutMs: this.config.maxRequestTimeoutMs,
+        });
+
+        restApi.setCredentials(tableauAccessToken, tableauUserId);
+        const sessionResult = await restApi.authenticatedServerMethods.getCurrentServerSession();
+        if (sessionResult.isErr()) {
+          log({
+            message: 'Embedded access token validation error',
+            level: 'error',
+            logger: 'oauth',
+            data: sessionResult.error,
+          });
+          return new Err('Invalid or expired access token');
+        }
+
+        const siteName = sessionResult.value.site.contentUrl || '';
+
         tableauAuthInfo = {
           type: 'X-Tableau-Auth',
           username: sub,
@@ -93,6 +111,7 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
           server: tableauServer,
           accessToken: tableauAccessToken,
           refreshToken: tableauRefreshToken,
+          siteName,
         };
       } else {
         const { tableauUserId, tableauSiteId, tableauServer, sub } = mcpAccessToken.data;
@@ -100,6 +119,7 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
           type: 'X-Tableau-Auth',
           username: sub,
           server: tableauServer,
+          siteName: this.config.siteName,
           ...(tableauUserId ? { userId: tableauUserId } : {}),
           ...(tableauSiteId ? { siteId: tableauSiteId } : {}),
         };
@@ -176,31 +196,31 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
       // (enforced by the schema). aud holds the resource URL and is never used as the client ID.
       const oauthClientId = client_id;
 
-      if (!userId) {
-        const restApi = new RestApi({
-          maxRequestTimeoutMs: this.config.maxRequestTimeoutMs,
+      const restApi = new RestApi({
+        maxRequestTimeoutMs: this.config.maxRequestTimeoutMs,
+      });
+
+      restApi.setBearerToken(token);
+      const sessionResult = await restApi.authenticatedServerMethods.getCurrentServerSession();
+      if (sessionResult.isErr()) {
+        log({
+          message: 'Tableau access token validation error',
+          level: 'error',
+          logger: 'oauth',
+          data: sessionResult.error,
         });
-
-        restApi.setBearerToken(token);
-        const sessionResult = await restApi.authenticatedServerMethods.getCurrentServerSession();
-        if (sessionResult.isErr()) {
-          log({
-            message: 'Tableau access token validation error',
-            level: 'debug',
-            logger: 'oauth',
-            data: sessionResult.error,
-          });
-          return new Err('Invalid or expired access token');
-        }
-
-        userId = sessionResult.value.user.id;
+        return new Err('Invalid or expired access token');
       }
+
+      userId ??= sessionResult.value.user.id;
+      const siteName = sessionResult.value.site.contentUrl || '';
 
       const tableauAuthInfo: TableauAuthInfo = {
         type: 'Bearer',
         username: sub,
         server: targetUrl,
         siteId,
+        siteName,
         userId,
         raw: token,
         clientId: oauthClientId,

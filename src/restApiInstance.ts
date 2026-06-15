@@ -34,6 +34,7 @@ type JwtScopes =
   | 'tableau:mcp_site_settings:read'
   | 'tableau:tasks:read'
   | 'tableau:tasks:delete'
+  | 'tableau:jobs:read'
   | 'tableau:users:read';
 
 export type RestApiArgs = Pick<

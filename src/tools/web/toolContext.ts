@@ -16,6 +16,7 @@ export type TableauWebToolContext = TableauToolContext<WebMcpServer> & {
   tableauAuthInfo: TableauAuthInfo | undefined;
   getConfigWithOverrides: () => Promise<OverridableConfig>;
   getSiteLuid: () => string;
+  getSiteName: () => string;
   getUserLuid: () => string;
   setSiteLuid?: (siteLuid: string) => void;
   setUserLuid?: (userLuid: string) => void;
