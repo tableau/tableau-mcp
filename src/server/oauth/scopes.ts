@@ -39,8 +39,8 @@ export type TableauApiScope =
   | 'tableau:mcp_site_settings:read'
   | 'tableau:tasks:read'
   | 'tableau:tasks:delete'
-  | 'tableau:content:write'
-  | 'tableau:content:delete'
+  | 'tableau:workbook_tags:update'
+  | 'tableau:workbooks:delete'
   | 'tableau:users:read';
 
 /**
@@ -98,14 +98,14 @@ const toolScopeMap: Record<
     mcp: ['tableau:mcp:workbook:read'],
     api: new Set(['tableau:content:read', 'tableau:mcp_site_settings:read']),
   },
-  // Admin-only destructive tool. Two-phase: preview tags the workbook (content:write) and
-  // resolves the owner (users:read); confirm deletes it (content:delete). getWorkbook → content:read.
+  // Admin-only destructive tool. Two-phase: preview tags the workbook (workbook_tags:update) and
+  // resolves the owner (users:read); confirm deletes it (workbooks:delete). getWorkbook → content:read.
   // adminGate.assertAdmin → GET /sites/{siteId}/users/{userId} → users:read.
   'delete-workbook': {
     mcp: ['tableau:mcp:workbook:delete'],
     api: new Set([
-      'tableau:content:delete',
-      'tableau:content:write',
+      'tableau:workbooks:delete',
+      'tableau:workbook_tags:update',
       'tableau:content:read',
       'tableau:users:read',
     ]),

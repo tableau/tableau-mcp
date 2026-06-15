@@ -82,7 +82,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
    * On Tableau Cloud the workbook is moved to the recycle bin and can be restored
    * for a limited time before permanent removal.
    *
-   * Required scopes (Tableau Cloud): `tableau:content:delete`
+   * Required scopes (Tableau Cloud): `tableau:workbooks:delete`
    *
    * @param workbookId - The ID of the workbook to delete.
    * @param siteId - The Tableau site ID
@@ -104,7 +104,7 @@ export default class WorkbooksMethods extends AuthenticatedMethods<typeof workbo
   /**
    * Adds one or more tags to the specified workbook.
    *
-   * Required scopes (Tableau Cloud): `tableau:content:write`
+   * Required scopes (Tableau Cloud): `tableau:workbook_tags:update`
    *
    * @param workbookId - The ID of the workbook to tag.
    * @param siteId - The Tableau site ID
