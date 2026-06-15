@@ -187,7 +187,18 @@ export class WebMcpServer extends Server {
       resourceUri,
       { mimeType: RESOURCE_MIME_TYPE },
       async () => {
-        const htmlContent = await readFile(join(__dirname, htmlPath), 'utf-8');
+        let htmlContent = await readFile(join(__dirname, htmlPath), 'utf-8');
+
+        // The HTML template contains {{SERVER_URL}} which gets replaced with the full
+        // Tableau Embedding API URL so the app can load the embedding library from
+        // the correct server (e.g., https://server.com/javascripts/api/tableau.embedding.3.latest.min.js)
+        const config = getConfig();
+        const embeddingApiUrl = new URL(
+          '/javascripts/api/tableau.embedding.3.latest.min.js',
+          config.server,
+        ).toString();
+        htmlContent = htmlContent.replace('{{SERVER_URL}}', embeddingApiUrl);
+
         return {
           contents: [
             {

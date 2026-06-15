@@ -30,6 +30,7 @@ export type TableauApiScope =
   | 'tableau:content:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
+  | 'tableau:views:embed'
   | 'tableau:insight_definitions_metrics:read'
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
