@@ -126,11 +126,11 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
-  // Token retrieval: no Tableau REST API calls, no content scope required.
-  // Any authenticated user may retrieve their own token regardless of granted scopes.
+  // Token retrieval: no Tableau REST API calls, but requires tableau:views:embed
+  // for the returned token to work with Tableau Embedding API.
   'get-oauth-token': {
     mcp: [],
-    api: new Set<TableauApiScope>(),
+    api: new Set<TableauApiScope>(['tableau:views:embed']),
   },
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
