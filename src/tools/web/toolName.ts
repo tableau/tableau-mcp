@@ -2,6 +2,7 @@ export const webToolNames = [
   'list-datasources',
   'list-extract-refresh-tasks',
   'delete-extract-refresh-task',
+  'list-jobs',
   'list-users',
   'list-workbooks',
   'list-projects',
@@ -41,6 +42,7 @@ export const webToolGroupNames = [
   'pulse',
   'content-exploration',
   'tasks',
+  'jobs',
   'users',
   'token-management',
   'admin-insights',
@@ -71,6 +73,7 @@ export const webToolGroups = {
   ],
   'content-exploration': ['search-content'],
   tasks: ['list-extract-refresh-tasks', 'delete-extract-refresh-task'],
+  jobs: ['list-jobs'],
   users: ['list-users'],
   'token-management': ['get-oauth-token', 'revoke-access-token', 'reset-consent'],
   'admin-insights': [
