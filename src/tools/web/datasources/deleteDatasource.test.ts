@@ -134,7 +134,7 @@ describe('deleteDatasourceTool', () => {
       title: 'Delete Datasource',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     });
   });

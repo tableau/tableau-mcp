@@ -109,7 +109,11 @@ compute the \`confirmationToken\` yourself — use the exact value the preview r
       title: 'Delete Datasource',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      // Hard delete-by-id: a second delete of the same datasourceId 404s (isError: true), so the
+      // operation is not idempotent. A client trusting an idempotent hint and retrying after a
+      // transient failure would get a spurious error for a delete that already succeeded.
+      // Matches the accepted resolution for delete-extract-refresh-task (tableau/tableau-mcp#392).
+      idempotentHint: false,
       openWorldHint: false,
     },
     callback: async (
