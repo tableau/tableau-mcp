@@ -82,7 +82,7 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
    * On Tableau Cloud the data source is moved to the recycle bin and can be restored
    * for a limited time before permanent removal.
    *
-   * Required scopes (Tableau Cloud): `tableau:content:delete`
+   * Required scopes (Tableau Cloud): `tableau:datasources:delete`
    *
    * @param datasourceId - The ID of the data source to delete.
    * @param siteId - The Tableau site ID
@@ -104,7 +104,7 @@ export default class DatasourcesMethods extends AuthenticatedMethods<typeof data
   /**
    * Adds one or more tags to the specified data source.
    *
-   * Required scopes (Tableau Cloud): `tableau:content:write`
+   * Required scopes (Tableau Cloud): `tableau:datasource_tags:update`
    *
    * @param datasourceId - The ID of the data source to tag.
    * @param siteId - The Tableau site ID

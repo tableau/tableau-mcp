@@ -53,6 +53,7 @@ const mocks = vi.hoisted(() => ({
   mockQueryUserOnSite: vi.fn(),
   mockGraphql: vi.fn(),
   mockAssertAdmin: vi.fn(),
+  mockIsDatasourceAllowed: vi.fn(),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -79,6 +80,12 @@ vi.mock('../adminGate.js', () => ({
   assertAdmin: mocks.mockAssertAdmin,
 }));
 
+vi.mock('../resourceAccessChecker.js', () => ({
+  resourceAccessChecker: {
+    isDatasourceAllowed: mocks.mockIsDatasourceAllowed,
+  },
+}));
+
 vi.mock('../../../config.js', () => ({
   getConfig: vi.fn(() => ({
     adminToolsEnabled: true,
@@ -92,6 +99,7 @@ describe('deleteDatasourceTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.mockAssertAdmin.mockResolvedValue(new Ok(true));
+    mocks.mockIsDatasourceAllowed.mockResolvedValue({ allowed: true });
     mocks.mockQueryDatasource.mockResolvedValue(mockDatasource);
     mocks.mockQueryUserOnSite.mockResolvedValue({
       id: 'owner-1',
@@ -150,6 +158,39 @@ describe('deleteDatasourceTool', () => {
     expect(result.content[0].text).toContain('site administrator');
     expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
     expect(mocks.mockAddTagsToDatasource).not.toHaveBeenCalled();
+    expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
+  });
+
+  // --- Tool scoping (bounded context) ---
+
+  it('should reject preview when the datasource is out of scope and perform no side effects', async () => {
+    mocks.mockIsDatasourceAllowed.mockResolvedValue({
+      allowed: false,
+      message: 'Querying the datasource with LUID ds-1 is not allowed.',
+    });
+    const result = await getToolResult({ datasourceId: 'ds-1' });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('not allowed');
+    expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    expect(mocks.mockAddTagsToDatasource).not.toHaveBeenCalled();
+    expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
+  });
+
+  it('should reject delete when the datasource is out of scope and perform no side effects', async () => {
+    mocks.mockIsDatasourceAllowed.mockResolvedValue({
+      allowed: false,
+      message: 'Querying the datasource with LUID ds-1 is not allowed.',
+    });
+    const result = await getToolResult({
+      datasourceId: 'ds-1',
+      confirm: true,
+      confirmationToken: validToken('ds-1'),
+    });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('not allowed');
+    expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
     expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
   });
 
@@ -232,6 +273,19 @@ describe('deleteDatasourceTool', () => {
       siteId: 'test-site-id',
       tagLabels: ['stale-pending-deletion'],
     });
+  });
+
+  it('should fall back to the default tag when the caller passes an empty or whitespace tag', async () => {
+    const result = await getToolResult({ datasourceId: 'ds-1', tag: '   ' });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(DEFAULT_PENDING_DELETION_TAG);
+    expect(mocks.mockAddTagsToDatasource).toHaveBeenCalledWith({
+      datasourceId: 'ds-1',
+      siteId: 'test-site-id',
+      tagLabels: [DEFAULT_PENDING_DELETION_TAG],
+    });
+    expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
   });
 
   it('should still preview when owner cannot be resolved', async () => {

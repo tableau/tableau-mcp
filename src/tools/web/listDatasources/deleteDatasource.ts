@@ -4,7 +4,11 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { AdminOnlyError, ArgsValidationError } from '../../../errors/mcpToolError.js';
+import {
+  AdminOnlyError,
+  ArgsValidationError,
+  DatasourceNotAllowedError,
+} from '../../../errors/mcpToolError.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
@@ -16,6 +20,7 @@ import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { assertAdmin } from '../adminGate.js';
+import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 
 const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
@@ -141,6 +146,17 @@ compute the \`confirmationToken\` yourself — use the exact value the preview r
                 ).toErr();
               }
 
+              // Honor the same tool-scoping rules the read tools enforce (e.g. get-datasource-metadata):
+              // a data source outside the configured bounded context cannot be tagged or deleted.
+              // Runs before any read/write so a rejected call has zero side effects.
+              const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
+                datasourceLuid: datasourceId,
+                extra,
+              });
+              if (!isDatasourceAllowedResult.allowed) {
+                return new DatasourceNotAllowedError(isDatasourceAllowedResult.message).toErr();
+              }
+
               // Resolve identity in both phases so the response (preview AND the final delete
               // confirmation) always names the data source, project, and owner for an auditable
               // record of exactly what was acted on.
@@ -169,7 +185,9 @@ compute the \`confirmationToken\` yourself — use the exact value the preview r
                 disableMetadataApiRequests: configWithOverrides.disableMetadataApiRequests,
               });
 
-              const pendingTag = tag ?? DEFAULT_PENDING_DELETION_TAG;
+              // Treat undefined, empty, and whitespace-only tags as "use the default" so a
+              // blank label never gets applied to the data source.
+              const pendingTag = tag?.trim() ? tag : DEFAULT_PENDING_DELETION_TAG;
               await restApi.datasourcesMethods.addTagsToDatasource({
                 datasourceId,
                 siteId,

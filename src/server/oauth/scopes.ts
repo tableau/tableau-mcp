@@ -43,6 +43,8 @@ export type TableauApiScope =
   | 'tableau:tasks:delete'
   | 'tableau:workbook_tags:update'
   | 'tableau:workbooks:delete'
+  | 'tableau:datasource_tags:update'
+  | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
   | 'tableau:users:read';
 
@@ -119,14 +121,14 @@ const toolScopeMap: Record<
       'tableau:users:read',
     ]),
   },
-  // Admin-only destructive tool. Preview tags the datasource (content:write), resolves the owner
-  // (users:read), and warns about dependent workbooks/flows via the Metadata API (content:read);
-  // confirm deletes it (content:delete). adminGate.assertAdmin → GET /users/{id} → users:read.
+  // Admin-only destructive tool. Preview tags the datasource (datasource_tags:update), resolves the
+  // owner (users:read), and warns about dependent workbooks/flows via the Metadata API (content:read);
+  // confirm deletes it (datasources:delete). adminGate.assertAdmin → GET /users/{id} → users:read.
   'delete-datasource': {
     mcp: ['tableau:mcp:datasource:delete'],
     api: new Set([
-      'tableau:content:delete',
-      'tableau:content:write',
+      'tableau:datasources:delete',
+      'tableau:datasource_tags:update',
       'tableau:content:read',
       'tableau:users:read',
     ]),

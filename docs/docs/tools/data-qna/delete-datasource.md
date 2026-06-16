@@ -37,6 +37,14 @@ these dependents so you can decide before deleting. The dependency check uses th
 the Metadata API is disabled or unavailable, the preview notes that and still allows deletion.
 :::
 
+## Tool scoping
+
+This tool honors the same [tool-scoping](../../configuration/mcp-config/tool-scoping.md) rules as the
+read tools (for example [Get Datasource Metadata](get-datasource-metadata.md)). If the server is
+configured with a bounded context (such as `INCLUDE_DATASOURCE_IDS` or `INCLUDE_PROJECT_IDS`), a data
+source that falls outside that scope cannot be previewed or deleted — the request is rejected before
+any tag or delete, so there are no side effects. Being an administrator does not bypass tool scoping.
+
 ## APIs called
 
 - [Add Tags to Data Source](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#add_tags_to_data_source) (preview phase)
