@@ -47,6 +47,7 @@ describe('server', () => {
         'query-admin-insights-site-content',
         'query-admin-insights-job-performance',
         'get-stale-content-report',
+        'delete-workbook',
       ];
       let expectedToolNames = [...webToolNames];
 
@@ -129,6 +130,7 @@ describe('server', () => {
         'query-admin-insights-site-content',
         'query-admin-insights-job-performance',
         'get-stale-content-report',
+        'delete-workbook',
       ];
       let expectedWebToolNames = [...webToolNames];
 
