@@ -15,8 +15,6 @@ describe('createTableauVizElement', () => {
     expect(element.tagName.toLowerCase()).toBe('tableau-viz');
     expect(element.getAttribute('src')).toBe(vizUrl);
     expect(element.getAttribute('token')).toBe(token);
-    // expect(element.getAttribute('toolbar')).toBe('bottom');
-    // expect(element.getAttribute('hide-tabs')).toBe('false');
   });
 });
 
