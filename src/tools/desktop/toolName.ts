@@ -24,6 +24,7 @@ export const desktopToolNames = [
   'search-commands',
   'lookup-workbook-schema',
   'search-workbook-examples',
+  'execute-tableau-command',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 

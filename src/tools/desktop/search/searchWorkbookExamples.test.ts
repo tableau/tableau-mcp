@@ -138,5 +138,8 @@ async function getResult({
 }): Promise<CallToolResult> {
   const tool = getSearchWorkbookExamplesTool(new DesktopMcpServer());
   const callback = await Provider.from(tool.callback);
-  return await callback({ feature, query, max_results, source }, getMockRequestHandlerExtra());
+  return await callback(
+    { feature, query, max_results, source: source ?? 'curated' },
+    getMockRequestHandlerExtra(),
+  );
 }

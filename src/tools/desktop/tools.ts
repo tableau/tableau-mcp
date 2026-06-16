@@ -1,3 +1,4 @@
+import { getExecuteTableauCommandTool } from './commands/executeTableauCommand.js';
 import { getApplyDashboardTool } from './dashboard/applyDashboard.js';
 import { getApplyDashboardWithViewpointsTool } from './dashboard/applyDashboardWithViewpoints.js';
 import { getBuildAndApplyDashboardTool } from './dashboard/buildAndApplyDashboard.js';
@@ -50,4 +51,5 @@ export const desktopToolFactories = [
   getSearchCommandsTool,
   getLookupWorkbookSchemaTool,
   getSearchWorkbookExamplesTool,
+  getExecuteTableauCommandTool,
 ];
