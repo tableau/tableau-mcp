@@ -183,19 +183,35 @@ export class WebMcpServer extends Server {
     );
 
     // Register the resource, which returns the bundled HTML/JavaScript for the UI.
+    const config = getConfig();
+    const serverOrigin = new URL(config.server).origin;
+
+    // Allow Tableau Online, Tableau.com domains, and configured server
+    const cspDomains = ['https://*.online.tableau.com', 'https://*.tableau.com', serverOrigin];
+
     registerAppResource(
       // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.
       this.mcpServer,
       tool.name,
       resourceUri,
-      { mimeType: RESOURCE_MIME_TYPE },
+      {
+        mimeType: RESOURCE_MIME_TYPE,
+        _meta: {
+          ui: {
+            csp: {
+              connectDomains: cspDomains,
+              resourceDomains: cspDomains,
+              frameDomains: cspDomains,
+            },
+          },
+        },
+      },
       async () => {
         let htmlContent = await readFile(join(__dirname, htmlPath), 'utf-8');
 
         // The HTML template contains {{SERVER_URL}} which gets replaced with the full
         // Tableau Embedding API URL so the app can load the embedding library from
         // the correct server (e.g., https://server.com/javascripts/api/tableau.embedding.3.latest.min.js)
-        const config = getConfig();
         const embeddingApiUrl = new URL(
           '/javascripts/api/tableau.embedding.3.latest.min.js',
           config.server,
