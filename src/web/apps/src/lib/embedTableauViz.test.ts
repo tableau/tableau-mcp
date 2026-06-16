@@ -1,8 +1,7 @@
 /**
- * @file Tests for embedTableauViz
  * @vitest-environment jsdom
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createTableauVizElement, embedTableauViz } from './embedTableauViz.js';
 
@@ -29,6 +28,12 @@ describe('embedTableauViz', () => {
     document.body.appendChild(container);
   });
 
+  afterEach(() => {
+    // Clean up
+    const container = document.getElementById('tableauVizContainer');
+    container?.remove();
+  });
+
   it('should embed viz into tableauVizContainer', () => {
     const vizUrl = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view';
     const token = 'test-token-123';
@@ -51,8 +56,8 @@ describe('embedTableauViz', () => {
     const vizUrl = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view';
     const token = 'test-token-123';
 
-    expect(() => embedTableauViz(vizUrl, token)).toThrow(
-      'Container element with id "tableauVizContainer" not found',
-    );
+    expect(() => {
+      embedTableauViz(vizUrl, token);
+    }).toThrow('Container element with id "tableauVizContainer" not found');
   });
 });
