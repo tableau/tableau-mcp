@@ -2,6 +2,7 @@ import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
 import { paginationSchema } from '../types/pagination.js';
+import { tagsSchema } from '../types/tags.js';
 import { workbookSchema } from '../types/workbook.js';
 import { paginationParameters } from './paginationParameters.js';
 
@@ -42,6 +43,57 @@ const queryWorkbooksForSiteEndpoint = makeEndpoint({
   }),
 });
 
-const workbooksApi = makeApi([queryWorkbooksForSiteEndpoint, getWorkbookEndpoint]);
+const deleteWorkbookEndpoint = makeEndpoint({
+  method: 'delete',
+  path: '/sites/:siteId/workbooks/:workbookId',
+  alias: 'deleteWorkbook',
+  description:
+    'Deletes the specified workbook from the site. On Tableau Cloud the workbook is moved to the recycle bin and can be restored for a limited time.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'workbookId',
+      type: 'Path',
+      schema: z.string(),
+    },
+  ],
+  response: z.void(),
+});
+
+const addTagsToWorkbookEndpoint = makeEndpoint({
+  method: 'put',
+  path: '/sites/:siteId/workbooks/:workbookId/tags',
+  alias: 'addTagsToWorkbook',
+  description: 'Adds one or more tags to the specified workbook.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'workbookId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'body',
+      type: 'Body',
+      schema: z.object({ tags: tagsSchema }),
+    },
+  ],
+  response: z.object({ tags: tagsSchema }),
+});
+
+const workbooksApi = makeApi([
+  queryWorkbooksForSiteEndpoint,
+  getWorkbookEndpoint,
+  deleteWorkbookEndpoint,
+  addTagsToWorkbookEndpoint,
+]);
 
 export const workbooksApis = [...workbooksApi] as const satisfies ZodiosEndpointDefinitions;
