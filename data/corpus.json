@@ -1,0 +1,904 @@
+{
+  "version": "2.0",
+  "description": "Tableau workbook transformation examples with XML diffs at multiple granularity levels",
+  "example_count": 62,
+  "examples": [
+    {
+      "id": "experiment_20260105_162540_0",
+      "title": "New workbook",
+      "description": "New workbook",
+      "user_input": "New workbook",
+      "tags": [
+        "create"
+      ],
+      "complexity": "medium",
+      "diff_lines": 63,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_162540_0\\\\workbook_before.twb\"\t2026-01-06 10:22:15.753673800 -0800\n+++ \"experiments\\\\experiment_20260105_162540_0\\\\workbook_after.twb\"\t2026-01-06 10:22:15.755671700 -0800\n@@ -5,9 +5,59 @@\n   <document-format-change-manifest>\n     <AnimationOnByDefault />\n     <MarkAnimation />\n+    <SheetIdentifierTracking />\n+    <WindowsPersistSimpleIdentifiers />\n   </document-format-change-manifest>\n   <preferences>\n     <preference name='ui.encoding.shelf.height' value='24' />\n     <preference name='ui.shelf.height' value='26' />\n   </preferences>\n+  <datasources />\n+  <worksheets>\n+    <worksheet name='Sheet 1'>\n+      <table>\n+        <view>\n+          <datasources />\n+          <aggregation value='true' />\n+        </view>\n+        <style />\n+        <panes>\n+          <pane selection-relaxation-option='selection-relaxation-allow'>\n+            <view>\n+              <breakdown value='auto' />\n+            </view>\n+            <mark class='Automatic' />\n+          </pane>\n+        </panes>\n+        <rows />\n+        <cols />\n+      </table>\n+      <simple-id uuid='{D4DCB499-07EB-4111-AD6C-D69EA504B926}' />\n+    </worksheet>\n+  </worksheets>\n+  <windows>\n+    <window class='worksheet' maximized='true' name='Sheet 1'>\n+      <cards>\n+        <edge name='left'>\n+          <strip size='160'>\n+            <card type='pages' />\n+            <card type='filters' />\n+            <card type='marks' />\n+          </strip>\n+        </edge>\n+        <edge name='top'>\n+          <strip size='31'>\n+            <card type='columns' />\n+          </strip>\n+          <strip size='31'>\n+            <card type='rows' />\n+          </strip>\n+          <strip size='31'>\n+            <card type='title' />\n+          </strip>\n+        </edge>\n+      </cards>\n+      <simple-id uuid='{8A46BC0A-3306-42BA-A979-4835049125D0}' />\n+    </window>\n+  </windows>\n </workbook>\n"
+    },
+    {
+      "id": "experiment_20260105_162605_5",
+      "title": "removing a hierarchy",
+      "description": "removing a hierarchy",
+      "user_input": "removing a hierarchy",
+      "tags": [
+        "hierarchy"
+      ],
+      "complexity": "simple",
+      "diff_lines": 17,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_162605_5\\\\workbook_before.twb\"\t2026-01-06 10:22:15.795947000 -0800\n+++ \"experiments\\\\experiment_20260105_162605_5\\\\workbook_after.twb\"\t2026-01-06 10:22:15.798946100 -0800\n@@ -2793,13 +2793,6 @@\n         </groupfilter>\n       </group>\n       <drill-paths>\n-        <drill-path name='Location'>\n-          <field>[Country/Region]</field>\n-          <field>[Region]</field>\n-          <field>[State/Province]</field>\n-          <field>[City]</field>\n-          <field>[Postal Code]</field>\n-        </drill-path>\n         <drill-path name='Product'>\n           <field>[Category]</field>\n           <field>[Sub-Category]</field>\n"
+    },
+    {
+      "id": "experiment_20260105_162615_7",
+      "title": "Create a map of US cities",
+      "description": "Create a map of US cities",
+      "user_input": "Create a map of US cities",
+      "tags": [
+        "chart",
+        "create"
+      ],
+      "complexity": "medium",
+      "diff_lines": 59,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_162615_7\\\\workbook_before.twb\"\t2026-01-06 10:22:15.385786800 -0800\n+++ \"experiments\\\\experiment_20260105_162615_7\\\\workbook_after.twb\"\t2026-01-06 10:22:15.382786400 -0800\n@@ -4,6 +4,7 @@\n <workbook original-version='18.1' source-build='0.0.0 (0000.0.0.0)' source-platform='win' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>\n   <document-format-change-manifest>\n     <AnimationOnByDefault />\n+    <MapboxVectorStylesAndLayers />\n     <MarkAnimation />\n     <ObjectModelEncapsulateLegacy />\n     <ObjectModelTableType />\n@@ -2887,24 +2888,43 @@\n       </object-graph>\n     </datasource>\n   </datasources>\n+  <mapsources>\n+    <mapsource name='Tableau' />\n+  </mapsources>\n   <worksheets>\n     <worksheet name='Sheet 1'>\n       <table>\n         <view>\n-          <datasources />\n+          <datasources>\n+            <datasource name='Sample - Superstore' />\n+          </datasources>\n+          <mapsources>\n+            <mapsource name='Tableau' />\n+          </mapsources>\n+          <datasource-dependencies datasource='Sample - Superstore'>\n+            <column datatype='string' name='[City]' role='dimension' semantic-role='[City].[Name]' type='nominal' />\n+            <column-instance column='[City]' derivation='None' name='[none:City:nk]' pivot='key' type='nominal' />\n+          </datasource-dependencies>\n           <aggregation value='true' />\n         </view>\n-        <style />\n+        <style>\n+          <style-rule element='map'>\n+            <format attr='washout' value='0.0' />\n+          </style-rule>\n+        </style>\n         <panes>\n           <pane selection-relaxation-option='selection-relaxation-allow'>\n             <view>\n               <breakdown value='auto' />\n             </view>\n             <mark class='Automatic' />\n+            <encodings>\n+              <lod column='[Sample - Superstore].[none:City:nk]' />\n+            </encodings>\n           </pane>\n         </panes>\n-        <rows />\n-        <cols />\n+        <rows>[Sample - Superstore].[Latitude (generated)]</rows>\n+        <cols>[Sample - Superstore].[Longitude (generated)]</cols>\n       </table>\n       <simple-id uuid='{D4DCB499-07EB-4111-AD6C-D69EA504B926}' />\n     </worksheet>\n"
+    },
+    {
+      "id": "experiment_20260105_162635_8",
+      "title": "Add profit to the view",
+      "description": "Add profit to the view",
+      "user_input": "Add profit to the view",
+      "tags": [
+        "view",
+        "create"
+      ],
+      "complexity": "simple",
+      "diff_lines": 33,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_162635_8\\\\workbook_before.twb\"\t2026-01-06 10:22:15.535356500 -0800\n+++ \"experiments\\\\experiment_20260105_162635_8\\\\workbook_after.twb\"\t2026-01-06 10:22:15.531833800 -0800\n@@ -2903,7 +2903,9 @@\n           </mapsources>\n           <datasource-dependencies datasource='Sample - Superstore'>\n             <column datatype='string' name='[City]' role='dimension' semantic-role='[City].[Name]' type='nominal' />\n+            <column datatype='real' name='[Profit]' role='measure' type='quantitative' />\n             <column-instance column='[City]' derivation='None' name='[none:City:nk]' pivot='key' type='nominal' />\n+            <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />\n           </datasource-dependencies>\n           <aggregation value='true' />\n         </view>\n@@ -2920,6 +2922,7 @@\n             <mark class='Automatic' />\n             <encodings>\n               <lod column='[Sample - Superstore].[none:City:nk]' />\n+              <size column='[Sample - Superstore].[sum:Profit:qk]' />\n             </encodings>\n           </pane>\n         </panes>\n@@ -2950,6 +2953,11 @@\n             <card type='title' />\n           </strip>\n         </edge>\n+        <edge name='right'>\n+          <strip size='0'>\n+            <card pane-specification-id='0' param='[Sample - Superstore].[sum:Profit:qk]' type='size' />\n+          </strip>\n+        </edge>\n       </cards>\n       <simple-id uuid='{8A46BC0A-3306-42BA-A979-4835049125D0}' />\n     </window>\n"
+    },
+    {
+      "id": "experiment_20260105_162648_9",
+      "title": "Create a new sheet",
+      "description": "Create a new sheet",
+      "user_input": "Create a new sheet",
+      "tags": [
+        "worksheet",
+        "create"
+      ],
+      "complexity": "medium",
+      "diff_lines": 63,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_162648_9\\\\workbook_before.twb\"\t2026-01-06 10:22:15.368165100 -0800\n+++ \"experiments\\\\experiment_20260105_162648_9\\\\workbook_after.twb\"\t2026-01-06 10:22:15.364173700 -0800\n@@ -2931,9 +2931,29 @@\n       </table>\n       <simple-id uuid='{D4DCB499-07EB-4111-AD6C-D69EA504B926}' />\n     </worksheet>\n+    <worksheet name='Sheet 2'>\n+      <table>\n+        <view>\n+          <datasources />\n+          <aggregation value='true' />\n+        </view>\n+        <style />\n+        <panes>\n+          <pane selection-relaxation-option='selection-relaxation-allow'>\n+            <view>\n+              <breakdown value='auto' />\n+            </view>\n+            <mark class='Automatic' />\n+          </pane>\n+        </panes>\n+        <rows />\n+        <cols />\n+      </table>\n+      <simple-id uuid='{AC0E0BC7-B981-43E0-8D4D-4A03F524E2E0}' />\n+    </worksheet>\n   </worksheets>\n   <windows source-height='30'>\n-    <window class='worksheet' maximized='true' name='Sheet 1'>\n+    <window class='worksheet' name='Sheet 1'>\n       <cards>\n         <edge name='left'>\n           <strip size='160'>\n@@ -2961,5 +2981,28 @@\n       </cards>\n       <simple-id uuid='{8A46BC0A-3306-42BA-A979-4835049125D0}' />\n     </window>\n+    <window class='worksheet' maximized='true' name='Sheet 2'>\n+      <cards>\n+        <edge name='left'>\n+          <strip size='160'>\n+            <card type='pages' />\n+            <card type='filters' />\n+            <card type='marks' />\n+          </strip>\n+        </edge>\n+        <edge name='top'>\n+          <strip size='31'>\n+            <card type='columns' />\n+          </strip>\n+          <strip size='31'>\n+            <card type='rows' />\n+          </strip>\n+          <strip size='31'>\n+            <card type='title' />\n+          </strip>\n+        </edge>\n+      </cards>\n+      <simple-id uuid='{F22AF7E4-BFC9-45A7-9F28-0C1435B20E66}' />\n+    </window>\n   </windows>\n </workbook>\n"
+    },
+    {
+      "id": "experiment_20260105_162657_11",
+      "title": "Rename sheet",
+      "description": "Rename sheet",
+      "user_input": "Rename sheet",
+      "tags": [
+        "worksheet",
+        "rename"
+      ],
+      "complexity": "medium",
+      "diff_lines": 66,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_162657_11\\\\workbook_before.twb\"\t2026-01-06 10:22:15.717538800 -0800\n+++ \"experiments\\\\experiment_20260105_162657_11\\\\workbook_after.twb\"\t2026-01-06 10:22:15.720538500 -0800\n@@ -2892,6 +2892,26 @@\n     <mapsource name='Tableau' />\n   </mapsources>\n   <worksheets>\n+    <worksheet name='A new sheet'>\n+      <table>\n+        <view>\n+          <datasources />\n+          <aggregation value='true' />\n+        </view>\n+        <style />\n+        <panes>\n+          <pane selection-relaxation-option='selection-relaxation-allow'>\n+            <view>\n+              <breakdown value='auto' />\n+            </view>\n+            <mark class='Automatic' />\n+          </pane>\n+        </panes>\n+        <rows />\n+        <cols />\n+      </table>\n+      <simple-id uuid='{AC0E0BC7-B981-43E0-8D4D-4A03F524E2E0}' />\n+    </worksheet>\n     <worksheet name='Sheet 1'>\n       <table>\n         <view>\n@@ -2931,26 +2951,6 @@\n       </table>\n       <simple-id uuid='{D4DCB499-07EB-4111-AD6C-D69EA504B926}' />\n     </worksheet>\n-    <worksheet name='Sheet 2'>\n-      <table>\n-        <view>\n-          <datasources />\n-          <aggregation value='true' />\n-        </view>\n-        <style />\n-        <panes>\n-          <pane selection-relaxation-option='selection-relaxation-allow'>\n-            <view>\n-              <breakdown value='auto' />\n-            </view>\n-            <mark class='Automatic' />\n-          </pane>\n-        </panes>\n-        <rows />\n-        <cols />\n-      </table>\n-      <simple-id uuid='{AC0E0BC7-B981-43E0-8D4D-4A03F524E2E0}' />\n-    </worksheet>\n   </worksheets>\n   <windows source-height='30'>\n     <window class='worksheet' name='Sheet 1'>\n@@ -2981,7 +2981,7 @@\n       </cards>\n       <simple-id uuid='{8A46BC0A-3306-42BA-A979-4835049125D0}' />\n     </window>\n-    <window class='worksheet' maximized='true' name='Sheet 2'>\n+    <window class='worksheet' maximized='true' name='A new sheet'>\n       <cards>\n         <edge name='left'>\n           <strip size='160'>\n"
+    },
+    {
+      "id": "experiment_20260105_162703_12",
+      "title": "Create a dashboard",
+      "description": "Create a dashboard",
+      "user_input": "Create a dashboard",
+      "tags": [
+        "dashboard",
+        "create"
+      ],
+      "complexity": "medium",
+      "diff_lines": 70,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_162703_12\\\\workbook_before.twb\"\t2026-01-06 10:22:15.498724400 -0800\n+++ \"experiments\\\\experiment_20260105_162703_12\\\\workbook_after.twb\"\t2026-01-06 10:22:15.495722200 -0800\n@@ -3,12 +3,15 @@\n <!-- build main.0.0000.0000                                 -->\n <workbook original-version='18.1' source-build='0.0.0 (0000.0.0.0)' source-platform='win' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>\n   <document-format-change-manifest>\n+    <AccessibleZoneTabOrder />\n     <AnimationOnByDefault />\n+    <AutoCreateAndUpdateDSDPhoneLayouts />\n     <MapboxVectorStylesAndLayers />\n     <MarkAnimation />\n     <ObjectModelEncapsulateLegacy />\n     <ObjectModelTableType />\n     <SchemaViewerObjectModel />\n+    <SetMembershipControl />\n     <SheetIdentifierTracking />\n     <WindowsPersistSimpleIdentifiers />\n   </document-format-change-manifest>\n@@ -2952,6 +2955,30 @@\n       <simple-id uuid='{D4DCB499-07EB-4111-AD6C-D69EA504B926}' />\n     </worksheet>\n   </worksheets>\n+  <dashboards>\n+    <dashboard enable-sort-zone-taborder='true' name='Dashboard 1'>\n+      <style />\n+      <size maxheight='800' maxwidth='1000' minheight='800' minwidth='1000' />\n+      <zones />\n+      <devicelayouts>\n+        <devicelayout auto-generated='true' name='Phone'>\n+          <size maxheight='700' minheight='700' sizing-mode='vscroll' />\n+          <zones>\n+            <zone h='100000' id='2' type-v2='layout-basic' w='100000' x='0' y='0'>\n+              <zone h='84000' id='1' param='vert' type-v2='layout-flow' w='84000' x='8000' y='8000' />\n+              <zone-style>\n+                <format attr='border-color' value='#000000' />\n+                <format attr='border-style' value='none' />\n+                <format attr='border-width' value='0' />\n+                <format attr='margin' value='8' />\n+              </zone-style>\n+            </zone>\n+          </zones>\n+        </devicelayout>\n+      </devicelayouts>\n+      <simple-id uuid='{6A5D651F-E658-40FD-BA97-ECCE7DB5B00D}' />\n+    </dashboard>\n+  </dashboards>\n   <windows source-height='30'>\n     <window class='worksheet' name='Sheet 1'>\n       <cards>\n@@ -2981,7 +3008,7 @@\n       </cards>\n       <simple-id uuid='{8A46BC0A-3306-42BA-A979-4835049125D0}' />\n     </window>\n-    <window class='worksheet' maximized='true' name='A new sheet'>\n+    <window class='worksheet' name='A new sheet'>\n       <cards>\n         <edge name='left'>\n           <strip size='160'>\n@@ -3004,5 +3031,10 @@\n       </cards>\n       <simple-id uuid='{F22AF7E4-BFC9-45A7-9F28-0C1435B20E66}' />\n     </window>\n+    <window class='dashboard' maximized='true' name='Dashboard 1'>\n+      <viewpoints />\n+      <active id='-1' />\n+      <simple-id uuid='{9A60DF2C-AC53-4B10-BD52-8244CD32C743}' />\n+    </window>\n   </windows>\n </workbook>\n"
+    },
+    {
+      "id": "experiment_20260105_162707_14",
+      "title": "Add a sheet to the dashboard",
+      "description": "Add a sheet to the dashboard",
+      "user_input": "Add a sheet to the dashboard",
+      "tags": [
+        "worksheet",
+        "dashboard",
+        "create"
+      ],
+      "complexity": "medium",
+      "diff_lines": 56,
+      "timestamp": "2026-01-05",
+      "scope": "dashboard",
+      "diff": "--- \"experiments\\\\experiment_20260105_162707_14\\\\workbook_before.twb\"\t2026-01-06 10:22:15.693373900 -0800\n+++ \"experiments\\\\experiment_20260105_162707_14\\\\workbook_after.twb\"\t2026-01-06 10:22:15.696529800 -0800\n@@ -2959,7 +2959,38 @@\n     <dashboard enable-sort-zone-taborder='true' name='Dashboard 1'>\n       <style />\n       <size maxheight='800' maxwidth='1000' minheight='800' minwidth='1000' />\n-      <zones />\n+      <zones>\n+        <zone h='100000' id='4' type-v2='layout-basic' w='100000' x='0' y='0'>\n+          <zone h='98000' id='7' param='horz' type-v2='layout-flow' w='98400' x='800' y='1000'>\n+            <zone h='98000' id='5' type-v2='layout-basic' w='82400' x='800' y='1000'>\n+              <zone h='98000' id='3' name='Sheet 1' w='82400' x='800' y='1000'>\n+                <zone-style>\n+                  <format attr='border-color' value='#000000' />\n+                  <format attr='border-style' value='none' />\n+                  <format attr='border-width' value='0' />\n+                  <format attr='margin' value='4' />\n+                </zone-style>\n+              </zone>\n+            </zone>\n+            <zone fixed-size='160' h='98000' id='6' is-fixed='true' param='vert' type-v2='layout-flow' w='16000' x='83200' y='1000'>\n+              <zone h='2750' id='8' name='Sheet 1' pane-specification-id='0' param='[Sample - Superstore].[sum:Profit:qk]' type-v2='size' w='16000' x='83200' y='1000'>\n+                <zone-style>\n+                  <format attr='border-color' value='#000000' />\n+                  <format attr='border-style' value='none' />\n+                  <format attr='border-width' value='0' />\n+                  <format attr='margin' value='4' />\n+                </zone-style>\n+              </zone>\n+            </zone>\n+          </zone>\n+          <zone-style>\n+            <format attr='border-color' value='#000000' />\n+            <format attr='border-style' value='none' />\n+            <format attr='border-width' value='0' />\n+            <format attr='margin' value='8' />\n+          </zone-style>\n+        </zone>\n+      </zones>\n       <devicelayouts>\n         <devicelayout auto-generated='true' name='Phone'>\n           <size maxheight='700' minheight='700' sizing-mode='vscroll' />\n@@ -3032,7 +3063,11 @@\n       <simple-id uuid='{F22AF7E4-BFC9-45A7-9F28-0C1435B20E66}' />\n     </window>\n     <window class='dashboard' maximized='true' name='Dashboard 1'>\n-      <viewpoints />\n+      <viewpoints>\n+        <viewpoint name='Sheet 1'>\n+          <zoom type='entire-view' />\n+        </viewpoint>\n+      </viewpoints>\n       <active id='3' />\n       <simple-id uuid='{9A60DF2C-AC53-4B10-BD52-8244CD32C743}' />\n     </window>\n",
+      "affected_sheet": "Dashboard 1",
+      "dashboard_diff": "--- \"C:\\\\Users\\\\WILL~1.MAR\\\\AppData\\\\Local\\\\Temp\\\\2\\\\tmpozdk5qhn.xml\"\t2026-03-04 12:59:25.185147400 -0800\n+++ \"C:\\\\Users\\\\WILL~1.MAR\\\\AppData\\\\Local\\\\Temp\\\\2\\\\tmpiai9cxpz.xml\"\t2026-03-04 12:59:25.189147900 -0800\n@@ -1,7 +1,38 @@\n <dashboard enable-sort-zone-taborder=\"true\" name=\"Dashboard 1\">\n       <style />\n       <size maxheight=\"800\" maxwidth=\"1000\" minheight=\"800\" minwidth=\"1000\" />\n-      <zones />\n+      <zones>\n+        <zone h=\"100000\" id=\"4\" type-v2=\"layout-basic\" w=\"100000\" x=\"0\" y=\"0\">\n+          <zone h=\"98000\" id=\"7\" param=\"horz\" type-v2=\"layout-flow\" w=\"98400\" x=\"800\" y=\"1000\">\n+            <zone h=\"98000\" id=\"5\" type-v2=\"layout-basic\" w=\"82400\" x=\"800\" y=\"1000\">\n+              <zone h=\"98000\" id=\"3\" name=\"Sheet 1\" w=\"82400\" x=\"800\" y=\"1000\">\n+                <zone-style>\n+                  <format attr=\"border-color\" value=\"#000000\" />\n+                  <format attr=\"border-style\" value=\"none\" />\n+                  <format attr=\"border-width\" value=\"0\" />\n+                  <format attr=\"margin\" value=\"4\" />\n+                </zone-style>\n+              </zone>\n+            </zone>\n+            <zone fixed-size=\"160\" h=\"98000\" id=\"6\" is-fixed=\"true\" param=\"vert\" type-v2=\"layout-flow\" w=\"16000\" x=\"83200\" y=\"1000\">\n+              <zone h=\"2750\" id=\"8\" name=\"Sheet 1\" pane-specification-id=\"0\" param=\"[Sample - Superstore].[sum:Profit:qk]\" type-v2=\"size\" w=\"16000\" x=\"83200\" y=\"1000\">\n+                <zone-style>\n+                  <format attr=\"border-color\" value=\"#000000\" />\n+                  <format attr=\"border-style\" value=\"none\" />\n+                  <format attr=\"border-width\" value=\"0\" />\n+                  <format attr=\"margin\" value=\"4\" />\n+                </zone-style>\n+              </zone>\n+            </zone>\n+          </zone>\n+          <zone-style>\n+            <format attr=\"border-color\" value=\"#000000\" />\n+            <format attr=\"border-style\" value=\"none\" />\n+            <format attr=\"border-width\" value=\"0\" />\n+            <format attr=\"margin\" value=\"8\" />\n+          </zone-style>\n+        </zone>\n+      </zones>\n       <devicelayouts>\n         <devicelayout auto-generated=\"true\" name=\"Phone\">\n           <size maxheight=\"700\" minheight=\"700\" sizing-mode=\"vscroll\" />\n",
+      "dashboard_diff_lines": 43
+    },
+    {
+      "id": "experiment_20260105_162714_15",
+      "title": "switch sheets",
+      "description": "switch sheets",
+      "user_input": "switch sheets",
+      "tags": [
+        "worksheet",
+        "switch"
+      ],
+      "complexity": "simple",
+      "diff_lines": 21,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_162714_15\\\\workbook_before.twb\"\t2026-01-06 10:22:15.780437300 -0800\n+++ \"experiments\\\\experiment_20260105_162714_15\\\\workbook_after.twb\"\t2026-01-06 10:22:15.777437300 -0800\n@@ -3039,7 +3039,7 @@\n       </cards>\n       <simple-id uuid='{8A46BC0A-3306-42BA-A979-4835049125D0}' />\n     </window>\n-    <window class='worksheet' name='A new sheet'>\n+    <window class='worksheet' maximized='true' name='A new sheet'>\n       <cards>\n         <edge name='left'>\n           <strip size='160'>\n@@ -3062,7 +3062,7 @@\n       </cards>\n       <simple-id uuid='{F22AF7E4-BFC9-45A7-9F28-0C1435B20E66}' />\n     </window>\n-    <window class='dashboard' maximized='true' name='Dashboard 1'>\n+    <window class='dashboard' name='Dashboard 1'>\n       <viewpoints>\n         <viewpoint name='Sheet 1'>\n           <zoom type='entire-view' />\n"
+    },
+    {
+      "id": "experiment_20260105_162733_17",
+      "title": "Create a stacked bar chart",
+      "description": "Create a stacked bar chart",
+      "user_input": "Create a stacked bar chart",
+      "tags": [
+        "chart",
+        "create"
+      ],
+      "complexity": "medium",
+      "diff_lines": 54,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_162733_17\\\\workbook_before.twb\"\t2026-01-06 10:22:15.838918600 -0800\n+++ \"experiments\\\\experiment_20260105_162733_17\\\\workbook_after.twb\"\t2026-01-06 10:22:15.835742600 -0800\n@@ -2898,7 +2898,21 @@\n     <worksheet name='A new sheet'>\n       <table>\n         <view>\n-          <datasources />\n+          <datasources>\n+            <datasource name='Sample - Superstore' />\n+          </datasources>\n+          <datasource-dependencies datasource='Sample - Superstore'>\n+            <column caption='Profit Ratio' datatype='real' name='[Calculation_1368249927221915648]' role='measure' type='quantitative'>\n+              <calculation class='tableau' formula='SUM([Profit])/SUM([Sales])' />\n+            </column>\n+            <column datatype='string' name='[Category]' role='dimension' type='nominal' />\n+            <column datatype='string' name='[City]' role='dimension' semantic-role='[City].[Name]' type='nominal' />\n+            <column datatype='real' name='[Profit]' role='measure' type='quantitative' />\n+            <column datatype='real' name='[Sales]' role='measure' type='quantitative' />\n+            <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />\n+            <column-instance column='[City]' derivation='None' name='[none:City:nk]' pivot='key' type='nominal' />\n+            <column-instance column='[Calculation_1368249927221915648]' derivation='User' name='[usr:Calculation_1368249927221915648:qk]' pivot='key' type='quantitative' />\n+          </datasource-dependencies>\n           <aggregation value='true' />\n         </view>\n         <style />\n@@ -2908,10 +2922,13 @@\n               <breakdown value='auto' />\n             </view>\n             <mark class='Automatic' />\n+            <encodings>\n+              <color column='[Sample - Superstore].[none:Category:nk]' />\n+            </encodings>\n           </pane>\n         </panes>\n-        <rows />\n-        <cols />\n+        <rows>[Sample - Superstore].[usr:Calculation_1368249927221915648:qk]</rows>\n+        <cols>[Sample - Superstore].[none:City:nk]</cols>\n       </table>\n       <simple-id uuid='{AC0E0BC7-B981-43E0-8D4D-4A03F524E2E0}' />\n     </worksheet>\n@@ -3059,6 +3076,11 @@\n             <card type='title' />\n           </strip>\n         </edge>\n+        <edge name='right'>\n+          <strip size='0'>\n+            <card pane-specification-id='0' param='[Sample - Superstore].[none:Category:nk]' type='color' />\n+          </strip>\n+        </edge>\n       </cards>\n       <simple-id uuid='{F22AF7E4-BFC9-45A7-9F28-0C1435B20E66}' />\n     </window>\n",
+      "affected_sheet": "A new sheet",
+      "worksheet_diff": "--- \"C:\\\\Users\\\\WILL~1.MAR\\\\AppData\\\\Local\\\\Temp\\\\2\\\\tmp6rrwmnin.xml\"\t2026-03-04 12:59:26.415710700 -0800\n+++ \"C:\\\\Users\\\\WILL~1.MAR\\\\AppData\\\\Local\\\\Temp\\\\2\\\\tmpluk_muve.xml\"\t2026-03-04 12:59:26.419715100 -0800\n@@ -1,7 +1,21 @@\n <worksheet name=\"A new sheet\">\n       <table>\n         <view>\n-          <datasources />\n+          <datasources>\n+            <datasource name=\"Sample - Superstore\" />\n+          </datasources>\n+          <datasource-dependencies datasource=\"Sample - Superstore\">\n+            <column caption=\"Profit Ratio\" datatype=\"real\" name=\"[Calculation_1368249927221915648]\" role=\"measure\" type=\"quantitative\">\n+              <calculation class=\"tableau\" formula=\"SUM([Profit])/SUM([Sales])\" />\n+            </column>\n+            <column datatype=\"string\" name=\"[Category]\" role=\"dimension\" type=\"nominal\" />\n+            <column datatype=\"string\" name=\"[City]\" role=\"dimension\" semantic-role=\"[City].[Name]\" type=\"nominal\" />\n+            <column datatype=\"real\" name=\"[Profit]\" role=\"measure\" type=\"quantitative\" />\n+            <column datatype=\"real\" name=\"[Sales]\" role=\"measure\" type=\"quantitative\" />\n+            <column-instance column=\"[Category]\" derivation=\"None\" name=\"[none:Category:nk]\" pivot=\"key\" type=\"nominal\" />\n+            <column-instance column=\"[City]\" derivation=\"None\" name=\"[none:City:nk]\" pivot=\"key\" type=\"nominal\" />\n+            <column-instance column=\"[Calculation_1368249927221915648]\" derivation=\"User\" name=\"[usr:Calculation_1368249927221915648:qk]\" pivot=\"key\" type=\"quantitative\" />\n+          </datasource-dependencies>\n           <aggregation value=\"true\" />\n         </view>\n         <style />\n@@ -11,10 +25,13 @@\n               <breakdown value=\"auto\" />\n             </view>\n             <mark class=\"Automatic\" />\n+            <encodings>\n+              <color column=\"[Sample - Superstore].[none:Category:nk]\" />\n+            </encodings>\n           </pane>\n         </panes>\n-        <rows />\n-        <cols />\n+        <rows>[Sample - Superstore].[usr:Calculation_1368249927221915648:qk]</rows>\n+        <cols>[Sample - Superstore].[none:City:nk]</cols>\n       </table>\n       <simple-id uuid=\"{AC0E0BC7-B981-43E0-8D4D-4A03F524E2E0}\" />\n     </worksheet>\n",
+      "worksheet_diff_lines": 42
+    },
+    {
+      "id": "experiment_20260105_162745_18",
+      "title": "Expand a hierarchy on the marks card",
+      "description": "Expand a hierarchy on the marks card",
+      "user_input": "Expand a hierarchy on the marks card",
+      "tags": [
+        "hierarchy",
+        "marks"
+      ],
+      "complexity": "simple",
+      "diff_lines": 22,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_162745_18\\\\workbook_before.twb\"\t2026-01-06 10:22:15.540919700 -0800\n+++ \"experiments\\\\experiment_20260105_162745_18\\\\workbook_after.twb\"\t2026-01-06 10:22:15.544562500 -0800\n@@ -2909,8 +2909,10 @@\n             <column datatype='string' name='[City]' role='dimension' semantic-role='[City].[Name]' type='nominal' />\n             <column datatype='real' name='[Profit]' role='measure' type='quantitative' />\n             <column datatype='real' name='[Sales]' role='measure' type='quantitative' />\n+            <column datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />\n             <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />\n             <column-instance column='[City]' derivation='None' name='[none:City:nk]' pivot='key' type='nominal' />\n+            <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />\n             <column-instance column='[Calculation_1368249927221915648]' derivation='User' name='[usr:Calculation_1368249927221915648:qk]' pivot='key' type='quantitative' />\n           </datasource-dependencies>\n           <aggregation value='true' />\n@@ -2924,6 +2926,7 @@\n             <mark class='Automatic' />\n             <encodings>\n               <color column='[Sample - Superstore].[none:Category:nk]' />\n+              <lod column='[Sample - Superstore].[none:Sub-Category:nk]' />\n             </encodings>\n           </pane>\n         </panes>\n"
+    },
+    {
+      "id": "experiment_20260105_162804_19",
+      "title": "Keep a selection of marks",
+      "description": "Keep a selection of marks",
+      "user_input": "Keep a selection of marks",
+      "tags": [
+        "marks",
+        "selection"
+      ],
+      "complexity": "medium",
+      "diff_lines": 137,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_162804_19\\\\workbook_before.twb\"\t2026-01-06 10:22:15.502726500 -0800\n+++ \"experiments\\\\experiment_20260105_162804_19\\\\workbook_after.twb\"\t2026-01-06 10:22:15.505893500 -0800\n@@ -549,6 +549,7 @@\n       <column caption='Profit Ratio' datatype='real' name='[Calculation_1368249927221915648]' role='measure' type='quantitative'>\n         <calculation class='tableau' formula='SUM([Profit])/SUM([Sales])' />\n       </column>\n+      <column datatype='string' name='[Category]' role='dimension' type='nominal' />\n       <column datatype='string' name='[City]' role='dimension' semantic-role='[City].[Name]' type='nominal' />\n       <column datatype='string' name='[Country/Region]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />\n       <column datatype='string' hidden='true' name='[Customer ID]' role='dimension' type='nominal' />\n@@ -2786,9 +2787,20 @@\n       <column aggregate-role-from='[State/Province]' datatype='string' name='[Region]' role='dimension' type='nominal' />\n       <column datatype='integer' hidden='true' name='[Row ID]' role='dimension' type='ordinal' />\n       <column datatype='string' name='[State/Province]' role='dimension' semantic-role='[State].[Name]' type='nominal' />\n+      <column datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />\n       <column caption='Orders' datatype='table' name='[__tableau_internal_object_id__].[Orders_ECFCA1FB690A41FE803BC071773BA862]' role='measure' type='quantitative' />\n       <column caption='People' datatype='table' name='[__tableau_internal_object_id__].[People_D73023733B004CC1B3CB1ACF62F4A965]' role='measure' type='quantitative' />\n       <column caption='Returns' datatype='table' name='[__tableau_internal_object_id__].[Returns_2AA0FE4D737A4F63970131D0E7480A03]' role='measure' type='quantitative' />\n+      <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />\n+      <column-instance column='[City]' derivation='None' name='[none:City:nk]' pivot='key' type='nominal' />\n+      <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />\n+      <group hidden='true' name='[Inclusions (Category,City,Sub-Category)]' name-style='unqualified' user:auto-column='include'>\n+        <groupfilter function='crossjoin'>\n+          <groupfilter function='level-members' level='[none:Category:nk]' />\n+          <groupfilter function='level-members' level='[none:City:nk]' />\n+          <groupfilter function='level-members' level='[none:Sub-Category:nk]' />\n+        </groupfilter>\n+      </group>\n       <group name='[Top Customers by Profit]' name-style='unqualified' user:ui-builder='filter-group'>\n         <groupfilter count='[Parameters].[Parameter 1]' end='top' function='end' units='records' user:ui-marker='end' user:ui-top-by-field='true'>\n           <groupfilter direction='DESC' expression='SUM([Profit])' function='order' user:ui-marker='order'>\n@@ -2915,6 +2927,104 @@\n             <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />\n             <column-instance column='[Calculation_1368249927221915648]' derivation='User' name='[usr:Calculation_1368249927221915648:qk]' pivot='key' type='quantitative' />\n           </datasource-dependencies>\n+          <filter class='categorical' column='[Sample - Superstore].[Inclusions (Category,City,Sub-Category)]'>\n+            <groupfilter function='union' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate'>\n+              <groupfilter function='crossjoin'>\n+                <groupfilter function='member' level='[none:Category:nk]' member='&quot;Furniture&quot;' />\n+                <groupfilter function='union'>\n+                  <groupfilter function='crossjoin'>\n+                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Amarillo&quot;' />\n+                    <groupfilter function='union'>\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Bookcases&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Chairs&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Furnishings&quot;' />\n+                    </groupfilter>\n+                  </groupfilter>\n+                  <groupfilter function='crossjoin'>\n+                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Anaheim&quot;' />\n+                    <groupfilter function='union'>\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Chairs&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Furnishings&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Tables&quot;' />\n+                    </groupfilter>\n+                  </groupfilter>\n+                  <groupfilter function='crossjoin'>\n+                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Andover&quot;' />\n+                    <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Chairs&quot;' />\n+                  </groupfilter>\n+                  <groupfilter function='crossjoin'>\n+                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Apopka&quot;' />\n+                    <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Furnishings&quot;' />\n+                  </groupfilter>\n+                </groupfilter>\n+              </groupfilter>\n+              <groupfilter function='crossjoin'>\n+                <groupfilter function='member' level='[none:Category:nk]' member='&quot;Office Supplies&quot;' />\n+                <groupfilter function='union'>\n+                  <groupfilter function='crossjoin'>\n+                    <groupfilter function='union'>\n+                      <groupfilter function='member' level='[none:City:nk]' member='&quot;Amarillo&quot;' />\n+                      <groupfilter function='member' level='[none:City:nk]' member='&quot;Antioch&quot;' />\n+                    </groupfilter>\n+                    <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Paper&quot;' />\n+                  </groupfilter>\n+                  <groupfilter function='crossjoin'>\n+                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Anaheim&quot;' />\n+                    <groupfilter function='union'>\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Appliances&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Art&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Binders&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Paper&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Storage&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Supplies&quot;' />\n+                    </groupfilter>\n+                  </groupfilter>\n+                  <groupfilter function='crossjoin'>\n+                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Andover&quot;' />\n+                    <groupfilter function='union'>\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Binders&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Paper&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Storage&quot;' />\n+                    </groupfilter>\n+                  </groupfilter>\n+                  <groupfilter function='crossjoin'>\n+                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Ann Arbor&quot;' />\n+                    <groupfilter function='union'>\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Appliances&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Binders&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Envelopes&quot;' />\n+                    </groupfilter>\n+                  </groupfilter>\n+                  <groupfilter function='crossjoin'>\n+                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Apopka&quot;' />\n+                    <groupfilter function='union'>\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Appliances&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Binders&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Envelopes&quot;' />\n+                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Fasteners&quot;' />\n+                    </groupfilter>\n+                  </groupfilter>\n+                </groupfilter>\n+              </groupfilter>\n+              <groupfilter function='crossjoin'>\n+                <groupfilter function='member' level='[none:Category:nk]' member='&quot;Technology&quot;' />\n+                <groupfilter function='crossjoin'>\n+                  <groupfilter function='union'>\n+                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Amarillo&quot;' />\n+                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Anaheim&quot;' />\n+                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Ann Arbor&quot;' />\n+                  </groupfilter>\n+                  <groupfilter function='union'>\n+                    <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Accessories&quot;' />\n+                    <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Phones&quot;' />\n+                  </groupfilter>\n+                </groupfilter>\n+              </groupfilter>\n+            </groupfilter>\n+          </filter>\n+          <slices>\n+            <column>[Sample - Superstore].[Inclusions (Category,City,Sub-Category)]</column>\n+          </slices>\n           <aggregation value='true' />\n         </view>\n         <style />\n"
+    },
+    {
+      "id": "experiment_20260105_162839_23",
+      "title": "Filter on average sales",
+      "description": "Filter on average sales",
+      "user_input": "Filter on average sales",
+      "tags": [
+        "filter"
+      ],
+      "complexity": "simple",
+      "diff_lines": 25,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_162839_23\\\\workbook_before.twb\"\t2026-01-06 10:22:15.631744800 -0800\n+++ \"experiments\\\\experiment_20260105_162839_23\\\\workbook_after.twb\"\t2026-01-06 10:22:15.628226700 -0800\n@@ -2922,6 +2922,7 @@\n             <column datatype='real' name='[Profit]' role='measure' type='quantitative' />\n             <column datatype='real' name='[Sales]' role='measure' type='quantitative' />\n             <column datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />\n+            <column-instance column='[Sales]' derivation='Avg' name='[avg:Sales:qk]' pivot='key' type='quantitative' />\n             <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />\n             <column-instance column='[City]' derivation='None' name='[none:City:nk]' pivot='key' type='nominal' />\n             <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />\n@@ -3022,8 +3023,13 @@\n               </groupfilter>\n             </groupfilter>\n           </filter>\n+          <filter class='quantitative' column='[Sample - Superstore].[avg:Sales:qk]' included-values='in-range'>\n+            <min>500.0</min>\n+            <max>1410.087</max>\n+          </filter>\n           <slices>\n             <column>[Sample - Superstore].[Inclusions (Category,City,Sub-Category)]</column>\n+            <column>[Sample - Superstore].[avg:Sales:qk]</column>\n           </slices>\n           <aggregation value='true' />\n         </view>\n"
+    },
+    {
+      "id": "experiment_20260105_162853_25",
+      "title": "Remove the selection filter",
+      "description": "Remove the selection filter",
+      "user_input": "Remove the selection filter",
+      "tags": [
+        "filter",
+        "selection",
+        "remove"
+      ],
+      "complexity": "medium",
+      "diff_lines": 111,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_162853_25\\\\workbook_before.twb\"\t2026-01-06 10:22:15.596700500 -0800\n+++ \"experiments\\\\experiment_20260105_162853_25\\\\workbook_after.twb\"\t2026-01-06 10:22:15.599709300 -0800\n@@ -2928,107 +2928,11 @@\n             <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />\n             <column-instance column='[Calculation_1368249927221915648]' derivation='User' name='[usr:Calculation_1368249927221915648:qk]' pivot='key' type='quantitative' />\n           </datasource-dependencies>\n-          <filter class='categorical' column='[Sample - Superstore].[Inclusions (Category,City,Sub-Category)]'>\n-            <groupfilter function='union' user:ui-domain='database' user:ui-enumeration='inclusive' user:ui-marker='enumerate'>\n-              <groupfilter function='crossjoin'>\n-                <groupfilter function='member' level='[none:Category:nk]' member='&quot;Furniture&quot;' />\n-                <groupfilter function='union'>\n-                  <groupfilter function='crossjoin'>\n-                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Amarillo&quot;' />\n-                    <groupfilter function='union'>\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Bookcases&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Chairs&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Furnishings&quot;' />\n-                    </groupfilter>\n-                  </groupfilter>\n-                  <groupfilter function='crossjoin'>\n-                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Anaheim&quot;' />\n-                    <groupfilter function='union'>\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Chairs&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Furnishings&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Tables&quot;' />\n-                    </groupfilter>\n-                  </groupfilter>\n-                  <groupfilter function='crossjoin'>\n-                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Andover&quot;' />\n-                    <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Chairs&quot;' />\n-                  </groupfilter>\n-                  <groupfilter function='crossjoin'>\n-                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Apopka&quot;' />\n-                    <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Furnishings&quot;' />\n-                  </groupfilter>\n-                </groupfilter>\n-              </groupfilter>\n-              <groupfilter function='crossjoin'>\n-                <groupfilter function='member' level='[none:Category:nk]' member='&quot;Office Supplies&quot;' />\n-                <groupfilter function='union'>\n-                  <groupfilter function='crossjoin'>\n-                    <groupfilter function='union'>\n-                      <groupfilter function='member' level='[none:City:nk]' member='&quot;Amarillo&quot;' />\n-                      <groupfilter function='member' level='[none:City:nk]' member='&quot;Antioch&quot;' />\n-                    </groupfilter>\n-                    <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Paper&quot;' />\n-                  </groupfilter>\n-                  <groupfilter function='crossjoin'>\n-                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Anaheim&quot;' />\n-                    <groupfilter function='union'>\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Appliances&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Art&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Binders&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Paper&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Storage&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Supplies&quot;' />\n-                    </groupfilter>\n-                  </groupfilter>\n-                  <groupfilter function='crossjoin'>\n-                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Andover&quot;' />\n-                    <groupfilter function='union'>\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Binders&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Paper&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Storage&quot;' />\n-                    </groupfilter>\n-                  </groupfilter>\n-                  <groupfilter function='crossjoin'>\n-                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Ann Arbor&quot;' />\n-                    <groupfilter function='union'>\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Appliances&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Binders&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Envelopes&quot;' />\n-                    </groupfilter>\n-                  </groupfilter>\n-                  <groupfilter function='crossjoin'>\n-                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Apopka&quot;' />\n-                    <groupfilter function='union'>\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Appliances&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Binders&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Envelopes&quot;' />\n-                      <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Fasteners&quot;' />\n-                    </groupfilter>\n-                  </groupfilter>\n-                </groupfilter>\n-              </groupfilter>\n-              <groupfilter function='crossjoin'>\n-                <groupfilter function='member' level='[none:Category:nk]' member='&quot;Technology&quot;' />\n-                <groupfilter function='crossjoin'>\n-                  <groupfilter function='union'>\n-                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Amarillo&quot;' />\n-                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Anaheim&quot;' />\n-                    <groupfilter function='member' level='[none:City:nk]' member='&quot;Ann Arbor&quot;' />\n-                  </groupfilter>\n-                  <groupfilter function='union'>\n-                    <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Accessories&quot;' />\n-                    <groupfilter function='member' level='[none:Sub-Category:nk]' member='&quot;Phones&quot;' />\n-                  </groupfilter>\n-                </groupfilter>\n-              </groupfilter>\n-            </groupfilter>\n-          </filter>\n           <filter class='quantitative' column='[Sample - Superstore].[avg:Sales:qk]' included-values='in-range'>\n             <min>500.0</min>\n             <max>1410.087</max>\n           </filter>\n           <slices>\n-            <column>[Sample - Superstore].[Inclusions (Category,City,Sub-Category)]</column>\n             <column>[Sample - Superstore].[avg:Sales:qk]</column>\n           </slices>\n           <aggregation value='true' />\n"
+    },
+    {
+      "id": "experiment_20260105_162912_26",
+      "title": "customize the tooltip on \"a new sheet\"",
+      "description": "customize the tooltip on \"a new sheet\"",
+      "user_input": "customize the tooltip on \"a new sheet\"",
+      "tags": [
+        "worksheet",
+        "tooltip",
+        "create"
+      ],
+      "complexity": "simple",
+      "diff_lines": 15,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_162912_26\\\\workbook_before.twb\"\t2026-01-06 10:22:15.821984100 -0800\n+++ \"experiments\\\\experiment_20260105_162912_26\\\\workbook_after.twb\"\t2026-01-06 10:22:15.825991900 -0800\n@@ -2948,6 +2948,11 @@\n               <color column='[Sample - Superstore].[none:Category:nk]' />\n               <lod column='[Sample - Superstore].[none:Sub-Category:nk]' />\n             </encodings>\n+            <customized-tooltip>\n+              <formatted-text>\n+                <run bold='true'>Let&apos;s make a cool new tooltip</run>\n+              </formatted-text>\n+            </customized-tooltip>\n           </pane>\n         </panes>\n         <rows>[Sample - Superstore].[usr:Calculation_1368249927221915648:qk]</rows>\n"
+    },
+    {
+      "id": "experiment_20260105_162925_28",
+      "title": "Separate the view by whether customers are in or out of set",
+      "description": "Separate the view by whether customers are in or out of set",
+      "user_input": "Separate the view by whether customers are in or out of set",
+      "tags": [
+        "view"
+      ],
+      "complexity": "simple",
+      "diff_lines": 39,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_162925_28\\\\workbook_before.twb\"\t2026-01-06 10:22:15.519951400 -0800\n+++ \"experiments\\\\experiment_20260105_162925_28\\\\workbook_after.twb\"\t2026-01-06 10:22:15.516950800 -0800\n@@ -2912,17 +2912,26 @@\n         <view>\n           <datasources>\n             <datasource name='Sample - Superstore' />\n+            <datasource name='Parameters' />\n           </datasources>\n+          <datasource-dependencies datasource='Parameters'>\n+            <column caption='Top Customers' datatype='integer' name='[Parameter 1]' param-domain-type='range' role='measure' type='quantitative' value='5'>\n+              <calculation class='tableau' formula='5' />\n+              <range granularity='5' max='20' min='5' />\n+            </column>\n+          </datasource-dependencies>\n           <datasource-dependencies datasource='Sample - Superstore'>\n             <column caption='Profit Ratio' datatype='real' name='[Calculation_1368249927221915648]' role='measure' type='quantitative'>\n               <calculation class='tableau' formula='SUM([Profit])/SUM([Sales])' />\n             </column>\n             <column datatype='string' name='[Category]' role='dimension' type='nominal' />\n             <column datatype='string' name='[City]' role='dimension' semantic-role='[City].[Name]' type='nominal' />\n+            <column datatype='string' name='[Customer Name]' role='dimension' type='nominal' />\n             <column datatype='real' name='[Profit]' role='measure' type='quantitative' />\n             <column datatype='real' name='[Sales]' role='measure' type='quantitative' />\n             <column datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />\n             <column-instance column='[Sales]' derivation='Avg' name='[avg:Sales:qk]' pivot='key' type='quantitative' />\n+            <column-instance column='[Top Customers by Profit]' derivation='InOut' name='[io:Top Customers by Profit:nk]' pivot='key' type='nominal' />\n             <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />\n             <column-instance column='[City]' derivation='None' name='[none:City:nk]' pivot='key' type='nominal' />\n             <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />\n@@ -2955,7 +2964,7 @@\n             </customized-tooltip>\n           </pane>\n         </panes>\n-        <rows>[Sample - Superstore].[usr:Calculation_1368249927221915648:qk]</rows>\n+        <rows>([Sample - Superstore].[io:Top Customers by Profit:nk] * [Sample - Superstore].[usr:Calculation_1368249927221915648:qk])</rows>\n         <cols>[Sample - Superstore].[none:City:nk]</cols>\n       </table>\n       <simple-id uuid='{AC0E0BC7-B981-43E0-8D4D-4A03F524E2E0}' />\n"
+    },
+    {
+      "id": "experiment_20260105_162938_29",
+      "title": "View quantity of shelf as well",
+      "description": "View quantity of shelf as well",
+      "user_input": "View quantity of shelf as well",
+      "tags": [
+        "view"
+      ],
+      "complexity": "medium",
+      "diff_lines": 68,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_162938_29\\\\workbook_before.twb\"\t2026-01-06 10:22:15.378790100 -0800\n+++ \"experiments\\\\experiment_20260105_162938_29\\\\workbook_after.twb\"\t2026-01-06 10:22:15.376162000 -0800\n@@ -2928,6 +2928,7 @@\n             <column datatype='string' name='[City]' role='dimension' semantic-role='[City].[Name]' type='nominal' />\n             <column datatype='string' name='[Customer Name]' role='dimension' type='nominal' />\n             <column datatype='real' name='[Profit]' role='measure' type='quantitative' />\n+            <column datatype='integer' name='[Quantity]' role='measure' type='quantitative' />\n             <column datatype='real' name='[Sales]' role='measure' type='quantitative' />\n             <column datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />\n             <column-instance column='[Sales]' derivation='Avg' name='[avg:Sales:qk]' pivot='key' type='quantitative' />\n@@ -2935,6 +2936,7 @@\n             <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />\n             <column-instance column='[City]' derivation='None' name='[none:City:nk]' pivot='key' type='nominal' />\n             <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />\n+            <column-instance column='[Quantity]' derivation='Sum' name='[sum:Quantity:qk]' pivot='key' type='quantitative' />\n             <column-instance column='[Calculation_1368249927221915648]' derivation='User' name='[usr:Calculation_1368249927221915648:qk]' pivot='key' type='quantitative' />\n           </datasource-dependencies>\n           <filter class='quantitative' column='[Sample - Superstore].[avg:Sales:qk]' included-values='in-range'>\n@@ -2963,8 +2965,38 @@\n               </formatted-text>\n             </customized-tooltip>\n           </pane>\n+          <pane id='1' selection-relaxation-option='selection-relaxation-allow' y-axis-name='[Sample - Superstore].[usr:Calculation_1368249927221915648:qk]'>\n+            <view>\n+              <breakdown value='auto' />\n+            </view>\n+            <mark class='Automatic' />\n+            <encodings>\n+              <color column='[Sample - Superstore].[none:Category:nk]' />\n+              <lod column='[Sample - Superstore].[none:Sub-Category:nk]' />\n+            </encodings>\n+            <customized-tooltip>\n+              <formatted-text>\n+                <run bold='true'>Let&apos;s make a cool new tooltip</run>\n+              </formatted-text>\n+            </customized-tooltip>\n+          </pane>\n+          <pane id='2' selection-relaxation-option='selection-relaxation-allow' y-axis-name='[Sample - Superstore].[sum:Quantity:qk]'>\n+            <view>\n+              <breakdown value='auto' />\n+            </view>\n+            <mark class='Automatic' />\n+            <encodings>\n+              <color column='[Sample - Superstore].[none:Category:nk]' />\n+              <lod column='[Sample - Superstore].[none:Sub-Category:nk]' />\n+            </encodings>\n+            <customized-tooltip>\n+              <formatted-text>\n+                <run bold='true'>Let&apos;s make a cool new tooltip</run>\n+              </formatted-text>\n+            </customized-tooltip>\n+          </pane>\n         </panes>\n-        <rows>([Sample - Superstore].[io:Top Customers by Profit:nk] * [Sample - Superstore].[usr:Calculation_1368249927221915648:qk])</rows>\n+        <rows>([Sample - Superstore].[io:Top Customers by Profit:nk] * ([Sample - Superstore].[usr:Calculation_1368249927221915648:qk] + [Sample - Superstore].[sum:Quantity:qk]))</rows>\n         <cols>[Sample - Superstore].[none:City:nk]</cols>\n       </table>\n       <simple-id uuid='{AC0E0BC7-B981-43E0-8D4D-4A03F524E2E0}' />\n@@ -3115,7 +3147,7 @@\n         </edge>\n         <edge name='right'>\n           <strip size='160'>\n-            <card pane-specification-id='0' param='[Sample - Superstore].[none:Category:nk]' type='color' />\n+            <card pane-specification-id='1' param='[Sample - Superstore].[none:Category:nk]' type='color' />\n           </strip>\n         </edge>\n       </cards>\n"
+    },
+    {
+      "id": "experiment_20260105_163004_30",
+      "title": "Remove set from shelf",
+      "description": "Remove set from shelf",
+      "user_input": "Remove set from shelf",
+      "tags": [
+        "remove"
+      ],
+      "complexity": "simple",
+      "diff_lines": 40,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_163004_30\\\\workbook_before.twb\"\t2026-01-06 10:22:15.439145300 -0800\n+++ \"experiments\\\\experiment_20260105_163004_30\\\\workbook_after.twb\"\t2026-01-06 10:22:15.442166700 -0800\n@@ -2912,27 +2912,18 @@\n         <view>\n           <datasources>\n             <datasource name='Sample - Superstore' />\n-            <datasource name='Parameters' />\n           </datasources>\n-          <datasource-dependencies datasource='Parameters'>\n-            <column caption='Top Customers' datatype='integer' name='[Parameter 1]' param-domain-type='range' role='measure' type='quantitative' value='5'>\n-              <calculation class='tableau' formula='5' />\n-              <range granularity='5' max='20' min='5' />\n-            </column>\n-          </datasource-dependencies>\n           <datasource-dependencies datasource='Sample - Superstore'>\n             <column caption='Profit Ratio' datatype='real' name='[Calculation_1368249927221915648]' role='measure' type='quantitative'>\n               <calculation class='tableau' formula='SUM([Profit])/SUM([Sales])' />\n             </column>\n             <column datatype='string' name='[Category]' role='dimension' type='nominal' />\n             <column datatype='string' name='[City]' role='dimension' semantic-role='[City].[Name]' type='nominal' />\n-            <column datatype='string' name='[Customer Name]' role='dimension' type='nominal' />\n             <column datatype='real' name='[Profit]' role='measure' type='quantitative' />\n             <column datatype='integer' name='[Quantity]' role='measure' type='quantitative' />\n             <column datatype='real' name='[Sales]' role='measure' type='quantitative' />\n             <column datatype='string' name='[Sub-Category]' role='dimension' type='nominal' />\n             <column-instance column='[Sales]' derivation='Avg' name='[avg:Sales:qk]' pivot='key' type='quantitative' />\n-            <column-instance column='[Top Customers by Profit]' derivation='InOut' name='[io:Top Customers by Profit:nk]' pivot='key' type='nominal' />\n             <column-instance column='[Category]' derivation='None' name='[none:Category:nk]' pivot='key' type='nominal' />\n             <column-instance column='[City]' derivation='None' name='[none:City:nk]' pivot='key' type='nominal' />\n             <column-instance column='[Sub-Category]' derivation='None' name='[none:Sub-Category:nk]' pivot='key' type='nominal' />\n@@ -2996,7 +2987,7 @@\n             </customized-tooltip>\n           </pane>\n         </panes>\n-        <rows>([Sample - Superstore].[io:Top Customers by Profit:nk] * ([Sample - Superstore].[usr:Calculation_1368249927221915648:qk] + [Sample - Superstore].[sum:Quantity:qk]))</rows>\n+        <rows>([Sample - Superstore].[usr:Calculation_1368249927221915648:qk] + [Sample - Superstore].[sum:Quantity:qk])</rows>\n         <cols>[Sample - Superstore].[none:City:nk]</cols>\n       </table>\n       <simple-id uuid='{AC0E0BC7-B981-43E0-8D4D-4A03F524E2E0}' />\n"
+    },
+    {
+      "id": "experiment_20260105_163010_31",
+      "title": "Add a new dashboard",
+      "description": "Add a new dashboard",
+      "user_input": "Add a new dashboard",
+      "tags": [
+        "dashboard",
+        "create"
+      ],
+      "complexity": "medium",
+      "diff_lines": 52,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_163010_31\\\\workbook_before.twb\"\t2026-01-06 10:22:15.426442900 -0800\n+++ \"experiments\\\\experiment_20260105_163010_31\\\\workbook_after.twb\"\t2026-01-06 10:22:15.423443100 -0800\n@@ -3086,6 +3086,28 @@\n       </devicelayouts>\n       <simple-id uuid='{6A5D651F-E658-40FD-BA97-ECCE7DB5B00D}' />\n     </dashboard>\n+    <dashboard enable-sort-zone-taborder='true' name='Dashboard 2'>\n+      <style />\n+      <size maxheight='800' maxwidth='1000' minheight='800' minwidth='1000' />\n+      <zones />\n+      <devicelayouts>\n+        <devicelayout auto-generated='true' name='Phone'>\n+          <size maxheight='700' minheight='700' sizing-mode='vscroll' />\n+          <zones>\n+            <zone h='100000' id='2' type-v2='layout-basic' w='100000' x='0' y='0'>\n+              <zone h='84000' id='1' param='vert' type-v2='layout-flow' w='84000' x='8000' y='8000' />\n+              <zone-style>\n+                <format attr='border-color' value='#000000' />\n+                <format attr='border-style' value='none' />\n+                <format attr='border-width' value='0' />\n+                <format attr='margin' value='8' />\n+              </zone-style>\n+            </zone>\n+          </zones>\n+        </devicelayout>\n+      </devicelayouts>\n+      <simple-id uuid='{78D4B0D3-C2A9-47C3-BE5A-7A55EE64A664}' />\n+    </dashboard>\n   </dashboards>\n   <windows source-height='30'>\n     <window class='worksheet' name='Sheet 1'>\n@@ -3116,7 +3138,7 @@\n       </cards>\n       <simple-id uuid='{8A46BC0A-3306-42BA-A979-4835049125D0}' />\n     </window>\n-    <window class='worksheet' maximized='true' name='A new sheet'>\n+    <window class='worksheet' name='A new sheet'>\n       <cards>\n         <edge name='left'>\n           <strip size='160'>\n@@ -3153,5 +3175,10 @@\n       <active id='3' />\n       <simple-id uuid='{9A60DF2C-AC53-4B10-BD52-8244CD32C743}' />\n     </window>\n+    <window class='dashboard' maximized='true' name='Dashboard 2'>\n+      <viewpoints />\n+      <active id='-1' />\n+      <simple-id uuid='{D2C78DFF-D5A0-4971-B142-8E190D5FB522}' />\n+    </window>\n   </windows>\n </workbook>\n"
+    },
+    {
+      "id": "experiment_20260105_163017_33",
+      "title": "switch sheets",
+      "description": "switch sheets",
+      "user_input": "switch sheets",
+      "tags": [
+        "worksheet",
+        "switch"
+      ],
+      "complexity": "simple",
+      "diff_lines": 21,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_163017_33\\\\workbook_before.twb\"\t2026-01-06 10:22:15.524945800 -0800\n+++ \"experiments\\\\experiment_20260105_163017_33\\\\workbook_after.twb\"\t2026-01-06 10:22:15.527944000 -0800\n@@ -3166,7 +3166,7 @@\n       </cards>\n       <simple-id uuid='{F22AF7E4-BFC9-45A7-9F28-0C1435B20E66}' />\n     </window>\n-    <window class='dashboard' name='Dashboard 1'>\n+    <window class='dashboard' maximized='true' name='Dashboard 1'>\n       <viewpoints>\n         <viewpoint name='Sheet 1'>\n           <zoom type='entire-view' />\n@@ -3175,7 +3175,7 @@\n       <active id='3' />\n       <simple-id uuid='{9A60DF2C-AC53-4B10-BD52-8244CD32C743}' />\n     </window>\n-    <window class='dashboard' maximized='true' name='Dashboard 2'>\n+    <window class='dashboard' name='Dashboard 2'>\n       <viewpoints />\n       <active id='-1' />\n       <simple-id uuid='{D2C78DFF-D5A0-4971-B142-8E190D5FB522}' />\n"
+    },
+    {
+      "id": "experiment_20260105_163024_34",
+      "title": "Add a new sheet to the dashboard under the legend",
+      "description": "Add a new sheet to the dashboard under the legend",
+      "user_input": "Add a new sheet to the dashboard under the legend",
+      "tags": [
+        "worksheet",
+        "dashboard",
+        "create"
+      ],
+      "complexity": "simple",
+      "diff_lines": 37,
+      "timestamp": "2026-01-05",
+      "scope": "dashboard",
+      "diff": "--- \"experiments\\\\experiment_20260105_163024_34\\\\workbook_before.twb\"\t2026-01-06 10:22:15.728052900 -0800\n+++ \"experiments\\\\experiment_20260105_163024_34\\\\workbook_after.twb\"\t2026-01-06 10:22:15.730698900 -0800\n@@ -3058,6 +3058,23 @@\n                   <format attr='margin' value='4' />\n                 </zone-style>\n               </zone>\n+              <zone h='38500' id='9' name='A new sheet' w='16000' x='83200' y='16750'>\n+                <layout-cache type-h='fixed' type-w='fixed' />\n+                <zone-style>\n+                  <format attr='border-color' value='#000000' />\n+                  <format attr='border-style' value='none' />\n+                  <format attr='border-width' value='0' />\n+                  <format attr='margin' value='4' />\n+                </zone-style>\n+              </zone>\n+              <zone h='2750' id='10' name='A new sheet' pane-specification-id='1' param='[Sample - Superstore].[none:Category:nk]' type-v2='color' w='16000' x='83200' y='55250'>\n+                <zone-style>\n+                  <format attr='border-color' value='#000000' />\n+                  <format attr='border-style' value='none' />\n+                  <format attr='border-width' value='0' />\n+                  <format attr='margin' value='4' />\n+                </zone-style>\n+              </zone>\n             </zone>\n           </zone>\n           <zone-style>\n@@ -3168,6 +3185,9 @@\n     </window>\n     <window class='dashboard' maximized='true' name='Dashboard 1'>\n       <viewpoints>\n+        <viewpoint name='A new sheet'>\n+          <zoom type='entire-view' />\n+        </viewpoint>\n         <viewpoint name='Sheet 1'>\n           <zoom type='entire-view' />\n         </viewpoint>\n"
+    },
+    {
+      "id": "experiment_20260105_163046_35",
+      "title": "reposition a sheet",
+      "description": "reposition a sheet",
+      "user_input": "reposition a sheet",
+      "tags": [
+        "worksheet",
+        "layout"
+      ],
+      "complexity": "simple",
+      "diff_lines": 45,
+      "timestamp": "2026-01-05",
+      "scope": "dashboard",
+      "diff": "--- \"experiments\\\\experiment_20260105_163046_35\\\\workbook_before.twb\"\t2026-01-06 10:22:15.411422900 -0800\n+++ \"experiments\\\\experiment_20260105_163046_35\\\\workbook_after.twb\"\t2026-01-06 10:22:15.407797400 -0800\n@@ -3040,7 +3040,7 @@\n         <zone h='100000' id='4' type-v2='layout-basic' w='100000' x='0' y='0'>\n           <zone h='98000' id='7' param='horz' type-v2='layout-flow' w='98400' x='800' y='1000'>\n             <zone h='98000' id='5' type-v2='layout-basic' w='82400' x='800' y='1000'>\n-              <zone h='98000' id='3' name='Sheet 1' w='82400' x='800' y='1000'>\n+              <zone h='49000' id='3' name='Sheet 1' w='82400' x='800' y='1000'>\n                 <zone-style>\n                   <format attr='border-color' value='#000000' />\n                   <format attr='border-style' value='none' />\n@@ -3048,9 +3048,8 @@\n                   <format attr='margin' value='4' />\n                 </zone-style>\n               </zone>\n-            </zone>\n-            <zone fixed-size='160' h='98000' id='6' is-fixed='true' param='vert' type-v2='layout-flow' w='16000' x='83200' y='1000'>\n-              <zone h='15750' id='8' name='Sheet 1' pane-specification-id='0' param='[Sample - Superstore].[sum:Profit:qk]' type-v2='size' w='16000' x='83200' y='1000'>\n+              <zone h='49000' id='9' name='A new sheet' w='82400' x='800' y='50000'>\n+                <layout-cache minheight='384' type-h='scalable' type-w='fixed' />\n                 <zone-style>\n                   <format attr='border-color' value='#000000' />\n                   <format attr='border-style' value='none' />\n@@ -3058,8 +3057,9 @@\n                   <format attr='margin' value='4' />\n                 </zone-style>\n               </zone>\n-              <zone h='71500' id='9' name='A new sheet' w='16000' x='83200' y='16750'>\n-                <layout-cache minheight='384' type-h='scalable' type-w='fixed' />\n+            </zone>\n+            <zone fixed-size='160' h='98000' id='6' is-fixed='true' param='vert' type-v2='layout-flow' w='16000' x='83200' y='1000'>\n+              <zone h='15750' id='8' name='Sheet 1' pane-specification-id='0' param='[Sample - Superstore].[sum:Profit:qk]' type-v2='size' w='16000' x='83200' y='1000'>\n                 <zone-style>\n                   <format attr='border-color' value='#000000' />\n                   <format attr='border-style' value='none' />\n@@ -3067,7 +3067,7 @@\n                   <format attr='margin' value='4' />\n                 </zone-style>\n               </zone>\n-              <zone h='10750' id='10' name='A new sheet' pane-specification-id='1' param='[Sample - Superstore].[none:Category:nk]' type-v2='color' w='16000' x='83200' y='88250'>\n+              <zone h='10750' id='10' name='A new sheet' pane-specification-id='1' param='[Sample - Superstore].[none:Category:nk]' type-v2='color' w='16000' x='83200' y='16750'>\n                 <zone-style>\n                   <format attr='border-color' value='#000000' />\n                   <format attr='border-style' value='none' />\n"
+    },
+    {
+      "id": "experiment_20260105_163102_36",
+      "title": "Reposition the sheet again",
+      "description": "Reposition the sheet again",
+      "user_input": "Reposition the sheet again",
+      "tags": [
+        "worksheet",
+        "layout"
+      ],
+      "complexity": "simple",
+      "diff_lines": 21,
+      "timestamp": "2026-01-05",
+      "scope": "dashboard",
+      "diff": "--- \"experiments\\\\experiment_20260105_163102_36\\\\workbook_before.twb\"\t2026-01-06 10:22:15.559665200 -0800\n+++ \"experiments\\\\experiment_20260105_163102_36\\\\workbook_after.twb\"\t2026-01-06 10:22:15.562667000 -0800\n@@ -3040,7 +3040,7 @@\n         <zone h='100000' id='4' type-v2='layout-basic' w='100000' x='0' y='0'>\n           <zone h='98000' id='7' param='horz' type-v2='layout-flow' w='98400' x='800' y='1000'>\n             <zone h='98000' id='5' type-v2='layout-basic' w='82400' x='800' y='1000'>\n-              <zone h='49000' id='3' name='Sheet 1' w='82400' x='800' y='1000'>\n+              <zone h='98000' id='3' name='Sheet 1' w='41200' x='800' y='1000'>\n                 <zone-style>\n                   <format attr='border-color' value='#000000' />\n                   <format attr='border-style' value='none' />\n@@ -3048,7 +3048,7 @@\n                   <format attr='margin' value='4' />\n                 </zone-style>\n               </zone>\n-              <zone h='49000' id='9' name='A new sheet' w='82400' x='800' y='50000'>\n+              <zone h='98000' id='9' name='A new sheet' w='41200' x='42000' y='1000'>\n                 <layout-cache minheight='384' type-h='scalable' type-w='fixed' />\n                 <zone-style>\n                   <format attr='border-color' value='#000000' />\n"
+    },
+    {
+      "id": "experiment_20260105_163114_37",
+      "title": "Add a text zone below a sheet",
+      "description": "Add a text zone below a sheet",
+      "user_input": "Add a text zone below a sheet",
+      "tags": [
+        "worksheet",
+        "create"
+      ],
+      "complexity": "simple",
+      "diff_lines": 30,
+      "timestamp": "2026-01-05",
+      "scope": "dashboard",
+      "diff": "--- \"experiments\\\\experiment_20260105_163114_37\\\\workbook_before.twb\"\t2026-01-06 10:22:15.758428800 -0800\n+++ \"experiments\\\\experiment_20260105_163114_37\\\\workbook_after.twb\"\t2026-01-06 10:22:15.762426800 -0800\n@@ -3040,7 +3040,7 @@\n         <zone h='100000' id='4' type-v2='layout-basic' w='100000' x='0' y='0'>\n           <zone h='98000' id='7' param='horz' type-v2='layout-flow' w='98400' x='800' y='1000'>\n             <zone h='98000' id='5' type-v2='layout-basic' w='82400' x='800' y='1000'>\n-              <zone h='98000' id='3' name='Sheet 1' w='41200' x='800' y='1000'>\n+              <zone h='49000' id='3' name='Sheet 1' w='41200' x='800' y='1000'>\n                 <zone-style>\n                   <format attr='border-color' value='#000000' />\n                   <format attr='border-style' value='none' />\n@@ -3053,6 +3053,17 @@\n                 <zone-style>\n                   <format attr='border-color' value='#000000' />\n                   <format attr='border-style' value='none' />\n+                  <format attr='border-width' value='0' />\n+                  <format attr='margin' value='4' />\n+                </zone-style>\n+              </zone>\n+              <zone h='49000' id='11' type-v2='text' w='41200' x='800' y='50000'>\n+                <formatted-text>\n+                  <run>Add a text zone below a sheet</run>\n+                </formatted-text>\n+                <zone-style>\n+                  <format attr='border-color' value='#000000' />\n+                  <format attr='border-style' value='none' />\n                   <format attr='border-width' value='0' />\n                   <format attr='margin' value='4' />\n                 </zone-style>\n"
+    },
+    {
+      "id": "experiment_20260105_163126_39",
+      "title": "Add a blank zone",
+      "description": "Add a blank zone",
+      "user_input": "Add a blank zone",
+      "tags": [
+        "create"
+      ],
+      "complexity": "simple",
+      "diff_lines": 27,
+      "timestamp": "2026-01-05",
+      "scope": "dashboard",
+      "diff": "--- \"experiments\\\\experiment_20260105_163126_39\\\\workbook_before.twb\"\t2026-01-06 10:22:15.570183300 -0800\n+++ \"experiments\\\\experiment_20260105_163126_39\\\\workbook_after.twb\"\t2026-01-06 10:22:15.567183500 -0800\n@@ -3048,7 +3048,7 @@\n                   <format attr='margin' value='4' />\n                 </zone-style>\n               </zone>\n-              <zone h='98000' id='9' name='A new sheet' w='41200' x='42000' y='1000'>\n+              <zone h='49000' id='9' name='A new sheet' w='41200' x='42000' y='50000'>\n                 <layout-cache minheight='384' type-h='scalable' type-w='fixed' />\n                 <zone-style>\n                   <format attr='border-color' value='#000000' />\n@@ -3064,6 +3064,14 @@\n                 <zone-style>\n                   <format attr='border-color' value='#000000' />\n                   <format attr='border-style' value='none' />\n+                  <format attr='border-width' value='0' />\n+                  <format attr='margin' value='4' />\n+                </zone-style>\n+              </zone>\n+              <zone h='49000' id='12' type-v2='empty' w='41200' x='42000' y='1000'>\n+                <zone-style>\n+                  <format attr='border-color' value='#000000' />\n+                  <format attr='border-style' value='none' />\n                   <format attr='border-width' value='0' />\n                   <format attr='margin' value='4' />\n                 </zone-style>\n"
+    },
+    {
+      "id": "experiment_20260105_163134_40",
+      "title": "Make the blank zone smaller",
+      "description": "Make the blank zone smaller",
+      "user_input": "Make the blank zone smaller",
+      "tags": [],
+      "complexity": "simple",
+      "diff_lines": 21,
+      "timestamp": "2026-01-05",
+      "scope": "dashboard",
+      "diff": "--- \"experiments\\\\experiment_20260105_163134_40\\\\workbook_before.twb\"\t2026-01-06 10:22:15.679722200 -0800\n+++ \"experiments\\\\experiment_20260105_163134_40\\\\workbook_after.twb\"\t2026-01-06 10:22:15.676724000 -0800\n@@ -3048,7 +3048,7 @@\n                   <format attr='margin' value='4' />\n                 </zone-style>\n               </zone>\n-              <zone h='49000' id='9' name='A new sheet' w='41200' x='42000' y='50000'>\n+              <zone h='74000' id='9' name='A new sheet' w='41200' x='42000' y='25000'>\n                 <layout-cache minheight='384' type-h='scalable' type-w='fixed' />\n                 <zone-style>\n                   <format attr='border-color' value='#000000' />\n@@ -3068,7 +3068,7 @@\n                   <format attr='margin' value='4' />\n                 </zone-style>\n               </zone>\n-              <zone h='49000' id='12' type-v2='empty' w='41200' x='42000' y='1000'>\n+              <zone h='24000' id='12' type-v2='empty' w='41200' x='42000' y='1000'>\n                 <zone-style>\n                   <format attr='border-color' value='#000000' />\n                   <format attr='border-style' value='none' />\n"
+    },
+    {
+      "id": "experiment_20260105_163147_41",
+      "title": "Zoom in on the map",
+      "description": "Zoom in on the map",
+      "user_input": "Zoom in on the map",
+      "tags": [
+        "chart",
+        "zoom"
+      ],
+      "complexity": "simple",
+      "diff_lines": 14,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_163147_41\\\\workbook_before.twb\"\t2026-01-06 10:22:15.639420300 -0800\n+++ \"experiments\\\\experiment_20260105_163147_41\\\\workbook_after.twb\"\t2026-01-06 10:22:15.636467200 -0800\n@@ -3010,6 +3010,10 @@\n           <aggregation value='true' />\n         </view>\n         <style>\n+          <style-rule element='axis'>\n+            <encoding attr='space' class='0' field='[Sample - Superstore].[Longitude (generated)]' field-type='quantitative' max='-9202429.2550265528' min='-12414941.361782551' projection='EPSG:3857' range-type='fixed' scope='cols' type='space' />\n+            <encoding attr='space' class='0' field='[Sample - Superstore].[Latitude (generated)]' field-type='quantitative' max='5875603.4565336946' min='3165295.4827748141' projection='EPSG:3857' range-type='fixed' scope='rows' type='space' />\n+          </style-rule>\n           <style-rule element='map'>\n             <format attr='washout' value='0.0' />\n           </style-rule>\n"
+    },
+    {
+      "id": "experiment_20260105_163152_42",
+      "title": "Zoom in again",
+      "description": "Zoom in again",
+      "user_input": "Zoom in again",
+      "tags": [
+        "zoom"
+      ],
+      "complexity": "simple",
+      "diff_lines": 14,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_163152_42\\\\workbook_before.twb\"\t2026-01-06 10:22:15.577184200 -0800\n+++ \"experiments\\\\experiment_20260105_163152_42\\\\workbook_after.twb\"\t2026-01-06 10:22:15.574185200 -0800\n@@ -3011,8 +3011,8 @@\n         </view>\n         <style>\n           <style-rule element='axis'>\n-            <encoding attr='space' class='0' field='[Sample - Superstore].[Longitude (generated)]' field-type='quantitative' max='-9202429.2550265528' min='-12414941.361782551' projection='EPSG:3857' range-type='fixed' scope='cols' type='space' />\n-            <encoding attr='space' class='0' field='[Sample - Superstore].[Latitude (generated)]' field-type='quantitative' max='5875603.4565336946' min='3165295.4827748141' projection='EPSG:3857' range-type='fixed' scope='rows' type='space' />\n+            <encoding attr='space' class='0' field='[Sample - Superstore].[Longitude (generated)]' field-type='quantitative' max='-10005557.281715553' min='-11611813.33509355' projection='EPSG:3857' range-type='fixed' scope='cols' type='space' />\n+            <encoding attr='space' class='0' field='[Sample - Superstore].[Latitude (generated)]' field-type='quantitative' max='5198026.4630939746' min='3842872.4762145341' projection='EPSG:3857' range-type='fixed' scope='rows' type='space' />\n           </style-rule>\n           <style-rule element='map'>\n             <format attr='washout' value='0.0' />\n"
+    },
+    {
+      "id": "experiment_20260105_163205_43",
+      "title": "Add download button",
+      "description": "Add download button",
+      "user_input": "Add download button",
+      "tags": [
+        "create"
+      ],
+      "complexity": "simple",
+      "diff_lines": 44,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_163205_43\\\\workbook_before.twb\"\t2026-01-06 10:22:15.666715900 -0800\n+++ \"experiments\\\\experiment_20260105_163205_43\\\\workbook_after.twb\"\t2026-01-06 10:22:15.663714400 -0800\n@@ -6,6 +6,9 @@\n     <AccessibleZoneTabOrder />\n     <AnimationOnByDefault />\n     <AutoCreateAndUpdateDSDPhoneLayouts />\n+    <BasicButtonObject />\n+    <BasicButtonObjectTextSupport />\n+    <DashboardExportButton />\n     <MapboxVectorStylesAndLayers />\n     <MarkAnimation />\n     <ObjectModelEncapsulateLegacy />\n@@ -3061,7 +3064,7 @@\n                   <format attr='margin' value='4' />\n                 </zone-style>\n               </zone>\n-              <zone h='49000' id='11' type-v2='text' w='41200' x='800' y='50000'>\n+              <zone h='49000' id='11' type-v2='text' w='20600' x='21400' y='50000'>\n                 <formatted-text>\n                   <run>Add a text zone below a sheet</run>\n                 </formatted-text>\n@@ -3076,6 +3079,21 @@\n                 <zone-style>\n                   <format attr='border-color' value='#000000' />\n                   <format attr='border-style' value='none' />\n+                  <format attr='border-width' value='0' />\n+                  <format attr='margin' value='4' />\n+                </zone-style>\n+              </zone>\n+              <zone h='49000' id='13' type-v2='dashboard-object' w='20600' x='800' y='50000'>\n+                <button action='' button-click-action-metadata='pdf' button-type='text'>\n+                  <export-button-action>tabdoc:abstract-dashboard-button-export-wrapper dashboard-button-export-type=&quot;pdf&quot; dashboarddoc-id=&quot;{6A5D651F-E658-40FD-BA97-ECCE7DB5B00D}&quot;</export-button-action>\n+                  <button-visual-state>\n+                    <button-caption-font-style fontcolor='#ffffff' fontname='Tableau Bold' fontsize='12' />\n+                    <format attr='background-color' value='#333333' />\n+                  </button-visual-state>\n+                </button>\n+                <zone-style>\n+                  <format attr='border-color' value='#000000' />\n+                  <format attr='border-style' value='none' />\n                   <format attr='border-width' value='0' />\n                   <format attr='margin' value='4' />\n                 </zone-style>\n"
+    },
+    {
+      "id": "experiment_20260105_163213_44",
+      "title": "Close the workbook",
+      "description": "Close the workbook",
+      "user_input": "Close the workbook",
+      "tags": [],
+      "complexity": "simple",
+      "diff_lines": 12,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_163213_44\\\\workbook_before.twb\"\t2026-01-06 10:22:15.809955300 -0800\n+++ \"experiments\\\\experiment_20260105_163213_44\\\\workbook_after.twb\"\t2026-01-06 10:22:15.812956400 -0800\n@@ -3167,7 +3167,7 @@\n       <simple-id uuid='{78D4B0D3-C2A9-47C3-BE5A-7A55EE64A664}' />\n     </dashboard>\n   </dashboards>\n-  <windows source-height='30'>\n+  <windows show-side-pane='false' source-height='30'>\n     <window class='worksheet' name='Sheet 1'>\n       <cards>\n         <edge name='left'>\n"
+    },
+    {
+      "id": "experiment_20260105_163217_45",
+      "title": "Closing the workbook",
+      "description": "Closing the workbook",
+      "user_input": "Closing the workbook",
+      "tags": [],
+      "complexity": "medium",
+      "diff_lines": 63,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_163217_45\\\\workbook_before.twb\"\t2026-01-06 10:22:15.452612600 -0800\n+++ \"experiments\\\\experiment_20260105_163217_45\\\\workbook_after.twb\"\t2026-01-06 10:22:15.455613100 -0800\n@@ -5,9 +5,59 @@\n   <document-format-change-manifest>\n     <AnimationOnByDefault />\n     <MarkAnimation />\n+    <SheetIdentifierTracking />\n+    <WindowsPersistSimpleIdentifiers />\n   </document-format-change-manifest>\n   <preferences>\n     <preference name='ui.encoding.shelf.height' value='24' />\n     <preference name='ui.shelf.height' value='26' />\n   </preferences>\n+  <datasources />\n+  <worksheets>\n+    <worksheet name='Sheet 1'>\n+      <table>\n+        <view>\n+          <datasources />\n+          <aggregation value='true' />\n+        </view>\n+        <style />\n+        <panes>\n+          <pane selection-relaxation-option='selection-relaxation-allow'>\n+            <view>\n+              <breakdown value='auto' />\n+            </view>\n+            <mark class='Automatic' />\n+          </pane>\n+        </panes>\n+        <rows />\n+        <cols />\n+      </table>\n+      <simple-id uuid='{95446269-8CA8-4E29-AC68-BDD1EAAE24E8}' />\n+    </worksheet>\n+  </worksheets>\n+  <windows>\n+    <window class='worksheet' maximized='true' name='Sheet 1'>\n+      <cards>\n+        <edge name='left'>\n+          <strip size='160'>\n+            <card type='pages' />\n+            <card type='filters' />\n+            <card type='marks' />\n+          </strip>\n+        </edge>\n+        <edge name='top'>\n+          <strip size='31'>\n+            <card type='columns' />\n+          </strip>\n+          <strip size='31'>\n+            <card type='rows' />\n+          </strip>\n+          <strip size='31'>\n+            <card type='title' />\n+          </strip>\n+        </edge>\n+      </cards>\n+      <simple-id uuid='{1C259BD1-8F40-4476-B4FB-E6BA844FD132}' />\n+    </window>\n+  </windows>\n </workbook>\n"
+    },
+    {
+      "id": "experiment_20260105_163258_47",
+      "title": "Add world indicators datasource to workbok",
+      "description": "Add world indicators datasource to workbok",
+      "user_input": "Add world indicators datasource to workbok",
+      "tags": [
+        "datasource",
+        "create"
+      ],
+      "complexity": "complex",
+      "diff_lines": 464,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_163258_47\\\\workbook_before.twb\"\t2026-01-06 10:22:15.703526500 -0800\n+++ \"experiments\\\\experiment_20260105_163258_47\\\\workbook_after.twb\"\t2026-01-06 10:22:15.700527900 -0800\n@@ -5,6 +5,9 @@\n   <document-format-change-manifest>\n     <AnimationOnByDefault />\n     <MarkAnimation />\n+    <ObjectModelEncapsulateLegacy />\n+    <ObjectModelTableType />\n+    <SchemaViewerObjectModel />\n     <SheetIdentifierTracking />\n     <WindowsPersistSimpleIdentifiers />\n   </document-format-change-manifest>\n@@ -12,7 +15,440 @@\n     <preference name='ui.encoding.shelf.height' value='24' />\n     <preference name='ui.shelf.height' value='26' />\n   </preferences>\n-  <datasources />\n+  <datasources>\n+    <datasource inline='true' name='World Indicators' version='18.1'>\n+      <connection class='federated'>\n+        <named-connections>\n+          <named-connection caption='World Indicators' name='hyper.02tkzk21390wwr18vjk7f1tnp84z'>\n+            <connection authentication='auth-none' author-locale='en_US' class='hyper' dbname='C:/Users/will.martin/Documents/My Tableau Repository (Beta)/Datasources/0.0/en_US-US/World Indicators.hyper' default-settings='yes' sslmode='' username='tableau_internal_user' />\n+          </named-connection>\n+        </named-connections>\n+        <relation connection='hyper.02tkzk21390wwr18vjk7f1tnp84z' name='Extract' table='[Extract].[Extract]' type='table' />\n+        <metadata-records>\n+          <metadata-record class='column'>\n+            <remote-name>Birth Rate</remote-name>\n+            <remote-type>5</remote-type>\n+            <local-name>[Birth Rate]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Birth Rate</remote-alias>\n+            <ordinal>0</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>real</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>47</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Business Tax Rate</remote-name>\n+            <remote-type>129</remote-type>\n+            <local-name>[Business Tax Rate]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Business Tax Rate</remote-alias>\n+            <ordinal>1</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>string</local-type>\n+            <aggregation>Count</aggregation>\n+            <approx-count>397</approx-count>\n+            <contains-null>true</contains-null>\n+            <collation flag='0' name='LEN_RUS' />\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>CO2 Emissions</remote-name>\n+            <remote-type>20</remote-type>\n+            <local-name>[CO2 Emissions]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>CO2 Emissions</remote-alias>\n+            <ordinal>2</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>integer</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>1261</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Country/Region</remote-name>\n+            <remote-type>129</remote-type>\n+            <local-name>[Country/Region]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Country/Region</remote-alias>\n+            <ordinal>3</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>string</local-type>\n+            <aggregation>Count</aggregation>\n+            <approx-count>208</approx-count>\n+            <contains-null>true</contains-null>\n+            <collation flag='0' name='LEN_RUS' />\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Days to Start Business</remote-name>\n+            <remote-type>20</remote-type>\n+            <local-name>[Days to Start Business]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Days to Start Business</remote-alias>\n+            <ordinal>4</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>integer</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>115</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Ease of Business</remote-name>\n+            <remote-type>129</remote-type>\n+            <local-name>[Ease of Business]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Ease of Business</remote-alias>\n+            <ordinal>5</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>string</local-type>\n+            <aggregation>Count</aggregation>\n+            <approx-count>334</approx-count>\n+            <contains-null>true</contains-null>\n+            <collation flag='0' name='LEN_RUS' />\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Energy Usage</remote-name>\n+            <remote-type>20</remote-type>\n+            <local-name>[Energy Usage]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Energy Usage</remote-alias>\n+            <ordinal>6</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>integer</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>1520</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>GDP</remote-name>\n+            <remote-type>5</remote-type>\n+            <local-name>[GDP]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>GDP</remote-alias>\n+            <ordinal>7</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>real</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>1605</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Health Exp % GDP</remote-name>\n+            <remote-type>5</remote-type>\n+            <local-name>[Health Exp % GDP]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Health Exp % GDP</remote-alias>\n+            <ordinal>8</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>real</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>131</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Health Exp/Capita</remote-name>\n+            <remote-type>20</remote-type>\n+            <local-name>[Health Exp/Capita]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Health Exp/Capita</remote-alias>\n+            <ordinal>9</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>integer</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>836</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Hours to do Tax</remote-name>\n+            <remote-type>129</remote-type>\n+            <local-name>[Hours to do Tax]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Hours to do Tax</remote-alias>\n+            <ordinal>10</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>string</local-type>\n+            <aggregation>Count</aggregation>\n+            <approx-count>262</approx-count>\n+            <contains-null>true</contains-null>\n+            <collation flag='0' name='LEN_RUS' />\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Infant Mortality Rate</remote-name>\n+            <remote-type>5</remote-type>\n+            <local-name>[Infant Mortality Rate]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Infant Mortality Rate</remote-alias>\n+            <ordinal>11</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>real</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>128</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Internet Usage</remote-name>\n+            <remote-type>5</remote-type>\n+            <local-name>[Internet Usage]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Internet Usage</remote-alias>\n+            <ordinal>12</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>real</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>617</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Lending Interest</remote-name>\n+            <remote-type>5</remote-type>\n+            <local-name>[Lending Interest]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Lending Interest</remote-alias>\n+            <ordinal>13</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>real</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>319</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Life Expectancy Female</remote-name>\n+            <remote-type>20</remote-type>\n+            <local-name>[Life Expectancy Female]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Life Expectancy Female</remote-alias>\n+            <ordinal>14</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>integer</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>48</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Life Expectancy Male</remote-name>\n+            <remote-type>20</remote-type>\n+            <local-name>[Life Expectancy Male]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Life Expectancy Male</remote-alias>\n+            <ordinal>15</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>integer</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>47</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Mobile Phone Usage</remote-name>\n+            <remote-type>5</remote-type>\n+            <local-name>[Mobile Phone Usage]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Mobile Phone Usage</remote-alias>\n+            <ordinal>16</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>real</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>950</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Population 0-14</remote-name>\n+            <remote-type>5</remote-type>\n+            <local-name>[Population 0-14]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Population 0-14</remote-alias>\n+            <ordinal>17</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>real</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>391</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Population 15-64</remote-name>\n+            <remote-type>5</remote-type>\n+            <local-name>[Population 15-64]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Population 15-64</remote-alias>\n+            <ordinal>18</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>real</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>287</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Population 65+</remote-name>\n+            <remote-type>5</remote-type>\n+            <local-name>[Population 65+]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Population 65+</remote-alias>\n+            <ordinal>19</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>real</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>199</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Population Total</remote-name>\n+            <remote-type>20</remote-type>\n+            <local-name>[Population Total]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Population Total</remote-alias>\n+            <ordinal>20</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>integer</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>2691</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Population Urban</remote-name>\n+            <remote-type>5</remote-type>\n+            <local-name>[Population Urban]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Population Urban</remote-alias>\n+            <ordinal>21</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>real</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>782</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Region</remote-name>\n+            <remote-type>129</remote-type>\n+            <local-name>[Region]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Region</remote-alias>\n+            <ordinal>22</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>string</local-type>\n+            <aggregation>Count</aggregation>\n+            <approx-count>6</approx-count>\n+            <contains-null>true</contains-null>\n+            <collation flag='0' name='LEN_RUS' />\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Tourism Inbound</remote-name>\n+            <remote-type>5</remote-type>\n+            <local-name>[Tourism Inbound]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Tourism Inbound</remote-alias>\n+            <ordinal>23</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>real</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>1207</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Tourism Outbound</remote-name>\n+            <remote-type>20</remote-type>\n+            <local-name>[Tourism Outbound]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Tourism Outbound</remote-alias>\n+            <ordinal>24</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>integer</local-type>\n+            <aggregation>Sum</aggregation>\n+            <approx-count>1082</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>Year</remote-name>\n+            <remote-type>133</remote-type>\n+            <local-name>[Year]</local-name>\n+            <parent-name>[Extract]</parent-name>\n+            <remote-alias>Year</remote-alias>\n+            <ordinal>25</ordinal>\n+            <family>World Indicators.csv</family>\n+            <local-type>date</local-type>\n+            <aggregation>Year</aggregation>\n+            <approx-count>13</approx-count>\n+            <contains-null>true</contains-null>\n+            <object-id>[Migrated Data]</object-id>\n+          </metadata-record>\n+        </metadata-records>\n+      </connection>\n+      <column datatype='string' name='[Country/Region]' role='dimension' semantic-role='[Country].[ISO3166_2]' type='nominal' />\n+      <column datatype='integer' name='[Number of Records]' role='measure' type='quantitative' user:auto-column='numrec'>\n+        <calculation class='tableau' formula='1' />\n+      </column>\n+      <column caption='Migrated Data' datatype='table' name='[__tableau_internal_object_id__].[Migrated Data]' role='measure' type='quantitative' />\n+      <folders-common>\n+        <folder name='Business'>\n+          <folder-item name='[Business Tax Rate]' type='field' />\n+          <folder-item name='[Days to Start Business]' type='field' />\n+          <folder-item name='[Ease of Business]' type='field' />\n+          <folder-item name='[Hours to do Tax]' type='field' />\n+          <folder-item name='[Lending Interest]' type='field' />\n+        </folder>\n+        <folder name='Development'>\n+          <folder-item name='[CO2 Emissions]' type='field' />\n+          <folder-item name='[Energy Usage]' type='field' />\n+          <folder-item name='[GDP]' type='field' />\n+          <folder-item name='[Internet Usage]' type='field' />\n+          <folder-item name='[Mobile Phone Usage]' type='field' />\n+          <folder-item name='[Tourism Inbound]' type='field' />\n+          <folder-item name='[Tourism Outbound]' type='field' />\n+        </folder>\n+        <folder name='Health'>\n+          <folder-item name='[Health Exp % GDP]' type='field' />\n+          <folder-item name='[Health Exp/Capita]' type='field' />\n+          <folder-item name='[Infant Mortality Rate]' type='field' />\n+          <folder-item name='[Life Expectancy Female]' type='field' />\n+          <folder-item name='[Life Expectancy Male]' type='field' />\n+        </folder>\n+        <folder name='Population'>\n+          <folder-item name='[Birth Rate]' type='field' />\n+          <folder-item name='[Population 0-14]' type='field' />\n+          <folder-item name='[Population 15-64]' type='field' />\n+          <folder-item name='[Population 65+]' type='field' />\n+          <folder-item name='[Population Total]' type='field' />\n+          <folder-item name='[Population Urban]' type='field' />\n+        </folder>\n+      </folders-common>\n+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='false' />\n+      <semantic-values>\n+        <semantic-value key='[Country].[Name]' value='&quot;United States&quot;' />\n+      </semantic-values>\n+      <object-graph>\n+        <objects>\n+          <object caption='Migrated Data' id='Migrated Data'>\n+            <properties context=''>\n+              <relation connection='hyper.02tkzk21390wwr18vjk7f1tnp84z' name='Extract' table='[Extract].[Extract]' type='table' />\n+            </properties>\n+          </object>\n+        </objects>\n+      </object-graph>\n+    </datasource>\n+  </datasources>\n   <worksheets>\n     <worksheet name='Sheet 1'>\n       <table>\n@@ -35,7 +471,7 @@\n       <simple-id uuid='{95446269-8CA8-4E29-AC68-BDD1EAAE24E8}' />\n     </worksheet>\n   </worksheets>\n-  <windows>\n+  <windows source-height='30'>\n     <window class='worksheet' maximized='true' name='Sheet 1'>\n       <cards>\n         <edge name='left'>\n"
+    },
+    {
+      "id": "experiment_20260105_163307_50",
+      "title": "Add a field to the view",
+      "description": "Add a field to the view",
+      "user_input": "Add a field to the view",
+      "tags": [
+        "field",
+        "view",
+        "create"
+      ],
+      "complexity": "simple",
+      "diff_lines": 27,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_163307_50\\\\workbook_before.twb\"\t2026-01-06 10:22:15.392787200 -0800\n+++ \"experiments\\\\experiment_20260105_163307_50\\\\workbook_after.twb\"\t2026-01-06 10:22:15.390786100 -0800\n@@ -453,7 +453,13 @@\n     <worksheet name='Sheet 1'>\n       <table>\n         <view>\n-          <datasources />\n+          <datasources>\n+            <datasource name='World Indicators' />\n+          </datasources>\n+          <datasource-dependencies datasource='World Indicators'>\n+            <column datatype='real' name='[Population 15-64]' role='measure' type='quantitative' />\n+            <column-instance column='[Population 15-64]' derivation='Sum' name='[sum:Population 15-64:qk]' pivot='key' type='quantitative' />\n+          </datasource-dependencies>\n           <aggregation value='true' />\n         </view>\n         <style />\n@@ -465,7 +471,7 @@\n             <mark class='Automatic' />\n           </pane>\n         </panes>\n-        <rows />\n+        <rows>[World Indicators].[sum:Population 15-64:qk]</rows>\n         <cols />\n       </table>\n       <simple-id uuid='{95446269-8CA8-4E29-AC68-BDD1EAAE24E8}' />\n",
+      "affected_sheet": "Sheet 1",
+      "worksheet_diff": "--- \"C:\\\\Users\\\\WILL~1.MAR\\\\AppData\\\\Local\\\\Temp\\\\2\\\\tmpkdxo3rdn.xml\"\t2026-03-04 12:59:36.447802500 -0800\n+++ \"C:\\\\Users\\\\WILL~1.MAR\\\\AppData\\\\Local\\\\Temp\\\\2\\\\tmp_gyl61dr.xml\"\t2026-03-04 12:59:36.454725500 -0800\n@@ -1,7 +1,13 @@\n <worksheet name=\"Sheet 1\">\n       <table>\n         <view>\n-          <datasources />\n+          <datasources>\n+            <datasource name=\"World Indicators\" />\n+          </datasources>\n+          <datasource-dependencies datasource=\"World Indicators\">\n+            <column datatype=\"real\" name=\"[Population 15-64]\" role=\"measure\" type=\"quantitative\" />\n+            <column-instance column=\"[Population 15-64]\" derivation=\"Sum\" name=\"[sum:Population 15-64:qk]\" pivot=\"key\" type=\"quantitative\" />\n+          </datasource-dependencies>\n           <aggregation value=\"true\" />\n         </view>\n         <style />\n@@ -13,7 +19,7 @@\n             <mark class=\"Automatic\" />\n           </pane>\n         </panes>\n-        <rows />\n+        <rows>[World Indicators].[sum:Population 15-64:qk]</rows>\n         <cols />\n       </table>\n       <simple-id uuid=\"{95446269-8CA8-4E29-AC68-BDD1EAAE24E8}\" />\n",
+      "worksheet_diff_lines": 27
+    },
+    {
+      "id": "experiment_20260105_163313_51",
+      "title": "Break the view down by year",
+      "description": "Break the view down by year",
+      "user_input": "Break the view down by year",
+      "tags": [
+        "view"
+      ],
+      "complexity": "simple",
+      "diff_lines": 22,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_163313_51\\\\workbook_before.twb\"\t2026-01-06 10:22:15.603709500 -0800\n+++ \"experiments\\\\experiment_20260105_163313_51\\\\workbook_after.twb\"\t2026-01-06 10:22:15.606709000 -0800\n@@ -458,7 +458,9 @@\n           </datasources>\n           <datasource-dependencies datasource='World Indicators'>\n             <column datatype='real' name='[Population 15-64]' role='measure' type='quantitative' />\n+            <column datatype='date' name='[Year]' role='dimension' type='ordinal' />\n             <column-instance column='[Population 15-64]' derivation='Sum' name='[sum:Population 15-64:qk]' pivot='key' type='quantitative' />\n+            <column-instance column='[Year]' derivation='Year' name='[yr:Year:ok]' pivot='key' type='ordinal' />\n           </datasource-dependencies>\n           <aggregation value='true' />\n         </view>\n@@ -472,7 +474,7 @@\n           </pane>\n         </panes>\n         <rows>[World Indicators].[sum:Population 15-64:qk]</rows>\n-        <cols />\n+        <cols>[World Indicators].[yr:Year:ok]</cols>\n       </table>\n       <simple-id uuid='{95446269-8CA8-4E29-AC68-BDD1EAAE24E8}' />\n     </worksheet>\n"
+    },
+    {
+      "id": "experiment_20260105_163344_55",
+      "title": "Color by region",
+      "description": "Color by region",
+      "user_input": "Color by region",
+      "tags": [
+        "color"
+      ],
+      "complexity": "simple",
+      "diff_lines": 35,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_163344_55\\\\workbook_before.twb\"\t2026-01-06 10:22:15.804956100 -0800\n+++ \"experiments\\\\experiment_20260105_163344_55\\\\workbook_after.twb\"\t2026-01-06 10:22:15.801956100 -0800\n@@ -458,7 +458,9 @@\n           </datasources>\n           <datasource-dependencies datasource='World Indicators'>\n             <column datatype='real' name='[Population 15-64]' role='measure' type='quantitative' />\n+            <column datatype='string' name='[Region]' role='dimension' type='nominal' />\n             <column datatype='date' name='[Year]' role='dimension' type='ordinal' />\n+            <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />\n             <column-instance column='[Population 15-64]' derivation='Sum' name='[sum:Population 15-64:qk]' pivot='key' type='quantitative' />\n             <column-instance column='[Year]' derivation='Year' name='[yr:Year:ok]' pivot='key' type='ordinal' />\n           </datasource-dependencies>\n@@ -471,6 +473,9 @@\n               <breakdown value='auto' />\n             </view>\n             <mark class='Automatic' />\n+            <encodings>\n+              <color column='[World Indicators].[none:Region:nk]' />\n+            </encodings>\n           </pane>\n         </panes>\n         <rows>[World Indicators].[sum:Population 15-64:qk]</rows>\n@@ -500,6 +505,11 @@\n             <card type='title' />\n           </strip>\n         </edge>\n+        <edge name='right'>\n+          <strip size='0'>\n+            <card pane-specification-id='0' param='[World Indicators].[none:Region:nk]' type='color' />\n+          </strip>\n+        </edge>\n       </cards>\n       <simple-id uuid='{1C259BD1-8F40-4476-B4FB-E6BA844FD132}' />\n     </window>\n"
+    },
+    {
+      "id": "experiment_20260105_163352_56",
+      "title": "Make the view wider",
+      "description": "Make the view wider",
+      "user_input": "Make the view wider",
+      "tags": [
+        "view"
+      ],
+      "complexity": "simple",
+      "diff_lines": 29,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_163352_56\\\\workbook_before.twb\"\t2026-01-06 10:22:15.396798700 -0800\n+++ \"experiments\\\\experiment_20260105_163352_56\\\\workbook_after.twb\"\t2026-01-06 10:22:15.398797800 -0800\n@@ -466,7 +466,11 @@\n           </datasource-dependencies>\n           <aggregation value='true' />\n         </view>\n-        <style />\n+        <style>\n+          <style-rule element='cell'>\n+            <format attr='width' field='[World Indicators].[yr:Year:ok]' value='427' />\n+          </style-rule>\n+        </style>\n         <panes>\n           <pane selection-relaxation-option='selection-relaxation-allow'>\n             <view>\n@@ -476,6 +480,12 @@\n             <encodings>\n               <color column='[World Indicators].[none:Region:nk]' />\n             </encodings>\n+            <style>\n+              <style-rule element='pane'>\n+                <format attr='minwidth' value='-1' />\n+                <format attr='maxwidth' value='-1' />\n+              </style-rule>\n+            </style>\n           </pane>\n         </panes>\n         <rows>[World Indicators].[sum:Population 15-64:qk]</rows>\n"
+    },
+    {
+      "id": "experiment_20260105_163403_57",
+      "title": "Change encoding to size",
+      "description": "Change encoding to size",
+      "user_input": "Change encoding to size",
+      "tags": [
+        "size",
+        "encoding"
+      ],
+      "complexity": "simple",
+      "diff_lines": 21,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_163403_57\\\\workbook_before.twb\"\t2026-01-06 10:22:15.466627200 -0800\n+++ \"experiments\\\\experiment_20260105_163403_57\\\\workbook_after.twb\"\t2026-01-06 10:22:15.468627000 -0800\n@@ -478,7 +478,7 @@\n             </view>\n             <mark class='Automatic' />\n             <encodings>\n-              <color column='[World Indicators].[none:Region:nk]' />\n+              <size column='[World Indicators].[none:Region:nk]' />\n             </encodings>\n             <style>\n               <style-rule element='pane'>\n@@ -517,7 +517,7 @@\n         </edge>\n         <edge name='right'>\n           <strip size='160'>\n-            <card pane-specification-id='0' param='[World Indicators].[none:Region:nk]' type='color' />\n+            <card pane-specification-id='0' param='[World Indicators].[none:Region:nk]' type='size' />\n           </strip>\n         </edge>\n       </cards>\n"
+    },
+    {
+      "id": "experiment_20260105_163459_58",
+      "title": "switch to a continuous date axis",
+      "description": "switch to a continuous date axis",
+      "user_input": "switch to a continuous date axis",
+      "tags": [
+        "axis",
+        "switch"
+      ],
+      "complexity": "simple",
+      "diff_lines": 29,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_163459_58\\\\workbook_before.twb\"\t2026-01-06 10:22:15.585191000 -0800\n+++ \"experiments\\\\experiment_20260105_163459_58\\\\workbook_after.twb\"\t2026-01-06 10:22:15.588193200 -0800\n@@ -461,14 +461,14 @@\n             <column datatype='string' name='[Region]' role='dimension' type='nominal' />\n             <column datatype='date' name='[Year]' role='dimension' type='ordinal' />\n             <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />\n+            <column-instance column='[Year]' derivation='None' name='[none:Year:qk]' pivot='key' type='quantitative' />\n             <column-instance column='[Population 15-64]' derivation='Sum' name='[sum:Population 15-64:qk]' pivot='key' type='quantitative' />\n-            <column-instance column='[Year]' derivation='Year' name='[yr:Year:ok]' pivot='key' type='ordinal' />\n           </datasource-dependencies>\n           <aggregation value='true' />\n         </view>\n         <style>\n           <style-rule element='cell'>\n-            <format attr='width' field='[World Indicators].[yr:Year:ok]' value='427' />\n+            <format attr='width' field='[World Indicators].[none:Year:qk]' value='427' />\n           </style-rule>\n         </style>\n         <panes>\n@@ -489,7 +489,7 @@\n           </pane>\n         </panes>\n         <rows>[World Indicators].[sum:Population 15-64:qk]</rows>\n-        <cols>[World Indicators].[yr:Year:ok]</cols>\n+        <cols>[World Indicators].[none:Year:qk]</cols>\n       </table>\n       <simple-id uuid='{95446269-8CA8-4E29-AC68-BDD1EAAE24E8}' />\n     </worksheet>\n"
+    },
+    {
+      "id": "experiment_20260105_163515_59",
+      "title": "switch to a text table",
+      "description": "switch to a text table",
+      "user_input": "switch to a text table",
+      "tags": [
+        "switch"
+      ],
+      "complexity": "medium",
+      "diff_lines": 58,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_163515_59\\\\workbook_before.twb\"\t2026-01-06 10:22:15.416446100 -0800\n+++ \"experiments\\\\experiment_20260105_163515_59\\\\workbook_after.twb\"\t2026-01-06 10:22:15.419442600 -0800\n@@ -461,16 +461,12 @@\n             <column datatype='string' name='[Region]' role='dimension' type='nominal' />\n             <column datatype='date' name='[Year]' role='dimension' type='ordinal' />\n             <column-instance column='[Region]' derivation='None' name='[none:Region:nk]' pivot='key' type='nominal' />\n-            <column-instance column='[Year]' derivation='None' name='[none:Year:qk]' pivot='key' type='quantitative' />\n             <column-instance column='[Population 15-64]' derivation='Sum' name='[sum:Population 15-64:qk]' pivot='key' type='quantitative' />\n+            <column-instance column='[Year]' derivation='Year' name='[yr:Year:ok]' pivot='key' type='ordinal' />\n           </datasource-dependencies>\n           <aggregation value='true' />\n         </view>\n-        <style>\n-          <style-rule element='cell'>\n-            <format attr='width' field='[World Indicators].[none:Year:qk]' value='427' />\n-          </style-rule>\n-        </style>\n+        <style />\n         <panes>\n           <pane selection-relaxation-option='selection-relaxation-allow'>\n             <view>\n@@ -478,18 +474,17 @@\n             </view>\n             <mark class='Automatic' />\n             <encodings>\n-              <size column='[World Indicators].[none:Region:nk]' />\n+              <text column='[World Indicators].[sum:Population 15-64:qk]' />\n             </encodings>\n             <style>\n-              <style-rule element='pane'>\n-                <format attr='minwidth' value='-1' />\n-                <format attr='maxwidth' value='-1' />\n+              <style-rule element='mark'>\n+                <format attr='mark-labels-show' value='true' />\n               </style-rule>\n             </style>\n           </pane>\n         </panes>\n-        <rows>[World Indicators].[sum:Population 15-64:qk]</rows>\n-        <cols>[World Indicators].[none:Year:qk]</cols>\n+        <rows>[World Indicators].[none:Region:nk]</rows>\n+        <cols>[World Indicators].[yr:Year:ok]</cols>\n       </table>\n       <simple-id uuid='{95446269-8CA8-4E29-AC68-BDD1EAAE24E8}' />\n     </worksheet>\n@@ -515,11 +510,6 @@\n             <card type='title' />\n           </strip>\n         </edge>\n-        <edge name='right'>\n-          <strip size='160'>\n-            <card pane-specification-id='0' param='[World Indicators].[none:Region:nk]' type='size' />\n-          </strip>\n-        </edge>\n       </cards>\n       <simple-id uuid='{1C259BD1-8F40-4476-B4FB-E6BA844FD132}' />\n     </window>\n"
+    },
+    {
+      "id": "experiment_20260105_163523_60",
+      "title": "make it a set of pie charts",
+      "description": "make it a set of pie charts",
+      "user_input": "make it a set of pie charts",
+      "tags": [
+        "chart"
+      ],
+      "complexity": "simple",
+      "diff_lines": 42,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_163523_60\\\\workbook_before.twb\"\t2026-01-06 10:22:15.651200500 -0800\n+++ \"experiments\\\\experiment_20260105_163523_60\\\\workbook_after.twb\"\t2026-01-06 10:22:15.656197800 -0800\n@@ -472,19 +472,16 @@\n             <view>\n               <breakdown value='auto' />\n             </view>\n-            <mark class='Automatic' />\n+            <mark class='Pie' />\n             <encodings>\n-              <text column='[World Indicators].[sum:Population 15-64:qk]' />\n+              <color column='[World Indicators].[none:Region:nk]' />\n+              <wedge-size column='[World Indicators].[sum:Population 15-64:qk]' />\n+              <size column='[World Indicators].[sum:Population 15-64:qk]' />\n             </encodings>\n-            <style>\n-              <style-rule element='mark'>\n-                <format attr='mark-labels-show' value='true' />\n-              </style-rule>\n-            </style>\n           </pane>\n         </panes>\n-        <rows>[World Indicators].[none:Region:nk]</rows>\n-        <cols>[World Indicators].[yr:Year:ok]</cols>\n+        <rows>[World Indicators].[yr:Year:ok]</rows>\n+        <cols />\n       </table>\n       <simple-id uuid='{95446269-8CA8-4E29-AC68-BDD1EAAE24E8}' />\n     </worksheet>\n@@ -510,6 +507,12 @@\n             <card type='title' />\n           </strip>\n         </edge>\n+        <edge name='right'>\n+          <strip size='0'>\n+            <card pane-specification-id='0' param='[World Indicators].[none:Region:nk]' type='color' />\n+            <card pane-specification-id='0' param='[World Indicators].[sum:Population 15-64:qk]' type='size' />\n+          </strip>\n+        </edge>\n       </cards>\n       <simple-id uuid='{1C259BD1-8F40-4476-B4FB-E6BA844FD132}' />\n     </window>\n"
+    },
+    {
+      "id": "experiment_20260105_163531_61",
+      "title": "make a tree map",
+      "description": "make a tree map",
+      "user_input": "make a tree map",
+      "tags": [
+        "chart"
+      ],
+      "complexity": "medium",
+      "diff_lines": 50,
+      "timestamp": "2026-01-05",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260105_163531_61\\\\workbook_before.twb\"\t2026-01-06 10:22:15.737707200 -0800\n+++ \"experiments\\\\experiment_20260105_163531_61\\\\workbook_after.twb\"\t2026-01-06 10:22:15.734706500 -0800\n@@ -470,17 +470,31 @@\n         <panes>\n           <pane selection-relaxation-option='selection-relaxation-allow'>\n             <view>\n-              <breakdown value='auto' />\n+              <breakdown value='on' />\n             </view>\n-            <mark class='Pie' />\n+            <mark class='Automatic' />\n             <encodings>\n-              <color column='[World Indicators].[none:Region:nk]' />\n-              <wedge-size column='[World Indicators].[sum:Population 15-64:qk]' />\n               <size column='[World Indicators].[sum:Population 15-64:qk]' />\n+              <color column='[World Indicators].[sum:Population 15-64:qk]' />\n+              <text column='[World Indicators].[none:Region:nk]' />\n+              <text column='[World Indicators].[yr:Year:ok]' />\n             </encodings>\n+            <style>\n+              <style-rule element='mark'>\n+                <format attr='mark-labels-show' value='true' />\n+                <format attr='mark-labels-cull' value='true' />\n+                <format attr='mark-labels-line-first' value='true' />\n+                <format attr='mark-labels-line-last' value='true' />\n+                <format attr='mark-labels-range-min' value='true' />\n+                <format attr='mark-labels-range-max' value='true' />\n+                <format attr='mark-labels-mode' value='all' />\n+                <format attr='mark-labels-range-scope' value='pane' />\n+                <format attr='mark-labels-range-field' value='' />\n+              </style-rule>\n+            </style>\n           </pane>\n         </panes>\n-        <rows>[World Indicators].[yr:Year:ok]</rows>\n+        <rows />\n         <cols />\n       </table>\n       <simple-id uuid='{95446269-8CA8-4E29-AC68-BDD1EAAE24E8}' />\n@@ -509,8 +523,7 @@\n         </edge>\n         <edge name='right'>\n           <strip size='160'>\n-            <card pane-specification-id='0' param='[World Indicators].[none:Region:nk]' type='color' />\n-            <card pane-specification-id='0' param='[World Indicators].[sum:Population 15-64:qk]' type='size' />\n+            <card pane-specification-id='0' param='[World Indicators].[sum:Population 15-64:qk]' type='color' />\n           </strip>\n         </edge>\n       </cards>\n"
+    },
+    {
+      "id": "experiment_20260105_163540_62",
+      "title": "Close the workbook",
+      "description": "Close the workbook",
+      "user_input": "Close the workbook",
+      "tags": [],
+      "complexity": "simple",
+      "diff_lines": 12,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_163540_62\\\\workbook_before.twb\"\t2026-01-06 10:22:15.474705600 -0800\n+++ \"experiments\\\\experiment_20260105_163540_62\\\\workbook_after.twb\"\t2026-01-06 10:22:15.472708200 -0800\n@@ -500,7 +500,7 @@\n       <simple-id uuid='{95446269-8CA8-4E29-AC68-BDD1EAAE24E8}' />\n     </worksheet>\n   </worksheets>\n-  <windows source-height='30'>\n+  <windows show-side-pane='false' source-height='30'>\n     <window class='worksheet' maximized='true' name='Sheet 1'>\n       <cards>\n         <edge name='left'>\n"
+    },
+    {
+      "id": "experiment_20260105_163544_63",
+      "title": "close the workbook",
+      "description": "close the workbook",
+      "user_input": "close the workbook",
+      "tags": [],
+      "complexity": "medium",
+      "diff_lines": 63,
+      "timestamp": "2026-01-05",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260105_163544_63\\\\workbook_before.twb\"\t2026-01-06 10:22:15.615719600 -0800\n+++ \"experiments\\\\experiment_20260105_163544_63\\\\workbook_after.twb\"\t2026-01-06 10:22:15.613718900 -0800\n@@ -5,9 +5,59 @@\n   <document-format-change-manifest>\n     <AnimationOnByDefault />\n     <MarkAnimation />\n+    <SheetIdentifierTracking />\n+    <WindowsPersistSimpleIdentifiers />\n   </document-format-change-manifest>\n   <preferences>\n     <preference name='ui.encoding.shelf.height' value='24' />\n     <preference name='ui.shelf.height' value='26' />\n   </preferences>\n+  <datasources />\n+  <worksheets>\n+    <worksheet name='Sheet 1'>\n+      <table>\n+        <view>\n+          <datasources />\n+          <aggregation value='true' />\n+        </view>\n+        <style />\n+        <panes>\n+          <pane selection-relaxation-option='selection-relaxation-allow'>\n+            <view>\n+              <breakdown value='auto' />\n+            </view>\n+            <mark class='Automatic' />\n+          </pane>\n+        </panes>\n+        <rows />\n+        <cols />\n+      </table>\n+      <simple-id uuid='{38501435-12D0-45D7-BFB6-BEDB2C2CCAC4}' />\n+    </worksheet>\n+  </worksheets>\n+  <windows>\n+    <window class='worksheet' maximized='true' name='Sheet 1'>\n+      <cards>\n+        <edge name='left'>\n+          <strip size='160'>\n+            <card type='pages' />\n+            <card type='filters' />\n+            <card type='marks' />\n+          </strip>\n+        </edge>\n+        <edge name='top'>\n+          <strip size='31'>\n+            <card type='columns' />\n+          </strip>\n+          <strip size='31'>\n+            <card type='rows' />\n+          </strip>\n+          <strip size='31'>\n+            <card type='title' />\n+          </strip>\n+        </edge>\n+      </cards>\n+      <simple-id uuid='{DFBCC020-5281-47F9-9E00-754504C234B8}' />\n+    </window>\n+  </windows>\n </workbook>\n"
+    },
+    {
+      "id": "experiment_20260106_084726_0",
+      "title": "Opening a workbook",
+      "description": "Opening a workbook",
+      "user_input": "Opening a workbook",
+      "tags": [],
+      "complexity": "medium",
+      "diff_lines": 63,
+      "timestamp": "2026-01-06",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260106_084726_0\\\\workbook_before.twb\"\t2026-01-06 10:22:15.767428200 -0800\n+++ \"experiments\\\\experiment_20260106_084726_0\\\\workbook_after.twb\"\t2026-01-06 10:22:15.766428500 -0800\n@@ -5,9 +5,59 @@\n   <document-format-change-manifest>\n     <AnimationOnByDefault />\n     <MarkAnimation />\n+    <SheetIdentifierTracking />\n+    <WindowsPersistSimpleIdentifiers />\n   </document-format-change-manifest>\n   <preferences>\n     <preference name='ui.encoding.shelf.height' value='24' />\n     <preference name='ui.shelf.height' value='26' />\n   </preferences>\n+  <datasources />\n+  <worksheets>\n+    <worksheet name='Sheet 1'>\n+      <table>\n+        <view>\n+          <datasources />\n+          <aggregation value='true' />\n+        </view>\n+        <style />\n+        <panes>\n+          <pane selection-relaxation-option='selection-relaxation-allow'>\n+            <view>\n+              <breakdown value='auto' />\n+            </view>\n+            <mark class='Automatic' />\n+          </pane>\n+        </panes>\n+        <rows />\n+        <cols />\n+      </table>\n+      <simple-id uuid='{301371C4-EC0E-4C26-AF3F-758BEF03639D}' />\n+    </worksheet>\n+  </worksheets>\n+  <windows>\n+    <window class='worksheet' maximized='true' name='Sheet 1'>\n+      <cards>\n+        <edge name='left'>\n+          <strip size='160'>\n+            <card type='pages' />\n+            <card type='filters' />\n+            <card type='marks' />\n+          </strip>\n+        </edge>\n+        <edge name='top'>\n+          <strip size='31'>\n+            <card type='columns' />\n+          </strip>\n+          <strip size='31'>\n+            <card type='rows' />\n+          </strip>\n+          <strip size='31'>\n+            <card type='title' />\n+          </strip>\n+        </edge>\n+      </cards>\n+      <simple-id uuid='{F54E0607-82B6-4192-92EB-6418AE2E494E}' />\n+    </window>\n+  </windows>\n </workbook>\n"
+    },
+    {
+      "id": "experiment_20260106_084951_3",
+      "title": "Connecting to a csv file",
+      "description": "Connecting to a csv file",
+      "user_input": "Connecting to a csv file",
+      "tags": [],
+      "complexity": "simple",
+      "diff_lines": 16,
+      "timestamp": "2026-01-06",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260106_084951_3\\\\workbook_before.twb\"\t2026-01-06 10:22:15.742624500 -0800\n+++ \"experiments\\\\experiment_20260106_084951_3\\\\workbook_after.twb\"\t2026-01-06 10:22:15.744633000 -0800\n@@ -16,10 +16,10 @@\n     <preference name='ui.shelf.height' value='26' />\n   </preferences>\n   <datasources>\n-    <datasource caption='Untitled Data Source' inline='true' name='federated.1nes5701jlp1e01ee2tb00mkmpcm' version='18.1'>\n+    <datasource caption='0' inline='true' name='federated.1nes5701jlp1e01ee2tb00mkmpcm' version='18.1'>\n       <connection class='federated'>\n         <named-connections>\n-          <named-connection name='textscan.1lgvpr00wx5m7f0zm4at304bz9zw'>\n+          <named-connection caption='0' name='textscan.1lgvpr00wx5m7f0zm4at304bz9zw'>\n             <connection class='textscan' directory='C:/Users/will.martin/Downloads' filename='0.csv' password='' server='' />\n           </named-connection>\n         </named-connections>\n"
+    },
+    {
+      "id": "experiment_20260106_084950_2",
+      "title": "connecting to a csv file",
+      "description": "connecting to a csv file",
+      "user_input": "connecting to a csv file",
+      "tags": [],
+      "complexity": "medium",
+      "diff_lines": 117,
+      "timestamp": "2026-01-06",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260106_084950_2\\\\workbook_before.twb\"\t2026-01-06 10:22:15.708537900 -0800\n+++ \"experiments\\\\experiment_20260106_084950_2\\\\workbook_after.twb\"\t2026-01-06 10:22:15.706529100 -0800\n@@ -5,6 +5,9 @@\n   <document-format-change-manifest>\n     <AnimationOnByDefault />\n     <MarkAnimation />\n+    <ObjectModelEncapsulateLegacy />\n+    <ObjectModelTableType />\n+    <SchemaViewerObjectModel />\n     <SheetIdentifierTracking />\n     <WindowsPersistSimpleIdentifiers />\n   </document-format-change-manifest>\n@@ -12,7 +15,93 @@\n     <preference name='ui.encoding.shelf.height' value='24' />\n     <preference name='ui.shelf.height' value='26' />\n   </preferences>\n-  <datasources />\n+  <datasources>\n+    <datasource caption='0' inline='true' name='federated.1nes5701jlp1e01ee2tb00mkmpcm' version='18.1'>\n+      <connection class='federated'>\n+        <named-connections>\n+          <named-connection caption='0' name='textscan.1lgvpr00wx5m7f0zm4at304bz9zw'>\n+            <connection class='textscan' directory='C:/Users/will.martin/Downloads' filename='0.csv' password='' server='' />\n+          </named-connection>\n+        </named-connections>\n+        <relation connection='textscan.1lgvpr00wx5m7f0zm4at304bz9zw' name='0.csv' table='[0#csv]' type='table'>\n+          <columns character-set='UTF-8' header='yes' locale='en_US' separator=','>\n+            <column datatype='string' name='GAGBKVGBIF' ordinal='0' />\n+            <column datatype='string' name='NAHIDAAUIM' ordinal='1' />\n+          </columns>\n+        </relation>\n+        <metadata-records>\n+          <metadata-record class='capability'>\n+            <remote-name />\n+            <remote-type>0</remote-type>\n+            <parent-name>[0.csv]</parent-name>\n+            <remote-alias />\n+            <aggregation>Count</aggregation>\n+            <contains-null>true</contains-null>\n+            <attributes>\n+              <attribute datatype='string' name='character-set'>&quot;UTF-8&quot;</attribute>\n+              <attribute datatype='string' name='collation'>&quot;en_US&quot;</attribute>\n+              <attribute datatype='string' name='field-delimiter'>&quot;,&quot;</attribute>\n+              <attribute datatype='string' name='header-row'>&quot;true&quot;</attribute>\n+              <attribute datatype='string' name='locale'>&quot;en_US&quot;</attribute>\n+              <attribute datatype='string' name='single-char'>&quot;&quot;</attribute>\n+            </attributes>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>GAGBKVGBIF</remote-name>\n+            <remote-type>129</remote-type>\n+            <local-name>[GAGBKVGBIF]</local-name>\n+            <parent-name>[0.csv]</parent-name>\n+            <remote-alias>GAGBKVGBIF</remote-alias>\n+            <ordinal>0</ordinal>\n+            <local-type>string</local-type>\n+            <aggregation>Count</aggregation>\n+            <scale>1</scale>\n+            <width>1073741823</width>\n+            <contains-null>true</contains-null>\n+            <collation flag='0' name='LEN_RUS' />\n+            <object-id>[0.csv_550DFB9BBBD143118350797F5DDE2F97]</object-id>\n+          </metadata-record>\n+          <metadata-record class='column'>\n+            <remote-name>NAHIDAAUIM</remote-name>\n+            <remote-type>129</remote-type>\n+            <local-name>[NAHIDAAUIM]</local-name>\n+            <parent-name>[0.csv]</parent-name>\n+            <remote-alias>NAHIDAAUIM</remote-alias>\n+            <ordinal>1</ordinal>\n+            <local-type>string</local-type>\n+            <aggregation>Count</aggregation>\n+            <scale>1</scale>\n+            <width>1073741823</width>\n+            <contains-null>true</contains-null>\n+            <collation flag='0' name='LEN_RUS' />\n+            <object-id>[0.csv_550DFB9BBBD143118350797F5DDE2F97]</object-id>\n+          </metadata-record>\n+        </metadata-records>\n+      </connection>\n+      <aliases enabled='yes' />\n+      <column caption='Gagbkvgbif' datatype='string' name='[GAGBKVGBIF]' role='dimension' type='nominal' />\n+      <column caption='Nahidaauim' datatype='string' name='[NAHIDAAUIM]' role='dimension' type='nominal' />\n+      <column caption='0.csv' datatype='table' name='[__tableau_internal_object_id__].[0.csv_550DFB9BBBD143118350797F5DDE2F97]' role='measure' type='quantitative' />\n+      <layout dim-ordering='alphabetic' measure-ordering='alphabetic' show-structure='true' />\n+      <semantic-values>\n+        <semantic-value key='[Country].[Name]' value='&quot;United States&quot;' />\n+      </semantic-values>\n+      <object-graph>\n+        <objects>\n+          <object caption='0.csv' id='0.csv_550DFB9BBBD143118350797F5DDE2F97'>\n+            <properties context=''>\n+              <relation connection='textscan.1lgvpr00wx5m7f0zm4at304bz9zw' name='0.csv' table='[0#csv]' type='table'>\n+                <columns character-set='UTF-8' header='yes' locale='en_US' separator=','>\n+                  <column datatype='string' name='GAGBKVGBIF' ordinal='0' />\n+                  <column datatype='string' name='NAHIDAAUIM' ordinal='1' />\n+                </columns>\n+              </relation>\n+            </properties>\n+          </object>\n+        </objects>\n+      </object-graph>\n+    </datasource>\n+  </datasources>\n   <worksheets>\n     <worksheet name='Sheet 1'>\n       <table>\n@@ -35,7 +124,7 @@\n       <simple-id uuid='{301371C4-EC0E-4C26-AF3F-758BEF03639D}' />\n     </worksheet>\n   </worksheets>\n-  <windows>\n+  <windows source-height='30'>\n     <window class='worksheet' maximized='true' name='Sheet 1'>\n       <cards>\n         <edge name='left'>\n"
+    },
+    {
+      "id": "experiment_20260106_085008_6",
+      "title": "Adding a dimension to rows",
+      "description": "Adding a dimension to rows",
+      "user_input": "Adding a dimension to rows",
+      "tags": [
+        "field",
+        "create"
+      ],
+      "complexity": "simple",
+      "diff_lines": 27,
+      "timestamp": "2026-01-06",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260106_085008_6\\\\workbook_before.twb\"\t2026-01-06 10:22:15.816476200 -0800\n+++ \"experiments\\\\experiment_20260106_085008_6\\\\workbook_after.twb\"\t2026-01-06 10:22:15.818473500 -0800\n@@ -106,7 +106,13 @@\n     <worksheet name='Sheet 1'>\n       <table>\n         <view>\n-          <datasources />\n+          <datasources>\n+            <datasource caption='0' name='federated.1nes5701jlp1e01ee2tb00mkmpcm' />\n+          </datasources>\n+          <datasource-dependencies datasource='federated.1nes5701jlp1e01ee2tb00mkmpcm'>\n+            <column caption='Nahidaauim' datatype='string' name='[NAHIDAAUIM]' role='dimension' type='nominal' />\n+            <column-instance column='[NAHIDAAUIM]' derivation='None' name='[none:NAHIDAAUIM:nk]' pivot='key' type='nominal' />\n+          </datasource-dependencies>\n           <aggregation value='true' />\n         </view>\n         <style />\n@@ -118,7 +124,7 @@\n             <mark class='Automatic' />\n           </pane>\n         </panes>\n-        <rows />\n+        <rows>[federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:NAHIDAAUIM:nk]</rows>\n         <cols />\n       </table>\n       <simple-id uuid='{301371C4-EC0E-4C26-AF3F-758BEF03639D}' />\n",
+      "affected_sheet": "Sheet 1",
+      "worksheet_diff": "--- \"C:\\\\Users\\\\WILL~1.MAR\\\\AppData\\\\Local\\\\Temp\\\\2\\\\tmpy9m22fjd.xml\"\t2026-03-04 12:59:43.043479500 -0800\n+++ \"C:\\\\Users\\\\WILL~1.MAR\\\\AppData\\\\Local\\\\Temp\\\\2\\\\tmpw79zcran.xml\"\t2026-03-04 12:59:43.045476500 -0800\n@@ -1,7 +1,13 @@\n <worksheet name=\"Sheet 1\">\n       <table>\n         <view>\n-          <datasources />\n+          <datasources>\n+            <datasource caption=\"0\" name=\"federated.1nes5701jlp1e01ee2tb00mkmpcm\" />\n+          </datasources>\n+          <datasource-dependencies datasource=\"federated.1nes5701jlp1e01ee2tb00mkmpcm\">\n+            <column caption=\"Nahidaauim\" datatype=\"string\" name=\"[NAHIDAAUIM]\" role=\"dimension\" type=\"nominal\" />\n+            <column-instance column=\"[NAHIDAAUIM]\" derivation=\"None\" name=\"[none:NAHIDAAUIM:nk]\" pivot=\"key\" type=\"nominal\" />\n+          </datasource-dependencies>\n           <aggregation value=\"true\" />\n         </view>\n         <style />\n@@ -13,7 +19,7 @@\n             <mark class=\"Automatic\" />\n           </pane>\n         </panes>\n-        <rows />\n+        <rows>[federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:NAHIDAAUIM:nk]</rows>\n         <cols />\n       </table>\n       <simple-id uuid=\"{301371C4-EC0E-4C26-AF3F-758BEF03639D}\" />\n",
+      "worksheet_diff_lines": 27
+    },
+    {
+      "id": "experiment_20260106_085021_7",
+      "title": "making a text table",
+      "description": "making a text table",
+      "user_input": "making a text table",
+      "tags": [],
+      "complexity": "simple",
+      "diff_lines": 22,
+      "timestamp": "2026-01-06",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260106_085021_7\\\\workbook_before.twb\"\t2026-01-06 10:22:15.550081300 -0800\n+++ \"experiments\\\\experiment_20260106_085021_7\\\\workbook_after.twb\"\t2026-01-06 10:22:15.548081200 -0800\n@@ -110,7 +110,9 @@\n             <datasource caption='0' name='federated.1nes5701jlp1e01ee2tb00mkmpcm' />\n           </datasources>\n           <datasource-dependencies datasource='federated.1nes5701jlp1e01ee2tb00mkmpcm'>\n+            <column caption='Gagbkvgbif' datatype='string' name='[GAGBKVGBIF]' role='dimension' type='nominal' />\n             <column caption='Nahidaauim' datatype='string' name='[NAHIDAAUIM]' role='dimension' type='nominal' />\n+            <column-instance column='[GAGBKVGBIF]' derivation='None' name='[none:GAGBKVGBIF:nk]' pivot='key' type='nominal' />\n             <column-instance column='[NAHIDAAUIM]' derivation='None' name='[none:NAHIDAAUIM:nk]' pivot='key' type='nominal' />\n           </datasource-dependencies>\n           <aggregation value='true' />\n@@ -124,7 +126,7 @@\n             <mark class='Automatic' />\n           </pane>\n         </panes>\n-        <rows>[federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:NAHIDAAUIM:nk]</rows>\n+        <rows>([federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:NAHIDAAUIM:nk] / [federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:GAGBKVGBIF:nk])</rows>\n         <cols />\n       </table>\n       <simple-id uuid='{301371C4-EC0E-4C26-AF3F-758BEF03639D}' />\n"
+    },
+    {
+      "id": "experiment_20260106_085039_9",
+      "title": "Sorting alphabetically",
+      "description": "Sorting alphabetically",
+      "user_input": "Sorting alphabetically",
+      "tags": [
+        "sort"
+      ],
+      "complexity": "simple",
+      "diff_lines": 19,
+      "timestamp": "2026-01-06",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260106_085039_9\\\\workbook_before.twb\"\t2026-01-06 10:22:15.687862500 -0800\n+++ \"experiments\\\\experiment_20260106_085039_9\\\\workbook_after.twb\"\t2026-01-06 10:22:15.690365500 -0800\n@@ -9,6 +9,7 @@\n     <ObjectModelTableType />\n     <SchemaViewerObjectModel />\n     <SheetIdentifierTracking />\n+    <SortTagCleanup />\n     <WindowsPersistSimpleIdentifiers />\n   </document-format-change-manifest>\n   <preferences>\n@@ -115,6 +116,7 @@\n             <column-instance column='[GAGBKVGBIF]' derivation='None' name='[none:GAGBKVGBIF:nk]' pivot='key' type='nominal' />\n             <column-instance column='[NAHIDAAUIM]' derivation='None' name='[none:NAHIDAAUIM:nk]' pivot='key' type='nominal' />\n           </datasource-dependencies>\n+          <alphabetic-sort column='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:NAHIDAAUIM:nk]' direction='ASC' />\n           <aggregation value='true' />\n         </view>\n         <style />\n"
+    },
+    {
+      "id": "experiment_20260106_085051_12",
+      "title": "Swapping axes",
+      "description": "Swapping axes",
+      "user_input": "Swapping axes",
+      "tags": [
+        "axis"
+      ],
+      "complexity": "simple",
+      "diff_lines": 14,
+      "timestamp": "2026-01-06",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260106_085051_12\\\\workbook_before.twb\"\t2026-01-06 10:22:15.714535000 -0800\n+++ \"experiments\\\\experiment_20260106_085051_12\\\\workbook_after.twb\"\t2026-01-06 10:22:15.711536900 -0800\n@@ -128,8 +128,8 @@\n             <mark class='Automatic' />\n           </pane>\n         </panes>\n-        <rows>([federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:NAHIDAAUIM:nk] / [federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:GAGBKVGBIF:nk])</rows>\n-        <cols />\n+        <rows />\n+        <cols>([federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:NAHIDAAUIM:nk] / [federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:GAGBKVGBIF:nk])</cols>\n       </table>\n       <simple-id uuid='{301371C4-EC0E-4C26-AF3F-758BEF03639D}' />\n     </worksheet>\n"
+    },
+    {
+      "id": "experiment_20260106_085110_13",
+      "title": "Adding measures to view",
+      "description": "Adding measures to view",
+      "user_input": "Adding measures to view",
+      "tags": [
+        "field",
+        "view",
+        "create"
+      ],
+      "complexity": "simple",
+      "diff_lines": 21,
+      "timestamp": "2026-01-06",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260106_085110_13\\\\workbook_before.twb\"\t2026-01-06 10:22:15.556666100 -0800\n+++ \"experiments\\\\experiment_20260106_085110_13\\\\workbook_after.twb\"\t2026-01-06 10:22:15.554148600 -0800\n@@ -113,6 +113,8 @@\n           <datasource-dependencies datasource='federated.1nes5701jlp1e01ee2tb00mkmpcm'>\n             <column caption='Gagbkvgbif' datatype='string' name='[GAGBKVGBIF]' role='dimension' type='nominal' />\n             <column caption='Nahidaauim' datatype='string' name='[NAHIDAAUIM]' role='dimension' type='nominal' />\n+            <column caption='0.csv' datatype='table' name='[__tableau_internal_object_id__].[0.csv_550DFB9BBBD143118350797F5DDE2F97]' role='measure' type='quantitative' />\n+            <column-instance column='[__tableau_internal_object_id__].[0.csv_550DFB9BBBD143118350797F5DDE2F97]' derivation='Count' name='[__tableau_internal_object_id__].[cnt:0.csv_550DFB9BBBD143118350797F5DDE2F97:qk]' pivot='key' type='quantitative' />\n             <column-instance column='[GAGBKVGBIF]' derivation='None' name='[none:GAGBKVGBIF:nk]' pivot='key' type='nominal' />\n             <column-instance column='[NAHIDAAUIM]' derivation='None' name='[none:NAHIDAAUIM:nk]' pivot='key' type='nominal' />\n           </datasource-dependencies>\n@@ -128,7 +130,7 @@\n             <mark class='Automatic' />\n           </pane>\n         </panes>\n-        <rows />\n+        <rows>[federated.1nes5701jlp1e01ee2tb00mkmpcm].[__tableau_internal_object_id__].[cnt:0.csv_550DFB9BBBD143118350797F5DDE2F97:qk]</rows>\n         <cols>([federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:NAHIDAAUIM:nk] / [federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:GAGBKVGBIF:nk])</cols>\n       </table>\n       <simple-id uuid='{301371C4-EC0E-4C26-AF3F-758BEF03639D}' />\n"
+    },
+    {
+      "id": "experiment_20260106_085203_17",
+      "title": "Going to a packed bubble chart",
+      "description": "Going to a packed bubble chart",
+      "user_input": "Going to a packed bubble chart",
+      "tags": [
+        "chart"
+      ],
+      "complexity": "simple",
+      "diff_lines": 43,
+      "timestamp": "2026-01-06",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260106_085203_17\\\\workbook_before.twb\"\t2026-01-06 10:22:15.591192500 -0800\n+++ \"experiments\\\\experiment_20260106_085203_17\\\\workbook_after.twb\"\t2026-01-06 10:22:15.593191700 -0800\n@@ -131,14 +131,14 @@\n             <view>\n               <breakdown value='auto' />\n             </view>\n-            <mark class='Square' />\n+            <mark class='Circle' />\n             <encodings>\n-              <color column='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[__tableau_internal_object_id__].[cnt:0.csv_550DFB9BBBD143118350797F5DDE2F97:qk]' />\n-              <text column='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[__tableau_internal_object_id__].[cnt:0.csv_550DFB9BBBD143118350797F5DDE2F97:qk]' />\n+              <size column='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[__tableau_internal_object_id__].[cnt:0.csv_550DFB9BBBD143118350797F5DDE2F97:qk]' />\n+              <text column='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:GAGBKVGBIF:nk]' />\n+              <text column='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:NAHIDAAUIM:nk]' />\n             </encodings>\n             <style>\n               <style-rule element='mark'>\n-                <format attr='has-stroke' value='false' />\n                 <format attr='mark-labels-show' value='true' />\n                 <format attr='mark-labels-cull' value='true' />\n                 <format attr='mark-labels-line-first' value='true' />\n@@ -152,7 +152,7 @@\n             </style>\n           </pane>\n         </panes>\n-        <rows>([federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:GAGBKVGBIF:nk] / [federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:NAHIDAAUIM:nk])</rows>\n+        <rows />\n         <cols />\n       </table>\n       <simple-id uuid='{301371C4-EC0E-4C26-AF3F-758BEF03639D}' />\n@@ -179,11 +179,6 @@\n             <card type='title' />\n           </strip>\n         </edge>\n-        <edge name='right'>\n-          <strip size='160'>\n-            <card pane-specification-id='0' param='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[__tableau_internal_object_id__].[cnt:0.csv_550DFB9BBBD143118350797F5DDE2F97:qk]' type='color' />\n-          </strip>\n-        </edge>\n       </cards>\n       <simple-id uuid='{F54E0607-82B6-4192-92EB-6418AE2E494E}' />\n     </window>\n"
+    },
+    {
+      "id": "experiment_20260106_085359_18",
+      "title": "Removing an encoding",
+      "description": "Removing an encoding",
+      "user_input": "Removing an encoding",
+      "tags": [
+        "encoding"
+      ],
+      "complexity": "simple",
+      "diff_lines": 32,
+      "timestamp": "2026-01-06",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260106_085359_18\\\\workbook_before.twb\"\t2026-01-06 10:22:15.784948500 -0800\n+++ \"experiments\\\\experiment_20260106_085359_18\\\\workbook_after.twb\"\t2026-01-06 10:22:15.786946300 -0800\n@@ -113,19 +113,13 @@\n           <datasource-dependencies datasource='federated.1nes5701jlp1e01ee2tb00mkmpcm'>\n             <column caption='Gagbkvgbif' datatype='string' name='[GAGBKVGBIF]' role='dimension' type='nominal' />\n             <column caption='Nahidaauim' datatype='string' name='[NAHIDAAUIM]' role='dimension' type='nominal' />\n-            <column caption='0.csv' datatype='table' name='[__tableau_internal_object_id__].[0.csv_550DFB9BBBD143118350797F5DDE2F97]' role='measure' type='quantitative' />\n-            <column-instance column='[__tableau_internal_object_id__].[0.csv_550DFB9BBBD143118350797F5DDE2F97]' derivation='Count' name='[__tableau_internal_object_id__].[cnt:0.csv_550DFB9BBBD143118350797F5DDE2F97:qk]' pivot='key' type='quantitative' />\n             <column-instance column='[GAGBKVGBIF]' derivation='None' name='[none:GAGBKVGBIF:nk]' pivot='key' type='nominal' />\n             <column-instance column='[NAHIDAAUIM]' derivation='None' name='[none:NAHIDAAUIM:nk]' pivot='key' type='nominal' />\n           </datasource-dependencies>\n           <alphabetic-sort column='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:NAHIDAAUIM:nk]' direction='ASC' />\n           <aggregation value='true' />\n         </view>\n-        <style>\n-          <style-rule element='mark'>\n-            <encoding attr='size-bar' field='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[__tableau_internal_object_id__].[cnt:0.csv_550DFB9BBBD143118350797F5DDE2F97:qk]' field-type='quantitative' max-size='1' min-size='0.005' type='centersize' />\n-          </style-rule>\n-        </style>\n+        <style />\n         <panes>\n           <pane selection-relaxation-option='selection-relaxation-allow'>\n             <view>\n@@ -133,7 +127,6 @@\n             </view>\n             <mark class='Circle' />\n             <encodings>\n-              <size column='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[__tableau_internal_object_id__].[cnt:0.csv_550DFB9BBBD143118350797F5DDE2F97:qk]' />\n               <text column='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:GAGBKVGBIF:nk]' />\n               <text column='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:NAHIDAAUIM:nk]' />\n             </encodings>\n"
+    },
+    {
+      "id": "experiment_20260106_085411_19",
+      "title": "Removing second encoding",
+      "description": "Removing second encoding",
+      "user_input": "Removing second encoding",
+      "tags": [
+        "encoding"
+      ],
+      "complexity": "simple",
+      "diff_lines": 21,
+      "timestamp": "2026-01-06",
+      "scope": "worksheet",
+      "diff": "--- \"experiments\\\\experiment_20260106_085411_19\\\\workbook_before.twb\"\t2026-01-06 10:22:15.459628000 -0800\n+++ \"experiments\\\\experiment_20260106_085411_19\\\\workbook_after.twb\"\t2026-01-06 10:22:15.457626700 -0800\n@@ -111,9 +111,7 @@\n             <datasource caption='0' name='federated.1nes5701jlp1e01ee2tb00mkmpcm' />\n           </datasources>\n           <datasource-dependencies datasource='federated.1nes5701jlp1e01ee2tb00mkmpcm'>\n-            <column caption='Gagbkvgbif' datatype='string' name='[GAGBKVGBIF]' role='dimension' type='nominal' />\n             <column caption='Nahidaauim' datatype='string' name='[NAHIDAAUIM]' role='dimension' type='nominal' />\n-            <column-instance column='[GAGBKVGBIF]' derivation='None' name='[none:GAGBKVGBIF:nk]' pivot='key' type='nominal' />\n             <column-instance column='[NAHIDAAUIM]' derivation='None' name='[none:NAHIDAAUIM:nk]' pivot='key' type='nominal' />\n           </datasource-dependencies>\n           <alphabetic-sort column='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:NAHIDAAUIM:nk]' direction='ASC' />\n@@ -127,7 +125,6 @@\n             </view>\n             <mark class='Circle' />\n             <encodings>\n-              <text column='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:GAGBKVGBIF:nk]' />\n               <text column='[federated.1nes5701jlp1e01ee2tb00mkmpcm].[none:NAHIDAAUIM:nk]' />\n             </encodings>\n             <style>\n"
+    },
+    {
+      "id": "experiment_20260106_085420_20",
+      "title": "New dashboard",
+      "description": "New dashboard",
+      "user_input": "New dashboard",
+      "tags": [
+        "dashboard",
+        "create"
+      ],
+      "complexity": "medium",
+      "diff_lines": 63,
+      "timestamp": "2026-01-06",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260106_085420_20\\\\workbook_before.twb\"\t2026-01-06 10:22:15.478707300 -0800\n+++ \"experiments\\\\experiment_20260106_085420_20\\\\workbook_after.twb\"\t2026-01-06 10:22:15.481707200 -0800\n@@ -3,11 +3,14 @@\n <!-- build main.0.0000.0000                                 -->\n <workbook original-version='18.1' source-build='0.0.0 (0000.0.0.0)' source-platform='win' version='18.1' xmlns:user='http://www.tableausoftware.com/xml/user'>\n   <document-format-change-manifest>\n+    <AccessibleZoneTabOrder />\n     <AnimationOnByDefault />\n+    <AutoCreateAndUpdateDSDPhoneLayouts />\n     <MarkAnimation />\n     <ObjectModelEncapsulateLegacy />\n     <ObjectModelTableType />\n     <SchemaViewerObjectModel />\n+    <SetMembershipControl />\n     <SheetIdentifierTracking />\n     <SortTagCleanup />\n     <WindowsPersistSimpleIdentifiers />\n@@ -148,8 +151,32 @@\n       <simple-id uuid='{301371C4-EC0E-4C26-AF3F-758BEF03639D}' />\n     </worksheet>\n   </worksheets>\n+  <dashboards>\n+    <dashboard enable-sort-zone-taborder='true' name='Dashboard 1'>\n+      <style />\n+      <size maxheight='800' maxwidth='1000' minheight='800' minwidth='1000' />\n+      <zones />\n+      <devicelayouts>\n+        <devicelayout auto-generated='true' name='Phone'>\n+          <size maxheight='700' minheight='700' sizing-mode='vscroll' />\n+          <zones>\n+            <zone h='100000' id='2' type-v2='layout-basic' w='100000' x='0' y='0'>\n+              <zone h='84000' id='1' param='vert' type-v2='layout-flow' w='84000' x='8000' y='8000' />\n+              <zone-style>\n+                <format attr='border-color' value='#000000' />\n+                <format attr='border-style' value='none' />\n+                <format attr='border-width' value='0' />\n+                <format attr='margin' value='8' />\n+              </zone-style>\n+            </zone>\n+          </zones>\n+        </devicelayout>\n+      </devicelayouts>\n+      <simple-id uuid='{F2A60186-1188-4243-83A3-5A63B9051544}' />\n+    </dashboard>\n+  </dashboards>\n   <windows source-height='30'>\n-    <window class='worksheet' maximized='true' name='Sheet 1'>\n+    <window class='worksheet' name='Sheet 1'>\n       <cards>\n         <edge name='left'>\n           <strip size='160'>\n@@ -172,5 +199,10 @@\n       </cards>\n       <simple-id uuid='{F54E0607-82B6-4192-92EB-6418AE2E494E}' />\n     </window>\n+    <window class='dashboard' maximized='true' name='Dashboard 1'>\n+      <viewpoints />\n+      <active id='-1' />\n+      <simple-id uuid='{882E2153-9AD2-4BBD-B962-5A67FB760FD9}' />\n+    </window>\n   </windows>\n </workbook>\n"
+    },
+    {
+      "id": "experiment_20260106_085428_22",
+      "title": "Selecting phone layout",
+      "description": "Selecting phone layout",
+      "user_input": "Selecting phone layout",
+      "tags": [
+        "layout",
+        "selection"
+      ],
+      "complexity": "simple",
+      "diff_lines": 38,
+      "timestamp": "2026-01-06",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260106_085428_22\\\\workbook_before.twb\"\t2026-01-06 10:22:15.486706000 -0800\n+++ \"experiments\\\\experiment_20260106_085428_22\\\\workbook_after.twb\"\t2026-01-06 10:22:15.484707300 -0800\n@@ -5,12 +5,10 @@\n   <document-format-change-manifest>\n     <AccessibleZoneTabOrder />\n     <AnimationOnByDefault />\n-    <AutoCreateAndUpdateDSDPhoneLayouts />\n     <MarkAnimation />\n     <ObjectModelEncapsulateLegacy />\n     <ObjectModelTableType />\n     <SchemaViewerObjectModel />\n-    <SetMembershipControl />\n     <SheetIdentifierTracking />\n     <SortTagCleanup />\n     <WindowsPersistSimpleIdentifiers />\n@@ -157,20 +155,7 @@\n       <size maxheight='800' maxwidth='1000' minheight='800' minwidth='1000' />\n       <zones />\n       <devicelayouts>\n-        <devicelayout auto-generated='true' name='Phone'>\n-          <size maxheight='700' minheight='700' sizing-mode='vscroll' />\n-          <zones>\n-            <zone h='100000' id='2' type-v2='layout-basic' w='100000' x='0' y='0'>\n-              <zone h='84000' id='1' param='vert' type-v2='layout-flow' w='84000' x='8000' y='8000' />\n-              <zone-style>\n-                <format attr='border-color' value='#000000' />\n-                <format attr='border-style' value='none' />\n-                <format attr='border-width' value='0' />\n-                <format attr='margin' value='8' />\n-              </zone-style>\n-            </zone>\n-          </zones>\n-        </devicelayout>\n+        <devicelayout active='true' name='Phone' />\n       </devicelayouts>\n       <simple-id uuid='{F2A60186-1188-4243-83A3-5A63B9051544}' />\n     </dashboard>\n"
+    },
+    {
+      "id": "experiment_20260106_085437_23",
+      "title": "Deleting phone layout",
+      "description": "Deleting phone layout",
+      "user_input": "Deleting phone layout",
+      "tags": [
+        "layout"
+      ],
+      "complexity": "simple",
+      "diff_lines": 13,
+      "timestamp": "2026-01-06",
+      "scope": "dashboard",
+      "diff": "--- \"experiments\\\\experiment_20260106_085437_23\\\\workbook_before.twb\"\t2026-01-06 10:22:15.792948100 -0800\n+++ \"experiments\\\\experiment_20260106_085437_23\\\\workbook_after.twb\"\t2026-01-06 10:22:15.789947900 -0800\n@@ -154,9 +154,6 @@\n       <style />\n       <size maxheight='800' maxwidth='1000' minheight='800' minwidth='1000' />\n       <zones />\n-      <devicelayouts>\n-        <devicelayout active='true' name='Phone' />\n-      </devicelayouts>\n       <simple-id uuid='{F2A60186-1188-4243-83A3-5A63B9051544}' />\n     </dashboard>\n   </dashboards>\n"
+    },
+    {
+      "id": "experiment_20260106_085539_24",
+      "title": "Add sheet to dashboard",
+      "description": "Add sheet to dashboard",
+      "user_input": "Add sheet to dashboard",
+      "tags": [
+        "worksheet",
+        "dashboard",
+        "create"
+      ],
+      "complexity": "simple",
+      "diff_lines": 48,
+      "timestamp": "2026-01-06",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260106_085539_24\\\\workbook_before.twb\"\t2026-01-06 10:22:15.832508400 -0800\n+++ \"experiments\\\\experiment_20260106_085539_24\\\\workbook_after.twb\"\t2026-01-06 10:22:15.829874200 -0800\n@@ -9,6 +9,7 @@\n     <ObjectModelEncapsulateLegacy />\n     <ObjectModelTableType />\n     <SchemaViewerObjectModel />\n+    <SetMembershipControl />\n     <SheetIdentifierTracking />\n     <SortTagCleanup />\n     <WindowsPersistSimpleIdentifiers />\n@@ -153,7 +154,24 @@\n     <dashboard enable-sort-zone-taborder='true' name='Dashboard 1'>\n       <style />\n       <size maxheight='800' maxwidth='1000' minheight='800' minwidth='1000' />\n-      <zones />\n+      <zones>\n+        <zone h='100000' id='2' type-v2='layout-basic' w='100000' x='0' y='0'>\n+          <zone h='98000' id='1' name='Sheet 1' w='98400' x='800' y='1000'>\n+            <zone-style>\n+              <format attr='border-color' value='#000000' />\n+              <format attr='border-style' value='none' />\n+              <format attr='border-width' value='0' />\n+              <format attr='margin' value='4' />\n+            </zone-style>\n+          </zone>\n+          <zone-style>\n+            <format attr='border-color' value='#000000' />\n+            <format attr='border-style' value='none' />\n+            <format attr='border-width' value='0' />\n+            <format attr='margin' value='8' />\n+          </zone-style>\n+        </zone>\n+      </zones>\n       <simple-id uuid='{F2A60186-1188-4243-83A3-5A63B9051544}' />\n     </dashboard>\n   </dashboards>\n@@ -182,7 +200,9 @@\n       <simple-id uuid='{F54E0607-82B6-4192-92EB-6418AE2E494E}' />\n     </window>\n     <window class='dashboard' maximized='true' name='Dashboard 1'>\n-      <viewpoints />\n+      <viewpoints>\n+        <viewpoint name='Sheet 1' />\n+      </viewpoints>\n       <active id='1' />\n       <simple-id uuid='{882E2153-9AD2-4BBD-B962-5A67FB760FD9}' />\n     </window>\n"
+    },
+    {
+      "id": "experiment_20260106_085551_26",
+      "title": "Adding a web zone to the dashboard",
+      "description": "Adding a web zone to the dashboard",
+      "user_input": "Adding a web zone to the dashboard",
+      "tags": [
+        "dashboard",
+        "create"
+      ],
+      "complexity": "simple",
+      "diff_lines": 12,
+      "timestamp": "2026-01-06",
+      "scope": "dashboard",
+      "diff": "--- \"experiments\\\\experiment_20260106_085551_26\\\\workbook_before.twb\"\t2026-01-06 10:22:15.624718000 -0800\n+++ \"experiments\\\\experiment_20260106_085551_26\\\\workbook_after.twb\"\t2026-01-06 10:22:15.618719600 -0800\n@@ -164,7 +164,7 @@\n               <format attr='margin' value='4' />\n             </zone-style>\n           </zone>\n-          <zone forceUpdate='' h='49000' id='3' type-v2='web' w='98400' x='800' y='50000'>\n+          <zone forceUpdate='' h='49000' id='3' param='google.com' type-v2='web' w='98400' x='800' y='50000'>\n             <zone-style>\n               <format attr='border-color' value='#000000' />\n               <format attr='border-style' value='none' />\n"
+    },
+    {
+      "id": "experiment_20260106_085547_25",
+      "title": "adding web zone to the dashboard",
+      "description": "adding web zone to the dashboard",
+      "user_input": "adding web zone to the dashboard",
+      "tags": [
+        "dashboard",
+        "create"
+      ],
+      "complexity": "simple",
+      "diff_lines": 20,
+      "timestamp": "2026-01-06",
+      "scope": "dashboard",
+      "diff": "--- \"experiments\\\\experiment_20260106_085547_25\\\\workbook_before.twb\"\t2026-01-06 10:22:15.491716800 -0800\n+++ \"experiments\\\\experiment_20260106_085547_25\\\\workbook_after.twb\"\t2026-01-06 10:22:15.489716900 -0800\n@@ -156,7 +156,15 @@\n       <size maxheight='800' maxwidth='1000' minheight='800' minwidth='1000' />\n       <zones>\n         <zone h='100000' id='2' type-v2='layout-basic' w='100000' x='0' y='0'>\n-          <zone h='98000' id='1' name='Sheet 1' w='98400' x='800' y='1000'>\n+          <zone h='49000' id='1' name='Sheet 1' w='98400' x='800' y='1000'>\n+            <zone-style>\n+              <format attr='border-color' value='#000000' />\n+              <format attr='border-style' value='none' />\n+              <format attr='border-width' value='0' />\n+              <format attr='margin' value='4' />\n+            </zone-style>\n+          </zone>\n+          <zone forceUpdate='' h='49000' id='3' type-v2='web' w='98400' x='800' y='50000'>\n             <zone-style>\n               <format attr='border-color' value='#000000' />\n               <format attr='border-style' value='none' />\n"
+    },
+    {
+      "id": "experiment_20260106_085614_27",
+      "title": "Adding a blank screen to corner",
+      "description": "Adding a blank screen to corner",
+      "user_input": "Adding a blank screen to corner",
+      "tags": [
+        "create"
+      ],
+      "complexity": "simple",
+      "diff_lines": 27,
+      "timestamp": "2026-01-06",
+      "scope": "dashboard",
+      "diff": "--- \"experiments\\\\experiment_20260106_085614_27\\\\workbook_before.twb\"\t2026-01-06 10:22:15.670725800 -0800\n+++ \"experiments\\\\experiment_20260106_085614_27\\\\workbook_after.twb\"\t2026-01-06 10:22:15.672727400 -0800\n@@ -156,7 +156,7 @@\n       <size maxheight='800' maxwidth='1000' minheight='800' minwidth='1000' />\n       <zones>\n         <zone h='100000' id='2' type-v2='layout-basic' w='100000' x='0' y='0'>\n-          <zone h='49000' id='1' name='Sheet 1' w='98400' x='800' y='1000'>\n+          <zone h='49000' id='1' name='Sheet 1' w='49200' x='800' y='1000'>\n             <zone-style>\n               <format attr='border-color' value='#000000' />\n               <format attr='border-style' value='none' />\n@@ -168,6 +168,14 @@\n             <zone-style>\n               <format attr='border-color' value='#000000' />\n               <format attr='border-style' value='none' />\n+              <format attr='border-width' value='0' />\n+              <format attr='margin' value='4' />\n+            </zone-style>\n+          </zone>\n+          <zone h='49000' id='4' type-v2='empty' w='49200' x='50000' y='1000'>\n+            <zone-style>\n+              <format attr='border-color' value='#000000' />\n+              <format attr='border-style' value='none' />\n               <format attr='border-width' value='0' />\n               <format attr='margin' value='4' />\n             </zone-style>\n"
+    },
+    {
+      "id": "experiment_20260106_085634_28",
+      "title": "closing wb",
+      "description": "closing wb",
+      "user_input": "closing wb",
+      "tags": [],
+      "complexity": "simple",
+      "diff_lines": 12,
+      "timestamp": "2026-01-06",
+      "scope": "workbook",
+      "diff": "--- \"experiments\\\\experiment_20260106_085634_28\\\\workbook_before.twb\"\t2026-01-06 10:22:15.750154500 -0800\n+++ \"experiments\\\\experiment_20260106_085634_28\\\\workbook_after.twb\"\t2026-01-06 10:22:15.747152800 -0800\n@@ -191,7 +191,7 @@\n       <simple-id uuid='{F2A60186-1188-4243-83A3-5A63B9051544}' />\n     </dashboard>\n   </dashboards>\n-  <windows source-height='30'>\n+  <windows show-side-pane='false' source-height='30'>\n     <window class='worksheet' name='Sheet 1'>\n       <cards>\n         <edge name='left'>\n"
+    }
+  ]
+}

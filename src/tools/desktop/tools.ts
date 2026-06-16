@@ -11,6 +11,10 @@ import { getRemoveFieldFromColsTool } from './fields/removeFieldFromCols.js';
 import { getRemoveFieldFromEncodingTool } from './fields/removeFieldFromEncoding.js';
 import { getRemoveFieldFromRowsTool } from './fields/removeFieldFromRows.js';
 import { getResolveFieldTool } from './fields/resolveField.js';
+import { getLookupWorkbookSchemaTool } from './search/lookupWorkbookSchema.js';
+import { getSearchCommandsTool } from './search/searchCommands.js';
+import { getSearchExamplesTool } from './search/searchExamples.js';
+import { getSearchWorkbookExamplesTool } from './search/searchWorkbookExamples.js';
 import { getCheckForUserChangesTool } from './session/checkForUserChanges.js';
 import { getListInstancesTool } from './session/listInstances.js';
 import { getApplyWorkbookTool } from './workbook/applyWorkbook.js';
@@ -42,4 +46,8 @@ export const desktopToolFactories = [
   getRemoveFieldFromRowsTool,
   getRemoveFieldFromColsTool,
   getResolveFieldTool,
+  getSearchExamplesTool,
+  getSearchCommandsTool,
+  getLookupWorkbookSchemaTool,
+  getSearchWorkbookExamplesTool,
 ];

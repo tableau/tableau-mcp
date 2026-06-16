@@ -20,6 +20,10 @@ export const desktopToolNames = [
   'remove-field-from-rows',
   'remove-field-from-cols',
   'resolve-field',
+  'search-examples',
+  'search-commands',
+  'lookup-workbook-schema',
+  'search-workbook-examples',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 

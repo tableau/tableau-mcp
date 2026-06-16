@@ -1,0 +1,44 @@
+{
+  "_description": "Configure mark type and color/text/detail encoding on a worksheet. Encodings go in pane > encodings (NOT inside pane > view > mark — that gets stripped by loadMetadataFromXml).",
+  "_feature": "mark,encoding,color",
+  "mark_node": {
+    "_placement": "Inside worksheet > table > panes > pane",
+    "type": "mark",
+    "attrs": { "class": "Bar" }
+  },
+  "color_encoding": {
+    "_placement": "Inside worksheet > table > panes > pane > encodings (NOT inside mark node)",
+    "_warning": "WRONG placement: pane > view > mark > encoding — this gets stripped by loadMetadataFromXml",
+    "type": "encodings",
+    "children": [
+      {
+        "type": "color",
+        "attrs": { "column": "[federated.XXXX].[none:Category:nk]" }
+      }
+    ]
+  },
+  "full_pane_example": {
+    "_description": "Complete pane structure showing correct encoding placement",
+    "type": "pane",
+    "attrs": { "id": "2", "selection-relaxation-option": "selection-relaxation-disallow" },
+    "children": [
+      { "type": "view", "children": [{ "type": "breakdown", "attrs": { "value": "auto" } }] },
+      { "type": "mark", "attrs": { "class": "Bar" } },
+      {
+        "type": "encodings",
+        "children": [
+          { "type": "color", "attrs": { "column": "[federated.XXXX].[none:Category:nk]" } },
+          { "type": "text", "attrs": { "column": "[federated.XXXX].[sum:Sales:qk]" } },
+          { "type": "lod", "attrs": { "column": "[federated.XXXX].[none:Region:nk]" } }
+        ]
+      }
+    ]
+  },
+  "notes": {
+    "mark_class_values_PrimitiveType_ST": ["Automatic", "Text", "Shape", "Bar", "GanttBar", "Line", "Area", "Circle", "Square", "Pie", "Polygon", "Heatmap", "Multipolygon"],
+    "encoding_types_in_pane_encodings": ["color", "size", "text", "shape", "lod", "tooltip", "path", "angle"],
+    "color_format": "Hex values like #4e79a7",
+    "setting_mark_type": "Change the 'class' attribute on the mark node inside panes > pane",
+    "CRITICAL": "Encodings MUST be direct children of pane (inside an 'encodings' wrapper), NOT inside the mark node. Mark-level encodings are stripped by loadMetadataFromXml."
+  }
+}
