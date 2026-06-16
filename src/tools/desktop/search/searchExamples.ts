@@ -9,7 +9,8 @@ import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 function loadCorpus(): Corpus | null {
-  const corpusPath = process.env.CORPUS_PATH || path.join(process.cwd(), 'data', 'corpus.json');
+  const corpusPath =
+    process.env.CORPUS_PATH || path.join(process.cwd(), 'src', 'desktop', 'data', 'corpus.json');
   try {
     return JSON.parse(readFileSync(corpusPath, 'utf8')) as Corpus;
   } catch {

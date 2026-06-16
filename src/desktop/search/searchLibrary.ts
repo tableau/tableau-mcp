@@ -2,10 +2,10 @@ import fs from 'fs';
 import Fuse from 'fuse.js';
 import path from 'path';
 
-// Data files are resolved relative to the process working directory (the repo/install root)
-// so that they survive the esbuild bundle step. Each path can be overridden via env vars.
+// Data files live at src/desktop/data/ and are resolved from the repo root at runtime.
+// Each path can be overridden via env vars.
 function dataPath(filename: string): string {
-  return path.join(process.cwd(), 'data', filename);
+  return path.join(process.cwd(), 'src', 'desktop', 'data', filename);
 }
 
 // --- Commands reference ---
