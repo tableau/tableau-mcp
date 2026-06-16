@@ -2,6 +2,8 @@
  * @file Tableau Embedding utilities
  */
 
+const TABLEAU_VIZ_CONTAINER_ID = 'tableauVizContainer';
+
 /**
  * Creates and configures a Tableau viz element for embedding
  * @param vizUrl - The URL of the Tableau view to embed
@@ -18,58 +20,26 @@ export function createTableauVizElement(vizUrl: string, token: string): HTMLElem
   // Set the token for authentication
   viz.setAttribute('token', token);
 
-  // Optional: Set common embedding properties
-  viz.setAttribute('toolbar', 'bottom');
-  viz.setAttribute('hide-tabs', 'false');
-
-  // Make it fill the container
-  viz.style.width = '100%';
-  viz.style.height = '100%';
-  viz.style.display = 'block';
+  // // Optional: Set common embedding properties
+  // viz.setAttribute('toolbar', 'bottom');
+  // viz.setAttribute('hide-tabs', 'false');
 
   return viz;
 }
 
 /**
- * Embeds a Tableau visualization into a container element
- * @param containerId - The ID of the container element
+ * Embeds a Tableau visualization into the tableauVizContainer element
  * @param vizUrl - The URL of the Tableau view to embed
  * @param token - The OAuth Bearer token for authentication
  */
-export function embedTableauViz(containerId: string, vizUrl: string, token: string): void {
-  const container = document.getElementById(containerId);
+export function embedTableauViz(vizUrl: string, token: string): void {
+  const container = document.getElementById(TABLEAU_VIZ_CONTAINER_ID);
 
   if (!container) {
-    throw new Error(`Container element with id "${containerId}" not found`);
-  }
-
-  // Clear existing content safely
-  while (container.firstChild) {
-    container.removeChild(container.firstChild);
+    throw new Error(`Container element with id "${TABLEAU_VIZ_CONTAINER_ID}" not found`);
   }
 
   // Create and append the viz element
   const viz = createTableauVizElement(vizUrl, token);
   container.appendChild(viz);
-}
-
-/**
- * Extracts the view URL from tool result content
- * @param result - The MCP tool result
- * @returns The view URL if found, otherwise null
- */
-export function extractViewUrlFromResult(result: any): string | null {
-  try {
-    const content = result.content?.[0];
-    if (content?.type === 'text') {
-      const data = JSON.parse(content.text);
-
-      // Check for various possible URL fields
-      return data.viewUrl || data.contentUrl || data.webpageUrl || data.url || null;
-    }
-  } catch {
-    // Silently handle parsing errors
-  }
-
-  return null;
 }
