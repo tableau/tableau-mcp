@@ -20,10 +20,6 @@ export function createTableauVizElement(vizUrl: string, token: string): HTMLElem
   // Set the token for authentication
   viz.setAttribute('token', token);
 
-  // // Optional: Set common embedding properties
-  // viz.setAttribute('toolbar', 'bottom');
-  // viz.setAttribute('hide-tabs', 'false');
-
   return viz;
 }
 
