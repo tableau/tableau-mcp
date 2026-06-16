@@ -1,5 +1,5 @@
 import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
-import { mockDatasources } from './listDatasources/mockDatasources.js';
+import { mockDatasources } from './datasources/mockDatasources.js';
 import { exportedForTesting } from './resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
 import { mockCustomView } from './views/mockCustomView.js';

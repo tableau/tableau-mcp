@@ -1,5 +1,5 @@
 import invariant from '../../../utils/invariant.js';
-import { mockDatasources } from '../listDatasources/mockDatasources.js';
+import { mockDatasources } from '../datasources/mockDatasources.js';
 import { constrainPulseDefinitions } from './constrainPulseDefinitions.js';
 import { mockPulseMetricDefinitions } from './mockPulseMetricDefinitions.js';
 
