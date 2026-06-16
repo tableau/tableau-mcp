@@ -146,7 +146,7 @@ describe('server', () => {
         );
       }
 
-      const expectedToolNames = [...desktopToolNames, ...expectedWebToolNames];
+      const expectedToolNames = [...expectedWebToolNames, ...desktopToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
     });
