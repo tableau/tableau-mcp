@@ -30,11 +30,7 @@ function loadTableauEmbeddingApi(viewUrl: string): Promise<void> {
   return new Promise((resolve, reject) => {
     // Check if custom elements are available (may be blocked in sandboxed iframes)
     if (!('customElements' in window)) {
-      reject(
-        new Error(
-          'Custom elements are not available. Cannot access tableau-viz element',
-        ),
-      );
+      reject(new Error('Custom elements are not available. Cannot access tableau-viz element'));
       return;
     }
 
