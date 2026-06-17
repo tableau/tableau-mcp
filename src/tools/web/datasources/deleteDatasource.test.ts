@@ -2,6 +2,7 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
@@ -326,6 +327,26 @@ describe('deleteDatasourceTool', () => {
     // No tagging or dependency check on the confirmed delete.
     expect(mocks.mockAddTagsToDatasource).not.toHaveBeenCalled();
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
+  });
+
+  it('should wire the tool-mapped API scopes into useRestApi', async () => {
+    await getToolResult({
+      datasourceId: 'ds-1',
+      confirm: true,
+      confirmationToken: validToken('ds-1'),
+    });
+    // Pin the scopes the tool requests so drift in toolScopeMap['delete-datasource'].api
+    // (a removed or added scope) fails here instead of silently shipping. Order-independent:
+    // requiredApiScopes derives from a Set, whose iteration order is not part of the contract.
+    const jwtScopes = vi.mocked(useRestApi).mock.calls[0][0].jwtScopes;
+    expect([...jwtScopes].sort()).toEqual(
+      [
+        'tableau:datasources:delete',
+        'tableau:datasource_tags:update',
+        'tableau:content:read',
+        'tableau:users:read',
+      ].sort(),
+    );
   });
 
   it('should handle API errors gracefully', async () => {
