@@ -2,6 +2,20 @@
  * @file Authentication utilities for Tableau MCP App
  */
 import { App } from '@modelcontextprotocol/ext-apps';
+import { z } from 'zod';
+
+const oauthTokenResultSchema = z.object({
+  content: z.array(
+    z.object({
+      type: z.literal('text'),
+      text: z.string(),
+    }),
+  ),
+});
+
+const oauthTokenDataSchema = z.object({
+  token: z.string(),
+});
 
 /**
  * Calls the get-oauth-token tool to retrieve the OAuth Bearer token from the MCP server
@@ -14,12 +28,11 @@ export async function callGetOAuthTokenTool(app: App): Promise<string> {
     arguments: {},
   });
 
-  // Parse the result to extract the token
-  const content = result.content[0];
-  if (content.type === 'text') {
-    const data = JSON.parse(content.text);
-    return data.token;
-  }
+  // Validate and parse the result to extract the token
+  const validated = oauthTokenResultSchema.parse(result);
+  const content = validated.content[0];
+  const data = JSON.parse(content.text);
+  const tokenData = oauthTokenDataSchema.parse(data);
 
-  throw new Error('Unexpected response format from get-oauth-token');
+  return tokenData.token;
 }
