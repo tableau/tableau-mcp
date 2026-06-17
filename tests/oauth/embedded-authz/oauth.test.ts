@@ -139,6 +139,7 @@ describe('OAuth', () => {
       bearer_methods_supported: ['header'],
       scopes_supported: [
         'tableau:mcp:datasource:read',
+        'tableau:mcp:datasource:delete',
         'tableau:mcp:tasks:read',
         'tableau:mcp:tasks:delete',
         'tableau:mcp:jobs:read',
@@ -171,6 +172,7 @@ describe('OAuth', () => {
       code_challenge_methods_supported: ['S256'],
       scopes_supported: [
         'tableau:mcp:datasource:read',
+        'tableau:mcp:datasource:delete',
         'tableau:mcp:tasks:read',
         'tableau:mcp:tasks:delete',
         'tableau:mcp:jobs:read',
@@ -208,6 +210,7 @@ describe('OAuth', () => {
       code_challenge_methods_supported: ['S256'],
       scopes_supported: [
         'tableau:mcp:datasource:read',
+        'tableau:mcp:datasource:delete',
         'tableau:mcp:tasks:read',
         'tableau:mcp:tasks:delete',
         'tableau:mcp:jobs:read',

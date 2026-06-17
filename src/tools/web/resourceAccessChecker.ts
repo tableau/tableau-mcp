@@ -98,7 +98,7 @@ class ResourceAccessChecker {
   }: {
     datasourceLuid: string;
     extra: TableauWebRequestHandlerExtra;
-  }): Promise<AllowedResult> {
+  }): Promise<AllowedResult<DataSource>> {
     const result = await this._isDatasourceAllowed({
       datasourceLuid,
       extra,
@@ -161,7 +161,7 @@ class ResourceAccessChecker {
   }: {
     datasourceLuid: string;
     extra: TableauWebRequestHandlerExtra;
-  }): Promise<AllowedResult> {
+  }): Promise<AllowedResult<DataSource>> {
     const allowedDatasourceIds = await this.getAllowedDatasourceIds({ extra });
     if (allowedDatasourceIds && !allowedDatasourceIds.has(datasourceLuid)) {
       return {
@@ -250,7 +250,9 @@ class ResourceAccessChecker {
       }
     }
 
-    return { allowed: true };
+    // Reuse the datasource already fetched by a project/tag scope check (undefined when no scope
+    // forced a fetch) so callers can avoid querying it again. Mirrors isWorkbookAllowed.
+    return { allowed: true, content: datasource };
   }
 
   private async _isWorkbookAllowed({

@@ -1,0 +1,319 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { createHash } from 'crypto';
+import { Ok } from 'ts-results-es';
+import { z } from 'zod';
+
+import { getConfig } from '../../../config.js';
+import {
+  AdminOnlyError,
+  ArgsValidationError,
+  DatasourceNotAllowedError,
+} from '../../../errors/mcpToolError.js';
+import { log } from '../../../logging/logger.js';
+import { useRestApi } from '../../../restApiInstance.js';
+import {
+  DatasourceDownstream,
+  getDatasourceDownstreamByLuid,
+  getDatasourceDownstreamQuery,
+} from '../../../sdks/tableau/methods/lineageUtils.js';
+import { RestApi } from '../../../sdks/tableau/restApi.js';
+import { WebMcpServer } from '../../../server.web.js';
+import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
+import { assertAdmin } from '../adminGate.js';
+import { resourceAccessChecker } from '../resourceAccessChecker.js';
+import { WebTool } from '../tool.js';
+
+const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
+
+// Default tag applied during the preview phase to mark a datasource as pending deletion. Reversible
+// and visible in the Tableau UI, giving owners a window to object before the confirmed delete.
+// Generic by design — callers (e.g. the Stale Content Cleanup prompt) override via `tag`.
+// NOTE: intentionally duplicated from deleteWorkbook.ts to keep this (in-flight, dependent) PR
+// purely additive; extract to a shared _lib module once both delete tools have merged.
+export const DEFAULT_PENDING_DELETION_TAG = 'pending-deletion';
+
+/**
+ * Deterministic confirmation token derived from the site + datasource. The preview phase returns
+ * it; the delete phase requires a matching value. This forces an explicit, deliberate second call
+ * with a datasource-specific token rather than a blind one-shot delete.
+ *
+ * NOTE: this is a friction/correctness gate, NOT proof that a preview actually ran. The token is a
+ * pure sha256(siteId:datasourceId) — both inputs are known to any caller (siteId from the connected
+ * site, datasourceId from the tool arg), so a caller can compute it without previewing. Guaranteeing
+ * a preview/tag step happened would require server-side state (e.g. gating on the pending-deletion
+ * tag set during preview). Stateless by design so it works across instances and restarts.
+ */
+export function computeConfirmationToken(siteId: string, datasourceId: string): string {
+  return createHash('sha256').update(`${siteId}:${datasourceId}`).digest('hex').slice(0, 12);
+}
+
+const paramsSchema = {
+  datasourceId: z.string().describe('The LUID of the published data source to delete.'),
+  confirm: z
+    .boolean()
+    .optional()
+    .describe(
+      'When omitted or false, runs a non-destructive preview: tags the data source as pending ' +
+        'deletion, warns about dependent workbooks/flows, and reports what would be deleted. When ' +
+        'true, deletes the data source. On Tableau Cloud it can be restored from the recycle bin ' +
+        'for a limited time; on Tableau Server deletion is permanent.',
+    ),
+  confirmationToken: z
+    .string()
+    .optional()
+    .describe(
+      'Required when confirm is true. The confirmationToken returned by the preview step ' +
+        '(confirm omitted/false) for this data source. Deletion is rejected without a matching ' +
+        'token, which forces a deliberate two-step delete rather than a blind single call.',
+    ),
+  tag: z
+    .string()
+    .max(200)
+    .optional()
+    .describe(
+      'Label applied to the data source during the preview phase to mark it as pending deletion ' +
+        `(reversible, visible in the Tableau UI). Defaults to '${DEFAULT_PENDING_DELETION_TAG}'.`,
+    ),
+};
+
+export const getDeleteDatasourceTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+  const config = getConfig();
+
+  const deleteDatasourceTool = new WebTool({
+    server,
+    name: 'delete-datasource',
+    disabled: !config.adminToolsEnabled,
+    description: `
+Permanently deletes a published data source from the current Tableau site. Restricted to
+Tableau site administrators and requires the \`ADMIN_TOOLS_ENABLED\` feature flag.
+
+This tool is **two-phase** to keep the destructive action safe:
+
+1. **Preview (default — \`confirm\` omitted or false):** tags the data source as pending deletion
+   (reversible, visible in the Tableau UI; label configurable via \`tag\`, default
+   \`${DEFAULT_PENDING_DELETION_TAG}\`), reports the data source name, project, and owner, **warns
+   which workbooks and flows depend on it and may break**, returns a \`confirmationToken\`, and does
+   **not** delete anything.
+2. **Delete (\`confirm: true\` + \`confirmationToken\`):** permanently removes the data source. The
+   token from step 1 is required — deletion is rejected without it, which forces a deliberate
+   second call rather than a blind one-shot delete. On Tableau Cloud the data source is moved to the recycle bin and can be restored
+   for a limited time before permanent removal (see ${RECYCLE_BIN_DOC_URL}); on Tableau Server there
+   is no recycle bin and deletion is permanent. Dependent workbooks and flows are **not** deleted,
+   but will lose this data source.
+
+**Required human confirmation:** After preview, present the data source (name, project, owner) and
+its dependent content to the user and get explicit approval before deleting. Do not auto-confirm or
+compute the \`confirmationToken\` yourself — use the exact value the preview returned.
+
+**Parameters:**
+- \`datasourceId\` (required) – The LUID of the data source. Obtain it from \`list-datasources\`.
+- \`confirm\` (optional) – Set \`true\` to perform the deletion. Defaults to preview.
+- \`confirmationToken\` (optional) – Required when \`confirm\` is true; the token from the preview step.
+- \`tag\` (optional) – Preview tag label. Defaults to \`${DEFAULT_PENDING_DELETION_TAG}\`.
+`.trim(),
+    paramsSchema,
+    annotations: {
+      title: 'Delete Datasource',
+      readOnlyHint: false,
+      destructiveHint: true,
+      // Hard delete-by-id: a second delete of the same datasourceId 404s (isError: true), so the
+      // operation is not idempotent. A client trusting an idempotent hint and retrying after a
+      // transient failure would get a spurious error for a delete that already succeeded.
+      // Matches the accepted resolution for delete-extract-refresh-task (tableau/tableau-mcp#392).
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+    callback: async (
+      { datasourceId, confirm, confirmationToken, tag },
+      extra,
+    ): Promise<CallToolResult> => {
+      const configWithOverrides = await extra.getConfigWithOverrides();
+
+      return await deleteDatasourceTool.logAndExecute<string>({
+        extra,
+        args: { datasourceId, confirm, confirmationToken, tag },
+        callback: async () => {
+          return await useRestApi({
+            ...extra,
+            jwtScopes: deleteDatasourceTool.requiredApiScopes,
+            callback: async (restApi) => {
+              const adminResult = await assertAdmin(restApi, extra);
+              if (adminResult.isErr()) {
+                return new AdminOnlyError(adminResult.error).toErr();
+              }
+
+              const siteId = restApi.siteId;
+              const expectedToken = computeConfirmationToken(siteId, datasourceId);
+
+              // Gate the destructive path on the confirmation token BEFORE any read or write, so a
+              // missing/mismatched token is rejected with zero side effects. This forces a
+              // deliberate two-step delete; it does not prove a preview ran (the token is a
+              // deterministic hash of caller-known inputs — see computeConfirmationToken).
+              if (confirm && confirmationToken !== expectedToken) {
+                return new ArgsValidationError(
+                  'Deletion requires the confirmationToken returned by the preview step. ' +
+                    'Run delete-datasource with confirm omitted (or false) for this datasourceId ' +
+                    'first, then call again with confirm: true and the confirmationToken from that ' +
+                    'response.',
+                ).toErr();
+              }
+
+              // Honor the same tool-scoping rules the read tools enforce (e.g. get-datasource-metadata):
+              // a data source outside the configured bounded context cannot be tagged or deleted.
+              // Runs before any read/write so a rejected call has zero side effects.
+              const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
+                datasourceLuid: datasourceId,
+                extra,
+              });
+              if (!isDatasourceAllowedResult.allowed) {
+                return new DatasourceNotAllowedError(isDatasourceAllowedResult.message).toErr();
+              }
+
+              // Resolve identity in both phases so the response (preview AND the final delete
+              // confirmation) always names the data source, project, and owner for an auditable
+              // record of exactly what was acted on. Reuse the data source already fetched by the
+              // access check when a project/tag scope forced it, otherwise fetch it now.
+              const datasource =
+                isDatasourceAllowedResult.content ??
+                (await restApi.datasourcesMethods.queryDatasource({
+                  datasourceId,
+                  siteId,
+                }));
+              const ownerEmail = await resolveOwnerEmail(restApi, siteId, datasource.owner?.id);
+              const projectName = datasource.project?.name ?? 'unknown project';
+              const ownerText = ownerEmail ? `owner ${ownerEmail}` : 'owner unknown';
+
+              if (confirm) {
+                await restApi.datasourcesMethods.deleteDatasource({ datasourceId, siteId });
+                return new Ok(
+                  `Deleted data source '${datasource.name}' (id ${datasourceId}) in '${projectName}', ${ownerText}. ` +
+                    `On Tableau Cloud it can be restored from the recycle bin (${RECYCLE_BIN_DOC_URL}) for a ` +
+                    'limited time before permanent removal; on Tableau Server deletion is permanent. ' +
+                    'Dependent workbooks and flows were not deleted but no longer have this data source.',
+                );
+              }
+
+              // Preview phase: warn about dependents, tag as pending deletion, report. No deletion.
+              const dependencyWarning = await describeDownstreamDependencies({
+                restApi,
+                datasourceId,
+                disableMetadataApiRequests: configWithOverrides.disableMetadataApiRequests,
+              });
+
+              // Treat undefined, empty, and whitespace-only tags as "use the default" so a
+              // blank label never gets applied to the data source.
+              const pendingTag = tag?.trim() ? tag : DEFAULT_PENDING_DELETION_TAG;
+              await restApi.datasourcesMethods.addTagsToDatasource({
+                datasourceId,
+                siteId,
+                tagLabels: [pendingTag],
+              });
+
+              return new Ok(
+                `Preview — data source '${datasource.name}' (id ${datasourceId}) in '${projectName}', ${ownerText}. ` +
+                  `${dependencyWarning} ` +
+                  `It has been tagged '${pendingTag}' (reversible). ` +
+                  'NEXT STEP — REQUIRED: show this data source (name, project, owner) and its dependent ' +
+                  'content to the user and ask them to explicitly confirm deleting it. Do NOT delete ' +
+                  'without the user’s approval. ' +
+                  `Once approved, call again with confirm: true and confirmationToken: ${expectedToken}. ` +
+                  'On Tableau Cloud deleted data sources are recoverable from the recycle bin ' +
+                  `(${RECYCLE_BIN_DOC_URL}) for a limited time; on Tableau Server deletion is permanent.`,
+              );
+            },
+          });
+        },
+        constrainSuccessResult: (result) => ({ type: 'success', result }),
+      });
+    },
+  });
+
+  return deleteDatasourceTool;
+};
+
+/**
+ * Builds a human-readable warning about the workbooks and flows that depend on this datasource,
+ * via the Metadata API reverse-lineage query. Best-effort: if the Metadata API is disabled or
+ * errors, we degrade to a neutral note and never fail the preview.
+ */
+async function describeDownstreamDependencies({
+  restApi,
+  datasourceId,
+  disableMetadataApiRequests,
+}: {
+  restApi: RestApi;
+  datasourceId: string;
+  disableMetadataApiRequests: boolean;
+}): Promise<string> {
+  if (disableMetadataApiRequests) {
+    return 'Dependency check skipped (Metadata API requests are disabled).';
+  }
+
+  let downstream: DatasourceDownstream | undefined;
+  try {
+    const response = await restApi.metadataMethods.graphql(
+      getDatasourceDownstreamQuery([datasourceId]),
+    );
+    downstream = getDatasourceDownstreamByLuid(response).get(datasourceId);
+  } catch (error) {
+    log({
+      message: `delete-datasource: downstream dependency check failed for ${datasourceId}`,
+      level: 'warning',
+      logger: 'delete-datasource',
+      data: getExceptionMessage(error),
+    });
+    return 'Dependency check unavailable (Metadata API error) — verify dependents manually before deleting.';
+  }
+
+  const workbooks = downstream?.workbooks ?? [];
+  const flows = downstream?.flows ?? [];
+  if (workbooks.length === 0 && flows.length === 0) {
+    return 'No workbooks or flows were found that depend on this data source.';
+  }
+
+  const parts: string[] = [];
+  if (workbooks.length > 0) {
+    parts.push(`${workbooks.length} workbook(s): ${formatDependentNames(workbooks)}`);
+  }
+  if (flows.length > 0) {
+    parts.push(`${flows.length} flow(s): ${formatDependentNames(flows)}`);
+  }
+  return `⚠️ WARNING: deleting this data source may break ${parts.join(' and ')}.`;
+}
+
+// Cap the number of dependent names listed so a data source with thousands of dependents does not
+// produce an unbounded message. The total count is always reported; only the name list is capped.
+const MAX_DEPENDENT_NAMES_LISTED = 10;
+
+function formatDependentNames(contents: ReadonlyArray<{ name: string }>): string {
+  const names = contents.slice(0, MAX_DEPENDENT_NAMES_LISTED).map((c) => c.name);
+  const remaining = contents.length - names.length;
+  const listed = names.join(', ');
+  return remaining > 0 ? `${listed}, …and ${remaining} more` : listed;
+}
+
+/**
+ * Best-effort resolution of the data source owner's email for the preview report. Owner lookup is
+ * informational only, so a failure must not block the preview — we log and fall back to no email.
+ */
+async function resolveOwnerEmail(
+  restApi: RestApi,
+  siteId: string,
+  ownerId: string | undefined,
+): Promise<string | null> {
+  if (!ownerId) {
+    return null;
+  }
+  try {
+    const owner = await restApi.usersMethods.queryUserOnSite({ siteId, userId: ownerId });
+    return owner.email ?? owner.name ?? null;
+  } catch (error) {
+    log({
+      message: `delete-datasource: failed to resolve owner ${ownerId} for preview`,
+      level: 'warning',
+      logger: 'delete-datasource',
+      data: getExceptionMessage(error),
+    });
+    return null;
+  }
+}
