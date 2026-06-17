@@ -1,4 +1,8 @@
 import { getExecuteTableauCommandTool } from './commands/executeTableauCommand.js';
+import { getBatchCreateAndCacheSheetsTool } from './coordination/batchCreateAndCacheSheets.js';
+import { getBuildAndApplyWorksheetTool } from './coordination/buildAndApplyWorksheet.js';
+import { getListTemplatesTool } from './coordination/listTemplates.js';
+import { getPlanDashboardCreationTool } from './coordination/planDashboardCreation.js';
 import { getApplyDashboardTool } from './dashboard/applyDashboard.js';
 import { getApplyDashboardWithViewpointsTool } from './dashboard/applyDashboardWithViewpoints.js';
 import { getBuildAndApplyDashboardTool } from './dashboard/buildAndApplyDashboard.js';
@@ -52,4 +56,8 @@ export const desktopToolFactories = [
   getLookupWorkbookSchemaTool,
   getSearchWorkbookExamplesTool,
   getExecuteTableauCommandTool,
+  getPlanDashboardCreationTool,
+  getBatchCreateAndCacheSheetsTool,
+  getBuildAndApplyWorksheetTool,
+  getListTemplatesTool,
 ];

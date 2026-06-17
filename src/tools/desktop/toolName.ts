@@ -25,6 +25,10 @@ export const desktopToolNames = [
   'lookup-workbook-schema',
   'search-workbook-examples',
   'execute-tableau-command',
+  'plan-dashboard-creation',
+  'batch-create-and-cache-sheets',
+  'build-and-apply-worksheet',
+  'list-templates',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 
