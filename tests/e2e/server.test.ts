@@ -39,6 +39,7 @@ describe('server', () => {
         'reset-consent',
       ];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
+        'delete-datasource',
         'list-extract-refresh-tasks',
         'delete-extract-refresh-task',
         'list-jobs',
@@ -122,6 +123,7 @@ describe('server', () => {
         'reset-consent',
       ];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
+        'delete-datasource',
         'list-extract-refresh-tasks',
         'delete-extract-refresh-task',
         'list-jobs',
