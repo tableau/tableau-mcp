@@ -14,12 +14,14 @@ const urlSchema = z.object({
 });
 
 const callToolResultSchema = z.object({
-  content: z.array(
-    z.object({
-      type: z.literal('text'),
-      text: z.string(),
-    }),
-  ),
+  content: z
+    .array(
+      z.object({
+        type: z.literal('text'),
+        text: z.string(),
+      }),
+    )
+    .nonempty(),
   isError: z.boolean().optional(),
 });
 
