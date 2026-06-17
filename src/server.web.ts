@@ -186,8 +186,8 @@ export class WebMcpServer extends Server {
     const config = getConfig();
     const serverOrigin = new URL(config.server).origin;
 
-    // Allow Tableau Online, Tableau.com domains, and configured server
-    const cspDomains = ['https://*.online.tableau.com', 'https://*.tableau.com', serverOrigin];
+    // Allow configured CSP domains and the configured server
+    const cspDomains = [...config.cspAllowedDomains, serverOrigin];
 
     registerAppResource(
       // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.

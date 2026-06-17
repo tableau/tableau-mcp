@@ -69,6 +69,7 @@ export class Config extends BaseConfig {
   isHyperforce: boolean;
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
+  cspAllowedDomains: string[];
 
   constructor() {
     super();
@@ -131,6 +132,7 @@ export class Config extends BaseConfig {
       IS_HYPERFORCE: isHyperforce,
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
+      CSP_ALLOWED_DOMAINS: cspAllowedDomains,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -264,6 +266,9 @@ export class Config extends BaseConfig {
     this.isHyperforce = isHyperforce === 'true';
     this.breakGlassDisableGlobally = breakGlassDisableGlobally === 'true';
     this.adminToolsEnabled = adminToolsEnabled === 'true';
+    this.cspAllowedDomains = cspAllowedDomains
+      ? cspAllowedDomains.split(',').map((d) => d.trim())
+      : ['https://*.online.tableau.com', 'https://*.tableau.com'];
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
@@ -387,7 +392,7 @@ function validateServer(server: string): void {
   }
 
   try {
-    const _ = new URL(server);
+    new URL(server);
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(
