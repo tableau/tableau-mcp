@@ -13,6 +13,16 @@ const urlSchema = z.object({
   url: z.string().url(),
 });
 
+const callToolResultSchema = z.object({
+  content: z.array(
+    z.object({
+      type: z.literal('text'),
+      text: z.string(),
+    }),
+  ),
+  isError: z.boolean().optional(),
+});
+
 /**
  * Loads the Tableau Embedding API script from the Tableau server
  */
@@ -47,14 +57,12 @@ const app = new App({ name: 'Tableau MCP App', version: pkg.version });
  * Extracts the view URL from tool result content
  */
 function extractUrlObjectFromResult(result: CallToolResult): string {
-  const content = result.content?.[0];
-  if (content?.type !== 'text') {
-    throw new Error('Tool result does not contain text content');
-  }
+  const validated = callToolResultSchema.parse(result);
+  const content = validated.content[0];
 
   const data = JSON.parse(content.text);
-  const validated = urlSchema.parse(data);
-  return validated.url;
+  const url = urlSchema.parse(data);
+  return url.url;
 }
 
 // Handle tool results
