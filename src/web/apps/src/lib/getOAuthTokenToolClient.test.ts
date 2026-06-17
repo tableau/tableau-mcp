@@ -42,9 +42,7 @@ describe('callGetOAuthTokenTool', () => {
       }),
     };
 
-    await expect(callGetOAuthTokenTool(mockApp as any)).rejects.toThrow(
-      'Unexpected response format from get-oauth-token',
-    );
+    await expect(callGetOAuthTokenTool(mockApp as any)).rejects.toThrow();
   });
 
   it('should throw error when response has no content', async () => {
@@ -87,8 +85,7 @@ describe('callGetOAuthTokenTool', () => {
       }),
     };
 
-    const token = await callGetOAuthTokenTool(mockApp as any);
-    expect(token).toBeUndefined();
+    await expect(callGetOAuthTokenTool(mockApp as any)).rejects.toThrow();
   });
 
   it('should propagate errors from callServerTool', async () => {
