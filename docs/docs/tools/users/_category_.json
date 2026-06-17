@@ -1,0 +1,8 @@
+{
+  "label": "Users",
+  "position": 8,
+  "link": {
+    "type": "generated-index",
+    "description": "Tools for retrieving information about users on the Tableau site."
+  }
+}
