@@ -6,6 +6,7 @@
  */
 
 import { getConfig } from '../../config.js';
+import { getFeatureGate } from '../../features/featureGate.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
 
 /**
@@ -265,6 +266,7 @@ const toolScopeMap: Record<
 
 function getEnabledToolNames(): Set<WebToolName> {
   const config = getConfig();
+  const featureGate = getFeatureGate();
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
 
   // Remove disabled tools based on feature flags
@@ -278,6 +280,11 @@ function getEnabledToolNames(): Set<WebToolName> {
     enabledTools.delete('query-admin-insights-site-content');
     enabledTools.delete('query-admin-insights-job-performance');
     enabledTools.delete('get-stale-content-report');
+  }
+
+  // Remove get-oauth-token if mcp-apps feature is disabled
+  if (!featureGate.isFeatureEnabled('mcp-apps')) {
+    enabledTools.delete('get-oauth-token');
   }
 
   return enabledTools;
