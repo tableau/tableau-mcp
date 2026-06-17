@@ -51,7 +51,23 @@ function loadTableauEmbeddingApi(viewUrl: string): Promise<void> {
     const script = document.createElement('script');
     script.type = 'module';
     script.src = embeddingApiUrl;
-    script.onload = () => resolve();
+
+    // Wait for custom element to be actually defined (not just script loaded)
+    // This catches runtime errors that onload would miss
+    script.onload = () => {
+      // Race between custom element definition and 30 second timeout
+      const definedPromise = customElements.whenDefined('tableau-viz');
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Tableau Embedding API failed to load within 30 seconds'));
+        }, 15000);
+      });
+
+      Promise.race([definedPromise, timeoutPromise])
+        .then(() => resolve())
+        .catch((error) => reject(error));
+    };
+
     script.onerror = () => {
       console.error('Failed to load Tableau Embedding API from:', embeddingApiUrl);
       reject(new Error(`Failed to load Tableau Embedding API from ${embeddingApiUrl}`));
