@@ -260,3 +260,17 @@ npm run docs:start   # Start dev server
 ```
 
 Official docs: https://tableau.github.io/tableau-mcp/
+
+## Git Operations Rules
+Never commit, push, or create PRs without explicit user permission. Always ask before any git write operations (commit, push, force-push, rebase, checkout).
+
+## Code Style & Approach
+Prefer the simplest solution first. Do not over-engineer, add extra features, or expand scope beyond what was explicitly asked. When in doubt, do less rather than more.
+
+When asked to make a change, make ONLY that change. Do not rename files, refactor adjacent code, add helper functions, or modify unrelated logic unless explicitly asked.
+
+## Build & Validation
+This is a TypeScript project. Always ensure type safety, run `tsc --noEmit` before considering work complete, and resolve all TypeScript errors before committing.
+
+## Behavioral Rules
+When running loops or repeated operations, stop after the requested number of iterations. Never continue indefinitely - always confirm before running additional cycles.
