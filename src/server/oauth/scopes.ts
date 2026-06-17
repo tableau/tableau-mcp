@@ -56,19 +56,19 @@ export type TableauApiScope =
  * This list can be configured via environment variable or config file.
  */
 export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
-  'tableau:mcp:content:read',
   'tableau:mcp:datasource:read',
+  'tableau:mcp:datasource:delete',
+  'tableau:mcp:tasks:read',
+  'tableau:mcp:tasks:delete',
+  'tableau:mcp:jobs:read',
+  'tableau:mcp:users:read',
   'tableau:mcp:workbook:read',
+  'tableau:mcp:workbook:delete',
+  'tableau:mcp:content:read',
   'tableau:mcp:view:read',
   'tableau:mcp:view:download',
   'tableau:mcp:pulse:read',
   'tableau:mcp:insight:create',
-  'tableau:mcp:tasks:read',
-  'tableau:mcp:tasks:delete',
-  'tableau:mcp:workbook:delete',
-  'tableau:mcp:jobs:read',
-  'tableau:mcp:datasource:delete',
-  'tableau:mcp:users:read',
 ];
 
 export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauApiScope> = [
