@@ -50,8 +50,8 @@ const paramsSchema = {
     .describe(
       'When omitted or false, runs a non-destructive preview: tags the data source as pending ' +
         'deletion, warns about dependent workbooks/flows, and reports what would be deleted. When ' +
-        'true, permanently deletes the data source (recoverable from the Tableau recycle bin for a ' +
-        'limited time).',
+        'true, deletes the data source. On Tableau Cloud it can be restored from the recycle bin ' +
+        'for a limited time; on Tableau Server deletion is permanent.',
     ),
   confirmationToken: z
     .string()
@@ -63,6 +63,7 @@ const paramsSchema = {
     ),
   tag: z
     .string()
+    .max(200)
     .optional()
     .describe(
       'Label applied to the data source during the preview phase to mark it as pending deletion ' +
@@ -78,7 +79,7 @@ export const getDeleteDatasourceTool = (server: WebMcpServer): WebTool<typeof pa
     name: 'delete-datasource',
     disabled: !config.adminToolsEnabled,
     description: `
-Permanently deletes a published data source from the current Tableau Cloud site. Restricted to
+Permanently deletes a published data source from the current Tableau site. Restricted to
 Tableau site administrators and requires the \`ADMIN_TOOLS_ENABLED\` feature flag.
 
 This tool is **two-phase** to keep the destructive action safe:
@@ -91,8 +92,9 @@ This tool is **two-phase** to keep the destructive action safe:
 2. **Delete (\`confirm: true\` + \`confirmationToken\`):** permanently removes the data source. The
    token from step 1 is required — deletion is rejected without it, which guarantees the preview
    was run first. On Tableau Cloud the data source is moved to the recycle bin and can be restored
-   for a limited time before permanent removal (see ${RECYCLE_BIN_DOC_URL}). Dependent workbooks and
-   flows are **not** deleted, but will lose this data source.
+   for a limited time before permanent removal (see ${RECYCLE_BIN_DOC_URL}); on Tableau Server there
+   is no recycle bin and deletion is permanent. Dependent workbooks and flows are **not** deleted,
+   but will lose this data source.
 
 **Required human confirmation:** After preview, present the data source (name, project, owner) and
 its dependent content to the user and get explicit approval before deleting. Do not auto-confirm or
@@ -176,9 +178,9 @@ compute the \`confirmationToken\` yourself — use the exact value the preview r
                 await restApi.datasourcesMethods.deleteDatasource({ datasourceId, siteId });
                 return new Ok(
                   `Deleted data source '${datasource.name}' (id ${datasourceId}) in '${projectName}', ${ownerText}. ` +
-                    `It can be restored from the Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) for a ` +
-                    'limited time before permanent removal. Dependent workbooks and flows were not ' +
-                    'deleted but no longer have this data source.',
+                    `On Tableau Cloud it can be restored from the recycle bin (${RECYCLE_BIN_DOC_URL}) for a ` +
+                    'limited time before permanent removal; on Tableau Server deletion is permanent. ' +
+                    'Dependent workbooks and flows were not deleted but no longer have this data source.',
                 );
               }
 
@@ -206,8 +208,8 @@ compute the \`confirmationToken\` yourself — use the exact value the preview r
                   'content to the user and ask them to explicitly confirm deleting it. Do NOT delete ' +
                   'without the user’s approval. ' +
                   `Once approved, call again with confirm: true and confirmationToken: ${expectedToken}. ` +
-                  `Deleted data sources are recoverable from the Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) ` +
-                  'for a limited time.',
+                  'On Tableau Cloud deleted data sources are recoverable from the recycle bin ' +
+                  `(${RECYCLE_BIN_DOC_URL}) for a limited time; on Tableau Server deletion is permanent.`,
               );
             },
           });

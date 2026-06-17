@@ -4,7 +4,7 @@ sidebar_position: 4
 
 # Delete Datasource
 
-Deletes a published data source from the current Tableau Cloud site as the destructive step of the
+Deletes a published data source from the current Tableau site as the destructive step of the
 Stale Content Cleanup workflow.
 
 This tool is **admin-only** and is registered only when the `ADMIN_TOOLS_ENABLED` feature flag is
@@ -20,7 +20,8 @@ The tool is **two-phase** to keep the destructive action safe:
    token from the preview step is **required** — deletion is rejected without a matching token,
    which guarantees the preview was run first for this data source. On Tableau Cloud the data source
    is moved to the [recycle bin](https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm)
-   and can be restored for a limited time before permanent removal.
+   and can be restored for a limited time before permanent removal; on Tableau Server there is no
+   recycle bin and deletion is permanent.
 
 :::warning Human confirmation required
 Between the preview and the delete, the calling agent is instructed (via the tool description and
@@ -93,6 +94,6 @@ Example: `stale-pending-deletion`
   the data source. This is reversible and visible in the Tableau UI. No content is deleted.
 - **Delete** removes the data source. On Tableau Cloud it is moved to the recycle bin and can be
   [restored](https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm) for a limited time
-  before it is permanently purged. Dependent workbooks and flows are not deleted but lose this data
-  source. Always run the preview first, review the dependency warning, and confirm the data source
-  identity before deleting.
+  before it is permanently purged; on Tableau Server there is no recycle bin and deletion is
+  permanent. Dependent workbooks and flows are not deleted but lose this data source. Always run the
+  preview first, review the dependency warning, and confirm the data source identity before deleting.

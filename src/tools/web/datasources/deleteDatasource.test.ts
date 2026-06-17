@@ -1,5 +1,6 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
@@ -273,6 +274,13 @@ describe('deleteDatasourceTool', () => {
       siteId: 'test-site-id',
       tagLabels: ['stale-pending-deletion'],
     });
+  });
+
+  it('should reject a tag that exceeds the schema length cap', () => {
+    const tool = getDeleteDatasourceTool(new WebMcpServer());
+    const tagSchema = (tool.paramsSchema as { tag: z.ZodOptional<z.ZodString> }).tag;
+    expect(tagSchema.safeParse('a'.repeat(200)).success).toBe(true);
+    expect(tagSchema.safeParse('a'.repeat(201)).success).toBe(false);
   });
 
   it('should fall back to the default tag when the caller passes an empty or whitespace tag', async () => {
