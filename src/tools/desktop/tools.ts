@@ -1,3 +1,7 @@
+import { getReadCachedXmlTool } from './cache/readCachedXml.js';
+import { getValidateWorkbookXmlTool } from './cache/validateWorkbookXml.js';
+import { getValidateWorksheetXmlTool } from './cache/validateWorksheetXml.js';
+import { getWriteCachedXmlTool } from './cache/writeCachedXml.js';
 import { getExecuteTableauCommandTool } from './commands/executeTableauCommand.js';
 import { getBatchCreateAndCacheSheetsTool } from './coordination/batchCreateAndCacheSheets.js';
 import { getBuildAndApplyWorksheetTool } from './coordination/buildAndApplyWorksheet.js';
@@ -60,4 +64,8 @@ export const desktopToolFactories = [
   getBatchCreateAndCacheSheetsTool,
   getBuildAndApplyWorksheetTool,
   getListTemplatesTool,
+  getValidateWorksheetXmlTool,
+  getValidateWorkbookXmlTool,
+  getReadCachedXmlTool,
+  getWriteCachedXmlTool,
 ];

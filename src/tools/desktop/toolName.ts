@@ -29,6 +29,10 @@ export const desktopToolNames = [
   'batch-create-and-cache-sheets',
   'build-and-apply-worksheet',
   'list-templates',
+  'validate-worksheet-xml',
+  'validate-workbook-xml',
+  'read-cached-xml',
+  'write-cached-xml',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 
