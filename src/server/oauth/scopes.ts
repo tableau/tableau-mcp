@@ -226,6 +226,32 @@ const toolScopeMap: Record<
       'tableau:users:read',
     ]),
   },
+  // Data-app tools do local filesystem + deploy work; they make no Tableau REST
+  // API calls themselves (the deployed proxy authenticates separately with a PAT).
+  'scaffold-data-app': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'write-data-app-file': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'read-data-app-file': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'list-data-app-files': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'package-data-app': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
+  'deploy-data-app': {
+    mcp: [],
+    api: new Set<TableauApiScope>(),
+  },
 };
 
 function getEnabledToolNames(): Set<WebToolName> {

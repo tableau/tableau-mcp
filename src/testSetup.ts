@@ -15,6 +15,8 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', async (importOriginal) => {
         }),
       },
       registerTool: vi.fn(),
+      registerPrompt: vi.fn(),
+      registerResource: vi.fn(),
       connect: vi.fn(),
       close: vi.fn(),
     })),

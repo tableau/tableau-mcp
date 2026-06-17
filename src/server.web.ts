@@ -15,6 +15,7 @@ import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { getFeatureGate } from './features/featureGate.js';
 import { getTableauServerInfo } from './getTableauServerInfo.js';
 import { registerPrompts } from './prompts/index.js';
+import { registerResources } from './resources/index.js';
 import { ClientInfo, Server } from './server.js';
 import { getTableauAuthInfo } from './server/oauth/getTableauAuthInfo.js';
 import { TableauAuthInfo } from './server/oauth/schemas.js';
@@ -101,6 +102,7 @@ export class WebMcpServer extends Server {
     }
 
     registerPrompts(this);
+    registerResources(this);
   };
 
   protected _getToolsToRegister = async (

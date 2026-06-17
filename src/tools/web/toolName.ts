@@ -28,6 +28,12 @@ export const webToolNames = [
   'query-admin-insights-site-content',
   'query-admin-insights-job-performance',
   'get-stale-content-report',
+  'scaffold-data-app',
+  'write-data-app-file',
+  'read-data-app-file',
+  'list-data-app-files',
+  'package-data-app',
+  'deploy-data-app',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -42,6 +48,7 @@ export const webToolGroupNames = [
   'users',
   'token-management',
   'admin-insights',
+  'data-app',
 ] as const;
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
@@ -76,6 +83,14 @@ export const webToolGroups = {
     'query-admin-insights-site-content',
     'query-admin-insights-job-performance',
     'get-stale-content-report',
+  ],
+  'data-app': [
+    'scaffold-data-app',
+    'write-data-app-file',
+    'read-data-app-file',
+    'list-data-app-files',
+    'package-data-app',
+    'deploy-data-app',
   ],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 
