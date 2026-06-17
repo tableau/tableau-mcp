@@ -5,7 +5,7 @@ import {
   createValidPulseMetric,
   createValidPulseMetricDefinition,
 } from '../../../sdks/tableau/types/pulse.test.js';
-import { mockDatasources } from '../listDatasources/mockDatasources.js';
+import { mockDatasources } from '../datasources/mockDatasources.js';
 
 export const mockPulseMetricDefinitions: Array<PulseMetricDefinition> =
   mockDatasources.datasources.map((datasource, index) =>

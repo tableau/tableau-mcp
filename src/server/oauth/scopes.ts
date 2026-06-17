@@ -6,6 +6,7 @@
  */
 
 import { getConfig } from '../../config.js';
+import { getFeatureGate } from '../../features/featureGate.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
 
 /**
@@ -26,12 +27,14 @@ export type McpScope =
   | 'tableau:mcp:tasks:delete'
   | 'tableau:mcp:workbook:delete'
   | 'tableau:mcp:jobs:read'
+  | 'tableau:mcp:datasource:delete'
   | 'tableau:mcp:users:read';
 
 export type TableauApiScope =
   | 'tableau:content:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
+  | 'tableau:views:embed'
   | 'tableau:insight_definitions_metrics:read'
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
@@ -42,6 +45,8 @@ export type TableauApiScope =
   | 'tableau:tasks:delete'
   | 'tableau:workbook_tags:update'
   | 'tableau:workbooks:delete'
+  | 'tableau:datasource_tags:update'
+  | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
   | 'tableau:users:read';
 
@@ -51,18 +56,19 @@ export type TableauApiScope =
  * This list can be configured via environment variable or config file.
  */
 export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
-  'tableau:mcp:content:read',
   'tableau:mcp:datasource:read',
+  'tableau:mcp:datasource:delete',
+  'tableau:mcp:tasks:read',
+  'tableau:mcp:tasks:delete',
+  'tableau:mcp:jobs:read',
+  'tableau:mcp:users:read',
   'tableau:mcp:workbook:read',
+  'tableau:mcp:workbook:delete',
+  'tableau:mcp:content:read',
   'tableau:mcp:view:read',
   'tableau:mcp:view:download',
   'tableau:mcp:pulse:read',
   'tableau:mcp:insight:create',
-  'tableau:mcp:tasks:read',
-  'tableau:mcp:tasks:delete',
-  'tableau:mcp:workbook:delete',
-  'tableau:mcp:jobs:read',
-  'tableau:mcp:users:read',
 ];
 
 export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauApiScope> = [
@@ -107,14 +113,30 @@ const toolScopeMap: Record<
   },
   // Admin-only destructive tool. Two-phase: preview tags the workbook (workbook_tags:update) and
   // resolves the owner (users:read); confirm deletes it (workbooks:delete). getWorkbook → content:read.
-  // adminGate.assertAdmin → GET /sites/{siteId}/users/{userId} → users:read.
+  // adminGate.assertAdmin → GET /sites/{siteId}/users/{userId} → users:read. Goes through the
+  // resourceAccessChecker (tool scoping), so it also needs RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES
+  // (content:read + mcp_site_settings:read).
   'delete-workbook': {
     mcp: ['tableau:mcp:workbook:delete'],
     api: new Set([
       'tableau:workbooks:delete',
       'tableau:workbook_tags:update',
-      'tableau:content:read',
       'tableau:users:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
+  // Admin-only destructive tool. Preview tags the datasource (datasource_tags:update), resolves the
+  // owner (users:read), and warns about dependent workbooks/flows via the Metadata API (content:read);
+  // confirm deletes it (datasources:delete). adminGate.assertAdmin → GET /users/{id} → users:read.
+  // Goes through the resourceAccessChecker (tool scoping), so it also needs
+  // RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES (content:read + mcp_site_settings:read).
+  'delete-datasource': {
+    mcp: ['tableau:mcp:datasource:delete'],
+    api: new Set([
+      'tableau:datasources:delete',
+      'tableau:datasource_tags:update',
+      'tableau:users:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
   'list-projects': {
@@ -141,11 +163,9 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
-  // Token retrieval: no Tableau REST API calls, no content scope required.
-  // Any authenticated user may retrieve their own token regardless of granted scopes.
   'get-oauth-token': {
     mcp: [],
-    api: new Set<TableauApiScope>(),
+    api: new Set<TableauApiScope>(['tableau:views:embed']),
   },
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
@@ -266,6 +286,7 @@ const toolScopeMap: Record<
 
 function getEnabledToolNames(): Set<WebToolName> {
   const config = getConfig();
+  const featureGate = getFeatureGate();
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
 
   // Remove disabled tools based on feature flags
@@ -274,11 +295,17 @@ function getEnabledToolNames(): Set<WebToolName> {
     enabledTools.delete('delete-extract-refresh-task');
     enabledTools.delete('delete-workbook');
     enabledTools.delete('list-jobs');
+    enabledTools.delete('delete-datasource');
     enabledTools.delete('list-users');
     enabledTools.delete('query-admin-insights-ts-events');
     enabledTools.delete('query-admin-insights-site-content');
     enabledTools.delete('query-admin-insights-job-performance');
     enabledTools.delete('get-stale-content-report');
+  }
+
+  // Remove get-oauth-token if mcp-apps feature is disabled
+  if (!featureGate.isFeatureEnabled('mcp-apps')) {
+    enabledTools.delete('get-oauth-token');
   }
 
   return enabledTools;

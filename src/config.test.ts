@@ -827,4 +827,28 @@ describe('Config', () => {
       expect(config.oauth.dnsServers).toEqual(['8.8.8.8', '8.8.4.4']);
     });
   });
+
+  describe('CSP allowed domains', () => {
+    it('should use default CSP domains when CSP_ALLOWED_DOMAINS is not set', () => {
+      const config = new Config();
+      expect(config.cspAllowedDomains).toEqual([
+        'https://*.online.tableau.com',
+        'https://*.tableau.com',
+        'https://my-tableau-server.com',
+      ]);
+    });
+
+    it('should parse custom CSP domains when CSP_ALLOWED_DOMAINS is set', () => {
+      vi.stubEnv('CSP_ALLOWED_DOMAINS', 'https://*.example.com,https://test.com');
+
+      const config = new Config();
+      expect(config.cspAllowedDomains).toEqual([
+        'https://*.online.tableau.com',
+        'https://*.tableau.com',
+        'https://my-tableau-server.com',
+        'https://*.example.com',
+        'https://test.com',
+      ]);
+    });
+  });
 });
