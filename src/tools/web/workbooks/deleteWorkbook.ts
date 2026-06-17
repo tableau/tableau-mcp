@@ -28,9 +28,14 @@ export const DEFAULT_PENDING_DELETION_TAG = 'pending-deletion';
 
 /**
  * Deterministic confirmation token derived from the site + workbook. The preview phase returns it;
- * the delete phase requires it. Because the value is only obtainable by running the preview, this
- * forces a genuine two-step (preview → confirm) flow and prevents a blind single-call delete.
- * Stateless by design (no server-side nonce store) so it works across server instances and restarts.
+ * the delete phase requires a matching value. This forces an explicit, deliberate second call with
+ * a workbook-specific token rather than a blind one-shot delete.
+ *
+ * NOTE: this is a friction/correctness gate, NOT proof that a preview actually ran. The token is a
+ * pure sha256(siteId:workbookId) — both inputs are known to any caller (siteId from the connected
+ * site, workbookId from the tool arg), so a caller can compute it without previewing. Guaranteeing
+ * a preview/tag step happened would require server-side state (e.g. gating on the pending-deletion
+ * tag set during preview). Stateless by design so it works across server instances and restarts.
  */
 export function computeConfirmationToken(siteId: string, workbookId: string): string {
   return createHash('sha256').update(`${siteId}:${workbookId}`).digest('hex').slice(0, 12);
@@ -52,7 +57,7 @@ const paramsSchema = {
     .describe(
       'Required when confirm is true. The confirmationToken returned by the preview step ' +
         '(confirm omitted/false) for this workbook. Deletion is rejected without a matching token, ' +
-        'which guarantees a preview was run first.',
+        'which forces a deliberate two-step delete rather than a blind single call.',
     ),
   tag: z
     .string()
@@ -81,8 +86,8 @@ This tool is **two-phase** to keep the destructive action safe:
    \`${DEFAULT_PENDING_DELETION_TAG}\`), reports the workbook name, project, and owner, returns a
    \`confirmationToken\`, and does **not** delete anything.
 2. **Delete (\`confirm: true\` + \`confirmationToken\`):** permanently removes the workbook. The
-   token from step 1 is required — deletion is rejected without it, which guarantees the preview
-   was run first. On Tableau Cloud the workbook is moved to the recycle bin and can be restored
+   token from step 1 is required — deletion is rejected without it, which forces a deliberate
+   second call rather than a blind one-shot delete. On Tableau Cloud the workbook is moved to the recycle bin and can be restored
    for a limited time before permanent removal (see ${RECYCLE_BIN_DOC_URL}).
 
 **Required human confirmation:** After preview, present the workbook (name, project, owner) to the
@@ -123,9 +128,10 @@ user and get explicit approval before deleting. Do not auto-confirm or compute t
               const siteId = restApi.siteId;
               const expectedToken = computeConfirmationToken(siteId, workbookId);
 
-              // Gate the destructive path on the preview-issued token BEFORE any read or write.
-              // The token is only obtainable by running the preview, so a missing/mismatched
-              // token means no preview was run for this workbook — reject without side effects.
+              // Gate the destructive path on the confirmation token BEFORE any read or write, so a
+              // missing/mismatched token is rejected with zero side effects. This forces a
+              // deliberate two-step delete; it does not prove a preview ran (the token is a
+              // deterministic hash of caller-known inputs — see computeConfirmationToken).
               if (confirm && confirmationToken !== expectedToken) {
                 return new ArgsValidationError(
                   'Deletion requires the confirmationToken returned by the preview step. ' +

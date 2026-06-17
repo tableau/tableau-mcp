@@ -18,7 +18,7 @@ The tool is **two-phase** to keep the destructive action safe:
    **not** delete anything.
 2. **Delete** (`confirm: true` + `confirmationToken`): permanently removes the workbook. The token
    from the preview step is **required** — deletion is rejected without a matching token, which
-   guarantees the preview was run first for this workbook. On Tableau Cloud the workbook is moved to
+   forces a deliberate two-step delete rather than a blind one-shot call. On Tableau Cloud the workbook is moved to
    the [recycle bin](https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm) and can be
    restored for a limited time before permanent removal.
 
@@ -65,8 +65,12 @@ Example: `true`
 ### `confirmationToken`
 
 Required when `confirm` is `true`. The `confirmationToken` value returned by the preview step for
-this workbook. Deletion is rejected without a matching token, which enforces a genuine
-preview-then-confirm flow and prevents a blind single-call delete.
+this workbook. Deletion is rejected without a matching token, which forces a deliberate two-step
+delete rather than a blind single call.
+
+The token is a deterministic `sha256(siteId:workbookId)` value, so it enforces an explicit second
+call but does **not** prove the preview/tag step actually ran (a caller who knows the workbook LUID
+can compute it). Guaranteeing a preview happened would require server-side state.
 
 Example: `3a7f9c2e1b04`
 
