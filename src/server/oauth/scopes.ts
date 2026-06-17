@@ -26,6 +26,7 @@ export type McpScope =
   | 'tableau:mcp:tasks:delete'
   | 'tableau:mcp:workbook:delete'
   | 'tableau:mcp:jobs:read'
+  | 'tableau:mcp:datasource:delete'
   | 'tableau:mcp:users:read';
 
 export type TableauApiScope =
@@ -42,6 +43,8 @@ export type TableauApiScope =
   | 'tableau:tasks:delete'
   | 'tableau:workbook_tags:update'
   | 'tableau:workbooks:delete'
+  | 'tableau:datasource_tags:update'
+  | 'tableau:datasources:delete'
   | 'tableau:jobs:read'
   | 'tableau:users:read';
 
@@ -62,6 +65,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:tasks:delete',
   'tableau:mcp:workbook:delete',
   'tableau:mcp:jobs:read',
+  'tableau:mcp:datasource:delete',
   'tableau:mcp:users:read',
 ];
 
@@ -107,14 +111,30 @@ const toolScopeMap: Record<
   },
   // Admin-only destructive tool. Two-phase: preview tags the workbook (workbook_tags:update) and
   // resolves the owner (users:read); confirm deletes it (workbooks:delete). getWorkbook → content:read.
-  // adminGate.assertAdmin → GET /sites/{siteId}/users/{userId} → users:read.
+  // adminGate.assertAdmin → GET /sites/{siteId}/users/{userId} → users:read. Goes through the
+  // resourceAccessChecker (tool scoping), so it also needs RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES
+  // (content:read + mcp_site_settings:read).
   'delete-workbook': {
     mcp: ['tableau:mcp:workbook:delete'],
     api: new Set([
       'tableau:workbooks:delete',
       'tableau:workbook_tags:update',
-      'tableau:content:read',
       'tableau:users:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
+  // Admin-only destructive tool. Preview tags the datasource (datasource_tags:update), resolves the
+  // owner (users:read), and warns about dependent workbooks/flows via the Metadata API (content:read);
+  // confirm deletes it (datasources:delete). adminGate.assertAdmin → GET /users/{id} → users:read.
+  // Goes through the resourceAccessChecker (tool scoping), so it also needs
+  // RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES (content:read + mcp_site_settings:read).
+  'delete-datasource': {
+    mcp: ['tableau:mcp:datasource:delete'],
+    api: new Set([
+      'tableau:datasources:delete',
+      'tableau:datasource_tags:update',
+      'tableau:users:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
   'list-projects': {
@@ -274,6 +294,7 @@ function getEnabledToolNames(): Set<WebToolName> {
     enabledTools.delete('delete-extract-refresh-task');
     enabledTools.delete('delete-workbook');
     enabledTools.delete('list-jobs');
+    enabledTools.delete('delete-datasource');
     enabledTools.delete('list-users');
     enabledTools.delete('query-admin-insights-ts-events');
     enabledTools.delete('query-admin-insights-site-content');

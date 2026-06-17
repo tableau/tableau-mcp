@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { dataSourceSchema } from '../types/dataSource.js';
 import { paginationSchema } from '../types/pagination.js';
+import { tagsSchema } from '../types/tags.js';
 import { paginationParameters } from './paginationParameters.js';
 
 const listDatasourcesEndpoint = makeEndpoint({
@@ -43,5 +44,56 @@ const queryDatasourceEndpoint = makeEndpoint({
   }),
 });
 
-const datasourcesApi = makeApi([listDatasourcesEndpoint, queryDatasourceEndpoint]);
+const deleteDatasourceEndpoint = makeEndpoint({
+  method: 'delete',
+  path: '/sites/:siteId/datasources/:datasourceId',
+  alias: 'deleteDatasource',
+  description:
+    'Deletes the specified published data source from the site. On Tableau Cloud the data source is moved to the recycle bin and can be restored for a limited time.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'datasourceId',
+      type: 'Path',
+      schema: z.string(),
+    },
+  ],
+  response: z.void(),
+});
+
+const addTagsToDatasourceEndpoint = makeEndpoint({
+  method: 'put',
+  path: '/sites/:siteId/datasources/:datasourceId/tags',
+  alias: 'addTagsToDatasource',
+  description: 'Adds one or more tags to the specified data source.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'datasourceId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'body',
+      type: 'Body',
+      schema: z.object({ tags: tagsSchema }),
+    },
+  ],
+  response: z.object({ tags: tagsSchema }),
+});
+
+const datasourcesApi = makeApi([
+  listDatasourcesEndpoint,
+  queryDatasourceEndpoint,
+  deleteDatasourceEndpoint,
+  addTagsToDatasourceEndpoint,
+]);
 export const datasourcesApis = [...datasourcesApi] as const satisfies ZodiosEndpointDefinitions;

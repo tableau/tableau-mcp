@@ -485,5 +485,5 @@ AI's context window is finite, so every token counts.
 
 - **Slack:** `#tab-dev-mcp-project` (internal Tableau employees only) or `#tableau-ai-solutions`
   (public channel for the community)
-- **Codebase reference:** Look at `src/tools/web/listDatasources/` for a straightforward read-only
+- **Codebase reference:** Look at `src/tools/web/datasources/` for a straightforward read-only
   tool, or `src/tools/web/pulse/` for a group of related tools

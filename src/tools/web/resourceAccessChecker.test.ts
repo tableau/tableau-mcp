@@ -1,5 +1,5 @@
 import { getCombinationsOfBoundedContextInputs } from '../../utils/getCombinationsOfBoundedContextInputs.js';
-import { mockDatasources } from './listDatasources/mockDatasources.js';
+import { mockDatasources } from './datasources/mockDatasources.js';
 import { exportedForTesting } from './resourceAccessChecker.js';
 import { getMockRequestHandlerExtra } from './toolContext.mock.js';
 import { mockCustomView } from './views/mockCustomView.js';
@@ -72,7 +72,9 @@ describe('ResourceAccessChecker', () => {
               datasourceLuid: mockDatasource.id,
               extra,
             }),
-          ).toEqual({ allowed: true });
+            // The datasource is returned as `content` only when a project/tag scope forced a fetch,
+            // so the caller can reuse it instead of querying again. Mirrors isWorkbookAllowed.
+          ).toEqual({ allowed: true, content: projectIds || tags ? mockDatasource : undefined });
 
           const expectedNumberOfCalls = projectIds || tags ? 1 : 0;
           expect(mocks.mockQueryDatasource).toHaveBeenCalledTimes(expectedNumberOfCalls);

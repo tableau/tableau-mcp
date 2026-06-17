@@ -1,7 +1,7 @@
 import { ServiceUnavailableError } from './errors/mcpToolError.js';
 import { serverName, WebMcpServer } from './server.web.js';
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
-import { exportedForTesting } from './tools/web/listDatasources/listDatasources.js';
+import { exportedForTesting } from './tools/web/datasources/listDatasources.js';
 import { getQueryDatasourceTool } from './tools/web/queryDatasource/queryDatasource.js';
 import { WebTool } from './tools/web/tool.js';
 import { TableauWebToolCallback } from './tools/web/toolContext.js';
