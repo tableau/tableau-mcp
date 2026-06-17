@@ -85,8 +85,8 @@ function extractUrlObjectFromResult(result: CallToolResult): string {
   const content = validated.content[0];
 
   const data = JSON.parse(content.text);
-  const url = urlSchema.parse(data);
-  return url.url;
+  const { url } = urlSchema.parse(data);
+  return url;
 }
 
 // Handle tool results

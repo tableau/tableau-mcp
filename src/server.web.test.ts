@@ -200,6 +200,9 @@ describe('server', () => {
   });
 
   it('should register app tools when tool has app property', async () => {
+    // Set custom CSP domains via environment
+    vi.stubEnv('CSP_ALLOWED_DOMAINS', 'https://*.custom.com,https://other.com');
+
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(true);
 
     const server = getServer();
@@ -229,7 +232,36 @@ describe('server', () => {
       server.mcpServer,
       'get-workbook',
       'tableau://app/test',
-      expect.objectContaining({ mimeType: expect.any(String) }),
+      expect.objectContaining({
+        mimeType: expect.any(String),
+        _meta: {
+          ui: {
+            csp: {
+              connectDomains: expect.arrayContaining([
+                'https://*.online.tableau.com',
+                'https://*.tableau.com',
+                'https://my-tableau-server.com',
+                'https://*.custom.com',
+                'https://other.com',
+              ]),
+              resourceDomains: expect.arrayContaining([
+                'https://*.online.tableau.com',
+                'https://*.tableau.com',
+                'https://my-tableau-server.com',
+                'https://*.custom.com',
+                'https://other.com',
+              ]),
+              frameDomains: expect.arrayContaining([
+                'https://*.online.tableau.com',
+                'https://*.tableau.com',
+                'https://my-tableau-server.com',
+                'https://*.custom.com',
+                'https://other.com',
+              ]),
+            },
+          },
+        },
+      }),
       expect.any(Function),
     );
   });

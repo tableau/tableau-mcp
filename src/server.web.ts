@@ -184,10 +184,9 @@ export class WebMcpServer extends Server {
 
     // Register the resource, which returns the bundled HTML/JavaScript for the UI.
     const config = getConfig();
-    const serverOrigin = new URL(config.server).origin;
 
-    // Allow configured CSP domains and the configured server
-    const cspDomains = [...config.cspAllowedDomains, serverOrigin];
+    // Allow configured CSP domains
+    const cspDomains = config.cspAllowedDomains;
 
     registerAppResource(
       // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.

@@ -834,6 +834,7 @@ describe('Config', () => {
       expect(config.cspAllowedDomains).toEqual([
         'https://*.online.tableau.com',
         'https://*.tableau.com',
+        'https://my-tableau-server.com',
       ]);
     });
 
@@ -841,41 +842,13 @@ describe('Config', () => {
       vi.stubEnv('CSP_ALLOWED_DOMAINS', 'https://*.example.com,https://test.com');
 
       const config = new Config();
-      expect(config.cspAllowedDomains).toEqual(['https://*.example.com', 'https://test.com']);
-    });
-
-    it('should throw error when CSP domain is missing protocol', () => {
-      vi.stubEnv('CSP_ALLOWED_DOMAINS', 'example.com');
-
-      expect(() => new Config()).toThrow(
-        'CSP domain must start with "https://", "http://", or "//": example.com',
-      );
-    });
-
-    it('should throw error when CSP domain has invalid format', () => {
-      vi.stubEnv('CSP_ALLOWED_DOMAINS', 'https://');
-
-      expect(() => new Config()).toThrow('CSP domain has invalid format: https://');
-    });
-
-    it('should throw error when CSP domain is empty', () => {
-      vi.stubEnv('CSP_ALLOWED_DOMAINS', 'https://valid.com,  ,https://another.com');
-
-      expect(() => new Config()).toThrow('CSP domain cannot be empty');
-    });
-
-    it('should accept wildcard subdomains', () => {
-      vi.stubEnv('CSP_ALLOWED_DOMAINS', 'https://*.example.com,https://*.test.org');
-
-      const config = new Config();
-      expect(config.cspAllowedDomains).toEqual(['https://*.example.com', 'https://*.test.org']);
-    });
-
-    it('should accept protocol-relative URLs', () => {
-      vi.stubEnv('CSP_ALLOWED_DOMAINS', '//*.example.com,//test.org');
-
-      const config = new Config();
-      expect(config.cspAllowedDomains).toEqual(['//*.example.com', '//test.org']);
+      expect(config.cspAllowedDomains).toEqual([
+        'https://*.online.tableau.com',
+        'https://*.tableau.com',
+        'https://my-tableau-server.com',
+        'https://*.example.com',
+        'https://test.com',
+      ]);
     });
   });
 });

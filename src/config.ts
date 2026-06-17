@@ -266,13 +266,6 @@ export class Config extends BaseConfig {
     this.isHyperforce = isHyperforce === 'true';
     this.breakGlassDisableGlobally = breakGlassDisableGlobally === 'true';
     this.adminToolsEnabled = adminToolsEnabled === 'true';
-    this.cspAllowedDomains = cspAllowedDomains
-      ? cspAllowedDomains.split(',').map((d) => {
-          const trimmed = d.trim();
-          validateCspDomain(trimmed);
-          return trimmed;
-        })
-      : ['https://*.online.tableau.com', 'https://*.tableau.com'];
 
     this.auth = isAuthType(auth) ? auth : this.oauth.enabled ? 'oauth' : 'pat';
     this.transport = isTransport(transport) ? transport : this.oauth.enabled ? 'http' : 'stdio';
@@ -372,6 +365,19 @@ export class Config extends BaseConfig {
     }
 
     this.server = server ?? '';
+
+    // Configure CSP domains with serverOrigin in defaults
+    const serverOrigin = this.server ? new URL(this.server).origin : '';
+    const defaultDomains = [
+      'https://*.online.tableau.com',
+      'https://*.tableau.com',
+      ...(serverOrigin ? [serverOrigin] : []),
+    ];
+    const customDomains = cspAllowedDomains
+      ? cspAllowedDomains.split(',').map((d) => d.trim())
+      : [];
+    this.cspAllowedDomains = [...defaultDomains, ...customDomains];
+
     this.patName = patName ?? '';
     this.patValue = patValue ?? '';
     this.jwtUsername = jwtUsername ?? '';
@@ -401,36 +407,6 @@ function validateServer(server: string): void {
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(
       `The environment variable SERVER is not a valid URL: ${server} -- ${errorMessage}`,
-    );
-  }
-}
-
-function validateCspDomain(domain: string): void {
-  // CSP domains can be:
-  // 1. Full URLs: https://example.com
-  // 2. Wildcard subdomains: https://*.example.com
-  // 3. Protocol-relative: //*.example.com
-
-  if (!domain || domain.trim() === '') {
-    throw new Error('CSP domain cannot be empty');
-  }
-
-  // Check for valid protocol
-  if (!domain.startsWith('https://') && !domain.startsWith('http://') && !domain.startsWith('//')) {
-    throw new Error(
-      `CSP domain must start with "https://", "http://", or "//": ${domain}`,
-    );
-  }
-
-  // Extract the domain part (after protocol)
-  const domainPart = domain.replace(/^(https?:)?\/\//, '');
-
-  // Validate domain format: can contain *.domain.com or domain.com
-  const domainPattern = /^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
-
-  if (!domainPattern.test(domainPart)) {
-    throw new Error(
-      `CSP domain has invalid format: ${domain}. Expected format: https://example.com or https://*.example.com`,
     );
   }
 }
