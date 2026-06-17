@@ -23,7 +23,7 @@ The tool is **two-phase** to keep the destructive action safe:
    and can be restored for a limited time before permanent removal; on Tableau Server there is no
    recycle bin and deletion is permanent.
 
-:::warning Human confirmation required
+:::warning[Human confirmation required]
 Between the preview and the delete, the calling agent is instructed (via the tool description and
 the preview response) to surface the data source identity **and its dependent content** to the user
 and obtain explicit approval before deleting. The `confirmationToken` enforces that a preview ran,
@@ -31,7 +31,7 @@ but the **human approval** step is a prompt-level expectation — agents must no
 compute the token themselves.
 :::
 
-:::note Dependent content is not deleted
+:::note[Dependent content is not deleted]
 Deleting a published data source does **not** delete the workbooks or flows that use it. Those
 items remain but lose this data source (their views/extracts may break). The preview phase surfaces
 these dependents so you can decide before deleting. The dependency check uses the Metadata API; if

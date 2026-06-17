@@ -344,9 +344,45 @@ describe('deleteDatasourceTool', () => {
         'tableau:datasources:delete',
         'tableau:datasource_tags:update',
         'tableau:content:read',
+        'tableau:mcp_site_settings:read',
         'tableau:users:read',
       ].sort(),
     );
+  });
+
+  it('should reuse the datasource from the access check and not query it again', async () => {
+    // When tool scoping (project/tag) forces the access check to fetch the datasource, it returns
+    // it as `content` so the tool does not query it a second time. Mirrors delete-workbook.
+    mocks.mockIsDatasourceAllowed.mockResolvedValue({ allowed: true, content: mockDatasource });
+    const result = await getToolResult({ datasourceId: 'ds-1' });
+    expect(result.isError).toBe(false);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain(mockDatasource.name);
+    expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+  });
+
+  it('should cap the dependent name list and report the remaining count', async () => {
+    // 12 downstream workbooks → only the first 10 names listed, plus "…and 2 more". The total
+    // count (12) is still reported so nothing is silently hidden.
+    const workbooks = Array.from({ length: 12 }, (_, i) => ({
+      luid: `wb-${i}`,
+      name: `Workbook ${i}`,
+    }));
+    mocks.mockGraphql.mockResolvedValue({
+      data: {
+        publishedDatasourcesConnection: {
+          nodes: [{ luid: 'ds-1', downstreamWorkbooks: workbooks, downstreamFlows: [] }],
+        },
+      },
+    });
+    const result = await getToolResult({ datasourceId: 'ds-1' });
+    invariant(result.content[0].type === 'text');
+    const text = result.content[0].text;
+    expect(text).toContain('12 workbook(s)');
+    expect(text).toContain('Workbook 0');
+    expect(text).toContain('Workbook 9');
+    expect(text).not.toContain('Workbook 10');
+    expect(text).toContain('…and 2 more');
   });
 
   it('should handle API errors gracefully', async () => {

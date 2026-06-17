@@ -111,26 +111,30 @@ const toolScopeMap: Record<
   },
   // Admin-only destructive tool. Two-phase: preview tags the workbook (workbook_tags:update) and
   // resolves the owner (users:read); confirm deletes it (workbooks:delete). getWorkbook → content:read.
-  // adminGate.assertAdmin → GET /sites/{siteId}/users/{userId} → users:read.
+  // adminGate.assertAdmin → GET /sites/{siteId}/users/{userId} → users:read. Goes through the
+  // resourceAccessChecker (tool scoping), so it also needs RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES
+  // (content:read + mcp_site_settings:read).
   'delete-workbook': {
     mcp: ['tableau:mcp:workbook:delete'],
     api: new Set([
       'tableau:workbooks:delete',
       'tableau:workbook_tags:update',
-      'tableau:content:read',
       'tableau:users:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
   // Admin-only destructive tool. Preview tags the datasource (datasource_tags:update), resolves the
   // owner (users:read), and warns about dependent workbooks/flows via the Metadata API (content:read);
   // confirm deletes it (datasources:delete). adminGate.assertAdmin → GET /users/{id} → users:read.
+  // Goes through the resourceAccessChecker (tool scoping), so it also needs
+  // RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES (content:read + mcp_site_settings:read).
   'delete-datasource': {
     mcp: ['tableau:mcp:datasource:delete'],
     api: new Set([
       'tableau:datasources:delete',
       'tableau:datasource_tags:update',
-      'tableau:content:read',
       'tableau:users:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
   'list-projects': {

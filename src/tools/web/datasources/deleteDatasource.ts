@@ -165,11 +165,14 @@ compute the \`confirmationToken\` yourself — use the exact value the preview r
 
               // Resolve identity in both phases so the response (preview AND the final delete
               // confirmation) always names the data source, project, and owner for an auditable
-              // record of exactly what was acted on.
-              const datasource = await restApi.datasourcesMethods.queryDatasource({
-                datasourceId,
-                siteId,
-              });
+              // record of exactly what was acted on. Reuse the data source already fetched by the
+              // access check when a project/tag scope forced it, otherwise fetch it now.
+              const datasource =
+                isDatasourceAllowedResult.content ??
+                (await restApi.datasourcesMethods.queryDatasource({
+                  datasourceId,
+                  siteId,
+                }));
               const ownerEmail = await resolveOwnerEmail(restApi, siteId, datasource.owner?.id);
               const projectName = datasource.project?.name ?? 'unknown project';
               const ownerText = ownerEmail ? `owner ${ownerEmail}` : 'owner unknown';
@@ -264,12 +267,23 @@ async function describeDownstreamDependencies({
 
   const parts: string[] = [];
   if (workbooks.length > 0) {
-    parts.push(`${workbooks.length} workbook(s): ${workbooks.map((w) => w.name).join(', ')}`);
+    parts.push(`${workbooks.length} workbook(s): ${formatDependentNames(workbooks)}`);
   }
   if (flows.length > 0) {
-    parts.push(`${flows.length} flow(s): ${flows.map((f) => f.name).join(', ')}`);
+    parts.push(`${flows.length} flow(s): ${formatDependentNames(flows)}`);
   }
   return `⚠️ WARNING: deleting this data source may break ${parts.join(' and ')}.`;
+}
+
+// Cap the number of dependent names listed so a data source with thousands of dependents does not
+// produce an unbounded message. The total count is always reported; only the name list is capped.
+const MAX_DEPENDENT_NAMES_LISTED = 10;
+
+function formatDependentNames(contents: ReadonlyArray<{ name: string }>): string {
+  const names = contents.slice(0, MAX_DEPENDENT_NAMES_LISTED).map((c) => c.name);
+  const remaining = contents.length - names.length;
+  const listed = names.join(', ');
+  return remaining > 0 ? `${listed}, …and ${remaining} more` : listed;
 }
 
 /**
