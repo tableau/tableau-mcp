@@ -1,5 +1,4 @@
 import { readFileSync } from 'fs';
-
 import { z } from 'zod';
 
 import { expect, test } from './base.js';
