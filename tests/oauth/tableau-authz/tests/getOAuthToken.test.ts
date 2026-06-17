@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { getFeatureGate } from '../../../../src/features/featureGate.js';
 import { expect, test } from './base.js';
 
 const tokenResponseSchema = z.object({
@@ -9,6 +10,7 @@ const tokenResponseSchema = z.object({
 
 test.describe('get-oauth-token', () => {
   test('should return Bearer token', async ({ client }) => {
+    test.skip(!getFeatureGate().isFeatureEnabled('mcp-apps'), 'mcp-apps feature is disabled');
     const result = await client.callTool('get-oauth-token', {
       schema: tokenResponseSchema,
       toolArgs: {},

@@ -6,6 +6,7 @@
  */
 
 import { getConfig } from '../../config.js';
+import { getFeatureGate } from '../../features/featureGate.js';
 import type { WebToolName } from '../../tools/web/toolName.js';
 
 /**
@@ -33,6 +34,7 @@ export type TableauApiScope =
   | 'tableau:content:read'
   | 'tableau:viz_data_service:read'
   | 'tableau:views:download'
+  | 'tableau:views:embed'
   | 'tableau:insight_definitions_metrics:read'
   | 'tableau:insight_metrics:read'
   | 'tableau:metric_subscriptions:read'
@@ -54,19 +56,19 @@ export type TableauApiScope =
  * This list can be configured via environment variable or config file.
  */
 export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
-  'tableau:mcp:content:read',
   'tableau:mcp:datasource:read',
+  'tableau:mcp:datasource:delete',
+  'tableau:mcp:tasks:read',
+  'tableau:mcp:tasks:delete',
+  'tableau:mcp:jobs:read',
+  'tableau:mcp:users:read',
   'tableau:mcp:workbook:read',
+  'tableau:mcp:workbook:delete',
+  'tableau:mcp:content:read',
   'tableau:mcp:view:read',
   'tableau:mcp:view:download',
   'tableau:mcp:pulse:read',
   'tableau:mcp:insight:create',
-  'tableau:mcp:tasks:read',
-  'tableau:mcp:tasks:delete',
-  'tableau:mcp:workbook:delete',
-  'tableau:mcp:jobs:read',
-  'tableau:mcp:datasource:delete',
-  'tableau:mcp:users:read',
 ];
 
 export const RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES: ReadonlyArray<TableauApiScope> = [
@@ -161,11 +163,9 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
-  // Token retrieval: no Tableau REST API calls, no content scope required.
-  // Any authenticated user may retrieve their own token regardless of granted scopes.
   'get-oauth-token': {
     mcp: [],
-    api: new Set<TableauApiScope>(),
+    api: new Set<TableauApiScope>(['tableau:views:embed']),
   },
   'get-workbook': {
     mcp: ['tableau:mcp:workbook:read'],
@@ -286,6 +286,7 @@ const toolScopeMap: Record<
 
 function getEnabledToolNames(): Set<WebToolName> {
   const config = getConfig();
+  const featureGate = getFeatureGate();
   const enabledTools = new Set<WebToolName>(Object.keys(toolScopeMap) as WebToolName[]);
 
   // Remove disabled tools based on feature flags
@@ -300,6 +301,11 @@ function getEnabledToolNames(): Set<WebToolName> {
     enabledTools.delete('query-admin-insights-site-content');
     enabledTools.delete('query-admin-insights-job-performance');
     enabledTools.delete('get-stale-content-report');
+  }
+
+  // Remove get-oauth-token if mcp-apps feature is disabled
+  if (!featureGate.isFeatureEnabled('mcp-apps')) {
+    enabledTools.delete('get-oauth-token');
   }
 
   return enabledTools;

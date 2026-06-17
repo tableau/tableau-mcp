@@ -69,6 +69,7 @@ export class Config extends BaseConfig {
   isHyperforce: boolean;
   breakGlassDisableGlobally: boolean;
   adminToolsEnabled: boolean;
+  cspAllowedDomains: string[];
 
   constructor() {
     super();
@@ -131,6 +132,7 @@ export class Config extends BaseConfig {
       IS_HYPERFORCE: isHyperforce,
       BREAK_GLASS_DISABLE_GLOBALLY: breakGlassDisableGlobally,
       ADMIN_TOOLS_ENABLED: adminToolsEnabled,
+      CSP_ALLOWED_DOMAINS: cspAllowedDomains,
     } = cleansedVars;
 
     let jwtUsername = '';
@@ -363,6 +365,19 @@ export class Config extends BaseConfig {
     }
 
     this.server = server ?? '';
+
+    // Configure CSP domains with serverOrigin in defaults
+    const serverOrigin = this.server ? new URL(this.server).origin : '';
+    const defaultDomains = [
+      'https://*.online.tableau.com',
+      'https://*.tableau.com',
+      ...(serverOrigin ? [serverOrigin] : []),
+    ];
+    const customDomains = cspAllowedDomains
+      ? cspAllowedDomains.split(',').map((d) => d.trim())
+      : [];
+    this.cspAllowedDomains = [...defaultDomains, ...customDomains];
+
     this.patName = patName ?? '';
     this.patValue = patValue ?? '';
     this.jwtUsername = jwtUsername ?? '';
@@ -387,7 +402,7 @@ function validateServer(server: string): void {
   }
 
   try {
-    const _ = new URL(server);
+    new URL(server);
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(

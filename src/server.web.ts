@@ -183,14 +183,31 @@ export class WebMcpServer extends Server {
     );
 
     // Register the resource, which returns the bundled HTML/JavaScript for the UI.
+    const config = getConfig();
+
+    // Allow configured CSP domains
+    const cspDomains = config.cspAllowedDomains;
+
     registerAppResource(
       // @ts-expect-error -- harmless type mismatch in registerAppResource; ext-apps uses MCP SDK v1.25.2. Should go away when MCP SDK is updated.
       this.mcpServer,
       tool.name,
       resourceUri,
-      { mimeType: RESOURCE_MIME_TYPE },
+      {
+        mimeType: RESOURCE_MIME_TYPE,
+        _meta: {
+          ui: {
+            csp: {
+              connectDomains: cspDomains,
+              resourceDomains: cspDomains,
+              frameDomains: cspDomains,
+            },
+          },
+        },
+      },
       async () => {
         const htmlContent = await readFile(join(__dirname, htmlPath), 'utf-8');
+
         return {
           contents: [
             {

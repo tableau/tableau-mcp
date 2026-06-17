@@ -190,6 +190,7 @@ Key variables (see `env.example.list` and `.env`):
 - `ENABLE_PASSTHROUGH_AUTH`: Allow X-Tableau-Auth header
 - `ENABLE_MCP_SITE_SETTINGS`: Enable per-site configuration
 - `BREAK_GLASS_DISABLE_GLOBALLY`: Emergency kill switch
+- `CSP_ALLOWED_DOMAINS`: Comma-separated list of domains for Content-Security-Policy (default: `https://*.online.tableau.com,https://*.tableau.com`)
 
 ## Testing Strategy
 
