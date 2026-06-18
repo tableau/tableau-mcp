@@ -3,6 +3,10 @@
     "tableau": {
       "type": "streamable-http",
       "url": "http://127.0.0.1:3927/tableau-mcp"
+    },
+    "tableau-heroku": {
+      "type": "streamable-http",
+      "url": "https://tableau-mcpapps-60795bc59119.herokuapp.com/tableau-mcp"
     }
   }
 }
