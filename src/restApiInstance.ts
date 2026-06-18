@@ -33,6 +33,7 @@ type JwtScopes =
   | 'tableau:insight_brief:create'
   | 'tableau:mcp_site_settings:read'
   | 'tableau:tasks:read'
+  | 'tableau:flow_tasks:read'
   | 'tableau:users:read'
   | 'tableau:flows:read'
   | 'tableau:flow_connections:read'

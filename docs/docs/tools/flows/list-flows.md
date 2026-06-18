@@ -223,8 +223,8 @@ whether the returned list is complete, so the answer never depends on the _absen
     `filter` until the matching set fits, or ask the administrator to raise the cap.
 - `totalAvailable` — the total number of flows matching the request on the server (across all pages,
   ignoring `limit`). **Present only when no server-side allow-list
-  ([`PROJECT_IDS`](../../configuration/mcp-config/env-vars.md#project_ids) /
-  [`TAGS`](../../configuration/mcp-config/env-vars.md#tags)) is configured** — that count is taken
+  ([`INCLUDE_PROJECT_IDS`](../../configuration/mcp-config/tool-scoping.md#include_project_ids) /
+  [`INCLUDE_TAGS`](../../configuration/mcp-config/tool-scoping.md#include_tags)) is configured** — that count is taken
   before the tool's allow-list filtering, so under a bounded context it would overstate the
   accessible total and is therefore omitted rather than risk a misleading "N of M". When present and
   `truncated` is `true`, use it to report "N of M" (e.g. "showing 100 of 430").
