@@ -6,7 +6,7 @@ import { McpClient } from '../mcpClient.js';
 /**
  * E2E coverage for the admin-only, mutating `update-cloud-extract-refresh-task` tool.
  *
- * Like `delete-extract-refresh-task`, the actual PUT is blocked on Tableau Cloud sessionless OAuth
+ * Like `delete-extract-refresh-task`, the actual POST is blocked on Tableau Cloud sessionless OAuth
  * enablement (401 with PAT auth), so only registration and schema-validation paths are tested here.
  * The mutating leg is gated behind `UPDATE_CLOUD_EXTRACT_REFRESH_TASK_E2E_ID` — set it to a
  * disposable task LUID once the endpoint is enabled on your Cloud site.

@@ -140,18 +140,18 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     mocks.mockUpdateCloudExtractRefreshTask.mockResolvedValue(
       new Err({
         type: 'tableau-api',
-        status: 400,
+        status: 409,
         code: '409004',
-        summary: 'Bad Request',
+        summary: 'Conflict',
         detail: 'Invalid subscription schedule',
       }),
     );
     const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Tableau 400');
+    expect(result.content[0].text).toContain('Tableau 409');
     expect(result.content[0].text).toContain('[409004]');
-    expect(result.content[0].text).toContain('Bad Request');
+    expect(result.content[0].text).toContain('Conflict');
     expect(result.content[0].text).toContain('Invalid subscription schedule');
   });
 
@@ -310,7 +310,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       mocks.mockUpdateCloudExtractRefreshTask.mockResolvedValue(
         new Err({
           type: 'tableau-api',
-          status: 400,
+          status: 409,
           code: '409004',
           detail: 'Invalid subscription schedule.',
         }),
@@ -320,7 +320,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).not.toContain(': :');
       expect(result.content[0].text).toContain(
-        'Tableau 400 [409004]: Invalid subscription schedule.',
+        'Tableau 409 [409004]: Invalid subscription schedule.',
       );
     });
   });

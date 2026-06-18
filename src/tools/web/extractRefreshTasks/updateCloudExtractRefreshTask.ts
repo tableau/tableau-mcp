@@ -51,7 +51,7 @@ export const getUpdateCloudExtractRefreshTaskTool = (
   - For \`Daily\`/\`Weekly\`/\`Monthly\`: \`end\` is ignored — omit it.
   - \`Weekly\` requires at least one interval with \`weekDay\`; \`Monthly\` requires at least one interval with \`monthDay\`.
 
-  Tableau may still reject a request that passes schema validation with \`409004 Bad Request\` for site-specific schedule rules; the tool surfaces Tableau's structured error code/summary/detail in the response so callers can recover.
+  Tableau may still reject a request that passes schema validation with \`409004 Conflict\` for site-specific schedule rules; the tool surfaces Tableau's structured error code/summary/detail in the response so callers can recover.
 
   **Response:** A confirmation message describing the updated task and its new schedule.
 

@@ -69,7 +69,7 @@ The schema enforces these rules — invalid input is rejected before any Tableau
 - **Daily / Weekly / Monthly** – `end` is ignored — omit it.
 - **Weekly** requires at least one interval with `weekDay`; **Monthly** requires at least one interval with `monthDay`.
 
-Tableau may still reject a schema-valid request with `409004 Bad Request` (`Invalid subscription schedule`) for site-specific rules. In that case the tool surfaces Tableau's structured error verbatim — e.g. `Tableau 400 [409004]: Bad Request: Invalid subscription schedule. (...)` — so callers can recover without parsing axios errors. A 404 is mapped to a "Tableau Cloud only" hint pointing at `list-extract-refresh-tasks` since the most common cause is calling against a Tableau Server site or with a stale taskId.
+Tableau may still reject a schema-valid request with `409004 Conflict` (`Invalid subscription schedule`) for site-specific rules. In that case the tool surfaces Tableau's structured error verbatim — e.g. `Tableau 409 [409004]: Conflict: Invalid subscription schedule. (...)` — so callers can recover without parsing axios errors. A 404 is mapped to a "Tableau Cloud only" hint pointing at `list-extract-refresh-tasks` since the most common cause is calling against a Tableau Server site or with a stale taskId.
 
 ## Example: Daily → Weekly Sunday at 06:00
 
