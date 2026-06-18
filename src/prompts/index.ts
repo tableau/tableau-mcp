@@ -2,10 +2,12 @@ import { getConfig } from '../config.js';
 import { WebMcpServer } from '../server.web.js';
 import { getJobOptimizationInformPrompt } from './jobOptimization/inform.js';
 import { WebPromptFactory } from './registry.js';
+import { getStaleContentCleanupApplyPrompt } from './staleContent/apply.js';
 import { getStaleContentCleanupInformPrompt } from './staleContent/inform.js';
 
 const webPromptFactories: ReadonlyArray<WebPromptFactory> = [
   getStaleContentCleanupInformPrompt,
+  getStaleContentCleanupApplyPrompt,
   getJobOptimizationInformPrompt,
 ];
 

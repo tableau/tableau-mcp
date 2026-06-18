@@ -22,6 +22,7 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { assertAdmin } from '../adminGate.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
+import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
 
 const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
 
@@ -179,7 +180,12 @@ compute the \`confirmationToken\` yourself — use the exact value the preview r
                   datasourceId,
                   siteId,
                 }));
-              const ownerEmail = await resolveOwnerEmail(restApi, siteId, datasource.owner?.id);
+              const ownerEmail = await resolveOwnerEmail(
+                restApi,
+                siteId,
+                datasource.owner?.id,
+                'delete-datasource',
+              );
               const projectName = datasource.project?.name ?? 'unknown project';
               const ownerText = ownerEmail ? `owner ${ownerEmail}` : 'owner unknown';
 
@@ -281,6 +287,8 @@ async function describeDownstreamDependencies({
   return `⚠️ WARNING: deleting this data source may break ${parts.join(' and ')}.`;
 }
 
+// (owner-email resolution moved to ../users/resolveOwnerEmail.js — shared with delete-workbook.)
+
 // Cap the number of dependent names listed so a data source with thousands of dependents does not
 // produce an unbounded message. The total count is always reported; only the name list is capped.
 const MAX_DEPENDENT_NAMES_LISTED = 10;
@@ -290,30 +298,4 @@ function formatDependentNames(contents: ReadonlyArray<{ name: string }>): string
   const remaining = contents.length - names.length;
   const listed = names.join(', ');
   return remaining > 0 ? `${listed}, …and ${remaining} more` : listed;
-}
-
-/**
- * Best-effort resolution of the data source owner's email for the preview report. Owner lookup is
- * informational only, so a failure must not block the preview — we log and fall back to no email.
- */
-async function resolveOwnerEmail(
-  restApi: RestApi,
-  siteId: string,
-  ownerId: string | undefined,
-): Promise<string | null> {
-  if (!ownerId) {
-    return null;
-  }
-  try {
-    const owner = await restApi.usersMethods.queryUserOnSite({ siteId, userId: ownerId });
-    return owner.email ?? owner.name ?? null;
-  } catch (error) {
-    log({
-      message: `delete-datasource: failed to resolve owner ${ownerId} for preview`,
-      level: 'warning',
-      logger: 'delete-datasource',
-      data: getExceptionMessage(error),
-    });
-    return null;
-  }
 }
