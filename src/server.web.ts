@@ -203,6 +203,14 @@ export class WebMcpServer extends Server {
               frameDomains: cspDomains,
             },
           },
+          // Emit the legacy OpenAI-proprietary CSP key for ChatGPT compatibility.
+          // ChatGPT's widget runtime reads this key in addition to (or instead of)
+          // the standard MCP-UI _meta.ui.csp structure above.
+          'openai/widgetCSP': {
+            connect_domains: cspDomains,
+            resource_domains: cspDomains,
+            frame_domains: cspDomains,
+          },
         },
       },
       async () => {
