@@ -49,10 +49,35 @@ describe('stale-content-cleanup-apply prompt', () => {
       expect(text).toContain('exactly once');
       // Required human-in-the-loop break is present.
       expect(text).toContain('🛑 STOP');
-      // Dry run is the default: stop after tag + notify, never confirm-delete.
+      // Dry run is the default: report only, never tag and never confirm-delete.
       expect(text).toContain('DRY RUN is active');
       expect(text).toContain('STOP (dry run)');
       expect(text).not.toContain('Step 7 — Delete (confirmed)');
+    });
+
+    it('writes nothing before approval — no tagging in the dry-run default (F1)', async () => {
+      if (!promptAvailable) {
+        return;
+      }
+      const text = await client.getPromptText(PROMPT_NAME);
+      // The dry-run branch must not emit a tagging step or instruct any write.
+      expect(text).not.toContain('Tag approved items');
+      expect(text).toContain('do NOT tag any item');
+      // Oversized-report guard is present.
+      expect(text).toContain('more than 100 rows');
+      expect(text).toContain('narrow the scope');
+    });
+
+    it('gates tagging behind the human approval break when dryRun is false (F1)', async () => {
+      if (!promptAvailable) {
+        return;
+      }
+      const text = await client.getPromptText(PROMPT_NAME, { dryRun: 'false' });
+      const gateIdx = text.indexOf('REQUIRED HUMAN CONFIRMATION');
+      const tagIdx = text.indexOf('Tag approved items');
+      expect(gateIdx).toBeGreaterThan(-1);
+      expect(tagIdx).toBeGreaterThan(gateIdx);
+      expect(text).toContain('ONLY for the items the user explicitly approved');
     });
 
     it('routes both supported content types by default', async () => {

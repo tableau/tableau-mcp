@@ -95,7 +95,33 @@ describe('stale-content-cleanup-apply prompt', () => {
   });
 
   it('applies a custom pending-deletion tag', () => {
-    const text = getText({ tag: 'sunset-2026' });
+    // Tagging only happens in the post-approval (dryRun:false) branch.
+    const text = getText({ dryRun: 'false', tag: 'sunset-2026' });
     expect(text).toContain('sunset-2026');
+  });
+
+  it('does not tag anything during a dry run (F1 — no write before approval)', () => {
+    const text = getText();
+    expect(text).toContain('DRY RUN is active');
+    expect(text).toContain('do NOT tag any item');
+    // No tagging step is emitted in the dry-run branch.
+    expect(text).not.toContain('Tag approved items');
+  });
+
+  it('gates tagging behind human approval — tag step follows the HITL break (F1)', () => {
+    const text = getText({ dryRun: 'false' });
+    const gateIdx = text.indexOf('REQUIRED HUMAN CONFIRMATION');
+    const tagIdx = text.indexOf('Tag approved items');
+    expect(gateIdx).toBeGreaterThan(-1);
+    expect(tagIdx).toBeGreaterThan(-1);
+    // The tag step must come after the confirmation gate, never before.
+    expect(tagIdx).toBeGreaterThan(gateIdx);
+    expect(text).toContain('ONLY for the items the user explicitly approved');
+  });
+
+  it('refuses to act on an oversized report and asks to narrow scope (F1)', () => {
+    const text = getText();
+    expect(text).toContain('more than 100 rows');
+    expect(text).toContain('narrow the scope');
   });
 });
