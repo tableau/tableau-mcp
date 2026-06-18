@@ -10,6 +10,7 @@ import { getPlanDashboardCreationTool } from './coordination/planDashboardCreati
 import { getApplyDashboardTool } from './dashboard/applyDashboard.js';
 import { getApplyDashboardWithViewpointsTool } from './dashboard/applyDashboardWithViewpoints.js';
 import { getBuildAndApplyDashboardTool } from './dashboard/buildAndApplyDashboard.js';
+import { getGetDashboardGuideTool } from './dashboard/getDashboardGuide.js';
 import { getGetDashboardXmlTool } from './dashboard/getDashboardXml.js';
 import { getAddFieldToColsTool } from './fields/addFieldToCols.js';
 import { getAddFieldToEncodingTool } from './fields/addFieldToEncoding.js';
@@ -70,4 +71,5 @@ export const desktopToolFactories = [
   getReadCachedXmlTool,
   getWriteCachedXmlTool,
   getInjectTemplateTool,
+  getGetDashboardGuideTool,
 ];

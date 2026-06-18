@@ -34,6 +34,7 @@ export const desktopToolNames = [
   'read-cached-xml',
   'write-cached-xml',
   'inject-template',
+  'get-dashboard-guide',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 

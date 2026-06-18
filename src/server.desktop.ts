@@ -22,7 +22,7 @@ const RESOURCE_ROOTS = [
   join(getDirname(), '..', 'resources', 'desktop'),
 ];
 
-const RESOURCES_ROOT = RESOURCE_ROOTS.find(existsSync) ?? RESOURCE_ROOTS[0];
+export const RESOURCES_ROOT = RESOURCE_ROOTS.find(existsSync) ?? RESOURCE_ROOTS[0];
 
 export class DesktopMcpServer extends Server {
   private readonly sessionManager = new SessionManager();
