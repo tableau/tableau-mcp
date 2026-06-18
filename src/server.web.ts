@@ -5,7 +5,11 @@ import {
 } from '@modelcontextprotocol/ext-apps/server';
 import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
+import {
+  ReadResourceResult,
+  ServerNotification,
+  ServerRequest,
+} from '@modelcontextprotocol/sdk/types.js';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
@@ -195,25 +199,8 @@ export class WebMcpServer extends Server {
       resourceUri,
       {
         mimeType: RESOURCE_MIME_TYPE,
-        _meta: {
-          ui: {
-            csp: {
-              connectDomains: cspDomains,
-              resourceDomains: cspDomains,
-              frameDomains: cspDomains,
-            },
-          },
-          // Emit the legacy OpenAI-proprietary CSP key for ChatGPT compatibility.
-          // ChatGPT's widget runtime reads this key in addition to (or instead of)
-          // the standard MCP-UI _meta.ui.csp structure above.
-          'openai/widgetCSP': {
-            connect_domains: cspDomains,
-            resource_domains: cspDomains,
-            frame_domains: cspDomains,
-          },
-        },
       },
-      async () => {
+      async (): Promise<ReadResourceResult> => {
         const htmlContent = await readFile(join(__dirname, htmlPath), 'utf-8');
 
         return {
@@ -222,6 +209,23 @@ export class WebMcpServer extends Server {
               uri: resourceUri,
               mimeType: RESOURCE_MIME_TYPE,
               text: htmlContent,
+              _meta: {
+                ui: {
+                  csp: {
+                    connectDomains: cspDomains,
+                    resourceDomains: cspDomains,
+                    frameDomains: cspDomains,
+                  },
+                },
+                // Emit the legacy OpenAI-proprietary CSP key for ChatGPT compatibility.
+                // ChatGPT's widget runtime reads this key in addition to (or instead of)
+                // the standard MCP-UI _meta.ui.csp structure above.
+                'openai/widgetCSP': {
+                  connect_domains: cspDomains,
+                  resource_domains: cspDomains,
+                  frame_domains: cspDomains,
+                },
+              },
             },
           ],
         };
