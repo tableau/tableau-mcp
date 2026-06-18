@@ -1,11 +1,17 @@
-import { McpServer, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ResourceTemplate, ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
+import {
+  ErrorCode,
+  McpError,
+  ServerNotification,
+  ServerRequest,
+} from '@modelcontextprotocol/sdk/types.js';
 import { existsSync } from 'fs';
 import { join } from 'path';
 
 import pkg from '../package.json';
 import { getDesktopConfig } from './config.desktop.js';
+import { listKnowledgeResources, readKnowledgeResource } from './desktop/knowledge/index.js';
 import { SessionManager } from './desktop/sessionManager.js';
 import { ClientInfo, Server } from './server.js';
 import { DesktopTool } from './tools/desktop/tool.js';
@@ -33,6 +39,7 @@ export class DesktopMcpServer extends Server {
 
   registerResources = async (): Promise<void> => {
     await this._registerDashboardXmlGuide();
+    this._registerKnowledgeResources();
   };
 
   registerTools = async (): Promise<void> => {
@@ -79,6 +86,40 @@ export class DesktopMcpServer extends Server {
   protected _getToolsToRegister = async (): Promise<Array<DesktopTool<any>>> => {
     const allTools = desktopToolFactories.map((toolFactory) => toolFactory(this));
     return allTools;
+  };
+
+  private _registerKnowledgeResources = (): void => {
+    const template = new ResourceTemplate('expertise://tableau/{+slug}', {
+      list: () => ({
+        resources: listKnowledgeResources().map(({ uri, name, description, mimeType }) => ({
+          uri,
+          name,
+          description,
+          mimeType,
+        })),
+      }),
+    });
+
+    this.registerResource({
+      name: 'tableau-expertise-knowledge',
+      title: 'Tableau authoring knowledge',
+      description: 'Expertise modules scanned from resources/desktop/knowledge',
+      template,
+      readTemplateCallback: (uri, variables) => {
+        const slug = variables['slug'];
+        if (typeof slug !== 'string' || !slug) {
+          throw new McpError(ErrorCode.InvalidParams, 'Missing expertise slug in URI.');
+        }
+        const text = readKnowledgeResource(`expertise://tableau/${slug}`);
+        if (!text) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            `Unknown knowledge resource: expertise://tableau/${slug}`,
+          );
+        }
+        return { contents: [{ uri: uri.href, mimeType: 'text/markdown', text }] };
+      },
+    });
   };
 
   private _registerDashboardXmlGuide = async (): Promise<void> => {
