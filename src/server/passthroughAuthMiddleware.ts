@@ -63,7 +63,7 @@ export function passthroughAuthMiddleware(): RequestHandler {
       if (!sessionResult.isOk()) {
         log({
           message: `Passthrough auth validation failed: ${sessionResult.error.message}`,
-          level: 'info',
+          level: 'error',
           logger: 'auth',
         });
         res.status(401).json({
