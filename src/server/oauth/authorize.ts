@@ -254,7 +254,7 @@ async function getClientFromMetadataDoc(
     } catch (error) {
       log({
         message: `DNS resolution failed for client metadata URL ${clientMetadataUrl.hostname}`,
-        level: 'info',
+        level: 'error',
         logger: 'oauth',
         data: error,
       });

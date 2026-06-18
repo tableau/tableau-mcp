@@ -485,3 +485,21 @@ discretion.
   "isError": true
 }
 ```
+
+<hr />
+
+## `CSP_ALLOWED_DOMAINS`
+
+A comma-separated list of domains to allow in the Content-Security-Policy header for MCP apps (when the `mcp-apps` feature is enabled).
+
+- Default: `https://*.online.tableau.com,https://*.tableau.com`
+- The configured [`SERVER`](#server) origin is automatically appended to this list.
+- Use this to quickly add or modify allowed domains without requiring a code change and release.
+
+**Example:**
+
+```bash
+CSP_ALLOWED_DOMAINS=https://*.mycompany.tableau.com,https://*.online.tableau.com
+```
+
+This allows embedding Tableau visualizations from custom Tableau Server domains in addition to the default Tableau Cloud domains.

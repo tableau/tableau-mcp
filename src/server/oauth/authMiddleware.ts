@@ -92,7 +92,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
 
       log({
         message: `Access token validation failed: ${result.error}`,
-        level: 'info',
+        level: 'error',
         logger: 'oauth',
         data: result.error,
       });
@@ -119,7 +119,7 @@ export function authMiddleware(accessTokenValidator: AccessTokenValidator): Requ
       if (missingScopes.length > 0) {
         log({
           message: `Insufficient scopes: missing [${missingScopes.join(', ')}]`,
-          level: 'info',
+          level: 'error',
           logger: 'oauth',
         });
         const { resourceUri } = getConfig().oauth;

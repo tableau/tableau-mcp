@@ -154,7 +154,7 @@ export async function startExpressServer({
         } else {
           log({
             message: 'Rejected request: no valid session ID and not an initialize request',
-            level: 'info',
+            level: 'error',
             logger: 'server',
           });
           res.status(400).json({

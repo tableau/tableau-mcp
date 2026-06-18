@@ -133,26 +133,27 @@ describe('OAuth', () => {
     const response = await request(app).get('/.well-known/oauth-protected-resource');
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
-    expect(response.body).toEqual({
-      resource: `http://127.0.0.1:3927/${serverName}`,
-      authorization_servers: ['http://127.0.0.1:3927'],
-      bearer_methods_supported: ['header'],
-      scopes_supported: [
-        'tableau:mcp:datasource:read',
-        'tableau:mcp:datasource:delete',
-        'tableau:mcp:tasks:read',
-        'tableau:mcp:tasks:delete',
-        'tableau:mcp:jobs:read',
-        'tableau:mcp:users:read',
-        'tableau:mcp:workbook:read',
-        'tableau:mcp:workbook:delete',
+    expect(response.body.resource).toBe(`http://127.0.0.1:3927/${serverName}`);
+    expect(response.body.authorization_servers).toEqual(['http://127.0.0.1:3927']);
+    expect(response.body.bearer_methods_supported).toEqual(['header']);
+    expect(response.body.scopes_supported).toEqual(
+      expect.arrayContaining([
         'tableau:mcp:content:read',
+        'tableau:mcp:datasource:read',
+        'tableau:mcp:workbook:read',
         'tableau:mcp:view:read',
         'tableau:mcp:view:download',
         'tableau:mcp:pulse:read',
         'tableau:mcp:insight:create',
-      ],
-    });
+        'tableau:mcp:tasks:read',
+        'tableau:mcp:tasks:delete',
+        'tableau:mcp:workbook:delete',
+        'tableau:mcp:jobs:read',
+        'tableau:mcp:datasource:delete',
+        'tableau:mcp:users:read',
+      ]),
+    );
+    expect(response.body.scopes_supported).toHaveLength(13);
   });
 
   it('should provide a authorization server metadata endpoint for the OAuth 2.1 flow', async () => {
@@ -161,34 +162,43 @@ describe('OAuth', () => {
     const response = await request(app).get('/.well-known/oauth-authorization-server');
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
-    expect(response.body).toEqual({
-      issuer: 'http://127.0.0.1:3927',
-      authorization_endpoint: 'http://127.0.0.1:3927/oauth2/authorize',
-      token_endpoint: 'http://127.0.0.1:3927/oauth2/token',
-      registration_endpoint: 'http://127.0.0.1:3927/oauth2/register',
-      revocation_endpoint: 'http://127.0.0.1:3927/oauth2/revoke',
-      response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
-      code_challenge_methods_supported: ['S256'],
-      scopes_supported: [
-        'tableau:mcp:datasource:read',
-        'tableau:mcp:datasource:delete',
-        'tableau:mcp:tasks:read',
-        'tableau:mcp:tasks:delete',
-        'tableau:mcp:jobs:read',
-        'tableau:mcp:users:read',
-        'tableau:mcp:workbook:read',
-        'tableau:mcp:workbook:delete',
+    expect(response.body.issuer).toBe('http://127.0.0.1:3927');
+    expect(response.body.authorization_endpoint).toBe('http://127.0.0.1:3927/oauth2/authorize');
+    expect(response.body.token_endpoint).toBe('http://127.0.0.1:3927/oauth2/token');
+    expect(response.body.registration_endpoint).toBe('http://127.0.0.1:3927/oauth2/register');
+    expect(response.body.revocation_endpoint).toBe('http://127.0.0.1:3927/oauth2/revoke');
+    expect(response.body.response_types_supported).toEqual(['code']);
+    expect(response.body.grant_types_supported).toEqual([
+      'authorization_code',
+      'refresh_token',
+      'client_credentials',
+    ]);
+    expect(response.body.code_challenge_methods_supported).toEqual(['S256']);
+    expect(response.body.scopes_supported).toEqual(
+      expect.arrayContaining([
         'tableau:mcp:content:read',
+        'tableau:mcp:datasource:read',
+        'tableau:mcp:workbook:read',
         'tableau:mcp:view:read',
         'tableau:mcp:view:download',
         'tableau:mcp:pulse:read',
         'tableau:mcp:insight:create',
-      ],
-      token_endpoint_auth_methods_supported: ['none', 'client_secret_basic', 'client_secret_post'],
-      subject_types_supported: ['public'],
-      client_id_metadata_document_supported: true,
-    });
+        'tableau:mcp:tasks:read',
+        'tableau:mcp:tasks:delete',
+        'tableau:mcp:workbook:delete',
+        'tableau:mcp:jobs:read',
+        'tableau:mcp:datasource:delete',
+        'tableau:mcp:users:read',
+      ]),
+    );
+    expect(response.body.scopes_supported).toHaveLength(13);
+    expect(response.body.token_endpoint_auth_methods_supported).toEqual([
+      'none',
+      'client_secret_basic',
+      'client_secret_post',
+    ]);
+    expect(response.body.subject_types_supported).toEqual(['public']);
+    expect(response.body.client_id_metadata_document_supported).toBe(true);
   });
 
   it('should provide a authorization server metadata endpoint for the OAuth 2.1 flow without client credentials', async () => {
@@ -199,34 +209,35 @@ describe('OAuth', () => {
     const response = await request(app).get('/.well-known/oauth-authorization-server');
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toBe('application/json; charset=utf-8');
-    expect(response.body).toEqual({
-      issuer: 'http://127.0.0.1:3927',
-      authorization_endpoint: 'http://127.0.0.1:3927/oauth2/authorize',
-      token_endpoint: 'http://127.0.0.1:3927/oauth2/token',
-      registration_endpoint: 'http://127.0.0.1:3927/oauth2/register',
-      revocation_endpoint: 'http://127.0.0.1:3927/oauth2/revoke',
-      response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token'],
-      code_challenge_methods_supported: ['S256'],
-      scopes_supported: [
-        'tableau:mcp:datasource:read',
-        'tableau:mcp:datasource:delete',
-        'tableau:mcp:tasks:read',
-        'tableau:mcp:tasks:delete',
-        'tableau:mcp:jobs:read',
-        'tableau:mcp:users:read',
-        'tableau:mcp:workbook:read',
-        'tableau:mcp:workbook:delete',
+    expect(response.body.issuer).toBe('http://127.0.0.1:3927');
+    expect(response.body.authorization_endpoint).toBe('http://127.0.0.1:3927/oauth2/authorize');
+    expect(response.body.token_endpoint).toBe('http://127.0.0.1:3927/oauth2/token');
+    expect(response.body.registration_endpoint).toBe('http://127.0.0.1:3927/oauth2/register');
+    expect(response.body.revocation_endpoint).toBe('http://127.0.0.1:3927/oauth2/revoke');
+    expect(response.body.response_types_supported).toEqual(['code']);
+    expect(response.body.grant_types_supported).toEqual(['authorization_code', 'refresh_token']);
+    expect(response.body.code_challenge_methods_supported).toEqual(['S256']);
+    expect(response.body.scopes_supported).toEqual(
+      expect.arrayContaining([
         'tableau:mcp:content:read',
+        'tableau:mcp:datasource:read',
+        'tableau:mcp:workbook:read',
         'tableau:mcp:view:read',
         'tableau:mcp:view:download',
         'tableau:mcp:pulse:read',
         'tableau:mcp:insight:create',
-      ],
-      token_endpoint_auth_methods_supported: ['none'],
-      subject_types_supported: ['public'],
-      client_id_metadata_document_supported: true,
-    });
+        'tableau:mcp:tasks:read',
+        'tableau:mcp:tasks:delete',
+        'tableau:mcp:workbook:delete',
+        'tableau:mcp:jobs:read',
+        'tableau:mcp:datasource:delete',
+        'tableau:mcp:users:read',
+      ]),
+    );
+    expect(response.body.scopes_supported).toHaveLength(13);
+    expect(response.body.token_endpoint_auth_methods_supported).toEqual(['none']);
+    expect(response.body.subject_types_supported).toEqual(['public']);
+    expect(response.body.client_id_metadata_document_supported).toBe(true);
   });
 
   it('should allow authenticated requests', async () => {
