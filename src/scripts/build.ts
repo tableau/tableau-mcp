@@ -65,6 +65,7 @@ const globalValues: Record<GlobalIdentifierName, string> = {
 
   if (variant === 'desktop' || variant === 'combined') {
     copyDirectory('./resources/desktop', './build/resources/desktop');
+    copyDirectory('./src/desktop/data', './build/desktop/data');
   }
 
   console.log('🏗️ Building telemetry/tracing.js...');

@@ -23,11 +23,16 @@ import { Provider } from './utils/provider.js';
 const serverName = 'tableau-desktop-mcp';
 const serverVersion = pkg.version;
 
+const DATA_ROOTS = [
+  join(getDirname(), 'desktop', 'data'),
+  join(getDirname(), '..', 'src', 'desktop', 'data'),
+];
 const RESOURCE_ROOTS = [
   join(getDirname(), 'resources', 'desktop'),
   join(getDirname(), '..', 'resources', 'desktop'),
 ];
 
+export const DATA_ROOT = DATA_ROOTS.find(existsSync) ?? DATA_ROOTS[0];
 export const RESOURCES_ROOT = RESOURCE_ROOTS.find(existsSync) ?? RESOURCE_ROOTS[0];
 
 export class DesktopMcpServer extends Server {

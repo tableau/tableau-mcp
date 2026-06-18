@@ -5,12 +5,11 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { Corpus, searchDiffCorpusFormatted } from '../../../desktop/search/diffCorpus.js';
-import { DesktopMcpServer } from '../../../server.desktop.js';
+import { DATA_ROOT, DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 function loadCorpus(): Corpus | null {
-  const corpusPath =
-    process.env.CORPUS_PATH || path.join(process.cwd(), 'src', 'desktop', 'data', 'corpus.json');
+  const corpusPath = process.env.CORPUS_PATH || path.join(DATA_ROOT, 'corpus.json');
   try {
     return JSON.parse(readFileSync(corpusPath, 'utf8')) as Corpus;
   } catch {
