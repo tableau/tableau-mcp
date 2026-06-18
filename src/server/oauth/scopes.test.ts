@@ -34,6 +34,24 @@ describe('scopes', () => {
       expect(scopes).not.toContain('tableau:mcp:tasks:read');
     });
 
+    it('should include tableau:mcp:tasks:write when adminToolsEnabled is true', () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: true,
+      } as any);
+
+      const scopes = getSupportedMcpScopes();
+      expect(scopes).toContain('tableau:mcp:tasks:write');
+    });
+
+    it('should exclude tableau:mcp:tasks:write when adminToolsEnabled is false', () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = getSupportedMcpScopes();
+      expect(scopes).not.toContain('tableau:mcp:tasks:write');
+    });
+
     it('should include tableau:mcp:jobs:read when adminToolsEnabled is true', () => {
       mockGetConfig.mockReturnValue({
         adminToolsEnabled: true,
@@ -85,6 +103,24 @@ describe('scopes', () => {
 
       const scopes = getSupportedApiScopes();
       expect(scopes).not.toContain('tableau:tasks:read');
+    });
+
+    it('should include tableau:tasks:write when adminToolsEnabled is true', () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: true,
+      } as any);
+
+      const scopes = getSupportedApiScopes();
+      expect(scopes).toContain('tableau:tasks:write');
+    });
+
+    it('should exclude tableau:tasks:write when adminToolsEnabled is false', () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      const scopes = getSupportedApiScopes();
+      expect(scopes).not.toContain('tableau:tasks:write');
     });
 
     it('should include tableau:jobs:read when adminToolsEnabled is true', () => {
@@ -162,8 +198,10 @@ describe('scopes', () => {
 
       const scopes = getSupportedScopes({ includeApiScopes: true });
       expect(scopes).not.toContain('tableau:mcp:tasks:read');
+      expect(scopes).not.toContain('tableau:mcp:tasks:write');
       expect(scopes).not.toContain('tableau:mcp:jobs:read');
       expect(scopes).not.toContain('tableau:tasks:read');
+      expect(scopes).not.toContain('tableau:tasks:write');
       expect(scopes).not.toContain('tableau:jobs:read');
       expect(scopes).not.toContain('tableau:users:read');
     });
@@ -176,6 +214,7 @@ describe('scopes', () => {
       } as any);
 
       expect(isValidScope('tableau:mcp:tasks:read')).toBe(true);
+      expect(isValidScope('tableau:mcp:tasks:write')).toBe(true);
       expect(isValidScope('tableau:mcp:jobs:read')).toBe(true);
       expect(isValidScope('tableau:mcp:datasource:read')).toBe(true);
     });
@@ -186,6 +225,14 @@ describe('scopes', () => {
       } as any);
 
       expect(isValidScope('tableau:mcp:tasks:read')).toBe(false);
+    });
+
+    it('should return false for tableau:mcp:tasks:write when adminToolsEnabled is false', () => {
+      mockGetConfig.mockReturnValue({
+        adminToolsEnabled: false,
+      } as any);
+
+      expect(isValidScope('tableau:mcp:tasks:write')).toBe(false);
     });
 
     it('should return false for tableau:mcp:jobs:read when adminToolsEnabled is false', () => {

@@ -7,6 +7,7 @@ import { getDeleteDatasourceTool } from './datasources/deleteDatasource.js';
 import { getListDatasourcesTool } from './datasources/listDatasources.js';
 import { getDeleteExtractRefreshTaskTool } from './extractRefreshTasks/deleteExtractRefreshTask.js';
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
+import { getUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/updateCloudExtractRefreshTask.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
 import { getOAuthTokenTool } from './getOAuthToken/getOAuthToken.js';
 import { getListJobsTool } from './jobs/listJobs.js';
@@ -40,6 +41,7 @@ export const webToolFactories = [
   getDeleteDatasourceTool,
   getListExtractRefreshTasksTool,
   getDeleteExtractRefreshTaskTool,
+  getUpdateCloudExtractRefreshTaskTool,
   getListJobsTool,
   getListUsersTool,
   getQueryDatasourceTool,

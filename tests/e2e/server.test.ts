@@ -39,16 +39,17 @@ describe('server', () => {
         'reset-consent',
       ];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
-        'delete-datasource',
         'list-extract-refresh-tasks',
         'delete-extract-refresh-task',
+        'update-cloud-extract-refresh-task',
         'list-jobs',
         'list-users',
+        'delete-workbook',
+        'delete-datasource',
         'query-admin-insights-ts-events',
         'query-admin-insights-site-content',
         'query-admin-insights-job-performance',
         'get-stale-content-report',
-        'delete-workbook',
       ];
       let expectedToolNames = [...webToolNames];
 
@@ -123,16 +124,17 @@ describe('server', () => {
         'reset-consent',
       ];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
-        'delete-datasource',
         'list-extract-refresh-tasks',
         'delete-extract-refresh-task',
+        'update-cloud-extract-refresh-task',
         'list-jobs',
         'list-users',
+        'delete-workbook',
+        'delete-datasource',
         'query-admin-insights-ts-events',
         'query-admin-insights-site-content',
         'query-admin-insights-job-performance',
         'get-stale-content-report',
-        'delete-workbook',
       ];
       let expectedWebToolNames = [...webToolNames];
 

@@ -1,7 +1,11 @@
 import { makeApi, makeEndpoint, ZodiosEndpointDefinitions } from '@zodios/core';
 import { z } from 'zod';
 
-import { extractRefreshTaskSchema } from '../types/extractRefreshTask.js';
+import {
+  extractRefreshTaskSchema,
+  updateCloudExtractRefreshTaskRequestSchema,
+  updateCloudExtractRefreshTaskResponseSchema,
+} from '../types/extractRefreshTask.js';
 
 const taskEntrySchema = z.object({
   extractRefresh: extractRefreshTaskSchema,
@@ -81,5 +85,43 @@ const deleteExtractRefreshTaskEndpoint = makeEndpoint({
   response: z.void(),
 });
 
-const tasksApi = makeApi([listExtractRefreshTasksEndpoint, deleteExtractRefreshTaskEndpoint]);
+/**
+ * Update Cloud Extract Refresh Task
+ * POST /api/api-version/sites/site-id/tasks/extractRefreshes/task-id
+ * Updates the schedule of an extract refresh task on Tableau Cloud (API 3.20+).
+ * The endpoint shares the path with delete-extract-refresh-task and uses POST for the update verb.
+ * Tableau Cloud only — not available on Tableau Server.
+ * Tableau Cloud scope: tableau:tasks:write
+ * @see https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#update_cloud_extract_refresh_task
+ */
+const updateCloudExtractRefreshTaskEndpoint = makeEndpoint({
+  method: 'post',
+  path: '/sites/:siteId/tasks/extractRefreshes/:taskId',
+  alias: 'updateCloudExtractRefreshTask',
+  description: 'Updates the schedule of an extract refresh task on Tableau Cloud.',
+  parameters: [
+    {
+      name: 'siteId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'taskId',
+      type: 'Path',
+      schema: z.string(),
+    },
+    {
+      name: 'body',
+      type: 'Body',
+      schema: updateCloudExtractRefreshTaskRequestSchema,
+    },
+  ],
+  response: updateCloudExtractRefreshTaskResponseSchema,
+});
+
+const tasksApi = makeApi([
+  listExtractRefreshTasksEndpoint,
+  deleteExtractRefreshTaskEndpoint,
+  updateCloudExtractRefreshTaskEndpoint,
+]);
 export const tasksApis = [...tasksApi] as const satisfies ZodiosEndpointDefinitions;
