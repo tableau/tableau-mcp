@@ -1,10 +1,11 @@
 import { Zodios } from '@zodios/core';
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
+import { AxiosRequestConfig } from '../../../utils/axios.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { parseListExtractRefreshTasksResponse, tasksApis } from '../apis/tasksApi.js';
 import { RestApiCredentials } from '../restApi.js';
+import { parseTableauApiError } from '../tableauApiError.js';
 import {
   ExtractRefreshTask,
   UpdateCloudExtractRefreshSchedule,
@@ -111,17 +112,18 @@ export default class TasksMethods extends AuthenticatedMethods<typeof tasksApis>
           ...this.authHeader,
         },
       );
-      return new Ok({ ...response.extractRefresh, schedule: response.schedule });
+      // The response schema is permissive — Cloud's exact payload varies by site and the
+      // destructive e2e leg is gated. Fall back to the requested taskId/schedule so a
+      // missing/partial response field doesn't turn a successful update into an Err.
+      return new Ok({
+        ...response.extractRefresh,
+        id: response.extractRefresh?.id ?? taskId,
+        schedule: response.schedule ?? response.extractRefresh?.schedule,
+      });
     } catch (error) {
-      if (isAxiosError(error) && error.response?.data?.error) {
-        const { code, summary, detail } = error.response.data.error;
-        return new Err({
-          type: 'tableau-api',
-          status: error.response.status,
-          code,
-          summary,
-          detail,
-        });
+      const parsed = parseTableauApiError(error);
+      if (parsed) {
+        return new Err({ type: 'tableau-api', ...parsed });
       }
       return new Err({ type: 'unknown', message: getExceptionMessage(error) });
     }

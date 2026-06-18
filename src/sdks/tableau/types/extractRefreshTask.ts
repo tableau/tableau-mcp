@@ -62,16 +62,41 @@ export type ExtractRefreshTask = z.infer<typeof extractRefreshTaskSchema>;
 /**
  * Tableau Cloud `update-cloud-extract-refresh-task` accepts a schedule with a frequency
  * (Hourly | Daily | Weekly | Monthly) and a frequencyDetails object describing the time
- * window and recurrence intervals. Stricter than the response schema: enum is closed and
- * intervals must be an array.
+ * window and recurrence intervals.
+ *
+ * The schema enforces what we know upfront so an LLM driving the tool gets immediate
+ * feedback instead of a 409004 round-trip:
+ *   - times are zero-padded HH:mm:ss
+ *   - minute/second portions are on a 5-minute boundary
+ *   - Hourly: end is required, end.minutes match start, end > start (numeric)
+ *   - Weekly: at least one weekDay interval; Monthly: at least one monthDay interval
  */
+const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/;
+const TIME_FORMAT_HINT = 'must be in zero-padded HH:mm:ss 24-hour format, e.g. "06:00:00"';
+
+const timeStringSchema = z.string().regex(TIME_REGEX, `time ${TIME_FORMAT_HINT}`);
+
+function timeToSeconds(t: string): number {
+  const [h, m, s] = t.split(':').map(Number);
+  return h * 3600 + m * 60 + s;
+}
+
+function isFiveMinuteBoundary(t: string): boolean {
+  const [, , minutes, seconds] = t.match(TIME_REGEX) ?? [];
+  return (
+    minutes !== undefined &&
+    seconds !== undefined &&
+    Number(minutes) % 5 === 0 &&
+    Number(seconds) === 0
+  );
+}
+
 export const updateCloudExtractRefreshScheduleSchema = z
   .object({
     frequency: z.enum(['Hourly', 'Daily', 'Weekly', 'Monthly']),
     frequencyDetails: z.object({
-      start: z.string().describe('Start time in HH:mm:ss (24-hour) format, e.g. "06:00:00".'),
-      end: z
-        .string()
+      start: timeStringSchema.describe('Start time in HH:mm:ss (24-hour) format, e.g. "06:00:00".'),
+      end: timeStringSchema
         .optional()
         .describe(
           'End time in HH:mm:ss (24-hour) format. Required for Hourly schedules; ignored for Daily/Weekly/Monthly.',
@@ -100,6 +125,19 @@ export const updateCloudExtractRefreshScheduleSchema = z
         .optional(),
     }),
   })
+  .refine((s) => isFiveMinuteBoundary(s.frequencyDetails.start), {
+    message:
+      'frequencyDetails.start minute portion must be on a 5-minute boundary (00, 05, 10, ..., 55) with seconds = 00',
+    path: ['frequencyDetails', 'start'],
+  })
+  .refine(
+    (s) => s.frequencyDetails.end === undefined || isFiveMinuteBoundary(s.frequencyDetails.end),
+    {
+      message:
+        'frequencyDetails.end minute portion must be on a 5-minute boundary (00, 05, 10, ..., 55) with seconds = 00',
+      path: ['frequencyDetails', 'end'],
+    },
+  )
   .refine((s) => s.frequency !== 'Hourly' || s.frequencyDetails.end !== undefined, {
     message: 'frequencyDetails.end is required for Hourly schedules',
     path: ['frequencyDetails', 'end'],
@@ -118,12 +156,34 @@ export const updateCloudExtractRefreshScheduleSchema = z
   .refine(
     (s) => {
       if (s.frequency !== 'Hourly' || s.frequencyDetails.end === undefined) return true;
-      return s.frequencyDetails.end > s.frequencyDetails.start;
+      return timeToSeconds(s.frequencyDetails.end) > timeToSeconds(s.frequencyDetails.start);
     },
     {
       message:
         'For Hourly schedules, frequencyDetails.end must be strictly after frequencyDetails.start',
       path: ['frequencyDetails', 'end'],
+    },
+  )
+  .refine(
+    (s) => {
+      if (s.frequency !== 'Weekly') return true;
+      return s.frequencyDetails.intervals?.interval.some((i) => i.weekDay !== undefined) ?? false;
+    },
+    {
+      message:
+        'Weekly schedules require at least one frequencyDetails.intervals.interval entry with a weekDay',
+      path: ['frequencyDetails', 'intervals'],
+    },
+  )
+  .refine(
+    (s) => {
+      if (s.frequency !== 'Monthly') return true;
+      return s.frequencyDetails.intervals?.interval.some((i) => i.monthDay !== undefined) ?? false;
+    },
+    {
+      message:
+        'Monthly schedules require at least one frequencyDetails.intervals.interval entry with a monthDay',
+      path: ['frequencyDetails', 'intervals'],
     },
   );
 
@@ -132,24 +192,25 @@ export type UpdateCloudExtractRefreshSchedule = z.infer<
 >;
 
 /**
- * Request body for `Update cloud extract refresh task`. Per the Tableau REST API,
- * `extractRefresh` and `schedule` are siblings at the top level — not nested. All attributes
- * are optional; sending only `schedule` is sufficient to change a task's schedule.
+ * Request body for `Update cloud extract refresh task`. Per the Tableau REST API the body
+ * carries just the schedule; the tool does not yet expose a way to flip extractRefresh.type
+ * (FullRefresh|IncrementalRefresh), so it is omitted to avoid advertising a capability the
+ * tool doesn't offer.
  */
 export const updateCloudExtractRefreshTaskRequestSchema = z.object({
-  extractRefresh: z
-    .object({
-      type: z.enum(['FullRefresh', 'IncrementalRefresh']).optional(),
-    })
-    .optional(),
   schedule: updateCloudExtractRefreshScheduleSchema,
 });
 
 /**
  * Response body shape for `Update cloud extract refresh task`. `extractRefresh` and `schedule`
- * are sibling top-level elements; the schedule is NOT nested inside extractRefresh on this endpoint.
+ * are sibling top-level elements (the schedule is NOT nested inside extractRefresh). All fields
+ * are tolerated optional/partial because the Cloud endpoint's exact response payload varies
+ * by site and is hard to lock down without the destructive e2e leg gated behind
+ * UPDATE_CLOUD_EXTRACT_REFRESH_TASK_E2E_ID. The wrapping method falls back to the requested
+ * taskId/schedule when the response omits them, so a missing field doesn't turn a successful
+ * update into a Result Err.
  */
 export const updateCloudExtractRefreshTaskResponseSchema = z.object({
-  extractRefresh: extractRefreshTaskSchema,
-  schedule: extractRefreshScheduleSchema,
+  extractRefresh: extractRefreshTaskSchema.partial().optional(),
+  schedule: extractRefreshScheduleSchema.optional(),
 });

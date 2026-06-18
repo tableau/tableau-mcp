@@ -44,11 +44,14 @@ export const getUpdateCloudExtractRefreshTaskTool = (
     - \`frequencyDetails.end\` (required for \`Hourly\`; omit for \`Daily\`/\`Weekly\`/\`Monthly\`) – End time in 24-hour \`HH:mm:ss\` format. For \`Hourly\` its minute portion must match \`start\` and it must be strictly after \`start\`.
     - \`frequencyDetails.intervals.interval\` (optional) – Array of recurrence intervals. Each entry can specify \`weekDay\` (Sunday..Saturday), \`monthDay\`, \`hours\`, or \`minutes\` depending on the frequency.
 
-  **Tableau schedule constraints (rejected with \`409004 Bad Request\` if violated):**
-  - The **minute** portion of \`start\` (and \`end\`, when present) must be on a 5-minute boundary: \`00\`, \`05\`, \`10\`, \`15\`, \`20\`, \`25\`, \`30\`, \`35\`, \`40\`, \`45\`, \`50\`, or \`55\`. \`07:26:00\` is rejected; \`07:25:00\` and \`07:30:00\` are accepted.
-  - For \`Hourly\`: the minute portion of \`start\` and \`end\` must match each other (e.g. \`06:00:00\`/\`18:00:00\` ✓, \`06:00:00\`/\`18:30:00\` ✗); \`end\` must be strictly after \`start\`.
+  **Schedule constraints (enforced at the schema layer — invalid input is rejected before any Tableau API call):**
+  - \`start\` and \`end\` must be zero-padded \`HH:mm:ss\` (e.g. \`"06:00:00"\`, not \`"6:00:00"\`).
+  - The **minute** portion of \`start\` (and \`end\`, when present) must be on a 5-minute boundary: \`00\`, \`05\`, \`10\`, \`15\`, \`20\`, \`25\`, \`30\`, \`35\`, \`40\`, \`45\`, \`50\`, or \`55\`, with seconds = \`00\`. \`07:26:00\` is rejected; \`07:25:00\` and \`07:30:00\` are accepted.
+  - For \`Hourly\`: the minute portion of \`start\` and \`end\` must match (e.g. \`06:00:00\`/\`18:00:00\` ✓, \`06:00:00\`/\`18:30:00\` ✗); \`end\` must be strictly after \`start\`.
   - For \`Daily\`/\`Weekly\`/\`Monthly\`: \`end\` is ignored — omit it.
-  - \`Weekly\` requires at least one \`weekDay\` interval; \`Monthly\` requires \`monthDay\`.
+  - \`Weekly\` requires at least one interval with \`weekDay\`; \`Monthly\` requires at least one interval with \`monthDay\`.
+
+  Tableau may still reject a request that passes schema validation with \`409004 Bad Request\` for site-specific schedule rules; the tool surfaces Tableau's structured error code/summary/detail in the response so callers can recover.
 
   **Response:** A confirmation message describing the updated task and its new schedule.
 
@@ -85,22 +88,32 @@ export const getUpdateCloudExtractRefreshTaskTool = (
               if (result.isErr()) {
                 if (result.error.type === 'tableau-api') {
                   const { status, code, summary, detail } = result.error;
+                  // 404 from Cloud commonly means the tool was called against a Tableau Server
+                  // site or the taskId doesn't exist on this site — surface a Cloud-only hint
+                  // instead of the bare "Not Found".
+                  if (status === 404) {
+                    return new UnknownError(
+                      `Tableau 404: extract refresh task '${args.taskId}' not found. This tool is Tableau Cloud only — verify you're connected to a Cloud site (not Server) and that the taskId came from list-extract-refresh-tasks.`,
+                      404,
+                    ).toErr();
+                  }
                   const codeStr = code ? ` [${code}]` : '';
-                  const summaryStr = summary ?? '';
-                  const detailStr = detail ? `: ${detail}` : '';
-                  return new UnknownError(
-                    `Tableau ${status}${codeStr}: ${summaryStr}${detailStr}`.trim(),
-                    status,
-                  ).toErr();
+                  const summaryDetail = [summary, detail].filter(Boolean).join(': ');
+                  const tail = summaryDetail ? `: ${summaryDetail}` : '';
+                  return new UnknownError(`Tableau ${status}${codeStr}${tail}`, status).toErr();
                 }
                 return new UnknownError(result.error.message).toErr();
               }
 
               const updated = result.value;
+              // Fall back to args for every field — the Cloud response payload varies by site
+              // and we don't want a partial response to produce a misleading message.
               const frequency = updated.schedule?.frequency ?? args.schedule.frequency;
-              const start = updated.schedule?.frequencyDetails?.start;
-              const end = updated.schedule?.frequencyDetails?.end;
-              const window = start ? (end ? ` (${start}–${end})` : ` (start ${start})`) : '';
+              const start =
+                updated.schedule?.frequencyDetails?.start ?? args.schedule.frequencyDetails.start;
+              const end =
+                updated.schedule?.frequencyDetails?.end ?? args.schedule.frequencyDetails.end;
+              const window = end ? ` (${start}–${end})` : ` (start ${start})`;
               return new Ok(
                 `Extract refresh task '${args.taskId}' has been successfully updated. New schedule: ${frequency}${window}.`,
               );

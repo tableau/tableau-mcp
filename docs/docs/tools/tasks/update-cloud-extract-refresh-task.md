@@ -59,16 +59,17 @@ See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
 | `frequencyDetails.end`               | string   | Hourly only | End time in 24-hour `HH:mm:ss` format. **Required** for `Hourly` (minute portion must match `start`, must be strictly after `start`). Omit for `Daily`/`Weekly`/`Monthly` — Tableau ignores it. |
 | `frequencyDetails.intervals.interval` | array    | No       | Recurrence intervals. Each entry can specify `weekDay` (Sunday..Saturday), `monthDay`, `hours`, or `minutes` depending on the frequency. |
 
-### Tableau schedule constraints
+### Schedule constraints
 
-Tableau Cloud rejects an `Update Cloud Extract Refresh Task` request with `409004 Bad Request` (`Invalid subscription schedule`) if any of the following is violated:
+The schema enforces these rules — invalid input is rejected before any Tableau API call:
 
-- **Minute boundary** – The minute portion of `start` (and `end`, when present) must be on a 5-minute boundary: `00`, `05`, `10`, `15`, `20`, `25`, `30`, `35`, `40`, `45`, `50`, or `55`. `07:26:00` is rejected; `07:25:00` and `07:30:00` are accepted.
-- **Hourly** – `start` and `end` must share the same minute portion (e.g. `06:00:00`/`18:00:00` ✓, `06:00:00`/`18:30:00` ✗); `end` must be strictly after `start`.
+- **Time format** – `start` and `end` must be zero-padded `HH:mm:ss` (e.g. `"06:00:00"`, not `"6:00:00"`).
+- **Minute boundary** – The minute portion of `start` (and `end`, when present) must be on a 5-minute boundary: `00`, `05`, `10`, `15`, `20`, `25`, `30`, `35`, `40`, `45`, `50`, or `55`, with seconds = `00`. `07:26:00` is rejected; `07:25:00` and `07:30:00` are accepted.
+- **Hourly** – `start` and `end` must share the same minute portion (e.g. `06:00:00`/`18:00:00` ✓, `06:00:00`/`18:30:00` ✗); `end` must be strictly after `start` (numeric comparison, not lexical).
 - **Daily / Weekly / Monthly** – `end` is ignored — omit it.
-- **Weekly** requires at least one `weekDay` interval; **Monthly** requires `monthDay`.
+- **Weekly** requires at least one interval with `weekDay`; **Monthly** requires at least one interval with `monthDay`.
 
-The error code/detail from Tableau is surfaced verbatim in the tool's response (e.g. `Tableau 400 [409004]: Bad Request: Invalid subscription schedule. (...)`), so callers can recover from validation rejections without parsing axios errors.
+Tableau may still reject a schema-valid request with `409004 Bad Request` (`Invalid subscription schedule`) for site-specific rules. In that case the tool surfaces Tableau's structured error verbatim — e.g. `Tableau 400 [409004]: Bad Request: Invalid subscription schedule. (...)` — so callers can recover without parsing axios errors. A 404 is mapped to a "Tableau Cloud only" hint pointing at `list-extract-refresh-tasks` since the most common cause is calling against a Tableau Server site or with a stale taskId.
 
 ## Example: Daily → Weekly Sunday at 06:00
 
