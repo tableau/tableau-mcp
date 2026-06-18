@@ -1,0 +1,181 @@
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'fs';
+import { resolve } from 'path';
+import { Ok } from 'ts-results-es';
+import { z } from 'zod';
+
+import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
+import { replaceFieldReferences } from '../../../desktop/templates/replaceFieldReferences.js';
+import { getTemplatePath, getTemplatesDir } from '../../../desktop/templates/templatePath.js';
+import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
+import {
+  ArgsValidationError,
+  FileNotFoundError,
+  FileReadError,
+  XmlValidationError,
+} from '../../../errors/mcpToolError.js';
+import { DesktopMcpServer } from '../../../server.desktop.js';
+import { DesktopTool } from '../tool.js';
+
+const paramsSchema = {
+  workbookFile: z
+    .string()
+    .describe('Path to workbook cache file (from get-workbook-xml with mode=file).'),
+  templateName: z
+    .string()
+    .describe('Template name without .xml extension (use list-templates to see options).'),
+  title: z.string().describe('Name for the new sheet — replaces {{TITLE}} in the template.'),
+  sheetType: z.enum(['worksheet', 'dashboard', 'story']).describe('Type of sheet being injected.'),
+  templateParameters: z
+    .record(z.string())
+    .optional()
+    .describe(
+      'Additional {{PLACEHOLDER}} substitutions, e.g. {"DATASOURCE": "Sales Data"}. DATASOURCE is handled alongside fieldMapping.',
+    ),
+  fieldMapping: z
+    .record(z.string())
+    .optional()
+    .describe(
+      'Map of template field names to column-instance refs, e.g. {"Sales": "[sum:Sales:qk]", "Region": "[none:Region:nk]"}.',
+    ),
+  insertPosition: z
+    .enum(['end', 'before_sheet', 'after_sheet'])
+    .optional()
+    .describe('Tab order position (default: end).'),
+  relativeSheetName: z
+    .string()
+    .optional()
+    .describe('Required when insertPosition is before_sheet or after_sheet.'),
+};
+
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+const toolTitle = 'Inject Template';
+export const getInjectTemplateTool = (
+  server: DesktopMcpServer,
+): DesktopTool<typeof paramsSchema> => {
+  const tool = new DesktopTool({
+    server,
+    name: 'inject-template',
+    title: toolTitle,
+    description: [
+      'Inject a pre-built worksheet, dashboard, or story from a template file into a cached workbook XML file.',
+      'Templates are TWB-format XML files; use list-templates to see available names.',
+      'Supports {{PLACEHOLDER}} substitution — {{TITLE}} is always replaced with the title argument.',
+      'Workflow: get-workbook-xml (mode=file) → inject-template → apply-workbook.',
+    ].join(' '),
+    paramsSchema,
+    annotations: {
+      title: toolTitle,
+      readOnlyHint: false,
+      openWorldHint: false,
+    },
+    callback: async (
+      {
+        workbookFile,
+        templateName,
+        title,
+        sheetType,
+        templateParameters,
+        fieldMapping,
+        insertPosition,
+        relativeSheetName,
+      },
+      extra,
+    ): Promise<CallToolResult> => {
+      return await tool.logAndExecute({
+        extra,
+        args: {
+          workbookFile,
+          templateName,
+          title,
+          sheetType,
+          templateParameters,
+          fieldMapping,
+          insertPosition,
+          relativeSheetName,
+        },
+        callback: async () => {
+          if (!existsSync(resolve(workbookFile))) {
+            return new FileNotFoundError(workbookFile).toErr();
+          }
+
+          const templateFilePath = getTemplatePath(templateName);
+          if (!existsSync(templateFilePath)) {
+            const templatesDir = getTemplatesDir();
+            let available = 'none';
+            if (existsSync(templatesDir)) {
+              const files = readdirSync(templatesDir)
+                .filter((f) => f.endsWith('.xml'))
+                .map((f) => f.replace('.xml', ''));
+              available = files.length > 0 ? files.join(', ') : 'none';
+            }
+            return new ArgsValidationError(
+              `Template "${templateName}" not found.\n\nAvailable templates: ${available}\n\nUse list-templates to see all options.`,
+            ).toErr();
+          }
+
+          try {
+            let templateXml = readFileSync(templateFilePath, 'utf-8');
+
+            templateXml = templateXml.replace(/\{\{TITLE\}\}/g, escapeXml(title));
+
+            if (templateParameters) {
+              for (const [key, value] of Object.entries(templateParameters)) {
+                if (key === 'DATASOURCE') continue;
+                templateXml = templateXml.replace(
+                  new RegExp(`\\{\\{${key}\\}\\}`, 'g'),
+                  escapeXml(value),
+                );
+              }
+            }
+
+            if (templateParameters?.['DATASOURCE']) {
+              templateXml = replaceFieldReferences(
+                templateXml,
+                fieldMapping ?? {},
+                templateParameters['DATASOURCE'],
+              );
+            }
+
+            const workbookXml = readFileSync(resolve(workbookFile), 'utf-8');
+            const modifiedXml = injectTemplate(
+              workbookXml,
+              templateXml,
+              sheetType,
+              insertPosition ?? 'end',
+              relativeSheetName,
+            );
+
+            const issues = wellFormedXmlRule.validate(modifiedXml);
+            if (issues.length > 0) {
+              return new XmlValidationError(issues.map((i) => i.message)).toErr();
+            }
+
+            writeFileSync(resolve(workbookFile), modifiedXml, 'utf-8');
+
+            return new Ok({ workbookFile, templateName, title, sheetType });
+          } catch (err) {
+            return new FileReadError(err).toErr();
+          }
+        },
+        getSuccessResult: ({ workbookFile, templateName, title, sheetType }) => ({
+          content: [
+            {
+              type: 'text',
+              text: `Injected template "${templateName}" as "${title}" (${sheetType}).\n\nUpdated file: ${workbookFile}\n\nUse apply-workbook to apply changes to Tableau.`,
+            },
+          ],
+        }),
+      });
+    },
+  });
+  return tool;
+};

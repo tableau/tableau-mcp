@@ -26,6 +26,7 @@ import { getSearchExamplesTool } from './search/searchExamples.js';
 import { getSearchWorkbookExamplesTool } from './search/searchWorkbookExamples.js';
 import { getCheckForUserChangesTool } from './session/checkForUserChanges.js';
 import { getListInstancesTool } from './session/listInstances.js';
+import { getInjectTemplateTool } from './template/injectTemplate.js';
 import { getApplyWorkbookTool } from './workbook/applyWorkbook.js';
 import { getGetWorkbookXmlTool } from './workbook/getWorkbookXml.js';
 import { getListDashboardsTool } from './workbook/listDashboards.js';
@@ -68,4 +69,5 @@ export const desktopToolFactories = [
   getValidateWorkbookXmlTool,
   getReadCachedXmlTool,
   getWriteCachedXmlTool,
+  getInjectTemplateTool,
 ];

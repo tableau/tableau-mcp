@@ -33,6 +33,7 @@ export const desktopToolNames = [
   'validate-workbook-xml',
   'read-cached-xml',
   'write-cached-xml',
+  'inject-template',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 
