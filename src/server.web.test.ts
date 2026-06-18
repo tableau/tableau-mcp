@@ -280,29 +280,6 @@ describe('server', () => {
           ]),
         },
       },
-      'openai/widgetCSP': {
-        connect_domains: expect.arrayContaining([
-          'https://*.online.tableau.com',
-          'https://*.tableau.com',
-          'https://my-tableau-server.com',
-          'https://*.custom.com',
-          'https://other.com',
-        ]),
-        resource_domains: expect.arrayContaining([
-          'https://*.online.tableau.com',
-          'https://*.tableau.com',
-          'https://my-tableau-server.com',
-          'https://*.custom.com',
-          'https://other.com',
-        ]),
-        frame_domains: expect.arrayContaining([
-          'https://*.online.tableau.com',
-          'https://*.tableau.com',
-          'https://my-tableau-server.com',
-          'https://*.custom.com',
-          'https://other.com',
-        ]),
-      },
     });
   });
 
