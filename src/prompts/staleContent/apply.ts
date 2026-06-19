@@ -9,6 +9,11 @@ const DEFAULT_PENDING_DELETION_TAG = 'pending-deletion';
 /**
  * Above this many report rows, the workflow refuses to tag/delete in one pass and asks the user to
  * narrow scope first — guards against an unreviewed mass write across other owners' content (F1).
+ *
+ * SOFT GUARD: this is enforced only via prompt text (Step 1 below), so the guarantee is only as
+ * strong as the model's compliance — a model that ignores the instruction can still resolve every
+ * row. Making it hard would require enforcing the cap server-side inside get-stale-content-report;
+ * tracked as a follow-up.
  */
 const LARGE_REPORT_THRESHOLD = 100;
 
@@ -63,11 +68,21 @@ const argsSchema = {
   tag: z
     .string()
     .max(200)
+    // Constrain to a safe tag character class. `tag` is interpolated into the workflow prompt text,
+    // so restricting it to alphanumerics/space/underscore/dash closes a prompt-injection vector
+    // (e.g. a value with quotes/backticks trying to coerce the model into auto-confirming).
+    .regex(
+      /^[A-Za-z0-9 _-]+$/,
+      'tag must contain only letters, numbers, spaces, underscores, and dashes',
+    )
     .optional()
     .describe(
       'Pending-deletion label applied during the tag/preview phase (reversible, visible in the ' +
-        `Tableau UI). Defaults to '${DEFAULT_PENDING_DELETION_TAG}'.`,
+        `Tableau UI). Letters, numbers, spaces, underscores, and dashes only. Defaults to '${DEFAULT_PENDING_DELETION_TAG}'.`,
     ),
+  // MCP prompt arguments are string-only over the wire (the GetPrompt request carries
+  // `arguments: { [key]: string }`), so this is a string enum rather than z.boolean(). Parsed to a
+  // boolean below via `args.dryRun !== 'false'`.
   dryRun: z
     .enum(['true', 'false'])
     .optional()
@@ -97,13 +112,29 @@ export const getStaleContentCleanupApplyPrompt: WebPromptFactory = () => ({
           .map((s: string) => s.trim())
           .filter(Boolean)
       : [];
-    const requestedTypes = args.itemTypes
-      ? args.itemTypes
-          .split(',')
-          .map((s: string) => s.trim())
-          .filter(Boolean)
-          .filter(isContentType)
+    // Split the supplied itemTypes (if any) into the supported subset and the unsupported leftovers.
+    // De-dupe so e.g. "Workbook,Workbook" doesn't emit a duplicate routing/confirm block.
+    const suppliedTypes: string[] = args.itemTypes
+      ? Array.from(
+          new Set(
+            args.itemTypes
+              .split(',')
+              .map((s: string) => s.trim())
+              .filter((s: string) => s.length > 0),
+          ),
+        )
       : [];
+    const requestedTypes = suppliedTypes.filter(isContentType);
+    const unsupportedTypes = suppliedTypes.filter((t) => !isContentType(t));
+    // Narrow-should-never-widen on a destructive prompt: if itemTypes was supplied but resolves to
+    // zero supported types (typo / wrong case / unsupported kind), do NOT silently fall back to ALL.
+    if (suppliedTypes.length > 0 && requestedTypes.length === 0) {
+      const text =
+        `No supported content types in itemTypes: ${suppliedTypes.join(', ')}. ` +
+        `Supported types are: ${ALL_CONTENT_TYPES.join(', ')}. ` +
+        'Re-run with a supported subset, or omit itemTypes to clean up all supported types.';
+      return { messages: [{ role: 'user', content: { type: 'text', text } }] };
+    }
     const itemTypes: ContentType[] = requestedTypes.length > 0 ? requestedTypes : ALL_CONTENT_TYPES;
     const tag = args.tag?.trim() ? args.tag.trim() : DEFAULT_PENDING_DELETION_TAG;
     const dryRun = args.dryRun !== 'false';
@@ -117,22 +148,33 @@ export const getStaleContentCleanupApplyPrompt: WebPromptFactory = () => ({
     const routing = itemTypes.map((type) => ({ itemType: type, ...CONTENT_TYPE_REGISTRY[type] }));
 
     const hitlGate = renderHitlGate({
-      action: 'tag or delete',
-      itemNoun: 'stale item',
+      actionVerb: 'tag or delete',
+      actionGerund: 'tagging or deletion',
+      itemNounSingular: 'stale item',
+      itemNounPlural: 'stale items',
       presentColumns: ['Item Type', 'Item Name', 'Project', 'Owner Email', 'Days Stale', 'Size'],
     });
-    // One confirm-instruction block per delete tool in scope, so the wording is exact per tool name.
-    const confirmInstructions = routing
-      .map(({ deleteTool }) =>
-        renderConfirmInstructions({ toolName: deleteTool, itemNoun: 'stale item' }),
-      )
-      .join('\n');
+    // A single confirm-instruction block points at the routing table (which already lists the tool
+    // names per itemType), so it covers every delete tool in scope without one block per tool.
+    const confirmInstructions = renderConfirmInstructions({
+      toolRef: "the `deleteTool` the routing table maps the item's `itemType` to",
+      itemNoun: 'stale item',
+    });
+
+    // If the user supplied unsupported types alongside supported ones, surface the dropped values so
+    // a typo doesn't silently shrink the scope without the user noticing (cf. the unresolved-LUID skip).
+    const droppedTypesNote =
+      unsupportedTypes.length > 0
+        ? `NOTE: ignoring unsupported itemTypes (not cleaned up): ${unsupportedTypes.join(', ')}. ` +
+          `Supported types are: ${ALL_CONTENT_TYPES.join(', ')}.`
+        : '';
 
     const text = [
       'You are running the Tableau MCP **stale-content-cleanup-apply** workflow against the connected Tableau Cloud site.',
       'This is a DESTRUCTIVE admin workflow. Follow every step in order and never skip the human-confirmation break.',
       'CRITICAL: Steps 1-3 are READ-ONLY. Make NO write to any content (no tagging, no deletion) until the user has ' +
         'explicitly approved a specific set of items at the Step 4 human-confirmation break.',
+      ...(droppedTypesNote ? ['', droppedTypesNote] : []),
       '',
       '**Content-type routing** — map each stale item to its tools by `Item Type`:',
       '',

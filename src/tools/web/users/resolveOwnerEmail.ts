@@ -8,8 +8,8 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
  * back to no email. Falls back to the owner's name (the login/username, an email on Tableau Cloud)
  * when no email field is returned.
  *
- * Shared by the delete tools (delete-workbook, delete-datasource) and the content-owner-emails
- * helper so the resolution behavior stays identical across the destructive Apply surface.
+ * Shared by the delete tools (delete-workbook, delete-datasource) so the resolution behavior stays
+ * identical across the destructive Apply surface.
  */
 export async function resolveOwnerEmail(
   restApi: RestApi,

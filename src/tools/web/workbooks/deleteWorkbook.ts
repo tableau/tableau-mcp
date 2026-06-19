@@ -54,8 +54,9 @@ const paramsSchema = {
     .optional()
     .describe(
       'Required when confirm is true. The confirmationToken returned by the preview step ' +
-        '(confirm omitted/false) for this workbook. Deletion is rejected without a matching token, ' +
-        'which forces a deliberate two-step delete rather than a blind single call.',
+        '(confirm omitted/false) for this workbook. Deletion is rejected without a matching token ' +
+        '— a friction gate requiring a distinct second call. Note the token is a deterministic hash ' +
+        'of caller-known inputs, so it adds deliberation but does not by itself prove a preview ran.',
     ),
   tag: z
     .string()
@@ -84,8 +85,9 @@ This tool is **two-phase** to keep the destructive action safe:
    \`${DEFAULT_PENDING_DELETION_TAG}\`), reports the workbook name, project, and owner, returns a
    \`confirmationToken\`, and does **not** delete anything.
 2. **Delete (\`confirm: true\` + \`confirmationToken\`):** permanently removes the workbook. The
-   token from step 1 is required — deletion is rejected without it, which forces a deliberate
-   second call rather than a blind one-shot delete. On Tableau Cloud the workbook is moved to the recycle bin and can be restored
+   token from step 1 is required — deletion is rejected without it, a friction gate requiring a
+   deliberate second call rather than a blind one-shot delete (the token is a deterministic hash of
+   caller-known inputs, so it adds deliberation but does not by itself prove a preview ran). On Tableau Cloud the workbook is moved to the recycle bin and can be restored
    for a limited time before permanent removal (see ${RECYCLE_BIN_DOC_URL}).
 
 **Required human confirmation:** After preview, present the workbook (name, project, owner) to the

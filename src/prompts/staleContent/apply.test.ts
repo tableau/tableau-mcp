@@ -124,4 +124,36 @@ describe('stale-content-cleanup-apply prompt', () => {
     expect(text).toContain('more than 100 rows');
     expect(text).toContain('narrow the scope');
   });
+
+  it('errors instead of silently widening when itemTypes has zero supported types', () => {
+    const text = getText({ itemTypes: 'Flow' });
+    expect(text).toContain('No supported content types in itemTypes: Flow');
+    expect(text).toContain('Workbook, Datasource');
+    // Must NOT fall through to running the full workflow on all types.
+    expect(text).not.toContain('get-stale-content-report');
+  });
+
+  it('surfaces dropped unsupported itemTypes alongside supported ones', () => {
+    const text = getText({ itemTypes: 'Workbook, Flow' });
+    expect(text).toContain('ignoring unsupported itemTypes');
+    expect(text).toContain('Flow');
+    expect(text).toContain('delete-workbook');
+    // Still runs the workflow for the supported subset.
+    expect(text).toContain('get-stale-content-report');
+    expect(text).not.toContain('delete-datasource');
+  });
+
+  it('de-duplicates repeated itemTypes (single routing/confirm block)', () => {
+    const text = getText({ dryRun: 'false', itemTypes: 'Workbook,Workbook,Datasource' });
+    const routing = JSON.parse(text.split('```json')[1].split('```')[0]);
+    expect(routing).toHaveLength(2);
+    expect(routing.map((r: { itemType: string }) => r.itemType)).toEqual(['Workbook', 'Datasource']);
+  });
+
+  it('renders a single confirm-instruction block referencing the routing table', () => {
+    const text = getText({ dryRun: 'false' });
+    expect(text).toContain('the routing table maps');
+    // Only one confirm block, regardless of how many delete tools are in scope.
+    expect(text.match(/Only AFTER the user approves/g)).toHaveLength(1);
+  });
 });

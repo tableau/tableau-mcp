@@ -65,7 +65,8 @@ const paramsSchema = {
     .describe(
       'Required when confirm is true. The confirmationToken returned by the preview step ' +
         '(confirm omitted/false) for this data source. Deletion is rejected without a matching ' +
-        'token, which forces a deliberate two-step delete rather than a blind single call.',
+        'token — a friction gate requiring a distinct second call. Note the token is a deterministic ' +
+        'hash of caller-known inputs, so it adds deliberation but does not by itself prove a preview ran.',
     ),
   tag: z
     .string()
@@ -96,8 +97,9 @@ This tool is **two-phase** to keep the destructive action safe:
    which workbooks and flows depend on it and may break**, returns a \`confirmationToken\`, and does
    **not** delete anything.
 2. **Delete (\`confirm: true\` + \`confirmationToken\`):** permanently removes the data source. The
-   token from step 1 is required — deletion is rejected without it, which forces a deliberate
-   second call rather than a blind one-shot delete. On Tableau Cloud the data source is moved to the recycle bin and can be restored
+   token from step 1 is required — deletion is rejected without it, a friction gate requiring a
+   deliberate second call rather than a blind one-shot delete (the token is a deterministic hash of
+   caller-known inputs, so it adds deliberation but does not by itself prove a preview ran). On Tableau Cloud the data source is moved to the recycle bin and can be restored
    for a limited time before permanent removal (see ${RECYCLE_BIN_DOC_URL}); on Tableau Server there
    is no recycle bin and deletion is permanent. Dependent workbooks and flows are **not** deleted,
    but will lose this data source.
@@ -286,8 +288,6 @@ async function describeDownstreamDependencies({
   }
   return `⚠️ WARNING: deleting this data source may break ${parts.join(' and ')}.`;
 }
-
-// (owner-email resolution moved to ../users/resolveOwnerEmail.js — shared with delete-workbook.)
 
 // Cap the number of dependent names listed so a data source with thousands of dependents does not
 // produce an unbounded message. The total count is always reported; only the name list is capped.
