@@ -67,6 +67,7 @@ The schema enforces these rules — invalid input is rejected before any Tableau
 - **Minute boundary** – The minute portion of `start` (and `end`, when present) must be on a 5-minute boundary: `00`, `05`, `10`, `15`, `20`, `25`, `30`, `35`, `40`, `45`, `50`, or `55`, with seconds = `00`. `07:26:00` is rejected; `07:25:00` and `07:30:00` are accepted.
 - **Hourly** – `start` and `end` must share the same minute portion (e.g. `06:00:00`/`18:00:00` ✓, `06:00:00`/`18:30:00` ✗); `end` must be strictly after `start` (numeric comparison, not lexical).
 - **Daily / Weekly / Monthly** – `end` is ignored — omit it.
+- **Hourly** and **Daily** require at least one interval with `weekDay` (Tableau rejects them otherwise with `409004`).
 - **Weekly** requires at least one interval with `weekDay`; **Monthly** requires at least one interval with `monthDay`.
 
 Tableau may still reject a schema-valid request with `409004 Conflict` (`Invalid subscription schedule`) for site-specific rules. In that case the tool surfaces Tableau's structured error verbatim — e.g. `Tableau 409 [409004]: Conflict: Invalid subscription schedule. (...)` — so callers can recover without parsing axios errors. A 404 is mapped to a "Tableau Cloud only" hint pointing at `list-extract-refresh-tasks` since the most common cause is calling against a Tableau Server site or with a stale taskId.
@@ -86,7 +87,7 @@ Tableau may still reject a schema-valid request with `409004 Conflict` (`Invalid
 }
 ```
 
-## Example: Hourly between 08:00 and 18:00 every 2 hours
+## Example: Hourly between 08:00 and 18:00 every 2 hours, Mondays
 
 ```json
 {
@@ -96,7 +97,7 @@ Tableau may still reject a schema-valid request with `409004 Conflict` (`Invalid
     "frequencyDetails": {
       "start": "08:00:00",
       "end": "18:00:00",
-      "intervals": { "interval": [{ "hours": 2 }] }
+      "intervals": { "interval": [{ "hours": 2 }, { "weekDay": "Monday" }] }
     }
   }
 }

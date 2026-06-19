@@ -171,7 +171,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       frequencyDetails: {
         start: '08:00:00',
         end: '18:00:00',
-        intervals: { interval: [{ hours: 2 }] },
+        intervals: { interval: [{ hours: 2 }, { weekDay: 'Monday' }] },
       },
     };
     const result = await getToolResult({ taskId: validTaskId, schedule: hourly });
@@ -187,7 +187,10 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     it('should accept Daily schedule without end (Tableau ignores it)', () => {
       const result = updateCloudExtractRefreshScheduleSchema.safeParse({
         frequency: 'Daily',
-        frequencyDetails: { start: '06:00:00' },
+        frequencyDetails: {
+          start: '06:00:00',
+          intervals: { interval: [{ weekDay: 'Monday' }] },
+        },
       });
       expect(result.success).toBe(true);
     });
@@ -198,6 +201,26 @@ describe('updateCloudExtractRefreshTaskTool', () => {
         frequencyDetails: { start: '6:00:00' },
       });
       expect(result.success).toBe(false);
+    });
+
+    it('should report only the format error (not the 5-minute-boundary error) for an unpadded time', () => {
+      const result = updateCloudExtractRefreshScheduleSchema.safeParse({
+        frequency: 'Daily',
+        frequencyDetails: {
+          start: '6:00:00',
+          intervals: { interval: [{ weekDay: 'Monday' }] },
+        },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const startErrors = result.error.issues.filter(
+          (i) => i.path.join('.') === 'frequencyDetails.start',
+        );
+        // Only the regex/format error fires; isFiveMinuteBoundary short-circuits when the
+        // format is invalid so callers see one root cause, not two messages.
+        expect(startErrors).toHaveLength(1);
+        expect(startErrors[0].message).toContain('HH:mm:ss');
+      }
     });
 
     it('should reject start times not on a 5-minute boundary', () => {
@@ -222,7 +245,10 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     it('should reject Hourly schedule missing end', () => {
       const result = updateCloudExtractRefreshScheduleSchema.safeParse({
         frequency: 'Hourly',
-        frequencyDetails: { start: '06:00:00' },
+        frequencyDetails: {
+          start: '06:00:00',
+          intervals: { interval: [{ weekDay: 'Monday' }] },
+        },
       });
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -233,7 +259,11 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     it('should reject Hourly schedule with mismatched minute portions', () => {
       const result = updateCloudExtractRefreshScheduleSchema.safeParse({
         frequency: 'Hourly',
-        frequencyDetails: { start: '06:00:00', end: '18:30:00' },
+        frequencyDetails: {
+          start: '06:00:00',
+          end: '18:30:00',
+          intervals: { interval: [{ weekDay: 'Monday' }] },
+        },
       });
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -247,7 +277,11 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       // inverse pair start='10:00:00', end='09:00:00'.
       const result = updateCloudExtractRefreshScheduleSchema.safeParse({
         frequency: 'Hourly',
-        frequencyDetails: { start: '10:00:00', end: '09:00:00' },
+        frequencyDetails: {
+          start: '10:00:00',
+          end: '09:00:00',
+          intervals: { interval: [{ weekDay: 'Monday' }] },
+        },
       });
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -260,9 +294,41 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       // rejecting this valid pair. Numeric comparison keeps it accepted.
       const result = updateCloudExtractRefreshScheduleSchema.safeParse({
         frequency: 'Hourly',
-        frequencyDetails: { start: '09:00:00', end: '10:00:00' },
+        frequencyDetails: {
+          start: '09:00:00',
+          end: '10:00:00',
+          intervals: { interval: [{ weekDay: 'Monday' }] },
+        },
       });
       expect(result.success).toBe(true);
+    });
+
+    it('should reject Hourly schedule without a weekDay interval', () => {
+      // Confirmed live: Tableau rejects with 409004 "Hourly and Daily schedules must
+      // have at least one weekDay interval". Reject client-side to skip the round-trip.
+      const result = updateCloudExtractRefreshScheduleSchema.safeParse({
+        frequency: 'Hourly',
+        frequencyDetails: {
+          start: '08:00:00',
+          end: '18:00:00',
+          intervals: { interval: [{ hours: 2 }] },
+        },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain('weekDay');
+      }
+    });
+
+    it('should reject Daily schedule without a weekDay interval', () => {
+      const result = updateCloudExtractRefreshScheduleSchema.safeParse({
+        frequency: 'Daily',
+        frequencyDetails: { start: '06:00:00' },
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain('weekDay');
+      }
     });
 
     it('should reject Weekly schedule without a weekDay interval', () => {
@@ -289,7 +355,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
   });
 
   describe('Tableau API error formatting', () => {
-    it('should map a 404 to a Cloud-only hint instead of the raw status', async () => {
+    it('should map a 404 to a Cloud-only hint and preserve the Tableau code', async () => {
       mocks.mockUpdateCloudExtractRefreshTask.mockResolvedValue(
         new Err({
           type: 'tableau-api',
@@ -304,6 +370,9 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Tableau Cloud only');
       expect(result.content[0].text).toContain(validTaskId);
+      // Code visibility is consistent with the generic branch — keeps debugability when
+      // Tableau emits multiple 404 sub-codes (e.g. 404026 vs 404001).
+      expect(result.content[0].text).toContain('Tableau 404 [404001]');
     });
 
     it('should not produce a double-colon when Tableau returns code without summary', async () => {

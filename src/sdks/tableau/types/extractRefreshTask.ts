@@ -69,6 +69,7 @@ export type ExtractRefreshTask = z.infer<typeof extractRefreshTaskSchema>;
  *   - times are zero-padded HH:mm:ss
  *   - minute/second portions are on a 5-minute boundary
  *   - Hourly: end is required, end.minutes match start, end > start (numeric)
+ *   - Hourly/Daily: at least one weekDay interval (Tableau requires this)
  *   - Weekly: at least one weekDay interval; Monthly: at least one monthDay interval
  */
 const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/;
@@ -81,14 +82,14 @@ function timeToSeconds(t: string): number {
   return h * 3600 + m * 60 + s;
 }
 
+// Returns true when the format is invalid so the regex on `timeStringSchema` is the single
+// owner of "bad format" errors — otherwise an input like "6:00:00" produces two messages
+// for one root cause.
 function isFiveMinuteBoundary(t: string): boolean {
-  const [, , minutes, seconds] = t.match(TIME_REGEX) ?? [];
-  return (
-    minutes !== undefined &&
-    seconds !== undefined &&
-    Number(minutes) % 5 === 0 &&
-    Number(seconds) === 0
-  );
+  const m = t.match(TIME_REGEX);
+  if (!m) return true;
+  const [, , minutes, seconds] = m;
+  return Number(minutes) % 5 === 0 && Number(seconds) === 0;
 }
 
 export const updateCloudExtractRefreshScheduleSchema = z
@@ -162,6 +163,20 @@ export const updateCloudExtractRefreshScheduleSchema = z
       message:
         'For Hourly schedules, frequencyDetails.end must be strictly after frequencyDetails.start',
       path: ['frequencyDetails', 'end'],
+    },
+  )
+  .refine(
+    (s) => {
+      if (s.frequency !== 'Hourly' && s.frequency !== 'Daily') return true;
+      return s.frequencyDetails.intervals?.interval.some((i) => i.weekDay !== undefined) ?? false;
+    },
+    {
+      // Confirmed live: Tableau rejects Hourly/Daily without a weekDay with
+      // 409004 "Hourly and Daily schedules must have at least one weekDay interval".
+      // Same round-trip-avoidance as the Weekly/Monthly refines below.
+      message:
+        'Hourly and Daily schedules require at least one frequencyDetails.intervals.interval entry with a weekDay',
+      path: ['frequencyDetails', 'intervals'],
     },
   )
   .refine(
