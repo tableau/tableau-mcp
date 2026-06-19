@@ -52,7 +52,10 @@ describe('renderHitlGate', () => {
 
 describe('renderConfirmInstructions', () => {
   it('inserts the tool reference and requires confirm: true with the preview token', () => {
-    const text = renderConfirmInstructions({ toolRef: '`delete-workbook`', itemNoun: 'stale item' });
+    const text = renderConfirmInstructions({
+      toolRef: '`delete-workbook`',
+      itemNoun: 'stale item',
+    });
     expect(text).toContain('`delete-workbook`');
     expect(text).toContain('`confirm: true`');
     expect(text).toContain('`confirmationToken`');

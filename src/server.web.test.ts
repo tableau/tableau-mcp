@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   mockFeatureGate: {
     isFeatureEnabled: vi.fn(() => false),
   },
+  mockReadFile: vi.fn(),
 }));
 
 vi.mock('@modelcontextprotocol/ext-apps/server', () => ({
@@ -29,6 +30,10 @@ vi.mock('./features/featureGate.js', () => ({
   getFeatureGate: vi.fn(() => mocks.mockFeatureGate),
 }));
 
+vi.mock('fs/promises', () => ({
+  readFile: (...args: any[]) => mocks.mockReadFile(...args),
+}));
+
 describe('server', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
@@ -36,6 +41,7 @@ describe('server', () => {
     mocks.mockRegisterAppTool.mockClear();
     mocks.mockRegisterAppResource.mockClear();
     mocks.mockFeatureGate.isFeatureEnabled.mockReturnValue(false);
+    mocks.mockReadFile.mockClear();
   });
 
   afterEach(() => {
@@ -228,42 +234,53 @@ describe('server', () => {
       expect.any(Function),
     );
 
+    // Assert registerAppResource was called with correct options (no _meta in options)
     expect(mocks.mockRegisterAppResource).toHaveBeenCalledWith(
       server.mcpServer,
       'get-workbook',
       'tableau://app/test',
-      expect.objectContaining({
+      {
         mimeType: expect.any(String),
-        _meta: {
-          ui: {
-            csp: {
-              connectDomains: expect.arrayContaining([
-                'https://*.online.tableau.com',
-                'https://*.tableau.com',
-                'https://my-tableau-server.com',
-                'https://*.custom.com',
-                'https://other.com',
-              ]),
-              resourceDomains: expect.arrayContaining([
-                'https://*.online.tableau.com',
-                'https://*.tableau.com',
-                'https://my-tableau-server.com',
-                'https://*.custom.com',
-                'https://other.com',
-              ]),
-              frameDomains: expect.arrayContaining([
-                'https://*.online.tableau.com',
-                'https://*.tableau.com',
-                'https://my-tableau-server.com',
-                'https://*.custom.com',
-                'https://other.com',
-              ]),
-            },
-          },
-        },
-      }),
+      },
       expect.any(Function),
     );
+
+    // Invoke the read callback and assert _meta is on the returned content
+    const registerAppResourceCall = mocks.mockRegisterAppResource.mock.calls[0];
+    const readCallback = registerAppResourceCall[4]; // 5th arg (0-indexed)
+
+    // Mock readFile to return test HTML content
+    mocks.mockReadFile.mockResolvedValueOnce('<html><body>Test App UI</body></html>');
+
+    const result = await readCallback();
+
+    expect(result.contents[0]._meta).toEqual({
+      ui: {
+        csp: {
+          connectDomains: expect.arrayContaining([
+            'https://*.online.tableau.com',
+            'https://*.tableau.com',
+            'https://my-tableau-server.com',
+            'https://*.custom.com',
+            'https://other.com',
+          ]),
+          resourceDomains: expect.arrayContaining([
+            'https://*.online.tableau.com',
+            'https://*.tableau.com',
+            'https://my-tableau-server.com',
+            'https://*.custom.com',
+            'https://other.com',
+          ]),
+          frameDomains: expect.arrayContaining([
+            'https://*.online.tableau.com',
+            'https://*.tableau.com',
+            'https://my-tableau-server.com',
+            'https://*.custom.com',
+            'https://other.com',
+          ]),
+        },
+      },
+    });
   });
 
   it('should register as standard tool when mcp-apps feature flag is disabled', async () => {

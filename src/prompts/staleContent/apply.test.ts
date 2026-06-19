@@ -147,7 +147,10 @@ describe('stale-content-cleanup-apply prompt', () => {
     const text = getText({ dryRun: 'false', itemTypes: 'Workbook,Workbook,Datasource' });
     const routing = JSON.parse(text.split('```json')[1].split('```')[0]);
     expect(routing).toHaveLength(2);
-    expect(routing.map((r: { itemType: string }) => r.itemType)).toEqual(['Workbook', 'Datasource']);
+    expect(routing.map((r: { itemType: string }) => r.itemType)).toEqual([
+      'Workbook',
+      'Datasource',
+    ]);
   });
 
   it('renders a single confirm-instruction block referencing the routing table', () => {
