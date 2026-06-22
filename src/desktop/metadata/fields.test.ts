@@ -110,6 +110,51 @@ describe('addFieldToRows / removeFieldFromRows', () => {
   });
 });
 
+describe('addFieldToRows date-part derivations', () => {
+  // Regression: mapDerivationToProperCase dropped the date-part keys, so a
+  // [mn:...] ref was written with derivation="mn" (invalid) and Tableau
+  // silently collapsed the date pill, killing YoY/seasonal overlays.
+  const DATE_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<worksheet name="Sheet 1">
+  <table>
+    <view>
+      <datasources>
+        <datasource name="Sample" caption="Sample Superstore"/>
+      </datasources>
+      <datasource-dependencies datasource="Sample">
+        <column name="[Order Date]" datatype="date" role="dimension" type="ordinal"/>
+        <column-instance name="[none:Order Date:nk]" column="[Order Date]" derivation="None" pivot="key" type="nominal"/>
+      </datasource-dependencies>
+    </view>
+    <rows>[Sample].[none:Order Date:nk]</rows>
+  </table>
+</worksheet>`;
+
+  function derivationOf(xml: string, columnInstanceName: string): string | undefined {
+    const m = xml.match(
+      new RegExp(
+        `<column-instance[^>]*name="\\[${columnInstanceName}\\]"[^>]*derivation="([^"]*)"`,
+      ),
+    );
+    return m?.[1];
+  }
+
+  it('maps the discrete month part [mn:...] to derivation="Month", not "mn"', () => {
+    const modified = addFieldToRows(DATE_XML, '[Sample].[mn:Order Date:ok]');
+    expect(derivationOf(modified, 'mn:Order Date:ok')).toBe('Month');
+  });
+
+  it('maps the truncated year part [tyr:...] to derivation="Year-Trunc"', () => {
+    const modified = addFieldToRows(DATE_XML, '[Sample].[tyr:Order Date:qk]');
+    expect(derivationOf(modified, 'tyr:Order Date:qk')).toBe('Year-Trunc');
+  });
+
+  it('still maps aggregations correctly (sum -> Sum)', () => {
+    const modified = addFieldToRows(DATE_XML, '[Sample].[sum:Order Date:qk]');
+    expect(derivationOf(modified, 'sum:Order Date:qk')).toBe('Sum');
+  });
+});
+
 describe('addFieldToCols / removeFieldFromCols', () => {
   it('should add a field to cols', () => {
     const modified = addFieldToCols(WORKSHEET_XML, '[Sample].[sum:Profit:qk]');
