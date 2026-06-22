@@ -18,7 +18,8 @@ The tool is **two-phase** to keep the destructive action safe:
    depend on it and may break**, returns a `confirmationToken`, and does **not** delete anything.
 2. **Delete** (`confirm: true` + `confirmationToken`): permanently removes the data source. The
    token from the preview step is **required** — deletion is rejected without a matching token,
-   which forces a deliberate two-step delete rather than a blind one-shot call. On Tableau Cloud the data source
+   a friction gate requiring a deliberate second call rather than a blind one-shot call (see the
+   [`confirmationToken`](#confirmationtoken) note on what this does and does not guarantee). On Tableau Cloud the data source
    is moved to the [recycle bin](https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm)
    and can be restored for a limited time before permanent removal; on Tableau Server there is no
    recycle bin and deletion is permanent.
@@ -75,8 +76,8 @@ Example: `true`
 ### `confirmationToken`
 
 Required when `confirm` is `true`. The `confirmationToken` value returned by the preview step for
-this data source. Deletion is rejected without a matching token, which forces a deliberate two-step
-delete rather than a blind single call.
+this data source. Deletion is rejected without a matching token — a friction gate requiring a
+deliberate second call rather than a blind single call.
 
 The token is a deterministic `sha256(siteId:datasourceId)` value, so it enforces an explicit second
 call but does **not** prove the preview/tag step actually ran (a caller who knows the datasource LUID

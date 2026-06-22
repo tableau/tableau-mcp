@@ -22,6 +22,7 @@ import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { assertAdmin } from '../adminGate.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
+import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
 
 const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
 
@@ -64,7 +65,8 @@ const paramsSchema = {
     .describe(
       'Required when confirm is true. The confirmationToken returned by the preview step ' +
         '(confirm omitted/false) for this data source. Deletion is rejected without a matching ' +
-        'token, which forces a deliberate two-step delete rather than a blind single call.',
+        'token — a friction gate requiring a distinct second call. Note the token is a deterministic ' +
+        'hash of caller-known inputs, so it adds deliberation but does not by itself prove a preview ran.',
     ),
   tag: z
     .string()
@@ -95,8 +97,9 @@ This tool is **two-phase** to keep the destructive action safe:
    which workbooks and flows depend on it and may break**, returns a \`confirmationToken\`, and does
    **not** delete anything.
 2. **Delete (\`confirm: true\` + \`confirmationToken\`):** permanently removes the data source. The
-   token from step 1 is required — deletion is rejected without it, which forces a deliberate
-   second call rather than a blind one-shot delete. On Tableau Cloud the data source is moved to the recycle bin and can be restored
+   token from step 1 is required — deletion is rejected without it, a friction gate requiring a
+   deliberate second call rather than a blind one-shot delete (the token is a deterministic hash of
+   caller-known inputs, so it adds deliberation but does not by itself prove a preview ran). On Tableau Cloud the data source is moved to the recycle bin and can be restored
    for a limited time before permanent removal (see ${RECYCLE_BIN_DOC_URL}); on Tableau Server there
    is no recycle bin and deletion is permanent. Dependent workbooks and flows are **not** deleted,
    but will lose this data source.
@@ -179,7 +182,12 @@ compute the \`confirmationToken\` yourself — use the exact value the preview r
                   datasourceId,
                   siteId,
                 }));
-              const ownerEmail = await resolveOwnerEmail(restApi, siteId, datasource.owner?.id);
+              const ownerEmail = await resolveOwnerEmail(
+                restApi,
+                siteId,
+                datasource.owner?.id,
+                'delete-datasource',
+              );
               const projectName = datasource.project?.name ?? 'unknown project';
               const ownerText = ownerEmail ? `owner ${ownerEmail}` : 'owner unknown';
 
@@ -290,30 +298,4 @@ function formatDependentNames(contents: ReadonlyArray<{ name: string }>): string
   const remaining = contents.length - names.length;
   const listed = names.join(', ');
   return remaining > 0 ? `${listed}, …and ${remaining} more` : listed;
-}
-
-/**
- * Best-effort resolution of the data source owner's email for the preview report. Owner lookup is
- * informational only, so a failure must not block the preview — we log and fall back to no email.
- */
-async function resolveOwnerEmail(
-  restApi: RestApi,
-  siteId: string,
-  ownerId: string | undefined,
-): Promise<string | null> {
-  if (!ownerId) {
-    return null;
-  }
-  try {
-    const owner = await restApi.usersMethods.queryUserOnSite({ siteId, userId: ownerId });
-    return owner.email ?? owner.name ?? null;
-  } catch (error) {
-    log({
-      message: `delete-datasource: failed to resolve owner ${ownerId} for preview`,
-      level: 'warning',
-      logger: 'delete-datasource',
-      data: getExceptionMessage(error),
-    });
-    return null;
-  }
 }

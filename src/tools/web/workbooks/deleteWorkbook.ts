@@ -9,14 +9,12 @@ import {
   ArgsValidationError,
   WorkbookNotAllowedError,
 } from '../../../errors/mcpToolError.js';
-import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
-import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
 import { assertAdmin } from '../adminGate.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
+import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
 
 const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
 
@@ -56,8 +54,9 @@ const paramsSchema = {
     .optional()
     .describe(
       'Required when confirm is true. The confirmationToken returned by the preview step ' +
-        '(confirm omitted/false) for this workbook. Deletion is rejected without a matching token, ' +
-        'which forces a deliberate two-step delete rather than a blind single call.',
+        '(confirm omitted/false) for this workbook. Deletion is rejected without a matching token ' +
+        '— a friction gate requiring a distinct second call. Note the token is a deterministic hash ' +
+        'of caller-known inputs, so it adds deliberation but does not by itself prove a preview ran.',
     ),
   tag: z
     .string()
@@ -86,8 +85,9 @@ This tool is **two-phase** to keep the destructive action safe:
    \`${DEFAULT_PENDING_DELETION_TAG}\`), reports the workbook name, project, and owner, returns a
    \`confirmationToken\`, and does **not** delete anything.
 2. **Delete (\`confirm: true\` + \`confirmationToken\`):** permanently removes the workbook. The
-   token from step 1 is required — deletion is rejected without it, which forces a deliberate
-   second call rather than a blind one-shot delete. On Tableau Cloud the workbook is moved to the recycle bin and can be restored
+   token from step 1 is required — deletion is rejected without it, a friction gate requiring a
+   deliberate second call rather than a blind one-shot delete (the token is a deterministic hash of
+   caller-known inputs, so it adds deliberation but does not by itself prove a preview ran). On Tableau Cloud the workbook is moved to the recycle bin and can be restored
    for a limited time before permanent removal (see ${RECYCLE_BIN_DOC_URL}).
 
 **Required human confirmation:** After preview, present the workbook (name, project, owner) to the
@@ -158,7 +158,12 @@ user and get explicit approval before deleting. Do not auto-confirm or compute t
               const workbook =
                 isWorkbookAllowedResult.content ??
                 (await restApi.workbooksMethods.getWorkbook({ workbookId, siteId }));
-              const ownerEmail = await resolveOwnerEmail(restApi, siteId, workbook.owner?.id);
+              const ownerEmail = await resolveOwnerEmail(
+                restApi,
+                siteId,
+                workbook.owner?.id,
+                'delete-workbook',
+              );
               const projectName = workbook.project?.name ?? 'unknown project';
               const ownerText = ownerEmail ? `owner ${ownerEmail}` : 'owner unknown';
 
@@ -200,30 +205,3 @@ user and get explicit approval before deleting. Do not auto-confirm or compute t
 
   return deleteWorkbookTool;
 };
-
-/**
- * Best-effort resolution of the workbook owner's email for the preview report. Owner lookup is
- * informational only (report-only notify), so a failure must not block the preview — we log and
- * fall back to no email.
- */
-async function resolveOwnerEmail(
-  restApi: RestApi,
-  siteId: string,
-  ownerId: string | undefined,
-): Promise<string | null> {
-  if (!ownerId) {
-    return null;
-  }
-  try {
-    const owner = await restApi.usersMethods.queryUserOnSite({ siteId, userId: ownerId });
-    return owner.email ?? owner.name ?? null;
-  } catch (error) {
-    log({
-      message: `delete-workbook: failed to resolve owner ${ownerId} for workbook preview`,
-      level: 'warning',
-      logger: 'delete-workbook',
-      data: getExceptionMessage(error),
-    });
-    return null;
-  }
-}
