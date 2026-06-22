@@ -3,6 +3,7 @@ import { writeFileSync } from 'fs';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
+import { formatArtifactSummary } from '../../../desktop/artifactSummary.js';
 import { DesktopCache } from '../../../desktop/cache.js';
 import { getWorksheetXml } from '../../../desktop/commands/workbook/getWorksheetXml.js';
 import {
@@ -111,7 +112,7 @@ export const getGetWorksheetXmlTool = (
               });
 
               return Ok({
-                message: `Worksheet "${worksheetName}" saved to cache file (${bytes} bytes)`,
+                message: `Worksheet "${worksheetName}" saved to cache file (${bytes} bytes)\n\nArtifact summary:\n${formatArtifactSummary('worksheet', worksheetXml)}`,
                 file: cacheFile,
                 instructions:
                   'Use this file path with modification tools instead of passing XML directly.',
