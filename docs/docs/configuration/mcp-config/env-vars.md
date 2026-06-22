@@ -427,9 +427,15 @@ Enables admin-only tools that require site administrator permissions.
 - Default: `false`
 - When `true`, enables tools that are restricted to Tableau site administrators:
   - [`list-extract-refresh-tasks`](../../tools/tasks/list-extract-refresh-tasks.md)
+  - [`delete-extract-refresh-task`](../../tools/tasks/delete-extract-refresh-task.md)
+  - [`update-cloud-extract-refresh-task`](../../tools/tasks/update-cloud-extract-refresh-task.md)
   - [`list-jobs`](../../tools/jobs/list-jobs.md)
+  - [`list-users`](../../tools/users/list-users.md)
+  - [`delete-workbook`](../../tools/workbooks/delete-workbook.md)
+  - [`delete-datasource`](../../tools/data-qna/delete-datasource.md)
   - [`query-admin-insights-ts-events`](../../tools/admin-insights/query-admin-insights-ts-events.md)
   - [`query-admin-insights-site-content`](../../tools/admin-insights/query-admin-insights-site-content.md)
+  - [`query-admin-insights-job-performance`](../../tools/admin-insights/query-admin-insights-job-performance.md)
   - [`get-stale-content-report`](../../tools/admin-insights/get-stale-content-report.md)
 - These tools require the user to have one of the following site roles:
   - SiteAdministratorCreator
