@@ -298,7 +298,7 @@ describe('TableauAccessTokenValidator', () => {
     });
 
     it('accepts a token whose aud matches the configured global resource URL', async () => {
-      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URI', MOCK_GLOBAL_RESOURCE_URI);
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', MOCK_GLOBAL_RESOURCE_URI);
       const audValidator = new TableauAccessTokenValidator();
       const token = makeBearer(basePayload({ aud: MOCK_GLOBAL_RESOURCE_URI }));
 
@@ -308,13 +308,68 @@ describe('TableauAccessTokenValidator', () => {
     });
 
     it('still accepts the pod resource identifier when a global resource URI is configured', async () => {
-      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URI', MOCK_GLOBAL_RESOURCE_URI);
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', MOCK_GLOBAL_RESOURCE_URI);
       const audValidator = new TableauAccessTokenValidator();
       const token = makeBearer(basePayload({ aud: EXPECTED_AUD }));
 
       const result = await audValidator.validate(token);
 
       expect(result.isOk()).toBe(true);
+    });
+
+    it('accepts any aud listed in a comma-separated OAUTH_GLOBAL_RESOURCE_URIS', async () => {
+      const secondGlobal = 'https://other-global.example.com';
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', `${MOCK_GLOBAL_RESOURCE_URI}, ${secondGlobal}`);
+      const audValidator = new TableauAccessTokenValidator();
+
+      for (const aud of [MOCK_GLOBAL_RESOURCE_URI, secondGlobal, EXPECTED_AUD]) {
+        const result = await audValidator.validate(makeBearer(basePayload({ aud })));
+        expect(result.isOk()).toBe(true);
+      }
+    });
+
+    it('accepts an aud that differs from the pod resource identifier only by a trailing slash', async () => {
+      const token = makeBearer(basePayload({ aud: `${EXPECTED_AUD}/` }));
+
+      const result = await validator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+    });
+
+    it('accepts an aud that matches a global resource URI minus a trailing slash', async () => {
+      // Configured value has no trailing slash; the AS stamps one into the token.
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', MOCK_GLOBAL_RESOURCE_URI);
+      const audValidator = new TableauAccessTokenValidator();
+      const token = makeBearer(basePayload({ aud: `${MOCK_GLOBAL_RESOURCE_URI}/` }));
+
+      const result = await audValidator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+    });
+
+    it('accepts a token aud without a trailing slash against a global URI configured with one', async () => {
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', `${MOCK_GLOBAL_RESOURCE_URI}/`);
+      const audValidator = new TableauAccessTokenValidator();
+      const token = makeBearer(basePayload({ aud: MOCK_GLOBAL_RESOURCE_URI }));
+
+      const result = await audValidator.validate(token);
+
+      expect(result.isOk()).toBe(true);
+    });
+
+    it('rejects an aud not present in a comma-separated OAUTH_GLOBAL_RESOURCE_URIS', async () => {
+      vi.stubEnv(
+        'OAUTH_GLOBAL_RESOURCE_URIS',
+        `${MOCK_GLOBAL_RESOURCE_URI}, https://other-global.example.com`,
+      );
+      const audValidator = new TableauAccessTokenValidator();
+      const token = makeBearer(basePayload({ aud: 'https://not-listed.example.com' }));
+
+      const result = await audValidator.validate(token);
+
+      expect(result.isErr()).toBe(true);
+      if (!result.isErr()) return;
+      expect(result.error).toMatch(/audience/i);
     });
   });
 });

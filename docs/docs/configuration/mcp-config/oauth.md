@@ -141,7 +141,7 @@ This value is the deployment domain only (no path). The MCP server is reached at
 audience-validated against it: the token's `aud` claim must equal `<OAUTH_RESOURCE_URI>/tableau-mcp`,
 per [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) and
 [RFC 8707](https://www.rfc-editor.org/rfc/rfc8707). A token whose `aud` matches neither that value
-nor [`OAUTH_GLOBAL_RESOURCE_URI`](#oauth_global_resource_uri) is rejected with a `401`.
+nor [`OAUTH_GLOBAL_RESOURCE_URIS`](#oauth_global_resource_uris) is rejected with a `401`.
 
 - Default: `http://127.0.0.1:3927`
 - Example: `http://127.0.0.1:3927` (for local testing) or `https://tableau-mcp.example.com` (for
@@ -149,15 +149,16 @@ nor [`OAUTH_GLOBAL_RESOURCE_URI`](#oauth_global_resource_uri) is rejected with a
 
 <hr />
 
-### `OAUTH_GLOBAL_RESOURCE_URI`
+### `OAUTH_GLOBAL_RESOURCE_URIS`
 
-An additional resource URL that is also accepted in a token's `aud` claim. Use this when clients may
-reach the deployment through an environment-wide global URL in addition to the pod-specific
-[`OAUTH_RESOURCE_URI`](#oauth_resource_uri).
+One or more additional resource URLs that are also accepted in a token's `aud` claim. Use this when
+clients may reach the deployment through an environment-wide global URL in addition to the
+pod-specific [`OAUTH_RESOURCE_URI`](#oauth_resource_uri).
 
 - Optional. When unset, only the `OAUTH_RESOURCE_URI` value is accepted.
-- The value is matched against `aud` exactly, so set it to the global resource URL the authorization
-  server stamps into the claim (for example `https://mcp.tableau.com`).
+- Accepts a single URL or a comma-separated list of URLs.
+- Each value is matched against `aud`, so set it to the global resource URL the
+  authorization server stamps into the claim (for example `https://mcp.tableau.com`).
 - Applies only when using an external Tableau authorization server
   ([`OAUTH_EMBEDDED_AUTHZ_SERVER`](#oauth_embedded_authz_server) is `false`).
 
