@@ -31,3 +31,10 @@ src/web/apps/dist/
 /blob-reports/
 /playwright/.cache/
 /playwright/.auth/
+
+.work/tickets/*.md
+.work/specs/GUS-*.md
+.work/specs/gus-*.md
+.work/reports/*.md
+!.work/specs/TEMPLATE.md
+!.work/**/.gitkeep
