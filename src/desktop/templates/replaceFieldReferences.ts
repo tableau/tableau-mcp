@@ -1,6 +1,11 @@
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import * as xpath from 'xpath';
 
+// DOM nodeType constants — `Node` is not a global in the Node.js/desktop
+// runtime, so reference the numeric values directly (matches the source repo).
+const TEXT_NODE = 3;
+const ATTRIBUTE_NODE = 2;
+
 type FieldInfo = { name: string; derivation: string; role: string };
 
 const DERIVATION_MAP: Record<string, string> = {
@@ -107,9 +112,11 @@ export function replaceFieldReferences(
         `\\[\\{\\{DATASOURCE\\}\\}\\]\\.\\[([^:]+):${escapeRegex(templateFieldName)}:([^\\]]+)\\]`,
         'g',
       );
+      // Function replacer: the field/datasource values are inserted literally,
+      // so `$`-sequences in names (e.g. "Net $1") are not treated as backrefs.
       const newText = text.replace(
         regex,
-        `[${datasourceName}].[${fi.derivation}:${fi.name}:${fi.role}]`,
+        () => `[${datasourceName}].[${fi.derivation}:${fi.name}:${fi.role}]`,
       );
       if (newText !== text) {
         text = newText;
@@ -131,7 +138,7 @@ export function replaceFieldReferences(
         );
         value = value.replace(
           regex,
-          `[${datasourceName}].[${fi.derivation}:${fi.name}:${fi.role}]`,
+          () => `[${datasourceName}].[${fi.derivation}:${fi.name}:${fi.role}]`,
         );
       }
       attr.value = value;
@@ -141,20 +148,20 @@ export function replaceFieldReferences(
   // Replace remaining {{DATASOURCE}} in all text and attribute nodes
   const allNodes = xpath.select('//text() | //*/@*', doc as unknown as Node) as Node[];
   for (const node of allNodes) {
-    if (node.nodeType === Node.TEXT_NODE) {
+    if (node.nodeType === TEXT_NODE) {
       const t = node as Text;
-      const newText = t.data.replace(/\{\{DATASOURCE\}\}/g, datasourceName);
+      const newText = t.data.replace(/\{\{DATASOURCE\}\}/g, () => datasourceName);
       if (newText !== t.data) t.data = newText;
-    } else if (node.nodeType === Node.ATTRIBUTE_NODE) {
+    } else if (node.nodeType === ATTRIBUTE_NODE) {
       const a = node as Attr;
-      const newVal = a.value.replace(/\{\{DATASOURCE\}\}/g, datasourceName);
+      const newVal = a.value.replace(/\{\{DATASOURCE\}\}/g, () => datasourceName);
       if (newVal !== a.value) a.value = newVal;
     }
   }
 
   const runElements = selectElements('//run', doc);
   for (const run of runElements) {
-    const textNode = Array.from(run.childNodes).find((n) => n.nodeType === Node.TEXT_NODE) as
+    const textNode = Array.from(run.childNodes).find((n) => n.nodeType === TEXT_NODE) as
       | Text
       | undefined;
     if (textNode) {
