@@ -188,7 +188,7 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
       if (!allowedAudiences.includes(stripTrailingSlash(aud))) {
         log({
           message: `Access token audience mismatch: expected one of [${allowedAudiences.join(', ')}], got '${truncateForLog(aud)}'`,
-          level: 'debug',
+          level: 'error',
           logger: 'oauth',
         });
         return new Err('Token audience does not match this MCP server');
