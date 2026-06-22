@@ -1,6 +1,13 @@
+import { join } from 'path';
+
 import { stubDefaultEnvVars, testProductVersion } from './testShared.js';
 
 stubDefaultEnvVars();
+
+// DATA_ROOT is derived from getDirname() at runtime, which does not resolve to
+// the source data dir under vitest. Point the desktop search tools at the
+// committed corpus so they exercise the real file instead of a null corpus.
+process.env.CORPUS_PATH ??= join(process.cwd(), 'src', 'desktop', 'data', 'corpus.json');
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', async (importOriginal) => {
   return {
