@@ -2,7 +2,7 @@ import fs from 'fs';
 import Fuse from 'fuse.js';
 import path, { join } from 'path';
 
-import { DATA_ROOT } from '~/src/server.desktop';
+import { DATA_ROOT } from '../../server.desktop.js';
 
 // --- Commands reference ---
 

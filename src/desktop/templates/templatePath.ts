@@ -1,6 +1,6 @@
 import { join } from 'path';
 
-import { DATA_ROOT } from '~/src/server.desktop';
+import { DATA_ROOT } from '../../server.desktop.js';
 
 export function getTemplatesDir(): string {
   return process.env['TEMPLATES_DIR'] ?? join(DATA_ROOT, 'templates');
