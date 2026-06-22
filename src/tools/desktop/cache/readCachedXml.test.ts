@@ -79,6 +79,21 @@ describe('readCachedXmlTool', () => {
     expect(result.content[0].text).toContain(outsidePath);
   });
 
+  it('should reject a sibling path that shares the cache-dir prefix', async () => {
+    // `/tmp/test-cache-evil/...` and `/tmp/test-cacheXYZ.xml` share the prefix
+    // `/tmp/test-cache` but are outside it — the old startsWith check let them through.
+    for (const escape of [
+      resolve(`${CACHE_DIR}-evil/secret.xml`),
+      resolve(`${CACHE_DIR}XYZ.xml`),
+    ]) {
+      const result = await getResult(escape);
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Security error');
+    }
+    expect(readFileSync).not.toHaveBeenCalled();
+  });
+
   it('should return error when readFileSync throws', async () => {
     vi.mocked(readFileSync).mockImplementation(() => {
       throw new Error('Permission denied');

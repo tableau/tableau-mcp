@@ -81,6 +81,18 @@ describe('writeCachedXmlTool', () => {
     expect(writeFileSync).not.toHaveBeenCalled();
   });
 
+  it('should reject a sibling path that shares the cache-dir prefix', async () => {
+    // `/tmp/test-cache-evil/...` and `/tmp/test-cacheXYZ.xml` share the prefix
+    // `/tmp/test-cache` but are outside it — the old startsWith check let them through.
+    for (const escape of [resolve(`${CACHE_DIR}-evil/x.xml`), resolve(`${CACHE_DIR}XYZ.xml`)]) {
+      const result = await getResult(escape, VALID_XML);
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Security error');
+    }
+    expect(writeFileSync).not.toHaveBeenCalled();
+  });
+
   it('should mention apply-* tools in success message', async () => {
     const result = await getResult(CACHED_FILE, VALID_XML);
 

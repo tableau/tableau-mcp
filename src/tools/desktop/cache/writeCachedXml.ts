@@ -1,25 +1,23 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { writeFileSync } from 'fs';
-import { dirname, resolve } from 'path';
+import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
-import { DesktopCache } from '../../../desktop/cache.js';
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
 import { ArgsValidationError, FileReadError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
+import { getCacheDir, isWithinCacheDir } from './cachePath.js';
 
 const paramsSchema = {
   filePath: z
     .string()
-    .describe('Path to cached XML file to write (e.g., returned by batch-create-and-cache-sheets).'),
+    .describe(
+      'Path to cached XML file to write (e.g., returned by batch-create-and-cache-sheets).',
+    ),
   xmlContent: z.string().describe('XML content to write to the file.'),
 };
-
-function getCacheDir(): string {
-  return dirname(new DesktopCache().getCacheFilePath({ prefix: '_', id: '_' }));
-}
 
 const toolTitle = 'Write Cached XML';
 export const getWriteCachedXmlTool = (
@@ -43,9 +41,9 @@ export const getWriteCachedXmlTool = (
         args: { filePath, xmlContent },
         callback: async () => {
           const absolutePath = resolve(filePath);
-          const cacheDir = resolve(getCacheDir());
+          const cacheDir = getCacheDir();
 
-          if (!absolutePath.startsWith(cacheDir)) {
+          if (!isWithinCacheDir(absolutePath, cacheDir)) {
             return new ArgsValidationError(
               `Security error: file path must be within cache directory.\n\nCache directory: ${cacheDir}\nRequested: ${absolutePath}`,
             ).toErr();
