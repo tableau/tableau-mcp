@@ -44,6 +44,7 @@ Tableau's official MCP Server. Helping Agents see and understand data.
 | [search-content](tools/content-exploration/search-content.md)                                                         | Searches for content in a Tableau site ([Content Exploration API][content-exploration])                             |
 | [list-extract-refresh-tasks](tools/tasks/list-extract-refresh-tasks.md)                                               | Admin-only. Retrieves a list of extract refresh tasks for the site ([REST API][list-extract-refresh-tasks])          |
 | [delete-extract-refresh-task](tools/tasks/delete-extract-refresh-task.md)                                             | Admin-only. Deletes an extract refresh task ([REST API][delete-extract-refresh-task])                                |
+| [update-cloud-extract-refresh-task](tools/tasks/update-cloud-extract-refresh-task.md)                                 | Admin-only. Updates the schedule of an extract refresh task on Tableau Cloud ([REST API][update-cloud-extract-refresh-task]) |
 | [list-users](tools/users/list-users.md)                                                                              | Admin-only. Retrieves a list of users on the site ([REST API][list-users-api])                                      |
 | [query-admin-insights-ts-events](tools/admin-insights/query-admin-insights-ts-events.md)                              | Admin-only. Issues a VDS query against the Admin Insights `TS Events` datasource ([VDS API][vds])                   |
 | [query-admin-insights-site-content](tools/admin-insights/query-admin-insights-site-content.md)                        | Admin-only. Issues a VDS query against the Admin Insights `Site Content` datasource ([VDS API][vds])                |
@@ -83,5 +84,7 @@ Tableau's official MCP Server. Helping Agents see and understand data.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_jobs_tasks_and_schedules.htm#list_extract_refresh_tasks
 [delete-extract-refresh-task]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#delete_extract_refresh_task
+[update-cloud-extract-refresh-task]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#update_cloud_extract_refresh_task
 [list-users-api]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#get_users_on_site

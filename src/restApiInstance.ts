@@ -35,6 +35,7 @@ type JwtScopes =
   | 'tableau:mcp_site_settings:read'
   | 'tableau:tasks:read'
   | 'tableau:tasks:delete'
+  | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
   | 'tableau:workbooks:delete'
   | 'tableau:datasource_tags:update'

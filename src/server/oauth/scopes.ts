@@ -25,6 +25,7 @@ export type McpScope =
   | 'tableau:mcp:insight:create'
   | 'tableau:mcp:tasks:read'
   | 'tableau:mcp:tasks:delete'
+  | 'tableau:mcp:tasks:write'
   | 'tableau:mcp:workbook:delete'
   | 'tableau:mcp:jobs:read'
   | 'tableau:mcp:datasource:delete'
@@ -43,6 +44,7 @@ export type TableauApiScope =
   | 'tableau:mcp_site_settings:read'
   | 'tableau:tasks:read'
   | 'tableau:tasks:delete'
+  | 'tableau:tasks:write'
   | 'tableau:workbook_tags:update'
   | 'tableau:workbooks:delete'
   | 'tableau:datasource_tags:update'
@@ -60,6 +62,7 @@ export const DEFAULT_SCOPES_SUPPORTED: ReadonlyArray<McpScope> = [
   'tableau:mcp:datasource:delete',
   'tableau:mcp:tasks:read',
   'tableau:mcp:tasks:delete',
+  'tableau:mcp:tasks:write',
   'tableau:mcp:jobs:read',
   'tableau:mcp:users:read',
   'tableau:mcp:workbook:read',
@@ -98,6 +101,10 @@ const toolScopeMap: Record<
   'delete-extract-refresh-task': {
     mcp: ['tableau:mcp:tasks:delete'],
     api: new Set(['tableau:tasks:delete', 'tableau:users:read']),
+  },
+  'update-cloud-extract-refresh-task': {
+    mcp: ['tableau:mcp:tasks:write'],
+    api: new Set(['tableau:tasks:write', 'tableau:users:read']),
   },
   'list-jobs': {
     mcp: ['tableau:mcp:jobs:read'],
@@ -293,6 +300,7 @@ function getEnabledToolNames(): Set<WebToolName> {
   if (!config.adminToolsEnabled) {
     enabledTools.delete('list-extract-refresh-tasks');
     enabledTools.delete('delete-extract-refresh-task');
+    enabledTools.delete('update-cloud-extract-refresh-task');
     enabledTools.delete('delete-workbook');
     enabledTools.delete('list-jobs');
     enabledTools.delete('delete-datasource');
