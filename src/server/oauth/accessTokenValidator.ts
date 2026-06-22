@@ -135,7 +135,7 @@ export class EmbeddedAccessTokenValidator extends AccessTokenValidator {
     } catch (error) {
       log({
         message: 'Embedded access token validation error',
-        level: 'debug',
+        level: 'error',
         logger: 'oauth',
         data: error,
       });
@@ -238,7 +238,7 @@ export class TableauAccessTokenValidator extends AccessTokenValidator {
     } catch (error) {
       log({
         message: 'Tableau access token validation error',
-        level: 'debug',
+        level: 'error',
         logger: 'oauth',
         data: error,
       });
