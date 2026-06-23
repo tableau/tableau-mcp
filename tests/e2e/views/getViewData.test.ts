@@ -18,7 +18,9 @@ describe('get-view-data', () => {
     await client.close();
   });
 
-  it('should get view data', async () => {
+  // Skipped: flaky against the live endpoint (intermittent "Request failed with status code 400").
+  // Re-enable once the live 400 is understood — tracked by W-23131245.
+  it.skip('should get view data', async () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
 
