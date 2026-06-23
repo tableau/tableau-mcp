@@ -35,7 +35,22 @@ export function embedTableauViz(vizUrl: string, token: string): void {
     throw new Error(`Container element with id "${TABLEAU_VIZ_CONTAINER_ID}" not found`);
   }
 
-  // Create and append the viz element
+  // Create and replace any existing viz element (idempotent)
   const viz = createTableauVizElement(vizUrl, token);
-  container.appendChild(viz);
+
+  // The Embedding API reports the viz's natural size via `firstvizsizeknown`.
+  // Set the element's height to the viz's natural sheet height so it renders
+  // fully; the ext-apps SDK's built-in auto-resize then grows the app frame to
+  // match the resulting document height.
+  viz.addEventListener('firstvizsizeknown', (event) => {
+    const vizSize = (event as CustomEvent).detail?.vizSize;
+    const sheetHeight = vizSize?.sheetSize?.maxSize?.height;
+    if (typeof sheetHeight !== 'number') {
+      return;
+    }
+
+    viz.style.height = `${sheetHeight}px`;
+  });
+
+  container.replaceChildren(viz);
 }
