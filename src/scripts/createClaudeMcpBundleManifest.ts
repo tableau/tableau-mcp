@@ -512,12 +512,12 @@ const envVars = {
     required: false,
     sensitive: false,
   },
-  OAUTH_GLOBAL_RESOURCE_URI: {
+  OAUTH_GLOBAL_RESOURCE_URIS: {
     includeInUserConfig: false,
     type: 'string',
-    title: 'OAuth Global Resource URI',
+    title: 'OAuth Global Resource URIs',
     description:
-      "An additional resource URI whose canonical identifier is accepted in a token's 'aud' claim, e.g. the environment's global Tableau URL alongside the pod-specific one.",
+      "One or more additional resource URIs (comma-separated) accepted in a token's 'aud' claim, e.g. the environment's global Tableau URL alongside the pod-specific one.",
     required: false,
     sensitive: false,
   },

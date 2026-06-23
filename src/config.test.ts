@@ -584,7 +584,7 @@ describe('Config', () => {
       issuer: 'https://example.com',
       redirectUri: 'https://example.com/Callback',
       resourceUri: 'http://127.0.0.1:3927',
-      globalResourceUri: '',
+      globalResourceUris: [],
       lockSite: true,
       jwePrivateKey: '',
       jwePrivateKeyPath: 'path/to/private.pem',
@@ -604,7 +604,7 @@ describe('Config', () => {
         clientIdSecretPairs: null,
         redirectUri: '',
         resourceUri: 'http://127.0.0.1:3927',
-        globalResourceUri: '',
+        globalResourceUris: [],
         lockSite: true,
         jwePrivateKey: '',
         jwePrivateKeyPath: '',
@@ -663,14 +663,39 @@ describe('Config', () => {
       });
     });
 
-    it('should set globalResourceUri to the specified value when OAUTH_GLOBAL_RESOURCE_URI is set', () => {
+    it('should set globalResourceUris to the specified value when OAUTH_GLOBAL_RESOURCE_URIS is set', () => {
       stubDefaultOAuthEnvVars();
-      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URI', 'https://global.example.com');
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', 'https://global.example.com');
 
       const config = new Config();
       expect(config.oauth).toEqual({
         ...defaultOAuthConfig,
-        globalResourceUri: 'https://global.example.com',
+        globalResourceUris: ['https://global.example.com'],
+      });
+    });
+
+    it('should parse comma-separated OAUTH_GLOBAL_RESOURCE_URIS into multiple audiences', () => {
+      stubDefaultOAuthEnvVars();
+      vi.stubEnv(
+        'OAUTH_GLOBAL_RESOURCE_URIS',
+        'https://global.example.com, https://other.example.com',
+      );
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        globalResourceUris: ['https://global.example.com', 'https://other.example.com'],
+      });
+    });
+
+    it('should ignore empty entries in OAUTH_GLOBAL_RESOURCE_URIS', () => {
+      stubDefaultOAuthEnvVars();
+      vi.stubEnv('OAUTH_GLOBAL_RESOURCE_URIS', 'https://global.example.com,,  ,');
+
+      const config = new Config();
+      expect(config.oauth).toEqual({
+        ...defaultOAuthConfig,
+        globalResourceUris: ['https://global.example.com'],
       });
     });
 

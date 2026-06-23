@@ -49,7 +49,7 @@ export class Config extends BaseConfig {
     issuer: string;
     redirectUri: string;
     resourceUri: string;
-    globalResourceUri: string;
+    globalResourceUris: string[];
     lockSite: boolean;
     jwePrivateKey: string;
     jwePrivateKeyPath: string;
@@ -115,7 +115,7 @@ export class Config extends BaseConfig {
       OAUTH_JWE_PRIVATE_KEY_PATH: oauthJwePrivateKeyPath,
       OAUTH_JWE_PRIVATE_KEY_PASSPHRASE: oauthJwePrivateKeyPassphrase,
       OAUTH_RESOURCE_URI: oauthResourceUri,
-      OAUTH_GLOBAL_RESOURCE_URI: oauthGlobalResourceUri,
+      OAUTH_GLOBAL_RESOURCE_URIS: oauthGlobalResourceUris,
       OAUTH_REDIRECT_URI: redirectUri,
       OAUTH_CLIENT_ID_SECRET_PAIRS: oauthClientIdSecretPairs,
       OAUTH_CIMD_DNS_SERVERS: dnsServers,
@@ -196,7 +196,12 @@ export class Config extends BaseConfig {
       embeddedAuthzServer,
       issuer: oauthIssuer ?? '',
       resourceUri: oauthResourceUri ?? `http://127.0.0.1:${this.httpPort}`,
-      globalResourceUri: oauthGlobalResourceUri ?? '',
+      globalResourceUris: oauthGlobalResourceUris
+        ? oauthGlobalResourceUris
+            .split(',')
+            .map((uri) => uri.trim())
+            .filter(Boolean)
+        : [],
       redirectUri: redirectUri || (oauthIssuer ? `${oauthIssuer}/Callback` : ''),
       lockSite: oauthLockSite !== 'false', // Site locking is enabled by default
       jwePrivateKey: oauthJwePrivateKey ?? '',
