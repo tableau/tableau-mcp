@@ -4,7 +4,8 @@
  * The MCP SDK exposes no runtime elicitation/sampling primitive (v1.x), and prompts are pure text
  * generators. So HITL here is a *prompt-text contract*: every Apply prompt injects the same, strongly
  * worded instruction blocks telling the model to STOP and obtain explicit human approval before any
- * destructive call, and to never fabricate a confirmation token. Centralizing the wording keeps the
+ * destructive call. The delete tools additionally enforce the gate server-side (a confirmed delete
+ * is rejected unless the item carries the pending-deletion tag from its preview). Centralizing the wording keeps the
  * gate identical across the Apply surface (stale-content cleanup, extract-refresh optimization,
  * license reclamation, …) and makes it the single place to harden the language over time.
  *
@@ -55,8 +56,9 @@ export function renderHitlGate({
 
 /**
  * Renders the instruction for the second, confirmed call against a two-phase delete tool. The tool
- * returns a per-item confirmationToken from its preview phase; the model must echo that exact value
- * and must never compute or guess it.
+ * enforces a server-authoritative gate: before deleting it re-fetches the item and verifies it
+ * carries the pending-deletion tag applied in the preview phase. The model cannot bypass this by
+ * fabricating a value — the only way to satisfy the gate is to have run the preview (tag) step.
  *
  * `toolRef` is inserted verbatim, so callers control its formatting: pass a single backticked tool
  * name (e.g. "`delete-workbook`") for a one-tool prompt, or a phrase pointing at a routing table
@@ -73,9 +75,10 @@ export function renderConfirmInstructions({
 }): string {
   return [
     `Only AFTER the user approves a given ${itemNoun}, call ${toolRef} for that ${itemNoun} ` +
-      'with `confirm: true` and the exact `confirmationToken` value that tool returned for it in ' +
-      'the preview step.',
-    'Do NOT auto-confirm. Do NOT compute, guess, or reuse a `confirmationToken` from a different ' +
-      `${itemNoun} — use only the token the preview returned for that same ${itemNoun}.`,
+      'with `confirm: true` (using the same `tag` value used to tag it in the preview step). The ' +
+      'tool re-fetches the item and verifies the pending-deletion tag before deleting; a delete on ' +
+      'an untagged item is rejected server-side.',
+    `Do NOT auto-confirm. Confirm each ${itemNoun} individually — never batch-confirm items the ` +
+      'user has not explicitly approved.',
   ].join('\n');
 }

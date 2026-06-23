@@ -218,8 +218,8 @@ export const getStaleContentCleanupApplyPrompt: WebPromptFactory = () => ({
             '**Step 5 — Tag approved items (reversible).** ONLY for the items the user explicitly approved above, ' +
               "call each item's `deleteTool` with `confirm` omitted " +
               `and \`tag: "${tag}"\` (and the resolved \`idArg\` value). This tags the item '${tag}' (reversible, visible in the ` +
-              "Tableau UI) and returns a per-item `confirmationToken`. Nothing is deleted in this step. Keep each item's " +
-              '`confirmationToken`. Do NOT tag any item the user did not approve.',
+              'Tableau UI). Nothing is deleted in this step. The tag is the server-side record that the preview ran; ' +
+              'the delete step verifies it. Do NOT tag any item the user did not approve.',
             '',
             '**Step 6 — Grace check.** Before deleting, confirm with the user that the grace/notification window has elapsed ' +
               'and re-verify the items are still the intended, still-stale targets.',

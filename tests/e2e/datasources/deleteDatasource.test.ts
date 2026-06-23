@@ -50,7 +50,7 @@ describe('delete-datasource', () => {
     }
   });
 
-  it('should preview (tag, no delete), warn on dependents, and return a confirmation token', async () => {
+  it('should preview (tag, no delete) and warn on dependents', async () => {
     if (!toolsAvailable) {
       return;
     }
@@ -69,15 +69,18 @@ describe('delete-datasource', () => {
 
     expect(message).toContain('Preview');
     expect(message).toContain('pending-deletion');
-    expect(message).toContain('confirmationToken');
   });
 
-  it('should reject a confirmed delete without the confirmation token', async () => {
+  it('should reject a confirmed delete when the data source is not tagged pending-deletion', async () => {
     if (!toolsAvailable) {
       return;
     }
-    const previewId = process.env.DELETE_DATASOURCE_E2E_ID;
-    if (!previewId) {
+    // Bypass-closed: a caller that jumps straight to confirm: true (skipping the preview/tag step)
+    // must be rejected by the server-authoritative tag gate, never deleting. Uses a distinct,
+    // never-previewed LUID so the live re-fetch finds no pending-deletion tag.
+    const untaggedId =
+      process.env.DELETE_DATASOURCE_E2E_UNTAGGED_ID ?? process.env.DELETE_DATASOURCE_E2E_ID;
+    if (!untaggedId) {
       return;
     }
 
@@ -85,16 +88,16 @@ describe('delete-datasource', () => {
     try {
       await client.callTool('delete-datasource', {
         schema: z.string(),
-        toolArgs: { datasourceId: previewId, confirm: true },
+        toolArgs: { datasourceId: untaggedId, confirm: true },
       });
     } catch (e) {
       threw = true;
-      expect(String(e)).toContain('confirmationToken');
+      expect(String(e)).toContain('not tagged');
     }
     expect(threw).toBe(true);
   });
 
-  it('should delete a disposable datasource via preview → token → confirm (opt-in)', async () => {
+  it('should delete a disposable datasource via preview (tag) → confirm (opt-in)', async () => {
     if (!toolsAvailable) {
       return;
     }
@@ -104,19 +107,20 @@ describe('delete-datasource', () => {
       return;
     }
 
-    // 1. Preview to obtain the confirmation token.
+    // 1. Preview applies the pending-deletion tag server-side (no token to capture).
     const preview = await client.callTool('delete-datasource', {
       schema: z.string(),
       toolArgs: { datasourceId: disposableId },
     });
-    const match = preview.match(/confirmationToken:\s*([a-f0-9]+)/i);
-    invariant(match, `Preview did not return a confirmationToken: ${preview}`);
-    const confirmationToken = match[1];
+    invariant(
+      preview.includes('pending-deletion'),
+      `Preview did not tag the data source: ${preview}`,
+    );
 
-    // 2. Confirm the delete with the token.
+    // 2. Confirm: the server re-fetches, verifies the tag, then deletes.
     const message = await client.callTool('delete-datasource', {
       schema: z.string(),
-      toolArgs: { datasourceId: disposableId, confirm: true, confirmationToken },
+      toolArgs: { datasourceId: disposableId, confirm: true },
     });
 
     expect(message).toContain('Deleted');
