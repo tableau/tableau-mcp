@@ -1,32 +1,13 @@
 import { z } from 'zod';
 
 import { renderHitlGate } from '../_lib/confirm.js';
+import { EXTRACT_REFRESH_JOB_TYPES, JOB_PERFORMANCE_FIELDS } from '../_lib/jobPerformance.js';
 import { WebPromptFactory } from '../registry.js';
 
 const INVENTORY_TOOL = 'list-extract-refresh-tasks';
 const PERFORMANCE_TOOL = 'query-admin-insights-job-performance';
 const UPDATE_TOOL = 'update-cloud-extract-refresh-task';
 const DELETE_TOOL = 'delete-extract-refresh-task';
-
-const PERFORMANCE_FIELDS = [
-  'Item Name',
-  'Job Type',
-  'Job Result',
-  'Started At',
-  'Job Duration',
-  'Job Execution Duration',
-  'Schedule Name',
-  'Was Manual Run',
-  'Error Message',
-  'Extract File Size',
-];
-
-const EXTRACT_REFRESH_JOB_TYPES = [
-  'RefreshExtracts',
-  'IncrementExtracts',
-  'RefreshExtractsViaBridge',
-  'IncrementExtractsViaBridge',
-];
 
 const argsSchema = {
   lookbackDays: z
@@ -39,6 +20,10 @@ const argsSchema = {
     ),
   taskIds: z
     .string()
+    // Constrain to a safe character class. `taskIds` is interpolated into the workflow prompt
+    // text (each id wrapped in backticks), so restricting it to alphanumerics/comma/space/dash
+    // closes a prompt-injection vector (e.g. a value with quotes/backticks trying to coerce the
+    // model into auto-confirming). Mirrors the `tag` defense in stale-content-cleanup-apply.
     .regex(
       /^[A-Za-z0-9, -]+$/,
       'taskIds must contain only letters, numbers, commas, spaces, and dashes',
@@ -49,6 +34,9 @@ const argsSchema = {
         'When omitted, the workflow analyzes every task returned by ' +
         `\`${INVENTORY_TOOL}\`.`,
     ),
+  // MCP prompt arguments are string-only over the wire (the GetPrompt request carries
+  // `arguments: { [key]: string }`), so this is a string enum rather than z.boolean(). Parsed to a
+  // boolean below via `args.dryRun !== 'false'`.
   dryRun: z
     .enum(['true', 'false'])
     .optional()
@@ -59,6 +47,12 @@ const argsSchema = {
     ),
 } as const;
 
+/**
+ * Builds the VDS query the model sends to `query-admin-insights-job-performance`. The job-type
+ * filter is always present (locks the read to the four extract-refresh variants); the `Started At`
+ * filter is added only when the caller supplied `lookbackDays`, so the prompt body still produces
+ * a deterministic JSON blob for the no-arg default.
+ */
 const buildPerformanceToolArgs = (lookbackDays?: number): Record<string, unknown> => {
   const filters: Array<Record<string, unknown>> = [
     {
@@ -78,7 +72,10 @@ const buildPerformanceToolArgs = (lookbackDays?: number): Record<string, unknown
     });
   }
   return {
-    query: { fields: PERFORMANCE_FIELDS.map((fieldCaption) => ({ fieldCaption })), filters },
+    query: {
+      fields: JOB_PERFORMANCE_FIELDS.map((fieldCaption) => ({ fieldCaption })),
+      filters,
+    },
   };
 };
 
@@ -86,10 +83,10 @@ export const getExtractOptimizationApplyPrompt: WebPromptFactory = () => ({
   name: 'extract-optimization-apply',
   title: 'Extract refresh optimization — apply changes',
   description:
-    'Tableau Cloud admin workflow: take the recommendations from the inform step and apply schedule ' +
-    `changes or deletions to extract refresh tasks. Orchestrates \`${INVENTORY_TOOL}\`, ` +
-    `\`${PERFORMANCE_TOOL}\`, \`${UPDATE_TOOL}\`, and \`${DELETE_TOOL}\`. Defaults to a dry run; ` +
-    'requires explicit human confirmation before any PUT or DELETE.',
+    'Tableau Cloud admin workflow (destructive Apply phase): take the recommendations from the ' +
+    'inform step and apply schedule changes or deletions to extract refresh tasks. Orchestrates ' +
+    `\`${INVENTORY_TOOL}\`, \`${PERFORMANCE_TOOL}\`, \`${UPDATE_TOOL}\`, and \`${DELETE_TOOL}\`. ` +
+    'Defaults to a dry run; requires explicit human confirmation before any PUT or DELETE.',
   argsSchema,
   disabled: (config) => !config.adminToolsEnabled,
   callback: (args) => {
@@ -116,30 +113,37 @@ export const getExtractOptimizationApplyPrompt: WebPromptFactory = () => ({
       presentColumns: ['Task ID', 'Item', 'Current Frequency', 'Recommendation', 'New Schedule'],
     });
 
-    const lines: string[] = [
+    const modeLine = dryRun
+      ? '`dryRun = true` — report only. Do **not** call `' +
+        UPDATE_TOOL +
+        '` or `' +
+        DELETE_TOOL +
+        '` under any circumstance.'
+      : '`dryRun = false` — apply step is permitted **only after** the human confirms in Step 4.';
+
+    const text = [
       'You are running the Tableau MCP **extract-optimization-apply** workflow against the connected Tableau Cloud site.',
+      'This is a DESTRUCTIVE admin workflow. Follow every step in order and never skip the human-confirmation break.',
+      'CRITICAL: Steps 1-3 are READ-ONLY. Make NO update or deletion call until the user has ' +
+        'explicitly approved a specific set of tasks at the Step 4 human-confirmation break.',
       '',
-      `**Mode:** ${dryRun ? '`dryRun = true` — report only. Do **not** call `' + UPDATE_TOOL + '` or `' + DELETE_TOOL + '` under any circumstance.' : '`dryRun = false` — apply step is permitted **only after** the human confirms in Step 4.'}`,
+      `**Mode:** ${modeLine}`,
       `**Scope:** ${taskIdScope}.`,
       '',
-      `**Step 1 — Inventory.** Call \`${INVENTORY_TOOL}\` exactly once with no filter to retrieve every extract refresh task on the site.`,
-    ];
-
-    if (taskIds.length > 0) {
-      lines.push(
-        'After the call returns, narrow the working set client-side to the task IDs listed in **Scope** above. If any requested ID is missing from the inventory, list it under "Missing tasks" in the final report and skip it for the remainder of the workflow.',
-      );
-    }
-
-    lines.push(
+      `**Step 1 — Inventory (read-only).** Call \`${INVENTORY_TOOL}\` exactly once with no filter to retrieve every extract refresh task on the site.`,
+      ...(taskIds.length > 0
+        ? [
+            'After the call returns, narrow the working set client-side to the task IDs listed in **Scope** above. If any requested ID is missing from the inventory, list it under "Missing tasks" in the final report and skip it for the remainder of the workflow.',
+          ]
+        : []),
       '',
-      `**Step 2 — Performance signals.** Call \`${PERFORMANCE_TOOL}\` exactly once with the arguments below. The tool returns the already-filtered rows for extract refresh job types. Do **not** add or remove rows. Do **not** recompute durations.`,
+      `**Step 2 — Performance signals (read-only).** Call \`${PERFORMANCE_TOOL}\` exactly once with the arguments below. The tool returns the already-filtered rows for extract refresh job types. Do **not** add or remove rows. Do **not** recompute durations.`,
       '',
       '```json',
       JSON.stringify(performanceToolArgs, null, 2),
       '```',
       '',
-      '**Step 3 — Recommend.** Join the inventory (Step 1) and the performance rows (Step 2) on the underlying datasource or workbook. For each task in scope, produce one row in a Markdown table with these columns:',
+      '**Step 3 — Recommend (read-only).** Join the inventory (Step 1) and the performance rows (Step 2) on the underlying datasource or workbook. For each task in scope, produce one row in a Markdown table with these columns:',
       '',
       '`Task ID | Item | Current Frequency | Next Run | Recent Job Result | Avg Duration | Failure Count | Recommendation | New Schedule`',
       '',
@@ -161,32 +165,40 @@ export const getExtractOptimizationApplyPrompt: WebPromptFactory = () => ({
         DELETE_TOOL +
         '` without the user\'s explicit approval in this turn. A previous approval does NOT carry forward. If the user replies with anything other than `yes` or a non-empty list of Task IDs, stop and report "Aborted by user".',
       '',
-      dryRun
-        ? "**Because `dryRun = true`, stop here regardless of the user's reply.** Print the table from Step 3 plus a one-line note: `Dry run — no changes applied. Re-run with dryRun = false to apply.`"
-        : '**Step 5 — Apply (only after Step 4 approval).** For each approved task, in order:\n' +
-            `- For \`downgrade\` rows: call \`${UPDATE_TOOL}\` with \`{ taskId, schedule: <proposed schedule> }\`. The schedule must satisfy the constraints documented on the tool (5-minute boundary; Hourly minute match and end > start; Daily/Weekly/Monthly omit \`end\`; Hourly/Daily require ≥1 \`weekDay\` interval; Weekly requires ≥1 \`weekDay\`; Monthly requires ≥1 \`monthDay\`).\n` +
-            `- For \`delete\` rows: call \`${DELETE_TOOL}\` with \`{ taskId }\`. **This is irreversible.**\n` +
-            '- Do **not** parallelize. Wait for each call to complete before the next.\n' +
-            '- If a single call returns an error, stop immediately, record the failure, and report the partial state in Step 6 — do **not** continue with the remaining changes.',
+      ...(dryRun
+        ? [
+            "**Because `dryRun = true`, stop here regardless of the user's reply.** Print the table from Step 3 plus a one-line note: `Dry run — no changes applied. Re-run with dryRun = false to apply.`",
+          ]
+        : [
+            '**Step 5 — Apply (only after Step 4 approval).** For each approved task, in order:',
+            `- For \`downgrade\` rows: call \`${UPDATE_TOOL}\` with \`{ taskId, schedule: <proposed schedule> }\`. The schedule must satisfy the constraints documented on the tool (5-minute boundary; Hourly minute match and end > start; Daily/Weekly/Monthly omit \`end\`; Hourly/Daily require ≥1 \`weekDay\` interval; Weekly requires ≥1 \`weekDay\`; Monthly requires ≥1 \`monthDay\`).`,
+            `- For \`delete\` rows: call \`${DELETE_TOOL}\` with \`{ taskId }\`. **This is irreversible.**`,
+            '- Do **not** parallelize. Wait for each call to complete before the next.',
+            '- If a single call returns an error, stop immediately, record the failure, and report the partial state in the final report — do **not** continue with the remaining changes.',
+          ]),
       '',
-      '**Step 6 — Final report.** Print:',
+      `**Step ${dryRun ? 5 : 6} — Final report.** Print:`,
       '- A "Changes applied" section with one bullet per task touched: `Task ID — <delete | downgrade to <new schedule>> — <success | error: <code/message>>`.',
       '- A "Skipped" section listing any `keep` rows or rows the user excluded.',
-    );
-    if (taskIds.length > 0) {
-      lines.push(
-        '- A "Missing tasks" section listing any requested Task IDs that were not found in the inventory.',
-      );
-    }
-    lines.push(
+      ...(taskIds.length > 0
+        ? [
+            '- A "Missing tasks" section listing any requested Task IDs that were not found in the inventory.',
+          ]
+        : []),
       '- A trailing note: `Tableau Cloud job lookback caps at 90 days (365 days with Advanced Management).`',
-    );
+      '',
+      '**Fixed notes**',
+      '- No task is updated or deleted until the user approves a specific task set at the Step 4 break.',
+      '- This workflow only acts on tasks the user explicitly approved; tasks the user did not approve are never touched.',
+      `- \`${DELETE_TOOL}\` is irreversible; \`${UPDATE_TOOL}\` is reversible by re-applying the prior schedule.`,
+      '- Admin-only, Tableau Cloud. Tasks the user excluded or that are missing from the inventory are never touched.',
+    ].join('\n');
 
     return {
       messages: [
         {
           role: 'user',
-          content: { type: 'text', text: lines.join('\n') },
+          content: { type: 'text', text },
         },
       ],
     };
