@@ -21,6 +21,7 @@ type McpbUserConfigurationOption = {
   description: string;
   required: boolean;
   sensitive: boolean;
+  default?: string | number | boolean | string[] | undefined;
 };
 type McpbManifest = z.infer<(typeof MANIFEST_SCHEMAS)['0.3']>;
 
@@ -594,12 +595,13 @@ const envVars = {
     sensitive: false,
   },
   PRODUCT_TELEMETRY_ENABLED: {
-    includeInUserConfig: false,
-    type: 'string',
-    title: 'Product Telemetry Enabled',
-    description: 'Enable or disable product telemetry. Set to "false" to disable.',
+    includeInUserConfig: true,
+    type: 'boolean',
+    title: 'Enable Product Telemetry',
+    description: 'Send basic product data to Tableau for each tool call.',
     required: false,
     sensitive: false,
+    default: true,
   },
   PRODUCT_TELEMETRY_ENDPOINT: {
     includeInUserConfig: false,
@@ -664,6 +666,7 @@ const userConfig = Object.entries(envVars).reduce<Record<string, McpbUserConfigu
         description: value.description,
         required: value.required,
         sensitive: value.sensitive,
+        ...('default' in value ? { default: value.default } : {}),
       };
     }
 
@@ -698,6 +701,7 @@ const manifest = {
   documentation: 'https://tableau.github.io/tableau-mcp/',
   license: packageJson.license,
   support: 'https://github.com/tableau/tableau-mcp/issues',
+  privacy_policies: ['https://www.salesforce.com/company/legal/privacy/'],
   icon: 'icon.png',
   server: {
     type: 'node',
