@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
-import { McpbManifestSchema, McpbUserConfigurationOptionSchema } from '@anthropic-ai/mcpb';
+import { MANIFEST_SCHEMAS } from '@anthropic-ai/mcpb';
 import { writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -15,8 +15,14 @@ import { webToolNames } from '../tools/web/toolName.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-type McpbUserConfigurationOption = z.infer<typeof McpbUserConfigurationOptionSchema>;
-type McpbManifest = z.infer<typeof McpbManifestSchema>;
+type McpbUserConfigurationOption = {
+  type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
+  title: string;
+  description: string;
+  required: boolean;
+  sensitive: boolean;
+};
+type McpbManifest = z.infer<(typeof MANIFEST_SCHEMAS)['0.3']>;
 
 type EnvVars = {
   [TKey in keyof ProcessEnvWeb]: McpbUserConfigurationOption & {
