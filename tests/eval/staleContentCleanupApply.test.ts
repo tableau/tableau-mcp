@@ -185,7 +185,7 @@ describe('stale-content-cleanup-apply eval', () => {
           name: PROMPT_NAME,
           arguments: { tag: 'bad`tag";rm -rf /' },
         }),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/tag must contain/i);
     });
 
     it(
