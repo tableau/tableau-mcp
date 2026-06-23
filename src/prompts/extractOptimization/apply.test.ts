@@ -33,11 +33,23 @@ describe('extract-optimization-apply prompt', () => {
     expect(text).toContain('`delete-extract-refresh-task`');
   });
 
+  it('marks itself DESTRUCTIVE and locks Steps 1-3 to read-only', async () => {
+    const text = await textOf();
+    expect(text).toContain('DESTRUCTIVE admin workflow');
+    expect(text).toContain('CRITICAL: Steps 1-3 are READ-ONLY');
+    expect(text).toContain('Step 1 — Inventory (read-only).');
+    expect(text).toContain('Step 2 — Performance signals (read-only).');
+    expect(text).toContain('Step 3 — Recommend (read-only).');
+  });
+
   it('defaults to dryRun = true and forbids any PUT or DELETE', async () => {
     const text = await textOf();
     expect(text).toContain('`dryRun = true`');
     expect(text).toContain('Do **not** call `update-cloud-extract-refresh-task`');
     expect(text).toContain('Dry run — no changes applied.');
+    // Numbering should not jump 4 → 6 in dry-run; there is no Step 5 (Apply).
+    expect(text).toContain('Step 5 — Final report.');
+    expect(text).not.toContain('Step 6 — Final report.');
   });
 
   it('allows the apply step only after Step 4 confirmation when dryRun = false', async () => {
@@ -48,6 +60,7 @@ describe('extract-optimization-apply prompt', () => {
     expect(text).toContain('Do **not** parallelize');
     expect(text).toContain('stop immediately');
     expect(text).not.toContain('Dry run — no changes applied.');
+    expect(text).toContain('Step 6 — Final report.');
   });
 
   it('includes the human-in-the-loop confirmation gate', async () => {
@@ -56,6 +69,15 @@ describe('extract-optimization-apply prompt', () => {
     expect(text).toContain('🛑 STOP — REQUIRED HUMAN CONFIRMATION before any update or deletion.');
     expect(text).toContain('Reply `yes` to proceed');
     expect(text).toContain('A previous approval does NOT carry forward.');
+  });
+
+  it('closes with a Fixed notes safety block', async () => {
+    const text = await textOf();
+    expect(text).toContain('**Fixed notes**');
+    expect(text).toContain(
+      '`delete-extract-refresh-task` is irreversible; `update-cloud-extract-refresh-task` is reversible',
+    );
+    expect(text).toContain('No task is updated or deleted until the user approves');
   });
 
   it('defaults the scope to every task and omits the Missing tasks section', async () => {
