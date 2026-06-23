@@ -95,7 +95,7 @@ app.ontoolresult = async (result: CallToolResult) => {
     const viewUrl = extractUrlObjectFromResult(result);
     await loadTableauEmbeddingApi(viewUrl);
     const token = await callGetOAuthTokenTool(app);
-    embedTableauViz(viewUrl, token);
+    embedTableauViz(viewUrl, token, (size) => app.sendSizeChanged(size));
   } catch (error) {
     console.error('Error embedding viz:', error);
   }

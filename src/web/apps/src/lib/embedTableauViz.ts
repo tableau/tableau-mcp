@@ -27,15 +27,40 @@ export function createTableauVizElement(vizUrl: string, token: string): HTMLElem
  * Embeds a Tableau visualization into the tableauVizContainer element
  * @param vizUrl - The URL of the Tableau view to embed
  * @param token - The OAuth Bearer token for authentication
+ * @param onSizeKnown - Optional callback invoked once the viz reports its
+ *   natural size, with the width/height the app frame should grow to. Wire
+ *   this to `app.sendSizeChanged` so the host resizes the frame to fit the viz.
  */
-export function embedTableauViz(vizUrl: string, token: string): void {
+export function embedTableauViz(
+  vizUrl: string,
+  token: string,
+  onSizeKnown?: (size: { width?: number; height: number }) => void,
+): void {
   const container = document.getElementById(TABLEAU_VIZ_CONTAINER_ID);
 
   if (!container) {
     throw new Error(`Container element with id "${TABLEAU_VIZ_CONTAINER_ID}" not found`);
   }
 
-  // Create and append the viz element
+  // Create and replace any existing viz element (idempotent)
   const viz = createTableauVizElement(vizUrl, token);
-  container.appendChild(viz);
+
+  // The Embedding API reports the viz's natural size via `firstvizsizeknown`.
+  // Set the element's height so it renders fully, then notify the host so it
+  // can grow the app frame to match.
+  viz.addEventListener('firstvizsizeknown', (event) => {
+    const vizSize = (event as CustomEvent).detail?.vizSize;
+    const sheetHeight = vizSize?.sheetSize?.maxSize?.height;
+    if (typeof sheetHeight !== 'number') {
+      return;
+    }
+
+    const chromeHeight = typeof vizSize.chromeHeight === 'number' ? vizSize.chromeHeight : 0;
+    const totalHeight = sheetHeight + chromeHeight;
+
+    viz.style.height = `${totalHeight}px`;
+    onSizeKnown?.({ height: totalHeight });
+  });
+
+  container.replaceChildren(viz);
 }

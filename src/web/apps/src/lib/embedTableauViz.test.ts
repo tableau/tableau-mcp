@@ -58,4 +58,41 @@ describe('embedTableauViz', () => {
       embedTableauViz(vizUrl, token);
     }).toThrow('Container element with id "tableauVizContainer" not found');
   });
+
+  it('should be idempotent - calling twice results in exactly one viz element', () => {
+    const vizUrl1 = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook1/view1';
+    const token1 = 'token-first';
+
+    const vizUrl2 = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook2/view2';
+    const token2 = 'token-second';
+
+    // Call embedTableauViz twice (simulating double-mount)
+    embedTableauViz(vizUrl1, token1);
+    embedTableauViz(vizUrl2, token2);
+
+    const container = document.getElementById('tableauVizContainer');
+    const vizElements = container?.querySelectorAll('tableau-viz');
+
+    // Should have exactly ONE viz element, not two
+    expect(vizElements?.length).toBe(1);
+  });
+
+  it('should replace previous viz with most recent one', () => {
+    const vizUrl1 = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook1/view1';
+    const token1 = 'token-first';
+
+    const vizUrl2 = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook2/view2';
+    const token2 = 'token-second';
+
+    // Call embedTableauViz twice
+    embedTableauViz(vizUrl1, token1);
+    embedTableauViz(vizUrl2, token2);
+
+    const container = document.getElementById('tableauVizContainer');
+    const vizElement = container?.querySelector('tableau-viz');
+
+    // The remaining viz should reflect the SECOND call (most recent wins)
+    expect(vizElement?.getAttribute('src')).toBe(vizUrl2);
+    expect(vizElement?.getAttribute('token')).toBe(token2);
+  });
 });
