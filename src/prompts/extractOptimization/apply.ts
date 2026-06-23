@@ -39,6 +39,10 @@ const argsSchema = {
     ),
   taskIds: z
     .string()
+    .regex(
+      /^[A-Za-z0-9, -]+$/,
+      'taskIds must contain only letters, numbers, commas, spaces, and dashes',
+    )
     .optional()
     .describe(
       'Optional comma-separated list of extract refresh task IDs (UUIDs) to scope the run to. ' +

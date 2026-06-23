@@ -45,6 +45,8 @@ describe('extract-optimization-apply prompt', () => {
     expect(text).toContain('`dryRun = false`');
     expect(text).toContain('only after** the human confirms in Step 4');
     expect(text).toContain('Step 5 — Apply (only after Step 4 approval).');
+    expect(text).toContain('Do **not** parallelize');
+    expect(text).toContain('stop immediately');
     expect(text).not.toContain('Dry run — no changes applied.');
   });
 
