@@ -37,10 +37,19 @@ const paramsSchema = {
     ),
   tag: z
     .string()
+    .max(200)
+    // Constrain to a safe tag character class. `tag` is interpolated into the preview-response text
+    // the model reads back, so restricting it to alphanumerics/space/underscore/dash closes a
+    // prompt-injection vector (e.g. a value with quotes/backticks trying to coerce auto-confirming).
+    .regex(
+      /^[A-Za-z0-9 _-]+$/,
+      'tag must contain only letters, numbers, spaces, underscores, and dashes',
+    )
     .optional()
     .describe(
       'Label applied to the workbook during the preview phase to mark it as pending deletion ' +
-        `(reversible, visible in the Tableau UI). Defaults to '${DEFAULT_PENDING_DELETION_TAG}'.`,
+        '(reversible, visible in the Tableau UI). Letters, numbers, spaces, underscores, and dashes ' +
+        `only. Defaults to '${DEFAULT_PENDING_DELETION_TAG}'.`,
     ),
 };
 
