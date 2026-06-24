@@ -1,13 +1,22 @@
 /**
  * Shared human-in-the-loop (HITL) confirmation primitive for destructive "Apply" prompts.
  *
- * The MCP SDK exposes no runtime elicitation/sampling primitive (v1.x), and prompts are pure text
- * generators. So HITL here is a *prompt-text contract*: every Apply prompt injects the same, strongly
- * worded instruction blocks telling the model to STOP and obtain explicit human approval before any
- * destructive call. The delete tools additionally enforce the gate server-side (a confirmed delete
- * is rejected unless the item carries the pending-deletion tag from its preview). Centralizing the wording keeps the
- * gate identical across the Apply surface (stale-content cleanup, extract-refresh optimization,
- * license reclamation, …) and makes it the single place to harden the language over time.
+ * Prompts are pure text generators, so HITL here is a *prompt-text contract*: every Apply prompt
+ * injects the same, strongly worded instruction blocks telling the model to STOP and obtain explicit
+ * human approval before any destructive call. The delete tools additionally enforce a
+ * server-authoritative gate (a confirmed delete is rejected unless the item carries the
+ * pending-deletion tag from its preview). That gate proves a preview *ran*, NOT that a human
+ * *approved* — an agent that runs both phases itself satisfies it. It closes the prior
+ * caller-computable-token bypass (W-23093455) but leaves human approval advisory.
+ *
+ * Real, enforced HITL needs an out-of-band signal the agent cannot forge. The installed MCP SDK
+ * (>=1.26; this repo runs 1.29) DOES expose `server.elicitInput(...)` with URL-mode elicitation
+ * (`UrlElicitationRequiredError`), which routes approval to a human out of band. Adopting it is
+ * tracked under W-23125362; until then the human-approval step here is advisory.
+ *
+ * Centralizing the wording keeps the gate identical across the Apply surface (stale-content cleanup,
+ * extract-refresh optimization, license reclamation, …) and makes it the single place to harden the
+ * language over time.
  *
  * These are content-type-agnostic: callers pass the action wording and the content nouns.
  */
