@@ -219,7 +219,8 @@ describe('deleteWorkbookTool', () => {
     const result = await getToolResult({ workbookId: 'wb-1', confirm: true });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Workbook not found');
+    // Match loosely so the test asserts the error is surfaced, not the exact upstream wording.
+    expect(result.content[0].text).toMatch(/not found/i);
     expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
   });
 
@@ -321,6 +322,19 @@ describe('deleteWorkbookTool', () => {
     });
     expect(result.isError).toBe(false);
     expect(mocks.mockDeleteWorkbook).toHaveBeenCalled();
+  });
+
+  it('should block confirm when the workbook carries a different tag than the one requested', async () => {
+    // Live re-fetch returns the default tag, but the caller confirms with a custom tag → the gate
+    // verifies the requested label specifically, so the delete is blocked.
+    mocks.mockGetWorkbook.mockResolvedValue(mockTaggedWorkbook); // default tag only
+    const result = await getToolResult({
+      workbookId: 'wb-1',
+      confirm: true,
+      tag: 'some-other-tag',
+    });
+    expect(result.isError).toBe(true);
+    expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
   });
 
   it('should handle API errors gracefully', async () => {

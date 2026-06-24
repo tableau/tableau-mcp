@@ -229,7 +229,8 @@ describe('deleteDatasourceTool', () => {
     const result = await getToolResult({ datasourceId: 'ds-1', confirm: true });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('Datasource not found');
+    // Match loosely so the test asserts the error is surfaced, not the exact upstream wording.
+    expect(result.content[0].text).toMatch(/not found/i);
     expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
   });
 

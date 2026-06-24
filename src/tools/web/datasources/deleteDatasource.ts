@@ -131,7 +131,7 @@ Do not auto-confirm — get the user's explicit approval first.
 
               // Treat undefined, empty, and whitespace-only tags as "use the default" so a blank
               // label never gets applied (preview) or verified against (confirm).
-              const pendingTag = tag?.trim() ? tag : DEFAULT_PENDING_DELETION_TAG;
+              const pendingTag = tag?.trim() || DEFAULT_PENDING_DELETION_TAG;
 
               // Honor the same tool-scoping rules the read tools enforce (e.g. get-datasource-metadata):
               // a data source outside the configured bounded context cannot be tagged or deleted.
@@ -145,18 +145,22 @@ Do not auto-confirm — get the user's explicit approval first.
               }
 
               if (confirm) {
-                // Server-authoritative HITL gate: re-fetch the data source LIVE and verify it carries
-                // the pending-deletion tag set by a prior preview call. The tag is server-side state
-                // the caller cannot fabricate, so its presence is genuine proof the preview ran —
-                // unlike a caller-computable confirmation token, this gate cannot be bypassed. We
-                // query fresh here (not the access-check's cached content) so the check reflects the
-                // current server state at delete time. Rejected with zero destructive side effects.
+                // Server-authoritative gate: re-fetch the data source LIVE and verify it carries the
+                // pending-deletion tag set by a prior preview call. The tag is server-side state that
+                // a caller going through this MCP tool cannot set without running the preview — so its
+                // presence is genuine proof the preview ran, and (unlike a caller-computable token)
+                // this gate cannot be bypassed by an agent. NOTE: this is not full human-in-the-loop;
+                // it proves the preview ran, not that a human approved (an agent that runs both phases
+                // satisfies it). We query fresh here (not the access-check's cached content) so the
+                // check reflects current server state at delete time. Rejected with zero side effects.
                 const datasource = await restApi.datasourcesMethods.queryDatasource({
                   datasourceId,
                   siteId,
                 });
-                const isPendingDeletion = datasource.tags?.tag?.some((t) => t.label === pendingTag);
-                if (!isPendingDeletion) {
+                const isTaggedForDeletion = datasource.tags?.tag?.some(
+                  (t) => t.label === pendingTag,
+                );
+                if (!isTaggedForDeletion) {
                   return new PreviewNotRunError(
                     `Deletion blocked: data source ${datasourceId} is not tagged '${pendingTag}' as ` +
                       'pending deletion. Run delete-datasource with confirm omitted (or false) for this ' +
