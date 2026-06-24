@@ -18,7 +18,9 @@ describe('get-custom-view-image', () => {
     await client.close();
   });
 
-  it('should get custom view image', async () => {
+  // Skipped: flaky against the live endpoint (intermittent "Request failed with status code 400").
+  // Re-enable once the live 400 is understood — tracked by W-23131245.
+  it.skip('should get custom view image', async () => {
     const env = getDefaultEnv();
     const superstore = getSuperstoreWorkbook(env);
     const pngData = await client.callTool('get-custom-view-image', {
