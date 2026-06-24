@@ -8,6 +8,7 @@ import pkg from '~/package.json';
 
 import { embedTableauViz } from './lib/embedTableauViz.js';
 import { callGetOAuthTokenTool } from './lib/getOAuthTokenToolClient.js';
+import { setupOpenInTableauLink } from './lib/openInTableauLink.js';
 
 const urlSchema = z.object({
   url: z.string().url(),
@@ -96,6 +97,7 @@ app.ontoolresult = async (result: CallToolResult) => {
     await loadTableauEmbeddingApi(viewUrl);
     const token = await callGetOAuthTokenTool(app);
     embedTableauViz(viewUrl, token);
+    setupOpenInTableauLink(app, viewUrl);
   } catch (error) {
     console.error('Error embedding viz:', error);
   }

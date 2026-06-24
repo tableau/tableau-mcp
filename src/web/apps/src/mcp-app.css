@@ -30,3 +30,29 @@ tableau-viz {
   display: block;
   transition: height 0.3s ease;
 }
+
+[hidden] {
+  display: none;
+}
+
+.open-in-tableau {
+  display: inline-block;
+  margin: 16px 0 0 0;
+  padding: 8px 12px;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  color: #0066CC;
+  text-decoration: none;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.open-in-tableau:hover {
+  background-color: #f0f0f0;
+  text-decoration: underline;
+}
+
+.open-in-tableau:focus {
+  outline: 2px solid #0066CC;
+  outline-offset: 2px;
+}
