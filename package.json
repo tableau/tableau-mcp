@@ -1,7 +1,7 @@
 {
   "name": "@tableau/mcp-server",
   "description": "Helping agents see and understand data.",
-  "version": "2.18.0",
+  "version": "2.18.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tableau/tableau-mcp.git"
@@ -73,7 +73,7 @@
     "zod-validation-error": "^4.0.1"
   },
   "devDependencies": {
-    "@anthropic-ai/mcpb": "^1.0.0",
+    "@anthropic-ai/mcpb": "^2.1.2",
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.25.1",
     "@openai/agents": "^0.1.9",

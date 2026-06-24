@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
-import { McpbManifestSchema, McpbUserConfigurationOptionSchema } from '@anthropic-ai/mcpb';
+import { MANIFEST_SCHEMAS } from '@anthropic-ai/mcpb';
 import { writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -9,14 +9,23 @@ import { z } from 'zod';
 
 import packageJson from '../../package.json';
 import { ProcessEnvWeb } from '../../types/process-env.js';
-import { webToolNames } from '../tools/web/toolName.js';
+import { WebMcpServer } from '../server.web.js';
+import { webToolFactories } from '../tools/web/tools.js';
+import { Provider } from '../utils/provider.js';
 
 // @ts-expect-error - import.meta is not allowed in CommonJS output, this script is run with tsx as ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-type McpbUserConfigurationOption = z.infer<typeof McpbUserConfigurationOptionSchema>;
-type McpbManifest = z.infer<typeof McpbManifestSchema>;
+type McpbUserConfigurationOption = {
+  type: 'string' | 'number' | 'boolean' | 'directory' | 'file';
+  title: string;
+  description: string;
+  required: boolean;
+  sensitive: boolean;
+  default?: string | number | boolean | string[] | undefined;
+};
+type McpbManifest = z.infer<(typeof MANIFEST_SCHEMAS)['0.3']>;
 
 type EnvVars = {
   [TKey in keyof ProcessEnvWeb]: McpbUserConfigurationOption & {
@@ -588,12 +597,13 @@ const envVars = {
     sensitive: false,
   },
   PRODUCT_TELEMETRY_ENABLED: {
-    includeInUserConfig: false,
-    type: 'string',
-    title: 'Product Telemetry Enabled',
-    description: 'Enable or disable product telemetry. Set to "false" to disable.',
+    includeInUserConfig: true,
+    type: 'boolean',
+    title: 'Enable Product Telemetry',
+    description: 'Send basic product data to Tableau for each tool call.',
     required: false,
     sensitive: false,
+    default: true,
   },
   PRODUCT_TELEMETRY_ENDPOINT: {
     includeInUserConfig: false,
@@ -658,6 +668,7 @@ const userConfig = Object.entries(envVars).reduce<Record<string, McpbUserConfigu
         description: value.description,
         required: value.required,
         sensitive: value.sensitive,
+        ...('default' in value ? { default: value.default } : {}),
       };
     }
 
@@ -676,36 +687,76 @@ const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>
   {},
 );
 
-const manifest = {
-  manifest_version: '0.3',
-  name: 'Tableau',
-  version: packageJson.version,
-  description: packageJson.description,
-  author: {
+(async () => {
+  const manifest = {
+    manifest_version: '0.3',
     name: 'Tableau',
-  },
-  repository: {
-    type: 'git',
-    url: 'https://github.com/tableau/tableau-mcp',
-  },
-  homepage: packageJson.homepage,
-  documentation: 'https://tableau.github.io/tableau-mcp/',
-  license: packageJson.license,
-  support: 'https://github.com/tableau/tableau-mcp/issues',
-  icon: 'icon.png',
-  server: {
-    type: 'node',
-    entry_point: 'build/index.js',
-    mcp_config: {
-      command: 'node',
-      args: ['${__dirname}/build/index.js'],
-      env: manifestEnvObject,
+    version: packageJson.version,
+    description: packageJson.description,
+    author: {
+      name: 'Tableau',
     },
-  },
-  tools: webToolNames.map((name) => ({ name })),
-  user_config: userConfig,
-} satisfies McpbManifest;
+    repository: {
+      type: 'git',
+      url: 'https://github.com/tableau/tableau-mcp',
+    },
+    homepage: packageJson.homepage,
+    documentation: 'https://tableau.github.io/tableau-mcp/',
+    license: packageJson.license,
+    support: 'https://github.com/tableau/tableau-mcp/issues',
+    privacy_policies: ['https://www.salesforce.com/company/legal/privacy/'],
+    icon: 'icon.png',
+    server: {
+      type: 'node',
+      entry_point: 'build/index.js',
+      mcp_config: {
+        command: 'node',
+        args: ['${__dirname}/build/index.js'],
+        env: manifestEnvObject,
+      },
+    },
+    tools: (await getEnabledTools()).map((name) => ({ name })),
+    user_config: userConfig,
+  } satisfies McpbManifest;
 
-const manifestPath = join(__dirname, '../../manifest.json');
-writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-console.log(`✅ Manifest file generated successfully at ${manifestPath}`);
+  const manifestPath = join(__dirname, '../../manifest.json');
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  console.log(`✅ Manifest file generated successfully at ${manifestPath}`);
+})();
+
+async function getEnabledTools(): Promise<Array<string>> {
+  const PLACEHOLDER_ENV: Record<string, string> = {
+    SERVER: 'https://placeholder.tableau.com',
+    PAT_NAME: 'placeholder',
+    PAT_VALUE: 'placeholder',
+  };
+
+  const saved = Object.fromEntries(
+    Object.keys(PLACEHOLDER_ENV).map((key) => [key, process.env[key]]),
+  );
+
+  try {
+    // Add placeholder values to satisfy Config requirements
+    for (const [key, value] of Object.entries(PLACEHOLDER_ENV)) {
+      process.env[key] = value;
+    }
+
+    // Best effort to get enabled tools.
+    // Won't work if any tools are disabled based off some user config value,
+    // like Tableau Server version. This script should fail if there was ever the case.
+    const tools = webToolFactories.map((toolFactory) =>
+      toolFactory({} as unknown as WebMcpServer, { value: '0.0.0', build: '0.0.0' }),
+    );
+
+    const disabledResults = await Promise.all(tools.map((tool) => Provider.from(tool.disabled)));
+    return tools.filter((_, i) => !disabledResults[i]).map((tool) => tool.name);
+  } finally {
+    for (const key of Object.keys(PLACEHOLDER_ENV)) {
+      if (saved[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = saved[key];
+      }
+    }
+  }
+}
