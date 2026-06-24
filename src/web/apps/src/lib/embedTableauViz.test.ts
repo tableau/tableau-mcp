@@ -58,4 +58,93 @@ describe('embedTableauViz', () => {
       embedTableauViz(vizUrl, token);
     }).toThrow('Container element with id "tableauVizContainer" not found');
   });
+
+  it('should be idempotent - calling twice results in exactly one viz element', () => {
+    const vizUrl1 = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook1/view1';
+    const token1 = 'token-first';
+
+    const vizUrl2 = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook2/view2';
+    const token2 = 'token-second';
+
+    // Call embedTableauViz twice (simulating double-mount)
+    embedTableauViz(vizUrl1, token1);
+    embedTableauViz(vizUrl2, token2);
+
+    const container = document.getElementById('tableauVizContainer');
+    const vizElements = container?.querySelectorAll('tableau-viz');
+
+    // Should have exactly ONE viz element, not two
+    expect(vizElements?.length).toBe(1);
+  });
+
+  it('should replace previous viz with most recent one', () => {
+    const vizUrl1 = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook1/view1';
+    const token1 = 'token-first';
+
+    const vizUrl2 = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook2/view2';
+    const token2 = 'token-second';
+
+    // Call embedTableauViz twice
+    embedTableauViz(vizUrl1, token1);
+    embedTableauViz(vizUrl2, token2);
+
+    const container = document.getElementById('tableauVizContainer');
+    const vizElement = container?.querySelector('tableau-viz');
+
+    // The remaining viz should reflect the SECOND call (most recent wins)
+    expect(vizElement?.getAttribute('src')).toBe(vizUrl2);
+    expect(vizElement?.getAttribute('token')).toBe(token2);
+  });
+
+  it('should set viz height from firstvizsizeknown event', () => {
+    const vizUrl = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view';
+    const token = 'test-token-123';
+
+    embedTableauViz(vizUrl, token);
+
+    const container = document.getElementById('tableauVizContainer');
+    const vizElement = container?.querySelector('tableau-viz') as HTMLElement;
+
+    expect(vizElement).toBeTruthy();
+
+    // Simulate firstvizsizeknown event with viz height
+    const event = new CustomEvent('firstvizsizeknown', {
+      detail: {
+        vizSize: {
+          sheetSize: {
+            maxSize: {
+              height: 800,
+            },
+          },
+        },
+      },
+    });
+
+    vizElement.dispatchEvent(event);
+
+    // Should set height to the reported viz height
+    expect(vizElement.style.height).toBe('800px');
+  });
+
+  it('should leave height unset when firstvizsizeknown has no numeric height', () => {
+    const vizUrl = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view';
+    const token = 'test-token-123';
+
+    embedTableauViz(vizUrl, token);
+
+    const container = document.getElementById('tableauVizContainer');
+    const vizElement = container?.querySelector('tableau-viz') as HTMLElement;
+
+    expect(vizElement).toBeTruthy();
+
+    // Simulate firstvizsizeknown event with empty detail
+    const event = new CustomEvent('firstvizsizeknown', {
+      detail: {},
+    });
+
+    vizElement.dispatchEvent(event);
+
+    // Height should remain unset
+    expect(vizElement.style.height).toBe('');
+  });
 });
