@@ -9,7 +9,9 @@ import { z } from 'zod';
 
 import packageJson from '../../package.json';
 import { ProcessEnvWeb } from '../../types/process-env.js';
-import { webToolNames } from '../tools/web/toolName.js';
+import { WebMcpServer } from '../server.web';
+import { webToolFactories } from '../tools/web/tools';
+import { Provider } from '../utils/provider';
 
 // @ts-expect-error - import.meta is not allowed in CommonJS output, this script is run with tsx as ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -685,37 +687,58 @@ const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>
   {},
 );
 
-const manifest = {
-  manifest_version: '0.3',
-  name: 'Tableau',
-  version: packageJson.version,
-  description: packageJson.description,
-  author: {
-    name: 'Tableau',
-  },
-  repository: {
-    type: 'git',
-    url: 'https://github.com/tableau/tableau-mcp',
-  },
-  homepage: packageJson.homepage,
-  documentation: 'https://tableau.github.io/tableau-mcp/',
-  license: packageJson.license,
-  support: 'https://github.com/tableau/tableau-mcp/issues',
-  privacy_policies: ['https://www.salesforce.com/company/legal/privacy/'],
-  icon: 'icon.png',
-  server: {
-    type: 'node',
-    entry_point: 'build/index.js',
-    mcp_config: {
-      command: 'node',
-      args: ['${__dirname}/build/index.js'],
-      env: manifestEnvObject,
-    },
-  },
-  tools: webToolNames.map((name) => ({ name })),
-  user_config: userConfig,
-} satisfies McpbManifest;
+async function getEnabledTools(): Promise<Array<string>> {
+  // Add placeholder values to satisfy Config requirements
+  process.env.SERVER = 'https://placeholder.tableau.com';
+  process.env.PAT_NAME = 'placeholder';
+  process.env.PAT_VALUE = 'placeholder';
 
-const manifestPath = join(__dirname, '../../manifest.json');
-writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-console.log(`✅ Manifest file generated successfully at ${manifestPath}`);
+  // Best effort to get enabled tools.
+  // Won't work if any tools are disabled based off some user config value,
+  // like Tableau Server version. This script should fail if there was ever the case.
+  const tools = webToolFactories.map((toolFactory) =>
+    toolFactory({} as unknown as WebMcpServer, { value: '0.0.0', build: '0.0.0' }),
+  );
+
+  const disabledResults = await Promise.all(tools.map((tool) => Provider.from(tool.disabled)));
+  return tools.filter((_, i) => !disabledResults[i]).map((tool) => tool.name);
+}
+
+(async () => {
+  const enabledTools = await getEnabledTools();
+
+  const manifest = {
+    manifest_version: '0.3',
+    name: 'Tableau',
+    version: packageJson.version,
+    description: packageJson.description,
+    author: {
+      name: 'Tableau',
+    },
+    repository: {
+      type: 'git',
+      url: 'https://github.com/tableau/tableau-mcp',
+    },
+    homepage: packageJson.homepage,
+    documentation: 'https://tableau.github.io/tableau-mcp/',
+    license: packageJson.license,
+    support: 'https://github.com/tableau/tableau-mcp/issues',
+    privacy_policies: ['https://www.salesforce.com/company/legal/privacy/'],
+    icon: 'icon.png',
+    server: {
+      type: 'node',
+      entry_point: 'build/index.js',
+      mcp_config: {
+        command: 'node',
+        args: ['${__dirname}/build/index.js'],
+        env: manifestEnvObject,
+      },
+    },
+    tools: enabledTools.map((name) => ({ name })),
+    user_config: userConfig,
+  } satisfies McpbManifest;
+
+  const manifestPath = join(__dirname, '../../manifest.json');
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  console.log(`✅ Manifest file generated successfully at ${manifestPath}`);
+})();
