@@ -63,6 +63,14 @@ describe('extract-optimization-apply prompt', () => {
     expect(text).toContain('Step 6 — Final report.');
   });
 
+  it('places the apply step strictly after the HITL gate (ordering invariant)', async () => {
+    const text = await textOf({ dryRun: 'false' });
+    const gateIdx = text.indexOf('REQUIRED HUMAN CONFIRMATION');
+    const applyIdx = text.indexOf('Step 5 — Apply (only after Step 4 approval).');
+    expect(gateIdx).toBeGreaterThan(-1);
+    expect(applyIdx).toBeGreaterThan(gateIdx);
+  });
+
   it('includes the human-in-the-loop confirmation gate', async () => {
     const text = await textOf();
     expect(text).toContain('**Step 4 — Human confirmation break.**');
@@ -94,6 +102,16 @@ describe('extract-optimization-apply prompt', () => {
     expect(text).toContain('`22222222-2222-2222-2222-222222222222`');
     expect(text).toContain('narrow the working set client-side');
     expect(text).toContain('Missing tasks');
+  });
+
+  it('de-duplicates repeated taskIds (each id appears once in the scope line)', async () => {
+    const text = await textOf({
+      taskIds:
+        '11111111-1111-1111-1111-111111111111, 11111111-1111-1111-1111-111111111111, 22222222-2222-2222-2222-222222222222',
+    });
+    const matches = text.match(/`11111111-1111-1111-1111-111111111111`/g) ?? [];
+    expect(matches.length).toBe(1);
+    expect(text).toContain('`22222222-2222-2222-2222-222222222222`');
   });
 
   it('emits a relative-date filter when lookbackDays is provided', async () => {

@@ -65,8 +65,8 @@ describe('extract-optimization-apply prompt', () => {
       }
       const text = await client.getPromptText(PROMPT_NAME);
       // The dry-run branch must not emit an apply step or instruct any write.
-      expect(text).toContain(`Do **not** call \`${UPDATE_TOOL}\``);
-      expect(text).toContain(`Do **not** call \`${DELETE_TOOL}\``);
+      // The prompt joins both tools in one sentence: `Do **not** call \`<update>\` or \`<delete>\``.
+      expect(text).toContain(`Do **not** call \`${UPDATE_TOOL}\` or \`${DELETE_TOOL}\``);
       // The destructive framing is present so a downstream prompt edit can't quietly remove it.
       expect(text).toContain('DESTRUCTIVE admin workflow');
       expect(text).toContain('CRITICAL: Steps 1-3 are READ-ONLY');

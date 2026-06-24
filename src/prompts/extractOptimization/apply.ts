@@ -92,11 +92,15 @@ export const getExtractOptimizationApplyPrompt: WebPromptFactory = () => ({
   callback: (args) => {
     const dryRun = args.dryRun !== 'false';
     const lookbackDays = args.lookbackDays ? parseInt(args.lookbackDays, 10) : undefined;
-    const taskIds = args.taskIds
-      ? args.taskIds
-          .split(',')
-          .map((value: string) => value.trim())
-          .filter(Boolean)
+    const taskIds: string[] = args.taskIds
+      ? Array.from(
+          new Set<string>(
+            args.taskIds
+              .split(',')
+              .map((value: string) => value.trim())
+              .filter(Boolean),
+          ),
+        )
       : [];
 
     const performanceToolArgs = buildPerformanceToolArgs(lookbackDays);
