@@ -374,14 +374,7 @@ TELEMETRY_PROVIDER_CONFIG='{"module": "./my-telemetry-provider.js"}'
 ```
 
 The custom provider module should export a default class (or named export `TelemetryProvider`) that
-implements:
-
-```typescript
-interface TelemetryProvider {
-  initialize(): void;
-  recordMetric(name: string, value: number, attributes: Record<string, unknown>): void;
-}
-```
+implements the [`TelemetryProvider`](https://github.com/tableau/tableau-mcp/blob/main/src/telemetry/types.ts) interface.
 
 <hr />
 
