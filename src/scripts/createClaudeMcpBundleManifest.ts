@@ -9,9 +9,9 @@ import { z } from 'zod';
 
 import packageJson from '../../package.json';
 import { ProcessEnvWeb } from '../../types/process-env.js';
-import { WebMcpServer } from '../server.web';
-import { webToolFactories } from '../tools/web/tools';
-import { Provider } from '../utils/provider';
+import { WebMcpServer } from '../server.web.js';
+import { webToolFactories } from '../tools/web/tools.js';
+import { Provider } from '../utils/provider.js';
 
 // @ts-expect-error - import.meta is not allowed in CommonJS output, this script is run with tsx as ESM
 const __filename = fileURLToPath(import.meta.url);
