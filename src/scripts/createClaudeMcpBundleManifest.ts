@@ -687,43 +687,6 @@ const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>
   {},
 );
 
-async function getEnabledTools(): Promise<Array<string>> {
-  const PLACEHOLDER_ENV: Record<string, string> = {
-    SERVER: 'https://placeholder.tableau.com',
-    PAT_NAME: 'placeholder',
-    PAT_VALUE: 'placeholder',
-  };
-
-  const saved = Object.fromEntries(
-    Object.keys(PLACEHOLDER_ENV).map((key) => [key, process.env[key]]),
-  );
-
-  try {
-    // Add placeholder values to satisfy Config requirements
-    for (const [key, value] of Object.entries(PLACEHOLDER_ENV)) {
-      process.env[key] = value;
-    }
-
-    // Best effort to get enabled tools.
-    // Won't work if any tools are disabled based off some user config value,
-    // like Tableau Server version. This script should fail if there was ever the case.
-    const tools = webToolFactories.map((toolFactory) =>
-      toolFactory({} as unknown as WebMcpServer, { value: '0.0.0', build: '0.0.0' }),
-    );
-
-    const disabledResults = await Promise.all(tools.map((tool) => Provider.from(tool.disabled)));
-    return tools.filter((_, i) => !disabledResults[i]).map((tool) => tool.name);
-  } finally {
-    for (const key of Object.keys(PLACEHOLDER_ENV)) {
-      if (saved[key] === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = saved[key];
-      }
-    }
-  }
-}
-
 (async () => {
   const enabledTools = await getEnabledTools();
 
@@ -762,3 +725,40 @@ async function getEnabledTools(): Promise<Array<string>> {
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
   console.log(`✅ Manifest file generated successfully at ${manifestPath}`);
 })();
+
+async function getEnabledTools(): Promise<Array<string>> {
+  const PLACEHOLDER_ENV: Record<string, string> = {
+    SERVER: 'https://placeholder.tableau.com',
+    PAT_NAME: 'placeholder',
+    PAT_VALUE: 'placeholder',
+  };
+
+  const saved = Object.fromEntries(
+    Object.keys(PLACEHOLDER_ENV).map((key) => [key, process.env[key]]),
+  );
+
+  try {
+    // Add placeholder values to satisfy Config requirements
+    for (const [key, value] of Object.entries(PLACEHOLDER_ENV)) {
+      process.env[key] = value;
+    }
+
+    // Best effort to get enabled tools.
+    // Won't work if any tools are disabled based off some user config value,
+    // like Tableau Server version. This script should fail if there was ever the case.
+    const tools = webToolFactories.map((toolFactory) =>
+      toolFactory({} as unknown as WebMcpServer, { value: '0.0.0', build: '0.0.0' }),
+    );
+
+    const disabledResults = await Promise.all(tools.map((tool) => Provider.from(tool.disabled)));
+    return tools.filter((_, i) => !disabledResults[i]).map((tool) => tool.name);
+  } finally {
+    for (const key of Object.keys(PLACEHOLDER_ENV)) {
+      if (saved[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = saved[key];
+      }
+    }
+  }
+}
