@@ -688,8 +688,6 @@ const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>
 );
 
 (async () => {
-  const enabledTools = await getEnabledTools();
-
   const manifest = {
     manifest_version: '0.3',
     name: 'Tableau',
@@ -717,7 +715,7 @@ const manifestEnvObject = Object.entries(envVars).reduce<Record<string, string>>
         env: manifestEnvObject,
       },
     },
-    tools: enabledTools.map((name) => ({ name })),
+    tools: (await getEnabledTools()).map((name) => ({ name })),
     user_config: userConfig,
   } satisfies McpbManifest;
 
