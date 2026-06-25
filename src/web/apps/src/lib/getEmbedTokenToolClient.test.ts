@@ -109,4 +109,22 @@ describe('callGetEmbedTokenTool', () => {
       'OAuth Bearer token retrieval is only available for Bearer authentication',
     );
   });
+
+  it('should return null when the tool reports no token is available (isError)', async () => {
+    const mockApp = {
+      callServerTool: vi.fn().mockResolvedValue({
+        content: [
+          {
+            type: 'text',
+            text: 'No embed token is available for the current authentication configuration.',
+          },
+        ],
+        isError: true,
+      }),
+    };
+
+    const token = await callGetEmbedTokenTool(mockApp as any);
+
+    expect(token).toBeNull();
+  });
 });

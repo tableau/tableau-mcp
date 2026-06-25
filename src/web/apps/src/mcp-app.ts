@@ -95,7 +95,9 @@ app.ontoolresult = async (result: CallToolResult) => {
     const viewUrl = extractUrlObjectFromResult(result);
     await loadTableauEmbeddingApi(viewUrl);
     const token = await callGetEmbedTokenTool(app);
-    embedTableauViz(viewUrl, token);
+    if (token) {
+      embedTableauViz(viewUrl, token);
+    }
   } catch (error) {
     console.error('Error embedding viz:', error);
   }
