@@ -33,11 +33,7 @@ describe('server', () => {
 
     it('should list tools', async () => {
       const names = await client.listTools();
-      const oauthOnlyTools: ReadonlyArray<WebToolName> = [
-        'get-embed-token',
-        'revoke-access-token',
-        'reset-consent',
-      ];
+      const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
         'list-extract-refresh-tasks',
         'delete-extract-refresh-task',
@@ -51,6 +47,9 @@ describe('server', () => {
         'query-admin-insights-job-performance',
         'get-stale-content-report',
       ];
+      // get-embed-token is gated by the mcp-apps feature (disabled by default in features.json)
+      const mcpAppsTools: ReadonlyArray<WebToolName> = ['get-embed-token'];
+
       let expectedToolNames = [...webToolNames];
 
       // Filter out oauth-only tools if not using oauth
@@ -62,6 +61,9 @@ describe('server', () => {
       if (process.env.ADMIN_TOOLS_ENABLED !== 'true') {
         expectedToolNames = expectedToolNames.filter((name) => !adminOnlyTools.includes(name));
       }
+
+      // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
+      expectedToolNames = expectedToolNames.filter((name) => !mcpAppsTools.includes(name));
 
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
       expect(names).toHaveLength(expectedToolNames.length);
@@ -118,11 +120,7 @@ describe('server', () => {
 
     it('should list tools', async () => {
       const names = await client.listTools();
-      const oauthOnlyTools: ReadonlyArray<WebToolName> = [
-        'get-embed-token',
-        'revoke-access-token',
-        'reset-consent',
-      ];
+      const oauthOnlyTools: ReadonlyArray<WebToolName> = ['revoke-access-token', 'reset-consent'];
       const adminOnlyTools: ReadonlyArray<WebToolName> = [
         'list-extract-refresh-tasks',
         'delete-extract-refresh-task',
@@ -136,6 +134,9 @@ describe('server', () => {
         'query-admin-insights-job-performance',
         'get-stale-content-report',
       ];
+      // get-embed-token is gated by the mcp-apps feature (disabled by default in features.json)
+      const mcpAppsTools: ReadonlyArray<WebToolName> = ['get-embed-token'];
+
       let expectedWebToolNames = [...webToolNames];
 
       // Filter out oauth-only tools if not using oauth
@@ -151,6 +152,9 @@ describe('server', () => {
           (name) => !adminOnlyTools.includes(name),
         );
       }
+
+      // Filter out mcp-apps tools (mcp-apps is disabled by default in features.json)
+      expectedWebToolNames = expectedWebToolNames.filter((name) => !mcpAppsTools.includes(name));
 
       const expectedToolNames = [...desktopToolNames, ...expectedWebToolNames];
       expect(names).toEqual(expect.arrayContaining(expectedToolNames));
