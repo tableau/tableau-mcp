@@ -17,6 +17,11 @@ export type EmbedTokenConfig = Pick<
   | 'connectedAppSecretId'
   | 'connectedAppSecretValue'
   | 'jwtUsername'
+  | 'uatTenantId'
+  | 'uatIssuer'
+  | 'uatUsernameClaimName'
+  | 'uatPrivateKey'
+  | 'uatKeyId'
 >;
 
 /**
@@ -56,6 +61,25 @@ export async function resolveEmbedToken({
         clientId: config.connectedAppClientId,
         secretId: config.connectedAppSecretId,
         secretValue: config.connectedAppSecretValue,
+      },
+      scopes: new Set([EMBED_SCOPE]),
+    });
+    return Ok({ token });
+  }
+
+  // 2b. uat: sign an embed JWT from the existing UAT RS256 key (zero new config).
+  // Keyed on config.auth alone — config validation guarantees the UAT_* fields are
+  // populated when AUTH=uat, exactly like getNewRestApiInstanceAsync's uat branch.
+  if (config.auth === 'uat') {
+    const token = await getJwt({
+      username: config.jwtUsername,
+      config: {
+        type: 'uat',
+        tenantId: config.uatTenantId,
+        issuer: config.uatIssuer,
+        usernameClaimName: config.uatUsernameClaimName,
+        privateKey: config.uatPrivateKey,
+        keyId: config.uatKeyId,
       },
       scopes: new Set([EMBED_SCOPE]),
     });

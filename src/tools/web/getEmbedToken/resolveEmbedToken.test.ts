@@ -1,4 +1,4 @@
-import { decodeJwt } from 'jose';
+import { decodeJwt, exportPKCS8, generateKeyPair } from 'jose';
 
 import { EMBED_SCOPE, resolveEmbedToken } from './resolveEmbedToken.js';
 
@@ -10,6 +10,11 @@ const directTrustConfig = {
   connectedAppSecretId: 'secret-id-456',
   connectedAppSecretValue: 'super-secret-value',
   jwtUsername: 'embed-user@example.com',
+  uatTenantId: '',
+  uatIssuer: '',
+  uatUsernameClaimName: '',
+  uatPrivateKey: '',
+  uatKeyId: '',
 };
 
 const bearerAuthInfo = {
@@ -78,6 +83,11 @@ describe('resolveEmbedToken', () => {
         connectedAppSecretId: '',
         connectedAppSecretValue: '',
         jwtUsername: '',
+        uatTenantId: '',
+        uatIssuer: '',
+        uatUsernameClaimName: '',
+        uatPrivateKey: '',
+        uatKeyId: '',
       },
       tableauAuthInfo: undefined,
     });
@@ -94,6 +104,11 @@ describe('resolveEmbedToken', () => {
         connectedAppSecretId: '',
         connectedAppSecretValue: '',
         jwtUsername: '',
+        uatTenantId: '',
+        uatIssuer: '',
+        uatUsernameClaimName: '',
+        uatPrivateKey: '',
+        uatKeyId: '',
       },
       tableauAuthInfo: {
         type: 'X-Tableau-Auth',
@@ -104,5 +119,37 @@ describe('resolveEmbedToken', () => {
     });
 
     expect(result.isErr()).toBe(true);
+  });
+
+  describe('uat embed token', async () => {
+    const { privateKey } = await generateKeyPair('RS256', { extractable: true });
+    const privateKeyPem = await exportPKCS8(privateKey);
+
+    const uatConfig = {
+      auth: 'uat' as const,
+      connectedAppClientId: '',
+      connectedAppSecretId: '',
+      connectedAppSecretValue: '',
+      jwtUsername: 'embed-user@example.com',
+      uatTenantId: 'test-tenant-id',
+      uatIssuer: 'test-issuer',
+      uatUsernameClaimName: 'email',
+      uatPrivateKey: privateKeyPem,
+      uatKeyId: 'test-key-id',
+    };
+
+    it('signs a uat embed JWT from the existing UAT key with the embed scope', async () => {
+      const result = await resolveEmbedToken({
+        config: uatConfig,
+        tableauAuthInfo: undefined,
+      });
+
+      expect(result.isOk()).toBe(true);
+      const payload = decodeJwt(result.unwrap().token);
+      expect(payload.scp).toEqual([EMBED_SCOPE]);
+      expect(payload.email).toBe('embed-user@example.com');
+      expect(payload.iss).toBe('test-issuer');
+      expect(payload['https://tableau.com/tenantId']).toBe('test-tenant-id');
+    });
   });
 });
