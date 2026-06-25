@@ -48,13 +48,10 @@ export async function resolveEmbedToken({
   }
 
   // 2. direct-trust: sign an embed JWT from the existing Connected App secret.
-  if (
-    config.auth === 'direct-trust' &&
-    config.connectedAppClientId &&
-    config.connectedAppSecretId &&
-    config.connectedAppSecretValue &&
-    config.jwtUsername
-  ) {
+  // Keyed on config.auth alone — config validation guarantees the CONNECTED_APP_* fields
+  // and jwtUsername are populated when AUTH=direct-trust, exactly like
+  // getNewRestApiInstanceAsync's direct-trust branch.
+  if (config.auth === 'direct-trust') {
     const token = await getJwt({
       username: config.jwtUsername,
       config: {
