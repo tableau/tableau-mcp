@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 2
 ---
 
 # Popular Client Integrations
@@ -12,7 +12,7 @@ This guide walks you through everything you need to explore Tableau data via Tab
 [Claude Desktop](https://claude.ai/download) using our built-in Claude desktop extension. Once it's
 running you'll be able to explore data like this example:
 
-![Claude Desktop](./getting-started/images/claude-desktop.png)
+![Claude Desktop](../getting-started/images/claude-desktop.png)
 
 ### Basic Architecture
 
@@ -71,7 +71,7 @@ memorable like "mcp" is suggested to make later configuraton easier. Make sure t
 value because it's only shown this one time. (Also, be aware that Tableau PATs will expire after 15
 days of inactivity, so you may need to periodically create a new one.)
 
-![Personal Access Token Config](./getting-started/images/pat.png)
+![Personal Access Token Config](../getting-started/images/pat.png)
 
 :::warning
 
@@ -153,7 +153,7 @@ Once the extension is installed, you'll be prompted to configure Tableau MCP:
 
 When everything is configured it should look like this:
 
-![Claude Desktop Extension configuration](./getting-started/images/dxt-config.png)
+![Claude Desktop Extension configuration](../getting-started/images/dxt-config.png)
 
 ## Using Claude with MCP
 
@@ -163,7 +163,7 @@ To verify that Claude is talking to Tableau correctly, start a new chat and try 
 "list some of the Tableau datasources". Claude will show a pop-up asking for permission to run the
 list-datasources tool, then you should see a result like this:
 
-![List Datasources Result](./getting-started/images/list-datasources.png)
+![List Datasources Result](../getting-started/images/list-datasources.png)
 
 For any datasource it lists, you can ask it to explain it in more detail and even sample some data
 if you like.
@@ -173,28 +173,28 @@ if you like.
 For large, shared sites, there may be a ton of "Superstore" datasources. To help narrow down to a
 specific one, include additional qualifiers in your prompt, like the name of the user who owns it.
 
-![List Datasources With Owner Result](./getting-started/images/list-datasources-with-owner.png)
+![List Datasources With Owner Result](../getting-started/images/list-datasources-with-owner.png)
 
 To peek under the hood and understand how the AI client (Claude) and Tableau MCP are communicating,
 you can click to expand any of the tool calls it makes. For example the query above used the List
 Datasources tool with a search by name and owner name:
 
-![List Datasources Tool Call Trace](./getting-started/images/list-datasources-trace.png)
+![List Datasources Tool Call Trace](../getting-started/images/list-datasources-trace.png)
 
 In the same chat session you can go deeper and explore the selected data. Asking the model to
 explore the data and propose questions is a great cheat code:
 
-![Data Exploration Result 1](./getting-started/images/data-exploration-1.png)
+![Data Exploration Result 1](../getting-started/images/data-exploration-1.png)
 
-![Data Exploration Result 2](./getting-started/images/data-exploration-2.png)
+![Data Exploration Result 2](../getting-started/images/data-exploration-2.png)
 
 Here's another example question along with a request to show me visually:
 
-![Data Exploration Result 3](./getting-started/images/data-exploration-3.png)
+![Data Exploration Result 3](../getting-started/images/data-exploration-3.png)
 
 Claude also created a simple React page to visualize everything, per my request:
 
-![Data Exploration Visualization](./getting-started/images/visualization.png)
+![Data Exploration Visualization](../getting-started/images/visualization.png)
 
 Claude calls these Artifacts and because they are single-page web content they can be published and
 shared. For example this one is live here:
@@ -231,7 +231,7 @@ are from Claude Desktop but can apply similarly with any AI tools.
 When the AI client is using tools through Tableau MCP, it might fail and report a "401 Unauthorized"
 error.
 
-![401 Unauthorized Error](./getting-started/images/401-error.png)
+![401 Unauthorized Error](../getting-started/images/401-error.png)
 
 Solutions:
 
@@ -245,7 +245,7 @@ Solutions:
 For Tableau MCP to work, the user must have the "API access" permission enabled. In cases where the
 user does not have that permission, a "403 Forbidden" error can occur.
 
-![403 Forbidden Error](./getting-started/images/403-error.png)
+![403 Forbidden Error](../getting-started/images/403-error.png)
 
 Solution:
 

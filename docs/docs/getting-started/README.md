@@ -1,6 +1,6 @@
 # Getting Started
 
-This guide walks through getting started with Tableau MCP. The easiest way for Cloud users to get started is to use the [remote hosted Tableau MCP server](insert link to remote hosted page). If you're a Server customer and/or you want to run Tableau MCP locally, follow the guide below. 
+This guide walks through getting started with Tableau MCP. The easiest way for Cloud users to get started is to use the [remote hosted Tableau MCP server](../hosted-tableau-mcp). If you're a Server customer and/or you want to run Tableau MCP locally, follow the guide below.
 
 ## Run with npx
 
