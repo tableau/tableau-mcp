@@ -123,8 +123,11 @@ describe('embedTableauViz', () => {
 
     vizElement.dispatchEvent(event);
 
-    // Should set height to the reported viz height
-    expect(vizElement.style.height).toBe('800px');
+    // Should set height to the reported sheet height plus chrome offset
+    // The chrome offset accounts for the tableau-viz border and status bar
+    // that are not included in the reported sheet height.
+    const EXPECTED_CHROME_OFFSET = 28;
+    expect(vizElement.style.height).toBe(`${800 + EXPECTED_CHROME_OFFSET}px`);
   });
 
   it('should leave height unset when firstvizsizeknown has no numeric height', () => {
