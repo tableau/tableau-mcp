@@ -10,6 +10,10 @@ const directTrustConfig = {
   connectedAppSecretId: 'secret-id-456',
   connectedAppSecretValue: 'super-secret-value',
   jwtUsername: 'embed-user@example.com',
+  embeddingConnectedAppClientId: '',
+  embeddingConnectedAppSecretId: '',
+  embeddingConnectedAppSecretValue: '',
+  embeddingUsername: '',
 };
 
 const bearerAuthInfo = {
@@ -90,6 +94,10 @@ describe('resolveEmbedToken', () => {
         connectedAppSecretId: '',
         connectedAppSecretValue: '',
         jwtUsername: '',
+        embeddingConnectedAppClientId: '',
+        embeddingConnectedAppSecretId: '',
+        embeddingConnectedAppSecretValue: '',
+        embeddingUsername: '',
       },
       tableauAuthInfo: undefined,
     });
@@ -106,6 +114,10 @@ describe('resolveEmbedToken', () => {
         connectedAppSecretId: '',
         connectedAppSecretValue: '',
         jwtUsername: '',
+        embeddingConnectedAppClientId: '',
+        embeddingConnectedAppSecretId: '',
+        embeddingConnectedAppSecretValue: '',
+        embeddingUsername: '',
       },
       tableauAuthInfo: {
         type: 'X-Tableau-Auth',
