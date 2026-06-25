@@ -1,5 +1,5 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Err, Ok } from 'ts-results-es';
+import { Ok } from 'ts-results-es';
 
 import { EmbedTokenNotAvailableError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/featureGate.js';
@@ -39,7 +39,7 @@ This tool resolves the embed token from the current session's signing material â
     },
     disabled: !getFeatureGate().isFeatureEnabled('mcp-apps'),
     callback: async (_args, extra): Promise<CallToolResult> => {
-      return getEmbedTokenTool.logAndExecute<{ token: string; tokenType: string }>({
+      return getEmbedTokenTool.logAndExecute<{ token: string }>({
         extra,
         args: {},
         callback: async () => {
@@ -47,7 +47,7 @@ This tool resolves the embed token from the current session's signing material â
 
           // 1. Bearer pass-through: if tableauAuthInfo is a Bearer JWT, use it directly.
           if (tableauAuthInfo?.type === 'Bearer') {
-            return Ok({ token: tableauAuthInfo.raw, tokenType: 'Bearer' });
+            return Ok({ token: tableauAuthInfo.raw });
           }
 
           // 2. Otherwise: build an AuthConfig and let the resolver sign an embed token.
@@ -67,7 +67,7 @@ This tool resolves the embed token from the current session's signing material â
             return new EmbedTokenNotAvailableError().toErr();
           }
 
-          return Ok({ token: result.value.token, tokenType: 'Bearer' });
+          return Ok({ token: result.value.token });
         },
         constrainSuccessResult: (result) => ({ type: 'success', result }),
       });

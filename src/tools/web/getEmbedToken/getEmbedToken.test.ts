@@ -72,7 +72,6 @@ describe('getEmbedTokenTool', () => {
     invariant(result.content[0].type === 'text');
     const response = JSON.parse(result.content[0].text);
     expect(response.token).toBe(MOCK_TOKEN);
-    expect(response.tokenType).toBe('Bearer');
   });
 
   it('signs a direct-trust embed JWT carrying the embed scope', async () => {
@@ -84,7 +83,6 @@ describe('getEmbedTokenTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const response = JSON.parse(result.content[0].text);
-    expect(response.tokenType).toBe('Bearer');
     const payload = decodeJwt(response.token);
     expect(payload.scp).toEqual([EMBED_SCOPE]);
     expect(payload.sub).toBe('embed-user@example.com');
@@ -131,7 +129,6 @@ describe('getEmbedTokenTool', () => {
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     const response = JSON.parse(result.content[0].text);
-    expect(response.tokenType).toBe('Bearer');
     const payload = decodeJwt(response.token);
     expect(payload.scp).toEqual([EMBED_SCOPE]);
     expect(payload.email).toBe('embed-user@example.com');

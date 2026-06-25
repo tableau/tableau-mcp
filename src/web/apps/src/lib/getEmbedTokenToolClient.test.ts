@@ -14,7 +14,6 @@ describe('callGetEmbedTokenTool', () => {
             type: 'text',
             text: JSON.stringify({
               token: 'test-bearer-token-12345',
-              tokenType: 'Bearer',
             }),
           },
         ],
@@ -77,7 +76,6 @@ describe('callGetEmbedTokenTool', () => {
           {
             type: 'text',
             text: JSON.stringify({
-              tokenType: 'Bearer',
               // token field is missing
             }),
           },
