@@ -108,7 +108,7 @@ describe('embedTableauViz', () => {
 
     expect(vizElement).toBeTruthy();
 
-    // Simulate firstvizsizeknown event with viz height
+    // Simulate firstvizsizeknown event with viz height and chrome height
     const event = new CustomEvent('firstvizsizeknown', {
       detail: {
         vizSize: {
@@ -117,17 +117,16 @@ describe('embedTableauViz', () => {
               height: 800,
             },
           },
+          chromeHeight: 32,
         },
       },
     });
 
     vizElement.dispatchEvent(event);
 
-    // Should set height to the reported sheet height plus chrome offset
-    // The chrome offset accounts for the tableau-viz border and status bar
-    // that are not included in the reported sheet height.
-    const EXPECTED_CHROME_OFFSET = 28;
-    expect(vizElement.style.height).toBe(`${800 + EXPECTED_CHROME_OFFSET}px`);
+    // Should set height to the reported sheet height plus the API-provided chromeHeight
+    // The chromeHeight is the height of Tableau UI elements (chrome) surrounding the view
+    expect(vizElement.style.height).toBe(`${800 + 32}px`);
   });
 
   it('should leave height unset when firstvizsizeknown has no numeric height', () => {
@@ -149,6 +148,36 @@ describe('embedTableauViz', () => {
     vizElement.dispatchEvent(event);
 
     // Height should remain unset
+    expect(vizElement.style.height).toBe('');
+  });
+
+  it('should leave height unset when chromeHeight is missing', () => {
+    const vizUrl = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view';
+    const token = 'test-token-123';
+
+    embedTableauViz(vizUrl, token);
+
+    const container = document.getElementById('tableauVizContainer');
+    const vizElement = container?.querySelector('tableau-viz') as HTMLElement;
+
+    expect(vizElement).toBeTruthy();
+
+    // Simulate firstvizsizeknown event with sheetSize but no chromeHeight
+    const event = new CustomEvent('firstvizsizeknown', {
+      detail: {
+        vizSize: {
+          sheetSize: {
+            maxSize: {
+              height: 800,
+            },
+          },
+        },
+      },
+    });
+
+    vizElement.dispatchEvent(event);
+
+    // Height should remain unset when chromeHeight is not provided
     expect(vizElement.style.height).toBe('');
   });
 });
