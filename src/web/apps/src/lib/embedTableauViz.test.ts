@@ -151,7 +151,7 @@ describe('embedTableauViz', () => {
     expect(vizElement.style.height).toBe('');
   });
 
-  it('should leave height unset when chromeHeight is missing', () => {
+  it('should set height to sheetHeight when chromeHeight is missing (no chrome)', () => {
     const vizUrl = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view';
     const token = 'test-token-123';
 
@@ -177,7 +177,38 @@ describe('embedTableauViz', () => {
 
     vizElement.dispatchEvent(event);
 
-    // Height should remain unset when chromeHeight is not provided
-    expect(vizElement.style.height).toBe('');
+    // Should set height to sheetHeight alone when chromeHeight is absent (treated as 0)
+    expect(vizElement.style.height).toBe('800px');
+  });
+
+  it('should set height to sheetHeight when chromeHeight is 0', () => {
+    const vizUrl = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view';
+    const token = 'test-token-123';
+
+    embedTableauViz(vizUrl, token);
+
+    const container = document.getElementById('tableauVizContainer');
+    const vizElement = container?.querySelector('tableau-viz') as HTMLElement;
+
+    expect(vizElement).toBeTruthy();
+
+    // Simulate firstvizsizeknown event with sheetSize and chromeHeight = 0
+    const event = new CustomEvent('firstvizsizeknown', {
+      detail: {
+        vizSize: {
+          sheetSize: {
+            maxSize: {
+              height: 800,
+            },
+          },
+          chromeHeight: 0,
+        },
+      },
+    });
+
+    vizElement.dispatchEvent(event);
+
+    // Should set height to sheetHeight when chromeHeight is explicitly 0
+    expect(vizElement.style.height).toBe('800px');
   });
 });

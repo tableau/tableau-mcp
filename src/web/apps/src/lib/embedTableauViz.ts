@@ -50,12 +50,14 @@ export function embedTableauViz(vizUrl: string, token: string): void {
     const sheetHeight = vizSize?.sheetSize?.maxSize?.height;
     const chromeHeight = vizSize?.chromeHeight;
 
-    // Only set height when both sheetHeight and chromeHeight are available
-    if (typeof sheetHeight !== 'number' || typeof chromeHeight !== 'number') {
+    // Only set height when sheetHeight is available; chromeHeight may be 0 or absent (no chrome)
+    if (typeof sheetHeight !== 'number') {
       return;
     }
 
-    viz.style.height = `${sheetHeight + chromeHeight}px`;
+    // chromeHeight may be missing, undefined, or 0 when there's no chrome; treat as 0
+    const effectiveChromeHeight = typeof chromeHeight === 'number' ? chromeHeight : 0;
+    viz.style.height = `${sheetHeight + effectiveChromeHeight}px`;
   });
 
   container.replaceChildren(viz);
