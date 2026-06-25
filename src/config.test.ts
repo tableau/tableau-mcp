@@ -564,6 +564,79 @@ describe('Config', () => {
     });
   });
 
+  describe('Embedding Connected App config parsing', () => {
+    function stubDefaultEmbeddingEnvVars(): void {
+      vi.stubEnv('EMBEDDING_CONNECTED_APP_CLIENT_ID', 'embed-client-id');
+      vi.stubEnv('EMBEDDING_CONNECTED_APP_SECRET_ID', 'embed-secret-id');
+      vi.stubEnv('EMBEDDING_CONNECTED_APP_SECRET_VALUE', 'embed-secret-value');
+      vi.stubEnv('EMBEDDING_USERNAME', 'embed-user@example.com');
+    }
+
+    it('should default all embedding fields to empty strings when none are set', () => {
+      const config = new Config();
+      expect(config.embeddingConnectedAppClientId).toBe('');
+      expect(config.embeddingConnectedAppSecretId).toBe('');
+      expect(config.embeddingConnectedAppSecretValue).toBe('');
+      expect(config.embeddingUsername).toBe('');
+    });
+
+    it('should configure all embedding fields when all are provided (AUTH=pat)', () => {
+      stubDefaultEmbeddingEnvVars();
+
+      const config = new Config();
+      expect(config.embeddingConnectedAppClientId).toBe('embed-client-id');
+      expect(config.embeddingConnectedAppSecretId).toBe('embed-secret-id');
+      expect(config.embeddingConnectedAppSecretValue).toBe('embed-secret-value');
+      expect(config.embeddingUsername).toBe('embed-user@example.com');
+    });
+
+    it('should allow all embedding fields when AUTH is "uat"', () => {
+      vi.stubEnv('AUTH', 'uat');
+      vi.stubEnv('UAT_TENANT_ID', 'test-tenant-id');
+      vi.stubEnv('UAT_ISSUER', 'test-issuer');
+      vi.stubEnv('UAT_USERNAME_CLAIM', 'test-username');
+      vi.stubEnv('UAT_PRIVATE_KEY', 'test-private-key');
+      vi.stubEnv('UAT_KEY_ID', 'test-key-id');
+      stubDefaultEmbeddingEnvVars();
+
+      const config = new Config();
+      expect(config.auth).toBe('uat');
+      expect(config.embeddingConnectedAppClientId).toBe('embed-client-id');
+      expect(config.embeddingUsername).toBe('embed-user@example.com');
+    });
+
+    it('should not require embedding fields for direct-trust auth', () => {
+      vi.stubEnv('AUTH', 'direct-trust');
+      vi.stubEnv('JWT_SUB_CLAIM', 'test-jwt-sub-claim');
+      vi.stubEnv('CONNECTED_APP_CLIENT_ID', 'test-client-id');
+      vi.stubEnv('CONNECTED_APP_SECRET_ID', 'test-secret-id');
+      vi.stubEnv('CONNECTED_APP_SECRET_VALUE', 'test-secret-value');
+
+      const config = new Config();
+      expect(config.auth).toBe('direct-trust');
+      expect(config.embeddingConnectedAppClientId).toBe('');
+      expect(config.embeddingUsername).toBe('');
+    });
+
+    it('should throw when only some embedding fields are set (CLIENT_ID without the rest)', () => {
+      vi.stubEnv('EMBEDDING_CONNECTED_APP_CLIENT_ID', 'embed-client-id');
+
+      expect(() => new Config()).toThrow(
+        'EMBEDDING_CONNECTED_APP_CLIENT_ID, EMBEDDING_CONNECTED_APP_SECRET_ID, EMBEDDING_CONNECTED_APP_SECRET_VALUE, and EMBEDDING_USERNAME must all be set together',
+      );
+    });
+
+    it('should throw when EMBEDDING_USERNAME is missing but the credential is set', () => {
+      vi.stubEnv('EMBEDDING_CONNECTED_APP_CLIENT_ID', 'embed-client-id');
+      vi.stubEnv('EMBEDDING_CONNECTED_APP_SECRET_ID', 'embed-secret-id');
+      vi.stubEnv('EMBEDDING_CONNECTED_APP_SECRET_VALUE', 'embed-secret-value');
+
+      expect(() => new Config()).toThrow(
+        'EMBEDDING_CONNECTED_APP_CLIENT_ID, EMBEDDING_CONNECTED_APP_SECRET_ID, EMBEDDING_CONNECTED_APP_SECRET_VALUE, and EMBEDDING_USERNAME must all be set together',
+      );
+    });
+  });
+
   describe('OAuth configuration', () => {
     function stubDefaultOAuthEnvVars(): void {
       vi.stubEnv('OAUTH_ISSUER', 'https://example.com');

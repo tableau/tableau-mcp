@@ -29,6 +29,10 @@ export class Config extends BaseConfig {
   connectedAppClientId: string;
   connectedAppSecretId: string;
   connectedAppSecretValue: string;
+  embeddingConnectedAppClientId: string;
+  embeddingConnectedAppSecretId: string;
+  embeddingConnectedAppSecretValue: string;
+  embeddingUsername: string;
   uatTenantId: string;
   uatIssuer: string;
   uatUsernameClaimName: string;
@@ -90,6 +94,10 @@ export class Config extends BaseConfig {
       CONNECTED_APP_CLIENT_ID: clientId,
       CONNECTED_APP_SECRET_ID: secretId,
       CONNECTED_APP_SECRET_VALUE: secretValue,
+      EMBEDDING_CONNECTED_APP_CLIENT_ID: embeddingClientId,
+      EMBEDDING_CONNECTED_APP_SECRET_ID: embeddingSecretId,
+      EMBEDDING_CONNECTED_APP_SECRET_VALUE: embeddingSecretValue,
+      EMBEDDING_USERNAME: embeddingUsername,
       UAT_TENANT_ID: uatTenantId,
       UAT_ISSUER: uatIssuer,
       UAT_USERNAME_CLAIM_NAME: uatUsernameClaimName,
@@ -180,6 +188,20 @@ export class Config extends BaseConfig {
     this.enableMcpSiteSettings = enableMcpSiteSettings !== 'false';
     this.allowSitesToConfigureRequestOverrides = allowSitesToConfigureRequestOverrides === 'true';
     this.enablePassthroughAuth = enablePassthroughAuth === 'true';
+
+    const embeddingFields = [
+      embeddingClientId,
+      embeddingSecretId,
+      embeddingSecretValue,
+      embeddingUsername,
+    ];
+    const setEmbeddingFieldCount = embeddingFields.filter(Boolean).length;
+    if (setEmbeddingFieldCount > 0 && setEmbeddingFieldCount < embeddingFields.length) {
+      throw new Error(
+        'EMBEDDING_CONNECTED_APP_CLIENT_ID, EMBEDDING_CONNECTED_APP_SECRET_ID, EMBEDDING_CONNECTED_APP_SECRET_VALUE, and EMBEDDING_USERNAME must all be set together (the embedding Connected App credential is optional, but all four are required when any one is provided).',
+      );
+    }
+
     const disableOauthOverride = disableOauth === 'true';
     const disableScopes = oauthDisableScopes === 'true';
     const enforceScopes = !disableScopes;
@@ -389,6 +411,10 @@ export class Config extends BaseConfig {
     this.connectedAppClientId = clientId ?? '';
     this.connectedAppSecretId = secretId ?? '';
     this.connectedAppSecretValue = secretValue ?? '';
+    this.embeddingConnectedAppClientId = embeddingClientId ?? '';
+    this.embeddingConnectedAppSecretId = embeddingSecretId ?? '';
+    this.embeddingConnectedAppSecretValue = embeddingSecretValue ?? '';
+    this.embeddingUsername = embeddingUsername ?? '';
     this.uatTenantId = uatTenantId ?? '';
     this.uatIssuer = uatIssuer ?? '';
     this.uatUsernameClaimName = uatUsernameClaimName || 'email';
