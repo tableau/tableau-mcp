@@ -1,5 +1,5 @@
 /**
- * @file Authentication utilities for Tableau MCP App
+ * @file getEmbedTokenToolClient - Tableau MCP App embed token utilities
  */
 import { App } from '@modelcontextprotocol/ext-apps';
 import { z } from 'zod';
@@ -18,13 +18,13 @@ const oauthTokenDataSchema = z.object({
 });
 
 /**
- * Calls the get-oauth-token tool to retrieve the OAuth Bearer token from the MCP server
+ * Calls the get-embed-token tool to retrieve the embed token from the MCP server
  * @param app - The MCP App instance
- * @returns Promise containing the OAuth token string
+ * @returns Promise containing the embed token string
  */
-export async function callGetOAuthTokenTool(app: App): Promise<string> {
+export async function callGetEmbedTokenTool(app: App): Promise<string> {
   const result = await app.callServerTool({
-    name: 'get-oauth-token',
+    name: 'get-embed-token',
     arguments: {},
   });
 

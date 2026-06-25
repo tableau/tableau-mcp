@@ -4,22 +4,22 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getOAuthTokenTool } from './getOAuthToken.js';
+import { getEmbedTokenTool } from './getEmbedToken.js';
 
 const MOCK_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.dGVzdC1wYXlsb2Fk.signature';
 
-describe('getOAuthTokenTool', () => {
+describe('getEmbedTokenTool', () => {
   it('should create a tool instance with correct properties', async () => {
-    const tool = getOAuthTokenTool(new WebMcpServer());
+    const tool = getEmbedTokenTool(new WebMcpServer());
     const annotations = await Provider.from(tool.annotations);
-    expect(tool.name).toBe('get-oauth-token');
+    expect(tool.name).toBe('get-embed-token');
     expect(tool.paramsSchema).toEqual({});
     expect(annotations?.readOnlyHint).toBe(true);
     expect(annotations?.openWorldHint).toBe(false);
   });
 
   it('should set visibility to app-only', () => {
-    const tool = getOAuthTokenTool(new WebMcpServer());
+    const tool = getEmbedTokenTool(new WebMcpServer());
     expect(tool.meta?.ui?.visibility).toEqual(['app']);
   });
 
@@ -86,7 +86,7 @@ describe('getOAuthTokenTool', () => {
 async function getToolResult(
   extra: ReturnType<typeof getMockRequestHandlerExtra>,
 ): Promise<CallToolResult> {
-  const tool = getOAuthTokenTool(new WebMcpServer());
+  const tool = getEmbedTokenTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
   return await callback({}, extra);
 }

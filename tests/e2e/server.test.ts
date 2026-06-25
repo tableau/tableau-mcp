@@ -34,7 +34,7 @@ describe('server', () => {
     it('should list tools', async () => {
       const names = await client.listTools();
       const oauthOnlyTools: ReadonlyArray<WebToolName> = [
-        'get-oauth-token',
+        'get-embed-token',
         'revoke-access-token',
         'reset-consent',
       ];
@@ -119,7 +119,7 @@ describe('server', () => {
     it('should list tools', async () => {
       const names = await client.listTools();
       const oauthOnlyTools: ReadonlyArray<WebToolName> = [
-        'get-oauth-token',
+        'get-embed-token',
         'revoke-access-token',
         'reset-consent',
       ];

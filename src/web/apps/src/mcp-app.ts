@@ -7,7 +7,7 @@ import { z } from 'zod';
 import pkg from '~/package.json';
 
 import { embedTableauViz } from './lib/embedTableauViz.js';
-import { callGetOAuthTokenTool } from './lib/getOAuthTokenToolClient.js';
+import { callGetEmbedTokenTool } from './lib/getEmbedTokenToolClient.js';
 
 const urlSchema = z.object({
   url: z.string().url(),
@@ -94,7 +94,7 @@ app.ontoolresult = async (result: CallToolResult) => {
   try {
     const viewUrl = extractUrlObjectFromResult(result);
     await loadTableauEmbeddingApi(viewUrl);
-    const token = await callGetOAuthTokenTool(app);
+    const token = await callGetEmbedTokenTool(app);
     embedTableauViz(viewUrl, token);
   } catch (error) {
     console.error('Error embedding viz:', error);

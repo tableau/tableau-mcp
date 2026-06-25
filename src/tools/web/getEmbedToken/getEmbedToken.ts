@@ -22,12 +22,12 @@ const paramsSchema = {};
  *   - Passthrough: not an OAuth token.
  *   - PAT mode: no OAuth token available.
  */
-export const getOAuthTokenTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
+export const getEmbedTokenTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const config = getConfig();
 
-  const getOAuthTokenTool = new WebTool({
+  const getEmbedTokenTool = new WebTool({
     server,
-    name: 'get-oauth-token',
+    name: 'get-embed-token',
     description: `Returns the OAuth Bearer token (Tableau JWT) used to authenticate the current session.
 
 This tool provides the raw Tableau JWT Bearer token associated with the current session for use by client applications. The token value is never exposed to the model.
@@ -53,7 +53,7 @@ This tool requires no input — it operates on the token already associated with
     },
     disabled: !config.oauth.enabled || config.oauth.embeddedAuthzServer,
     callback: async (_args, extra): Promise<CallToolResult> => {
-      return getOAuthTokenTool.logAndExecute<{ token: string; tokenType: string }>({
+      return getEmbedTokenTool.logAndExecute<{ token: string; tokenType: string }>({
         extra,
         args: {},
         callback: async () => {
@@ -82,5 +82,5 @@ This tool requires no input — it operates on the token already associated with
     },
   });
 
-  return getOAuthTokenTool;
+  return getEmbedTokenTool;
 };
