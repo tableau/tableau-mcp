@@ -1,55 +1,29 @@
 import { decodeJwt, exportPKCS8, generateKeyPair } from 'jose';
 
+import { AuthConfig } from '../../../sdks/tableau/authConfig.js';
 import { EMBED_SCOPE, resolveEmbedToken } from './resolveEmbedToken.js';
 
-const BEARER_JWT = 'eyJhbGciOiJIUzI1NiJ9.dGVzdC1wYXlsb2Fk.signature';
-
-const directTrustConfig = {
-  auth: 'direct-trust' as const,
-  connectedAppClientId: 'client-id-123',
-  connectedAppSecretId: 'secret-id-456',
-  connectedAppSecretValue: 'super-secret-value',
-  jwtUsername: 'embed-user@example.com',
-  uatTenantId: '',
-  uatIssuer: '',
-  uatUsernameClaimName: '',
-  uatPrivateKey: '',
-  uatKeyId: '',
+const directTrustAuthConfig: AuthConfig = {
+  type: 'direct-trust',
+  siteName: 'site',
+  username: 'embed-user@example.com',
+  clientId: 'client-id-123',
+  secretId: 'secret-id-456',
+  secretValue: 'super-secret-value',
+  scopes: new Set(),
 };
 
-const bearerAuthInfo = {
-  type: 'Bearer' as const,
-  raw: BEARER_JWT,
-  username: 'bearer-user@example.com',
-  server: 'https://example.com',
-  siteId: 'site-id',
+const patAuthConfig: AuthConfig = {
+  type: 'pat',
   siteName: 'site',
+  patName: 'test-pat-name',
+  patValue: 'test-pat-value',
 };
 
 describe('resolveEmbedToken', () => {
-  it('passes through a Tableau Bearer JWT when present', async () => {
+  it('signs a direct-trust embed JWT with the embed scope and configured username', async () => {
     const result = await resolveEmbedToken({
-      config: { ...directTrustConfig, auth: 'oauth' },
-      tableauAuthInfo: bearerAuthInfo,
-    });
-
-    expect(result.isOk()).toBe(true);
-    expect(result.unwrap().token).toBe(BEARER_JWT);
-  });
-
-  it('prefers a present Bearer JWT over signing material', async () => {
-    const result = await resolveEmbedToken({
-      config: directTrustConfig,
-      tableauAuthInfo: bearerAuthInfo,
-    });
-
-    expect(result.unwrap().token).toBe(BEARER_JWT);
-  });
-
-  it('signs a direct-trust embed JWT with the embed scope and configured sub', async () => {
-    const result = await resolveEmbedToken({
-      config: directTrustConfig,
-      tableauAuthInfo: undefined,
+      authConfig: directTrustAuthConfig,
     });
 
     expect(result.isOk()).toBe(true);
@@ -60,88 +34,50 @@ describe('resolveEmbedToken', () => {
     expect(payload.aud).toBe('tableau');
   });
 
-  it('also signs for direct-trust when an X-Tableau-Auth authInfo is present (embedded-authz)', async () => {
+  it('includes additionalPayload in the signed JWT', async () => {
+    const authConfigWithPayload: AuthConfig = {
+      ...directTrustAuthConfig,
+      additionalPayload: { custom: 'value', other: 123 },
+    };
+
     const result = await resolveEmbedToken({
-      config: directTrustConfig,
-      tableauAuthInfo: {
-        type: 'X-Tableau-Auth',
-        username: 'embed-user@example.com',
-        server: 'https://example.com',
-        siteName: 'site',
-      },
+      authConfig: authConfigWithPayload,
     });
 
     expect(result.isOk()).toBe(true);
-    expect(decodeJwt(result.unwrap().token).scp).toEqual([EMBED_SCOPE]);
+    const payload = decodeJwt(result.unwrap().token);
+    expect(payload.custom).toBe('value');
+    expect(payload.other).toBe(123);
   });
 
-  it('returns not-available when no Bearer JWT and no signing material exist', async () => {
+  it('returns not-available for pat AuthConfig', async () => {
     const result = await resolveEmbedToken({
-      config: {
-        auth: 'pat',
-        connectedAppClientId: '',
-        connectedAppSecretId: '',
-        connectedAppSecretValue: '',
-        jwtUsername: '',
-        uatTenantId: '',
-        uatIssuer: '',
-        uatUsernameClaimName: '',
-        uatPrivateKey: '',
-        uatKeyId: '',
-      },
-      tableauAuthInfo: undefined,
+      authConfig: patAuthConfig,
     });
 
     expect(result.isErr()).toBe(true);
     expect(result.unwrapErr()).toBe('embed-token-not-available');
   });
 
-  it('returns not-available for non-direct-trust auth even with an X-Tableau-Auth authInfo', async () => {
-    const result = await resolveEmbedToken({
-      config: {
-        auth: 'pat',
-        connectedAppClientId: '',
-        connectedAppSecretId: '',
-        connectedAppSecretValue: '',
-        jwtUsername: '',
-        uatTenantId: '',
-        uatIssuer: '',
-        uatUsernameClaimName: '',
-        uatPrivateKey: '',
-        uatKeyId: '',
-      },
-      tableauAuthInfo: {
-        type: 'X-Tableau-Auth',
-        username: 'pat-user@example.com',
-        server: 'https://example.com',
-        siteName: 'site',
-      },
-    });
-
-    expect(result.isErr()).toBe(true);
-  });
-
   describe('uat embed token', async () => {
     const { privateKey } = await generateKeyPair('RS256', { extractable: true });
     const privateKeyPem = await exportPKCS8(privateKey);
 
-    const uatConfig = {
-      auth: 'uat' as const,
-      connectedAppClientId: '',
-      connectedAppSecretId: '',
-      connectedAppSecretValue: '',
-      jwtUsername: 'embed-user@example.com',
-      uatTenantId: 'test-tenant-id',
-      uatIssuer: 'test-issuer',
-      uatUsernameClaimName: 'email',
-      uatPrivateKey: privateKeyPem,
-      uatKeyId: 'test-key-id',
+    const uatAuthConfig: AuthConfig = {
+      type: 'uat',
+      siteName: 'site',
+      username: 'embed-user@example.com',
+      tenantId: 'test-tenant-id',
+      issuer: 'test-issuer',
+      usernameClaimName: 'email',
+      privateKey: privateKeyPem,
+      keyId: 'test-key-id',
+      scopes: new Set(),
     };
 
-    it('signs a uat embed JWT from the existing UAT key with the embed scope', async () => {
+    it('signs a uat embed JWT from the UAT key with the embed scope', async () => {
       const result = await resolveEmbedToken({
-        config: uatConfig,
-        tableauAuthInfo: undefined,
+        authConfig: uatAuthConfig,
       });
 
       expect(result.isOk()).toBe(true);
@@ -150,6 +86,21 @@ describe('resolveEmbedToken', () => {
       expect(payload.email).toBe('embed-user@example.com');
       expect(payload.iss).toBe('test-issuer');
       expect(payload['https://tableau.com/tenantId']).toBe('test-tenant-id');
+    });
+
+    it('includes additionalPayload in the uat JWT', async () => {
+      const uatConfigWithPayload: AuthConfig = {
+        ...uatAuthConfig,
+        additionalPayload: { team: 'engineering' },
+      };
+
+      const result = await resolveEmbedToken({
+        authConfig: uatConfigWithPayload,
+      });
+
+      expect(result.isOk()).toBe(true);
+      const payload = decodeJwt(result.unwrap().token);
+      expect(payload.team).toBe('engineering');
     });
   });
 });

@@ -1,7 +1,6 @@
 import { Err, Ok, Result } from 'ts-results-es';
 
-import { Config } from '../../../config.js';
-import { TableauAuthInfo } from '../../../server/oauth/schemas.js';
+import { AuthConfig } from '../../../sdks/tableau/authConfig.js';
 import { getJwt } from '../../../utils/getJwt.js';
 
 /** The Embedding API scope every embed JWT must carry. */
@@ -9,81 +8,58 @@ export const EMBED_SCOPE = 'tableau:views:embed';
 
 export type EmbedTokenError = 'embed-token-not-available';
 
-/** The slice of Config the resolver needs (keeps it trivially testable). */
-export type EmbedTokenConfig = Pick<
-  Config,
-  | 'auth'
-  | 'connectedAppClientId'
-  | 'connectedAppSecretId'
-  | 'connectedAppSecretValue'
-  | 'jwtUsername'
-  | 'uatTenantId'
-  | 'uatIssuer'
-  | 'uatUsernameClaimName'
-  | 'uatPrivateKey'
-  | 'uatKeyId'
->;
-
 /**
- * Resolves a `tableau:views:embed` token for the embedded viz, in priority order:
- *   1. A Tableau-signed Bearer JWT is present (http + Tableau-authz + AUTH=oauth) -> pass it through.
- *   2. direct-trust signing material is present -> sign an embed JWT via getJwt.
- *   2b. AUTH=uat -> sign an embed JWT from the existing UAT RS256 key via getJwt.
- *   3. Nothing available -> typed not-available (the app skips embedding).
+ * Resolves a `tableau:views:embed` token for the embedded viz by signing with the
+ * provided AuthConfig:
+ *   - direct-trust: sign an embed JWT via getJwt with connected-app config.
+ *   - uat: sign an embed JWT from the UAT RS256 key via getJwt.
+ *   - pat (or default): return not-available (caller must handle Bearer pass-through
+ *     or oauth scenarios before calling this resolver).
  *
- * Gating on the Bearer token *type* (not on config.auth) is deliberate: under
- * embedded-authz the stashed token is X-Tableau-Auth, not a Bearer JWT, so step 1
- * correctly does not fire there.
+ * Always signs with the embed scope `tableau:views:embed`, overriding any scopes in
+ * the AuthConfig (which are sign-in scopes, not embedding scopes).
  */
 export async function resolveEmbedToken({
-  config,
-  tableauAuthInfo,
+  authConfig,
 }: {
-  config: EmbedTokenConfig;
-  tableauAuthInfo: TableauAuthInfo | undefined;
+  authConfig: AuthConfig;
 }): Promise<Result<{ token: string }, EmbedTokenError>> {
-  // 1. Pass-through Bearer JWT.
-  if (tableauAuthInfo?.type === 'Bearer') {
-    return Ok({ token: tableauAuthInfo.raw });
-  }
+  switch (authConfig.type) {
+    case 'direct-trust': {
+      const token = await getJwt({
+        username: authConfig.username,
+        config: {
+          type: 'connected-app',
+          clientId: authConfig.clientId,
+          secretId: authConfig.secretId,
+          secretValue: authConfig.secretValue,
+        },
+        scopes: new Set([EMBED_SCOPE]),
+        additionalPayload: authConfig.additionalPayload,
+      });
+      return Ok({ token });
+    }
 
-  // 2. direct-trust: sign an embed JWT from the existing Connected App secret.
-  // Keyed on config.auth alone — config validation guarantees the CONNECTED_APP_* fields
-  // and jwtUsername are populated when AUTH=direct-trust, exactly like
-  // getNewRestApiInstanceAsync's direct-trust branch.
-  if (config.auth === 'direct-trust') {
-    const token = await getJwt({
-      username: config.jwtUsername,
-      config: {
-        type: 'connected-app',
-        clientId: config.connectedAppClientId,
-        secretId: config.connectedAppSecretId,
-        secretValue: config.connectedAppSecretValue,
-      },
-      scopes: new Set([EMBED_SCOPE]),
-    });
-    return Ok({ token });
-  }
+    case 'uat': {
+      const token = await getJwt({
+        username: authConfig.username,
+        config: {
+          type: 'uat',
+          tenantId: authConfig.tenantId,
+          issuer: authConfig.issuer,
+          usernameClaimName: authConfig.usernameClaimName,
+          privateKey: authConfig.privateKey,
+          keyId: authConfig.keyId,
+        },
+        scopes: new Set([EMBED_SCOPE]),
+        additionalPayload: authConfig.additionalPayload,
+      });
+      return Ok({ token });
+    }
 
-  // 2b. uat: sign an embed JWT from the existing UAT RS256 key (zero new config).
-  // Keyed on config.auth alone — config validation guarantees the UAT_* fields are
-  // populated when AUTH=uat, exactly like getNewRestApiInstanceAsync's uat branch.
-  if (config.auth === 'uat') {
-    const token = await getJwt({
-      username: config.jwtUsername,
-      config: {
-        type: 'uat',
-        tenantId: config.uatTenantId,
-        issuer: config.uatIssuer,
-        usernameClaimName: config.uatUsernameClaimName,
-        privateKey: config.uatPrivateKey,
-        keyId: config.uatKeyId,
-      },
-      scopes: new Set([EMBED_SCOPE]),
-    });
-    return Ok({ token });
+    case 'pat':
+    default:
+      // PAT cannot sign embed tokens.
+      return Err('embed-token-not-available');
   }
-
-  // 3. No material available.
-  return Err('embed-token-not-available');
 }

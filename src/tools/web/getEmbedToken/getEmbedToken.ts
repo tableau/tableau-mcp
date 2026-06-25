@@ -3,9 +3,10 @@ import { Err, Ok } from 'ts-results-es';
 
 import { McpToolError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/featureGate.js';
+import { buildAuthConfig } from '../../../sdks/tableau/buildAuthConfig.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { WebTool } from '../tool.js';
-import { resolveEmbedToken } from './resolveEmbedToken.js';
+import { EMBED_SCOPE, resolveEmbedToken } from './resolveEmbedToken.js';
 
 const paramsSchema = {};
 
@@ -44,7 +45,31 @@ This tool resolves the embed token from the current session's signing material â
         callback: async () => {
           const { config, tableauAuthInfo } = extra;
 
-          const result = await resolveEmbedToken({ config, tableauAuthInfo });
+          // 1. Bearer pass-through: if tableauAuthInfo is a Bearer JWT, use it directly.
+          if (tableauAuthInfo?.type === 'Bearer') {
+            return Ok({ token: tableauAuthInfo.raw, tokenType: 'Bearer' });
+          }
+
+          // 2. Otherwise: build an AuthConfig and let the resolver sign an embed token.
+          const authConfig = buildAuthConfig({
+            config,
+            tableauAuthInfo,
+            scopes: new Set([EMBED_SCOPE]),
+          });
+
+          if (!authConfig) {
+            // No AuthConfig available (oauth without Bearer, or other unsupported scenario)
+            return new Err(
+              new McpToolError({
+                type: 'embed-token-not-available',
+                message:
+                  'No embed token is available for the current authentication configuration.',
+                statusCode: 404,
+              }),
+            );
+          }
+
+          const result = await resolveEmbedToken({ authConfig });
           if (result.isErr()) {
             return new Err(
               new McpToolError({
