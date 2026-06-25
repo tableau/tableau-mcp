@@ -5,6 +5,11 @@ vi.mock('fs', () => ({
   readFileSync: vi.fn(),
 }));
 
+vi.mock('../utils/getDirname.js', () => ({
+  getDirname: vi.fn(() => '/mock/module/directory'),
+}));
+
+import { getDirname } from '../utils/getDirname.js';
 import { getFeatureGate, resetFeatureGate } from './featureGate.js';
 
 describe('FeatureGate', () => {
@@ -14,6 +19,23 @@ describe('FeatureGate', () => {
   });
 
   describe('loadFeatures', () => {
+    it('should resolve features.json relative to module directory not process.cwd()', () => {
+      const config = { mcpapps: true };
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));
+
+      getFeatureGate();
+
+      expect(getDirname).toHaveBeenCalled();
+      expect(readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('/mock/module/directory'),
+        'utf-8',
+      );
+      expect(readFileSync).toHaveBeenCalledWith(
+        expect.stringMatching(/\/mock\/module\/directory.*features\.json$/),
+        'utf-8',
+      );
+    });
+
     it('should load valid feature config file', () => {
       const config = { mcpapps: true, pulse: false };
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(config));

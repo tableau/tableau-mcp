@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import path from 'path';
 
 import { log } from '../logging/logger.js';
+import { getDirname } from '../utils/getDirname.js';
 
 const FEATURES_CONFIG_PATH = 'features.json';
 
@@ -22,7 +23,7 @@ export class FeatureGate {
   }
 
   private loadFeatures(): Map<string, boolean> {
-    const filePath = path.join(process.cwd(), FEATURES_CONFIG_PATH);
+    const filePath = path.join(getDirname(), FEATURES_CONFIG_PATH);
 
     try {
       const fileContent = readFileSync(filePath, 'utf-8');
