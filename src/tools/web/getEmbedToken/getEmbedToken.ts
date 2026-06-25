@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
 
-import { McpToolError } from '../../../errors/mcpToolError.js';
+import { EmbedTokenNotAvailableError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/featureGate.js';
 import { buildAuthConfig } from '../../../sdks/tableau/buildAuthConfig.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -59,26 +59,12 @@ This tool resolves the embed token from the current session's signing material â
 
           if (!authConfig) {
             // No AuthConfig available (oauth without Bearer, or other unsupported scenario)
-            return new Err(
-              new McpToolError({
-                type: 'embed-token-not-available',
-                message:
-                  'No embed token is available for the current authentication configuration.',
-                statusCode: 404,
-              }),
-            );
+            return new EmbedTokenNotAvailableError().toErr();
           }
 
           const result = await resolveEmbedToken({ authConfig });
           if (result.isErr()) {
-            return new Err(
-              new McpToolError({
-                type: 'embed-token-not-available',
-                message:
-                  'No embed token is available for the current authentication configuration.',
-                statusCode: 404,
-              }),
-            );
+            return new EmbedTokenNotAvailableError().toErr();
           }
 
           return Ok({ token: result.value.token, tokenType: 'Bearer' });

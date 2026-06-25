@@ -100,6 +100,19 @@ describe('buildAuthConfig', () => {
     expect(result).toBeUndefined();
   });
 
+  it('returns undefined for unsupported auth mode', () => {
+    const extra = getMockRequestHandlerExtra();
+    extra.config.auth = 'unsupported-auth' as any;
+
+    const result = buildAuthConfig({
+      config: extra.config,
+      tableauAuthInfo: undefined,
+      scopes: new Set(['tableau:content:read']),
+    });
+
+    expect(result).toBeUndefined();
+  });
+
   it('applies {OAUTH_USERNAME} substitution in jwtUsername', () => {
     const extra = getMockRequestHandlerExtra();
     extra.config.auth = 'direct-trust';

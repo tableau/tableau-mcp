@@ -98,7 +98,7 @@ describe('getEmbedTokenTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('No embed token is available');
+    expect(result.content[0].text).toContain('Failed to get an embed token');
   });
 
   it('returns a not-available error for oauth without Bearer token', async () => {
@@ -109,7 +109,7 @@ describe('getEmbedTokenTool', () => {
 
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('No embed token is available');
+    expect(result.content[0].text).toContain('Failed to get an embed token');
   });
 
   it('signs a uat embed JWT with the embed scope', async () => {
