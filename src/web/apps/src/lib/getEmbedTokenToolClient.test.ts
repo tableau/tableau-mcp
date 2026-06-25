@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 
 describe('callGetEmbedTokenTool', () => {
-  it('should successfully retrieve OAuth token', async () => {
+  it('should successfully retrieve embed token', async () => {
     const mockApp = {
       callServerTool: vi.fn().mockResolvedValue({
         content: [
@@ -98,16 +98,10 @@ describe('callGetEmbedTokenTool', () => {
 
   it('should handle MCP error responses', async () => {
     const mockApp = {
-      callServerTool: vi
-        .fn()
-        .mockRejectedValue(
-          new Error('OAuth Bearer token retrieval is only available for Bearer authentication'),
-        ),
+      callServerTool: vi.fn().mockRejectedValue(new Error('Tool call failed')),
     };
 
-    await expect(callGetEmbedTokenTool(mockApp as any)).rejects.toThrow(
-      'OAuth Bearer token retrieval is only available for Bearer authentication',
-    );
+    await expect(callGetEmbedTokenTool(mockApp as any)).rejects.toThrow('Tool call failed');
   });
 
   it('should return null when the tool reports no token is available (isError)', async () => {
