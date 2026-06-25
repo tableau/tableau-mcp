@@ -97,7 +97,12 @@ app.ontoolresult = async (result: CallToolResult) => {
     await loadTableauEmbeddingApi(viewUrl);
     const token = await callGetOAuthTokenTool(app);
     embedTableauViz(viewUrl, token);
-    setupOpenInTableauLink(app, viewUrl);
+
+    // Get the main container to append the "Open in Tableau" link
+    const mainContainer = document.querySelector('.main') as HTMLElement;
+    if (mainContainer) {
+      setupOpenInTableauLink(app, viewUrl, mainContainer);
+    }
   } catch (error) {
     console.error('Error embedding viz:', error);
   }
