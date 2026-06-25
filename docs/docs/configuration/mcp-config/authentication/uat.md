@@ -102,11 +102,4 @@ Example:
 }
 ```
 
-## Embedded viz
-
-When `AUTH` is `uat`, the MCP app UI embeds the Tableau viz with no additional
-configuration. The server signs the per-viz embed token (scope
-`tableau:views:embed`) using the same `UAT_*` RS256 key it already uses to sign
-login JWTs — there are no extra embedding variables to set.
-
 [uat]: https://help.tableau.com/current/api/cloud-manager/en-us/docs/unified_access_tokens.html
