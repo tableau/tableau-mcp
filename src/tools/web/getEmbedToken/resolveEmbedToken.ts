@@ -28,6 +28,7 @@ export type EmbedTokenConfig = Pick<
  * Resolves a `tableau:views:embed` token for the embedded viz, in priority order:
  *   1. A Tableau-signed Bearer JWT is present (http + Tableau-authz + AUTH=oauth) -> pass it through.
  *   2. direct-trust signing material is present -> sign an embed JWT via getJwt.
+ *   2b. AUTH=uat -> sign an embed JWT from the existing UAT RS256 key via getJwt.
  *   3. Nothing available -> typed not-available (the app skips embedding).
  *
  * Gating on the Bearer token *type* (not on config.auth) is deliberate: under

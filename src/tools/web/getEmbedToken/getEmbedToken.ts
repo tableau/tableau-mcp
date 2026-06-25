@@ -14,7 +14,7 @@ const paramsSchema = {};
  * Tableau viz in the MCP app UI. Resolves the token from whatever signing material
  * the current server configuration provides:
  *   - a passed-through Tableau Bearer JWT (AUTH=oauth, Tableau authZ server), or
- *   - a Connected App embed JWT signed on the server (AUTH=direct-trust).
+ *   - an embed JWT signed on the server (AUTH=direct-trust or AUTH=uat).
  * When no material is available the tool reports not-available and the app skips
  * embedding. The token value is never exposed to the model.
  */
@@ -24,7 +24,7 @@ export const getEmbedTokenTool = (server: WebMcpServer): WebTool<typeof paramsSc
     name: 'get-embed-token',
     description: `Returns an embed token (a Tableau-signed JWT) used to authenticate the embedded Tableau viz in the app UI.
 
-This tool resolves the embed token from the current session's signing material — a passed-through Tableau Bearer JWT, or a Connected App embed JWT signed on the server. It requires no input and is only visible to the app, never the model. If no token is available for the current configuration, it reports that and the app falls back to a non-embedded view.`,
+This tool resolves the embed token from the current session's signing material — a passed-through Tableau Bearer JWT, or an embed JWT signed on the server under direct-trust or uat. It requires no input and is only visible to the app, never the model. If no token is available for the current configuration, it reports that and the app falls back to a non-embedded view.`,
     paramsSchema,
     annotations: {
       title: 'Get Embed Token',
