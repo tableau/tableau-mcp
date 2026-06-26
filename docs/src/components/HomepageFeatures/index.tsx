@@ -20,17 +20,12 @@ const cards: CardItem[] = [
       <svg viewBox="0 0 80 80" className={styles.cardIcon} aria-hidden="true">
         <circle cx="40" cy="40" r="38" fill="#e8f4f8" />
         <path
-          d="M28 52 L28 34 L52 40 Z"
+          d="M32 24 L32 56 L58 40 Z"
           fill="#4CAF50"
           stroke="#388E3C"
           strokeWidth="2"
           strokeLinejoin="round"
         />
-        <circle cx="52" cy="28" r="8" fill="#4CAF50" />
-        <line x1="52" y1="20" x2="52" y2="16" stroke="#4CAF50" strokeWidth="2.5" strokeLinecap="round" />
-        <line x1="52" y1="36" x2="52" y2="40" stroke="#4CAF50" strokeWidth="2.5" strokeLinecap="round" />
-        <line x1="44" y1="28" x2="40" y2="28" stroke="#4CAF50" strokeWidth="2.5" strokeLinecap="round" />
-        <line x1="60" y1="28" x2="64" y2="28" stroke="#4CAF50" strokeWidth="2.5" strokeLinecap="round" />
       </svg>
     ),
   },
@@ -42,10 +37,18 @@ const cards: CardItem[] = [
     icon: (
       <svg viewBox="0 0 80 80" className={styles.cardIcon} aria-hidden="true">
         <circle cx="40" cy="40" r="38" fill="#e8f4f8" />
-        <rect x="18" y="30" width="44" height="28" rx="5" fill="#5B9BD5" />
-        <path d="M26 30 Q40 16 54 30" fill="#82BEEA" />
-        <rect x="34" y="44" width="12" height="8" rx="2" fill="#fff" opacity="0.8" />
-        <circle cx="40" cy="37" r="4" fill="#fff" opacity="0.9" />
+        <path
+          d="M26 52
+             a10 10 0 0 1 -2 -19.6
+             a12 12 0 0 1 23.6 -3.4
+             a9 9 0 0 1 14.4 7
+             a9 9 0 0 1 -2 16
+             Z"
+          fill="#5B9BD5"
+          stroke="#3A7FC1"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },
