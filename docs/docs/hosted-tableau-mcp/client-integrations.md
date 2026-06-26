@@ -5,9 +5,16 @@ sidebar_position: 2
 # Popular Client Integrations
 This guide walks you through everything you need to leverage Tableau MCP through popular 3rd-party agents.
 
+## Slack
+You can connect Slackbot to Tableau MCP by installing the latest version of the [Tableau Slack app](https://slack-pde.slack.com/marketplace/A026RA4ND1R-tableau) into your workspace. Then each user in your workspace simply has to click the `apps` button inside Slackbot and connect to their target Tableau site through the built-in [OAuth](/configuration/mcp-config/authentication/oauth.md) flow. 
+
+![Slack connector set up](images/slackbot1.jpeg)
+
 ## Claude Product Suite
 ### Tableau Connector for Claude and Cowork
-Coming soon! 
+We'll be adding a Tableau connector to the Anthropic Marketplace soon. In the meantime, you can add Tableau as a custom connector.
+
+![Claude Custom Connector Set Up](images/custom_connector.png)
 
 ### Claude Desktop Extension
 *The Tableau Extension for Claude Desktop does not actually use the hosted service. Instead, like all Claude desktop extensions, it is a bundle that contains all the tableau mcp code and depencies in a single `.mcpb` package. It uses Claude desktop's native node.js runtime. To use the Tableau extension, you must have installed [Claude Desktop](https://claude.ai/download)*
@@ -70,3 +77,6 @@ Once the extension is installed, you'll be prompted to configure Tableau MCP:
 When everything is configured it should look like this:
 
 ![Claude Desktop Extension configuration](../getting-started/images/dxt-config.png)
+
+## OpenAI Product Suite
+A Tableau ChatGPT app and Tableau plugin for Codex is coming soon!
