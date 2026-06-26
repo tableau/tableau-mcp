@@ -4,12 +4,19 @@ sidebar_position: 1
 
 # Introduction
 
-Tableau's official MCP Server. Helping Agents see and understand data.
+Tableau's official MCP Server. Helping *agents* see and understand data.
 
 
 [Tableau MCP](https://github.com/tableau/tableau-mcp) is an open source GitHub project that uses the
 [Model Context Protocol](https://modelcontextprotocol.io/introduction) standard for simplifying
-agent-to-Tableau communication, enabling users to bring their Tableau data into AI tools. This MCP server can be used with any Tableau edition on Cloud or Server, though specific tools may be gated by SKU. For more information on what is available across editions and hosting environment see: [ADD link!]
+agent-to-Tableau communication, enabling users to bring their Tableau data into AI tools. This MCP server can be used with any Tableau edition on Cloud or Server, though specific tools may be gated by SKU. 
+
+Tableau MCP is also a managed service on every Tableau Cloud pod, and it is accessible over the url: `mcp.tableau.com`. See [Hosted Tableau MCP](hosted-tableau-mcp) for more details.
+
+Follow along and share ideas with the Tableau MCP team by creating issues or discussions on the
+repository. You can also join the [Tableau Developer Platform](https://www.tableau.com/developer)
+and reach out in the [#tableau-ai-solutions](https://tableau-datadev.slack.com/archives/C07LMAVG4N6)
+Slack channel in the Tableau #DataDev workspace.
 
 ## Use Cases
 
@@ -20,6 +27,7 @@ agent-to-Tableau communication, enabling users to bring their Tableau data into 
 
 ### Coming soon! 
 - Prepare your data and manage prep flows.
+- Pre-built skills that leverage the Tableau MCP toolset
 - Collaboratively or Autonomously build Tableau workbooks: Leverage new tools and skills that allow local coding agents to directly work with and take action on Tableau desktop. Drag and drop your way to insights or let an agent do it for you! 
 
 

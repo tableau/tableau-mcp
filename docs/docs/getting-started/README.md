@@ -1,6 +1,6 @@
 # Getting Started
 
-This guide walks through getting started with Tableau MCP. The easiest way for Cloud users to get started is to use the [remote hosted Tableau MCP server](../hosted-tableau-mcp). If you're a Server customer and/or you want to run Tableau MCP locally, follow the guide below.
+This guide walks through getting started with Tableau MCP (TMCP). The easiest way for Cloud users to get started is to use the [remote hosted Tableau MCP server](hosted-tableau-mcp). To self-host TMCP or run it locally, follow the guide below.
 
 ## Run with npx
 
@@ -99,3 +99,34 @@ to relaunch your AI tool so it starts using the updated image.
 ### Run with Heroku
 
 See [Deploy to Heroku](../extras/deploy-heroku.md) for new experimental Heroku support.
+
+## Troubleshooting
+
+Here are some common issues that might come up – and how to solve them. The examples and screenshots
+are from Claude Desktop but can apply similarly with any AI tools.
+
+### 401 Unauthorized
+
+When the AI client is using tools through Tableau MCP, it might fail and report a "401 Unauthorized"
+error.
+
+![401 Unauthorized Error](../getting-started/images/401-error.png)
+
+Solutions:
+
+- Double-check that the server URL and site are correct
+- For PAT_NAME, ensure you are providing the **name** of the PAT, not your username or email address
+- Generate a new personal access token (PATs can
+  [expire after 15 days if not used](https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm#change-personal-access-tokens-expiry))
+
+### 403 Forbidden
+
+For Tableau MCP to work, the user must have the "API access" permission enabled. In cases where the
+user does not have that permission, a "403 Forbidden" error can occur.
+
+![403 Forbidden Error](../getting-started/images/403-error.png)
+
+Solution:
+
+- Grant API access to your user for that specific data source
+- More likely, request that the admin or project owner do that for you
