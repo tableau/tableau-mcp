@@ -85,6 +85,13 @@ const globalValues: Record<GlobalIdentifierName, string> = {
 
   await chmod(buildOptions.outfile, '755');
 
+  console.log('🏗️ Copying features.json to build directory...');
+  await copyFile(
+    resolve(process.cwd(), 'features.json'),
+    resolve(process.cwd(), 'build', 'features.json'),
+  );
+  console.log('✅ features.json copied successfully');
+
   console.log('🏗️ Building MCP Apps...');
   try {
     const appsDir = resolve(process.cwd(), 'src/web/apps');
