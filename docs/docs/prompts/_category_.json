@@ -1,8 +1,8 @@
 {
   "label": "Prompts",
-  "position": 4,
+  "position": 8,
   "link": {
-    "type": "generated-index",
-    "description": "Guided admin workflows that orchestrate multiple tools. Gated behind the ADMIN_TOOLS_ENABLED feature flag."
+    "type": "doc",
+    "id": "prompts/README"
   }
 }

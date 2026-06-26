@@ -629,7 +629,7 @@ working.
 ### Embedded authorization server
 
 To support OAuth, the Tableau MCP server ships with its own "embedded" authorization server,
-responsible for issuing access and refresh tokens to MCP clients. It leverages the authentication
+responsible for issuing access and refresh tokens to MCP clients. It uses the authentication
 mechanisms provided by Tableau Server and configured at the Tableau site level to ensure access is
 limited to users who can already access the Tableau sites. When OAuth is enabled on the MCP server,
 the Tableau user context is securely stored within the access token issued to MCP clients so user

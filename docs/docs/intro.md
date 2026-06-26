@@ -11,7 +11,7 @@ Tableau's official MCP Server. Helping *agents* see and understand data.
 [Model Context Protocol](https://modelcontextprotocol.io/introduction) standard for simplifying
 agent-to-Tableau communication, enabling users to bring their Tableau data into AI tools. This MCP server can be used with any Tableau edition on Cloud or Server, though specific tools may be gated by SKU. 
 
-Tableau MCP is also a managed service on every Tableau Cloud pod, and it is accessible over the url: `mcp.tableau.com`. See [Hosted Tableau MCP](hosted-tableau-mcp) for more details.
+Tableau MCP is also a managed service on every Tableau Cloud pod, and it is accessible over the url: `https://mcp.tableau.com`. See [Hosted Tableau MCP](hosted-tableau-mcp) for more details.
 
 Follow along and share ideas with the Tableau MCP team by creating issues or discussions on the
 repository. You can also join the [Tableau Developer Platform](https://www.tableau.com/developer)
@@ -22,13 +22,13 @@ Slack channel in the Tableau #DataDev workspace.
 
 - Chat with your data: Reuse your trusted, curated data models to answer ad-hoc questions that are grounded on your pre-built data semantics and metadata. 
 - Find insights from pre-built data artifacts: Enable agents to query your published workbooks and extract data, images, custom views and more. 
-- Discover and analyze Pulse metrics: Bring 100% accuracy and deterministic AI to any agent by leveraging pulse metric definitions and the pulse insights engine. 
-- Manage and Adminster your Tableau environment.
+- Discover and analyze Pulse metrics: Bring 100% accuracy and deterministic AI to any agent by using Pulse metric definitions and the Pulse insights engine.
+- Manage and administer your Tableau environment.
 
 ### Coming soon! 
 - Prepare your data and manage prep flows.
-- Pre-built skills that leverage the Tableau MCP toolset
-- Collaboratively or Autonomously build Tableau workbooks: Leverage new tools and skills that allow local coding agents to directly work with and take action on Tableau desktop. Drag and drop your way to insights or let an agent do it for you! 
+- Pre-built skills that use the Tableau MCP toolset.
+- Collaboratively or autonomously build Tableau workbooks: new tools and skills allow local coding agents to directly work with and take action on Tableau Desktop. Drag and drop your way to insights or let an agent do it for you!
 
 
 ## Tool List
@@ -44,12 +44,12 @@ Slack channel in the Tableau #DataDev workspace.
 | [get-workbook](tools/workbooks/get-workbook.md)                                                                       | Retrieves information about a workbook for a specified workbook on a Tableau site ([REST API][get-workbook])                        | All SKUs     |
 | [delete-workbook](tools/workbooks/delete-workbook.md)                                                                 | Admin-only. Two-phase (preview/confirm) delete of a workbook; recoverable via recycle bin ([REST API][delete-workbook]) | All SKUs     |
 | [delete-datasource](tools/data-qna/delete-datasource.md)                                                              | Admin-only. Two-phase (preview/confirm) delete of a published data source; warns on dependent workbooks/flows; recoverable via recycle bin ([REST API][delete-datasource]) | All SKUs     |
-| [get-view-data](tools/views/get-view-data.md)                                                                         | Retrieves data in CSV format for the specified view in a Tableau workbook. *Note: the get-view-data api currently has a limitation that when used on a dashboard sheet type, it will only return data for the first worksheet in the dashboard. This will be fixed starting in 26.3.*([REST API][get-view-data])               | All SKUs     |
+| [get-view-data](tools/views/get-view-data.md)                                                                         | Retrieves data in CSV format for the specified view in a Tableau workbook. *Note: the get-view-data api currently has a limitation that when used on a dashboard sheet type, it will only return data for the first worksheet in the dashboard. This will be fixed in the 26.3 fall release.* ([REST API][get-view-data])               | All SKUs     |
 | [get-view-image](tools/views/get-view-image.md)                                                                       | Retrieves an image for the specified view in a Tableau workbook ([REST API][get-view-image])                        | All SKUs     |
 | [get-custom-view-data](tools/views/get-custom-view-data.md)                                                           | Retrieves data in CSV format for the specified custom view in a Tableau workbook. *Note: the same limitation of get-view-data exists for this tool.* ([REST API][get-custom-view-data]) | All SKUs     |
 | [get-custom-view-image](tools/views/get-custom-view-image.md)                                                         | Retrieves an image for a saved custom view ([REST API][get-custom-view-image])                                      | All SKUs     |
 | [query-datasource](tools/data-qna/query-datasource.md)                                                                | Retrieves json formatted data from a published data source by executing VizQL Data Service requests ([VDS API][vds]) | All SKUs     |
-| [list-all-pulse-metric-definitions](tools/pulse/list-all-pulse-metric-definitions.md)                                 | Lists all Pulse metric definitions on a specific tableau cloud site. ([Pulse API][pulse])                           | All SKUs     |
+| [list-all-pulse-metric-definitions](tools/pulse/list-all-pulse-metric-definitions.md)                                 | Lists all Pulse metric definitions on a specific Tableau Cloud site. ([Pulse API][pulse])                           | All SKUs     |
 | [list-pulse-metric-definitions-from-definition-ids](tools/pulse/list-pulse-metric-definitions-from-definition-ids.md) | Lists the definition JSON object(s) from Metric Definition IDs ([Pulse API][pulse])                                 | All SKUs     |
 | [list-pulse-metrics-from-metric-definition-id](tools/pulse/list-pulse-metrics-from-metric-definition-id.md)           | Lists Pulse metrics that are the children of a Metric Definition ID ([Pulse API][pulse])                            | All SKUs     |
 | [list-pulse-metrics-from-metric-ids](tools/pulse/list-pulse-metrics-from-metric-ids.md)                               | Lists pulse metric metadata from its associated Metric IDs ([Pulse API][pulse])                                     | All SKUs     |

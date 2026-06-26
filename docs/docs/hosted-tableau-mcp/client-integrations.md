@@ -3,7 +3,7 @@ sidebar_position: 2
 ---
 
 # Popular Client Integrations
-This guide walks you through everything you need to leverage Tableau MCP through popular 3rd-party agents.
+This guide walks you through everything you need to use Tableau MCP with popular third-party agents.
 
 ## Slack
 You can connect Slackbot to Tableau MCP by installing the latest version of the [Tableau Slack app](https://slack-pde.slack.com/marketplace/A026RA4ND1R-tableau) into your workspace. Then each user in your workspace simply has to click the `apps` button inside Slackbot and connect to their target Tableau site through the built-in [OAuth](/configuration/mcp-config/authentication/oauth.md) flow. 
@@ -17,14 +17,14 @@ We'll be adding a Tableau connector to the Anthropic Marketplace soon. In the me
 ![Claude Custom Connector Set Up](images/custom_connector.png)
 
 ### Claude Desktop Extension
-*The Tableau Extension for Claude Desktop does not actually use the hosted service. Instead, like all Claude desktop extensions, it is a bundle that contains all the tableau mcp code and depencies in a single `.mcpb` package. It uses Claude desktop's native node.js runtime. To use the Tableau extension, you must have installed [Claude Desktop](https://claude.ai/download)*
+*The Tableau Extension for Claude Desktop does not actually use the hosted service. Instead, like all Claude Desktop extensions, it is a bundle that contains all the Tableau MCP code and dependencies in a single `.mcpb` package. It uses Claude Desktop's native Node.js runtime. To use the Tableau extension, you must have installed [Claude Desktop](https://claude.ai/download).*
 
 #### Step 1: create a Personal Access Token (PAT)
 
 Login to your site, then click your profile in the upper right to bring up My Account Settings.
 
 Scroll down to Personal Access Tokens and create a new one. You can use any token name but something
-memorable like "mcp" is suggested to make later configuraton easier. Make sure to copy and save the
+memorable like "mcp" is suggested to make later configuration easier. Make sure to copy and save the
 value because it's only shown this one time. (Also, be aware that, by default, Tableau PATs will expire after 15
 days of inactivity, so you may need to periodically create a new one.)
 
