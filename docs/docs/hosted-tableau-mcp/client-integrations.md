@@ -41,7 +41,7 @@ expiration date; default expiration is 15 days.
 Make note of these 4 values which you'll need later for the MCP configuration:
 
 - SERVER (e.g. https://10ax.online.tableau.com or https://tableau.example.com)
-- SITE_NAME (e.g. techandprod; on Server leave blank to use the default site)
+- SITE_NAME (e.g. sales-official; on Server leave blank to use the default site)
 - PAT_NAME (e.g. mcp)
 - PAT_VALUE (value copied after PAT creation)
 
@@ -69,7 +69,7 @@ Once the extension is installed, you'll be prompted to configure Tableau MCP:
   - Cloud: pod hostname like https://10ax.online.tableau.com
   - Server: hostname like https://tableau.example.com
 - SITE_NAME
-  - Cloud: required, for example techandprod
+  - Cloud: required, for example sales-official
   - Server: site name, or can leave blank to use the default site
 - PAT_NAME (e.g. mcp)
   - The name of the PAT you created in the Tableau site settings

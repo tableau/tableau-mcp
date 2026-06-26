@@ -75,7 +75,7 @@ x-tableau-mcp-config: INCLUDE_TAGS=sales,marketing&MAX_RESULT_LIMIT=50
 
 ## Request Overridable Variables
 
-The following variables can be overriden on a per-request basis. Each variable has different behavior depending on whether it is `restricted` or `unrestricted`.
+The following variables can be overridden on a per-request basis. Each variable has different behavior depending on whether it is `restricted` or `unrestricted`.
 
 ### [`INCLUDE_PROJECT_IDS`](tool-scoping.md#include_project_ids)
 

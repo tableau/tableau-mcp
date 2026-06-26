@@ -39,7 +39,7 @@ When creating or updating site settings via REST API:
 :::warning
 
 When configuring site settings, make sure to validate your overrides have been applied successfully.
-Tableau MCP will ignore any overrides if it does not recognize the variable being overriden, or if the override value is invalid.
+Tableau MCP will ignore any overrides if it does not recognize the variable being overridden, or if the override value is invalid.
 
 You might not see changes take immediate effect due to caching, see [`MCP_SITE_SETTINGS_CHECK_INTERVAL_IN_MINUTES`](#mcp_site_settings_check_interval_in_minutes).
 
