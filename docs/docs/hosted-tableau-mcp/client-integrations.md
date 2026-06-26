@@ -8,6 +8,7 @@ This guide walks you through everything you need to use Tableau MCP with popular
 ## Slack
 You can connect Slackbot to Tableau MCP by installing the latest version of the [Tableau Slack app](https://slack-pde.slack.com/marketplace/A026RA4ND1R-tableau) into your workspace. Then each user in your workspace simply has to click the `apps` button inside Slackbot and connect to their target Tableau site through the built-in [OAuth](/configuration/mcp-config/authentication/oauth.md) flow. 
 
+For more information about Slackbot and MCP server support, go to: [ADD LINK]
 ![Slack connector set up](images/slackbot1.jpeg)
 
 ## Claude Product Suite

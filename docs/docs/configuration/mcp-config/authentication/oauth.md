@@ -14,10 +14,6 @@ their agents to this URL without any additional configuration.
 All Tableau auth modes are *site scoped*. If you are a multi-site user, and you have connected an MCP client to the hosted Tableau MCP server, you must disconnect, then reconnect to your target site.
 
 **Known Issues**
- - "I'm a multi-site user and I'm connecting to Tableau MCP for the first time, but the OAuth flow is sending me to the wrong site." If a user has an active SiteSAML session in the browser, the Tableau MCP OAuth flow will default to the site the user is logged into. To fix this, sign-out, sign into the target site, then trigger the Tableau MCP OAuth flow again.
- - "I've already connected my MCP Client to the hosted Tableau MCP server. When I disconnect, then reconnect, the OAuth flow never triggers." Once a user has consented to the app for a given site (stored per user + site + client), the OAuth flow silently issues a new access token for that same site on reconnect — no consent screen, no opportunity to select a different site. To force the OAuth flow to re-run, sign out of Tableau in your browser before reconnecting. This clears the SiteSAML session so the OAuth flow has no existing session to resume against, and the full authentication and consent flow will trigger again. Note: a future improvement will add a logout/re-authenticate link directly on the consent screen to make this easier.
-
-*Brian alternate way to show the same info:*
 
 **Issue 1: First-time connection lands on the wrong site**
 
@@ -27,7 +23,7 @@ All Tableau auth modes are *site scoped*. If you are a multi-site user, and you 
 **Issue 2: Reconnecting does not re-trigger the OAuth flow**
 
 - **Problem:** After a user has already connected to the hosted Tableau MCP server, disconnecting and reconnecting may not trigger the OAuth flow again.
-- **Workaround:** Sign out of Tableau Cloud, then trigger the Tableau MCP OAuth flow again.
+- **Workaround:** Sign out of Tableau Cloud, then trigger the Tableau MCP OAuth flow again. If the issue persists, clear your browser cookies and try again.
 
 ### Self-hosted Tableau MCP
 
