@@ -8,13 +8,13 @@ Tableau MCP is available as a managed service on every Tableau Cloud pod, access
 
 ## Who it's for
 
-The hosted service is intended for **Tableau Cloud customers** who want to connect AI agents (Claude, ChatGPT, Cursor, Slack, custom agents, etc.) to their Tableau site without standing up infrastructure. Tableau Server customers and Cloud customers who require self-hosted infrastructure should see [Enterprise Deployment](../enterprise/).
+The hosted service is intended for **Tableau Cloud customers** who want to connect AI agents (Claude, ChatGPT, Cursor, Slack, custom agents, etc.) to their Tableau site without standing up infrastructure. Tableau Server customers and Cloud customers who require self-hosted infrastructure should see [Enterprise Deployment](../enterprise/README.md).
 
 ## What you get
 
 - **OAuth 2.1 authentication out of the box.** Every user signs in to their own Tableau Cloud identity. The MCP server then makes Tableau REST API calls *as that user*, so every existing per-user permission and access control is enforced automatically.
 - **Pod-aware routing.** A single URL (`https://mcp.tableau.com`) works for every Tableau Cloud pod. A CloudFront edge function inspects the OAuth token and routes the request to the correct pod. See [Architecture](architecture.md) for details.
-- **The full Tableau MCP tool catalog.** All tools documented in the [Tools](../tools/) section are available, subject to your site's SKU entitlements and the signed-in user's permissions.
+- **The full Tableau MCP tool catalog.** All tools documented in the [Tools](./category/tools) section are available, subject to your site's SKU entitlements and the signed-in user's permissions.
 - **Continuously updated.** New tools and fixes ship to the hosted service automatically — no client-side upgrade required.
 
 ## Availability and scope
