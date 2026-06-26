@@ -56,7 +56,9 @@ describe('extract-optimization-apply prompt', () => {
       // Dry run is the default: report only, never call update or delete.
       expect(text).toContain('`dryRun = true`');
       expect(text).toContain('Dry run — no changes applied.');
-      expect(text).not.toContain('Step 5 — Apply (only after Step 4 approval).');
+      // Neither the preview nor the confirmed-apply step is emitted in the dry-run default.
+      expect(text).not.toContain('Step 5 — Preview (per approved task, read-only).');
+      expect(text).not.toContain('Step 6 — Apply (confirmed).');
     });
 
     it('writes nothing before approval — no apply step in the dry-run default', async () => {
@@ -72,18 +74,34 @@ describe('extract-optimization-apply prompt', () => {
       expect(text).toContain('CRITICAL: Steps 1-3 are READ-ONLY');
     });
 
-    it('gates the apply step behind the human approval break when dryRun is false', async () => {
+    it('gates preview-then-apply behind the human approval break when dryRun is false', async () => {
       if (!promptAvailable) {
         return;
       }
       const text = await client.getPromptText(PROMPT_NAME, { dryRun: 'false' });
       const gateIdx = text.indexOf('REQUIRED HUMAN CONFIRMATION');
-      const applyIdx = text.indexOf('Step 5 — Apply (only after Step 4 approval).');
+      const previewIdx = text.indexOf('Step 5 — Preview (per approved task, read-only).');
+      const applyIdx = text.indexOf('Step 6 — Apply (confirmed).');
       expect(gateIdx).toBeGreaterThan(-1);
-      expect(applyIdx).toBeGreaterThan(gateIdx);
+      expect(previewIdx).toBeGreaterThan(gateIdx);
+      expect(applyIdx).toBeGreaterThan(previewIdx);
       expect(text).toContain('Do **not** parallelize');
       expect(text).toContain('A previous approval does NOT carry forward.');
       expect(text).not.toContain('Dry run — no changes applied.');
+      // Two-phase contract: the preview step gathers per-task tokens, and the apply step echoes
+      // them back via `confirm: true` + `confirmationToken`.
+      expect(text).toContain('per-task `confirmationToken`');
+      expect(text).toContain('`confirm` omitted');
+      expect(text).toContain('`{ taskId, schedule, confirm: true, confirmationToken:');
+      expect(text).toContain('`{ taskId, confirm: true, confirmationToken:');
+      // The shared renderConfirmInstructions block must surface verbatim in the apply step so a
+      // future prompt edit can't quietly downgrade two-phase enforcement.
+      expect(text).toContain(
+        'Only AFTER the user approves a given extract refresh task, call the appropriate tool —',
+      );
+      expect(text).toContain(
+        'Do NOT auto-confirm. Do NOT compute, guess, or reuse a `confirmationToken`',
+      );
     });
 
     it('scopes the performance read to the four extract refresh job types', async () => {
