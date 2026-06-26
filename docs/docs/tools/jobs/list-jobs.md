@@ -7,7 +7,7 @@ sidebar_position: 1
 Retrieves a list of background jobs for the Tableau site. Each job represents a background task such as an extract refresh, subscription delivery, flow run, or other asynchronous operations.
 
 :::warning Admin Only
-This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` feature flag to be enabled.
+This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` site setting to be enabled.
 :::
 
 ## APIs called
@@ -33,7 +33,7 @@ Use this tool when you need to:
 
 ## Configuration
 
-Enable this tool by setting the feature flag:
+Enable this tool by setting:
 
 ```bash
 ADMIN_TOOLS_ENABLED=true

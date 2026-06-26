@@ -54,9 +54,9 @@ Slack channel in the Tableau #DataDev workspace.
 | [list-pulse-metrics-from-metric-definition-id](tools/pulse/list-pulse-metrics-from-metric-definition-id.md)           | Lists Pulse metrics that are the children of a Metric Definition ID ([Pulse API][pulse])                            | All SKUs     |
 | [list-pulse-metrics-from-metric-ids](tools/pulse/list-pulse-metrics-from-metric-ids.md)                               | Lists pulse metric metadata from its associated Metric IDs ([Pulse API][pulse])                                     | All SKUs     |
 | [list-pulse-metric-subscriptions](tools/pulse/list-pulse-metric-subscriptions.md)                                     | List Pulse Metric Subscriptions for the current user ([Pulse API][pulse])                                           | All SKUs     |
-| [generate-pulse-metric-value-insight-bundle](tools/pulse/generate-pulse-metric-value-insight-bundle.md)               | Generates a Pulse metric value insight bundle with insight types like period-over-period change, top contributers, bottom contributiors, and more. See [Pulse API][pulse] and [insight types](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#insight-types) | All SKUs     |
+| [generate-pulse-metric-value-insight-bundle](tools/pulse/generate-pulse-metric-value-insight-bundle.md)               | Generates a Pulse metric value insight bundle with insight types like period-over-period change, top contributors, bottom contributors, and more. See [Pulse API][pulse] and [insight types](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#insight-types) | All SKUs     |
 | [generate-pulse-insight-brief](tools/pulse/generate-pulse-insight-brief.md)                                           | Generates an AI-powered Pulse [Insight Brief](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm#EmbeddingsService_GenerateInsightBrief). | Tableau plus only     |
-| [search-content](tools/content-exploration/search-content.md)                                                         | Searches for content in a Tableau site using Tableau's [search API](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_content_exploration.htm#ContentExplorationService_getSearch) | All SKUs     |
+| [search-content](tools/content-exploration/search-content.md)                                                         | Searches for content in a Tableau site using Tableau's [search API][content-exploration] | All SKUs     |
 | [list-extract-refresh-tasks](tools/tasks/list-extract-refresh-tasks.md)                                               | Admin-only. Retrieves a list of extract refresh tasks for the site ([REST API][list-extract-refresh-tasks])         | All SKUs     |
 | [delete-extract-refresh-task](tools/tasks/delete-extract-refresh-task.md)                                             | Admin-only. Deletes an extract refresh task ([REST API][delete-extract-refresh-task])                               | All SKUs     |
 | [update-cloud-extract-refresh-task](tools/tasks/update-cloud-extract-refresh-task.md)                                 | Admin-only. Updates the schedule of an extract refresh task on Tableau Cloud ([REST API][update-cloud-extract-refresh-task]) | All SKUs     |
@@ -94,9 +94,9 @@ Slack channel in the Tableau #DataDev workspace.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#get_custom_view_image
 [meta]: https://help.tableau.com/current/api/metadata_api/en-us/index.html
 [vds]: https://help.tableau.com/current/api/vizql-data-service/en-us/index.html
-[pulse]: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_pulse.htm
+[pulse]: https://help.tableau.com/current/api/rest_api/en-us/REST/TAG/index.html#tag/Pulse-Methods
 [content-exploration]:
-  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_content_exploration.htm
+  https://help.tableau.com/current/api/rest_api/en-us/REST/TAG/index.html#tag/Content-Exploration-Methods
 [list-extract-refresh-tasks]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_jobs_tasks_and_schedules.htm#list_extract_refresh_tasks
 [delete-extract-refresh-task]:
@@ -108,7 +108,7 @@ Slack channel in the Tableau #DataDev workspace.
 
 ## Prompt List
 
-Prompts orchestrate multiple tools into a guided admin workflow. They are gated behind the `ADMIN_TOOLS_ENABLED` feature flag.
+Prompts orchestrate multiple tools into a guided admin workflow. They are gated behind the `ADMIN_TOOLS_ENABLED` site setting.
 
 | **Prompt**                                                                    | **Description**                                                                                                          |
 | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |

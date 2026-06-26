@@ -33,8 +33,8 @@ days of inactivity, so you may need to periodically create a new one.)
 
 :::warning
 
-Keep your PAT safe and don't share with anyone or check into source control. Pay attention to the
-expiration date. You can also return here to revoke the token when you no longer need it.
+Keep your PAT safe and don't share with anyone. Pay attention to the
+expiration date; default expiration is 15 days. 
 
 :::
 
