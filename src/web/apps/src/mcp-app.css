@@ -37,10 +37,10 @@ tableau-viz {
 
 .open-in-tableau {
   display: inline-block;
-  margin: 16px 0 0 0;
-  padding: 8px 12px;
+  margin: 1rem 0 0 0;
+  padding: 0.5rem 0.75rem;
   font-family: system-ui, -apple-system, sans-serif;
-  font-size: 14px;
+  font-size: 0.875rem;
   color: #0066CC;
   text-decoration: none;
   border-radius: 4px;
