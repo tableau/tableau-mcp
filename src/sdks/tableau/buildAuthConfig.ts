@@ -10,10 +10,7 @@ function getJwtAdditionalPayload(
   config: Config,
   authInfo: TableauAuthInfo | undefined,
 ): Record<string, unknown> {
-  const json = config.jwtAdditionalPayload.replaceAll(
-    '{OAUTH_USERNAME}',
-    authInfo?.username ?? '',
-  );
+  const json = config.jwtAdditionalPayload.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
   return JSON.parse(json || '{}');
 }
 
