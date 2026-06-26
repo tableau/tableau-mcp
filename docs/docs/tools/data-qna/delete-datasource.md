@@ -15,22 +15,39 @@ The tool is **two-phase** to keep the destructive action safe:
 1. **Preview** (default — `confirm` omitted or `false`): tags the data source with
    `pending-deletion` (reversible, visible in the Tableau UI; label configurable via the `tag`
    argument), reports the data source name, project, and owner, **warns which workbooks and flows
-   depend on it and may break**, returns a `confirmationToken`, and does **not** delete anything.
-2. **Delete** (`confirm: true` + `confirmationToken`): permanently removes the data source. The
-   token from the preview step is **required** — deletion is rejected without a matching token,
-   a friction gate requiring a deliberate second call rather than a blind one-shot call (see the
-   [`confirmationToken`](#confirmationtoken) note on what this does and does not guarantee). On Tableau Cloud the data source
+   depend on it and may break**, and does **not** delete anything.
+2. **Delete** (`confirm: true`): permanently removes the data source. Before deleting, the server
+   re-fetches the data source and **verifies it carries the pending-deletion tag** applied in the
+   preview step. A confirmed delete against an untagged data source is rejected (see the
+   [server-authoritative gate](#server-authoritative-gate) note). On Tableau Cloud the data source
    is moved to the [recycle bin](https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm)
    and can be restored for a limited time before permanent removal; on Tableau Server there is no
    recycle bin and deletion is permanent.
 
-:::warning[Human confirmation required]
+:::warning[Human confirmation required — advisory, not enforced]
 Between the preview and the delete, the calling agent is instructed (via the tool description and
 the preview response) to surface the data source identity **and its dependent content** to the user
-and obtain explicit approval before deleting. The `confirmationToken` enforces that a preview ran,
-but the **human approval** step is a prompt-level expectation — agents must not auto-confirm or
-compute the token themselves.
+and obtain explicit approval before deleting. This human-approval step is a **prompt-level
+expectation, not a server guarantee**: the tag gate proves a preview *ran*, but the server cannot
+observe whether a human actually approved. An agent that calls preview and then confirm itself
+satisfies the gate with no human in the loop. Enforcing true human-in-the-loop (out-of-band
+approval the agent cannot forge) is tracked as follow-up work.
 :::
+
+### Server-authoritative gate
+
+The confirm phase does not trust any caller-supplied value. It re-fetches the data source from
+Tableau and only deletes if the data source is currently tagged `pending-deletion` (or the custom
+`tag` value). The tag is server-side state that the caller can only set by running the preview
+phase, so the gate genuinely proves a preview happened — it **cannot** be bypassed by computing or
+guessing a token, which the prior `confirmationToken` (a caller-derivable `sha256`) could be. The
+live re-fetch deliberately ignores any cached copy so the check reflects the data source's current
+state at delete time.
+
+**What this gate does and does not guarantee.** It proves a preview *ran* (closing the
+caller-computable-token bypass). It does **not** prove a *human approved* — an agent that runs both
+the preview and the confirm satisfies it on its own. Server-enforced human-in-the-loop requires an
+out-of-band approval primitive (e.g. MCP URL-mode elicitation) and is tracked as follow-up work.
 
 :::note[Dependent content is not deleted]
 Deleting a published data source does **not** delete the workbooks or flows that use it. Those
@@ -69,21 +86,12 @@ Example: `222ea993-9391-4910-a167-56b3d19b4e3b`
 ### `confirm`
 
 When omitted or `false`, runs the non-destructive preview (tags, warns about dependents, and
-reports). When `true`, permanently deletes the data source (also requires `confirmationToken`).
+reports). When `true`, permanently deletes the data source — but only if the data source already
+carries the pending-deletion tag from a prior preview (verified by a live re-fetch; see
+[server-authoritative gate](#server-authoritative-gate)). Pass the same `tag` value used in the
+preview if you overrode the default.
 
 Example: `true`
-
-### `confirmationToken`
-
-Required when `confirm` is `true`. The `confirmationToken` value returned by the preview step for
-this data source. Deletion is rejected without a matching token — a friction gate requiring a
-deliberate second call rather than a blind single call.
-
-The token is a deterministic `sha256(siteId:datasourceId)` value, so it enforces an explicit second
-call but does **not** prove the preview/tag step actually ran (a caller who knows the datasource LUID
-can compute it). Guaranteeing a preview happened would require server-side state.
-
-Example: `3a7f9c2e1b04`
 
 ### `tag`
 

@@ -1,12 +1,22 @@
 /**
  * Shared human-in-the-loop (HITL) confirmation primitive for destructive "Apply" prompts.
  *
- * The MCP SDK exposes no runtime elicitation/sampling primitive (v1.x), and prompts are pure text
- * generators. So HITL here is a *prompt-text contract*: every Apply prompt injects the same, strongly
- * worded instruction blocks telling the model to STOP and obtain explicit human approval before any
- * destructive call, and to never fabricate a confirmation token. Centralizing the wording keeps the
- * gate identical across the Apply surface (stale-content cleanup, extract-refresh optimization,
- * license reclamation, …) and makes it the single place to harden the language over time.
+ * Prompts are pure text generators, so HITL here is a *prompt-text contract*: every Apply prompt
+ * injects the same, strongly worded instruction blocks telling the model to STOP and obtain explicit
+ * human approval before any destructive call. The delete tools additionally enforce a
+ * server-authoritative gate (a confirmed delete is rejected unless the item carries the
+ * pending-deletion tag from its preview). That gate proves a preview *ran*, NOT that a human
+ * *approved* — an agent that runs both phases itself satisfies it. It closes the prior
+ * caller-computable-token bypass (W-23093455) but leaves human approval advisory.
+ *
+ * Real, enforced HITL needs an out-of-band signal the agent cannot forge. The installed MCP SDK
+ * (>=1.26; this repo runs 1.29) DOES expose `server.elicitInput(...)` with URL-mode elicitation
+ * (`UrlElicitationRequiredError`), which routes approval to a human out of band. Adopting it is
+ * tracked under W-23125362; until then the human-approval step here is advisory.
+ *
+ * Centralizing the wording keeps the gate identical across the Apply surface (stale-content cleanup,
+ * extract-refresh optimization, license reclamation, …) and makes it the single place to harden the
+ * language over time.
  *
  * These are content-type-agnostic: callers pass the action wording and the content nouns.
  */
@@ -55,8 +65,9 @@ export function renderHitlGate({
 
 /**
  * Renders the instruction for the second, confirmed call against a two-phase delete tool. The tool
- * returns a per-item confirmationToken from its preview phase; the model must echo that exact value
- * and must never compute or guess it.
+ * enforces a server-authoritative gate: before deleting it re-fetches the item and verifies it
+ * carries the pending-deletion tag applied in the preview phase. The model cannot bypass this by
+ * fabricating a value — the only way to satisfy the gate is to have run the preview (tag) step.
  *
  * `toolRef` is inserted verbatim, so callers control its formatting: pass a single backticked tool
  * name (e.g. "`delete-workbook`") for a one-tool prompt, or a phrase pointing at a routing table
@@ -73,9 +84,10 @@ export function renderConfirmInstructions({
 }): string {
   return [
     `Only AFTER the user approves a given ${itemNoun}, call ${toolRef} for that ${itemNoun} ` +
-      'with `confirm: true` and the exact `confirmationToken` value that tool returned for it in ' +
-      'the preview step.',
-    'Do NOT auto-confirm. Do NOT compute, guess, or reuse a `confirmationToken` from a different ' +
-      `${itemNoun} — use only the token the preview returned for that same ${itemNoun}.`,
+      'with `confirm: true` (using the same `tag` value used to tag it in the preview step). The ' +
+      'tool re-fetches the item and verifies the pending-deletion tag before deleting; a delete on ' +
+      'an untagged item is rejected server-side.',
+    `Do NOT auto-confirm. Confirm each ${itemNoun} individually — never batch-confirm items the ` +
+      'user has not explicitly approved.',
   ].join('\n');
 }

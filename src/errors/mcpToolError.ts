@@ -58,6 +58,18 @@ export class DatasourceNotAllowedError extends McpToolError {
   }
 }
 
+// Thrown by the two-phase delete tools when a confirmed delete (`confirm: true`) is requested but the
+// target resource is not carrying the pending-deletion tag. The tag is server-side state set by a
+// prior, distinct preview call, so its presence — verified by a fresh re-fetch — is the authoritative
+// proof that a preview actually ran. Unlike a caller-computable confirmation token, this gate cannot
+// be bypassed by deriving a value: the caller has no way to mark the resource as pending deletion
+// other than by running the preview phase. statusCode 409: a required precondition/state is missing.
+export class PreviewNotRunError extends McpToolError {
+  constructor(message: string) {
+    super({ type: 'preview-not-run', message, statusCode: 409 });
+  }
+}
+
 export class FeatureDisabledError extends McpToolError {
   constructor(message: string) {
     super({ type: 'feature-disabled', message, statusCode: 404 });
