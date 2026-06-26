@@ -52,23 +52,45 @@ describe('extract-optimization-apply prompt', () => {
     expect(text).not.toContain('Step 6 — Final report.');
   });
 
-  it('allows the apply step only after Step 4 confirmation when dryRun = false', async () => {
+  it('runs preview-then-confirmed apply only after Step 4 confirmation when dryRun = false', async () => {
     const text = await textOf({ dryRun: 'false' });
     expect(text).toContain('`dryRun = false`');
     expect(text).toContain('only after** the human confirms in Step 4');
-    expect(text).toContain('Step 5 — Apply (only after Step 4 approval).');
+    expect(text).toContain('Step 5 — Preview (per approved task, read-only).');
+    expect(text).toContain('Step 6 — Apply (confirmed).');
     expect(text).toContain('Do **not** parallelize');
     expect(text).toContain('stop immediately');
     expect(text).not.toContain('Dry run — no changes applied.');
-    expect(text).toContain('Step 6 — Final report.');
+    expect(text).toContain('Step 7 — Final report.');
   });
 
-  it('places the apply step strictly after the HITL gate (ordering invariant)', async () => {
+  it('places preview after the HITL gate and apply after preview (ordering invariant)', async () => {
     const text = await textOf({ dryRun: 'false' });
     const gateIdx = text.indexOf('REQUIRED HUMAN CONFIRMATION');
-    const applyIdx = text.indexOf('Step 5 — Apply (only after Step 4 approval).');
+    const previewIdx = text.indexOf('Step 5 — Preview (per approved task, read-only).');
+    const applyIdx = text.indexOf('Step 6 — Apply (confirmed).');
     expect(gateIdx).toBeGreaterThan(-1);
-    expect(applyIdx).toBeGreaterThan(gateIdx);
+    expect(previewIdx).toBeGreaterThan(gateIdx);
+    expect(applyIdx).toBeGreaterThan(previewIdx);
+  });
+
+  it('renders the renderConfirmInstructions block in the confirmed apply step', async () => {
+    const text = await textOf({ dryRun: 'false' });
+    // The shared confirm-instructions block — both phrases are emitted verbatim from
+    // renderConfirmInstructions. Asserting against the literal text catches a regression where
+    // the prompt stops invoking the helper (single-layer enforcement) instead of two-phase.
+    expect(text).toContain(
+      'Only AFTER the user approves a given extract refresh task, call the appropriate tool —',
+    );
+    expect(text).toContain(
+      'Do NOT auto-confirm. Do NOT compute, guess, or reuse a `confirmationToken`',
+    );
+    // The preview step must instruct the model to gather tokens with `confirm` omitted.
+    expect(text).toContain('`confirm` omitted');
+    expect(text).toContain('per-task `confirmationToken`');
+    // The apply step must instruct the model to echo `confirm: true` + the preview's token.
+    expect(text).toContain('`{ taskId, schedule, confirm: true, confirmationToken:');
+    expect(text).toContain('`{ taskId, confirm: true, confirmationToken:');
   });
 
   it('includes the human-in-the-loop confirmation gate', async () => {

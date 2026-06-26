@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { renderHitlGate } from '../_lib/confirm.js';
+import { renderConfirmInstructions, renderHitlGate } from '../_lib/confirm.js';
 import { EXTRACT_REFRESH_JOB_TYPES, JOB_PERFORMANCE_FIELDS } from '../_lib/jobPerformance.js';
 import { WebPromptFactory } from '../registry.js';
 
@@ -116,6 +116,20 @@ export const getExtractOptimizationApplyPrompt: WebPromptFactory = () => ({
       itemNounPlural: 'extract refresh tasks',
       presentColumns: ['Task ID', 'Item', 'Current Frequency', 'Recommendation', 'New Schedule'],
     });
+    // Single confirm-instruction block that covers both apply tools — the recommendation table
+    // already routes each row to `update-cloud-extract-refresh-task` or `delete-extract-refresh-task`
+    // via its `Recommendation` column, so one block points back at that routing rather than
+    // duplicating per tool.
+    // Extract refresh tasks have no Tableau-tag affordance in the REST API, so we use the
+    // friction-token contract instead of the server-authoritative pending-deletion tag gate
+    // (see _lib/confirm.ts).
+    const confirmInstructions = renderConfirmInstructions({
+      toolRef:
+        `the appropriate tool — \`${UPDATE_TOOL}\` for \`downgrade\` rows, ` +
+        `\`${DELETE_TOOL}\` for \`delete\` rows`,
+      itemNoun: 'extract refresh task',
+      gateKind: 'token',
+    });
 
     const modeLine = dryRun
       ? '`dryRun = true` — report only. Do **not** call `' +
@@ -174,14 +188,21 @@ export const getExtractOptimizationApplyPrompt: WebPromptFactory = () => ({
             "**Because `dryRun = true`, stop here regardless of the user's reply.** Print the table from Step 3 plus a one-line note: `Dry run — no changes applied. Re-run with dryRun = false to apply.`",
           ]
         : [
-            '**Step 5 — Apply (only after Step 4 approval).** For each approved task, in order:',
-            `- For \`downgrade\` rows: call \`${UPDATE_TOOL}\` with \`{ taskId, schedule: <proposed schedule> }\`. The schedule must satisfy the constraints documented on the tool (5-minute boundary; Hourly minute match and end > start; Daily/Weekly/Monthly omit \`end\`; Hourly/Daily require ≥1 \`weekDay\` interval; Weekly requires ≥1 \`weekDay\`; Monthly requires ≥1 \`monthDay\`).`,
-            `- For \`delete\` rows: call \`${DELETE_TOOL}\` with \`{ taskId }\`. **This is irreversible.**`,
+            '**Step 5 — Preview (per approved task, read-only).** ONLY for the tasks the user explicitly approved above, in order:',
+            `- For \`downgrade\` rows: call \`${UPDATE_TOOL}\` with \`{ taskId, schedule: <proposed schedule> }\` and \`confirm\` omitted. The schedule must satisfy the constraints documented on the tool (5-minute boundary; Hourly minute match and end > start; Daily/Weekly/Monthly omit \`end\`; Hourly/Daily require ≥1 \`weekDay\` interval; Weekly requires ≥1 \`weekDay\`; Monthly requires ≥1 \`monthDay\`). The tool validates the schedule and returns a per-task \`confirmationToken\` without calling the Tableau update endpoint. Keep each task's \`confirmationToken\`.`,
+            `- For \`delete\` rows: call \`${DELETE_TOOL}\` with \`{ taskId }\` and \`confirm\` omitted. The tool returns a per-task \`confirmationToken\` without deleting. Keep each task's \`confirmationToken\`.`,
+            '- Do **not** parallelize. Wait for each preview to complete before the next. Nothing is updated or deleted in this step.',
+            '',
+            '**Step 6 — Apply (confirmed).**',
+            confirmInstructions,
+            '',
+            `- For \`downgrade\` rows: call \`${UPDATE_TOOL}\` again with \`{ taskId, schedule, confirm: true, confirmationToken: <the token Step 5 returned for this task> }\`.`,
+            `- For \`delete\` rows: call \`${DELETE_TOOL}\` again with \`{ taskId, confirm: true, confirmationToken: <the token Step 5 returned for this task> }\`. **This is irreversible.**`,
             '- Do **not** parallelize. Wait for each call to complete before the next.',
             '- If a single call returns an error, stop immediately, record the failure, and report the partial state in the final report — do **not** continue with the remaining changes.',
           ]),
       '',
-      `**Step ${dryRun ? 5 : 6} — Final report.** Print:`,
+      `**Step ${dryRun ? 5 : 7} — Final report.** Print:`,
       '- A "Changes applied" section with one bullet per task touched: `Task ID — <delete | downgrade to <new schedule>> — <success | error: <code/message>>`.',
       '- A "Skipped" section listing any `keep` rows or rows the user excluded.',
       ...(taskIds.length > 0
