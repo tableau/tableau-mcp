@@ -10,7 +10,7 @@ server in a self-hosted environment.
 
 :::info
 
-Self-hosting Tableau MCP is not required for Cloud customers. Tableau's first party, hosted MCP
+Self-hosting Tableau MCP is not required for Cloud customers. Tableau's first-party, hosted MCP
 server is available at `https://mcp.tableau.com`. See [Tableau MCP](../hosted-tableau-mcp)
 for more details.
 
@@ -177,7 +177,7 @@ multiple clients will fail.
 :::
 
 Create a PAT using the instructions provided in
-[Personal Access Tokens - Tableau](https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm).
+[Personal Access Tokens - Tableau](https://help.tableau.com/current/online/en-us/security_personal_access_tokens.htm).
 All requests made to the MCP server will use the PAT to authenticate to the underlying Tableau REST
 APIs. PAT-based HTTP configurations are intended for testing/prototyping or licensed and approved
 UBL scenarios only.
@@ -550,8 +550,8 @@ When OAuth is not enabled, the agent will connect immediately and list the avail
 
 ![Cursor Connected](images/cursor-connected.png)
 
-When OAuth is enabled, Cursor will inform the user that they need to authenticate to the MCP server
-first:
+When OAuth is enabled, the agent will inform the user that they need to authenticate to the MCP
+server first:
 
 ![Cursor Auth Required](images/cursor-auth-required.png)
 
