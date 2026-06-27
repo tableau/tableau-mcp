@@ -11,7 +11,8 @@ server in a self-hosted environment.
 :::info
 
 Self-hosting Tableau MCP is not required for Cloud customers. Tableau's first party, hosted MCP
-server is available at https://mcp.tableau.com
+server is available at `https://mcp.tableau.com`. See [Tableau MCP](../hosted-tableau-mcp)
+for more details.
 
 :::
 

@@ -8,7 +8,7 @@ sidebar_position: 4
 
 ### Hosted Tableau MCP
 
-https://mcp.tableau.com is Tableau's hosted version of Tableau MCP. Tableau Cloud users can connect
+`https://mcp.tableau.com` is Tableau's hosted version of Tableau MCP. Tableau Cloud users can connect
 their agents to this URL without any additional configuration.
 
 All Tableau auth modes are *site scoped*. If you are a multi-site user, and you have connected an MCP client to the hosted Tableau MCP server, you must disconnect, then reconnect to your target site.
