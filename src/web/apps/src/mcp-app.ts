@@ -7,6 +7,7 @@ import { z } from 'zod';
 import pkg from '~/package.json';
 
 import { embedTableauViz } from './lib/embedTableauViz.js';
+import { setupFullscreenToggle } from './lib/fullscreenToggle.js';
 import { callGetOAuthTokenTool } from './lib/getOAuthTokenToolClient.js';
 
 const urlSchema = z.object({
@@ -95,9 +96,39 @@ app.ontoolresult = async (result: CallToolResult) => {
     const viewUrl = extractUrlObjectFromResult(result);
     await loadTableauEmbeddingApi(viewUrl);
     const token = await callGetOAuthTokenTool(app);
+
+    const vizContainer = document.getElementById('tableauVizContainer');
+    if (!vizContainer) {
+      throw new Error('Viz container not found');
+    }
+
     embedTableauViz(viewUrl, token);
+
+    // Set up fullscreen toggle (gracefully degrades if unsupported)
+    setupFullscreenToggle(app, vizContainer);
   } catch (error) {
     console.error('Error embedding viz:', error);
+  }
+};
+
+// Handle host context changes (e.g., when host toggles fullscreen via its own UI)
+app.onhostcontextchanged = (context) => {
+  const vizContainer = document.getElementById('tableauVizContainer');
+  if (!vizContainer) return;
+
+  const isFullscreen = context.displayMode === 'fullscreen';
+  vizContainer.classList.toggle('fullscreen', isFullscreen);
+
+  // Also apply to main element
+  const main = vizContainer.closest('main');
+  if (main) {
+    main.classList.toggle('fullscreen', isFullscreen);
+  }
+
+  // Update button aria-pressed if button exists
+  const button = vizContainer.querySelector('.fullscreen-toggle');
+  if (button) {
+    button.setAttribute('aria-pressed', String(isFullscreen));
   }
 };
 
