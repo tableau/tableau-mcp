@@ -20,6 +20,9 @@ export function createTableauVizElement(vizUrl: string, token: string): HTMLElem
   // Set the token for authentication
   viz.setAttribute('token', token);
 
+  // Hide the toolbar to prevent inner scrollbar (toolbar adds ~27-40px beyond reported sheet height)
+  viz.setAttribute('toolbar', 'hidden');
+
   return viz;
 }
 
