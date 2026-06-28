@@ -81,6 +81,7 @@ Flow tools are grouped by operation: GET, LIST, then RUN.
 | [manage-knowledge-context](tools/knowledge/manage-knowledge-context.md)                                              | Creates, updates, or deletes customer-governed semantic context | Tableau+ only |
 | [delete-content](tools/content/delete-content.md)                                                                     | Admin-only. Two-phase (preview/confirm) delete of a workbook, data source, or extract refresh task; workbook/data source deletes need Admin Insights (Tableau Cloud) ([REST API][delete-workbook], [REST API][delete-datasource], [REST API][delete-extract-refresh-task]) | All SKUs     |
 | [scaffold-data-app](tools/data-apps/scaffold-data-app.md)                                                             | Disabled by default (`data-apps` feature flag). Scaffolds a starter Tableau data app workspace and requires a site allowed-origins API lookup                                                      | All SKUs     |
+| [whoami](tools/session/whoami.md)                                                                                     | Reports the current connection: auth method, server, site, and authorized user ([REST API][session-api])            | All SKUs     |
 
 \* The `get-datasource-metadata` tool relies on both the VizQL Data Service and the Metadata API to get rich metadata about a data source. Only sites with Data Management entitlements will be able to execute the Metadata API calls, though the tool will remain functional without it.
 
@@ -150,6 +151,8 @@ Flow tools are grouped by operation: GET, LIST, then RUN.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#get_users_on_site
 [update-user-api]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#update_user
+[session-api]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_server.htm#get-current-server-session
 
 ## Prompt List
 
