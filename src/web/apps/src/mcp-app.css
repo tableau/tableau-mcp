@@ -82,5 +82,5 @@ tableau-viz {
   width: 100%;
   height: 100% !important; /* Override inline pixel height from firstvizsizeknown */
   max-height: none;
-  overflow: hidden;
+  overflow: auto; /* Allow scrolling for wide visualizations */
 }
