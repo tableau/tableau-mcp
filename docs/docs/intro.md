@@ -50,6 +50,7 @@ Tableau's official MCP Server. Helping Agents see and understand data.
 | [query-admin-insights-site-content](tools/admin-insights/query-admin-insights-site-content.md)                        | Admin-only. Issues a VDS query against the Admin Insights `Site Content` datasource ([VDS API][vds])                |
 | [query-admin-insights-job-performance](tools/admin-insights/query-admin-insights-job-performance.md)                  | Admin-only. Issues a VDS query against the Admin Insights `Job Performance` datasource ([VDS API][vds])             |
 | [get-stale-content-report](tools/admin-insights/get-stale-content-report.md)                                          | Admin-only. Deterministic stale-content report from `Site Content` ([VDS API][vds])                                 |
+| [whoami](tools/session/whoami.md)                                                                                     | Reports the current connection: auth method, server, site, and authorized user ([REST API][session-api])            |
 
 [query]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources
@@ -88,6 +89,8 @@ Tableau's official MCP Server. Helping Agents see and understand data.
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#update_cloud_extract_refresh_task
 [list-users-api]:
   https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_users_and_groups.htm#get_users_on_site
+[session-api]:
+  https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_server.htm#get-current-server-session
 
 ## Prompt List
 

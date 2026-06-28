@@ -34,6 +34,7 @@ export const webToolNames = [
   'query-admin-insights-site-content',
   'query-admin-insights-job-performance',
   'get-stale-content-report',
+  'whoami',
 ] as const;
 export type WebToolName = (typeof webToolNames)[number];
 
@@ -49,6 +50,7 @@ export const webToolGroupNames = [
   'users',
   'token-management',
   'admin-insights',
+  'session',
 ] as const;
 export type WebToolGroupName = (typeof webToolGroupNames)[number];
 
@@ -94,6 +96,7 @@ export const webToolGroups = {
     'query-admin-insights-job-performance',
     'get-stale-content-report',
   ],
+  session: ['whoami'],
 } as const satisfies Record<WebToolGroupName, Array<WebToolName>>;
 
 export function isWebToolName(value: unknown): value is WebToolName {
