@@ -2,13 +2,17 @@
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
 }
 
 body {
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
 }
 
 .main {
@@ -20,7 +24,6 @@ body {
 
 .viz-container {
   width: 100%;
-  height: 100%;
 }
 
 tableau-viz {
@@ -65,22 +68,18 @@ tableau-viz {
 }
 
 /* Fullscreen layout */
-.main.fullscreen,
 .viz-container.fullscreen {
   position: fixed;
+  top: 0;
+  left: 0;
   width: 100vw;
   height: 100vh;
-  max-height: none;
-  margin: 0;
-  padding: 0;
   z-index: 999;
-  justify-content: center;
+  overflow: auto; /* This container owns the scroll region in fullscreen */
 }
 
 .viz-container.fullscreen tableau-viz {
-  /* Let the viz maintain its natural size, container will scroll */
+  /* Let the viz maintain its natural size; the container scrolls */
   min-width: 100%;
   max-height: none;
-  display: block;
-  overflow: auto
 }
