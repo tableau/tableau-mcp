@@ -76,11 +76,12 @@ tableau-viz {
   margin: 0;
   padding: 0;
   z-index: 999;
+  overflow: auto; /* Allow scrolling at container level */
 }
 
 .viz-container.fullscreen tableau-viz {
-  width: 100%;
-  height: 100% !important; /* Override inline pixel height from firstvizsizeknown */
+  /* Let the viz maintain its natural size, container will scroll */
+  min-width: 100%;
   max-height: none;
-  overflow: auto; /* Allow scrolling for wide visualizations */
+  display: block;
 }
