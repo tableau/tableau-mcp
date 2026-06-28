@@ -28,8 +28,6 @@ body {
 
 tableau-viz {
   width: 100%;
-  max-height: 1200px;
-  overflow-y: auto;
   display: block;
   transition: height 0.3s ease;
 }
@@ -81,5 +79,4 @@ tableau-viz {
 .viz-container.fullscreen tableau-viz {
   /* Let the viz maintain its natural size; the container scrolls */
   min-width: 100%;
-  max-height: none;
 }
