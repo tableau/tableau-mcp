@@ -31,7 +31,7 @@ export async function callGetEmbedTokenTool(app: App): Promise<string | null> {
 
   // No token available for this configuration (e.g. PAT without an embed credential):
   // the tool returns an error result. Treat that as a clean skip, not a failure.
-  if ((result as { isError?: boolean }).isError) {
+  if (result.isError) {
     return null;
   }
 
