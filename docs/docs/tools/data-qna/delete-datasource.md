@@ -7,7 +7,7 @@ sidebar_position: 4
 Deletes a published data source from the current Tableau site as the destructive step of the
 Stale Content Cleanup workflow.
 
-This tool is **admin-only** and is registered only when the `ADMIN_TOOLS_ENABLED` site setting is
+This tool is **admin-only** and is registered only when the `ADMIN_TOOLS_ENABLED` environment variable is
 enabled. Non-administrator callers are rejected before any action is taken.
 
 The tool is **two-phase** to keep the destructive action safe:

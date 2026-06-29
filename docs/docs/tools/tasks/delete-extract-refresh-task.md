@@ -7,7 +7,7 @@ sidebar_position: 2
 Deletes an extract refresh task from the Tableau site. This permanently removes the scheduled extract refresh — the underlying data source or workbook is not affected, but it will no longer be refreshed on this schedule.
 
 :::warning Admin Only
-This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` site setting to be enabled.
+This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable to be enabled.
 :::
 
 :::danger Destructive Operation

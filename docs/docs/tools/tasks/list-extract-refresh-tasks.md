@@ -7,7 +7,7 @@ sidebar_position: 1
 Retrieves a list of extract refresh tasks for the Tableau site. Each task describes a scheduled refresh for a data source or workbook extract and includes schedule information (e.g. frequency, next run time, schedule name on Server).
 
 :::warning Admin Only
-This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` site setting to be enabled.
+This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable to be enabled.
 :::
 
 ## APIs called

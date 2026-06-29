@@ -13,7 +13,10 @@ The quickest way to run Tableau MCP locally. Requires [Node.js](https://nodejs.o
       "command": "npx",
       "args": ["-y", "@tableau/mcp-server@latest"],
       "env": {
-        [INSERT CONFIG HERE]
+        "SERVER": "https://my-tableau-server.com",
+        "SITE_NAME": "my_site",
+        "PAT_NAME": "my_pat",
+        "PAT_VALUE": "pat_value"
       }
     }
   }
