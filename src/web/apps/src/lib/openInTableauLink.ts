@@ -6,17 +6,25 @@ import type { App } from '@modelcontextprotocol/ext-apps';
  * @param container - Container element to append the error message to
  */
 function showOpenLinkError(container: HTMLElement): void {
-  // Check if error message already exists (reuse if present)
-  let errorMessage = container.querySelector('.open-in-tableau-error') as HTMLElement;
-
-  if (!errorMessage) {
-    // Create new error message element
-    errorMessage = document.createElement('div');
-    errorMessage.className = 'open-in-tableau-error';
-    container.appendChild(errorMessage);
+  // Reuse the existing error message if present; the text is static so there's
+  // no need to re-set it on repeated failures.
+  if (container.querySelector('.open-in-tableau-error')) {
+    return;
   }
 
+  const errorMessage = document.createElement('div');
+  errorMessage.className = 'open-in-tableau-error';
   errorMessage.textContent = 'The URL was unable to be opened.';
+  container.appendChild(errorMessage);
+}
+
+/**
+ * Removes any inline error message left over from a previous failed open.
+ *
+ * @param container - Container element to remove the error message from
+ */
+function clearOpenLinkError(container: HTMLElement): void {
+  container.querySelector('.open-in-tableau-error')?.remove();
 }
 
 /**
@@ -59,6 +67,9 @@ export function setupOpenInTableauLink(app: App, url: string, container: HTMLEle
       if (result.isError) {
         console.warn('Open in Tableau link request denied by host', { url });
         showOpenLinkError(container);
+      } else {
+        // Clear any error left over from a previous failed attempt.
+        clearOpenLinkError(container);
       }
     } catch (error) {
       console.warn('Open in Tableau link request failed', { url, error });

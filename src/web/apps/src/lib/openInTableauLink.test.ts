@@ -257,4 +257,25 @@ describe('setupOpenInTableauLink', () => {
     const errorMessages = container.querySelectorAll('.open-in-tableau-error');
     expect(errorMessages.length).toBe(1);
   });
+
+  it('should clear a pre-existing error message when a later openLink succeeds', async () => {
+    const url = 'https://tableau.example.com/views/workbook/view';
+    // First attempt fails, second attempt succeeds.
+    mockApp.openLink = vi.fn().mockResolvedValueOnce({ isError: true }).mockResolvedValueOnce({});
+
+    setupOpenInTableauLink(mockApp, url, container);
+
+    const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
+    expect(linkElement).not.toBeNull();
+
+    // First click fails and shows the error message.
+    linkElement.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(container.querySelector('.open-in-tableau-error')).not.toBeNull();
+
+    // Second click succeeds and should clear the leftover error message.
+    linkElement.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(container.querySelector('.open-in-tableau-error')).toBeNull();
+  });
 });
