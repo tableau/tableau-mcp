@@ -38,9 +38,6 @@ Also, you cannot install the Tableau slack app from the Slack marketplace. You h
 
 :::
 
-### I've already installed the tableau slack app 
-TBD
-
 ### Using Tableau MCP from Slackbot
 Once you've install the Tableau Slack app, users of the worksapce simply have to click the `apps` button inside Slackbot and connect to their target Tableau site through the built-in [OAuth](/configuration/mcp-config/authentication/oauth.md) flow. 
 
