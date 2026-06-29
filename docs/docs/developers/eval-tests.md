@@ -9,7 +9,7 @@ The Tableau MCP project uses [Vitest][vitest] for eval tests. Eval tests are loc
 
 ## What is an Eval test?
 
-Eval tests—aka Evals—are tests used to evaluate MCP tool implementations using LLM-based scoring.
+Eval tests (aka evals) are tests used to evaluate MCP tool implementations using LLM-based scoring.
 The tests provide assessments for accuracy, completeness, relevance, clarity, and reasoning and help
 answer questions like:
 

@@ -9,7 +9,7 @@ sidebar_position: 3
 A read-only Tableau Cloud admin workflow that analyzes Admin Insights job performance and surfaces optimization signals.
 
 :::warning[Admin Only]
-This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` feature flag.
+This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` site setting.
 :::
 
 ## Workflow

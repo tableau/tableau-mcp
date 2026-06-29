@@ -7,7 +7,7 @@ sidebar_position: 1
 Retrieves a list of users on the Tableau site. Each user includes profile information such as site role, email, last login time, and authentication settings.
 
 :::warning[Admin Only]
-This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` feature flag to be enabled.
+This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable to be enabled.
 :::
 
 ## APIs called
@@ -34,7 +34,7 @@ Use this tool when you need to:
 
 ## Configuration
 
-Enable this tool by setting the feature flag:
+Enable this tool by setting:
 
 ```bash
 ADMIN_TOOLS_ENABLED=true

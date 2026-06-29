@@ -1,12 +1,20 @@
 ---
-sidebar_position: 1
-title: Deployment Guide for Tableau Server Customers
+sidebar_position: 2
+title: Deployment Guide for Tableau Cloud Customers
 ---
 
-# Tableau MCP Deployment Guide for Tableau Server Customers
+# Tableau MCP Deployment Guide for Tableau Cloud Customers
 
-This guide provides step-by-step instructions for Tableau Server customers to deploy the Tableau MCP
+This guide provides step-by-step instructions for Tableau Cloud customers to deploy the Tableau MCP
 server in a self-hosted environment.
+
+:::info
+
+Self-hosting Tableau MCP is not required for Cloud customers. Tableau's first-party, hosted MCP
+server is available at `https://mcp.tableau.com`. See [Hosted Tableau MCP](../hosted-tableau-mcp)
+for more details.
+
+:::
 
 ## Overview
 
@@ -24,8 +32,6 @@ being accessed by multiple users simultaneously, similar to any other web applic
 
 Before beginning the deployment process, ensure the following prerequisites are met:
 
-- **Tableau Server build**: If enabling OAuth, Tableau Server 2025.3 or newer. Otherwise, any
-  supported version is fine.
 - **Operating System**: Any operating system that is capable of running Docker or Node.js 22.7.5 or
   higher.
   - **Node.js**: Install Node.js 22.7.5 or higher. Not required if using Docker or a Node.js Single
@@ -34,9 +40,8 @@ Before beginning the deployment process, ensure the following prerequisites are 
   require a large or expensive SKU. You should do capacity planning based on your needs but
   something like an EC2 T4g small instance, Heroku Standard-2X dyno, or Azure Standard_B2als_v2
   should be sufficient.
-- **Network Access**: Ensure the MCP server machine can communicate with your Tableau Server
-  instance. The MCP server makes requests to the Tableau Server REST APIs so it must be able to
-  communicate with it.
+- **Network Access**: Ensure the MCP server machine can communicate with Tableau Cloud. The MCP
+  server makes requests to the Tableau Cloud REST APIs so it must be able to communicate with it.
 - **User Access**: This guide steps through running the MCP server over a local address. Exposing it
   to your users and only your users (e.g. via reverse proxy or tunnel) is left to the reader.
   Additional necessary precautions are described in the "Network isolation" section below.
@@ -53,8 +58,7 @@ Before making the Tableau MCP server deployment accessible to your users, ensure
 configuration guarantees it can only be accessed by the users you expect. In other words, don't open
 it up to the Internet, and definitely don't do that with OAuth disabled. Without OAuth, anyone who
 can make requests to the MCP server can effectively access Tableau data on behalf of the owner of
-the credential specified in the configuration. Generally speaking, lock it down at least as much as
-your deployment of Tableau Server itself.
+the credential specified in the configuration.
 
 ### Basic architecture
 
@@ -75,7 +79,7 @@ flowchart TB
  subgraph subGraph1["Hosting platform"]
         server1["Tableau MCP Server"]
   end
- subgraph subGraph2["Tableau Server"]
+ subgraph subGraph2["Tableau Cloud"]
 
         vds["VizQL Data Service"]
         metadata["Metadata API"]
@@ -94,10 +98,12 @@ flowchart TB
 
 ### Step 1: Determine your authentication approach
 
-The tools exposed by the Tableau MCP server call the Tableau Server REST APIs which require signing
-in with a Tableau Server user. Tableau MCP provides several options for specifying which credential
-is used when it signs in to the REST APIs. Using the below decision tree, determine which
-authentication option is most appropriate.
+The tools exposed by the Tableau MCP server call the Tableau Cloud REST APIs which require signing
+in with a Tableau Cloud user. **OAuth is the recommended, most secure, and fully supported
+authentication method for production deployments.** It provides per-user authentication and proper
+authorization scoping, and is the only method designed for general multi-user HTTP deployments.
+Alternative options are available only for testing, prototyping, or specific licensed scenarios.
+Using the below decision tree, determine which authentication option is most appropriate.
 
 ```mermaid
 flowchart TD
@@ -126,25 +132,58 @@ are provided below and assume the use of a `.env` file in the working directory 
 
 #### Required Environment Variables
 
-- The `SERVER` environment variable is always required; the value is the URL of your Tableau Server
-  (not the MCP server).
+- The `SERVER` environment variable is always required; the value is the URL of your Tableau Cloud
+  pod on which your Tableau site(s) exist(s) (not the MCP server).
 - Other required variables depend on your desired authentication mechanism and are as shown in the
   examples below
 
 <hr />
 
-#### Example: Authentication with Personal Access Token (PAT)
+#### Example: Authentication with OAuth (Recommended)
 
-Create a PAT using the instructions provided in
-[Personal Access Tokens - Tableau](https://help.tableau.com/current/server/en-us/security_personal_access_tokens.htm).
-All requests made to the MCP server will use the PAT to authenticate to the underlying Tableau REST
-APIs. For general multi-user HTTP deployments, prefer OAuth. PAT-based HTTP configurations are
-intended for testing/prototyping or licensed and approved UBL scenarios. ⚠️ PATs also should not be
-used when you expect simultaneous requests from multiple clients since they cannot be used
-concurrently.
+With OAuth enabled, when connecting to the MCP server the first time, each user will be required to
+sign in to their Tableau Cloud site the same way they would when viewing a dashboard in their web
+browser. Once a user successfully connects, the MCP server will make its requests to the underlying
+Tableau REST APIs as the user themself. The Tableau authorization server will issue the MCP client
+an access token which will be included with each subsequent request when calling MCP tools, where it
+will be validated before allowing the tool to be executed.
+
+This is the **recommended method for all production deployments**. It is the only approach that
+provides proper per-user authentication and authorization scoping.
+
+##### Environment Variables
 
 ```
-SERVER=https://tableau.superstore.com
+SERVER=https://10ax.online.tableau.com
+SITE_NAME=MySite
+
+OAUTH_ISSUER=https://sso.online.tableau.com
+OAUTH_RESOURCE_URI=https://tableau-mcp.superstore.com
+ADVERTISE_API_SCOPES=true
+OAUTH_EMBEDDED_AUTHZ_SERVER=false
+
+```
+
+<hr />
+
+#### Example: Authentication with Personal Access Token (PAT) — Testing/prototyping only
+
+:::warning
+
+PAT-based authentication is **not recommended for production deployments**. Use OAuth for
+multi-user HTTP deployments. PATs cannot be used concurrently, so simultaneous requests from
+multiple clients will fail.
+
+:::
+
+Create a PAT using the instructions provided in
+[Personal Access Tokens - Tableau](https://help.tableau.com/current/online/en-us/security_personal_access_tokens.htm).
+All requests made to the MCP server will use the PAT to authenticate to the underlying Tableau REST
+APIs. PAT-based HTTP configurations are intended for testing/prototyping or licensed and approved
+UBL scenarios only.
+
+```
+SERVER=https://10ax.online.tableau.com
 SITE_NAME=MySite
 TRANSPORT=http
 
@@ -159,19 +198,26 @@ DANGEROUSLY_DISABLE_OAUTH=true
 
 <hr />
 
-#### Example: Authentication with Direct Trust
+#### Example: Authentication with Direct Trust — Licensed/approved UBL scenarios only
+
+:::warning
+
+Direct Trust with OAuth disabled is **not recommended for general deployments**. Use OAuth for
+multi-user HTTP deployments. This configuration is intended only for deployments that are licensed
+and approved for user-based licensing (UBL). Confirm with your Tableau licensing and security
+guidance before use.
+
+:::
 
 Create a Direct Trust Connected App using the instructions provided in
-[Configure Connected Apps with Direct Trust - Tableau](https://help.tableau.com/current/server/en-us/connected_apps_direct.htm).
+[Configure Connected Apps with Direct Trust - Tableau](https://help.tableau.com/current/online/en-us/connected_apps_direct.htm).
 All requests made to the MCP server will use the provided details of the Connected App to generate a
 scoped
 [JSON Web Token (JWT)](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_authentication.htm#jwt)
-and use it to authenticate to the Tableau REST APIs. For general multi-user HTTP deployments, prefer
-OAuth. Direct Trust with OAuth disabled is intended for testing/prototyping or deployments that are
-licensed and approved for UBL, not as the default shared-account end-user deployment path.
+and use it to authenticate to the Tableau REST APIs.
 
 ```
-SERVER=https://tableau.superstore.com
+SERVER=https://10ax.online.tableau.com
 SITE_NAME=MySite
 TRANSPORT=http
 
@@ -184,72 +230,6 @@ CONNECTED_APP_SECRET_VALUE=DeF...
 # When TRANSPORT=http, requiring OAuth is the default
 # It must be disabled explicitly to use a different auth mechanism
 DANGEROUSLY_DISABLE_OAUTH=true
-```
-
-<hr />
-
-#### Example: Authentication with OAuth
-
-⚠️ Tableau Server 2025.3+ only.
-
-With OAuth enabled, when connecting to the MCP server the first time, each user will be required to
-sign in to their Tableau site the same way they would when viewing a dashboard in their web browser.
-Once a user successfully connects, the MCP server will make its requests to the underlying Tableau
-REST APIs as the user themself. Tableau MCP includes its own embedded authorization server, capable
-of issuing access and refresh tokens to MCP clients. Clients include the access token on each
-subsequent request when calling MCP tools, where it will be validated before allowing the tool to be
-executed.
-
-##### Prerequisites
-
-1. The access token created by the authorization server is encrypted using JWE (JSON Web Encryption)
-   with an RSA public key before it is issued to MCP clients. This public key is derived from an RSA
-   private key that you must provide. The private key is used by the MCP server to decrypt the
-   access tokens provided by the client.
-
-   If you don't have a private key handy, you can generate one using
-   [openssl-genrsa](https://docs.openssl.org/3.0/man1/openssl-genrsa/) e.g.
-
-   ```shell
-   openssl genrsa -out private.pem
-   ```
-
-2. Tableau Server administrators must also use
-   [tsm](https://help.tableau.com/current/server/en-us/cli_configuration-set_tsm.htm) to set
-   `oauth.allowed_redirect_uri_hosts` to the host of the MCP server. This is a security protection
-   mechanism that prevents the Tableau sign in flow for your sites from issuing authorization codes
-   to any application other than Tableau MCP's embedded authorization server. The value should be
-   the same as OAUTH_ISSUER but without the protocol or any trailing slash. This is not necessary
-   when testing the MCP server when accessed locally e.g. @ http://127.0.0.1:3927/tableau-mcp
-
-   ```shell
-   tsm configuration set -k oauth.allowed_redirect_uri_hosts -v tableau-mcp.superstore.com
-   tsm pending-changes apply
-   ```
-
-##### Environment Variables
-
-```
-SERVER=https://tableau.superstore.com
-SITE_NAME=MySite
-
-AUTH=oauth
-
-# For local testing:
-OAUTH_ISSUER=http://127.0.0.1:3927
-
-# For production use:
-#OAUTH_ISSUER=https://tableau-mcp.superstore.com
-#OAUTH_RESOURCE_URI=https://tableau-mcp.superstore.com
-
-# One of these, but not both:
-#   OAUTH_JWE_PRIVATE_KEY
-#   OAUTH_JWE_PRIVATE_KEY_PATH
-
-#OAUTH_JWE_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----\nMIIE...HZ3Q==\n-----END RSA PRIVATE KEY-----
-#OAUTH_JWE_PRIVATE_KEY_PATH=private.pem
-#OAUTH_JWE_PRIVATE_KEY_PASSPHRASE=private-key-passphrase-if-encrypted
-
 ```
 
 ### Step 3: Run the MCP Server
@@ -350,10 +330,9 @@ Examples:
    INCLUDE_TOOLS=datasource
    ```
 
-2. **Exclude Pulse tools and the Get View Image tool**. Since Tableau Pulse is not available on
-   Tableau Server, the Pulse tools can be easily excluded using the `pulse` tool group. This example
-   also excludes the `get-view-image` tool to demonstrate tool groups and individual tools can be
-   provided simultaneously.
+2. **Exclude Pulse tools and the Get View Image tool**. The Pulse tools can be easily excluded using
+   the `pulse` tool group. This example also excludes the `get-view-image` tool to demonstrate tool
+   groups and individual tools can be provided simultaneously.
 
    ```
    EXCLUDE_TOOLS=pulse,get-view-image
@@ -433,25 +412,13 @@ ENABLED_LOGGERS=fileLogger
 FILE_LOGGER_DIRECTORY=D:\logs
 ```
 
-##### OAuth Site Locking
-
-When OAuth is enabled, the Tableau site that the MCP server uses when making its requests to the
-underlying Tableau REST APIs is the one the user signed into when initially authenticating to the
-MCP server. By default, users are forced to sign into the site specified in the `SITE_NAME`
-environment variable. However, if you would rather give your users the ability to sign into any site
-on the Tableau server that they can access, you can set `OAUTH_LOCK_SITE=false`.
-
-```
-OAUTH_LOCK_SITE=false
-```
-
 ##### OAuth + alternate authentication
 
 When OAuth is enabled by providing a value for the `OAUTH_ISSUER`, users must first sign into their
-Tableau site to access the MCP server. By default, the MCP server will then make its requests to the
-underlying Tableau REST APIs on behalf of the user themself. **It is highly recommended to rely on
-this default behavior**, however it can be configured if deemed unnecessary or undesirable for your
-workflow.
+Tableau Cloud site to access the MCP server. By default, the MCP server will then make its requests
+to the underlying Tableau REST APIs on behalf of the user themself. **It is highly recommended to
+rely on this default behavior**, however it can be configured if deemed unnecessary or undesirable
+for your workflow.
 
 The `AUTH` environment variable can still be set to any of the non-OAuth authentication mechanisms,
 e.g. `direct-trust`. In the below example, the MCP server will still be protected from unauthorized
@@ -463,10 +430,13 @@ hard-coded `sub` claim should only be used for deployments that are licensed and
 user-based licensing (UBL) pattern.
 
 ```
-SERVER=https://tableau.superstore.com
+SERVER=https://10ax.online.tableau.com
 SITE_NAME=MySite
 
-OAUTH_ISSUER=http://127.0.0.1:3927
+OAUTH_ISSUER=https://sso.online.tableau.com
+OAUTH_RESOURCE_URI=https://tableau-mcp.superstore.com
+ADVERTISE_API_SCOPES=true
+OAUTH_EMBEDDED_AUTHZ_SERVER=false
 
 AUTH=direct-trust
 JWT_SUB_CLAIM={OAUTH_USERNAME}
@@ -576,28 +546,16 @@ curl --request POST \
 This depends on your agent, but add the MCP server URL in the agent's MCP configuration file or
 settings UI.
 
-For example, in Cursor, mcp.json will look like:
-
-```json
-{
-  "mcpServers": {
-    "tableau": {
-      "url": "http://127.0.0.1:3927/tableau-mcp"
-    }
-  }
-}
-```
-
-When OAuth is not enabled, Cursor will connect immediately and list the available tools:
+When OAuth is not enabled, the agent will connect immediately and list the available tools:
 
 ![Cursor Connected](images/cursor-connected.png)
 
-When OAuth is enabled, Cursor will inform the user that they need to authenticate to the MCP server
-first:
+When OAuth is enabled, the agent will inform the user that they need to authenticate to the MCP
+server first:
 
 ![Cursor Auth Required](images/cursor-auth-required.png)
 
-Clicking **Connect** will prompt the user to sign into the site and once they do, Cursor will be
+Clicking **Connect** will prompt the user to sign into the site and once they do, the agent will be
 fully connected to the MCP server and display the list of available tools. If you encounter any
 issues during the sign in process, this suggests a misconfiguration of the OAuth environment
 variables. The easiest way to debug exactly what is wrong is to use an MCP OAuth debugger like the
@@ -619,41 +577,12 @@ working.
   authentication configuration.
   - Is the PAT expired?
   - Is the Connected App enabled on the site?
-- If the tool returns some other error, this could indicate a Tableau Server misconfiguration or a
+- If the tool returns some other error, this could indicate a Tableau Cloud misconfiguration or a
   runtime issue.
 - If you see the model fail to choose or execute the tool, this suggests the model may not support
   tool calling or the model is weak.
 
 ## Additional considerations
-
-### Embedded authorization server
-
-To support OAuth, the Tableau MCP server ships with its own "embedded" authorization server,
-responsible for issuing access and refresh tokens to MCP clients. It uses the authentication
-mechanisms provided by Tableau Server and configured at the Tableau site level to ensure access is
-limited to users who can already access the Tableau sites. When OAuth is enabled on the MCP server,
-the Tableau user context is securely stored within the access token issued to MCP clients so user
-capabilities and privileges persist end-to-end.
-
-The embedded authorization server is currently the only supported authorization server for use when
-self-hosting the Tableau MCP server for Tableau Server customers. This has no impact on the
-authentication configuration of the Tableau Server itself. For example, if your Tableau Server is
-configured to require OpenID Connect via an external identity provider, this doesn't change. The
-embedded authorization server only protects the deployment of Tableau MCP, not Tableau Server.
-
-There is one limitation of the embedded authorization server that is worth mentioning. The refresh
-tokens issued to MCP clients are currently stored in the memory of the Tableau MCP server process.
-These are used when an agent determines the access token will soon expire and requests it be
-refreshed using the refresh token. The agent provides the refresh token, the authorization server
-ensures it exists in its memory and is valid for the client, and reissues a fresh set of access and
-refresh tokens to the client. In the event the Tableau MCP process is stopped or restarted, all
-these refresh tokens are effectively forgotten so if a client later attempts to exchange a refresh
-token for a new access token, it will fail and the user will need to reconnect their client. Clients
-may or may not automatically prompt the user to re-authenticate, potentially causing some friction.
-Access tokens expire after 1 hour by default but can be extended to 30 days using the
-`OAUTH_ACCESS_TOKEN_TIMEOUT_MS` environment variable. We are working internally to improve this, but
-for now please be aware. See
-[Add support for persistent storage of refresh tokens and authorization codes · Issue #265 · tableau/tableau-mcp](https://github.com/tableau/tableau-mcp/issues/265)
 
 ### Passthrough authentication
 

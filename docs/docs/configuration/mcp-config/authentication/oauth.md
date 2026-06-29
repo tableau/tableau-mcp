@@ -4,21 +4,57 @@ sidebar_position: 4
 
 # OAuth
 
+## Tableau Cloud
+
+### Hosted Tableau MCP
+
+`https://mcp.tableau.com` is Tableau's hosted version of Tableau MCP. Tableau Cloud users can connect
+their agents to this URL without any additional configuration.
+
+All Tableau auth modes are *site scoped*. If you are a multi-site user, and you have connected an MCP client to the hosted Tableau MCP server, you must disconnect, then reconnect to your target site.
+
+**Known Issues**
+
+**Issue 1: First-time connection lands on the wrong site**
+
+- **Problem:** When a multi-site user connects to Tableau MCP for the first time, the OAuth flow may send them to the wrong site.
+- **Workaround:** Sign out of Tableau Cloud, sign in to the target site, then trigger the Tableau MCP OAuth flow again.
+
+**Issue 2: Reconnecting does not re-trigger the OAuth flow**
+
+- **Problem:** After a user has already connected to the hosted Tableau MCP server, disconnecting and reconnecting may not trigger the OAuth flow again.
+- **Workaround:** Sign out of Tableau Cloud, then trigger the Tableau MCP OAuth flow again. If the issue persists, clear your browser cookies and try again.
+
+### Self-hosted Tableau MCP
+
+Tableau Cloud customers can self-host Tableau MCP. A full guide can be found at
+[Tableau MCP Deployment Guide for Tableau Cloud Customers](../../../enterprise/tableau-cloud.md).
+
+### Local Tableau MCP
+
+Users running Tableau MCP locally can provide the following environment variables to enable OAuth:
+
+```
+# The Tableau Cloud pod URL your site is on e.g. https://prod-uswest-c.online.tableau.com
+SERVER=https://[prod-my-pod].online.tableau.com
+
+# Tableau's authorization server used to issue access tokens
+OAUTH_ISSUER=https://sso.online.tableau.com
+
+# Configures issued access tokens to contain the necessary Tableau API scopes
+ADVERTISE_API_SCOPES=true
+
+# Configures Tableau MCP to use the Tableau authZ server, not its embedded authZ server
+# which is reserved for Tableau Server users
+OAUTH_EMBEDDED_AUTHZ_SERVER=false
+```
+
+## Tableau Server
+
 :::warning
 
-Tableau Server 2025.3+ only. Full Tableau Cloud is not supported yet but is coming soon ETA Q2 2026.
-Until then, enabling OAuth support against a Tableau Cloud site will only work when the MCP server
-is accessed using a local development URL e.g. `http://127.0.0.1:3927/tableau-mcp`.
+Tableau Server must be version 2025.3 or newer.
 
 :::
 
-When `AUTH` is `oauth`, the MCP server will use a Tableau session initiated by the Tableau OAuth
-flow to authenticate to the Tableau REST APIs.
-
-OAuth is enabled by setting the `OAUTH_ISSUER` environment variable to the origin of your MCP server.
-
-:::info
-
-See [Enabling OAuth](../oauth.md) for full details on configuring OAuth.
-
-:::
+See [Enabling OAuth (Tableau Server)](../oauth.md) for full details on configuring OAuth.
