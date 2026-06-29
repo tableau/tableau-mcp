@@ -2,13 +2,17 @@
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
 }
 
 body {
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
 }
 
 .main {
@@ -20,13 +24,70 @@ body {
 
 .viz-container {
   width: 100%;
-  height: 100%;
+}
+
+/* Cap non-fullscreen viz height to prevent unbounded growth for dashboards that
+   report a very large natural sheet height (sheetSize.maxSize.height). The
+   container becomes the single scroll owner above the cap. Restores the bound
+   that the base tableau-viz max-height once provided, without the inner-iframe
+   scroll (already eliminated by attribute sizing + toolbar=hidden). Scoped to
+   :not(.fullscreen) so fullscreen's own 100vh scroll container is untouched. */
+.viz-container:not(.fullscreen) {
+  max-height: 90vh;
+  overflow: auto;
 }
 
 tableau-viz {
   width: 100%;
-  max-height: 1200px;
-  overflow-y: auto;
   display: block;
   transition: height 0.3s ease;
+}
+
+/* Fullscreen toggle button */
+.fullscreen-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1000;
+  padding: 0.5rem;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.fullscreen-toggle:hover {
+  background: rgba(255, 255, 255, 1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.fullscreen-toggle:focus {
+  outline: 2px solid #0066cc;
+  outline-offset: 2px;
+}
+
+.fullscreen-toggle:active {
+  transform: scale(0.95);
+}
+
+/* Fullscreen layout */
+.viz-container.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 999;
+  overflow: auto; /* This container owns the scroll region in fullscreen */
+}
+
+.viz-container.fullscreen tableau-viz {
+  /* Let the viz maintain its natural size; the container scrolls */
+  min-width: 100%;
 }

@@ -15,6 +15,7 @@ describe('createTableauVizElement', () => {
     expect(element.tagName.toLowerCase()).toBe('tableau-viz');
     expect(element.getAttribute('src')).toBe(vizUrl);
     expect(element.getAttribute('token')).toBe(token);
+    expect(element.getAttribute('toolbar')).toBe('hidden');
   });
 });
 
@@ -107,12 +108,13 @@ describe('embedTableauViz', () => {
 
     expect(vizElement).toBeTruthy();
 
-    // Simulate firstvizsizeknown event with viz height
+    // Simulate firstvizsizeknown event with viz dimensions
     const event = new CustomEvent('firstvizsizeknown', {
       detail: {
         vizSize: {
           sheetSize: {
             maxSize: {
+              width: 1200,
               height: 800,
             },
           },
@@ -122,8 +124,40 @@ describe('embedTableauViz', () => {
 
     vizElement.dispatchEvent(event);
 
-    // Should set height to the reported viz height
+    // Should set height attribute and style for the Embedding API iframe sizing
+    expect(vizElement.getAttribute('height')).toBe('800');
     expect(vizElement.style.height).toBe('800px');
+  });
+
+  it('should set width to 100% string to preserve responsive behavior', () => {
+    const vizUrl = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view';
+    const token = 'test-token-123';
+
+    embedTableauViz(vizUrl, token);
+
+    const container = document.getElementById('tableauVizContainer');
+    const vizElement = container?.querySelector('tableau-viz') as HTMLElement;
+
+    expect(vizElement).toBeTruthy();
+
+    // Simulate firstvizsizeknown event with viz dimensions
+    const event = new CustomEvent('firstvizsizeknown', {
+      detail: {
+        vizSize: {
+          sheetSize: {
+            maxSize: {
+              width: 1200,
+              height: 800,
+            },
+          },
+        },
+      },
+    });
+
+    vizElement.dispatchEvent(event);
+
+    // Width should be set to "100%" to maintain responsive behavior
+    expect(vizElement.getAttribute('width')).toBe('100%');
   });
 
   it('should leave height unset when firstvizsizeknown has no numeric height', () => {

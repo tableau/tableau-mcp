@@ -20,6 +20,9 @@ export function createTableauVizElement(vizUrl: string, token: string): HTMLElem
   // Set the token for authentication
   viz.setAttribute('token', token);
 
+  // Hide the toolbar to prevent inner scrollbar (toolbar adds ~27-40px beyond reported sheet height)
+  viz.setAttribute('toolbar', 'hidden');
+
   return viz;
 }
 
@@ -39,9 +42,10 @@ export function embedTableauViz(vizUrl: string, token: string): void {
   const viz = createTableauVizElement(vizUrl, token);
 
   // The Embedding API reports the viz's natural size via `firstvizsizeknown`.
-  // Set the element's height to the viz's natural sheet height so it renders
-  // fully; the ext-apps SDK's built-in auto-resize then grows the app frame to
-  // match the resulting document height.
+  // Set the element's width/height ATTRIBUTES (not just CSS) so the Embedding
+  // API sizes its internal cross-origin iframe correctly. Without attributes,
+  // the iframe uses a default size and creates its own scrollbar.
+  // Width is set to "100%" for responsive behavior; height is the native px value.
   viz.addEventListener('firstvizsizeknown', (event) => {
     const vizSize = (event as CustomEvent).detail?.vizSize;
     const sheetHeight = vizSize?.sheetSize?.maxSize?.height;
@@ -49,6 +53,13 @@ export function embedTableauViz(vizUrl: string, token: string): void {
       return;
     }
 
+    console.log('height: ', sheetHeight);
+
+    // Set attributes for Embedding API iframe sizing
+    viz.setAttribute('width', '100%');
+    viz.setAttribute('height', String(sheetHeight));
+
+    // Also set CSS height for backward compatibility
     viz.style.height = `${sheetHeight}px`;
   });
 
