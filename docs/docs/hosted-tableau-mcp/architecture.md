@@ -82,7 +82,7 @@ flowchart LR
 
 ### Request routing sequence
 
-1. An user's AI agent sends unauthenticated request to [mcp.tableau.com](https://mcp.tableau.com).
+1. A user's AI agent sends unauthenticated request to [mcp.tableau.com](https://mcp.tableau.com).
 2. AI agent's unauthenticated request is routed to the nearest Cloudfront edge location to provide best network latency.
 3. Unauthenticated request is sent back by Routing Layer returning an `HTTP 401` with a `WWW-Authenticate` header pointing the agent to the OAuth 2.1 flow:
 
