@@ -20,19 +20,20 @@ const embedTokenDataSchema = z.object({
 /**
  * Calls the get-embed-token tool to retrieve the embed token from the MCP server.
  * @param app - The MCP App instance
- * @returns The embed token string, or null when no token is available for the
- *   current configuration (the app should then skip embedding).
+ * @returns The embed token string.
+ * @throws When no token is available for the current configuration (e.g. PAT
+ *   without an embed credential), surfacing the server's error message.
  */
-export async function callGetEmbedTokenTool(app: App): Promise<string | null> {
+export async function callGetEmbedTokenTool(app: App): Promise<string> {
   const result = await app.callServerTool({
     name: 'get-embed-token',
     arguments: {},
   });
 
   // No token available for this configuration (e.g. PAT without an embed credential):
-  // the tool returns an error result. Treat that as a clean skip, not a failure.
+  // the tool returns an error result.
   if (result.isError) {
-    return null;
+    throw new Error('Failed to get an embed token for the current authentication configuration.');
   }
 
   // Validate and parse the result to extract the token

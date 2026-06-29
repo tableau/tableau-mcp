@@ -102,21 +102,21 @@ describe('callGetEmbedTokenTool', () => {
     await expect(callGetEmbedTokenTool(mockApp as any)).rejects.toThrow('Tool call failed');
   });
 
-  it('should return null when the tool reports no token is available (isError)', async () => {
+  it('should throw when no token is available (isError)', async () => {
     const mockApp = {
       callServerTool: vi.fn().mockResolvedValue({
         content: [
           {
             type: 'text',
-            text: 'No embed token is available for the current authentication configuration.',
+            text: 'Failed to get an embed token for the current authentication configuration.',
           },
         ],
         isError: true,
       }),
     };
 
-    const token = await callGetEmbedTokenTool(mockApp as any);
-
-    expect(token).toBeNull();
+    await expect(callGetEmbedTokenTool(mockApp as any)).rejects.toThrow(
+      'Failed to get an embed token for the current authentication configuration.',
+    );
   });
 });
