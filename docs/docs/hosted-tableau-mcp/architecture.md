@@ -94,4 +94,4 @@ flowchart LR
    ```
 4. AI agent starts OAuth flow from the info provided in `www-authenticate` and completes authentication.
 5. AI agent starts making authenticated requests to [mcp.tableau.com](https://mcp.tableau.com).
-5. Tableau Routing Layer routes the authenticated request to the corresponding tableau cloud pod.
+5. Tableau Routing Layer routes the authenticated request to the corresponding Tableau Cloud pod.
