@@ -115,7 +115,7 @@ describe('deleteWorkbookTool', () => {
       title: 'Delete Workbook',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     });
   });
