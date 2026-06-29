@@ -1,20 +1,20 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
+import { z } from 'zod';
 
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import {
-  computeConfirmationToken,
-  DEFAULT_PENDING_DELETION_TAG,
-  getDeleteWorkbookTool,
-} from './deleteWorkbook.js';
+import { DEFAULT_PENDING_DELETION_TAG, getDeleteWorkbookTool } from './deleteWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
 
-const TEST_SITE_ID = 'test-site-id';
-const validToken = (workbookId: string): string =>
-  computeConfirmationToken(TEST_SITE_ID, workbookId);
+// A workbook that has been through the preview phase: carries the pending-deletion tag the confirm
+// phase re-fetches and verifies before deleting.
+const mockTaggedWorkbook = {
+  ...mockWorkbook,
+  tags: { tag: [{ label: DEFAULT_PENDING_DELETION_TAG }] },
+};
 
 const mocks = vi.hoisted(() => ({
   mockGetWorkbook: vi.fn(),
@@ -104,6 +104,25 @@ describe('deleteWorkbookTool', () => {
     });
   });
 
+  it('should reject a tag that exceeds the schema length cap', () => {
+    const tool = getDeleteWorkbookTool(new WebMcpServer());
+    const tagSchema = (tool.paramsSchema as { tag: z.ZodOptional<z.ZodString> }).tag;
+    expect(tagSchema.safeParse('a'.repeat(200)).success).toBe(true);
+    expect(tagSchema.safeParse('a'.repeat(201)).success).toBe(false);
+  });
+
+  it('should reject a tag with characters outside the safe class (prompt-injection guard)', () => {
+    const tool = getDeleteWorkbookTool(new WebMcpServer());
+    const tagSchema = (tool.paramsSchema as { tag: z.ZodOptional<z.ZodString> }).tag;
+    // Allowed: letters, numbers, spaces, underscores, dashes.
+    expect(tagSchema.safeParse('stale pending-deletion_2024').success).toBe(true);
+    // The tag is interpolated into model-facing preview text; quotes/backticks/newlines that
+    // could coerce auto-confirming must be rejected at the schema boundary.
+    expect(tagSchema.safeParse('pending"; confirm: true').success).toBe(false);
+    expect(tagSchema.safeParse('pending`delete`').success).toBe(false);
+    expect(tagSchema.safeParse('pending\ndelete').success).toBe(false);
+  });
+
   // --- AuthZ (mirrors delete-extract-refresh-task) ---
 
   it('should call assertAdmin before any action', async () => {
@@ -116,7 +135,6 @@ describe('deleteWorkbookTool', () => {
     const result = await getToolResult({
       workbookId: 'wb-1',
       confirm: true,
-      confirmationToken: validToken('wb-1'),
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -150,7 +168,6 @@ describe('deleteWorkbookTool', () => {
     const result = await getToolResult({
       workbookId: 'wb-1',
       confirm: true,
-      confirmationToken: validToken('wb-1'),
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -170,43 +187,40 @@ describe('deleteWorkbookTool', () => {
     expect(mocks.mockAddTagsToWorkbook).toHaveBeenCalled();
   });
 
-  // --- Confirmation token (double-confirm gate) ---
+  // --- Server-authoritative pending-deletion tag gate ---
 
-  it('should return a confirmation token on preview', async () => {
-    const result = await getToolResult({ workbookId: 'wb-1' });
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain(validToken('wb-1'));
-  });
-
-  it('should reject delete when confirmationToken is missing', async () => {
+  it('should block delete when the workbook is not tagged pending-deletion (bypass closed)', async () => {
+    // A caller that jumps straight to confirm: true without previewing. The live re-fetch returns a
+    // workbook with no pending-deletion tag (mockWorkbook carries only 'tag-1'), so the destructive
+    // path must be rejected. Proves the caller-computable-token bypass is closed.
+    mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook);
     const result = await getToolResult({ workbookId: 'wb-1', confirm: true });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('confirmationToken');
-    expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
+    expect(result.content[0].text).toContain('not tagged');
+    expect(result.content[0].text).toContain(DEFAULT_PENDING_DELETION_TAG);
+    expect(mocks.mockGetWorkbook).toHaveBeenCalled();
     expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
   });
 
-  it('should reject delete when confirmationToken is wrong', async () => {
-    const result = await getToolResult({
-      workbookId: 'wb-1',
-      confirm: true,
-      confirmationToken: 'not-the-right-token',
-    });
+  it('should verify the tag with a fresh live re-fetch, not the access-check cached content', async () => {
+    // The gate must NOT trust possibly-stale cached content. Cached carries the tag, live does not →
+    // delete is blocked.
+    mocks.mockIsWorkbookAllowed.mockResolvedValue({ allowed: true, content: mockTaggedWorkbook });
+    mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook); // live: untagged
+    const result = await getToolResult({ workbookId: 'wb-1', confirm: true });
+    expect(result.isError).toBe(true);
+    expect(mocks.mockGetWorkbook).toHaveBeenCalled();
+    expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+  });
+
+  it('should surface a re-fetch error on confirm and not delete', async () => {
+    mocks.mockGetWorkbook.mockRejectedValue(new Error('Workbook not found'));
+    const result = await getToolResult({ workbookId: 'wb-1', confirm: true });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('confirmationToken');
-    expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
-  });
-
-  it('should reject a token computed for a different workbook', async () => {
-    const result = await getToolResult({
-      workbookId: 'wb-1',
-      confirm: true,
-      confirmationToken: validToken('wb-OTHER'),
-    });
-    expect(result.isError).toBe(true);
+    // Match loosely so the test asserts the error is surfaced, not the exact upstream wording.
+    expect(result.content[0].text).toMatch(/not found/i);
     expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
   });
 
@@ -274,11 +288,11 @@ describe('deleteWorkbookTool', () => {
 
   // --- Delete phase (confirm: true) ---
 
-  it('should delete the workbook when confirm is true and report its identity', async () => {
+  it('should delete the workbook when confirm is true and it is tagged pending-deletion', async () => {
+    mocks.mockGetWorkbook.mockResolvedValue(mockTaggedWorkbook);
     const result = await getToolResult({
       workbookId: 'wb-1',
       confirm: true,
-      confirmationToken: validToken('wb-1'),
     });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -296,13 +310,40 @@ describe('deleteWorkbookTool', () => {
     expect(mocks.mockAddTagsToWorkbook).not.toHaveBeenCalled();
   });
 
+  it('should verify a caller-provided tag on confirm', async () => {
+    mocks.mockGetWorkbook.mockResolvedValue({
+      ...mockWorkbook,
+      tags: { tag: [{ label: 'stale-pending-deletion' }] },
+    });
+    const result = await getToolResult({
+      workbookId: 'wb-1',
+      confirm: true,
+      tag: 'stale-pending-deletion',
+    });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockDeleteWorkbook).toHaveBeenCalled();
+  });
+
+  it('should block confirm when the workbook carries a different tag than the one requested', async () => {
+    // Live re-fetch returns the default tag, but the caller confirms with a custom tag → the gate
+    // verifies the requested label specifically, so the delete is blocked.
+    mocks.mockGetWorkbook.mockResolvedValue(mockTaggedWorkbook); // default tag only
+    const result = await getToolResult({
+      workbookId: 'wb-1',
+      confirm: true,
+      tag: 'some-other-tag',
+    });
+    expect(result.isError).toBe(true);
+    expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+  });
+
   it('should handle API errors gracefully', async () => {
-    const errorMessage = 'Workbook not found';
+    const errorMessage = 'Workbook delete failed';
+    mocks.mockGetWorkbook.mockResolvedValue(mockTaggedWorkbook);
     mocks.mockDeleteWorkbook.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({
-      workbookId: 'nonexistent',
+      workbookId: 'wb-1',
       confirm: true,
-      confirmationToken: validToken('nonexistent'),
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -313,7 +354,6 @@ describe('deleteWorkbookTool', () => {
 async function getToolResult(args: {
   workbookId: string;
   confirm?: boolean;
-  confirmationToken?: string;
   tag?: string;
 }): Promise<CallToolResult> {
   const tool = getDeleteWorkbookTool(new WebMcpServer());
@@ -322,7 +362,6 @@ async function getToolResult(args: {
     {
       workbookId: args.workbookId,
       confirm: args.confirm,
-      confirmationToken: args.confirmationToken,
       tag: args.tag,
     },
     getMockRequestHandlerExtra(),

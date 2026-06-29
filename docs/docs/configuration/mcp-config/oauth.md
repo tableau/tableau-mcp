@@ -2,17 +2,24 @@
 sidebar_position: 3
 ---
 
-# Enabling OAuth
+# Enabling OAuth (Tableau Server)
 
-:::warning
+:::info
 
-Tableau Server 2025.3+ only. Full Tableau Cloud is not supported yet but is coming soon ETA Q2 2026.
-Until then, enabling OAuth support against a Tableau Cloud site will only work when the MCP server
-is accessed using a local development URL e.g. `http://127.0.0.1:3927/tableau-mcp`.
+These docs are for enabling OAuth for Tableau Server only.
+
+Tableau Cloud customers should refer to
+[OAuth: Tableau Cloud](../mcp-config/authentication/oauth.md).
 
 :::
 
 ## How to Enable OAuth
+
+:::warning
+
+Tableau Server must be version 2025.3 or newer.
+
+:::
 
 To enable OAuth, set the [`OAUTH_ISSUER`](#oauth_issuer) environment variable to the origin of your
 MCP server. When a URL for `OAUTH_ISSUER` is provided, the MCP server will act as an OAuth 2.1
@@ -138,8 +145,8 @@ server. This should be the base URL of your MCP server deployment.
 This value is the deployment domain only (no path). The MCP server is reached at
 `<OAUTH_RESOURCE_URI>/tableau-mcp`, which is the canonical resource identifier advertised as
 `resource` in the protected resource metadata document. Incoming bearer tokens are
-audience-validated against it: the token's `aud` claim must equal `<OAUTH_RESOURCE_URI>/tableau-mcp`,
-per [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) and
+audience-validated against it: the token's `aud` claim must equal
+`<OAUTH_RESOURCE_URI>/tableau-mcp`, per [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068) and
 [RFC 8707](https://www.rfc-editor.org/rfc/rfc8707). A token whose `aud` matches neither that value
 nor [`OAUTH_GLOBAL_RESOURCE_URIS`](#oauth_global_resource_uris) is rejected with a `401`.
 
@@ -491,14 +498,12 @@ sequenceDiagram
 The MCP server supports three OAuth 2.1 grant types:
 
 1. **Authorization Code Grant** (with PKCE): Interactive flow requiring user authentication
-
    - User must authenticate with Tableau Server
    - Supports refresh tokens for long-term access
    - Uses PKCE for security
    - Suitable for interactive applications
 
 2. **Client Credentials Grant**: Non-interactive flow for service-to-service authentication
-
    - No user authentication required
    - No refresh tokens issued
    - Uses pre-configured client ID/secret pairs
@@ -537,5 +542,5 @@ The MCP server supports three OAuth 2.1 grant types:
 
 For MCP client-facing token and consent cleanup, see the
 [`reset-consent`](../../tools/token-management/reset-consent.md) and
-[`revoke-access-token`](../../tools/token-management/revoke-access-token.md) tools. For full cleanup,
-call `reset-consent` before `revoke-access-token`.
+[`revoke-access-token`](../../tools/token-management/revoke-access-token.md) tools. For full
+cleanup, call `reset-consent` before `revoke-access-token`.

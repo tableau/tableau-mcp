@@ -4,16 +4,12 @@ sidebar_position: 1
 
 # Configuring Tableau
 
-Tableau MCP works with both Tableau Server and Tableau Cloud data with these prerequisites:
+Tableau MCP is a bridge between an AI agent and your Tableau Platform (APIs). It works with both Tableau Server and Tableau Cloud, but its capabilities are determined by the availability of the underlying Tableau services that the MCP tools depend on, and by an individual user's ability to access them. To get the most out of Tableau MCP, we recommend the following:
 
-- Only published data sources are supported.
-- VDS (VizQL Data Service) must be enabled (Tableau Server users may need to [enable it][vds]).
-- VDS requires that the user also have API Access permission [enabled][api-access].
-- Metadata API must be enabled (Tableau Server users may need to [enable it][metadata]).
-- You may need to [enable Tableau Pulse][pulse] on your Tableau Cloud site to use the
-  [Pulse tools](../category/pulse) (Tableau Server is unable to use Tableau Pulse).
+- Ensure VDS (VizQL Data Service) is enabled (Tableau Server users may need to [enable it][vds]) and users have the API Access permission [enabled][api-access] on the data sources they intend to query.
+- Data Catalog is enabled for accessing the Metadata API to ground agents on the metadata and lineage of data sources and content. (Tableau Server users may need to [enable it][metadata]).
+- Tableau Pulse's AI capabilities [are enabled](https://help.tableau.com/current/online/en-us/pulse_set_up.htm). Tableau Server is unable to use Tableau Pulse at this time.
 
-[pulse]: https://help.tableau.com/current/online/en-us/pulse_set_up.htm
 [vds]:
   https://help.tableau.com/current/server-linux/en-us/cli_configuration-set_tsm.htm#featuresvizqldataservicedeploywithtsm
 [api-access]:

@@ -51,20 +51,20 @@ describe('renderHitlGate', () => {
 });
 
 describe('renderConfirmInstructions', () => {
-  it('inserts the tool reference and requires confirm: true with the preview token', () => {
+  it('inserts the tool reference and requires confirm: true with the pending-deletion tag', () => {
     const text = renderConfirmInstructions({
       toolRef: '`delete-workbook`',
       itemNoun: 'stale item',
     });
     expect(text).toContain('`delete-workbook`');
     expect(text).toContain('`confirm: true`');
-    expect(text).toContain('`confirmationToken`');
+    expect(text).toContain('pending-deletion tag');
   });
 
-  it('forbids auto-confirming or fabricating the token', () => {
+  it('forbids auto-confirming and batch-confirming', () => {
     const text = renderConfirmInstructions({ toolRef: '`delete-datasource`' });
     expect(text).toContain('Do NOT auto-confirm');
-    expect(text).toContain('Do NOT compute, guess, or reuse');
+    expect(text).toContain('never batch-confirm');
   });
 
   it('accepts a routing-table phrase as the tool reference', () => {

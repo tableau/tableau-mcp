@@ -1,11 +1,80 @@
 .features {
-  display: flex;
-  align-items: center;
-  padding: 2rem 0;
+  padding: 3rem 0 4rem;
   width: 100%;
 }
 
-.featureSvg {
-  height: 200px;
-  width: 200px;
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2.5rem 2rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  text-decoration: none;
+  color: inherit;
+  transition: background-color 0.2s ease;
+}
+
+.card:hover {
+  background-color: var(--ifm-color-emphasis-100);
+  text-decoration: none;
+  color: inherit;
+}
+
+/* top-left and top-right cards get a bottom border only; bottom row gets none */
+.card:nth-child(-n+2) {
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+/* remove double borders between columns */
+.card:nth-child(odd) {
+  border-right: none;
+}
+
+.cardIconWrapper {
+  margin-bottom: 1.25rem;
+}
+
+.cardIcon {
+  height: 120px;
+  width: 120px;
+}
+
+.cardTitle {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--ifm-color-primary);
+  margin-bottom: 0.6rem;
+}
+
+.cardDescription {
+  font-size: 0.95rem;
+  color: var(--ifm-color-content-secondary);
+  line-height: 1.5;
+  max-width: 340px;
+  margin: 0;
+}
+
+@media screen and (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card:nth-child(-n+2) {
+    border-bottom: 1px solid var(--ifm-color-emphasis-200);
+  }
+
+  .card:nth-child(odd) {
+    border-right: 1px solid var(--ifm-color-emphasis-200);
+  }
+
+  .card:last-child {
+    border-bottom: none;
+  }
 }

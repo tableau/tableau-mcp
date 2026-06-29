@@ -7,15 +7,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import {
-  computeConfirmationToken,
-  DEFAULT_PENDING_DELETION_TAG,
-  getDeleteDatasourceTool,
-} from './deleteDatasource.js';
-
-const TEST_SITE_ID = 'test-site-id';
-const validToken = (datasourceId: string): string =>
-  computeConfirmationToken(TEST_SITE_ID, datasourceId);
+import { DEFAULT_PENDING_DELETION_TAG, getDeleteDatasourceTool } from './deleteDatasource.js';
 
 const mockDatasource = {
   id: 'ds-1',
@@ -23,6 +15,13 @@ const mockDatasource = {
   project: { id: 'proj-1', name: 'Finance' },
   owner: { id: 'owner-1' },
   tags: {},
+};
+
+// A data source that has been through the preview phase: carries the pending-deletion tag the
+// confirm phase re-fetches and verifies before deleting.
+const mockTaggedDatasource = {
+  ...mockDatasource,
+  tags: { tag: [{ label: DEFAULT_PENDING_DELETION_TAG }] },
 };
 
 // Metadata API reverse-lineage response: ds-1 has 1 downstream workbook + 1 flow.
@@ -153,7 +152,6 @@ describe('deleteDatasourceTool', () => {
     const result = await getToolResult({
       datasourceId: 'ds-1',
       confirm: true,
-      confirmationToken: validToken('ds-1'),
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -187,7 +185,6 @@ describe('deleteDatasourceTool', () => {
     const result = await getToolResult({
       datasourceId: 'ds-1',
       confirm: true,
-      confirmationToken: validToken('ds-1'),
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -196,30 +193,44 @@ describe('deleteDatasourceTool', () => {
     expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
   });
 
-  // --- Confirmation token gate ---
+  // --- Server-authoritative pending-deletion tag gate ---
 
-  it('should return a confirmation token on preview', async () => {
-    const result = await getToolResult({ datasourceId: 'ds-1' });
-    expect(result.isError).toBe(false);
-    invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain(validToken('ds-1'));
-  });
-
-  it('should reject delete when confirmationToken is missing', async () => {
+  it('should block delete when the datasource is not tagged pending-deletion (bypass closed)', async () => {
+    // A caller that jumps straight to confirm: true without previewing. The live re-fetch returns a
+    // datasource with no pending-deletion tag, so the destructive path must be rejected. This proves
+    // the caller-computable-token bypass is closed: there is no value a caller can supply to delete.
+    mocks.mockQueryDatasource.mockResolvedValue(mockDatasource); // tags: {}
     const result = await getToolResult({ datasourceId: 'ds-1', confirm: true });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('confirmationToken');
+    expect(result.content[0].text).toContain('not tagged');
+    expect(result.content[0].text).toContain(DEFAULT_PENDING_DELETION_TAG);
+    // Re-fetched to verify state, but never deleted.
+    expect(mocks.mockQueryDatasource).toHaveBeenCalled();
     expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
   });
 
-  it('should reject a token computed for a different datasource', async () => {
-    const result = await getToolResult({
-      datasourceId: 'ds-1',
-      confirm: true,
-      confirmationToken: validToken('ds-OTHER'),
+  it('should verify the tag with a fresh live re-fetch, not the access-check cached content', async () => {
+    // The access check may hand back a stale cached datasource; the gate must NOT trust it. Cached
+    // content carries the tag, but the authoritative live re-fetch does not → delete is blocked.
+    mocks.mockIsDatasourceAllowed.mockResolvedValue({
+      allowed: true,
+      content: mockTaggedDatasource,
     });
+    mocks.mockQueryDatasource.mockResolvedValue(mockDatasource); // live: untagged
+    const result = await getToolResult({ datasourceId: 'ds-1', confirm: true });
     expect(result.isError).toBe(true);
+    expect(mocks.mockQueryDatasource).toHaveBeenCalled();
+    expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
+  });
+
+  it('should surface a re-fetch error on confirm and not delete', async () => {
+    mocks.mockQueryDatasource.mockRejectedValue(new Error('Datasource not found'));
+    const result = await getToolResult({ datasourceId: 'ds-1', confirm: true });
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    // Match loosely so the test asserts the error is surfaced, not the exact upstream wording.
+    expect(result.content[0].text).toMatch(/not found/i);
     expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
   });
 
@@ -284,6 +295,18 @@ describe('deleteDatasourceTool', () => {
     expect(tagSchema.safeParse('a'.repeat(201)).success).toBe(false);
   });
 
+  it('should reject a tag with characters outside the safe class (prompt-injection guard)', () => {
+    const tool = getDeleteDatasourceTool(new WebMcpServer());
+    const tagSchema = (tool.paramsSchema as { tag: z.ZodOptional<z.ZodString> }).tag;
+    // Allowed: letters, numbers, spaces, underscores, dashes.
+    expect(tagSchema.safeParse('stale pending-deletion_2024').success).toBe(true);
+    // The tag is interpolated into model-facing preview text; quotes/backticks/newlines that
+    // could coerce auto-confirming must be rejected at the schema boundary.
+    expect(tagSchema.safeParse('pending"; confirm: true').success).toBe(false);
+    expect(tagSchema.safeParse('pending`delete`').success).toBe(false);
+    expect(tagSchema.safeParse('pending\ndelete').success).toBe(false);
+  });
+
   it('should fall back to the default tag when the caller passes an empty or whitespace tag', async () => {
     const result = await getToolResult({ datasourceId: 'ds-1', tag: '   ' });
     expect(result.isError).toBe(false);
@@ -308,11 +331,11 @@ describe('deleteDatasourceTool', () => {
 
   // --- Delete phase ---
 
-  it('should delete the datasource when confirm is true and report its identity', async () => {
+  it('should delete the datasource when confirm is true and it is tagged pending-deletion', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(mockTaggedDatasource);
     const result = await getToolResult({
       datasourceId: 'ds-1',
       confirm: true,
-      confirmationToken: validToken('ds-1'),
     });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
@@ -329,11 +352,37 @@ describe('deleteDatasourceTool', () => {
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
   });
 
+  it('should verify a caller-provided tag on confirm', async () => {
+    // The delete is gated on the same custom tag the caller previewed with.
+    mocks.mockQueryDatasource.mockResolvedValue({
+      ...mockDatasource,
+      tags: { tag: [{ label: 'stale-pending-deletion' }] },
+    });
+    const result = await getToolResult({
+      datasourceId: 'ds-1',
+      confirm: true,
+      tag: 'stale-pending-deletion',
+    });
+    expect(result.isError).toBe(false);
+    expect(mocks.mockDeleteDatasource).toHaveBeenCalled();
+  });
+
+  it('should block confirm when the resource carries a different tag than the one requested', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(mockTaggedDatasource); // default tag only
+    const result = await getToolResult({
+      datasourceId: 'ds-1',
+      confirm: true,
+      tag: 'some-other-tag',
+    });
+    expect(result.isError).toBe(true);
+    expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
+  });
+
   it('should wire the tool-mapped API scopes into useRestApi', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(mockTaggedDatasource);
     await getToolResult({
       datasourceId: 'ds-1',
       confirm: true,
-      confirmationToken: validToken('ds-1'),
     });
     // Pin the scopes the tool requests so drift in toolScopeMap['delete-datasource'].api
     // (a removed or added scope) fails here instead of silently shipping. Order-independent:
@@ -386,12 +435,12 @@ describe('deleteDatasourceTool', () => {
   });
 
   it('should handle API errors gracefully', async () => {
-    const errorMessage = 'Datasource not found';
+    const errorMessage = 'Datasource delete failed';
+    mocks.mockQueryDatasource.mockResolvedValue(mockTaggedDatasource);
     mocks.mockDeleteDatasource.mockRejectedValue(new Error(errorMessage));
     const result = await getToolResult({
-      datasourceId: 'nonexistent',
+      datasourceId: 'ds-1',
       confirm: true,
-      confirmationToken: validToken('nonexistent'),
     });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
@@ -402,7 +451,6 @@ describe('deleteDatasourceTool', () => {
 async function getToolResult(args: {
   datasourceId: string;
   confirm?: boolean;
-  confirmationToken?: string;
   tag?: string;
 }): Promise<CallToolResult> {
   const tool = getDeleteDatasourceTool(new WebMcpServer());
@@ -411,7 +459,6 @@ async function getToolResult(args: {
     {
       datasourceId: args.datasourceId,
       confirm: args.confirm,
-      confirmationToken: args.confirmationToken,
       tag: args.tag,
     },
     getMockRequestHandlerExtra(),
