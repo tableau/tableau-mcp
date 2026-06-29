@@ -3,16 +3,21 @@
  *
  * Prompts are pure text generators, so HITL here is a *prompt-text contract*: every Apply prompt
  * injects the same, strongly worded instruction blocks telling the model to STOP and obtain explicit
- * human approval before any destructive call. The delete tools additionally enforce a
- * server-authoritative gate (a confirmed delete is rejected unless the item carries the
- * pending-deletion tag from its preview). That gate proves a preview *ran*, NOT that a human
- * *approved* — an agent that runs both phases itself satisfies it. It closes the prior
- * caller-computable-token bypass (W-23093455) but leaves human approval advisory.
+ * human approval before any destructive call. The mutation tools additionally enforce the gate
+ * server-side via the shared mutation guard (src/tools/web/_lib/mutationGuard.ts) and its pluggable
+ * EvidenceStrategy: a confirmed mutation is rejected unless a preview genuinely ran, proven by one of
+ * two evidence kinds — a `tag` (the reversible pending-deletion tag re-verified on live content;
+ * datasource/workbook) or a `registry-nonce` (a server-generated single-use confirmation token;
+ * extract refresh tasks). Every attempt (allowed and denied) also emits an authoritative audit record.
+ * This closes the prior caller-computable-token bypass (W-23093455).
  *
- * Real, enforced HITL needs an out-of-band signal the agent cannot forge. The installed MCP SDK
- * (>=1.26; this repo runs 1.29) DOES expose `server.elicitInput(...)` with URL-mode elicitation
- * (`UrlElicitationRequiredError`), which routes approval to a human out of band. Adopting it is
- * tracked under W-23125362; until then the human-approval step here is advisory.
+ * RESIDUAL GAP: the gate proves a preview *ran*, NOT that a human *approved* — an agent that runs both
+ * phases itself satisfies it, so human approval remains advisory. Closing it needs an out-of-band
+ * approval signal the agent cannot forge. The adoption path (tracked under W-23125362) is an app-only
+ * confirmation tool delivered via MCP Apps: an `visibility:['app']` tool the LLM cannot see or call,
+ * invoked by a human gesture in the app surface and routed through the same guard — so the
+ * confirmation nonce never enters LLM context. It layers a trustworthy gesture on app-capable clients
+ * ON TOP of (not replacing) the server-authoritative gate, which stays the backstop for all clients.
  *
  * Centralizing the wording keeps the gate identical across the Apply surface (stale-content cleanup,
  * extract-refresh optimization, license reclamation, …) and makes it the single place to harden the

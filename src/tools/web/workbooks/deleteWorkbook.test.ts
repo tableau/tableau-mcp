@@ -1,13 +1,29 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
+import type { MockedFunction } from 'vitest';
 import { z } from 'zod';
 
+import * as logger from '../../../logging/logger.js';
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { auditRecordSchema } from '../_lib/auditRecord.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { DEFAULT_PENDING_DELETION_TAG, getDeleteWorkbookTool } from './deleteWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
+
+// Auto-mock the logger so the durable audit record emitted by the mutation guard is captured as a
+// spy call (AC-6) rather than written to stderr.
+vi.mock('../../../logging/logger.js');
+
+// Parse the single mutation-audit record emitted on this call through the authoritative schema so
+// the assertion fails if the guard ever drops a required field. Returns the validated record.
+function getAuditRecord(): ReturnType<typeof auditRecordSchema.parse> {
+  const log = logger.log as MockedFunction<typeof logger.log>;
+  const auditEntries = log.mock.calls.map((c) => c[0]).filter((e) => e.logger === 'audit');
+  expect(auditEntries).toHaveLength(1);
+  return auditRecordSchema.parse(auditEntries[0].data);
+}
 
 // A workbook that has been through the preview phase: carries the pending-deletion tag the confirm
 // phase re-fetches and verifies before deleting.
@@ -99,7 +115,7 @@ describe('deleteWorkbookTool', () => {
       title: 'Delete Workbook',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     });
   });
@@ -130,7 +146,7 @@ describe('deleteWorkbookTool', () => {
     expect(mocks.mockAssertAdmin).toHaveBeenCalled();
   });
 
-  it('should fail when user is not admin and perform no side effects', async () => {
+  it('should fail when user is not admin and perform no destructive side effects', async () => {
     mocks.mockAssertAdmin.mockResolvedValue(new Err('User is not a site administrator'));
     const result = await getToolResult({
       workbookId: 'wb-1',
@@ -139,9 +155,21 @@ describe('deleteWorkbookTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('site administrator');
-    expect(mocks.mockGetWorkbook).not.toHaveBeenCalled();
+    // The guard resolves the target before the denial so the audit names it, but never tags or deletes.
     expect(mocks.mockAddTagsToWorkbook).not.toHaveBeenCalled();
     expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+  });
+
+  // AC-6(c): a denied attempt still emits an authoritative audit record with required fields.
+  it('should emit a DENIED audit record when the user is not an admin', async () => {
+    mocks.mockAssertAdmin.mockResolvedValue(new Err('User is not a site administrator'));
+    await getToolResult({ workbookId: 'wb-1', confirm: true });
+    const record = getAuditRecord();
+    expect(record.result).toBe('denied');
+    expect(record.denyReason).toBe('not-admin');
+    expect(record.tool).toBe('delete-workbook');
+    expect(record.action).toBe('delete');
+    expect(record.target.id).toBe('wb-1');
   });
 
   // --- Tool scoping (bounded context) ---
@@ -197,10 +225,17 @@ describe('deleteWorkbookTool', () => {
     const result = await getToolResult({ workbookId: 'wb-1', confirm: true });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('not tagged');
-    expect(result.content[0].text).toContain(DEFAULT_PENDING_DELETION_TAG);
+    // The guard rejects with the server-authoritative "preview not run" message and explains the
+    // gate cannot be bypassed by computing a token.
+    expect(result.content[0].text).toContain('Mutation blocked');
+    expect(result.content[0].text).toContain('cannot be bypassed by computing a token');
     expect(mocks.mockGetWorkbook).toHaveBeenCalled();
     expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+    // AC-6(c): the rejected confirm is audited as denied/preview-not-run.
+    const record = getAuditRecord();
+    expect(record.result).toBe('denied');
+    expect(record.denyReason).toBe('preview-not-run');
+    expect(record.phase).toBe('confirm');
   });
 
   it('should verify the tag with a fresh live re-fetch, not the access-check cached content', async () => {
@@ -308,6 +343,12 @@ describe('deleteWorkbookTool', () => {
     // Identity is resolved for the confirmation record, but the workbook is NOT tagged on delete.
     expect(mocks.mockGetWorkbook).toHaveBeenCalled();
     expect(mocks.mockAddTagsToWorkbook).not.toHaveBeenCalled();
+    // AC-6(c): the allowed confirm emits an allowed audit with the tag evidence descriptor.
+    const record = getAuditRecord();
+    expect(record.result).toBe('allowed');
+    expect(record.phase).toBe('confirm');
+    expect(record.denyReason).toBeUndefined();
+    expect(record.confirmationEvidence.kind).toBe('tag');
   });
 
   it('should verify a caller-provided tag on confirm', async () => {
@@ -348,6 +389,49 @@ describe('deleteWorkbookTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
+  });
+
+  // --- AC-6: end-to-end preview→confirm + audit on the in-scope tool ---
+
+  it('AC-6(a): rejects a forged/precomputed confirm (no prior preview) and does not delete', async () => {
+    // The caller jumps straight to confirm: true. No preview ran, so the live workbook is untagged
+    // and the server-authoritative gate rejects — there is no value the caller can precompute.
+    mocks.mockGetWorkbook.mockResolvedValue(mockWorkbook); // only 'tag-1'
+    const result = await getToolResult({ workbookId: 'wb-1', confirm: true });
+    expect(result.isError).toBe(true);
+    expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+    expect(getAuditRecord().result).toBe('denied');
+  });
+
+  it('AC-6(b): preview then confirm happy path deletes and audits both phases', async () => {
+    // Preview: tags the workbook (establishes evidence) and audits an allowed preview.
+    const preview = await getToolResult({ workbookId: 'wb-1' });
+    expect(preview.isError).toBe(false);
+    expect(mocks.mockAddTagsToWorkbook).toHaveBeenCalled();
+    const previewRecord = getAuditRecord();
+    expect(previewRecord.result).toBe('allowed');
+    expect(previewRecord.phase).toBe('preview');
+
+    // Reset the spy so the confirm-phase audit is isolated; simulate the tag now being present.
+    vi.mocked(logger.log).mockClear();
+    mocks.mockGetWorkbook.mockResolvedValue(mockTaggedWorkbook);
+
+    // Confirm: verifies the tag against live state and deletes.
+    const confirm = await getToolResult({ workbookId: 'wb-1', confirm: true });
+    expect(confirm.isError).toBe(false);
+    expect(mocks.mockDeleteWorkbook).toHaveBeenCalled();
+    const confirmRecord = getAuditRecord();
+    expect(confirmRecord.result).toBe('allowed');
+    expect(confirmRecord.phase).toBe('confirm');
+  });
+
+  it('AC-6(c): preview emits an allowed audit naming the workbook', async () => {
+    await getToolResult({ workbookId: 'wb-1' });
+    const record = getAuditRecord();
+    expect(record.result).toBe('allowed');
+    expect(record.phase).toBe('preview');
+    expect(record.target.id).toBe('wb-1');
+    expect(record.confirmationEvidence.kind).toBe('tag');
   });
 });
 

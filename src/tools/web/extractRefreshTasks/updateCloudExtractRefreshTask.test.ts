@@ -1,6 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
+import type { MockedFunction } from 'vitest';
 
+import * as logger from '../../../logging/logger.js';
 import {
   ExtractRefreshTask,
   UpdateCloudExtractRefreshSchedule,
@@ -9,8 +11,22 @@ import {
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { auditRecordSchema } from '../_lib/auditRecord.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getUpdateCloudExtractRefreshTaskTool } from './updateCloudExtractRefreshTask.js';
+
+// Auto-mock the logger so the durable audit record emitted by the mutation guard is captured as a
+// spy call (AC-6) rather than written to stderr.
+vi.mock('../../../logging/logger.js');
+
+// Parse the single mutation-audit record emitted on this call through the authoritative schema so
+// the assertion fails if the guard ever drops a required field. Returns the validated record.
+function getAuditRecord(): ReturnType<typeof auditRecordSchema.parse> {
+  const log = logger.log as MockedFunction<typeof logger.log>;
+  const auditEntries = log.mock.calls.map((c) => c[0]).filter((e) => e.logger === 'audit');
+  expect(auditEntries).toHaveLength(1);
+  return auditRecordSchema.parse(auditEntries[0].data);
+}
 
 const mocks = vi.hoisted(() => ({
   mockUpdateCloudExtractRefreshTask: vi.fn(),
@@ -107,7 +123,11 @@ describe('updateCloudExtractRefreshTaskTool', () => {
   });
 
   it('should successfully update an extract refresh task', async () => {
-    const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+    const result = await getToolResult({
+      taskId: validTaskId,
+      schedule: validSchedule,
+      confirm: true,
+    });
     expect(result.isError).toBe(false);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(validTaskId);
@@ -129,11 +149,27 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     mocks.mockAssertAdmin.mockResolvedValue(
       new Err('This tool requires site administrator permissions. Your site role is: Viewer'),
     );
-    const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+    const result = await getToolResult({
+      taskId: validTaskId,
+      schedule: validSchedule,
+      confirm: true,
+    });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('requires site administrator permissions');
     expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+  });
+
+  // AC-6(c): a denied attempt still emits an authoritative audit record with required fields.
+  it('should emit a DENIED audit record when the user is not an admin', async () => {
+    mocks.mockAssertAdmin.mockResolvedValue(new Err('not admin'));
+    await getToolResult({ taskId: validTaskId, schedule: validSchedule, confirm: true });
+    const record = getAuditRecord();
+    expect(record.result).toBe('denied');
+    expect(record.denyReason).toBe('not-admin');
+    expect(record.tool).toBe('update-cloud-extract-refresh-task');
+    expect(record.action).toBe('update');
+    expect(record.confirmationEvidence.kind).toBe('none');
   });
 
   it('should surface Tableau-structured error code/summary/detail when present', async () => {
@@ -146,7 +182,11 @@ describe('updateCloudExtractRefreshTaskTool', () => {
         detail: 'Invalid subscription schedule',
       }),
     );
-    const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+    const result = await getToolResult({
+      taskId: validTaskId,
+      schedule: validSchedule,
+      confirm: true,
+    });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Tableau 409');
@@ -159,7 +199,11 @@ describe('updateCloudExtractRefreshTaskTool', () => {
     mocks.mockUpdateCloudExtractRefreshTask.mockResolvedValue(
       new Err({ type: 'unknown', message: 'Network connection lost' }),
     );
-    const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+    const result = await getToolResult({
+      taskId: validTaskId,
+      schedule: validSchedule,
+      confirm: true,
+    });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Network connection lost');
@@ -174,7 +218,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
         intervals: { interval: [{ hours: 2 }, { weekDay: 'Monday' }] },
       },
     };
-    const result = await getToolResult({ taskId: validTaskId, schedule: hourly });
+    const result = await getToolResult({ taskId: validTaskId, schedule: hourly, confirm: true });
     expect(result.isError).toBe(false);
     expect(mocks.mockUpdateCloudExtractRefreshTask).toHaveBeenCalledWith({
       siteId: 'test-site-id',
@@ -365,7 +409,11 @@ describe('updateCloudExtractRefreshTaskTool', () => {
           detail: 'Task not found',
         }),
       );
-      const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+      const result = await getToolResult({
+        taskId: validTaskId,
+        schedule: validSchedule,
+        confirm: true,
+      });
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Tableau Cloud only');
@@ -384,7 +432,11 @@ describe('updateCloudExtractRefreshTaskTool', () => {
           detail: 'Invalid subscription schedule.',
         }),
       );
-      const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+      const result = await getToolResult({
+        taskId: validTaskId,
+        schedule: validSchedule,
+        confirm: true,
+      });
       expect(result.isError).toBe(true);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).not.toContain(': :');
@@ -403,7 +455,11 @@ describe('updateCloudExtractRefreshTaskTool', () => {
           schedule: { frequency: 'Weekly' },
         } as ExtractRefreshTask),
       );
-      const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+      const result = await getToolResult({
+        taskId: validTaskId,
+        schedule: validSchedule,
+        confirm: true,
+      });
       expect(result.isError).toBe(false);
       invariant(result.content[0].type === 'text');
       expect(result.content[0].text).toContain('Weekly');
@@ -411,13 +467,51 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       expect(result.content[0].text).toContain('06:00:00');
     });
   });
+
+  // --- AC-6: confirm-only preview→confirm gate + audit on both phases ---
+
+  describe('AC-6 confirm gate and audit', () => {
+    it('AC-6(a): preview (confirm omitted) does NOT apply the update and audits an allowed preview', async () => {
+      const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Preview');
+      expect(result.content[0].text).toContain('No change has been made');
+      // The gate is the confirm flag: with it omitted, the destructive update never runs.
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+      const record = getAuditRecord();
+      expect(record.result).toBe('allowed');
+      expect(record.phase).toBe('preview');
+      expect(record.action).toBe('update');
+      expect(record.confirmationEvidence.kind).toBe('none');
+    });
+
+    it('AC-6(b): confirm: true applies the update and audits an allowed confirm', async () => {
+      const result = await getToolResult({
+        taskId: validTaskId,
+        schedule: validSchedule,
+        confirm: true,
+      });
+      expect(result.isError).toBe(false);
+      expect(mocks.mockUpdateCloudExtractRefreshTask).toHaveBeenCalled();
+      const record = getAuditRecord();
+      expect(record.result).toBe('allowed');
+      expect(record.phase).toBe('confirm');
+      expect(record.action).toBe('update');
+      expect(record.target.id).toBe(validTaskId);
+    });
+  });
 });
 
 async function getToolResult(args: {
   taskId: string;
   schedule: UpdateCloudExtractRefreshSchedule;
+  confirm?: boolean;
 }): Promise<CallToolResult> {
   const tool = getUpdateCloudExtractRefreshTaskTool(new WebMcpServer());
   const callback = await Provider.from(tool.callback);
-  return await callback(args, getMockRequestHandlerExtra());
+  return await callback(
+    { taskId: args.taskId, schedule: args.schedule, confirm: args.confirm },
+    getMockRequestHandlerExtra(),
+  );
 }

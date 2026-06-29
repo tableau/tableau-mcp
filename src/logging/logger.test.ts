@@ -119,6 +119,30 @@ describe('log', () => {
     expect(stderrSpy).not.toHaveBeenCalled();
   });
 
+  it('should always emit audit records even when below the configured log level', () => {
+    // Audit records are a security control: an operator must not be able to suppress them by
+    // raising LOG_LEVEL. The 'audit' logger bypasses the level filter (W-23125362).
+    vi.stubEnv('LOG_LEVEL', 'error');
+    vi.stubEnv('TRANSPORT', 'stdio');
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    log({ message: 'mutation-audit', level: 'notice', logger: 'audit', data: { foo: 'bar' } });
+
+    expect(stderrSpy).toHaveBeenCalledTimes(1);
+    expect(stderrSpy.mock.calls[0][0]).toContain('mutation-audit');
+  });
+
+  it('should not let a non-audit notice through when below the configured log level', () => {
+    // Guard against the bypass being too broad: only logger 'audit' is exempt.
+    vi.stubEnv('LOG_LEVEL', 'error');
+    vi.stubEnv('TRANSPORT', 'stdio');
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    log({ message: 'ordinary notice', level: 'notice', logger: 'tool' });
+
+    expect(stderrSpy).not.toHaveBeenCalled();
+  });
+
   it('should log when entry level meets configured log level', () => {
     vi.stubEnv('LOG_LEVEL', 'info');
     vi.stubEnv('TRANSPORT', 'stdio');

@@ -14,6 +14,39 @@ This tool is restricted to Tableau site administrators and requires the `ADMIN_T
 This operation is irreversible. The extract refresh task cannot be recovered once deleted. To re-enable scheduled refreshes, a new task must be created.
 :::
 
+## Two-phase confirm
+
+The tool is **two-phase** to keep the destructive action safe:
+
+1. **Preview** (default — `confirm` omitted or `false`): reports what would be deleted and returns a
+   single-use **confirmation token**. Nothing is deleted.
+2. **Delete** (`confirm: true`): permanently removes the task — but only if the `confirmationToken`
+   from a prior preview call is supplied. The server verifies and consumes the token (single-use). The
+   token is server-generated and unguessable, so this gate genuinely requires the preview phase to
+   have run; it cannot be bypassed by computing a value.
+
+Because an extract refresh task has no durable, taggable state, the confirmation token is held in an
+in-memory registry (TTL configurable via `MUTATION_PREVIEW_TTL_MINUTES`, default 5). The registry is
+not durable across a server restart or shared across instances; the only consequence is that a lost
+token causes a confirm to be **rejected** (re-run the preview) — it can never wrongly allow a delete.
+
+:::warning Human confirmation required
+Between the preview and the delete, the calling agent is instructed (via the tool description and the
+preview response) to surface the task to the user and obtain explicit approval before deleting. The
+token gate guarantees the preview ran, but the **human approval** step is a prompt-level expectation —
+agents must not auto-confirm.
+:::
+
+:::note[Authoritative audit]
+Every mutation attempt — both the preview and the confirmed delete, and both allowed and denied
+attempts (for example a non-admin caller, or a confirm with a missing/forged token) — emits a
+structured authoritative audit record to the server's durable log sink (logger `audit`, level
+`notice`), not just to the tool-response text. Each record captures the actor identity, the tool,
+action, phase, the target id, the confirmation evidence kind (`registry-nonce` here, described but
+never the raw token), and the result. This routing is centralized in the shared mutation guard so
+every TMCP mutation tool audits identically.
+:::
+
 ## APIs called
 
 - [Delete Extract Refresh Task](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#delete_extract_refresh_task)
@@ -48,6 +81,8 @@ See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
 | Parameter | Type   | Required | Description                                                                 |
 | --------- | ------ | -------- | --------------------------------------------------------------------------- |
 | `taskId`  | string | Yes      | The ID of the extract refresh task to delete. Obtain from `list-extract-refresh-tasks`. |
+| `confirm` | boolean | No      | Set `true` to perform the deletion (requires `confirmationToken` from a prior preview). Defaults to preview. |
+| `confirmationToken` | string | No | The single-use token returned by the preview call. Required when `confirm` is true. |
 
 ## Response
 
