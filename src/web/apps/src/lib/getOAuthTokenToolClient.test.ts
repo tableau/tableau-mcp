@@ -8,6 +8,7 @@ import { callGetOAuthTokenTool } from './getOAuthTokenToolClient.js';
 describe('callGetOAuthTokenTool', () => {
   it('should successfully retrieve OAuth token', async () => {
     const mockApp = {
+      getHostCapabilities: vi.fn().mockReturnValue({ serverTools: {} }),
       callServerTool: vi.fn().mockResolvedValue({
         content: [
           {
@@ -32,6 +33,7 @@ describe('callGetOAuthTokenTool', () => {
 
   it('should throw error when response format is unexpected (non-text content)', async () => {
     const mockApp = {
+      getHostCapabilities: vi.fn().mockReturnValue({ serverTools: {} }),
       callServerTool: vi.fn().mockResolvedValue({
         content: [
           {
@@ -47,6 +49,7 @@ describe('callGetOAuthTokenTool', () => {
 
   it('should throw error when response has no content', async () => {
     const mockApp = {
+      getHostCapabilities: vi.fn().mockReturnValue({ serverTools: {} }),
       callServerTool: vi.fn().mockResolvedValue({
         content: [],
       }),
@@ -57,6 +60,7 @@ describe('callGetOAuthTokenTool', () => {
 
   it('should throw error when JSON parsing fails', async () => {
     const mockApp = {
+      getHostCapabilities: vi.fn().mockReturnValue({ serverTools: {} }),
       callServerTool: vi.fn().mockResolvedValue({
         content: [
           {
@@ -72,6 +76,7 @@ describe('callGetOAuthTokenTool', () => {
 
   it('should throw error when token is missing from response', async () => {
     const mockApp = {
+      getHostCapabilities: vi.fn().mockReturnValue({ serverTools: {} }),
       callServerTool: vi.fn().mockResolvedValue({
         content: [
           {
@@ -90,6 +95,7 @@ describe('callGetOAuthTokenTool', () => {
 
   it('should propagate errors from callServerTool', async () => {
     const mockApp = {
+      getHostCapabilities: vi.fn().mockReturnValue({ serverTools: {} }),
       callServerTool: vi.fn().mockRejectedValue(new Error('Tool call failed')),
     };
 
@@ -98,6 +104,7 @@ describe('callGetOAuthTokenTool', () => {
 
   it('should handle MCP error responses', async () => {
     const mockApp = {
+      getHostCapabilities: vi.fn().mockReturnValue({ serverTools: {} }),
       callServerTool: vi
         .fn()
         .mockRejectedValue(
@@ -108,5 +115,17 @@ describe('callGetOAuthTokenTool', () => {
     await expect(callGetOAuthTokenTool(mockApp as any)).rejects.toThrow(
       'OAuth Bearer token retrieval is only available for Bearer authentication',
     );
+  });
+
+  it('should throw when host does not support server tools', async () => {
+    const mockApp = {
+      getHostCapabilities: vi.fn().mockReturnValue({}),
+      callServerTool: vi.fn(),
+    };
+
+    await expect(callGetOAuthTokenTool(mockApp as any)).rejects.toThrow(
+      'the MCP host does not support server tools',
+    );
+    expect(mockApp.callServerTool).not.toHaveBeenCalled();
   });
 });
