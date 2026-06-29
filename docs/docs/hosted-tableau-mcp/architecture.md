@@ -47,10 +47,7 @@ flowchart LR
   end
     claude ~~~ chatgpt ~~~ slackbot ~~~ otherAgents
     podWest ~~~ podEast ~~~ podEu ~~~ podMore
-    agents <--> edgeWest
-    agents <--> edgeEast
-    agents <--> edgeEu
-    agents <--> edgeMore
+    agents <--> edgeWest & edgeEast & edgeEu & edgeMore
     edgeWest --> podWest
     edgeEast --> podEast
     edgeEu --> podEu
@@ -79,10 +76,14 @@ flowchart LR
     style otherAgents fill:#B2DFDB
 ```
 
+> **Note:** Any AI agent (Claude, ChatGPT, Slackbot, ...) can be routed to any CloudFront
+> edge location. Each agent's request is directed to the nearest edge location to provide the
+> best network latency, so the agent-to-edge pairing shown above is illustrative rather than fixed.
+
 ### Request routing sequence
 
 1. An user's AI agent sends unauthenticated request to `mcp.tableau.com`.
-2. AI agent's unauthenticated request to the nearest Cloudfront edge location to provide best network latency.
+2. AI agent's unauthenticated request is routed to the nearest Cloudfront edge location to provide best network latency.
 3. Unauthenticated request is sent back by Routing Layer returning an `HTTP 401` with a `WWW-Authenticate` header pointing the agent to the OAuth 2.1 flow:
 
    ```http
@@ -91,6 +92,6 @@ flowchart LR
 
    {"error":"unauthorized","error_description":"Authorization required. Use OAuth 2.1 flow. See https://tableau.github.io/tableau-mcp/ for details."}
    ```
-4. AI agent completes OAuth authentication from the info provided in `www-authenticate`. 
+4. AI agent starts OAuth flow from the info provided in `www-authenticate` and completes authentication.
 5. AI agent starts making authenticated requests to mcp.tableau.com.
 5. Hyperforce Routing Layer routes the authenticated request to the corresponding tableau cloud pod.
