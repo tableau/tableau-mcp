@@ -53,6 +53,8 @@ export function embedTableauViz(vizUrl: string, token: string): void {
       return;
     }
 
+    console.log('height: ', sheetHeight);
+
     // Set attributes for Embedding API iframe sizing
     viz.setAttribute('width', '100%');
     viz.setAttribute('height', String(sheetHeight));
