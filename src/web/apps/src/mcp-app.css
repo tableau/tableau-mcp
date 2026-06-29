@@ -26,6 +26,17 @@ body {
   width: 100%;
 }
 
+/* Cap non-fullscreen viz height to prevent unbounded growth for dashboards that
+   report a very large natural sheet height (sheetSize.maxSize.height). The
+   container becomes the single scroll owner above the cap. Restores the bound
+   that the base tableau-viz max-height once provided, without the inner-iframe
+   scroll (already eliminated by attribute sizing + toolbar=hidden). Scoped to
+   :not(.fullscreen) so fullscreen's own 100vh scroll container is untouched. */
+.viz-container:not(.fullscreen) {
+  max-height: 90vh;
+  overflow: auto;
+}
+
 tableau-viz {
   width: 100%;
   display: block;
