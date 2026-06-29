@@ -127,7 +127,7 @@ const getNewRestApiInstanceAsync = async (
       setSiteLuid?.(restApi.siteId);
       setUserLuid?.(restApi.userId);
     } else {
-      // oauth: buildAuthConfig returns undefined — preserve the existing oauth handling.
+      // oauth: buildAuthConfig returns null — preserve the existing oauth handling.
       invariant(tableauAuthInfo, 'Tableau auth info not provided.');
 
       signOutWhenCompleted = false;

@@ -16,8 +16,8 @@ function getJwtAdditionalPayload(
 
 /**
  * Builds an AuthConfig from the server Config and optional TableauAuthInfo.
- * Returns undefined when the auth mode doesn't produce signable AuthConfig
- * (e.g., oauth without signing material — Bearer tokens are passed through separately).
+ * Returns null when the auth mode doesn't produce signable AuthConfig
+ * (oauth — Bearer tokens are passed through separately).
  */
 export function buildAuthConfig({
   config,
@@ -27,7 +27,7 @@ export function buildAuthConfig({
   config: Config;
   tableauAuthInfo: TableauAuthInfo | undefined;
   scopes: Set<string>;
-}): AuthConfig | undefined {
+}): AuthConfig | null {
   const username = getJwtUsername(config, tableauAuthInfo);
   const additionalPayload = getJwtAdditionalPayload(config, tableauAuthInfo);
 
@@ -66,8 +66,9 @@ export function buildAuthConfig({
         additionalPayload,
       };
 
-    default:
-      // ignore all other cases
-      return undefined;
+    case 'oauth':
+      // oauth has no server-side signing material — Bearer tokens are passed
+      // through separately by the caller.
+      return null;
   }
 }

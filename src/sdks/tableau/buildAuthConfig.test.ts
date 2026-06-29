@@ -87,7 +87,7 @@ describe('buildAuthConfig', () => {
     });
   });
 
-  it('returns undefined for oauth mode', () => {
+  it('returns null for oauth mode', () => {
     const extra = getMockRequestHandlerExtra();
     extra.config.auth = 'oauth';
 
@@ -97,20 +97,7 @@ describe('buildAuthConfig', () => {
       scopes: new Set(['tableau:content:read']),
     });
 
-    expect(result).toBeUndefined();
-  });
-
-  it('returns undefined for unsupported auth mode', () => {
-    const extra = getMockRequestHandlerExtra();
-    extra.config.auth = 'unsupported-auth' as any;
-
-    const result = buildAuthConfig({
-      config: extra.config,
-      tableauAuthInfo: undefined,
-      scopes: new Set(['tableau:content:read']),
-    });
-
-    expect(result).toBeUndefined();
+    expect(result).toBeNull();
   });
 
   it('applies {OAUTH_USERNAME} substitution in jwtUsername', () => {
