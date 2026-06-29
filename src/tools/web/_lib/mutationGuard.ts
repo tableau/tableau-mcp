@@ -13,12 +13,14 @@
  *   4. Emits a single authoritative AuditRecord (allowed OR denied) to the durable log sink.
  *
  * AC-5 — RESIDUAL GAP (code-enforced human approval): the MCP SDK shipped with this server
- * (@modelcontextprotocol/sdk v1.26.0) exposes NO elicitation/sampling primitive, so the server
- * cannot itself block on an interactive human approval at call time. HITL therefore remains a
- * prompt-text contract (centralized in src/prompts/_lib/confirm.ts) reinforced by the
- * server-authoritative evidence gate below — a confirmed mutation is rejected unless a preview
- * genuinely ran. Adopting a true elicitation handshake is tracked for when the SDK gains the
- * primitive.
+ * (@modelcontextprotocol/sdk >=1.26, currently 1.29) DOES expose an elicitation primitive
+ * (server.elicitInput(...)), but it is not wired in here and host/client support for it is uneven —
+ * many clients do not yet implement elicitation, so the server cannot rely on it to block on an
+ * interactive human approval at call time. HITL therefore remains a prompt-text contract
+ * (centralized in src/prompts/_lib/confirm.ts) reinforced by the server-authoritative evidence gate
+ * below — a confirmed mutation is rejected unless a preview genuinely ran. Adopting a true
+ * elicitation handshake (or the app-only confirmation tool described in confirm.ts) is tracked as
+ * follow-up.
  *
  * RegistryEvidence's nonce store is in-memory (see the DURABILITY CAVEAT in evidence.ts): it is not
  * durable across restart / multi-instance, but it can only ever reject (never wrongly allow), so the
@@ -49,6 +51,9 @@ export interface MutationTarget {
   name?: string;
   project?: string;
   owner?: string;
+  // 'user' is reserved/forward-looking: no user-mutation tool is wired yet. Kept in the union so the
+  // audit schema (auditRecord.ts) stays stable when one is added; removing it now would be a
+  // breaking schema change for downstream audit-log consumers.
   kind: 'datasource' | 'workbook' | 'extract-refresh-task' | 'user';
 }
 

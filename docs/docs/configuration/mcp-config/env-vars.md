@@ -453,6 +453,22 @@ Tune lower if site role / project metadata changes need to propagate faster. Tun
 
 <hr />
 
+## `MUTATION_PREVIEW_TTL_MINUTES`
+
+TTL (in minutes) for the single-use confirmation tokens minted by the preview phase of two-phase
+mutation tools (e.g. [`delete-extract-refresh-task`](../../tools/tasks/delete-extract-refresh-task.md)).
+A token must be supplied on the confirmed call before it expires, otherwise the caller must re-run
+the preview.
+
+- Default: `5`
+- Minimum: `1`
+- Maximum: `1440` (24 hours)
+
+Tune lower to shorten the window in which a preview token is valid. Tune higher to give callers more
+time between preview and confirmation.
+
+<hr />
+
 ## `STALE_CONTENT_MIN_AGE_DAYS`
 
 Default minimum days since last access for content to be considered stale by the [`get-stale-content-report`](../../tools/admin-insights/get-stale-content-report.md) tool. Callers can pass an explicit `minAgeDays` argument to override per-call.

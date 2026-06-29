@@ -40,7 +40,12 @@ export const getUpdateCloudExtractRefreshTaskTool = (
 
   **Tableau Cloud only.** This tool calls the Cloud variant of the update endpoint and is not appropriate for Tableau Server.
 
-  This mutation is gated on an explicit confirmation flag: with \`confirm\` omitted or false the tool runs a non-destructive preview that reports the schedule that would be applied without changing anything; set \`confirm: true\` to apply the update. Present the change to the user and get explicit approval before confirming.
+  This tool is **two-phase** to keep the mutating action safe:
+
+  1. **Preview (default — \`confirm\` omitted or false):** reports the schedule that would be applied. Nothing is changed.
+  2. **Update (\`confirm: true\`):** overwrites the task's schedule with the supplied one.
+
+  **Required human confirmation:** After preview, present the change to the user and get explicit approval before calling again with \`confirm: true\`. Do not auto-confirm — get the user's explicit approval first.
 
   Use this tool when you need to:
   - Reduce the frequency of an under-used extract refresh (e.g. Hourly → Daily, Daily → Weekly)
