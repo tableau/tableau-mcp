@@ -15,6 +15,7 @@ describe('createTableauVizElement', () => {
     expect(element.tagName.toLowerCase()).toBe('tableau-viz');
     expect(element.getAttribute('src')).toBe(vizUrl);
     expect(element.getAttribute('token')).toBe(token);
+    expect(element.getAttribute('toolbar')).toBe('hidden');
   });
 });
 
@@ -107,7 +108,7 @@ describe('embedTableauViz', () => {
 
     expect(vizElement).toBeTruthy();
 
-    // Simulate firstvizsizeknown event with viz height
+    // Simulate firstvizsizeknown event with viz height and chrome height
     const event = new CustomEvent('firstvizsizeknown', {
       detail: {
         vizSize: {
@@ -116,14 +117,16 @@ describe('embedTableauViz', () => {
               height: 800,
             },
           },
+          chromeHeight: 32,
         },
       },
     });
 
     vizElement.dispatchEvent(event);
 
-    // Should set height to the reported viz height
-    expect(vizElement.style.height).toBe('800px');
+    // Should set height to the reported sheet height plus the API-provided chromeHeight
+    // The chromeHeight is the height of Tableau UI elements (chrome) surrounding the view
+    expect(vizElement.style.height).toBe(`${800 + 32}px`);
   });
 
   it('should leave height unset when firstvizsizeknown has no numeric height', () => {
@@ -146,5 +149,66 @@ describe('embedTableauViz', () => {
 
     // Height should remain unset
     expect(vizElement.style.height).toBe('');
+  });
+
+  it('should set height to sheetHeight when chromeHeight is missing (no chrome)', () => {
+    const vizUrl = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view';
+    const token = 'test-token-123';
+
+    embedTableauViz(vizUrl, token);
+
+    const container = document.getElementById('tableauVizContainer');
+    const vizElement = container?.querySelector('tableau-viz') as HTMLElement;
+
+    expect(vizElement).toBeTruthy();
+
+    // Simulate firstvizsizeknown event with sheetSize but no chromeHeight
+    const event = new CustomEvent('firstvizsizeknown', {
+      detail: {
+        vizSize: {
+          sheetSize: {
+            maxSize: {
+              height: 800,
+            },
+          },
+        },
+      },
+    });
+
+    vizElement.dispatchEvent(event);
+
+    // Should set height to sheetHeight alone when chromeHeight is absent (treated as 0)
+    expect(vizElement.style.height).toBe('800px');
+  });
+
+  it('should set height to sheetHeight when chromeHeight is 0', () => {
+    const vizUrl = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view';
+    const token = 'test-token-123';
+
+    embedTableauViz(vizUrl, token);
+
+    const container = document.getElementById('tableauVizContainer');
+    const vizElement = container?.querySelector('tableau-viz') as HTMLElement;
+
+    expect(vizElement).toBeTruthy();
+
+    // Simulate firstvizsizeknown event with sheetSize and chromeHeight = 0
+    const event = new CustomEvent('firstvizsizeknown', {
+      detail: {
+        vizSize: {
+          sheetSize: {
+            maxSize: {
+              height: 800,
+            },
+          },
+          chromeHeight: 0,
+        },
+      },
+    });
+
+    vizElement.dispatchEvent(event);
+
+    // Should set height to sheetHeight when chromeHeight is explicitly 0
+    expect(vizElement.style.height).toBe('800px');
   });
 });

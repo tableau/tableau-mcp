@@ -23,6 +23,15 @@ const oauthTokenDataSchema = z.object({
  * @returns Promise containing the OAuth token string
  */
 export async function callGetOAuthTokenTool(app: App): Promise<string> {
+  // Ensure the host allows calling server tools before attempting to retrieve the token.
+  // If unsupported, throw so the caller's top-level handler can surface an error to the user.
+  const capabilities = app.getHostCapabilities();
+  if (!capabilities?.serverTools) {
+    throw new Error(
+      'Cannot retrieve OAuth token: the MCP host does not support server tools (serverTools capability is unavailable).',
+    );
+  }
+
   const result = await app.callServerTool({
     name: 'get-oauth-token',
     arguments: {},
