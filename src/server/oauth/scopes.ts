@@ -132,6 +132,19 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
+  // Admin-only, app-only confirm step for delete-workbook (MCP-Apps HITL). Invoked ONLY by a human
+  // gesture in the rendered iframe (visibility:['app']), never the model. Re-fetches + re-checks the
+  // pending-deletion tag and deletes (workbooks:delete + content:read), resolves the owner for the
+  // audit (users:read), and goes through the resourceAccessChecker — same API scopes as delete-workbook
+  // minus the tag write (the tag was applied in the preview phase).
+  'confirm-delete-workbook': {
+    mcp: ['tableau:mcp:workbook:delete'],
+    api: new Set([
+      'tableau:workbooks:delete',
+      'tableau:users:read',
+      ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
+    ]),
+  },
   // Admin-only destructive tool. Preview tags the datasource (datasource_tags:update), resolves the
   // owner (users:read), and warns about dependent workbooks/flows via the Metadata API (content:read);
   // confirm deletes it (datasources:delete). adminGate.assertAdmin → GET /users/{id} → users:read.
@@ -302,6 +315,7 @@ function getEnabledToolNames(): Set<WebToolName> {
     enabledTools.delete('delete-extract-refresh-task');
     enabledTools.delete('update-cloud-extract-refresh-task');
     enabledTools.delete('delete-workbook');
+    enabledTools.delete('confirm-delete-workbook');
     enabledTools.delete('list-jobs');
     enabledTools.delete('delete-datasource');
     enabledTools.delete('list-users');
@@ -311,9 +325,12 @@ function getEnabledToolNames(): Set<WebToolName> {
     enabledTools.delete('get-stale-content-report');
   }
 
-  // Remove get-embed-token if mcp-apps feature is disabled
+  // Remove the MCP-Apps-only tools if the mcp-apps feature is disabled. confirm-delete-workbook is
+  // the human-gesture confirm step for delete-workbook and only exists when the iframe can render.
   if (!featureGate.isFeatureEnabled('mcp-apps')) {
     enabledTools.delete('get-embed-token');
+    enabledTools.delete('get-oauth-token');
+    enabledTools.delete('confirm-delete-workbook');
   }
 
   return enabledTools;

@@ -8,6 +8,7 @@ export const webToolNames = [
   'list-users',
   'list-workbooks',
   'delete-workbook',
+  'confirm-delete-workbook',
   'list-projects',
   'list-views',
   'list-custom-views',
@@ -59,7 +60,7 @@ export const webToolGroups = {
     'query-datasource',
     'delete-datasource',
   ],
-  workbook: ['list-workbooks', 'get-workbook', 'delete-workbook'],
+  workbook: ['list-workbooks', 'get-workbook', 'delete-workbook', 'confirm-delete-workbook'],
   project: ['list-projects'],
   view: [
     'list-views',

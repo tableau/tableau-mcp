@@ -2,6 +2,8 @@ import { afterEach, beforeEach } from 'vitest';
 
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import {
+  AllEvidence,
+  AppApprovalEvidence,
   DEFAULT_PENDING_DELETION_TAG,
   EvidenceContext,
   NoEvidence,
@@ -276,6 +278,158 @@ describe('RegistryEvidence', () => {
         ),
       ).resolves.toBe(true);
     });
+  });
+});
+
+describe('AppApprovalEvidence', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+  });
+
+  // The app-approval registry is module-scoped and shared across instances (the preview tool and
+  // the confirm tool are separate WebTool instances but must hit the same store). Use distinct
+  // target ids per test so cases don't bleed into one another.
+  function appCtx(overrides: Partial<EvidenceContext> = {}): EvidenceContext {
+    return makeCtx({
+      target: { id: 'wb-app', kind: 'workbook' },
+      tool: 'delete-workbook',
+      userLuid: 'user-1',
+      ...overrides,
+    });
+  }
+
+  it('describes itself as a registry-nonce with a human-gesture detail and leaks no secret', () => {
+    const descriptor = new AppApprovalEvidence().describeEvidence();
+    expect(descriptor.kind).toBe('registry-nonce');
+    expect(descriptor.detail).toContain('app-approval');
+  });
+
+  it('establish records presence so a later verify (single-use) succeeds exactly once', async () => {
+    const evidence = new AppApprovalEvidence();
+    const ctx = appCtx({ target: { id: 'wb-once', kind: 'workbook' } });
+    await evidence.establish(ctx);
+
+    // A separate instance (mirrors confirm tool ≠ preview tool) sharing the module registry.
+    const confirm = new AppApprovalEvidence();
+    const confirmCtx = appCtx({ target: { id: 'wb-once', kind: 'workbook' } });
+    await expect(confirm.verify(confirmCtx)).resolves.toBe(true);
+    // Single-use: the approval is consumed on first verify, so a replay is rejected.
+    await expect(confirm.verify(confirmCtx)).resolves.toBe(false);
+  });
+
+  it('verify fails when no approval was ever established (no human gesture)', async () => {
+    const evidence = new AppApprovalEvidence();
+    await expect(
+      evidence.verify(appCtx({ target: { id: 'wb-never', kind: 'workbook' } })),
+    ).resolves.toBe(false);
+  });
+
+  it('ignores any caller-supplied confirmationToken — approval is presence-based, not transported', async () => {
+    const evidence = new AppApprovalEvidence();
+    // A caller that forges a token but never previewed in the iframe must still be rejected.
+    await expect(
+      evidence.verify(
+        appCtx({ target: { id: 'wb-forge', kind: 'workbook' }, confirmationToken: 'anything' }),
+      ),
+    ).resolves.toBe(false);
+  });
+
+  it('scopes approval by site+user+tool+target so a different target is not satisfied', async () => {
+    const evidence = new AppApprovalEvidence();
+    await evidence.establish(appCtx({ target: { id: 'wb-A', kind: 'workbook' } }));
+    await expect(
+      evidence.verify(appCtx({ target: { id: 'wb-B', kind: 'workbook' } })),
+    ).resolves.toBe(false);
+  });
+
+  it('scopes approval by user so another user cannot consume it', async () => {
+    const evidence = new AppApprovalEvidence();
+    await evidence.establish(
+      appCtx({ target: { id: 'wb-user', kind: 'workbook' }, userLuid: 'user-1' }),
+    );
+    await expect(
+      evidence.verify(appCtx({ target: { id: 'wb-user', kind: 'workbook' }, userLuid: 'user-2' })),
+    ).resolves.toBe(false);
+  });
+
+  describe('TTL expiry', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('rejects a confirm once the approval window (TTL) has elapsed — must re-preview', async () => {
+      const evidence = new AppApprovalEvidence();
+      await evidence.establish(appCtx({ target: { id: 'wb-ttl', kind: 'workbook' } }));
+      // TTL defaults to 5 minutes; advance past it so the approval auto-expires.
+      await vi.advanceTimersByTimeAsync(1000 * 60 * 6);
+      await expect(
+        evidence.verify(appCtx({ target: { id: 'wb-ttl', kind: 'workbook' } })),
+      ).resolves.toBe(false);
+    });
+
+    it('still verifies an approval that has not yet expired', async () => {
+      const evidence = new AppApprovalEvidence();
+      await evidence.establish(appCtx({ target: { id: 'wb-fresh', kind: 'workbook' } }));
+      await vi.advanceTimersByTimeAsync(1000 * 60 * 2);
+      await expect(
+        evidence.verify(appCtx({ target: { id: 'wb-fresh', kind: 'workbook' } })),
+      ).resolves.toBe(true);
+    });
+  });
+});
+
+describe('AllEvidence (AND-composition)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+    mocks.mockGetWorkbook.mockResolvedValue({
+      tags: { tag: [{ label: DEFAULT_PENDING_DELETION_TAG }] },
+    });
+  });
+
+  function appCtx(id: string): EvidenceContext {
+    return makeCtx({ target: { id, kind: 'workbook' }, tool: 'confirm-delete-workbook' });
+  }
+
+  it('verify is true only when EVERY strategy verifies (tag present AND approval present)', async () => {
+    const approval = new AppApprovalEvidence();
+    await approval.establish(appCtx('wb-and-ok'));
+    const all = new AllEvidence([new TagEvidence({ kind: 'workbook' }), approval]);
+    await expect(all.verify(appCtx('wb-and-ok'))).resolves.toBe(true);
+  });
+
+  it('verify is false when the tag is missing even if the approval is present', async () => {
+    mocks.mockGetWorkbook.mockResolvedValue({ tags: { tag: [{ label: 'other' }] } });
+    const approval = new AppApprovalEvidence();
+    await approval.establish(appCtx('wb-and-notag'));
+    const all = new AllEvidence([new TagEvidence({ kind: 'workbook' }), approval]);
+    await expect(all.verify(appCtx('wb-and-notag'))).resolves.toBe(false);
+  });
+
+  it('verify is false when no human approval exists even if the tag is present', async () => {
+    const all = new AllEvidence([new TagEvidence({ kind: 'workbook' }), new AppApprovalEvidence()]);
+    await expect(all.verify(appCtx('wb-and-noapproval'))).resolves.toBe(false);
+  });
+
+  it('describes itself with the kind of its primary (first) strategy for the audit record', () => {
+    const all = new AllEvidence([new AppApprovalEvidence(), new TagEvidence({ kind: 'workbook' })]);
+    expect(all.describeEvidence().kind).toBe('registry-nonce');
+  });
+});
+
+describe('getMutationPreviewTtlMs', () => {
+  afterEach(() => {
+    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+  });
+
+  it('defaults to 5 minutes', async () => {
+    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+    const { getMutationPreviewTtlMs } = await import('./evidence.js');
+    expect(getMutationPreviewTtlMs()).toBe(1000 * 60 * 5);
   });
 });
 

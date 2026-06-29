@@ -3,14 +3,36 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
+import { PreviewNotRunError, WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../features/featureGate.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { DEFAULT_PENDING_DELETION_TAG, TagEvidence } from '../_lib/evidence.js';
+import { getAppConfig } from '../../../web/apps/appConfig.js';
+import {
+  AppApprovalEvidence,
+  DEFAULT_PENDING_DELETION_TAG,
+  getMutationPreviewTtlMs,
+  TagEvidence,
+} from '../_lib/evidence.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { WebTool } from '../tool.js';
+import { AppToolResult, WebTool } from '../tool.js';
 import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
+
+/**
+ * The confirm-panel payload the delete-workbook preview returns (flag-ON) as `AppToolResult.data`,
+ * serialized into the tool-result text the MCP-Apps iframe parses to render the HITL confirm UI
+ * (name/project/owner + a live countdown to `expiresAtMs`). No secret/token is carried — the
+ * approval is presence-based server-side.
+ */
+export type DeleteWorkbookConfirmPanel = {
+  kind: 'delete-workbook-confirm';
+  workbookId: string;
+  name?: string;
+  project?: string;
+  owner?: string;
+  expiresAtMs: number;
+};
 
 const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
 
@@ -50,11 +72,16 @@ const paramsSchema = {
 
 export const getDeleteWorkbookTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const config = getConfig();
+  // MCP-Apps HITL (AC-5): when the flag is ON, the preview carries an app so the host renders an
+  // iframe confirm panel and the destructive step runs as a human gesture (confirm-delete-workbook).
+  // Flag OFF → no `app`, byte-identical to today's tag/confirm behavior.
+  const mcpAppsEnabled = getFeatureGate().isFeatureEnabled('mcp-apps');
 
   const deleteWorkbookTool = new WebTool({
     server,
     name: 'delete-workbook',
     disabled: !config.adminToolsEnabled,
+    ...(mcpAppsEnabled ? { app: getAppConfig('delete-workbook') } : {}),
     description: `
 Permanently deletes a workbook from the current Tableau Cloud site. Restricted to Tableau site
 administrators and requires the \`ADMIN_TOOLS_ENABLED\` feature flag.
@@ -89,15 +116,13 @@ the user's explicit approval first.
       title: 'Delete Workbook',
       readOnlyHint: false,
       destructiveHint: true,
-      // Hard delete-by-id: a second delete of the same workbookId 404s (isError: true), so the
-      // operation is not idempotent. A client trusting an idempotent hint and retrying after a
-      // transient failure would get a spurious error for a delete that already succeeded.
-      // Matches the accepted resolution for delete-extract-refresh-task (tableau/tableau-mcp#392).
-      idempotentHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ workbookId, confirm, tag }, extra): Promise<CallToolResult> => {
-      return await deleteWorkbookTool.logAndExecute<string>({
+      return await deleteWorkbookTool.logAndExecute<
+        string | AppToolResult<DeleteWorkbookConfirmPanel>
+      >({
         extra,
         args: { workbookId, confirm, tag },
         callback: async () => {
@@ -106,6 +131,19 @@ the user's explicit approval first.
             jwtScopes: deleteWorkbookTool.requiredApiScopes,
             callback: async (restApi) => {
               const siteId = restApi.siteId;
+
+              // Flag ON (MCP-Apps HITL): the model-driven confirm:true path is CLOSED so an agent
+              // cannot self-confirm a deletion by re-calling this tool — the only route to deletion
+              // is a human gesture in the confirm panel (confirm-delete-workbook). Reject before any
+              // side effect. Flag OFF keeps the original tag-gated confirm:true path intact.
+              if (confirm && mcpAppsEnabled) {
+                return new PreviewNotRunError(
+                  'Mutation blocked: deleting a workbook requires a human confirmation in the ' +
+                    'delete-workbook approval panel. Run delete-workbook in preview (omit confirm) ' +
+                    'to open the panel; the deletion is performed by confirm-delete-workbook only ' +
+                    "when a person clicks Delete. The assistant cannot confirm on the user's behalf.",
+                ).toErr();
+              }
 
               // Treat undefined, empty, and whitespace-only tags as "use the default" so a blank
               // label never gets applied (preview) or verified against (confirm).
@@ -173,7 +211,36 @@ the user's explicit approval first.
                 );
               }
 
-              // Preview phase: the guard has tagged the workbook pending deletion. Report. No deletion.
+              // Preview phase: the guard has tagged the workbook pending deletion. No deletion.
+              // Flag ON: also record a single-use, TTL-bounded human-approval window and return an
+              // AppToolResult so the host renders the in-iframe confirm panel. The destructive step
+              // is then a human gesture via the model-invisible confirm-delete-workbook tool — the
+              // approval recorded here is what its AppApprovalEvidence verifies. No secret is
+              // transported; approval is presence-based, keyed server-side by site+user+workbook.
+              if (mcpAppsEnabled) {
+                await new AppApprovalEvidence().establish({
+                  restApi,
+                  siteId,
+                  target,
+                  tool: 'confirm-delete-workbook',
+                  userLuid: extra.getUserLuid(),
+                });
+                const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
+                return new Ok<AppToolResult<DeleteWorkbookConfirmPanel>>({
+                  data: {
+                    kind: 'delete-workbook-confirm',
+                    workbookId,
+                    name: target.name,
+                    project: target.project,
+                    owner: target.owner,
+                    expiresAtMs,
+                  },
+                  // No web URL to embed for a confirm panel; the host renders from `data`.
+                  url: '',
+                });
+              }
+
+              // Flag OFF: today's exact preview text. No approval recorded, no iframe.
               return new Ok(
                 `Preview — workbook '${target.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
                   `It has been tagged '${pendingTag}' (reversible). ` +

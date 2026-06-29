@@ -104,6 +104,42 @@ describe('computeStaleRows', () => {
     expect(rows[0].daysSinceLastUse).toBeGreaterThan(90);
   });
 
+  it('surfaces Item LUID as itemLuid (the LUID delete-workbook/get-workbook require, not the integer Item ID)', () => {
+    const rows = computeStaleRows({
+      universe: [
+        row({
+          'Item ID': 2971061,
+          'Item LUID': '2f6d87c1-8165-42f4-907d-2f0631a3c41c',
+          'Created At': '2024-01-01T00:00:00Z',
+          'Last Accessed At': null,
+        }),
+      ],
+      thresholdDays: 90,
+      today,
+    });
+    expect(rows).toHaveLength(1);
+    // Integer repo ID stays in itemId (back-compat); the REST-usable LUID is in itemLuid.
+    expect(rows[0].itemId).toBe('2971061');
+    expect(rows[0].itemLuid).toBe('2f6d87c1-8165-42f4-907d-2f0631a3c41c');
+  });
+
+  it('sets itemLuid to null when Item LUID is absent (older Site Content schemas)', () => {
+    const rows = computeStaleRows({
+      universe: [
+        row({
+          'Item ID': 'wb-no-luid',
+          'Item LUID': undefined,
+          'Created At': '2024-01-01T00:00:00Z',
+          'Last Accessed At': null,
+        }),
+      ],
+      thresholdDays: 90,
+      today,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].itemLuid).toBeNull();
+  });
+
   it('falls back to Created At when Last Accessed At is null and flags neverAccessed', () => {
     const rows = computeStaleRows({
       universe: [
@@ -258,6 +294,7 @@ describe('buildSiteContentQuery', () => {
     const captions = query.fields.map((f) => ('fieldCaption' in f ? f.fieldCaption : null));
     expect(captions).toEqual([
       'Item ID',
+      'Item LUID',
       'Item Type',
       'Item Name',
       'Item Parent Project Name',
