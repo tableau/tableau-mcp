@@ -56,3 +56,10 @@ tableau-viz {
   outline: 2px solid #0066CC;
   outline-offset: 2px;
 }
+
+.open-in-tableau-error {
+  margin: 0.5rem 0 0 0.75rem;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.875rem;
+  color: #D62728;
+}
