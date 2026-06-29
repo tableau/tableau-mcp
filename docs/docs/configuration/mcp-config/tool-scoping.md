@@ -33,7 +33,7 @@ sources and workbooks (or views from those workbooks) that are members of the pr
 be queried or will be included in the results of the tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set by the Tableau MCP server, cannot be empty.
-- When overriden, can be empty to clear any bounds set by the Tableau MCP server.
+- When overridden, can be empty to clear any bounds set by the Tableau MCP server.
 - Project IDs can be determined using the
   [Query Projects](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_projects.htm#query_projects)
   REST API or by the [List Data Sources](../../tools/data-qna/list-datasources.md),
@@ -63,7 +63,7 @@ data sources or Pulse metrics and definitions derived from those data sources ca
 be included in the results of the tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
-- When overriden, can be empty to clear any bounds set by the Tableau MCP server.
+- When overridden, can be empty to clear any bounds set by the Tableau MCP server.
 - Data source IDs can be determined using the
   [Query Data Sources](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_data_sources.htm#query_data_sources)
   REST API or the [List Data Sources](../../tools/data-qna/list-datasources.md) tool (assuming tool
@@ -81,7 +81,7 @@ workbooks or views from those workbooks can be queried or will be included in th
 tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
-- When overriden, can be empty to clear any bounds set by the Tableau MCP server.
+- When overridden, can be empty to clear any bounds set by the Tableau MCP server.
 - Workbook IDs can be determined using the
   [Query Workbooks](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_workbooks)
   REST API or the [List Workbooks](../../tools/workbooks/list-workbooks.md) tool (assuming tool
@@ -100,7 +100,7 @@ the specified views can be queried, fetched as images, or returned by listing to
 is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
-- When overriden, can be empty to clear any bounds set by the Tableau MCP server.
+- When overridden, can be empty to clear any bounds set by the Tableau MCP server.
 - View IDs can be determined using the
   [Query Views for Site](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_workbooks_and_views.htm#query_views_for_site)
   REST API or the [List Views](../../tools/views/list-views.md) tool (assuming tool scoping is
@@ -119,7 +119,7 @@ data sources, workbooks, or views with the provided tags can be queried or will 
 results of the tools. This variable is site and request overridable, see [Site Settings](site-settings.md) and [Request Overrides](request-overrides.md).
 
 - When set, cannot be empty.
-- When overriden, can be empty to clear any bounds set by the Tableau MCP server.
+- When overridden, can be empty to clear any bounds set by the Tableau MCP server.
 - Tags can be determined using the
   [Tableau product](https://help.tableau.com/current/pro/desktop/en-us/tags.htm) or the REST APIs
   for querying

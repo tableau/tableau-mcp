@@ -120,6 +120,16 @@ export class QueryValidationError extends McpToolError {
   }
 }
 
+export class EmbedTokenNotAvailableError extends McpToolError {
+  constructor() {
+    super({
+      type: 'embed-token-not-available',
+      message: 'Failed to get an embed token for the current authentication configuration.',
+      statusCode: 500,
+    });
+  }
+}
+
 export class ViewNotAllowedError extends McpToolError {
   constructor(message: string) {
     super({ type: 'view-not-allowed', message, statusCode: 403 });

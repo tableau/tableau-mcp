@@ -20,6 +20,9 @@ export function createTableauVizElement(vizUrl: string, token: string): HTMLElem
   // Set the token for authentication
   viz.setAttribute('token', token);
 
+  // Hide the toolbar
+  viz.setAttribute('toolbar', 'hidden');
+
   return viz;
 }
 
@@ -39,17 +42,22 @@ export function embedTableauViz(vizUrl: string, token: string): void {
   const viz = createTableauVizElement(vizUrl, token);
 
   // The Embedding API reports the viz's natural size via `firstvizsizeknown`.
-  // Set the element's height to the viz's natural sheet height so it renders
-  // fully; the ext-apps SDK's built-in auto-resize then grows the app frame to
-  // match the resulting document height.
+  // Set the element's height to the viz's natural sheet height plus the API-provided
+  // chromeHeight so it renders fully; the ext-apps SDK's built-in auto-resize then grows
+  // the app frame to match the resulting document height.
   viz.addEventListener('firstvizsizeknown', (event) => {
     const vizSize = (event as CustomEvent).detail?.vizSize;
     const sheetHeight = vizSize?.sheetSize?.maxSize?.height;
+    const chromeHeight = vizSize?.chromeHeight;
+
+    // Only set height when sheetHeight is available; chromeHeight may be 0 or absent (no chrome)
     if (typeof sheetHeight !== 'number') {
       return;
     }
 
-    viz.style.height = `${sheetHeight}px`;
+    // chromeHeight may be missing, undefined, or 0 when there's no chrome; treat as 0
+    const effectiveChromeHeight = typeof chromeHeight === 'number' ? chromeHeight : 0;
+    viz.style.height = `${sheetHeight + effectiveChromeHeight}px`;
   });
 
   container.replaceChildren(viz);

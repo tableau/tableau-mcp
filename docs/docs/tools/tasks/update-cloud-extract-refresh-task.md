@@ -7,7 +7,7 @@ sidebar_position: 3
 Updates the schedule of an extract refresh task on Tableau Cloud. Use this to change how often a refresh runs (e.g. downgrade Daily → Weekly), shift its time window, or modify the day/hour it executes — without recreating the task.
 
 :::warning Admin Only
-This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` feature flag to be enabled.
+This tool is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` environment variable to be enabled.
 :::
 
 :::info Tableau Cloud Only
@@ -57,7 +57,7 @@ Use this tool when you need to:
 
 ## Configuration
 
-Enable this tool by setting the feature flag:
+Enable this tool by setting:
 
 ```bash
 ADMIN_TOOLS_ENABLED=true

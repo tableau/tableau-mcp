@@ -9,7 +9,7 @@ sidebar_position: 1
 A read-only Tableau Cloud admin workflow that identifies stale workbooks and published data sources and renders them as a report for review.
 
 :::warning[Admin Only]
-This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` feature flag.
+This prompt is restricted to Tableau site administrators and requires the `ADMIN_TOOLS_ENABLED` site setting.
 :::
 
 ## Workflow
