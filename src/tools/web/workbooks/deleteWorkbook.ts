@@ -3,25 +3,20 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import {
-  AdminOnlyError,
-  PreviewNotRunError,
-  WorkbookNotAllowedError,
-} from '../../../errors/mcpToolError.js';
+import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { assertAdmin } from '../adminGate.js';
+import { DEFAULT_PENDING_DELETION_TAG, TagEvidence } from '../_lib/evidence.js';
+import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
 import { WebTool } from '../tool.js';
 import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
 
 const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
 
-// Default tag applied during the preview phase to mark a workbook as pending deletion. Reversible
-// and visible in the Tableau UI, giving owners a window to object before the confirmed delete.
-// Generic by design — callers (e.g. the Stale Content Cleanup prompt) can override via the `tag`
-// argument to use their own vocabulary.
-export const DEFAULT_PENDING_DELETION_TAG = 'pending-deletion';
+// Re-exported for back-compat with callers that imported it from this module before it moved to
+// the shared evidence module.
+export { DEFAULT_PENDING_DELETION_TAG };
 
 const paramsSchema = {
   workbookId: z.string().describe('The LUID of the workbook to delete.'),
@@ -106,11 +101,6 @@ the user's explicit approval first.
             ...extra,
             jwtScopes: deleteWorkbookTool.requiredApiScopes,
             callback: async (restApi) => {
-              const adminResult = await assertAdmin(restApi, extra);
-              if (adminResult.isErr()) {
-                return new AdminOnlyError(adminResult.error).toErr();
-              }
-
               const siteId = restApi.siteId;
 
               // Treat undefined, empty, and whitespace-only tags as "use the default" so a blank
@@ -128,67 +118,60 @@ the user's explicit approval first.
                 return new WorkbookNotAllowedError(isWorkbookAllowedResult.message).toErr();
               }
 
-              if (confirm) {
-                // Server-authoritative gate: re-fetch the workbook LIVE and verify it carries the
-                // pending-deletion tag set by a prior preview call. The tag is server-side state that
-                // a caller going through this MCP tool cannot set without running the preview — so its
-                // presence is genuine proof the preview ran, and (unlike a caller-computable token)
-                // this gate cannot be bypassed by an agent. NOTE: this is not full human-in-the-loop;
-                // it proves the preview ran, not that a human approved (an agent that runs both phases
-                // satisfies it). We query fresh here (not the access-check's cached content) so the
-                // check reflects current server state at delete time. Rejected with zero side effects.
-                const workbook = await restApi.workbooksMethods.getWorkbook({ workbookId, siteId });
-                const isTaggedForDeletion = workbook.tags?.tag?.some((t) => t.label === pendingTag);
-                if (!isTaggedForDeletion) {
-                  return new PreviewNotRunError(
-                    `Deletion blocked: workbook ${workbookId} is not tagged '${pendingTag}' as pending ` +
-                      'deletion. Run delete-workbook with confirm omitted (or false) for this workbookId ' +
-                      'first to preview and tag it, then call again with confirm: true. This gate verifies ' +
-                      'server-side state and cannot be bypassed by computing a token.',
-                  ).toErr();
-                }
-
+              // Resolve identity so both the audit record and the response name the workbook,
+              // project, and owner. Reuse the workbook already fetched by the access check when a
+              // project scope forced it, otherwise fetch it now.
+              const resolveTarget = async (): Promise<MutationTarget> => {
+                const workbook =
+                  isWorkbookAllowedResult.content ??
+                  (await restApi.workbooksMethods.getWorkbook({ workbookId, siteId }));
                 const ownerEmail = await resolveOwnerEmail(
                   restApi,
                   siteId,
                   workbook.owner?.id,
                   'delete-workbook',
                 );
-                const projectName = workbook.project?.name ?? 'unknown project';
-                const ownerText = ownerEmail ? `owner ${ownerEmail}` : 'owner unknown';
+                return {
+                  id: workbookId,
+                  name: workbook.name,
+                  project: workbook.project?.name,
+                  owner: ownerEmail ?? undefined,
+                  kind: 'workbook',
+                };
+              };
 
+              // Route the admin gate, tag-evidence gate, and authoritative audit through the shared
+              // mutation guard. The guard re-fetches the workbook on confirm and verifies the
+              // pending-deletion tag; a confirm without a prior preview is rejected server-side.
+              const guardResult = await guardMutation({
+                restApi,
+                extra,
+                tool: 'delete-workbook',
+                action: 'delete',
+                mode: 'preview-confirm',
+                phase: confirm ? 'confirm' : 'preview',
+                evidence: new TagEvidence({ tag: pendingTag, kind: 'workbook' }),
+                resolveTarget,
+              });
+              if (guardResult.isErr()) {
+                return guardResult.error.toErr();
+              }
+              const { target } = guardResult.value;
+              const projectName = target.project ?? 'unknown project';
+              const ownerText = target.owner ? `owner ${target.owner}` : 'owner unknown';
+
+              if (confirm) {
                 await restApi.workbooksMethods.deleteWorkbook({ workbookId, siteId });
                 return new Ok(
-                  `Deleted workbook '${workbook.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
+                  `Deleted workbook '${target.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
                     `It can be restored from the Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) for a ` +
                     'limited time before permanent removal.',
                 );
               }
 
-              // Preview phase: tag as pending deletion and report. No deletion.
-              // Resolve identity so the response names the workbook, project, and owner for an
-              // auditable record of exactly what was acted on. Reuse the workbook already fetched by
-              // the access check when a project scope forced it, otherwise fetch it now.
-              const workbook =
-                isWorkbookAllowedResult.content ??
-                (await restApi.workbooksMethods.getWorkbook({ workbookId, siteId }));
-              const ownerEmail = await resolveOwnerEmail(
-                restApi,
-                siteId,
-                workbook.owner?.id,
-                'delete-workbook',
-              );
-              const projectName = workbook.project?.name ?? 'unknown project';
-              const ownerText = ownerEmail ? `owner ${ownerEmail}` : 'owner unknown';
-
-              await restApi.workbooksMethods.addTagsToWorkbook({
-                workbookId,
-                siteId,
-                tagLabels: [pendingTag],
-              });
-
+              // Preview phase: the guard has tagged the workbook pending deletion. Report. No deletion.
               return new Ok(
-                `Preview — workbook '${workbook.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
+                `Preview — workbook '${target.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
                   `It has been tagged '${pendingTag}' (reversible). ` +
                   'NEXT STEP — REQUIRED: show this workbook (name, project, owner) to the user and ask them ' +
                   'to explicitly confirm deleting it. Do NOT delete without the user’s approval. ' +

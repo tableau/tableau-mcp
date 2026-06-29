@@ -3,16 +3,25 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { AdminOnlyError, UnknownError } from '../../../errors/mcpToolError.js';
+import { UnknownError } from '../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { updateCloudExtractRefreshScheduleSchema } from '../../../sdks/tableau/types/extractRefreshTask.js';
 import { WebMcpServer } from '../../../server.web.js';
-import { assertAdmin } from '../adminGate.js';
+import { NoEvidence } from '../_lib/evidence.js';
+import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
 import { WebTool } from '../tool.js';
 
 const paramsSchema = {
   taskId: z.string().uuid('taskId must be a valid UUID'),
   schedule: updateCloudExtractRefreshScheduleSchema,
+  confirm: z
+    .boolean()
+    .optional()
+    .describe(
+      'When omitted or false, runs a non-destructive preview: reports the new schedule that would be ' +
+        'applied without changing anything. When true, applies the schedule update. The update is ' +
+        'gated on this flag so a schedule is never overwritten without an explicit confirmed call.',
+    ),
 };
 
 export const getUpdateCloudExtractRefreshTaskTool = (
@@ -31,6 +40,8 @@ export const getUpdateCloudExtractRefreshTaskTool = (
 
   **Tableau Cloud only.** This tool calls the Cloud variant of the update endpoint and is not appropriate for Tableau Server.
 
+  This mutation is gated on an explicit confirmation flag: with \`confirm\` omitted or false the tool runs a non-destructive preview that reports the schedule that would be applied without changing anything; set \`confirm: true\` to apply the update. Present the change to the user and get explicit approval before confirming.
+
   Use this tool when you need to:
   - Reduce the frequency of an under-used extract refresh (e.g. Hourly → Daily, Daily → Weekly)
   - Move a refresh window to off-peak hours
@@ -38,6 +49,7 @@ export const getUpdateCloudExtractRefreshTaskTool = (
 
   **Parameters:**
   - \`taskId\` (required) – The ID of the extract refresh task to update. Obtain this from the \`list-extract-refresh-tasks\` tool.
+  - \`confirm\` (optional) – Set \`true\` to apply the update. When omitted or false, previews the change without applying it.
   - \`schedule\` (required) – The new schedule to apply. Replaces the existing schedule wholesale; partial-field merging is not supported by the Tableau API.
     - \`frequency\` (required) – One of \`Hourly\`, \`Daily\`, \`Weekly\`, \`Monthly\`.
     - \`frequencyDetails.start\` (required) – Start time in 24-hour \`HH:mm:ss\` format, e.g. \`"06:00:00"\`.
@@ -75,9 +87,41 @@ export const getUpdateCloudExtractRefreshTaskTool = (
             ...extra,
             jwtScopes: updateCloudExtractRefreshTaskTool.requiredApiScopes,
             callback: async (restApi) => {
-              const adminResult = await assertAdmin(restApi, extra);
-              if (adminResult.isErr()) {
-                return new AdminOnlyError(adminResult.error).toErr();
+              // Confirm-only mutation: no preview→confirm evidence to establish/verify, but still
+              // route the admin gate, identity/target resolution, and authoritative audit through the
+              // shared mutation guard. The guard audits both the preview (confirm omitted) and the
+              // confirmed update.
+              const resolveTarget = async (): Promise<MutationTarget> => ({
+                id: args.taskId,
+                kind: 'extract-refresh-task',
+              });
+              const guardResult = await guardMutation({
+                restApi,
+                extra,
+                tool: 'update-cloud-extract-refresh-task',
+                action: 'update',
+                mode: 'confirm-only',
+                phase: args.confirm ? 'confirm' : 'preview',
+                evidence: new NoEvidence(),
+                resolveTarget,
+              });
+              if (guardResult.isErr()) {
+                return guardResult.error.toErr();
+              }
+
+              // Preview phase: report the schedule that would be applied without changing anything.
+              if (!args.confirm) {
+                const { frequency, frequencyDetails } = args.schedule;
+                const window = frequencyDetails.end
+                  ? ` (${frequencyDetails.start}–${frequencyDetails.end})`
+                  : ` (start ${frequencyDetails.start})`;
+                return new Ok(
+                  `Preview — extract refresh task '${args.taskId}' would be updated to: ${frequency}${window}. ` +
+                    'No change has been made. ' +
+                    'NEXT STEP — REQUIRED: present this change to the user and ask them to explicitly ' +
+                    'confirm it. Do NOT apply without the user’s approval. ' +
+                    'Once approved, call again with confirm: true to apply the new schedule.',
+                );
               }
 
               const result = await restApi.tasksMethods.updateCloudExtractRefreshTask({

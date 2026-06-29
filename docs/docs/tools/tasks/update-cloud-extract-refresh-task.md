@@ -14,6 +14,28 @@ This tool is restricted to Tableau site administrators and requires the `ADMIN_T
 This tool calls the **Cloud variant** of the update endpoint and is not appropriate for Tableau Server. The Server variant has a different payload shape and is tracked separately.
 :::
 
+## Confirm and audit
+
+This mutation is gated on an explicit confirmation flag:
+
+1. **Preview** (default — `confirm` omitted or `false`): reports the new schedule that would be
+   applied without changing anything.
+2. **Update** (`confirm: true`): applies the schedule update.
+
+This is a `confirm-only` gate — there is no preview→confirm evidence token (the update is naturally
+idempotent and reversible by re-applying the prior schedule), but a schedule is never overwritten
+without an explicit confirmed call. Present the change to the user and get explicit approval before
+confirming.
+
+:::note[Authoritative audit]
+Every attempt — both the preview and the confirmed update, and both allowed and denied attempts (for
+example a non-admin caller) — emits a structured authoritative audit record to the server's durable
+log sink (logger `audit`, level `notice`), not just to the tool-response text. Each record captures
+the actor identity, the tool, action (`update`), phase, the target id, the confirmation evidence kind
+(`none` for this confirm-only tool), and the result. This routing is centralized in the shared
+mutation guard so every TMCP mutation tool audits identically.
+:::
+
 ## APIs called
 
 - [Update Cloud Extract Refresh Task](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_extract_and_encryption.htm#update_cloud_extract_refresh_task)
@@ -48,6 +70,7 @@ See also: [Environment Variables](../../configuration/mcp-config/env-vars.md)
 | Parameter  | Type   | Required | Description                                                                                       |
 | ---------- | ------ | -------- | ------------------------------------------------------------------------------------------------- |
 | `taskId`   | string (UUID) | Yes      | The ID of the extract refresh task to update. Obtain from `list-extract-refresh-tasks`.    |
+| `confirm`  | boolean | No      | Set `true` to apply the update. When omitted or false, previews the change without applying it.   |
 | `schedule` | object | Yes      | The new schedule to apply. Replaces the existing schedule wholesale.                              |
 
 ### `schedule` shape

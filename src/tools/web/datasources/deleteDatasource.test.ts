@@ -1,13 +1,29 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Err, Ok } from 'ts-results-es';
+import type { MockedFunction } from 'vitest';
 import { z } from 'zod';
 
+import * as logger from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
+import { auditRecordSchema } from '../_lib/auditRecord.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { DEFAULT_PENDING_DELETION_TAG, getDeleteDatasourceTool } from './deleteDatasource.js';
+
+// Auto-mock the logger so the durable audit record emitted by the mutation guard is captured as a
+// spy call (AC-6) rather than written to stderr.
+vi.mock('../../../logging/logger.js');
+
+// Parse the single mutation-audit record emitted on this call through the authoritative schema so
+// the assertion fails if the guard ever drops a required field. Returns the validated record.
+function getAuditRecord(): ReturnType<typeof auditRecordSchema.parse> {
+  const log = logger.log as MockedFunction<typeof logger.log>;
+  const auditEntries = log.mock.calls.map((c) => c[0]).filter((e) => e.logger === 'audit');
+  expect(auditEntries).toHaveLength(1);
+  return auditRecordSchema.parse(auditEntries[0].data);
+}
 
 const mockDatasource = {
   id: 'ds-1',
@@ -147,7 +163,7 @@ describe('deleteDatasourceTool', () => {
     expect(mocks.mockAssertAdmin).toHaveBeenCalled();
   });
 
-  it('should fail when user is not admin and perform no side effects', async () => {
+  it('should fail when user is not admin and perform no destructive side effects', async () => {
     mocks.mockAssertAdmin.mockResolvedValue(new Err('User is not a site administrator'));
     const result = await getToolResult({
       datasourceId: 'ds-1',
@@ -156,9 +172,21 @@ describe('deleteDatasourceTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('site administrator');
-    expect(mocks.mockQueryDatasource).not.toHaveBeenCalled();
+    // The guard resolves the target before the denial so the audit names it, but never tags or deletes.
     expect(mocks.mockAddTagsToDatasource).not.toHaveBeenCalled();
     expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
+  });
+
+  // AC-6(c): a denied attempt still emits an authoritative audit record with required fields.
+  it('should emit a DENIED audit record when the user is not an admin', async () => {
+    mocks.mockAssertAdmin.mockResolvedValue(new Err('User is not a site administrator'));
+    await getToolResult({ datasourceId: 'ds-1', confirm: true });
+    const record = getAuditRecord();
+    expect(record.result).toBe('denied');
+    expect(record.denyReason).toBe('not-admin');
+    expect(record.tool).toBe('delete-datasource');
+    expect(record.action).toBe('delete');
+    expect(record.target.id).toBe('ds-1');
   });
 
   // --- Tool scoping (bounded context) ---
@@ -203,11 +231,18 @@ describe('deleteDatasourceTool', () => {
     const result = await getToolResult({ datasourceId: 'ds-1', confirm: true });
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
-    expect(result.content[0].text).toContain('not tagged');
-    expect(result.content[0].text).toContain(DEFAULT_PENDING_DELETION_TAG);
+    // The guard rejects with the server-authoritative "preview not run" message and explains the
+    // gate cannot be bypassed by computing a token.
+    expect(result.content[0].text).toContain('Mutation blocked');
+    expect(result.content[0].text).toContain('cannot be bypassed by computing a token');
     // Re-fetched to verify state, but never deleted.
     expect(mocks.mockQueryDatasource).toHaveBeenCalled();
     expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
+    // AC-6(c): the rejected confirm is audited as denied/preview-not-run.
+    const record = getAuditRecord();
+    expect(record.result).toBe('denied');
+    expect(record.denyReason).toBe('preview-not-run');
+    expect(record.phase).toBe('confirm');
   });
 
   it('should verify the tag with a fresh live re-fetch, not the access-check cached content', async () => {
@@ -350,6 +385,12 @@ describe('deleteDatasourceTool', () => {
     // No tagging or dependency check on the confirmed delete.
     expect(mocks.mockAddTagsToDatasource).not.toHaveBeenCalled();
     expect(mocks.mockGraphql).not.toHaveBeenCalled();
+    // AC-6(c): the allowed confirm emits an allowed audit with the tag evidence descriptor.
+    const record = getAuditRecord();
+    expect(record.result).toBe('allowed');
+    expect(record.phase).toBe('confirm');
+    expect(record.denyReason).toBeUndefined();
+    expect(record.confirmationEvidence.kind).toBe('tag');
   });
 
   it('should verify a caller-provided tag on confirm', async () => {
@@ -445,6 +486,47 @@ describe('deleteDatasourceTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain(errorMessage);
+  });
+
+  // --- AC-6: end-to-end preview→confirm + audit on the in-scope tool ---
+
+  it('AC-6(a): rejects a forged/precomputed confirm (no prior preview) and does not delete', async () => {
+    mocks.mockQueryDatasource.mockResolvedValue(mockDatasource); // live: untagged
+    const result = await getToolResult({ datasourceId: 'ds-1', confirm: true });
+    expect(result.isError).toBe(true);
+    expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
+    expect(getAuditRecord().result).toBe('denied');
+  });
+
+  it('AC-6(b): preview then confirm happy path deletes and audits both phases', async () => {
+    // Preview: tags the datasource (establishes evidence) and audits an allowed preview.
+    const preview = await getToolResult({ datasourceId: 'ds-1' });
+    expect(preview.isError).toBe(false);
+    expect(mocks.mockAddTagsToDatasource).toHaveBeenCalled();
+    const previewRecord = getAuditRecord();
+    expect(previewRecord.result).toBe('allowed');
+    expect(previewRecord.phase).toBe('preview');
+
+    // Reset the spy so the confirm-phase audit is isolated; simulate the tag now being present.
+    vi.mocked(logger.log).mockClear();
+    mocks.mockQueryDatasource.mockResolvedValue(mockTaggedDatasource);
+
+    // Confirm: verifies the tag against live state and deletes.
+    const confirm = await getToolResult({ datasourceId: 'ds-1', confirm: true });
+    expect(confirm.isError).toBe(false);
+    expect(mocks.mockDeleteDatasource).toHaveBeenCalled();
+    const confirmRecord = getAuditRecord();
+    expect(confirmRecord.result).toBe('allowed');
+    expect(confirmRecord.phase).toBe('confirm');
+  });
+
+  it('AC-6(c): preview emits an allowed audit naming the datasource', async () => {
+    await getToolResult({ datasourceId: 'ds-1' });
+    const record = getAuditRecord();
+    expect(record.result).toBe('allowed');
+    expect(record.phase).toBe('preview');
+    expect(record.target.id).toBe('ds-1');
+    expect(record.confirmationEvidence.kind).toBe('tag');
   });
 });
 
