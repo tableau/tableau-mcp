@@ -170,7 +170,7 @@ const toolScopeMap: Record<
       ...RESOURCE_ACCESS_CHECKER_REQUIRED_API_SCOPES,
     ]),
   },
-  'get-oauth-token': {
+  'get-embed-token': {
     mcp: [],
     api: new Set<TableauApiScope>(['tableau:views:embed']),
   },
@@ -311,9 +311,9 @@ function getEnabledToolNames(): Set<WebToolName> {
     enabledTools.delete('get-stale-content-report');
   }
 
-  // Remove get-oauth-token if mcp-apps feature is disabled
+  // Remove get-embed-token if mcp-apps feature is disabled
   if (!featureGate.isFeatureEnabled('mcp-apps')) {
-    enabledTools.delete('get-oauth-token');
+    enabledTools.delete('get-embed-token');
   }
 
   return enabledTools;

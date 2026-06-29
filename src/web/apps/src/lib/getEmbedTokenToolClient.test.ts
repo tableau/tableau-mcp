@@ -1,12 +1,12 @@
 /**
- * @file Tests for getOAuthTokenToolClient
+ * @file Tests for getEmbedTokenToolClient
  */
 import { describe, expect, it, vi } from 'vitest';
 
-import { callGetOAuthTokenTool } from './getOAuthTokenToolClient.js';
+import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 
-describe('callGetOAuthTokenTool', () => {
-  it('should successfully retrieve OAuth token', async () => {
+describe('callGetEmbedTokenTool', () => {
+  it('should successfully retrieve embed token', async () => {
     const mockApp = {
       getHostCapabilities: vi.fn().mockReturnValue({ serverTools: {} }),
       callServerTool: vi.fn().mockResolvedValue({
@@ -15,18 +15,17 @@ describe('callGetOAuthTokenTool', () => {
             type: 'text',
             text: JSON.stringify({
               token: 'test-bearer-token-12345',
-              tokenType: 'Bearer',
             }),
           },
         ],
       }),
     };
 
-    const token = await callGetOAuthTokenTool(mockApp as any);
+    const token = await callGetEmbedTokenTool(mockApp as any);
 
     expect(token).toBe('test-bearer-token-12345');
     expect(mockApp.callServerTool).toHaveBeenCalledWith({
-      name: 'get-oauth-token',
+      name: 'get-embed-token',
       arguments: {},
     });
   });
@@ -44,7 +43,7 @@ describe('callGetOAuthTokenTool', () => {
       }),
     };
 
-    await expect(callGetOAuthTokenTool(mockApp as any)).rejects.toThrow();
+    await expect(callGetEmbedTokenTool(mockApp as any)).rejects.toThrow();
   });
 
   it('should throw error when response has no content', async () => {
@@ -55,7 +54,7 @@ describe('callGetOAuthTokenTool', () => {
       }),
     };
 
-    await expect(callGetOAuthTokenTool(mockApp as any)).rejects.toThrow();
+    await expect(callGetEmbedTokenTool(mockApp as any)).rejects.toThrow();
   });
 
   it('should throw error when JSON parsing fails', async () => {
@@ -71,7 +70,7 @@ describe('callGetOAuthTokenTool', () => {
       }),
     };
 
-    await expect(callGetOAuthTokenTool(mockApp as any)).rejects.toThrow();
+    await expect(callGetEmbedTokenTool(mockApp as any)).rejects.toThrow();
   });
 
   it('should throw error when token is missing from response', async () => {
@@ -82,7 +81,6 @@ describe('callGetOAuthTokenTool', () => {
           {
             type: 'text',
             text: JSON.stringify({
-              tokenType: 'Bearer',
               // token field is missing
             }),
           },
@@ -90,7 +88,7 @@ describe('callGetOAuthTokenTool', () => {
       }),
     };
 
-    await expect(callGetOAuthTokenTool(mockApp as any)).rejects.toThrow();
+    await expect(callGetEmbedTokenTool(mockApp as any)).rejects.toThrow();
   });
 
   it('should propagate errors from callServerTool', async () => {
@@ -99,21 +97,25 @@ describe('callGetOAuthTokenTool', () => {
       callServerTool: vi.fn().mockRejectedValue(new Error('Tool call failed')),
     };
 
-    await expect(callGetOAuthTokenTool(mockApp as any)).rejects.toThrow('Tool call failed');
+    await expect(callGetEmbedTokenTool(mockApp as any)).rejects.toThrow('Tool call failed');
   });
 
-  it('should handle MCP error responses', async () => {
+  it('should throw when no token is available (isError)', async () => {
     const mockApp = {
       getHostCapabilities: vi.fn().mockReturnValue({ serverTools: {} }),
-      callServerTool: vi
-        .fn()
-        .mockRejectedValue(
-          new Error('OAuth Bearer token retrieval is only available for Bearer authentication'),
-        ),
+      callServerTool: vi.fn().mockResolvedValue({
+        content: [
+          {
+            type: 'text',
+            text: 'Failed to get an embed token for the current authentication configuration.',
+          },
+        ],
+        isError: true,
+      }),
     };
 
-    await expect(callGetOAuthTokenTool(mockApp as any)).rejects.toThrow(
-      'OAuth Bearer token retrieval is only available for Bearer authentication',
+    await expect(callGetEmbedTokenTool(mockApp as any)).rejects.toThrow(
+      'Failed to get an embed token for the current authentication configuration.',
     );
   });
 
@@ -123,7 +125,7 @@ describe('callGetOAuthTokenTool', () => {
       callServerTool: vi.fn(),
     };
 
-    await expect(callGetOAuthTokenTool(mockApp as any)).rejects.toThrow(
+    await expect(callGetEmbedTokenTool(mockApp as any)).rejects.toThrow(
       'the MCP host does not support server tools',
     );
     expect(mockApp.callServerTool).not.toHaveBeenCalled();

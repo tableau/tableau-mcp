@@ -8,10 +8,10 @@ const tokenResponseSchema = z.object({
   tokenType: z.string(),
 });
 
-test.describe('get-oauth-token', () => {
+test.describe('get-embed-token', () => {
   test('should return Bearer token', async ({ client }) => {
     test.skip(!getFeatureGate().isFeatureEnabled('mcp-apps'), 'mcp-apps feature is disabled');
-    const result = await client.callTool('get-oauth-token', {
+    const result = await client.callTool('get-embed-token', {
       schema: tokenResponseSchema,
       toolArgs: {},
     });

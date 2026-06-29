@@ -9,7 +9,7 @@ import { getDeleteExtractRefreshTaskTool } from './extractRefreshTasks/deleteExt
 import { getListExtractRefreshTasksTool } from './extractRefreshTasks/listExtractRefreshTasks.js';
 import { getUpdateCloudExtractRefreshTaskTool } from './extractRefreshTasks/updateCloudExtractRefreshTask.js';
 import { getGetDatasourceMetadataTool } from './getDatasourceMetadata/getDatasourceMetadata.js';
-import { getOAuthTokenTool } from './getOAuthToken/getOAuthToken.js';
+import { getEmbedTokenTool } from './getEmbedToken/getEmbedToken.js';
 import { getListJobsTool } from './jobs/listJobs.js';
 import { getListProjectsTool } from './projects/listProjects.js';
 import { getGeneratePulseInsightBriefTool } from './pulse/generateInsightBrief/generatePulseInsightBriefTool.js';
@@ -36,7 +36,7 @@ import { getListWorkbooksTool } from './workbooks/listWorkbooks.js';
 
 export const webToolFactories = [
   getGetDatasourceMetadataTool,
-  getOAuthTokenTool,
+  getEmbedTokenTool,
   getListDatasourcesTool,
   getDeleteDatasourceTool,
   getListExtractRefreshTasksTool,

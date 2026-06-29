@@ -1,6 +1,6 @@
 import { RequestId } from '@modelcontextprotocol/sdk/types.js';
 
-import { Config, getConfig } from './config.js';
+import { getConfig } from './config.js';
 import { log } from './logging/logger.js';
 import { notifier, shouldNotifyWhenLevelIsAtLeast } from './logging/notification.js';
 import { maskRequest, maskResponse } from './logging/secretMask.js';
@@ -14,9 +14,9 @@ import {
   ResponseInterceptor,
   ResponseInterceptorConfig,
 } from './sdks/interceptors.js';
+import { buildAuthConfig } from './sdks/tableau/buildAuthConfig.js';
 import { RestApi } from './sdks/tableau/restApi.js';
 import { Server } from './server.js';
-import { TableauAuthInfo } from './server/oauth/schemas.js';
 import { TableauWebRequestHandlerExtra } from './tools/web/toolContext.js';
 import { isAxiosError } from './utils/axios.js';
 import { getExceptionMessage } from './utils/getExceptionMessage.js';
@@ -121,44 +121,13 @@ const getNewRestApiInstanceAsync = async (
     signOutWhenCompleted = false;
     restApi.setCredentials(tableauAuthInfo.raw, tableauAuthInfo.userId);
   } else {
-    if (config.auth === 'pat') {
-      await restApi.signIn({
-        type: 'pat',
-        patName: config.patName,
-        patValue: config.patValue,
-        siteName: config.siteName,
-      });
+    const authConfig = buildAuthConfig({ config, tableauAuthInfo, scopes: jwtScopes });
+    if (authConfig) {
+      await restApi.signIn(authConfig);
       setSiteLuid?.(restApi.siteId);
       setUserLuid?.(restApi.userId);
-    } else if (config.auth === 'direct-trust') {
-      await restApi.signIn({
-        type: 'direct-trust',
-        siteName: config.siteName,
-        username: getJwtUsername(config, tableauAuthInfo),
-        clientId: config.connectedAppClientId,
-        secretId: config.connectedAppSecretId,
-        secretValue: config.connectedAppSecretValue,
-        scopes: jwtScopes,
-        additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
-      });
-      setSiteLuid?.(restApi.siteId);
-      setUserLuid?.(restApi.userId);
-    } else if (config.auth === 'uat') {
-      await restApi.signIn({
-        type: 'uat',
-        siteName: config.siteName,
-        username: getJwtUsername(config, tableauAuthInfo),
-        tenantId: config.uatTenantId,
-        issuer: config.uatIssuer,
-        usernameClaimName: config.uatUsernameClaimName,
-        privateKey: config.uatPrivateKey,
-        keyId: config.uatKeyId,
-        scopes: jwtScopes,
-        additionalPayload: getJwtAdditionalPayload(config, tableauAuthInfo),
-      });
-      setSiteLuid?.(restApi.siteId);
-      setUserLuid?.(restApi.userId);
-    } else if (config.auth === 'oauth') {
+    } else {
+      // oauth: buildAuthConfig returns null — preserve the existing oauth handling.
       invariant(tableauAuthInfo, 'Tableau auth info not provided.');
 
       signOutWhenCompleted = false;
@@ -330,16 +299,4 @@ function logResponse(
   } as const;
 
   notifier.info(server.mcpServer, messageObj, { notifier: 'rest-api', requestId });
-}
-
-function getJwtUsername(config: Config, authInfo: TableauAuthInfo | undefined): string {
-  return config.jwtUsername.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
-}
-
-function getJwtAdditionalPayload(
-  config: Config,
-  authInfo: TableauAuthInfo | undefined,
-): Record<string, unknown> {
-  const json = config.jwtAdditionalPayload.replaceAll('{OAUTH_USERNAME}', authInfo?.username ?? '');
-  return JSON.parse(json || '{}');
 }
