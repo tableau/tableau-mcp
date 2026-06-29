@@ -78,10 +78,41 @@ const cards: CardItem[] = [
       <svg viewBox="0 0 80 80" className={styles.cardIcon} aria-hidden="true">
         <circle cx="40" cy="40" r="38" fill="#e8f4f8" />
         <rect x="16" y="24" width="48" height="34" rx="4" fill="#F5A623" opacity="0.2" />
-        <rect x="16" y="24" width="48" height="34" rx="4" fill="none" stroke="#F5A623" strokeWidth="2.5" />
-        <polyline points="28,36 22,42 28,48" fill="none" stroke="#F5A623" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        <polyline points="52,36 58,42 52,48" fill="none" stroke="#F5A623" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        <line x1="44" y1="32" x2="36" y2="52" stroke="#F5A623" strokeWidth="2.5" strokeLinecap="round" />
+        <rect
+          x="16"
+          y="24"
+          width="48"
+          height="34"
+          rx="4"
+          fill="none"
+          stroke="#F5A623"
+          strokeWidth="2.5"
+        />
+        <polyline
+          points="28,36 22,42 28,48"
+          fill="none"
+          stroke="#F5A623"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <polyline
+          points="52,36 58,42 52,48"
+          fill="none"
+          stroke="#F5A623"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <line
+          x1="44"
+          y1="32"
+          x2="36"
+          y2="52"
+          stroke="#F5A623"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        />
       </svg>
     ),
   },
