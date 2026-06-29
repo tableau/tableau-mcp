@@ -30,6 +30,8 @@ Retrieves a list of published Pulse Metrics from a Pulse Metric Definition using
     annotations: {
       title: 'List Pulse Metrics from Metric Definition ID',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ pulseMetricDefinitionID }, extra): Promise<CallToolResult> => {

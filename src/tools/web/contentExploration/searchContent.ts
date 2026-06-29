@@ -64,6 +64,8 @@ This tool searches across all supported content types for objects relevant to th
     annotations: {
       title: 'Search Content',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ terms, limit, orderBy, filter }, extra): Promise<CallToolResult> => {

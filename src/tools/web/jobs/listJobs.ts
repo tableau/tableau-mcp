@@ -83,6 +83,8 @@ export const getListJobsTool = (server: WebMcpServer): WebTool<typeof paramsSche
     annotations: {
       title: 'List Jobs',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async (args, extra): Promise<CallToolResult> => {

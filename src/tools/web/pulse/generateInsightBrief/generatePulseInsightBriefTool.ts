@@ -178,6 +178,8 @@ An insight brief is an AI-generated response to questions about Pulse metrics. I
     annotations: {
       title: 'Generate Pulse Insight Brief',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ briefRequest }, extra): Promise<CallToolResult> => {

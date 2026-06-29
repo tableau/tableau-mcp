@@ -30,6 +30,8 @@ This tool resolves the embed token from the current session's signing material â
     annotations: {
       title: 'Get Embed Token',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     meta: {

@@ -67,6 +67,8 @@ export const getListWorkbooksTool = (server: WebMcpServer): WebTool<typeof param
     annotations: {
       title: 'List Workbooks',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {
