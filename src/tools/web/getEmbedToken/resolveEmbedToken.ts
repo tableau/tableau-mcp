@@ -13,7 +13,7 @@ export type EmbedTokenError = 'embed-token-not-available';
  * provided AuthConfig:
  *   - direct-trust: sign an embed JWT via getJwt with connected-app config.
  *   - uat: sign an embed JWT from the UAT RS256 key via getJwt.
- *   - pat (or default): return not-available (caller must handle Bearer pass-through
+ *   - pat: return not-available (caller must handle Bearer pass-through
  *     or oauth scenarios before calling this resolver).
  *
  * Always signs with the embed scope `tableau:views:embed`, overriding any scopes in
@@ -58,7 +58,6 @@ export async function resolveEmbedToken({
     }
 
     case 'pat':
-    default:
       // PAT cannot sign embed tokens.
       return Err('embed-token-not-available');
   }
