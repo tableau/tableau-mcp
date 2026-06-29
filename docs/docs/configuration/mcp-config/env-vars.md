@@ -12,7 +12,6 @@ The URL of the Tableau server.
 
 - For Tableau Cloud, specify your site's specific pod e.g.
   `https://prod-useast-c.online.tableau.com`
-- Required unless [`AUTH`](#auth) is `oauth`.
 
 <hr />
 
@@ -64,7 +63,6 @@ A comma-separated list of loggers to enable.
   `2025-10-15T22-00-00-000Z.log` meaning this log file contains all log messages for hour 22 of
   2025-10-15 in UTC time. All log entries for a given hour of the day are appended to the same file.
 - Each line in the log file is a JSON object with a timestamp and additional properties:
-
   - `timestamp`: The timestamp of the log message in UTC time.
   - `level`: The logging level of the log message.
   - `logger`: The logger of the log message. This is typically `rest-api` for HTTP traces or
@@ -374,14 +372,7 @@ TELEMETRY_PROVIDER_CONFIG='{"module": "./my-telemetry-provider.js"}'
 ```
 
 The custom provider module should export a default class (or named export `TelemetryProvider`) that
-implements:
-
-```typescript
-interface TelemetryProvider {
-  initialize(): void;
-  recordMetric(name: string, value: number, attributes: Record<string, unknown>): void;
-}
-```
+implements the [`TelemetryProvider`](https://github.com/tableau/tableau-mcp/blob/main/src/telemetry/types.ts) interface.
 
 <hr />
 
@@ -441,13 +432,15 @@ Enables admin-only tools that require site administrator permissions.
   - SiteAdministratorCreator
   - SiteAdministratorExplorer
   - ServerAdministrator
-- Admin tools perform runtime role verification and will return a 403 error if the user does not have the required permissions.
+- Admin tools perform runtime role verification and will return a 403 error if the user does not
+  have the required permissions.
 
 <hr />
 
 ## `ADMIN_GATE_CACHE_TTL_MINUTES`
 
 TTL (in minutes) for caches used by admin-only tools. Affects:
+
 - Admin role lookups (`assertAdmin`)
 - Admin Insights dataset LUID resolution
 - Project ID → name resolution used by `get-stale-content-report`
@@ -456,19 +449,23 @@ TTL (in minutes) for caches used by admin-only tools. Affects:
 - Minimum: `1`
 - Maximum: `1440` (24 hours)
 
-Tune lower if site role / project metadata changes need to propagate faster. Tune higher under memory pressure to reduce REST traffic.
+Tune lower if site role / project metadata changes need to propagate faster. Tune higher under
+memory pressure to reduce REST traffic.
 
 <hr />
 
 ## `STALE_CONTENT_MIN_AGE_DAYS`
 
-Default minimum days since last access for content to be considered stale by the [`get-stale-content-report`](../../tools/admin-insights/get-stale-content-report.md) tool. Callers can pass an explicit `minAgeDays` argument to override per-call.
+Default minimum days since last access for content to be considered stale by the
+[`get-stale-content-report`](../../tools/admin-insights/get-stale-content-report.md) tool. Callers
+can pass an explicit `minAgeDays` argument to override per-call.
 
 - Default: `90`
 - Minimum: `1`
 - Maximum: `3650` (10 years)
 
-Overridable per-site via [Site Settings](site-settings.md) and per-request via [Request Overrides](request-overrides.md#stale_content_min_age_days).
+Overridable per-site via [Site Settings](site-settings.md) and per-request via
+[Request Overrides](request-overrides.md#stale_content_min_age_days).
 
 <hr />
 

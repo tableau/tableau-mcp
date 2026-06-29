@@ -25,6 +25,15 @@ const embedTokenDataSchema = z.object({
  *   without an embed credential), surfacing the server's error message.
  */
 export async function callGetEmbedTokenTool(app: App): Promise<string> {
+  // Ensure the host allows calling server tools before attempting to retrieve the token.
+  // If unsupported, throw so the caller's top-level handler can surface an error to the user.
+  const capabilities = app.getHostCapabilities();
+  if (!capabilities?.serverTools) {
+    throw new Error(
+      'Cannot retrieve embed token: the MCP host does not support server tools (serverTools capability is unavailable).',
+    );
+  }
+
   const result = await app.callServerTool({
     name: 'get-embed-token',
     arguments: {},

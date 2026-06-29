@@ -8,6 +8,7 @@ RUN npm ci --ignore-scripts
 
 # Copy source and build
 COPY src ./src
+COPY features.json ./
 RUN npm run build
 
 # Production stage
