@@ -194,4 +194,67 @@ describe('setupOpenInTableauLink', () => {
     linkElement = container.querySelector('#openInTableauLink');
     expect(linkElement).toBeNull();
   });
+
+  it('should show inline error message when openLink returns isError', async () => {
+    const url = 'https://tableau.example.com/views/workbook/view';
+    mockApp.openLink = vi.fn().mockResolvedValue({ isError: true });
+
+    setupOpenInTableauLink(mockApp, url, container);
+
+    const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
+    expect(linkElement).not.toBeNull();
+
+    // Click the link
+    linkElement.click();
+
+    // Wait for async handler
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Verify inline error message was created
+    const errorMessage = container.querySelector('.open-in-tableau-error') as HTMLElement;
+    expect(errorMessage).not.toBeNull();
+    expect(errorMessage.textContent).toBe('The URL was unable to be opened.');
+  });
+
+  it('should show inline error message when openLink throws error', async () => {
+    const url = 'https://tableau.example.com/views/workbook/view';
+    mockApp.openLink = vi.fn().mockRejectedValue(new Error('Connection lost'));
+
+    setupOpenInTableauLink(mockApp, url, container);
+
+    const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
+    expect(linkElement).not.toBeNull();
+
+    // Click the link
+    linkElement.click();
+
+    // Wait for async handler
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Verify inline error message was created
+    const errorMessage = container.querySelector('.open-in-tableau-error') as HTMLElement;
+    expect(errorMessage).not.toBeNull();
+    expect(errorMessage.textContent).toBe('The URL was unable to be opened.');
+  });
+
+  it('should reuse existing error message element on repeated failures', async () => {
+    const url = 'https://tableau.example.com/views/workbook/view';
+    mockApp.openLink = vi.fn().mockResolvedValue({ isError: true });
+
+    setupOpenInTableauLink(mockApp, url, container);
+
+    const linkElement = container.querySelector('#openInTableauLink') as HTMLAnchorElement;
+    expect(linkElement).not.toBeNull();
+
+    // Click the link twice
+    linkElement.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    linkElement.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Should have exactly one error message element
+    const errorMessages = container.querySelectorAll('.open-in-tableau-error');
+    expect(errorMessages.length).toBe(1);
+  });
 });

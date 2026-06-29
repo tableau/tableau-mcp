@@ -1,6 +1,25 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
 
 /**
+ * Shows an inline error message when the link fails to open.
+ *
+ * @param container - Container element to append the error message to
+ */
+function showOpenLinkError(container: HTMLElement): void {
+  // Check if error message already exists (reuse if present)
+  let errorMessage = container.querySelector('.open-in-tableau-error') as HTMLElement;
+
+  if (!errorMessage) {
+    // Create new error message element
+    errorMessage = document.createElement('div');
+    errorMessage.className = 'open-in-tableau-error';
+    container.appendChild(errorMessage);
+  }
+
+  errorMessage.textContent = 'The URL was unable to be opened.';
+}
+
+/**
  * Sets up the "Open in Tableau" link element for host-mediated link opening.
  * Creates the link element dynamically and appends it to the provided container.
  *
@@ -39,9 +58,11 @@ export function setupOpenInTableauLink(app: App, url: string, container: HTMLEle
 
       if (result.isError) {
         console.warn('Open in Tableau link request denied by host', { url });
+        showOpenLinkError(container);
       }
     } catch (error) {
       console.warn('Open in Tableau link request failed', { url, error });
+      showOpenLinkError(container);
     }
   };
 
