@@ -34,6 +34,19 @@ satisfies the gate with no human in the loop. Enforcing true human-in-the-loop (
 approval the agent cannot forge) is tracked as follow-up work.
 :::
 
+### MCP-Apps confirm panel (real human-in-the-loop)
+
+When the off-by-default `mcp-apps` feature flag is enabled, this tool ships with an MCP App and the
+preview phase renders an in-iframe **confirm panel** (data source name, project, owner, and a live
+countdown) instead of returning preview text the model could act on. The destructive delete is then
+performed only when a person clicks **Delete data source** in that panel, which invokes the
+model-invisible `confirm-delete-datasource` tool (`visibility: ['app']`). With the flag on, the
+model-driven `confirm: true` path is **closed** — the assistant cannot delete on the user's behalf;
+the only route to deletion is the human gesture. The confirm tool re-verifies **both** the live
+`pending-deletion` tag **and** a fresh, single-use human approval recorded during the preview (within
+`MUTATION_PREVIEW_TTL_MINUTES`, default 5); either missing rejects the delete. When the flag is off
+the tool behaves exactly as the two-phase `confirm`/tag flow described above.
+
 ### Server-authoritative gate
 
 The confirm phase does not trust any caller-supplied value. It re-fetches the data source from

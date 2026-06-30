@@ -6,9 +6,25 @@ import { z } from 'zod';
 
 import pkg from '~/package.json';
 
+import {
+  isDeleteDatasourceConfirmResult,
+  renderDeleteDatasourceConfirm,
+} from './lib/deleteDatasourceConfirmClient.js';
+import {
+  isDeleteExtractRefreshTaskConfirmResult,
+  renderDeleteExtractRefreshTaskConfirm,
+} from './lib/deleteExtractRefreshTaskConfirmClient.js';
+import {
+  isDeleteWorkbookConfirmResult,
+  renderDeleteWorkbookConfirm,
+} from './lib/deleteWorkbookConfirmClient.js';
 import { embedTableauViz } from './lib/embedTableauViz.js';
 import { callGetEmbedTokenTool } from './lib/getEmbedTokenToolClient.js';
 import { setupOpenInTableauLink } from './lib/openInTableauLink.js';
+import {
+  isUpdateCloudExtractRefreshTaskConfirmResult,
+  renderUpdateCloudExtractRefreshTaskConfirm,
+} from './lib/updateCloudExtractRefreshTaskConfirmClient.js';
 
 const urlSchema = z.object({
   url: z.string().url(),
@@ -93,6 +109,24 @@ function extractUrlObjectFromResult(result: CallToolResult): string {
 // Handle tool results
 app.ontoolresult = async (result: CallToolResult) => {
   try {
+    // delete-workbook (flag ON) preview returns a confirm-panel payload, not a viz URL. Branch on
+    // the result shape: render the HITL confirm panel; otherwise fall through to viz embedding.
+    if (isDeleteWorkbookConfirmResult(result)) {
+      renderDeleteWorkbookConfirm(app, result);
+      return;
+    }
+    if (isDeleteDatasourceConfirmResult(result)) {
+      renderDeleteDatasourceConfirm(app, result);
+      return;
+    }
+    if (isDeleteExtractRefreshTaskConfirmResult(result)) {
+      renderDeleteExtractRefreshTaskConfirm(app, result);
+      return;
+    }
+    if (isUpdateCloudExtractRefreshTaskConfirmResult(result)) {
+      renderUpdateCloudExtractRefreshTaskConfirm(app, result);
+      return;
+    }
     const viewUrl = extractUrlObjectFromResult(result);
     await loadTableauEmbeddingApi(viewUrl);
     const token = await callGetEmbedTokenTool(app);
@@ -104,7 +138,7 @@ app.ontoolresult = async (result: CallToolResult) => {
       setupOpenInTableauLink(app, viewUrl, mainContainer);
     }
   } catch (error) {
-    console.error('Error embedding viz:', error);
+    console.error('Error handling tool result:', error);
   }
 };
 

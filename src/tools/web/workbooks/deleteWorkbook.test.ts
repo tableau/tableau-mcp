@@ -8,6 +8,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { auditRecordSchema } from '../_lib/auditRecord.js';
+import { AppApprovalEvidence } from '../_lib/evidence.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { DEFAULT_PENDING_DELETION_TAG, getDeleteWorkbookTool } from './deleteWorkbook.js';
 import { mockWorkbook } from './mockWorkbook.js';
@@ -39,6 +40,11 @@ const mocks = vi.hoisted(() => ({
   mockQueryUserOnSite: vi.fn(),
   mockAssertAdmin: vi.fn(),
   mockIsWorkbookAllowed: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../features/featureGate.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -90,6 +96,8 @@ describe('deleteWorkbookTool', () => {
     });
     mocks.mockAddTagsToWorkbook.mockResolvedValue(undefined);
     mocks.mockDeleteWorkbook.mockResolvedValue(undefined);
+    // Default: mcp-apps flag OFF → today's exact behavior (no iframe, no approval recorded).
+    mocks.mockIsFeatureEnabled.mockReturnValue(false);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -115,7 +123,7 @@ describe('deleteWorkbookTool', () => {
       title: 'Delete Workbook',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     });
   });
@@ -432,6 +440,61 @@ describe('deleteWorkbookTool', () => {
     expect(record.phase).toBe('preview');
     expect(record.target.id).toBe('wb-1');
     expect(record.confirmationEvidence.kind).toBe('tag');
+  });
+
+  // --- MCP-Apps flag ON: preview carries the iframe app + records a human-approval window ---
+
+  describe('with mcp-apps flag ON', () => {
+    beforeEach(() => {
+      mocks.mockIsFeatureEnabled.mockReturnValue(true);
+    });
+
+    it('carries the delete-workbook app config so the host renders the confirm iframe', () => {
+      const tool = getDeleteWorkbookTool(new WebMcpServer());
+      expect(tool.app).toBeDefined();
+      expect(tool.app?.resourceUri).toContain('delete-workbook');
+    });
+
+    it('preview returns an AppToolResult panel payload AND records a single-use human approval', async () => {
+      const result = await getToolResult({ workbookId: 'wb-app' });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      // The host parses content[0].text as the AppToolResult; assert the confirm-panel shape.
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.data.kind).toBe('delete-workbook-confirm');
+      expect(payload.data.workbookId).toBe('wb-app');
+      expect(payload.data.name).toBe(mockWorkbook.name);
+      expect(typeof payload.data.expiresAtMs).toBe('number');
+      // SECURITY: no secret/token is transported to the iframe — approval is presence-based.
+      expect(result.content[0].text).not.toMatch(/nonce|token|secret/i);
+      // Still tags (preview side effect) and does not delete.
+      expect(mocks.mockAddTagsToWorkbook).toHaveBeenCalled();
+      expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+
+      // The approval was recorded so a subsequent confirm-delete-workbook verify succeeds once.
+      const extra = getMockRequestHandlerExtra();
+      await expect(
+        new AppApprovalEvidence().verify({
+          restApi: { siteId: 'test-site-id' } as never,
+          siteId: 'test-site-id',
+          target: { id: 'wb-app', kind: 'workbook' },
+          tool: 'confirm-delete-workbook',
+          userLuid: extra.getUserLuid(),
+        }),
+      ).resolves.toBe(true);
+    });
+
+    it('routes confirm:true to the human-gesture panel instead of deleting (AC-5: no self-confirm)', async () => {
+      // Flag ON: the model-driven confirm path is closed so the agent cannot bypass the iframe by
+      // calling delete-workbook again with confirm:true. The only path to deletion is the human
+      // gesture in the panel (confirm-delete-workbook). No destructive side effect here.
+      mocks.mockGetWorkbook.mockResolvedValue(mockTaggedWorkbook);
+      const result = await getToolResult({ workbookId: 'wb-1', confirm: true });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('confirm-delete-workbook');
+      expect(mocks.mockDeleteWorkbook).not.toHaveBeenCalled();
+    });
   });
 });
 

@@ -2,6 +2,8 @@ import { afterEach, beforeEach } from 'vitest';
 
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import {
+  AllEvidence,
+  AppApprovalEvidence,
   DEFAULT_PENDING_DELETION_TAG,
   EvidenceContext,
   NoEvidence,
@@ -276,6 +278,246 @@ describe('RegistryEvidence', () => {
         ),
       ).resolves.toBe(true);
     });
+  });
+});
+
+describe('AppApprovalEvidence', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+  });
+
+  // The app-approval registry is module-scoped and shared across instances (the preview tool and
+  // the confirm tool are separate WebTool instances but must hit the same store). Use distinct
+  // target ids per test so cases don't bleed into one another.
+  function appCtx(overrides: Partial<EvidenceContext> = {}): EvidenceContext {
+    return makeCtx({
+      target: { id: 'wb-app', kind: 'workbook' },
+      tool: 'delete-workbook',
+      userLuid: 'user-1',
+      ...overrides,
+    });
+  }
+
+  it('describes itself as a registry-nonce with a human-gesture detail and leaks no secret', () => {
+    const descriptor = new AppApprovalEvidence().describeEvidence();
+    expect(descriptor.kind).toBe('registry-nonce');
+    expect(descriptor.detail).toContain('app-approval');
+  });
+
+  it('establish records presence so a later verify (single-use) succeeds exactly once', async () => {
+    const evidence = new AppApprovalEvidence();
+    const ctx = appCtx({ target: { id: 'wb-once', kind: 'workbook' } });
+    await evidence.establish(ctx);
+
+    // A separate instance (mirrors confirm tool ≠ preview tool) sharing the module registry.
+    const confirm = new AppApprovalEvidence();
+    const confirmCtx = appCtx({ target: { id: 'wb-once', kind: 'workbook' } });
+    await expect(confirm.verify(confirmCtx)).resolves.toBe(true);
+    // Single-use: the approval is consumed on first verify, so a replay is rejected.
+    await expect(confirm.verify(confirmCtx)).resolves.toBe(false);
+  });
+
+  it('verify fails when no approval was ever established (no human gesture)', async () => {
+    const evidence = new AppApprovalEvidence();
+    await expect(
+      evidence.verify(appCtx({ target: { id: 'wb-never', kind: 'workbook' } })),
+    ).resolves.toBe(false);
+  });
+
+  it('ignores any caller-supplied confirmationToken — approval is presence-based, not transported', async () => {
+    const evidence = new AppApprovalEvidence();
+    // A caller that forges a token but never previewed in the iframe must still be rejected.
+    await expect(
+      evidence.verify(
+        appCtx({ target: { id: 'wb-forge', kind: 'workbook' }, confirmationToken: 'anything' }),
+      ),
+    ).resolves.toBe(false);
+  });
+
+  it('scopes approval by site+user+tool+target so a different target is not satisfied', async () => {
+    const evidence = new AppApprovalEvidence();
+    await evidence.establish(appCtx({ target: { id: 'wb-A', kind: 'workbook' } }));
+    await expect(
+      evidence.verify(appCtx({ target: { id: 'wb-B', kind: 'workbook' } })),
+    ).resolves.toBe(false);
+  });
+
+  it('scopes approval by user so another user cannot consume it', async () => {
+    const evidence = new AppApprovalEvidence();
+    await evidence.establish(
+      appCtx({ target: { id: 'wb-user', kind: 'workbook' }, userLuid: 'user-1' }),
+    );
+    await expect(
+      evidence.verify(appCtx({ target: { id: 'wb-user', kind: 'workbook' }, userLuid: 'user-2' })),
+    ).resolves.toBe(false);
+  });
+
+  describe('TTL expiry', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('rejects a confirm once the approval window (TTL) has elapsed — must re-preview', async () => {
+      const evidence = new AppApprovalEvidence();
+      await evidence.establish(appCtx({ target: { id: 'wb-ttl', kind: 'workbook' } }));
+      // TTL defaults to 5 minutes; advance past it so the approval auto-expires.
+      await vi.advanceTimersByTimeAsync(1000 * 60 * 6);
+      await expect(
+        evidence.verify(appCtx({ target: { id: 'wb-ttl', kind: 'workbook' } })),
+      ).resolves.toBe(false);
+    });
+
+    it('still verifies an approval that has not yet expired', async () => {
+      const evidence = new AppApprovalEvidence();
+      await evidence.establish(appCtx({ target: { id: 'wb-fresh', kind: 'workbook' } }));
+      await vi.advanceTimersByTimeAsync(1000 * 60 * 2);
+      await expect(
+        evidence.verify(appCtx({ target: { id: 'wb-fresh', kind: 'workbook' } })),
+      ).resolves.toBe(true);
+    });
+  });
+
+  // --- Generalized namespace (the refactor under test) ---
+  //
+  // The key was changed from `${siteId}:${userLuid}:${tool}:${targetId}` to
+  // `${siteId}:${userLuid}:${namespace}:${targetId}`, where `namespace` is a fixed ctor arg (the
+  // PREVIEW tool's name) shared by the preview/confirm pair. The `ctx.tool` field is intentionally
+  // NOT part of the key for this strategy — the preview tool and its confirm tool run under DIFFERENT
+  // tool names, so keying on `ctx.tool` would never match across the pair. These cases pin that
+  // behavior and, critically, the cross-namespace ISOLATION the refactor exists to provide.
+  describe('generalized namespace', () => {
+    it('establish(ns) then verify(ns) for the SAME site/user/target succeeds (explicit namespace)', async () => {
+      const establish = new AppApprovalEvidence('delete-datasource');
+      const verify = new AppApprovalEvidence('delete-datasource');
+      const ctx = appCtx({ target: { id: 'ns-A-target', kind: 'datasource' } });
+      await establish.establish(ctx);
+      await expect(verify.verify(ctx)).resolves.toBe(true);
+    });
+
+    it('WRONG-NAMESPACE ISOLATION: an approval for delete-datasource does NOT satisfy delete-workbook for the SAME site/user/target', async () => {
+      // This is the whole point of the refactor: one tool's human approval must never unlock
+      // another tool's confirm, even when site + user + target id are identical. Establish under the
+      // 'delete-datasource' namespace, then attempt to verify under 'delete-workbook' with the same
+      // EvidenceContext → MUST be rejected.
+      const sameTargetCtx = appCtx({ target: { id: 'shared-target-id', kind: 'datasource' } });
+      await new AppApprovalEvidence('delete-datasource').establish(sameTargetCtx);
+      await expect(new AppApprovalEvidence('delete-workbook').verify(sameTargetCtx)).resolves.toBe(
+        false,
+      );
+      // And the genuine namespace still verifies (the approval was recorded, just isolated).
+      await expect(
+        new AppApprovalEvidence('delete-datasource').verify(sameTargetCtx),
+      ).resolves.toBe(true);
+    });
+
+    it('isolates every distinct namespace from every other (extract-refresh-task vs update-cloud)', async () => {
+      const ctx = appCtx({ target: { id: 'task-shared', kind: 'extract-refresh-task' } });
+      await new AppApprovalEvidence('delete-extract-refresh-task').establish(ctx);
+      // The update tool's confirm must not be satisfied by the delete tool's approval.
+      await expect(
+        new AppApprovalEvidence('update-cloud-extract-refresh-task').verify(ctx),
+      ).resolves.toBe(false);
+    });
+
+    it('default constructor preserves the original behavior (namespace = delete-workbook)', async () => {
+      // new AppApprovalEvidence() must key identically to new AppApprovalEvidence('delete-workbook'),
+      // so the pre-generalization delete-workbook flow is unchanged. Establish with the default ctor,
+      // verify with the explicit 'delete-workbook' namespace → true.
+      const ctx = appCtx({ target: { id: 'default-ns-target', kind: 'workbook' } });
+      await new AppApprovalEvidence().establish(ctx);
+      await expect(new AppApprovalEvidence('delete-workbook').verify(ctx)).resolves.toBe(true);
+    });
+
+    it('default constructor is NOT satisfied by a non-delete-workbook namespace', async () => {
+      // The mirror of the above: establishing under an explicit non-default namespace must not
+      // satisfy the default ('delete-workbook') verify.
+      const ctx = appCtx({ target: { id: 'default-ns-iso', kind: 'workbook' } });
+      await new AppApprovalEvidence('delete-datasource').establish(ctx);
+      await expect(new AppApprovalEvidence().verify(ctx)).resolves.toBe(false);
+    });
+
+    it('namespace key ignores ctx.tool entirely (preview/confirm tool names differ but namespace matches)', async () => {
+      // Establish as the preview tool would (ctx.tool = 'delete-datasource') and verify as the
+      // confirm tool would (ctx.tool = 'confirm-delete-datasource'); the differing ctx.tool must NOT
+      // break the match because the fixed namespace is what keys the entry.
+      const target = { id: 'tool-irrelevant', kind: 'datasource' as const };
+      await new AppApprovalEvidence('delete-datasource').establish(
+        appCtx({ target, tool: 'delete-datasource' }),
+      );
+      await expect(
+        new AppApprovalEvidence('delete-datasource').verify(
+          appCtx({ target, tool: 'confirm-delete-datasource' }),
+        ),
+      ).resolves.toBe(true);
+    });
+
+    it('a wrong-namespace verify does NOT consume the genuine approval (isolation is total)', async () => {
+      // A rejected cross-namespace verify must be a pure no-op on the real entry — it must not
+      // single-use-consume the approval that belongs to the correct namespace.
+      const ctx = appCtx({ target: { id: 'no-cross-consume', kind: 'datasource' } });
+      await new AppApprovalEvidence('delete-datasource').establish(ctx);
+      // Wrong namespace probe (rejected, and must not touch the real entry).
+      await expect(new AppApprovalEvidence('delete-workbook').verify(ctx)).resolves.toBe(false);
+      // The genuine namespace still verifies once...
+      await expect(new AppApprovalEvidence('delete-datasource').verify(ctx)).resolves.toBe(true);
+      // ...and is single-use thereafter.
+      await expect(new AppApprovalEvidence('delete-datasource').verify(ctx)).resolves.toBe(false);
+    });
+  });
+});
+
+describe('AllEvidence (AND-composition)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+    mocks.mockGetWorkbook.mockResolvedValue({
+      tags: { tag: [{ label: DEFAULT_PENDING_DELETION_TAG }] },
+    });
+  });
+
+  function appCtx(id: string): EvidenceContext {
+    return makeCtx({ target: { id, kind: 'workbook' }, tool: 'confirm-delete-workbook' });
+  }
+
+  it('verify is true only when EVERY strategy verifies (tag present AND approval present)', async () => {
+    const approval = new AppApprovalEvidence();
+    await approval.establish(appCtx('wb-and-ok'));
+    const all = new AllEvidence([new TagEvidence({ kind: 'workbook' }), approval]);
+    await expect(all.verify(appCtx('wb-and-ok'))).resolves.toBe(true);
+  });
+
+  it('verify is false when the tag is missing even if the approval is present', async () => {
+    mocks.mockGetWorkbook.mockResolvedValue({ tags: { tag: [{ label: 'other' }] } });
+    const approval = new AppApprovalEvidence();
+    await approval.establish(appCtx('wb-and-notag'));
+    const all = new AllEvidence([new TagEvidence({ kind: 'workbook' }), approval]);
+    await expect(all.verify(appCtx('wb-and-notag'))).resolves.toBe(false);
+  });
+
+  it('verify is false when no human approval exists even if the tag is present', async () => {
+    const all = new AllEvidence([new TagEvidence({ kind: 'workbook' }), new AppApprovalEvidence()]);
+    await expect(all.verify(appCtx('wb-and-noapproval'))).resolves.toBe(false);
+  });
+
+  it('describes itself with the kind of its primary (first) strategy for the audit record', () => {
+    const all = new AllEvidence([new AppApprovalEvidence(), new TagEvidence({ kind: 'workbook' })]);
+    expect(all.describeEvidence().kind).toBe('registry-nonce');
+  });
+});
+
+describe('getMutationPreviewTtlMs', () => {
+  afterEach(() => {
+    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+  });
+
+  it('defaults to 5 minutes', async () => {
+    delete process.env.MUTATION_PREVIEW_TTL_MINUTES;
+    const { getMutationPreviewTtlMs } = await import('./evidence.js');
+    expect(getMutationPreviewTtlMs()).toBe(1000 * 60 * 5);
   });
 });
 
