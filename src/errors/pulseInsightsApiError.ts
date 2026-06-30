@@ -1,5 +1,3 @@
-import { McpToolError } from './mcpToolError.js';
-
 const PULSE_INSIGHTS_ERROR_GUIDANCE: Record<string, string> = {
   '400712':
     'Missing measure or measure field name. Ensure basic_specification.measure.field is a non-empty string.',
@@ -78,17 +76,4 @@ function parseResponseData(data: unknown): {
   }
 
   return { errorCode, tabCode, guidance };
-}
-
-export class PulseInsightsApiError extends McpToolError {
-  constructor(message: string, statusCode: number, errorCode?: string, details?: string) {
-    super({
-      type: 'pulse-insights-api-error',
-      message,
-      statusCode,
-      internalStatusCode: statusCode,
-      internalError: errorCode,
-      internalErrorDetails: details,
-    });
-  }
 }
