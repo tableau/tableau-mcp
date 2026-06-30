@@ -145,6 +145,8 @@ describe('getGeneratePulseInsightBriefTool', () => {
     expect(tool.annotations).toEqual({
       title: 'Generate Pulse Insight Brief',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     });
   });
