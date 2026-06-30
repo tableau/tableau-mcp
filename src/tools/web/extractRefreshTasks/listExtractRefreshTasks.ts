@@ -79,6 +79,8 @@ export const getListExtractRefreshTasksTool = (
     annotations: {
       title: 'List Extract Refresh Tasks',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async (args, extra): Promise<CallToolResult> => {

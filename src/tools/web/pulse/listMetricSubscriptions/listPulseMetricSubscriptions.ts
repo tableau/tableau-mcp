@@ -33,6 +33,8 @@ Retrieves a list of published Pulse Metric Subscriptions for the current user us
     annotations: {
       title: 'List Pulse Metric Subscriptions for Current User',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async (_, extra): Promise<CallToolResult> => {

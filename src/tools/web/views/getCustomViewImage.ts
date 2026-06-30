@@ -55,6 +55,8 @@ export const getGetCustomViewImageTool = (
     annotations: {
       title: 'Get Custom View Image',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async (

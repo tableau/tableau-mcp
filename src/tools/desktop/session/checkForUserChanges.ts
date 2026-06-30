@@ -43,6 +43,8 @@ export const getCheckForUserChangesTool = (
     annotations: {
       title,
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ session, sinceSequence }, extra): Promise<CallToolResult> => {

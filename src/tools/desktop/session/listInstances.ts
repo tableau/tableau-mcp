@@ -22,6 +22,8 @@ export const getListInstancesTool = (
     annotations: {
       title,
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async (_, extra): Promise<CallToolResult> => {

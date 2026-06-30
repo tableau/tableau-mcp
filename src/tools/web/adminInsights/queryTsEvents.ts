@@ -41,6 +41,8 @@ Notes:
     annotations: {
       title: 'Query Admin Insights — TS Events',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ query, limit }, extra): Promise<CallToolResult> => {

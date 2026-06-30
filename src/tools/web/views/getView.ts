@@ -32,6 +32,8 @@ export const getGetViewTool = (server: WebMcpServer): WebTool<typeof paramsSchem
     annotations: {
       title: 'Get View',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     app: getAppConfig('get-view'),

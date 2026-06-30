@@ -76,6 +76,8 @@ export const getListUsersTool = (server: WebMcpServer): WebTool<typeof paramsSch
     annotations: {
       title: 'List Users',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async (args, extra): Promise<CallToolResult> => {

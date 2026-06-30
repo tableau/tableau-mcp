@@ -134,6 +134,8 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
     annotations: {
       title: 'Generate Pulse Metric Value Insight Bundle',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ bundleRequest, bundleType }, extra): Promise<CallToolResult> => {
