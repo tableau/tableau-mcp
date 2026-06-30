@@ -210,6 +210,48 @@ describe('confirmDeleteDatasourceTool', () => {
     expect(mocks.mockDeleteDatasource).toHaveBeenCalledTimes(1);
   });
 
+  // --- Cross-namespace isolation through the tool ---
+
+  it('rejects an approval established under a DIFFERENT tool namespace (no cross-tool unlock)', async () => {
+    // The tag half of AllEvidence passes (default tagged datasource), but the approval was recorded
+    // under delete-workbook's namespace for the same site/user/target. The confirm tool verifies the
+    // 'delete-datasource' namespace, so the cross-namespace approval must NOT satisfy it.
+    await new AppApprovalEvidence('delete-workbook').establish({
+      restApi: { siteId: 'test-site-id' } as never,
+      siteId: 'test-site-id',
+      target: { id: 'ds-cross', kind: 'datasource' },
+      tool: 'confirm-delete-workbook',
+      userLuid: getMockRequestHandlerExtra().getUserLuid(),
+    });
+    const result = await getToolResult({ datasourceId: 'ds-cross' });
+    expect(result.isError).toBe(true);
+    expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
+  });
+
+  // --- Expired approval window: TTL elapsed → rejected, no delete ---
+
+  describe('expired approval window', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('rejects when the human approval has expired (TTL elapsed) and performs no delete', async () => {
+      await establishApproval('ds-ttl');
+      // The approval auto-expires after the default 5-minute window; advance well past it so the
+      // shared AppApprovalEvidence cache has dropped the entry before the confirm verifies it.
+      await vi.advanceTimersByTimeAsync(1000 * 60 * 6);
+      const result = await getToolResult({ datasourceId: 'ds-ttl' });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Mutation blocked');
+      expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
+      expect(getAuditRecord().denyReason).toBe('preview-not-run');
+    });
+  });
+
   // --- AuthZ: admin gate ---
 
   it('rejects and performs no delete when the user is not an admin', async () => {

@@ -177,6 +177,30 @@ describe('confirmDeleteExtractRefreshTaskTool', () => {
     expect(mocks.mockDeleteExtractRefreshTask).toHaveBeenCalledTimes(1);
   });
 
+  // --- Expired approval window: TTL elapsed → rejected, no delete ---
+
+  describe('expired approval window', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('rejects when the human approval has expired (TTL elapsed) and performs no delete', async () => {
+      await establishApproval(validTaskId);
+      // The approval auto-expires after the default 5-minute window; advance past it so the shared
+      // AppApprovalEvidence cache has dropped the entry before the confirm verifies it.
+      await vi.advanceTimersByTimeAsync(1000 * 60 * 6);
+      const result = await getToolResult({ taskId: validTaskId });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Mutation blocked');
+      expect(mocks.mockDeleteExtractRefreshTask).not.toHaveBeenCalled();
+      expect(getAuditRecord().denyReason).toBe('preview-not-run');
+    });
+  });
+
   // --- AuthZ ---
 
   it('rejects and performs no delete when the user is not an admin', async () => {

@@ -189,6 +189,30 @@ describe('confirmUpdateCloudExtractRefreshTaskTool', () => {
     expect(mocks.mockUpdateCloudExtractRefreshTask).toHaveBeenCalledTimes(1);
   });
 
+  // --- Expired approval window: TTL elapsed → rejected, no update ---
+
+  describe('expired approval window', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('rejects when the human approval has expired (TTL elapsed) and performs no update', async () => {
+      await establishApproval(validTaskId);
+      // The approval auto-expires after the default 5-minute window; advance past it so the shared
+      // AppApprovalEvidence cache has dropped the entry before the confirm verifies it.
+      await vi.advanceTimersByTimeAsync(1000 * 60 * 6);
+      const result = await getToolResult({ taskId: validTaskId, schedule: validSchedule });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('Mutation blocked');
+      expect(mocks.mockUpdateCloudExtractRefreshTask).not.toHaveBeenCalled();
+      expect(getAuditRecord().denyReason).toBe('preview-not-run');
+    });
+  });
+
   // --- AuthZ ---
 
   it('rejects and performs no update when the user is not an admin', async () => {
