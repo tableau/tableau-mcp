@@ -5,6 +5,7 @@ import z from 'zod';
 import {
   McpToolError,
   PulseDisabledError,
+  PulseInsightsApiError,
   PulseInsightsDisabledError,
   PulseNotAvailableError,
 } from '../../../errors/mcpToolError.js';
@@ -236,6 +237,13 @@ async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise
         hasPulseInsightsDisabledErrorCode(responseMessage)
       ) {
         return new PulseInsightsDisabledError().toErr();
+      }
+
+      if (error.response?.status) {
+        return new PulseInsightsApiError(
+          error.response.status,
+          error.response.data,
+        ).toErr();
       }
     }
 

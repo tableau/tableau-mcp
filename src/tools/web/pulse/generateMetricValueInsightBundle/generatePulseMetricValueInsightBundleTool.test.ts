@@ -1,7 +1,11 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
-import { PulseDisabledError, PulseNotAvailableError } from '../../../../errors/mcpToolError.js';
+import {
+  PulseDisabledError,
+  PulseInsightsApiError,
+  PulseNotAvailableError,
+} from '../../../../errors/mcpToolError.js';
 import { PulseInsightBundleType } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../../testShared.js';
@@ -215,6 +219,42 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
     expect(result.isError).toBe(true);
     invariant(result.content[0].type === 'text');
     expect(result.content[0].text).toContain('Pulse is disabled on this Tableau Cloud site.');
+  });
+
+  it('should return actionable error message when API returns a known error code', async () => {
+    const apiError = new PulseInsightsApiError(400, {
+      code: '400945',
+      message: '0x30c0672c',
+    });
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(apiError.toErr());
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Pulse Insights API returned HTTP 400');
+    expect(result.content[0].text).toContain('Error code: 400945');
+    expect(result.content[0].text).toContain('No measurement period present');
+  });
+
+  it('should return TabCode fallback when API returns an unknown error code', async () => {
+    const apiError = new PulseInsightsApiError(400, {
+      code: '499999',
+      message: '0xdeadbeef',
+    });
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(apiError.toErr());
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Pulse Insights API returned HTTP 400');
+    expect(result.content[0].text).toContain('TabCode: 0xdeadbeef');
+  });
+
+  it('should return a meaningful error for non-400 API failures', async () => {
+    const apiError = new PulseInsightsApiError(500, null);
+    mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(apiError.toErr());
+    const result = await getToolResult();
+    expect(result.isError).toBe(true);
+    invariant(result.content[0].type === 'text');
+    expect(result.content[0].text).toContain('Pulse Insights API returned HTTP 500');
   });
 
   it('should return data source not allowed error when datasource is not allowed', async () => {
