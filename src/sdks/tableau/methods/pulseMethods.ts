@@ -240,10 +240,7 @@ async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise
       }
 
       if (error.response?.status) {
-        return new PulseInsightsApiError(
-          error.response.status,
-          error.response.data,
-        ).toErr();
+        return new PulseInsightsApiError(error.response.status, error.response.data).toErr();
       }
     }
 

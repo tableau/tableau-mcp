@@ -1,6 +1,7 @@
-import { validateBundleRequest, validateBriefRequest } from './validatePulsePayload.js';
+import { validateBriefRequest, validateBundleRequest } from './validatePulsePayload.js';
 
 describe('validateBundleRequest', () => {
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   function makeValidBundleRequest() {
     return {
       bundle_request: {
@@ -134,6 +135,7 @@ describe('validateBundleRequest', () => {
 });
 
 describe('validateBriefRequest', () => {
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   function makeValidBriefRequest() {
     return {
       language: 'LANGUAGE_EN_US' as const,
@@ -234,6 +236,8 @@ describe('validateBriefRequest', () => {
     req.messages[0].metric_group_context[0].metric.extension_options.allowed_dimensions = [];
     req.messages[0].metric_group_context[0].metric.extension_options.allowed_granularities = [];
     const result = validateBriefRequest(req);
-    expect(result).toContain('extension_options has empty allowed_dimensions and allowed_granularities');
+    expect(result).toContain(
+      'extension_options has empty allowed_dimensions and allowed_granularities',
+    );
   });
 });

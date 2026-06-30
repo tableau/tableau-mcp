@@ -28,10 +28,7 @@ export function validateBundleRequest(req: BundleRequest): string | null {
   if (!spec.measure.field) {
     errors.push('basic_specification.measure.field is empty.');
   }
-  if (
-    !spec.measure.aggregation ||
-    spec.measure.aggregation === 'AGGREGATION_UNSPECIFIED'
-  ) {
+  if (!spec.measure.aggregation || spec.measure.aggregation === 'AGGREGATION_UNSPECIFIED') {
     errors.push(
       'basic_specification.measure.aggregation must be set (e.g., AGGREGATION_SUM, AGGREGATION_AVERAGE). Got: ' +
         (spec.measure.aggregation || '(empty)') +
@@ -56,10 +53,7 @@ export function validateBundleRequest(req: BundleRequest): string | null {
     );
   }
 
-  if (
-    !ms.comparison.comparison ||
-    ms.comparison.comparison === 'TIME_COMPARISON_UNSPECIFIED'
-  ) {
+  if (!ms.comparison.comparison || ms.comparison.comparison === 'TIME_COMPARISON_UNSPECIFIED') {
     errors.push(
       'metric_specification.comparison.comparison must be set (e.g., TIME_COMPARISON_PREVIOUS_PERIOD, TIME_COMPARISON_YEAR_AGO_PERIOD).',
     );
@@ -135,10 +129,7 @@ export function validateBriefRequest(req: BriefRequest): string | null {
         if (!spec.measure.field) {
           errors.push(`${ctxPrefix}measure.field is empty.`);
         }
-        if (
-          !spec.measure.aggregation ||
-          spec.measure.aggregation === 'AGGREGATION_UNSPECIFIED'
-        ) {
+        if (!spec.measure.aggregation || spec.measure.aggregation === 'AGGREGATION_UNSPECIFIED') {
           errors.push(`${ctxPrefix}measure.aggregation must be set (not UNSPECIFIED).`);
         }
       }
@@ -150,16 +141,10 @@ export function validateBriefRequest(req: BriefRequest): string | null {
       ) {
         errors.push(`${ctxPrefix}measurement_period.granularity must be set.`);
       }
-      if (
-        !ms.measurement_period.range ||
-        ms.measurement_period.range === 'RANGE_UNSPECIFIED'
-      ) {
+      if (!ms.measurement_period.range || ms.measurement_period.range === 'RANGE_UNSPECIFIED') {
         errors.push(`${ctxPrefix}measurement_period.range must be set.`);
       }
-      if (
-        !ms.comparison.comparison ||
-        ms.comparison.comparison === 'TIME_COMPARISON_UNSPECIFIED'
-      ) {
+      if (!ms.comparison.comparison || ms.comparison.comparison === 'TIME_COMPARISON_UNSPECIFIED') {
         errors.push(`${ctxPrefix}comparison.comparison must be set.`);
       }
 
