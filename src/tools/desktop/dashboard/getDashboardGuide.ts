@@ -1,10 +1,9 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
 import { Ok } from 'ts-results-es';
 
+import { readResourceAsset } from '../../../desktop/assets.js';
 import { FileNotFoundError } from '../../../errors/mcpToolError.js';
-import { DesktopMcpServer, RESOURCES_ROOT } from '../../../server.desktop.js';
+import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
 
 const paramsSchema = {};
@@ -30,11 +29,11 @@ export const getGetDashboardGuideTool = (
         extra,
         args: {},
         callback: async () => {
-          const guidePath = join(RESOURCES_ROOT, 'dashboard-xml-guide.md');
-          if (!existsSync(guidePath)) {
-            return new FileNotFoundError(guidePath).toErr();
+          const guide = readResourceAsset('dashboard-xml-guide.md');
+          if (guide === null) {
+            return new FileNotFoundError('dashboard-xml-guide.md').toErr();
           }
-          return new Ok(readFileSync(guidePath, 'utf-8'));
+          return new Ok(guide);
         },
         getSuccessResult: (guide) => ({
           content: [{ type: 'text', text: guide }],
