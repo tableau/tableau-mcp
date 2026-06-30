@@ -148,9 +148,11 @@ export function validateBriefRequest(req: BriefRequest): string | null {
         errors.push(`${ctxPrefix}comparison.comparison must be set.`);
       }
 
+      const extOpts = ctx.metric.extension_options;
       if (
-        ctx.metric.extension_options.allowed_dimensions.length === 0 &&
-        ctx.metric.extension_options.allowed_granularities.length === 0
+        extOpts &&
+        (extOpts.allowed_dimensions?.length ?? 0) === 0 &&
+        (extOpts.allowed_granularities?.length ?? 0) === 0
       ) {
         errors.push(
           `${ctxPrefix}extension_options has empty allowed_dimensions and allowed_granularities. These should be populated from the metric definition.`,
