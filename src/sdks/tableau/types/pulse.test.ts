@@ -1,6 +1,9 @@
 import {
   PulseMetric,
   PulseMetricDefinition,
+  pulseBundleRequestSchema,
+  pulseInsightBriefRequestSchema,
+  metricGroupContextSchema,
   pulseMetricDefinitionSchema,
   pulseMetricDefinitionViewEnum,
   pulseMetricSchema,
@@ -99,6 +102,167 @@ describe('PulseMetricSubscription schema', () => {
       metric_id: 5678,
     };
     expect(() => pulseMetricSubscriptionSchema.parse(data)).toThrow();
+  });
+});
+
+describe('pulseBundleRequestSchema optionality', () => {
+  const minimalBundleRequest = {
+    bundle_request: {
+      version: 1,
+      options: {
+        output_format: 'OUTPUT_FORMAT_HTML' as const,
+        time_zone: 'UTC',
+        language: 'LANGUAGE_EN_US' as const,
+        locale: 'LOCALE_EN_US' as const,
+      },
+      input: {
+        metadata: {},
+        metric: {
+          definition: {
+            datasource: { id: 'ds-1' },
+            basic_specification: {
+              measure: { field: 'Sales', aggregation: 'AGGREGATION_SUM' },
+              time_dimension: { field: 'Order Date' },
+              filters: [],
+            },
+            is_running_total: false,
+          },
+          metric_specification: {
+            measurement_period: {
+              granularity: 'GRANULARITY_BY_MONTH',
+              range: 'RANGE_LAST_COMPLETE',
+            },
+            comparison: { comparison: 'TIME_COMPARISON_PREVIOUS_PERIOD' },
+          },
+        },
+      },
+    },
+  };
+
+  it('accepts a bundle request without extension_options', () => {
+    expect(() => pulseBundleRequestSchema.parse(minimalBundleRequest)).not.toThrow();
+  });
+
+  it('accepts a bundle request without representation_options', () => {
+    expect(() => pulseBundleRequestSchema.parse(minimalBundleRequest)).not.toThrow();
+    expect(pulseBundleRequestSchema.parse(minimalBundleRequest).bundle_request.input.metric.representation_options).toBeUndefined();
+  });
+
+  it('accepts a bundle request without insights_options', () => {
+    expect(() => pulseBundleRequestSchema.parse(minimalBundleRequest)).not.toThrow();
+    expect(pulseBundleRequestSchema.parse(minimalBundleRequest).bundle_request.input.metric.insights_options).toBeUndefined();
+  });
+
+  it('accepts a bundle request without metric_specification.filters', () => {
+    expect(() => pulseBundleRequestSchema.parse(minimalBundleRequest)).not.toThrow();
+    expect(pulseBundleRequestSchema.parse(minimalBundleRequest).bundle_request.input.metric.metric_specification.filters).toBeUndefined();
+  });
+
+  it('accepts a bundle request without metadata name, metric_id, or definition_id', () => {
+    expect(() => pulseBundleRequestSchema.parse(minimalBundleRequest)).not.toThrow();
+  });
+
+  it('accepts a bundle request with partial representation_options', () => {
+    const req = {
+      ...minimalBundleRequest,
+      bundle_request: {
+        ...minimalBundleRequest.bundle_request,
+        input: {
+          ...minimalBundleRequest.bundle_request.input,
+          metric: {
+            ...minimalBundleRequest.bundle_request.input.metric,
+            representation_options: {
+              type: 'NUMBER_FORMAT_TYPE_NUMBER',
+            },
+          },
+        },
+      },
+    };
+    expect(() => pulseBundleRequestSchema.parse(req)).not.toThrow();
+  });
+
+  it('still requires datasource.id', () => {
+    const req = structuredClone(minimalBundleRequest);
+    // @ts-expect-error - intentionally removing required field
+    req.bundle_request.input.metric.definition.datasource = {};
+    expect(() => pulseBundleRequestSchema.parse(req)).toThrow();
+  });
+
+  it('still requires measure.field', () => {
+    const req = structuredClone(minimalBundleRequest);
+    // @ts-expect-error - intentionally removing required field
+    req.bundle_request.input.metric.definition.basic_specification.measure = { aggregation: 'AGGREGATION_SUM' };
+    expect(() => pulseBundleRequestSchema.parse(req)).toThrow();
+  });
+
+  it('still requires measurement_period.granularity', () => {
+    const req = structuredClone(minimalBundleRequest);
+    // @ts-expect-error - intentionally removing required field
+    req.bundle_request.input.metric.metric_specification.measurement_period = { range: 'RANGE_LAST_COMPLETE' };
+    expect(() => pulseBundleRequestSchema.parse(req)).toThrow();
+  });
+});
+
+describe('metricGroupContextSchema optionality', () => {
+  const minimalContext = [
+    {
+      metadata: { name: 'Sales' },
+      metric: {
+        definition: {
+          datasource: { id: 'ds-1' },
+          basic_specification: {
+            measure: { field: 'Sales', aggregation: 'AGGREGATION_SUM' },
+            time_dimension: { field: 'Date' },
+            filters: [],
+          },
+          is_running_total: false,
+        },
+        metric_specification: {
+          measurement_period: {
+            granularity: 'GRANULARITY_BY_MONTH',
+            range: 'RANGE_LAST_COMPLETE',
+          },
+          comparison: { comparison: 'TIME_COMPARISON_PREVIOUS_PERIOD' },
+        },
+      },
+    },
+  ];
+
+  it('accepts metric_group_context without extension_options', () => {
+    expect(() => metricGroupContextSchema.parse(minimalContext)).not.toThrow();
+  });
+
+  it('accepts metric_group_context without representation_options', () => {
+    expect(() => metricGroupContextSchema.parse(minimalContext)).not.toThrow();
+  });
+
+  it('accepts metric_group_context without insights_options', () => {
+    expect(() => metricGroupContextSchema.parse(minimalContext)).not.toThrow();
+  });
+
+  it('accepts metric_group_context without candidates', () => {
+    expect(() => metricGroupContextSchema.parse(minimalContext)).not.toThrow();
+  });
+
+  it('accepts metric_group_context without metadata.metric_id or definition_id', () => {
+    expect(() => metricGroupContextSchema.parse(minimalContext)).not.toThrow();
+    const parsed = metricGroupContextSchema.parse(minimalContext);
+    expect(parsed[0].metadata.metric_id).toBeUndefined();
+    expect(parsed[0].metadata.definition_id).toBeUndefined();
+  });
+
+  it('still requires metadata.name', () => {
+    const ctx = structuredClone(minimalContext);
+    // @ts-expect-error - intentionally removing required field
+    delete ctx[0].metadata.name;
+    expect(() => metricGroupContextSchema.parse(ctx)).toThrow();
+  });
+
+  it('still requires definition.datasource', () => {
+    const ctx = structuredClone(minimalContext);
+    // @ts-expect-error - intentionally removing required field
+    delete ctx[0].metric.definition.datasource;
+    expect(() => metricGroupContextSchema.parse(ctx)).toThrow();
   });
 });
 
