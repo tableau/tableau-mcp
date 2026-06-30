@@ -3,7 +3,8 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { DatasourceNotAllowedError } from '../../../errors/mcpToolError.js';
+import { DatasourceNotAllowedError, PreviewNotRunError } from '../../../errors/mcpToolError.js';
+import { getFeatureGate } from '../../../features/featureGate.js';
 import { log } from '../../../logging/logger.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import {
@@ -14,11 +15,32 @@ import {
 import { RestApi } from '../../../sdks/tableau/restApi.js';
 import { WebMcpServer } from '../../../server.web.js';
 import { getExceptionMessage } from '../../../utils/getExceptionMessage.js';
-import { DEFAULT_PENDING_DELETION_TAG, TagEvidence } from '../_lib/evidence.js';
+import { getAppConfig } from '../../../web/apps/appConfig.js';
+import {
+  AppApprovalEvidence,
+  DEFAULT_PENDING_DELETION_TAG,
+  getMutationPreviewTtlMs,
+  TagEvidence,
+} from '../_lib/evidence.js';
 import { guardMutation, MutationTarget } from '../_lib/mutationGuard.js';
 import { resourceAccessChecker } from '../resourceAccessChecker.js';
-import { WebTool } from '../tool.js';
+import { AppToolResult, WebTool } from '../tool.js';
 import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
+
+/**
+ * The confirm-panel payload the delete-datasource preview returns (flag-ON) as `AppToolResult.data`,
+ * serialized into the tool-result text the MCP-Apps iframe parses to render the HITL confirm UI
+ * (name/project/owner + a live countdown to `expiresAtMs`). No secret/token is carried — the
+ * approval is presence-based server-side.
+ */
+export type DeleteDatasourceConfirmPanel = {
+  kind: 'delete-datasource-confirm';
+  datasourceId: string;
+  name?: string;
+  project?: string;
+  owner?: string;
+  expiresAtMs: number;
+};
 
 const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
 
@@ -58,11 +80,16 @@ const paramsSchema = {
 
 export const getDeleteDatasourceTool = (server: WebMcpServer): WebTool<typeof paramsSchema> => {
   const config = getConfig();
+  // MCP-Apps HITL: when the flag is ON, the preview carries an app so the host renders an iframe
+  // confirm panel and the destructive step runs as a human gesture (confirm-delete-datasource).
+  // Flag OFF → no `app`, byte-identical to today's tag/confirm behavior.
+  const mcpAppsEnabled = getFeatureGate().isFeatureEnabled('mcp-apps');
 
   const deleteDatasourceTool = new WebTool({
     server,
     name: 'delete-datasource',
     disabled: !config.adminToolsEnabled,
+    ...(mcpAppsEnabled ? { app: getAppConfig('delete-datasource') } : {}),
     description: `
 Permanently deletes a published data source from the current Tableau site. Restricted to
 Tableau site administrators and requires the \`ADMIN_TOOLS_ENABLED\` feature flag.
@@ -108,7 +135,9 @@ Do not auto-confirm — get the user's explicit approval first.
     callback: async ({ datasourceId, confirm, tag }, extra): Promise<CallToolResult> => {
       const configWithOverrides = await extra.getConfigWithOverrides();
 
-      return await deleteDatasourceTool.logAndExecute<string>({
+      return await deleteDatasourceTool.logAndExecute<
+        string | AppToolResult<DeleteDatasourceConfirmPanel>
+      >({
         extra,
         args: { datasourceId, confirm, tag },
         callback: async () => {
@@ -117,6 +146,19 @@ Do not auto-confirm — get the user's explicit approval first.
             jwtScopes: deleteDatasourceTool.requiredApiScopes,
             callback: async (restApi) => {
               const siteId = restApi.siteId;
+
+              // Flag ON (MCP-Apps HITL): the model-driven confirm:true path is CLOSED so an agent
+              // cannot self-confirm a deletion by re-calling this tool — the only route to deletion
+              // is a human gesture in the confirm panel (confirm-delete-datasource). Reject before any
+              // side effect. Flag OFF keeps the original tag-gated confirm:true path intact.
+              if (confirm && mcpAppsEnabled) {
+                return new PreviewNotRunError(
+                  'Mutation blocked: deleting a data source requires a human confirmation in the ' +
+                    'delete-datasource approval panel. Run delete-datasource in preview (omit confirm) ' +
+                    'to open the panel; the deletion is performed by confirm-delete-datasource only ' +
+                    "when a person clicks Delete. The assistant cannot confirm on the user's behalf.",
+                ).toErr();
+              }
 
               // Treat undefined, empty, and whitespace-only tags as "use the default" so a blank
               // label never gets applied (preview) or verified against (confirm).
@@ -185,8 +227,37 @@ Do not auto-confirm — get the user's explicit approval first.
                 );
               }
 
-              // Preview phase: the guard has tagged the data source pending deletion. Warn about
-              // dependents (tool-specific) and report. No deletion.
+              // Preview phase: the guard has tagged the data source pending deletion. No deletion.
+              // Flag ON: also record a single-use, TTL-bounded human-approval window and return an
+              // AppToolResult so the host renders the in-iframe confirm panel. The destructive step
+              // is then a human gesture via the model-invisible confirm-delete-datasource tool — the
+              // approval recorded here is what its AppApprovalEvidence verifies. No secret is
+              // transported; approval is presence-based, keyed server-side by site+user+datasource.
+              if (mcpAppsEnabled) {
+                await new AppApprovalEvidence('delete-datasource').establish({
+                  restApi,
+                  siteId,
+                  target,
+                  tool: 'confirm-delete-datasource',
+                  userLuid: extra.getUserLuid(),
+                });
+                const expiresAtMs = Date.now() + getMutationPreviewTtlMs();
+                return new Ok<AppToolResult<DeleteDatasourceConfirmPanel>>({
+                  data: {
+                    kind: 'delete-datasource-confirm',
+                    datasourceId,
+                    name: target.name,
+                    project: target.project,
+                    owner: target.owner,
+                    expiresAtMs,
+                  },
+                  // No web URL to embed for a confirm panel; the host renders from `data`.
+                  url: '',
+                });
+              }
+
+              // Flag OFF: today's exact preview text. Warn about dependents (tool-specific) and
+              // report. No approval recorded, no iframe.
               const dependencyWarning = await describeDownstreamDependencies({
                 restApi,
                 datasourceId,

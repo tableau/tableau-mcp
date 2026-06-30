@@ -37,6 +37,20 @@ token gate guarantees the preview ran, but the **human approval** step is a prom
 agents must not auto-confirm.
 :::
 
+## MCP-Apps confirm panel (real human-in-the-loop)
+
+When the off-by-default `mcp-apps` feature flag is enabled, this tool ships with an MCP App and the
+preview phase renders an in-iframe **confirm panel** (the task id and a live countdown) instead of
+returning a confirmation token the model could echo back. The permanent, irreversible delete is then
+performed only when a person clicks **Delete task** in that panel, which invokes the model-invisible
+`confirm-delete-extract-refresh-task` tool (`visibility: ['app']`). With the flag on, the model-driven
+`confirm: true` path is **closed** — the assistant cannot delete on the user's behalf; the only route
+to deletion is the human gesture. Because a task has no durable, taggable state, the human gesture
+itself is the proof: the confirm tool verifies a fresh, single-use human approval recorded during the
+preview (within `MUTATION_PREVIEW_TTL_MINUTES`, default 5); a missing or expired approval rejects the
+delete. When the flag is off the tool behaves exactly as the two-phase `confirm`/`confirmationToken`
+flow described above.
+
 :::note[Authoritative audit]
 Every mutation attempt — both the preview and the confirmed delete, and both allowed and denied
 attempts (for example a non-admin caller, or a confirm with a missing/forged token) — emits a

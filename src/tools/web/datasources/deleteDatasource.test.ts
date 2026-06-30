@@ -9,6 +9,7 @@ import { WebMcpServer } from '../../../server.web.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { auditRecordSchema } from '../_lib/auditRecord.js';
+import { AppApprovalEvidence } from '../_lib/evidence.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { DEFAULT_PENDING_DELETION_TAG, getDeleteDatasourceTool } from './deleteDatasource.js';
 
@@ -71,6 +72,11 @@ const mocks = vi.hoisted(() => ({
   mockGraphql: vi.fn(),
   mockAssertAdmin: vi.fn(),
   mockIsDatasourceAllowed: vi.fn(),
+  mockIsFeatureEnabled: vi.fn(),
+}));
+
+vi.mock('../../../features/featureGate.js', () => ({
+  getFeatureGate: vi.fn(() => ({ isFeatureEnabled: mocks.mockIsFeatureEnabled })),
 }));
 
 vi.mock('../../../restApiInstance.js', () => ({
@@ -126,6 +132,8 @@ describe('deleteDatasourceTool', () => {
     mocks.mockGraphql.mockResolvedValue(downstreamResponse);
     mocks.mockAddTagsToDatasource.mockResolvedValue(undefined);
     mocks.mockDeleteDatasource.mockResolvedValue(undefined);
+    // Default: mcp-apps flag OFF → today's exact tag/confirm behavior (no iframe, no approval).
+    mocks.mockIsFeatureEnabled.mockReturnValue(false);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -527,6 +535,73 @@ describe('deleteDatasourceTool', () => {
     expect(record.phase).toBe('preview');
     expect(record.target.id).toBe('ds-1');
     expect(record.confirmationEvidence.kind).toBe('tag');
+  });
+
+  // --- MCP-Apps flag ON: preview carries the iframe app + records a human-approval window ---
+
+  describe('with mcp-apps flag ON', () => {
+    beforeEach(() => {
+      mocks.mockIsFeatureEnabled.mockReturnValue(true);
+    });
+
+    it('carries the delete-datasource app config so the host renders the confirm iframe', () => {
+      const tool = getDeleteDatasourceTool(new WebMcpServer());
+      expect(tool.app).toBeDefined();
+      expect(tool.app?.resourceUri).toContain('delete-datasource');
+    });
+
+    it('preview returns an AppToolResult panel payload AND records a single-use human approval', async () => {
+      const result = await getToolResult({ datasourceId: 'ds-app' });
+      expect(result.isError).toBe(false);
+      invariant(result.content[0].type === 'text');
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.data.kind).toBe('delete-datasource-confirm');
+      expect(payload.data.datasourceId).toBe('ds-app');
+      expect(payload.data.name).toBe(mockDatasource.name);
+      expect(typeof payload.data.expiresAtMs).toBe('number');
+      // SECURITY: no secret/token is transported to the iframe — approval is presence-based.
+      expect(result.content[0].text).not.toMatch(/nonce|token|secret/i);
+      // Still tags (preview side effect) and does not delete.
+      expect(mocks.mockAddTagsToDatasource).toHaveBeenCalled();
+      expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
+
+      // The approval was recorded so a subsequent confirm-delete-datasource verify succeeds once,
+      // keyed by the 'delete-datasource' namespace (NOT the default).
+      const extra = getMockRequestHandlerExtra();
+      await expect(
+        new AppApprovalEvidence('delete-datasource').verify({
+          restApi: { siteId: 'test-site-id' } as never,
+          siteId: 'test-site-id',
+          target: { id: 'ds-app', kind: 'datasource' },
+          tool: 'confirm-delete-datasource',
+          userLuid: extra.getUserLuid(),
+        }),
+      ).resolves.toBe(true);
+    });
+
+    it('does NOT record an approval under the default (delete-workbook) namespace', async () => {
+      await getToolResult({ datasourceId: 'ds-ns' });
+      const extra = getMockRequestHandlerExtra();
+      // Wrong namespace must not be satisfied — the approval is isolated to 'delete-datasource'.
+      await expect(
+        new AppApprovalEvidence().verify({
+          restApi: { siteId: 'test-site-id' } as never,
+          siteId: 'test-site-id',
+          target: { id: 'ds-ns', kind: 'datasource' },
+          tool: 'confirm-delete-datasource',
+          userLuid: extra.getUserLuid(),
+        }),
+      ).resolves.toBe(false);
+    });
+
+    it('routes confirm:true to the human-gesture panel instead of deleting (no model self-confirm)', async () => {
+      mocks.mockQueryDatasource.mockResolvedValue(mockTaggedDatasource);
+      const result = await getToolResult({ datasourceId: 'ds-1', confirm: true });
+      expect(result.isError).toBe(true);
+      invariant(result.content[0].type === 'text');
+      expect(result.content[0].text).toContain('confirm-delete-datasource');
+      expect(mocks.mockDeleteDatasource).not.toHaveBeenCalled();
+    });
   });
 });
 

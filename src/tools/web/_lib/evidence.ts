@@ -176,11 +176,23 @@ function getApprovalCache(): ExpiringMap<string, true> {
  * NARROWS access → it can reject, never wrongly allow.
  */
 export class AppApprovalEvidence implements EvidenceStrategy<MutationTarget> {
-  // Keyed by site+user+target under a FIXED `delete-workbook` namespace (NOT ctx.tool) so the
-  // preview tool (delete-workbook) and the confirm tool (confirm-delete-workbook) — which run as
-  // separate WebTool instances under different tool names — resolve the SAME approval entry.
+  // The preview-tool name that namespaces the approval key. The preview tool and its model-invisible
+  // confirm tool run as separate WebTool instances under DIFFERENT tool names, so the key must NOT be
+  // `ctx.tool` (that would never match across the pair). Instead both sides pass the SAME fixed
+  // namespace — the preview tool's name (e.g. 'delete-workbook', 'delete-datasource',
+  // 'delete-extract-refresh-task', 'update-cloud-extract-refresh-task') — so each tool's approval is
+  // isolated from every other tool's and the preview/confirm pair resolves the same entry.
+  private readonly namespace: string;
+
+  // Defaults to 'delete-workbook' to preserve the original (pre-generalization) behavior for the
+  // first tool to adopt this strategy. Every NEW tool MUST pass its own preview-tool name so the
+  // approvals don't collide on the 'delete-workbook' namespace.
+  constructor(namespace: string = 'delete-workbook') {
+    this.namespace = namespace;
+  }
+
   private approvalKey(ctx: EvidenceContext): string {
-    return `${ctx.siteId}:${ctx.userLuid}:delete-workbook:${ctx.target.id}`;
+    return `${ctx.siteId}:${ctx.userLuid}:${this.namespace}:${ctx.target.id}`;
   }
 
   async establish(ctx: EvidenceContext): Promise<void> {

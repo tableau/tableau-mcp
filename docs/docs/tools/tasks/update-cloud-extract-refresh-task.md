@@ -27,6 +27,20 @@ idempotent and reversible by re-applying the prior schedule), but a schedule is 
 without an explicit confirmed call. Present the change to the user and get explicit approval before
 confirming.
 
+### MCP-Apps confirm panel (real human-in-the-loop)
+
+When the off-by-default `mcp-apps` feature flag is enabled, this tool ships with an MCP App and the
+preview phase renders an in-iframe **confirm panel** describing the schedule change (new frequency and
+time window, plus a live countdown) instead of returning preview text the model could act on. The
+schedule change is then applied only when a person clicks **Apply schedule change** in that panel,
+which invokes the model-invisible `confirm-update-cloud-extract-refresh-task` tool
+(`visibility: ['app']`), passing the task id and the full structured schedule. With the flag on, the
+model-driven `confirm: true` path is **closed** — the assistant cannot apply the change on the user's
+behalf; the only route is the human gesture. The confirm tool verifies a fresh, single-use human
+approval recorded during the preview (within `MUTATION_PREVIEW_TTL_MINUTES`, default 5); a missing or
+expired approval rejects the update. When the flag is off the tool behaves exactly as the
+`confirm`-only flow described above.
+
 :::note[Authoritative audit]
 Every attempt — both the preview and the confirmed update, and both allowed and denied attempts (for
 example a non-admin caller) — emits a structured authoritative audit record to the server's durable

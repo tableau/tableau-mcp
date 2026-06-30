@@ -3,7 +3,7 @@ import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { getConfig } from '../../../config.js';
-import { WorkbookNotAllowedError } from '../../../errors/mcpToolError.js';
+import { DatasourceNotAllowedError } from '../../../errors/mcpToolError.js';
 import { getFeatureGate } from '../../../features/featureGate.js';
 import { useRestApi } from '../../../restApiInstance.js';
 import { WebMcpServer } from '../../../server.web.js';
@@ -21,51 +21,51 @@ import { resolveOwnerEmail } from '../users/resolveOwnerEmail.js';
 const RECYCLE_BIN_DOC_URL = 'https://help.tableau.com/current/pro/desktop/en-us/recycle_bin.htm';
 
 const paramsSchema = {
-  workbookId: z.string().describe('The LUID of the workbook to delete.'),
+  datasourceId: z.string().describe('The LUID of the published data source to delete.'),
 };
 
 /**
- * confirm-delete-workbook — the human-gesture confirm step of the MCP-Apps HITL flow for
- * delete-workbook (W-23125362, AC-5 closure).
+ * confirm-delete-datasource — the human-gesture confirm step of the MCP-Apps HITL flow for
+ * delete-datasource (W-23202047, mirroring confirm-delete-workbook).
  *
  * This tool is APP-ONLY (`meta.ui.visibility = ['app']`), so it is invisible to and uncallable by
- * the model — exactly like get-oauth-token. The ONLY path that reaches it is a human clicking
+ * the model — exactly like confirm-delete-workbook. The ONLY path that reaches it is a human clicking
  * "Confirm" inside the rendered MCP-Apps iframe, which calls back via `app.callServerTool`. The
- * destructive `deleteWorkbook` REST call lives ONLY here.
+ * destructive `deleteDatasource` REST call lives ONLY here.
  *
  * The guard verifies BOTH (AllEvidence):
- *   - a fresh in-iframe human approval (AppApprovalEvidence) recorded by the delete-workbook preview
- *     within the MUTATION_PREVIEW_TTL_MINUTES window, single-use; and
+ *   - a fresh in-iframe human approval (AppApprovalEvidence, namespace 'delete-datasource') recorded
+ *     by the delete-datasource preview within the MUTATION_PREVIEW_TTL_MINUTES window, single-use; and
  *   - the live `pending-deletion` tag (TagEvidence), re-fetched server-side and un-forgeable.
  * Either missing → PreviewNotRunError, no delete. The composite can only ever narrow access.
  *
  * Gated behind the off-by-default `mcp-apps` flag AND ADMIN_TOOLS_ENABLED, so when the flag is off
  * the model never sees a destructive tool that lacks a preview path.
  */
-export const getConfirmDeleteWorkbookTool = (
+export const getConfirmDeleteDatasourceTool = (
   server: WebMcpServer,
 ): WebTool<typeof paramsSchema> => {
   const config = getConfig();
 
-  const confirmDeleteWorkbookTool = new WebTool({
+  const confirmDeleteDatasourceTool = new WebTool({
     server,
-    name: 'confirm-delete-workbook',
+    name: 'confirm-delete-datasource',
     disabled: !config.adminToolsEnabled || !getFeatureGate().isFeatureEnabled('mcp-apps'),
     description: `
-Confirms and permanently deletes a workbook previously previewed by \`delete-workbook\`. This tool is
-**not visible to the model** — it is invoked only by an explicit human confirmation gesture inside
-the rendered MCP App interface, never by the assistant.
+Confirms and permanently deletes a published data source previously previewed by \`delete-datasource\`.
+This tool is **not visible to the model** — it is invoked only by an explicit human confirmation
+gesture inside the rendered MCP App interface, never by the assistant.
 
-Before deleting, the server re-verifies BOTH that the workbook is still tagged pending deletion AND
+Before deleting, the server re-verifies BOTH that the data source is still tagged pending deletion AND
 that a human approved the deletion in the App within the allowed time window. If either check fails
 the deletion is rejected and the user must preview again.
 `.trim(),
     paramsSchema,
     annotations: {
-      title: 'Confirm Delete Workbook',
+      title: 'Confirm Delete Datasource',
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     },
     meta: {
@@ -73,42 +73,42 @@ the deletion is rejected and the user must preview again.
         visibility: ['app'], // Only the App can call this; never the model.
       },
     },
-    callback: async ({ workbookId }, extra): Promise<CallToolResult> => {
-      return await confirmDeleteWorkbookTool.logAndExecute<string>({
+    callback: async ({ datasourceId }, extra): Promise<CallToolResult> => {
+      return await confirmDeleteDatasourceTool.logAndExecute<string>({
         extra,
-        args: { workbookId },
+        args: { datasourceId },
         callback: async () => {
           return await useRestApi({
             ...extra,
-            jwtScopes: confirmDeleteWorkbookTool.requiredApiScopes,
+            jwtScopes: confirmDeleteDatasourceTool.requiredApiScopes,
             callback: async (restApi) => {
               const siteId = restApi.siteId;
 
-              // Honor tool-scoping (bounded context) before any read/write, exactly as delete-workbook.
-              const isWorkbookAllowedResult = await resourceAccessChecker.isWorkbookAllowed({
-                workbookId,
+              // Honor tool-scoping (bounded context) before any read/write, exactly as delete-datasource.
+              const isDatasourceAllowedResult = await resourceAccessChecker.isDatasourceAllowed({
+                datasourceLuid: datasourceId,
                 extra,
               });
-              if (!isWorkbookAllowedResult.allowed) {
-                return new WorkbookNotAllowedError(isWorkbookAllowedResult.message).toErr();
+              if (!isDatasourceAllowedResult.allowed) {
+                return new DatasourceNotAllowedError(isDatasourceAllowedResult.message).toErr();
               }
 
               const resolveTarget = async (): Promise<MutationTarget> => {
-                const workbook =
-                  isWorkbookAllowedResult.content ??
-                  (await restApi.workbooksMethods.getWorkbook({ workbookId, siteId }));
+                const datasource =
+                  isDatasourceAllowedResult.content ??
+                  (await restApi.datasourcesMethods.queryDatasource({ datasourceId, siteId }));
                 const ownerEmail = await resolveOwnerEmail(
                   restApi,
                   siteId,
-                  workbook.owner?.id,
-                  'confirm-delete-workbook',
+                  datasource.owner?.id,
+                  'confirm-delete-datasource',
                 );
                 return {
-                  id: workbookId,
-                  name: workbook.name,
-                  project: workbook.project?.name,
+                  id: datasourceId,
+                  name: datasource.name,
+                  project: datasource.project?.name,
                   owner: ownerEmail ?? undefined,
-                  kind: 'workbook',
+                  kind: 'datasource',
                 };
               };
 
@@ -118,13 +118,13 @@ the deletion is rejected and the user must preview again.
               const guardResult = await guardMutation({
                 restApi,
                 extra,
-                tool: 'confirm-delete-workbook',
+                tool: 'confirm-delete-datasource',
                 action: 'delete',
                 mode: 'preview-confirm',
                 phase: 'confirm',
                 evidence: new AllEvidence([
-                  new TagEvidence({ tag: DEFAULT_PENDING_DELETION_TAG, kind: 'workbook' }),
-                  new AppApprovalEvidence('delete-workbook'),
+                  new TagEvidence({ tag: DEFAULT_PENDING_DELETION_TAG, kind: 'datasource' }),
+                  new AppApprovalEvidence('delete-datasource'),
                 ]),
                 resolveTarget,
               });
@@ -135,11 +135,12 @@ the deletion is rejected and the user must preview again.
               const projectName = target.project ?? 'unknown project';
               const ownerText = target.owner ? `owner ${target.owner}` : 'owner unknown';
 
-              await restApi.workbooksMethods.deleteWorkbook({ workbookId, siteId });
+              await restApi.datasourcesMethods.deleteDatasource({ datasourceId, siteId });
               return new Ok(
-                `Deleted workbook '${target.name}' (id ${workbookId}) in '${projectName}', ${ownerText}. ` +
-                  `It can be restored from the Tableau recycle bin (${RECYCLE_BIN_DOC_URL}) for a ` +
-                  'limited time before permanent removal.',
+                `Deleted data source '${target.name}' (id ${datasourceId}) in '${projectName}', ${ownerText}. ` +
+                  `On Tableau Cloud it can be restored from the recycle bin (${RECYCLE_BIN_DOC_URL}) for a ` +
+                  'limited time before permanent removal; on Tableau Server deletion is permanent. ' +
+                  'Dependent workbooks and flows were not deleted but no longer have this data source.',
               );
             },
           });
@@ -149,5 +150,5 @@ the deletion is rejected and the user must preview again.
     },
   });
 
-  return confirmDeleteWorkbookTool;
+  return confirmDeleteDatasourceTool;
 };

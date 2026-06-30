@@ -380,6 +380,94 @@ describe('AppApprovalEvidence', () => {
       ).resolves.toBe(true);
     });
   });
+
+  // --- Generalized namespace (the refactor under test) ---
+  //
+  // The key was changed from `${siteId}:${userLuid}:${tool}:${targetId}` to
+  // `${siteId}:${userLuid}:${namespace}:${targetId}`, where `namespace` is a fixed ctor arg (the
+  // PREVIEW tool's name) shared by the preview/confirm pair. The `ctx.tool` field is intentionally
+  // NOT part of the key for this strategy — the preview tool and its confirm tool run under DIFFERENT
+  // tool names, so keying on `ctx.tool` would never match across the pair. These cases pin that
+  // behavior and, critically, the cross-namespace ISOLATION the refactor exists to provide.
+  describe('generalized namespace', () => {
+    it('establish(ns) then verify(ns) for the SAME site/user/target succeeds (explicit namespace)', async () => {
+      const establish = new AppApprovalEvidence('delete-datasource');
+      const verify = new AppApprovalEvidence('delete-datasource');
+      const ctx = appCtx({ target: { id: 'ns-A-target', kind: 'datasource' } });
+      await establish.establish(ctx);
+      await expect(verify.verify(ctx)).resolves.toBe(true);
+    });
+
+    it('WRONG-NAMESPACE ISOLATION: an approval for delete-datasource does NOT satisfy delete-workbook for the SAME site/user/target', async () => {
+      // This is the whole point of the refactor: one tool's human approval must never unlock
+      // another tool's confirm, even when site + user + target id are identical. Establish under the
+      // 'delete-datasource' namespace, then attempt to verify under 'delete-workbook' with the same
+      // EvidenceContext → MUST be rejected.
+      const sameTargetCtx = appCtx({ target: { id: 'shared-target-id', kind: 'datasource' } });
+      await new AppApprovalEvidence('delete-datasource').establish(sameTargetCtx);
+      await expect(new AppApprovalEvidence('delete-workbook').verify(sameTargetCtx)).resolves.toBe(
+        false,
+      );
+      // And the genuine namespace still verifies (the approval was recorded, just isolated).
+      await expect(
+        new AppApprovalEvidence('delete-datasource').verify(sameTargetCtx),
+      ).resolves.toBe(true);
+    });
+
+    it('isolates every distinct namespace from every other (extract-refresh-task vs update-cloud)', async () => {
+      const ctx = appCtx({ target: { id: 'task-shared', kind: 'extract-refresh-task' } });
+      await new AppApprovalEvidence('delete-extract-refresh-task').establish(ctx);
+      // The update tool's confirm must not be satisfied by the delete tool's approval.
+      await expect(
+        new AppApprovalEvidence('update-cloud-extract-refresh-task').verify(ctx),
+      ).resolves.toBe(false);
+    });
+
+    it('default constructor preserves the original behavior (namespace = delete-workbook)', async () => {
+      // new AppApprovalEvidence() must key identically to new AppApprovalEvidence('delete-workbook'),
+      // so the pre-generalization delete-workbook flow is unchanged. Establish with the default ctor,
+      // verify with the explicit 'delete-workbook' namespace → true.
+      const ctx = appCtx({ target: { id: 'default-ns-target', kind: 'workbook' } });
+      await new AppApprovalEvidence().establish(ctx);
+      await expect(new AppApprovalEvidence('delete-workbook').verify(ctx)).resolves.toBe(true);
+    });
+
+    it('default constructor is NOT satisfied by a non-delete-workbook namespace', async () => {
+      // The mirror of the above: establishing under an explicit non-default namespace must not
+      // satisfy the default ('delete-workbook') verify.
+      const ctx = appCtx({ target: { id: 'default-ns-iso', kind: 'workbook' } });
+      await new AppApprovalEvidence('delete-datasource').establish(ctx);
+      await expect(new AppApprovalEvidence().verify(ctx)).resolves.toBe(false);
+    });
+
+    it('namespace key ignores ctx.tool entirely (preview/confirm tool names differ but namespace matches)', async () => {
+      // Establish as the preview tool would (ctx.tool = 'delete-datasource') and verify as the
+      // confirm tool would (ctx.tool = 'confirm-delete-datasource'); the differing ctx.tool must NOT
+      // break the match because the fixed namespace is what keys the entry.
+      const target = { id: 'tool-irrelevant', kind: 'datasource' as const };
+      await new AppApprovalEvidence('delete-datasource').establish(
+        appCtx({ target, tool: 'delete-datasource' }),
+      );
+      await expect(
+        new AppApprovalEvidence('delete-datasource').verify(
+          appCtx({ target, tool: 'confirm-delete-datasource' }),
+        ),
+      ).resolves.toBe(true);
+    });
+
+    it('a wrong-namespace verify does NOT consume the genuine approval (isolation is total)', async () => {
+      // A rejected cross-namespace verify must be a pure no-op on the real entry — it must not
+      // single-use-consume the approval that belongs to the correct namespace.
+      const ctx = appCtx({ target: { id: 'no-cross-consume', kind: 'datasource' } });
+      await new AppApprovalEvidence('delete-datasource').establish(ctx);
+      // Wrong namespace probe (rejected, and must not touch the real entry).
+      await expect(new AppApprovalEvidence('delete-workbook').verify(ctx)).resolves.toBe(false);
+      // The genuine namespace still verifies once...
+      await expect(new AppApprovalEvidence('delete-datasource').verify(ctx)).resolves.toBe(true);
+      // ...and is single-use thereafter.
+      await expect(new AppApprovalEvidence('delete-datasource').verify(ctx)).resolves.toBe(false);
+    });
+  });
 });
 
 describe('AllEvidence (AND-composition)', () => {

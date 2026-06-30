@@ -218,7 +218,7 @@ the user's explicit approval first.
               // approval recorded here is what its AppApprovalEvidence verifies. No secret is
               // transported; approval is presence-based, keyed server-side by site+user+workbook.
               if (mcpAppsEnabled) {
-                await new AppApprovalEvidence().establish({
+                await new AppApprovalEvidence('delete-workbook').establish({
                   restApi,
                   siteId,
                   target,
