@@ -36,54 +36,59 @@ const PULSE_INSIGHTS_ERROR_GUIDANCE: Record<string, string> = {
   '404936': 'Missing datasource ID or definition specification.',
 };
 
+export function formatPulseInsightsApiError(
+  statusCode: number,
+  responseData: unknown,
+): { message: string; errorCode?: string; details: string } {
+  const { errorCode, tabCode, guidance } = parseResponseData(responseData);
+
+  const parts: string[] = [];
+  parts.push(`Pulse Insights API returned HTTP ${statusCode}.`);
+  if (errorCode) parts.push(`Error code: ${errorCode}.`);
+  if (guidance) {
+    parts.push(guidance);
+  } else if (tabCode) {
+    parts.push(`TabCode: ${tabCode}. Check the Pulse Insights API documentation for details.`);
+  }
+
+  return {
+    message: parts.join(' '),
+    errorCode: errorCode ?? undefined,
+    details:
+      typeof responseData === 'object' ? JSON.stringify(responseData) : String(responseData ?? ''),
+  };
+}
+
+function parseResponseData(data: unknown): {
+  errorCode: string | null;
+  tabCode: string | null;
+  guidance: string | null;
+} {
+  if (data == null || typeof data !== 'object') {
+    return { errorCode: null, tabCode: null, guidance: null };
+  }
+
+  const obj = data as Record<string, unknown>;
+  const errorCode = typeof obj.code === 'string' ? obj.code : null;
+  const tabCode = typeof obj.message === 'string' ? obj.message : null;
+
+  let guidance: string | null = null;
+  if (errorCode && errorCode in PULSE_INSIGHTS_ERROR_GUIDANCE) {
+    guidance = PULSE_INSIGHTS_ERROR_GUIDANCE[errorCode];
+  }
+
+  return { errorCode, tabCode, guidance };
+}
+
 export class PulseInsightsApiError extends McpToolError {
-  constructor(statusCode: number, responseData: unknown) {
-    const { errorCode, tabCode, guidance } = PulseInsightsApiError.parseResponse(responseData);
-
-    const parts: string[] = [];
-    parts.push(`Pulse Insights API returned HTTP ${statusCode}.`);
-    if (errorCode) parts.push(`Error code: ${errorCode}.`);
-    if (guidance) {
-      parts.push(guidance);
-    } else if (tabCode) {
-      parts.push(`TabCode: ${tabCode}. Check the Pulse Insights API documentation for details.`);
-    }
-
+  constructor(message: string, statusCode: number, errorCode?: string, details?: string) {
     super({
       type: 'pulse-insights-api-error',
-      message: parts.join(' '),
+      message,
       statusCode,
       internalStatusCode: statusCode,
-      internalError: errorCode ?? undefined,
-      internalErrorDetails:
-        typeof responseData === 'object'
-          ? JSON.stringify(responseData)
-          : String(responseData ?? ''),
+      internalError: errorCode,
+      internalErrorDetails: details,
     });
-  }
-
-  override getErrorText(): string {
-    return this.message;
-  }
-
-  private static parseResponse(data: unknown): {
-    errorCode: string | null;
-    tabCode: string | null;
-    guidance: string | null;
-  } {
-    if (data == null || typeof data !== 'object') {
-      return { errorCode: null, tabCode: null, guidance: null };
-    }
-
-    const obj = data as Record<string, unknown>;
-    const errorCode = typeof obj.code === 'string' ? obj.code : null;
-    const tabCode = typeof obj.message === 'string' ? obj.message : null;
-
-    let guidance: string | null = null;
-    if (errorCode && errorCode in PULSE_INSIGHTS_ERROR_GUIDANCE) {
-      guidance = PULSE_INSIGHTS_ERROR_GUIDANCE[errorCode];
-    }
-
-    return { errorCode, tabCode, guidance };
   }
 }

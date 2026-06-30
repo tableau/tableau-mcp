@@ -2,7 +2,10 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
 import { PulseDisabledError, PulseNotAvailableError } from '../../../../errors/mcpToolError.js';
-import { PulseInsightsApiError } from '../../../../errors/pulseInsightsApiError.js';
+import {
+  formatPulseInsightsApiError,
+  PulseInsightsApiError,
+} from '../../../../errors/pulseInsightsApiError.js';
 import { PulseInsightBundleType } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../../testShared.js';
@@ -219,10 +222,8 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   it('should return actionable error message when API returns a known error code', async () => {
-    const apiError = new PulseInsightsApiError(400, {
-      code: '400945',
-      message: '0x30c0672c',
-    });
+    const formatted = formatPulseInsightsApiError(400, { code: '400945', message: '0x30c0672c' });
+    const apiError = new PulseInsightsApiError(formatted.message, 400, formatted.errorCode);
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(apiError.toErr());
     const result = await getToolResult();
     expect(result.isError).toBe(true);
@@ -233,10 +234,8 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   it('should return TabCode fallback when API returns an unknown error code', async () => {
-    const apiError = new PulseInsightsApiError(400, {
-      code: '499999',
-      message: '0xdeadbeef',
-    });
+    const formatted = formatPulseInsightsApiError(400, { code: '499999', message: '0xdeadbeef' });
+    const apiError = new PulseInsightsApiError(formatted.message, 400, formatted.errorCode);
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(apiError.toErr());
     const result = await getToolResult();
     expect(result.isError).toBe(true);
@@ -246,7 +245,8 @@ describe('getGeneratePulseMetricValueInsightBundleTool', () => {
   });
 
   it('should return a meaningful error for non-400 API failures', async () => {
-    const apiError = new PulseInsightsApiError(500, null);
+    const formatted = formatPulseInsightsApiError(500, null);
+    const apiError = new PulseInsightsApiError(formatted.message, 500);
     mocks.mockGeneratePulseMetricValueInsightBundle.mockResolvedValue(apiError.toErr());
     const result = await getToolResult();
     expect(result.isError).toBe(true);

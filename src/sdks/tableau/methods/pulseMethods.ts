@@ -8,7 +8,10 @@ import {
   PulseInsightsDisabledError,
   PulseNotAvailableError,
 } from '../../../errors/mcpToolError.js';
-import { PulseInsightsApiError } from '../../../errors/pulseInsightsApiError.js';
+import {
+  formatPulseInsightsApiError,
+  PulseInsightsApiError,
+} from '../../../errors/pulseInsightsApiError.js';
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { pulseApis } from '../apis/pulseApi.js';
 import { RestApiCredentials } from '../restApi.js';
@@ -240,7 +243,13 @@ async function guardAgainstPulseDisabled<T>(callback: () => Promise<T>): Promise
       }
 
       if (error.response?.status) {
-        return new PulseInsightsApiError(error.response.status, error.response.data).toErr();
+        const formatted = formatPulseInsightsApiError(error.response.status, error.response.data);
+        return new PulseInsightsApiError(
+          formatted.message,
+          error.response.status,
+          formatted.errorCode,
+          formatted.details,
+        ).toErr();
       }
     }
 
