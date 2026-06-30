@@ -38,7 +38,10 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+            # Move `latest` only for STABLE releases — a prerelease/hotfix tag
+            # (one containing a `-`, e.g. v2.18.0-hotfix.1) gets its exact-version
+            # Docker tag but must NOT steal `latest`, mirroring the npm publish guard.
+            type=raw,value=latest,enable=${{ github.event_name == 'release' && !contains(github.event.release.tag_name, '-') }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
