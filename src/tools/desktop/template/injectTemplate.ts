@@ -1,13 +1,13 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'crypto';
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { Ok } from 'ts-results-es';
 import { z } from 'zod';
 
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
-import { getTemplatePath, getTemplatesDir } from '../../../desktop/templates/templatePath.js';
+import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import { wellFormedXmlRule } from '../../../desktop/validation/rules/wellFormedXml.js';
 import {
   ArgsValidationError,
@@ -108,23 +108,17 @@ export const getInjectTemplateTool = (
             return new FileNotFoundError(workbookFile).toErr();
           }
 
-          const templateFilePath = getTemplatePath(templateName);
-          if (!existsSync(templateFilePath)) {
-            const templatesDir = getTemplatesDir();
-            let available = 'none';
-            if (existsSync(templatesDir)) {
-              const files = readdirSync(templatesDir)
-                .filter((f) => f.endsWith('.xml'))
-                .map((f) => f.replace('.xml', ''));
-              available = files.length > 0 ? files.join(', ') : 'none';
-            }
+          const templateXmlSource = readTemplate(templateName);
+          if (templateXmlSource === null) {
+            const files = listTemplateNames();
+            const available = files.length > 0 ? files.join(', ') : 'none';
             return new ArgsValidationError(
               `Template "${templateName}" not found.\n\nAvailable templates: ${available}\n\nUse list-xml-templates to see all options.`,
             ).toErr();
           }
 
           try {
-            let templateXml = readFileSync(templateFilePath, 'utf-8');
+            let templateXml = templateXmlSource;
 
             templateXml = templateXml.replace(/\{\{TITLE\}\}/g, escapeXml(title));
 

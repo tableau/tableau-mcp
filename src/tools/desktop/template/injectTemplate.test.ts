@@ -12,11 +12,11 @@ vi.mock('../../../desktop/templates/fieldReferenceRewriter.js');
 vi.mock('../../../desktop/templates/templatePath.js');
 vi.mock('fs');
 
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 
 import { rewriteFieldReferences } from '../../../desktop/templates/fieldReferenceRewriter.js';
 import { injectTemplate } from '../../../desktop/templates/injectTemplate.js';
-import { getTemplatePath, getTemplatesDir } from '../../../desktop/templates/templatePath.js';
+import { listTemplateNames, readTemplate } from '../../../desktop/templates/templatePath.js';
 import { TableauDesktopRequestHandlerExtra } from '../toolContext.js';
 
 const WORKBOOK_FILE = resolve('/cache/workbook.xml');
@@ -38,14 +38,10 @@ function makeExtra(): TableauDesktopRequestHandlerExtra {
   const extra = getMockRequestHandlerExtra();
   extra.getExecutor = vi.fn().mockResolvedValue({});
   vi.mocked(existsSync).mockReturnValue(true);
-  vi.mocked(readFileSync).mockImplementation((p) => {
-    if (String(p).includes('ranking')) return TEMPLATE_XML;
-    return WORKBOOK_XML;
-  });
+  vi.mocked(readFileSync).mockReturnValue(WORKBOOK_XML);
   vi.mocked(writeFileSync).mockImplementation(() => {});
-  vi.mocked(getTemplatePath).mockReturnValue('/templates/ranking-ordered-bar.xml');
-  vi.mocked(getTemplatesDir).mockReturnValue('/templates');
-  vi.mocked(readdirSync).mockReturnValue(['ranking-ordered-bar.xml', 'kpi-text.xml'] as any);
+  vi.mocked(readTemplate).mockReturnValue(TEMPLATE_XML);
+  vi.mocked(listTemplateNames).mockReturnValue(['kpi-text', 'ranking-ordered-bar']);
   vi.mocked(rewriteFieldReferences).mockReturnValue(TEMPLATE_XML);
   vi.mocked(injectTemplate).mockReturnValue(INJECTED_XML);
   return extra;
@@ -97,7 +93,7 @@ describe('injectTemplateTool', () => {
 
   it('should return error listing available templates when template file does not exist', async () => {
     const extra = makeExtra();
-    vi.mocked(existsSync).mockImplementation((p) => !String(p).includes('ranking'));
+    vi.mocked(readTemplate).mockReturnValue(null);
 
     const result = await getResult(BASE_PARAMS, extra);
 
@@ -110,10 +106,7 @@ describe('injectTemplateTool', () => {
   it('should replace {{TITLE}} before injecting', async () => {
     const extra = makeExtra();
     let capturedTemplate = '';
-    vi.mocked(readFileSync).mockImplementation((p) => {
-      if (String(p).includes('ranking')) return '{{TITLE}} template';
-      return WORKBOOK_XML;
-    });
+    vi.mocked(readTemplate).mockReturnValue('{{TITLE}} template');
     vi.mocked(injectTemplate).mockImplementation((_wb, tmpl) => {
       capturedTemplate = tmpl;
       return INJECTED_XML;
@@ -177,10 +170,7 @@ describe('injectTemplateTool', () => {
   it('should replace custom {{PLACEHOLDER}} from templateParameters', async () => {
     const extra = makeExtra();
     let capturedTemplate = '';
-    vi.mocked(readFileSync).mockImplementation((p) => {
-      if (String(p).includes('ranking')) return '{{SUBTITLE}} content';
-      return WORKBOOK_XML;
-    });
+    vi.mocked(readTemplate).mockReturnValue('{{SUBTITLE}} content');
     vi.mocked(injectTemplate).mockImplementation((_wb, tmpl) => {
       capturedTemplate = tmpl;
       return INJECTED_XML;
