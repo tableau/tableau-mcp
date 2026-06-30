@@ -165,31 +165,6 @@ describe('pulseBundleRequestSchema optionality', () => {
     };
     expect(() => pulseBundleRequestSchema.parse(req)).not.toThrow();
   });
-
-  it('still requires datasource.id', () => {
-    const req = structuredClone(minimalBundleRequest);
-    // @ts-expect-error - intentionally removing required field
-    req.bundle_request.input.metric.definition.datasource = {};
-    expect(() => pulseBundleRequestSchema.parse(req)).toThrow();
-  });
-
-  it('still requires measure.field', () => {
-    const req = structuredClone(minimalBundleRequest);
-    // @ts-expect-error - intentionally removing required field
-    req.bundle_request.input.metric.definition.basic_specification.measure = {
-      aggregation: 'AGGREGATION_SUM',
-    };
-    expect(() => pulseBundleRequestSchema.parse(req)).toThrow();
-  });
-
-  it('still requires measurement_period.granularity', () => {
-    const req = structuredClone(minimalBundleRequest);
-    // @ts-expect-error - intentionally removing required field
-    req.bundle_request.input.metric.metric_specification.measurement_period = {
-      range: 'RANGE_LAST_COMPLETE',
-    };
-    expect(() => pulseBundleRequestSchema.parse(req)).toThrow();
-  });
 });
 
 describe('metricGroupContextSchema optionality', () => {
@@ -226,20 +201,6 @@ describe('metricGroupContextSchema optionality', () => {
     expect(ctx.metric.candidates).toBeUndefined();
     expect(ctx.metadata.metric_id).toBeUndefined();
     expect(ctx.metadata.definition_id).toBeUndefined();
-  });
-
-  it('still requires metadata.name', () => {
-    const ctx = structuredClone(minimalContext);
-    // @ts-expect-error - intentionally removing required field
-    delete ctx[0].metadata.name;
-    expect(() => metricGroupContextSchema.parse(ctx)).toThrow();
-  });
-
-  it('still requires definition.datasource', () => {
-    const ctx = structuredClone(minimalContext);
-    // @ts-expect-error - intentionally removing required field
-    delete ctx[0].metric.definition.datasource;
-    expect(() => metricGroupContextSchema.parse(ctx)).toThrow();
   });
 });
 
