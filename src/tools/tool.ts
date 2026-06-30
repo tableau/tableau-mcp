@@ -38,7 +38,7 @@ export type ToolParams<
   paramsSchema: TypeOrProvider<Args>;
 
   // The annotations of the tool
-  annotations: TypeOrProvider<ToolAnnotations>;
+  annotations: TypeOrProvider<Required<ToolAnnotations>>;
 
   // The implementation of the tool itself
   callback: TypeOrProvider<TCallback>;
@@ -90,7 +90,7 @@ export abstract class Tool<
   title?: TypeOrProvider<string>;
   description: TypeOrProvider<string>;
   paramsSchema: TypeOrProvider<Args>;
-  annotations: TypeOrProvider<ToolAnnotations>;
+  annotations: TypeOrProvider<Required<ToolAnnotations>>;
   callback: TypeOrProvider<TCallback>;
   disabled: TypeOrProvider<boolean>;
 
