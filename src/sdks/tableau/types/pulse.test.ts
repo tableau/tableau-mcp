@@ -138,36 +138,13 @@ describe('pulseBundleRequestSchema optionality', () => {
     },
   };
 
-  it('accepts a bundle request without extension_options', () => {
-    expect(() => pulseBundleRequestSchema.parse(minimalBundleRequest)).not.toThrow();
-  });
-
-  it('accepts a bundle request without representation_options', () => {
-    expect(() => pulseBundleRequestSchema.parse(minimalBundleRequest)).not.toThrow();
-    expect(
-      pulseBundleRequestSchema.parse(minimalBundleRequest).bundle_request.input.metric
-        .representation_options,
-    ).toBeUndefined();
-  });
-
-  it('accepts a bundle request without insights_options', () => {
-    expect(() => pulseBundleRequestSchema.parse(minimalBundleRequest)).not.toThrow();
-    expect(
-      pulseBundleRequestSchema.parse(minimalBundleRequest).bundle_request.input.metric
-        .insights_options,
-    ).toBeUndefined();
-  });
-
-  it('accepts a bundle request without metric_specification.filters', () => {
-    expect(() => pulseBundleRequestSchema.parse(minimalBundleRequest)).not.toThrow();
-    expect(
-      pulseBundleRequestSchema.parse(minimalBundleRequest).bundle_request.input.metric
-        .metric_specification.filters,
-    ).toBeUndefined();
-  });
-
-  it('accepts a bundle request without metadata name, metric_id, or definition_id', () => {
-    expect(() => pulseBundleRequestSchema.parse(minimalBundleRequest)).not.toThrow();
+  it('accepts a bundle request without optional fields', () => {
+    const parsed = pulseBundleRequestSchema.parse(minimalBundleRequest);
+    const metric = parsed.bundle_request.input.metric;
+    expect(metric.extension_options).toBeUndefined();
+    expect(metric.representation_options).toBeUndefined();
+    expect(metric.insights_options).toBeUndefined();
+    expect(metric.metric_specification.filters).toBeUndefined();
   });
 
   it('accepts a bundle request with partial representation_options', () => {
@@ -240,27 +217,15 @@ describe('metricGroupContextSchema optionality', () => {
     },
   ];
 
-  it('accepts metric_group_context without extension_options', () => {
-    expect(() => metricGroupContextSchema.parse(minimalContext)).not.toThrow();
-  });
-
-  it('accepts metric_group_context without representation_options', () => {
-    expect(() => metricGroupContextSchema.parse(minimalContext)).not.toThrow();
-  });
-
-  it('accepts metric_group_context without insights_options', () => {
-    expect(() => metricGroupContextSchema.parse(minimalContext)).not.toThrow();
-  });
-
-  it('accepts metric_group_context without candidates', () => {
-    expect(() => metricGroupContextSchema.parse(minimalContext)).not.toThrow();
-  });
-
-  it('accepts metric_group_context without metadata.metric_id or definition_id', () => {
-    expect(() => metricGroupContextSchema.parse(minimalContext)).not.toThrow();
+  it('accepts metric_group_context without optional fields', () => {
     const parsed = metricGroupContextSchema.parse(minimalContext);
-    expect(parsed[0].metadata.metric_id).toBeUndefined();
-    expect(parsed[0].metadata.definition_id).toBeUndefined();
+    const ctx = parsed[0];
+    expect(ctx.metric.extension_options).toBeUndefined();
+    expect(ctx.metric.representation_options).toBeUndefined();
+    expect(ctx.metric.insights_options).toBeUndefined();
+    expect(ctx.metric.candidates).toBeUndefined();
+    expect(ctx.metadata.metric_id).toBeUndefined();
+    expect(ctx.metadata.definition_id).toBeUndefined();
   });
 
   it('still requires metadata.name', () => {
