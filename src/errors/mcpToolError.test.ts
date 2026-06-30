@@ -1,4 +1,4 @@
-import { PulseInsightsApiError } from './mcpToolError.js';
+import { PulseInsightsApiError } from './pulseInsightsApiError.js';
 
 describe('PulseInsightsApiError', () => {
   it('includes known error code guidance when the code is in the lookup map', () => {

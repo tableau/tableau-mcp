@@ -5,10 +5,10 @@ import z from 'zod';
 import {
   McpToolError,
   PulseDisabledError,
-  PulseInsightsApiError,
   PulseInsightsDisabledError,
   PulseNotAvailableError,
 } from '../../../errors/mcpToolError.js';
+import { PulseInsightsApiError } from '../../../errors/pulseInsightsApiError.js';
 import { AxiosRequestConfig, isAxiosError } from '../../../utils/axios.js';
 import { pulseApis } from '../apis/pulseApi.js';
 import { RestApiCredentials } from '../restApi.js';

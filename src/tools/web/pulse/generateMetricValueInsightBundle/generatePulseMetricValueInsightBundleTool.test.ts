@@ -1,11 +1,8 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Ok } from 'ts-results-es';
 
-import {
-  PulseDisabledError,
-  PulseInsightsApiError,
-  PulseNotAvailableError,
-} from '../../../../errors/mcpToolError.js';
+import { PulseDisabledError, PulseNotAvailableError } from '../../../../errors/mcpToolError.js';
+import { PulseInsightsApiError } from '../../../../errors/pulseInsightsApiError.js';
 import { PulseInsightBundleType } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { stubDefaultEnvVars } from '../../../../testShared.js';
