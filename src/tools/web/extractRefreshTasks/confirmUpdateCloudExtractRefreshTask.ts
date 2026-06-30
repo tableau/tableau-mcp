@@ -89,6 +89,7 @@ schedule values.
                 restApi,
                 extra,
                 tool: 'confirm-update-cloud-extract-refresh-task',
+                previewTool: 'update-cloud-extract-refresh-task',
                 action: 'update',
                 mode: 'preview-confirm',
                 phase: 'confirm',

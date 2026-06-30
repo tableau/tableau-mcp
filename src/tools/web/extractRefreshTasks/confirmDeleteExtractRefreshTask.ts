@@ -87,6 +87,7 @@ operation is permanent and irreversible — the extract refresh task cannot be r
                 restApi,
                 extra,
                 tool: 'confirm-delete-extract-refresh-task',
+                previewTool: 'delete-extract-refresh-task',
                 action: 'delete',
                 mode: 'preview-confirm',
                 phase: 'confirm',

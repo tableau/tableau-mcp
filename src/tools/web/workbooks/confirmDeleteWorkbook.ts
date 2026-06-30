@@ -119,6 +119,7 @@ the deletion is rejected and the user must preview again.
                 restApi,
                 extra,
                 tool: 'confirm-delete-workbook',
+                previewTool: 'delete-workbook',
                 action: 'delete',
                 mode: 'preview-confirm',
                 phase: 'confirm',

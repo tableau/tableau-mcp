@@ -81,6 +81,7 @@ export async function guardMutation<TTarget>({
   evidence,
   resolveTarget,
   confirmationToken,
+  previewTool,
 }: {
   restApi: RestApi;
   extra: TableauWebRequestHandlerExtra;
@@ -91,6 +92,13 @@ export async function guardMutation<TTarget>({
   evidence: EvidenceStrategy<TTarget>;
   resolveTarget: () => Promise<MutationTarget>;
   confirmationToken?: string;
+  // The model-visible preview tool whose preview establishes the evidence this confirm verifies. Set
+  // ONLY by an app-only confirm tool (`tool` !== `previewTool`): the user re-previews by re-running
+  // `previewTool` and approving in the rendered panel — they never pass `confirm` to this tool, which
+  // is model-invisible and takes no `confirm` arg. When omitted (model-visible preview-confirm tools
+  // where preview and confirm are the SAME tool name), the recovery is "re-run `tool` with confirm
+  // omitted", which is what the message says.
+  previewTool?: WebToolName;
 }): Promise<Result<GuardOutcome, McpToolError>> {
   // (2) Build the actor identity up front so a denied attempt is still attributable in the audit.
   const actor: MutationActor = {
@@ -145,10 +153,17 @@ export async function guardMutation<TTarget>({
         result: 'denied',
         denyReason: 'preview-not-run',
       });
+      // An app-only confirm tool (previewTool set) recovers by re-running the preview tool and
+      // approving in the rendered panel — it is model-invisible and takes no `confirm` arg, so the
+      // "run with confirm omitted" recovery does not apply to it. A model-visible preview-confirm
+      // tool (no previewTool) previews and confirms under the SAME name, so it recovers in place.
+      const recovery = previewTool
+        ? `Re-run ${previewTool} to preview again, then approve in the confirmation panel.`
+        : `Run ${tool} with confirm omitted (or false) first to preview, then call again with ` +
+          'confirm: true.';
       return new PreviewNotRunError(
         `Mutation blocked: ${tool} could not verify that a preview ran for ${target.kind} ` +
-          `${target.id}. Run ${tool} with confirm omitted (or false) first to preview, then call ` +
-          'again with confirm: true. This gate verifies server-side state and cannot be bypassed by ' +
+          `${target.id}. ${recovery} This gate verifies server-side state and cannot be bypassed by ` +
           'computing a token.',
       ).toErr();
     }
