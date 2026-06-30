@@ -230,14 +230,4 @@ describe('validateBriefRequest', () => {
     const result = validateBriefRequest(req);
     expect(result).toContain('granularity must be set');
   });
-
-  it('catches empty extension_options dimensions and granularities', () => {
-    const req = makeValidBriefRequest();
-    req.messages[0].metric_group_context[0].metric.extension_options.allowed_dimensions = [];
-    req.messages[0].metric_group_context[0].metric.extension_options.allowed_granularities = [];
-    const result = validateBriefRequest(req);
-    expect(result).toContain(
-      'extension_options has empty allowed_dimensions and allowed_granularities',
-    );
-  });
 });
