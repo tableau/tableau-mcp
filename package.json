@@ -28,6 +28,8 @@
     "build:combined": "tsx src/scripts/build.ts --variant combined",
     "build:dev": "tsx src/scripts/build.ts --dev",
     "build:docker": "docker build -t tableau-mcp .",
+    "build:sea": "tsx src/scripts/buildSea.ts",
+    "build:sea:desktop": "tsx src/scripts/buildSea.ts --variant desktop",
     ":build:mcpb": "npx -y @anthropic-ai/mcpb pack . tableau-mcp.mcpb",
     "build:mcpb": "run-s build:manifest :build:mcpb",
     "build:manifest": "tsx src/scripts/createClaudeMcpBundleManifest.ts",

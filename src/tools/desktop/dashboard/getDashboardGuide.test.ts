@@ -6,17 +6,16 @@ import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
 import { getGetDashboardGuideTool } from './getDashboardGuide.js';
 
-vi.mock('fs');
+vi.mock('../../../desktop/assets.js');
 
-import { existsSync, readFileSync } from 'fs';
+import { readResourceAsset } from '../../../desktop/assets.js';
 
 const GUIDE_CONTENT = '# Dashboard XML Guide\n\nZone structure and best practices.';
 
 describe('getDashboardGuideTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readFileSync).mockReturnValue(GUIDE_CONTENT);
+    vi.mocked(readResourceAsset).mockReturnValue(GUIDE_CONTENT);
   });
 
   it('should create a tool instance with correct properties', () => {
@@ -33,8 +32,8 @@ describe('getDashboardGuideTool', () => {
     expect(result.content[0].text).toBe(GUIDE_CONTENT);
   });
 
-  it('should return error when guide file does not exist', async () => {
-    vi.mocked(existsSync).mockReturnValue(false);
+  it('should return error when guide asset is not available', async () => {
+    vi.mocked(readResourceAsset).mockReturnValue(null);
 
     const result = await getResult();
 
@@ -43,11 +42,10 @@ describe('getDashboardGuideTool', () => {
     expect(result.content[0].text).toContain('not found');
   });
 
-  it('should look for the guide in a resources/desktop directory', async () => {
+  it('should read the dashboard-xml-guide.md resource asset', async () => {
     await getResult();
 
-    const checkedPaths = vi.mocked(existsSync).mock.calls.map((c) => String(c[0]));
-    expect(checkedPaths.some((p) => p.includes('resources') && p.includes('desktop'))).toBe(true);
+    expect(readResourceAsset).toHaveBeenCalledWith('dashboard-xml-guide.md');
   });
 });
 

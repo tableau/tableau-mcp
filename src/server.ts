@@ -89,11 +89,24 @@ export abstract class Server {
           name: string;
           title: string;
           description: string;
+          uri: string;
+          text: string;
+          mimeType: string;
+        }
+      | {
+          name: string;
+          title: string;
+          description: string;
           template: ResourceTemplate;
           readTemplateCallback: ReadResourceTemplateCallback;
         },
   ): void => {
-    if ('path' in args) {
+    if ('text' in args) {
+      const { name, title, description, uri, text, mimeType } = args;
+      this.mcpServer.registerResource(name, uri, { title, description, mimeType }, (uri) => {
+        return { contents: [{ uri: uri.href, mimeType, text }] };
+      });
+    } else if ('path' in args) {
       const { name, title, description, uri, path, mimeType } = args;
       if (!existsSync(path)) {
         throw new McpError(ErrorCode.InternalError, `File not found: ${path}`);
