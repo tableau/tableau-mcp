@@ -1,9 +1,8 @@
 import {
+  metricGroupContextSchema,
+  pulseBundleRequestSchema,
   PulseMetric,
   PulseMetricDefinition,
-  pulseBundleRequestSchema,
-  pulseInsightBriefRequestSchema,
-  metricGroupContextSchema,
   pulseMetricDefinitionSchema,
   pulseMetricDefinitionViewEnum,
   pulseMetricSchema,
@@ -145,17 +144,26 @@ describe('pulseBundleRequestSchema optionality', () => {
 
   it('accepts a bundle request without representation_options', () => {
     expect(() => pulseBundleRequestSchema.parse(minimalBundleRequest)).not.toThrow();
-    expect(pulseBundleRequestSchema.parse(minimalBundleRequest).bundle_request.input.metric.representation_options).toBeUndefined();
+    expect(
+      pulseBundleRequestSchema.parse(minimalBundleRequest).bundle_request.input.metric
+        .representation_options,
+    ).toBeUndefined();
   });
 
   it('accepts a bundle request without insights_options', () => {
     expect(() => pulseBundleRequestSchema.parse(minimalBundleRequest)).not.toThrow();
-    expect(pulseBundleRequestSchema.parse(minimalBundleRequest).bundle_request.input.metric.insights_options).toBeUndefined();
+    expect(
+      pulseBundleRequestSchema.parse(minimalBundleRequest).bundle_request.input.metric
+        .insights_options,
+    ).toBeUndefined();
   });
 
   it('accepts a bundle request without metric_specification.filters', () => {
     expect(() => pulseBundleRequestSchema.parse(minimalBundleRequest)).not.toThrow();
-    expect(pulseBundleRequestSchema.parse(minimalBundleRequest).bundle_request.input.metric.metric_specification.filters).toBeUndefined();
+    expect(
+      pulseBundleRequestSchema.parse(minimalBundleRequest).bundle_request.input.metric
+        .metric_specification.filters,
+    ).toBeUndefined();
   });
 
   it('accepts a bundle request without metadata name, metric_id, or definition_id', () => {
@@ -191,14 +199,18 @@ describe('pulseBundleRequestSchema optionality', () => {
   it('still requires measure.field', () => {
     const req = structuredClone(minimalBundleRequest);
     // @ts-expect-error - intentionally removing required field
-    req.bundle_request.input.metric.definition.basic_specification.measure = { aggregation: 'AGGREGATION_SUM' };
+    req.bundle_request.input.metric.definition.basic_specification.measure = {
+      aggregation: 'AGGREGATION_SUM',
+    };
     expect(() => pulseBundleRequestSchema.parse(req)).toThrow();
   });
 
   it('still requires measurement_period.granularity', () => {
     const req = structuredClone(minimalBundleRequest);
     // @ts-expect-error - intentionally removing required field
-    req.bundle_request.input.metric.metric_specification.measurement_period = { range: 'RANGE_LAST_COMPLETE' };
+    req.bundle_request.input.metric.metric_specification.measurement_period = {
+      range: 'RANGE_LAST_COMPLETE',
+    };
     expect(() => pulseBundleRequestSchema.parse(req)).toThrow();
   });
 });
