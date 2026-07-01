@@ -29,6 +29,8 @@ export const getGetViewDataTool = (server: WebMcpServer): WebTool<typeof paramsS
     annotations: {
       title: 'Get View Data',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ viewId, viewFilters }, extra): Promise<CallToolResult> => {

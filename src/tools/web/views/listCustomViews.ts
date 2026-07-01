@@ -50,6 +50,8 @@ export const getListCustomViewsTool = (server: WebMcpServer): WebTool<typeof par
     annotations: {
       title: 'List Custom Views',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ workbookId, filter, pageSize, limit }, extra): Promise<CallToolResult> => {

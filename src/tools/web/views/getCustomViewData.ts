@@ -34,6 +34,8 @@ export const getGetCustomViewDataTool = (server: WebMcpServer): WebTool<typeof p
     annotations: {
       title: 'Get Custom View Data',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ customViewId, viewFilters }, extra): Promise<CallToolResult> => {

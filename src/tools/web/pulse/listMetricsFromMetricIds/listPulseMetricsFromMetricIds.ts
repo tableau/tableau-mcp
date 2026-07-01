@@ -35,6 +35,8 @@ Retrieves a list of published Pulse Metrics from a list of metric IDs using the 
     annotations: {
       title: 'List Pulse Metrics from Metric IDs',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ metricIds }, extra): Promise<CallToolResult> => {

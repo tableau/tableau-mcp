@@ -75,6 +75,8 @@ export const getListDatasourcesTool = (server: WebMcpServer): WebTool<typeof par
     annotations: {
       title: 'List Datasources',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ filter, pageSize, limit }, extra): Promise<CallToolResult> => {

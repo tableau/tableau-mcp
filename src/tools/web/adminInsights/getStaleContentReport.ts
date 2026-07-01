@@ -131,6 +131,8 @@ access have \`lastUsedDate = createdAt\` and \`neverAccessed = true\`.
     annotations: {
       title: 'Stale content report',
       readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
       openWorldHint: false,
     },
     callback: async ({ minAgeDays, projectIds, itemTypes }, extra): Promise<CallToolResult> => {

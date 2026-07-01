@@ -62,7 +62,13 @@ describe('server', () => {
       title: 'Test App Tool',
       description: 'Test App Tool',
       paramsSchema: {},
-      annotations: { title: 'Test App Tool' },
+      annotations: {
+        title: 'Test App Tool',
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       callback: vi.fn(),
       disabled: false,
       requiredApiScopes: [],
@@ -224,7 +230,13 @@ describe('server', () => {
         title: 'Test App Tool',
         description: 'Test App Tool',
         inputSchema: {},
-        annotations: { title: 'Test App Tool' },
+        annotations: {
+          title: 'Test App Tool',
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
         _meta: {
           ui: {
             resourceUri: 'tableau://app/test',
@@ -299,7 +311,13 @@ describe('server', () => {
         title: 'Test App Tool',
         description: 'Test App Tool',
         inputSchema: {},
-        annotations: { title: 'Test App Tool' },
+        annotations: {
+          title: 'Test App Tool',
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
       },
       expect.any(Function),
     );
