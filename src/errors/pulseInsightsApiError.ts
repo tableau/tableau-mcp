@@ -1,16 +1,11 @@
+/**
+ * Human-readable guidance for Pulse service error codes.
+ * Codes are from ntbue-service-chassis/errors/service_error_codes.go.
+ */
 const PULSE_INSIGHTS_ERROR_GUIDANCE: Record<string, string> = {
-  '400712':
-    'Missing measure or measure field name. Ensure basic_specification.measure.field is a non-empty string.',
-  '400713':
-    'Unknown or missing measure aggregation. Set basic_specification.measure.aggregation to a valid value (e.g., AGGREGATION_SUM, AGGREGATION_AVERAGE, AGGREGATION_USER).',
-  '400714':
-    'Missing time dimension or time dimension field name. Ensure basic_specification.time_dimension.field is set.',
+  // Measurement period / comparison
   '400732':
     'Invalid measurement period. Check that the date format is YYYY-MM-DD and that start/end dates are valid.',
-  '400734': 'Invalid offset_from_today. Value must be between 0 and 365 inclusive.',
-  '400940': 'Invalid filter: missing field name or unknown/unspecified operator.',
-  '400941':
-    'Invalid filter values: no values provided, or mixed string and boolean data types in the same filter.',
   '400945':
     'No measurement period present. Set metric_specification.measurement_period with both granularity and range.',
   '400946':
@@ -21,17 +16,57 @@ const PULSE_INSIGHTS_ERROR_GUIDANCE: Record<string, string> = {
     'No comparison config present. Set metric_specification.comparison with a valid comparison type.',
   '400949':
     'No comparison type specified, or BY_CONFIG comparison is missing the required specific_comparison config.',
-  '400955': 'AI-powered insights (GAI) is not enabled for this site.',
-  '400958': 'Missing or incorrectly formatted field ID in field values request.',
-  '400960': 'Field ID not set in the request.',
+
+  // Definition specification
+  '400900': 'Missing filter field name.',
+  '400901':
+    'Missing measure field. Ensure basic_specification.measure.field is a non-empty string.',
+  '400902': 'Missing time dimension field. Ensure basic_specification.time_dimension.field is set.',
+  '400903':
+    'Invalid definition type. Use either basic_specification, abstract_query_specification, or viz_state_specification.',
+  '400905': 'Missing definition field.',
+  '400910': 'Invalid datasource ID.',
+  '400913': 'Missing datasource.',
+  '400914':
+    'Invalid measure aggregation. Set basic_specification.measure.aggregation to a valid value (e.g., AGGREGATION_SUM, AGGREGATION_AVERAGE, AGGREGATION_USER).',
+  '400936': 'Invalid granularity value.',
+  '400987':
+    'Missing basic specification. Ensure definition includes a basic_specification with measure and time_dimension.',
+
+  // Filters
+  '400940': 'Filter operator is missing or unspecified.',
+  '400941':
+    'Filter value is missing. Provide at least one value, or mixed string and boolean data types in the same filter.',
+
+  // Extension options / scoping
   '400969': 'Conflicting options: is_running_total cannot be true when is_summable is false.',
+  '400972':
+    'Invalid input metric. Time dimension must be absent when both range and comparison are unspecified.',
+  '400988': 'Missing extension_options.',
+
+  // Field values
+  '400958': 'Missing or incorrectly formatted field ID.',
+  '400960': 'Field ID not set in the request.',
   '400970': 'Unsupported field type for the requested operation.',
-  '400971':
-    'Unknown definition specification type. Use either basic_specification, abstract_query_specification, or viz_state_specification.',
-  '400972': 'Time dimension must be absent when both range and comparison are unspecified.',
+
+  // GAI / insights
+  '400955': 'AI-powered insights (GAI) is not enabled for this site.',
+  '400957': 'Missing insight options.',
+  '400983': 'Missing representation options.',
+
+  // Bundle-specific
+  '400950': 'Invalid bundle type.',
+  '400951': 'Invalid timezone.',
+  '400952': 'Invalid date override.',
+
+  // General
   '400000':
     'General validation error. Check that: version is 1, at least one metric is provided, all metric keys are unique and non-empty, and input counts are within limits.',
   '404936': 'Missing datasource ID or definition specification.',
+
+  // Duplicate detection
+  '409902':
+    'A metric definition with the same specification already exists. Change the measure, aggregation, time dimension, or definition filters.',
 };
 
 export function formatPulseInsightsApiError(
