@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createTableauVizElement, embedTableauViz } from './embedTableauViz.js';
 
@@ -210,5 +210,28 @@ describe('embedTableauViz', () => {
 
     // Should set height to sheetHeight when chromeHeight is explicitly 0
     expect(vizElement.style.height).toBe('800px');
+  });
+
+  it('AC3 runtime: should call onError callback when vizloaderror event is dispatched', () => {
+    const vizUrl = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view';
+    const token = 'test-token-123';
+    const onErrorSpy = vi.fn();
+
+    embedTableauViz(vizUrl, token, onErrorSpy);
+
+    const container = document.getElementById('tableauVizContainer');
+    const vizElement = container?.querySelector('tableau-viz') as HTMLElement;
+
+    expect(vizElement).toBeTruthy();
+
+    // Simulate vizloaderror event (Tableau Embedding API v3 VizLoadError)
+    const event = new CustomEvent('vizloaderror', {
+      detail: { message: 'Authentication failed' },
+    });
+
+    vizElement.dispatchEvent(event);
+
+    // Should call the onError callback
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
   });
 });
