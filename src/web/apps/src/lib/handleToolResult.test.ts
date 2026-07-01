@@ -48,7 +48,7 @@ describe('handleToolResult', () => {
     vi.restoreAllMocks();
   });
 
-  it('AC1: should show error UI when tool returns error result (isError: true)', async () => {
+  it('should show error UI when tool returns error result (isError: true)', async () => {
     const errorResult: CallToolResult = {
       isError: true,
       content: [
@@ -91,7 +91,7 @@ describe('handleToolResult', () => {
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
   });
 
-  it('AC1: should show error UI when tool result is null or undefined', async () => {
+  it('should show error UI when tool result is null or undefined', async () => {
     // Test with undefined
     await handleToolResult(mockApp, undefined as any);
     await new Promise((r) => setTimeout(r, 0));
@@ -146,7 +146,7 @@ describe('handleToolResult', () => {
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
   });
 
-  it('AC2: should show error UI when tool result is malformed JSON', async () => {
+  it('should show error UI when tool result is malformed JSON', async () => {
     const malformedResult: CallToolResult = {
       content: [
         {
@@ -186,7 +186,7 @@ describe('handleToolResult', () => {
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
   });
 
-  it('AC2: should show error UI when tool result has valid JSON but missing url field', async () => {
+  it('should show error UI when tool result has valid JSON but missing url field', async () => {
     const missingUrlResult: CallToolResult = {
       content: [
         {
@@ -214,7 +214,7 @@ describe('handleToolResult', () => {
     );
   });
 
-  it('AC4: should show error UI when embedding API script fails to load', async () => {
+  it('should show error UI when embedding API script fails to load', async () => {
     const validResult: CallToolResult = {
       content: [
         {
@@ -259,7 +259,7 @@ describe('handleToolResult', () => {
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
   });
 
-  it('AC3: should show error UI when token minting fails', async () => {
+  it('should show error UI when token minting fails', async () => {
     const validResult: CallToolResult = {
       content: [
         {
@@ -303,7 +303,7 @@ describe('handleToolResult', () => {
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
   });
 
-  it('AC3 runtime: replaces viz with error UI when vizloaderror fires after embedding', async () => {
+  it('runtime: replaces viz with error UI when vizloaderror fires after embedding', async () => {
     const validResult: CallToolResult = {
       content: [
         {
