@@ -47,7 +47,7 @@ describe('embedTableauViz', () => {
     expect(vizElement?.getAttribute('token')).toBe(token);
   });
 
-  it('should throw error if tableauVizContainer not found', () => {
+  it('should log error and return early if tableauVizContainer not found', () => {
     // Remove the container
     const container = document.getElementById('tableauVizContainer');
     container?.remove();
@@ -55,9 +55,18 @@ describe('embedTableauViz', () => {
     const vizUrl = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view';
     const token = 'test-token-123';
 
-    expect(() => {
-      embedTableauViz(vizUrl, token);
-    }).toThrow('Container element with id "tableauVizContainer" not found');
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    embedTableauViz(vizUrl, token);
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('tableauVizContainer'));
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('not found'));
+
+    consoleErrorSpy.mockRestore();
+
+    // No viz element should be created anywhere in the document
+    const vizElements = document.querySelectorAll('tableau-viz');
+    expect(vizElements.length).toBe(0);
   });
 
   it('should be idempotent - calling twice results in exactly one viz element', () => {

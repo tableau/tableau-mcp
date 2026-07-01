@@ -36,7 +36,10 @@ export function embedTableauViz(vizUrl: string, token: string, onError?: () => v
   const container = document.getElementById(TABLEAU_VIZ_CONTAINER_ID);
 
   if (!container) {
-    throw new Error(`Container element with id "${TABLEAU_VIZ_CONTAINER_ID}" not found`);
+    console.error(
+      `[mcp-app] container element with id "${TABLEAU_VIZ_CONTAINER_ID}" not found; cannot embed viz`,
+    );
+    return;
   }
 
   // Create and replace any existing viz element (idempotent)
