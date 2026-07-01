@@ -42,13 +42,12 @@ export function extractUrlObjectFromResult(result: CallToolResult): string {
  * @param result - The tool result containing the view URL
  */
 export async function handleToolResult(app: App, result: CallToolResult): Promise<void> {
-  // AC1: Tool execution failure
   if (!result || result.isError) {
     showError('TOOL_ERROR');
     return;
   }
 
-  // AC2: Parse failure
+  // Parse failure
   let viewUrl: string;
   try {
     viewUrl = extractUrlObjectFromResult(result);
@@ -57,7 +56,7 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
     return;
   }
 
-  // AC4: Embedding API load failure
+  // Embedding API load failure
   try {
     await loadTableauEmbeddingApi(viewUrl);
   } catch (e) {
@@ -65,7 +64,7 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
     return;
   }
 
-  // AC3: Auth failure (minting)
+  // Auth failure (minting)
   let token: string;
   try {
     token = await callGetEmbedTokenTool(app);
@@ -74,7 +73,7 @@ export async function handleToolResult(app: App, result: CallToolResult): Promis
     return;
   }
 
-  // AC3: Auth failure (runtime) - handled by onError callback
+  // Auth failure (runtime) - handled by onError callback
   embedTableauViz(viewUrl, token, () => showError('AUTH_ERROR'));
 
   const main = document.querySelector('.main');

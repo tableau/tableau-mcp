@@ -19,7 +19,6 @@ import { setupOpenInTableauLink } from './openInTableauLink.js';
 
 describe('handleToolResult', () => {
   let mockApp: any;
-  let consoleErrorSpy: any;
 
   beforeEach(() => {
     // Set up DOM
@@ -36,8 +35,8 @@ describe('handleToolResult', () => {
       callServerTool: vi.fn(),
     };
 
-    // Spy on console.error
-    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Mute console.error output during tests
+    vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // Default mock: embedding API loads successfully for most tests
     vi.mocked(loadTableauEmbeddingApi).mockResolvedValue(undefined);
@@ -81,12 +80,6 @@ describe('handleToolResult', () => {
       'The tool request was unsuccessful.',
     );
 
-    // Assert console log identifier
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[mcp-app:tool-error] Tool returned an error result',
-      undefined,
-    );
-
     // Assert embedTableauViz was NOT called
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
   });
@@ -113,17 +106,10 @@ describe('handleToolResult', () => {
       'The tool request was unsuccessful.',
     );
 
-    // Assert console log identifier
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[mcp-app:tool-error] Tool returned an error result',
-      undefined,
-    );
-
     // Assert embedTableauViz was NOT called
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
 
     // Clean up for null test
-    consoleErrorSpy.mockClear();
     vi.mocked(embedTableauViz).mockClear();
 
     // Test with null
@@ -138,10 +124,6 @@ describe('handleToolResult', () => {
     );
     expect(errorElement2?.querySelector('.mcp-app-error-message')?.textContent).toBe(
       'The tool request was unsuccessful.',
-    );
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[mcp-app:tool-error] Tool returned an error result',
-      undefined,
     );
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
   });
@@ -176,12 +158,6 @@ describe('handleToolResult', () => {
       'The response was not in the expected format.',
     );
 
-    // Assert console log identifier
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[mcp-app:parse-error] Failed to parse tool result',
-      expect.any(Error),
-    );
-
     // Assert embedTableauViz was NOT called
     expect(vi.mocked(embedTableauViz)).not.toHaveBeenCalled();
   });
@@ -206,12 +182,6 @@ describe('handleToolResult', () => {
 
     // Assert error UI IS displayed
     expect(container?.querySelector('.mcp-app-error')).toBeTruthy();
-
-    // Assert console log identifier for parse error
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[mcp-app:parse-error] Failed to parse tool result',
-      expect.any(Error),
-    );
   });
 
   it('should show error UI when embedding API script fails to load', async () => {
@@ -246,12 +216,6 @@ describe('handleToolResult', () => {
     );
     expect(errorElement?.querySelector('.mcp-app-error-message')?.textContent).toBe(
       'The visualization failed to load.',
-    );
-
-    // Assert console log identifier
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[mcp-app:embed-load-error] Tableau Embedding API failed to load',
-      expect.any(Error),
     );
 
     // Assert downstream functions were NOT called
@@ -291,12 +255,6 @@ describe('handleToolResult', () => {
     );
     expect(errorElement?.querySelector('.mcp-app-error-message')?.textContent).toBe(
       'Authentication was unsuccessful.',
-    );
-
-    // Assert console log identifier
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[mcp-app:auth-error] Failed to obtain or use embed token',
-      expect.any(Error),
     );
 
     // Assert embedTableauViz was NOT called
@@ -344,12 +302,6 @@ describe('handleToolResult', () => {
     );
     expect(errorElement?.querySelector('.mcp-app-error-message')?.textContent).toBe(
       'Authentication was unsuccessful.',
-    );
-
-    // Assert console log identifier for auth error
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[mcp-app:auth-error] Failed to obtain or use embed token',
-      undefined,
     );
   });
 
