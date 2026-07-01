@@ -92,7 +92,7 @@ When everything is configured it should look like this:
 Add Tableau MCP with the CLI, passing a Bearer token:
 
 ```bash
-claude mcp add --transport http tableau-mcp https://mcp.tableau.com/mcp 
+claude mcp add --transport http tableau-mcp https://mcp.tableau.com/
 ```
 
 then restart your claude code session and run `/mcp` inside Claude Code and approve the Tableau sign-in:
