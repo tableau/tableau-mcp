@@ -2,7 +2,7 @@
  * @file Tableau Embedding utilities
  */
 
-const TABLEAU_VIZ_CONTAINER_ID = 'tableauVizContainer';
+export const TABLEAU_VIZ_CONTAINER_ID = 'tableauVizContainer';
 
 /**
  * Creates and configures a Tableau viz element for embedding

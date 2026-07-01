@@ -1,4 +1,5 @@
 import DISCONNECTED_SVG from '../assets/disconnected.svg?raw';
+import { TABLEAU_VIZ_CONTAINER_ID } from './embedTableauViz.js';
 
 export type Scenario = 'TOOL_ERROR' | 'PARSE_ERROR' | 'AUTH_ERROR' | 'EMBED_LOAD_ERROR';
 
@@ -29,7 +30,7 @@ const ERROR_UI: Record<Scenario, { detail: string; logCode: string }> = {
  * @param cause - Optional error that caused this scenario
  */
 export function showError(scenario: Scenario, cause?: unknown): void {
-  const container = document.getElementById('tableauVizContainer');
+  const container = document.getElementById(TABLEAU_VIZ_CONTAINER_ID);
   if (!container) {
     return;
   }

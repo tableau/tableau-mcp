@@ -9,6 +9,8 @@ import { handleToolResult } from './lib/handleToolResult.js';
 
 const app = new App({ name: 'Tableau MCP App', version: pkg.version });
 app.ontoolresult = (result: CallToolResult) => {
-  void handleToolResult(app, result);
+  void handleToolResult(app, result).catch((err) => {
+    console.error('[mcp-app] Unhandled error in handleToolResult:', err);
+  });
 };
 app.connect();

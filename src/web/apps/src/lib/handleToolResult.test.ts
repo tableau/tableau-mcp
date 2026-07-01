@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
+import type { App } from '@modelcontextprotocol/ext-apps';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -18,7 +19,7 @@ import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
 import { setupOpenInTableauLink } from './openInTableauLink.js';
 
 describe('handleToolResult', () => {
-  let mockApp: any;
+  let mockApp: App;
 
   beforeEach(() => {
     // Set up DOM
@@ -33,7 +34,7 @@ describe('handleToolResult', () => {
     mockApp = {
       getHostCapabilities: vi.fn().mockReturnValue({ serverTools: {} }),
       callServerTool: vi.fn(),
-    };
+    } as unknown as App;
 
     // Mute console.error output during tests
     vi.spyOn(console, 'error').mockImplementation(() => {});
