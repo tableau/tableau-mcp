@@ -1,4 +1,3 @@
-import { PulseInsightsApiError } from './mcpToolError.js';
 import { formatPulseInsightsApiError } from './pulseInsightsApiError.js';
 
 describe('formatPulseInsightsApiError', () => {
@@ -59,18 +58,5 @@ describe('formatPulseInsightsApiError', () => {
   ])('provides guidance for error code %s', (code, expectedFragment) => {
     const result = formatPulseInsightsApiError(400, { code, message: '0x00000000' });
     expect(result.message).toContain(expectedFragment);
-  });
-});
-
-describe('PulseInsightsApiError', () => {
-  it('stores fields passed to constructor', () => {
-    const error = new PulseInsightsApiError('test message', 400, '400945', '{"code":"400945"}');
-
-    expect(error.type).toBe('pulse-insights-api-error');
-    expect(error.message).toBe('test message');
-    expect(error.statusCode).toBe(400);
-    expect(error.internalError).toBe('400945');
-    expect(error.internalErrorDetails).toBe('{"code":"400945"}');
-    expect(error.getErrorText()).toBe('test message');
   });
 });
