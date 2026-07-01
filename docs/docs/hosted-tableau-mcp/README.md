@@ -29,7 +29,32 @@ See [Popular Client Integrations](./client-integrations.md) for step-by-step ins
 
 ## Admin controls
 
-- **Disable per site.** Tableau Cloud site administrators can disable MCP access for their site through site settings.
+- **Disable per site.** Tableau Cloud site administrators cannot disable the Tableau MCP hosted service. However, you can prevent hosted Tableau MCP from issuing tool calls against your site through the `EXCLUDE_TOOLS` variable in site settings. Use the [REST API](https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_ref_tableau_mcp.htm) to exclude all tool groups exposed in the Hosted Tableau MCP Server. You would supply the following payload: 
+
+```json title="JSON"
+{
+  "mcpSiteSettings": {
+    "settings": [
+      {
+        "key": "EXCLUDE_TOOLS",
+        "value": "admin-insights,content-exploration,datasource,jobs,project,pulse,tasks,token-management,users,view,workbook"
+      }
+    ]
+  }
+}
+```
+
+```xml title="XML"
+<tsRequest>
+    <mcpSiteSettings>
+        <settings>
+            <key>EXCLUDE_TOOLS</key>
+            <value>admin-insights,content-exploration,datasource,jobs,project,pulse,tasks,token-management,users,view,workbook</value>
+        </settings>
+    </mcpSiteSettings>
+</tsRequest>
+```
+
 - **Per-user access.** Hosted MCP respects each user's existing site role and permissions; no separate provisioning is required.
 - **Audit.** OAuth sign-ins and tool calls are logged via Tableau's standard activity and audit pipelines.
 
