@@ -6,47 +6,7 @@ sidebar_position: 2
 This guide walks you through everything you need to use Tableau MCP with popular third-party agents.
 
 ## Slack
-You can connect Slackbot to Tableau MCP by installing the latest version of the [Tableau Slack app](https://slack-pde.slack.com/marketplace/A026RA4ND1R-tableau) into your workspace. 
-
-### First-time Tableau Slack App installation
-If it's your first time installing the Tableau Slack app, go to Tableau site settings for the Tableau site you want to connect Slack to. From site settings, click the `integrations` tab and scroll to the bottom of the page until you see the *Slack Connectivity* section. Click the `Connect to Slack` button and connect to your target Slack workspace by clicking `allow` from the app install dialogue. 
-
-![Connect to Slack](images/connect_to_slack.png)
-
-<hr style={{margin: '2rem auto', maxWidth: '60%', border: 'none', borderTop: '1px solid var(--ifm-color-emphasis-300, #dadde1)'}} />
-
-<div style={{
-  maxWidth: '380px',
-  margin: '1.5rem auto',
-  padding: '12px',
-  background: 'var(--ifm-background-surface-color, #fff)',
-  border: '1px solid var(--ifm-color-emphasis-300, #dadde1)',
-  borderRadius: '10px',
-  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06)',
-}}>
-
-![Allow Workspace](images/connect_to_workspace.png)
-
-</div>
-
-To confirm that the app installation completed, go to your slack workspace, click tools, apps, and look for Tableau in the list of installed apps. 
-
-:::note 
-This workflow does not block multi-site users from using Slackbot to interact with multiple Tableau sites. Tableau MCP uses a separate OAuth flow from inside Slackbot to connect users to their target site. 
-
-Also, you cannot install the Tableau slack app from the Slack marketplace. You have to do it from the Tableau site settings. 
-
-:::
-
-### Using Tableau MCP from Slackbot
-Once you've install the Tableau Slack app, users of the worksapce simply have to click the `apps` button inside Slackbot and connect to their target Tableau site through the built-in [OAuth](/configuration/mcp-config/authentication/oauth.md) flow. 
-
-For more information about Slackbot and MCP server support, see [Slackbot documentation](https://docs.slack.dev/ai/slackbot-mcp-client/)
-<div style={{maxWidth: '75%', margin: '1rem auto'}}>
-
-![Slack connector set up](images/slackbot1.jpeg)
-
-</div>
+Coming soon! 
 
 ## Claude Product Suite
 ### Tableau Connector for Claude and Cowork
@@ -127,6 +87,18 @@ When everything is configured it should look like this:
 ![Claude Desktop Extension configuration](../getting-started/images/dxt-config.png)
 
 </div>
+
+### Claude Code
+Add Tableau MCP with the CLI, passing a Bearer token:
+
+```bash
+claude mcp add --transport http tableau-mcp https://mcp.tableau.com/mcp 
+```
+
+then restart your claude code session and run `/mcp` inside Claude Code and approve the Tableau sign-in:
+
+
+Verify with `claude mcp list`.
 
 ## OpenAI Product Suite
 A Tableau ChatGPT app and Tableau plugin for Codex is coming soon!
