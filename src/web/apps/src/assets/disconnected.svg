@@ -1,8 +1,4 @@
-/**
- * Disconnected illustration SVG markup.
- * Static, trusted constant for error UI display.
- */
-export const DISCONNECTED_SVG = `<svg width="171" height="165" viewBox="0 0 171 165" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="171" height="165" viewBox="0 0 171 165" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g clip-path="url(#clip0_1_26)">
 <path d="M132.921 108.53C132.921 108.53 123.601 108.53 146.001 108.53C168.401 108.53 171 139.53 139 139.53C90.5 139.53 71.5 136.03 67 119.53C62.5 103.03 81.5 95.0303 89 105.03C96.5 115.03 90 124.03 83 133.53C76 143.03 79 157.53 95 157.53" stroke="#BEC7F6" stroke-width="2" stroke-linecap="round"/>
 <path d="M92 127.53H120V89.53H92V127.53Z" fill="#1966FF"/>
@@ -32,4 +28,4 @@ export const DISCONNECTED_SVG = `<svg width="171" height="165" viewBox="0 0 171 
 <rect width="171" height="165" fill="white"/>
 </clipPath>
 </defs>
-</svg>`;
+</svg>

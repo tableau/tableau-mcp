@@ -50,7 +50,7 @@ describe('showError', () => {
 
     // New two-line layout: heading + subtitle
     expect(headingElement?.textContent).toBe('Unable to load this Tableau view');
-    expect(messageElement?.textContent).toBe('The request could not be completed.');
+    expect(messageElement?.textContent).toBe('The tool request was unsuccessful.');
 
     expect(errorElement?.getAttribute('role')).toBe('alert');
     expect(errorElement?.querySelector('.mcp-app-error-icon')).toBeTruthy();
@@ -127,7 +127,7 @@ describe('showError', () => {
 
     // New two-line layout: heading + subtitle
     expect(headingElement?.textContent).toBe('Unable to load this Tableau view');
-    expect(messageElement?.textContent).toBe('The viewer could not be loaded.');
+    expect(messageElement?.textContent).toBe('The visualization failed to load.');
 
     expect(errorElement?.querySelector('.mcp-app-error-icon')).toBeTruthy();
     expect(consoleErrorSpy).toHaveBeenCalledWith(
@@ -220,7 +220,7 @@ describe('handleToolResult', () => {
       'Unable to load this Tableau view',
     );
     expect(errorElement?.querySelector('.mcp-app-error-message')?.textContent).toBe(
-      'The request could not be completed.',
+      'The tool request was unsuccessful.',
     );
 
     // Assert console log identifier
@@ -252,7 +252,7 @@ describe('handleToolResult', () => {
       'Unable to load this Tableau view',
     );
     expect(errorElement?.querySelector('.mcp-app-error-message')?.textContent).toBe(
-      'The request could not be completed.',
+      'The tool request was unsuccessful.',
     );
 
     // Assert console log identifier
@@ -279,7 +279,7 @@ describe('handleToolResult', () => {
       'Unable to load this Tableau view',
     );
     expect(errorElement2?.querySelector('.mcp-app-error-message')?.textContent).toBe(
-      'The request could not be completed.',
+      'The tool request was unsuccessful.',
     );
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       '[mcp-app:tool-error] Tool returned an error result',
@@ -387,7 +387,7 @@ describe('handleToolResult', () => {
       'Unable to load this Tableau view',
     );
     expect(errorElement?.querySelector('.mcp-app-error-message')?.textContent).toBe(
-      'The viewer could not be loaded.',
+      'The visualization failed to load.',
     );
 
     // Assert console log identifier

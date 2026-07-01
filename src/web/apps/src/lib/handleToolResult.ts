@@ -2,7 +2,7 @@ import type { App } from '@modelcontextprotocol/ext-apps';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
-import { DISCONNECTED_SVG } from '../assets/disconnectedSvg.js';
+import DISCONNECTED_SVG from '../assets/disconnected.svg?raw';
 import { embedTableauViz } from './embedTableauViz.js';
 import { callGetEmbedTokenTool } from './getEmbedTokenToolClient.js';
 import { loadTableauEmbeddingApi } from './loadTableauEmbeddingApi.js';
