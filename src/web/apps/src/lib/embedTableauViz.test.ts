@@ -219,7 +219,7 @@ describe('embedTableauViz', () => {
     expect(vizElement.style.height).toBe('800px');
   });
 
-  it('AC3 runtime: should call onError callback when vizloaderror event is dispatched', () => {
+  it('should call onError callback when vizloaderror event is dispatched', () => {
     const vizUrl = 'https://prod-uswest-c.online.tableau.com/site/mysite/views/workbook/view';
     const token = 'test-token-123';
     const onErrorSpy = vi.fn();

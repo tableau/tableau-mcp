@@ -34,7 +34,7 @@ describe('showError', () => {
     const headingElement = errorElement?.querySelector('.mcp-app-error-heading');
     const messageElement = errorElement?.querySelector('.mcp-app-error-message');
 
-    // AC6 invariants: tableau-viz removed, error UI displayed
+    // tableau-viz removed, error UI displayed
     expect(container?.querySelector('tableau-viz')).toBeNull();
     expect(errorElement).toBeTruthy();
 
@@ -56,7 +56,7 @@ describe('showError', () => {
     const headingElement = errorElement?.querySelector('.mcp-app-error-heading');
     const messageElement = errorElement?.querySelector('.mcp-app-error-message');
 
-    // AC6 invariants: tableau-viz removed, error UI displayed
+    // tableau-viz removed, error UI displayed
     expect(container?.querySelector('tableau-viz')).toBeNull();
     expect(errorElement).toBeTruthy();
 
@@ -75,7 +75,7 @@ describe('showError', () => {
     const headingElement = errorElement?.querySelector('.mcp-app-error-heading');
     const messageElement = errorElement?.querySelector('.mcp-app-error-message');
 
-    // AC6 invariants: tableau-viz removed, error UI displayed
+    // tableau-viz removed, error UI displayed
     expect(container?.querySelector('tableau-viz')).toBeNull();
     expect(errorElement).toBeTruthy();
 
@@ -94,7 +94,7 @@ describe('showError', () => {
     const headingElement = errorElement?.querySelector('.mcp-app-error-heading');
     const messageElement = errorElement?.querySelector('.mcp-app-error-message');
 
-    // AC6 invariants: tableau-viz removed, error UI displayed
+    // tableau-viz removed, error UI displayed
     expect(container?.querySelector('tableau-viz')).toBeNull();
     expect(errorElement).toBeTruthy();
 

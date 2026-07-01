@@ -65,10 +65,10 @@ describe('handleToolResult', () => {
 
     const container = document.getElementById('tableauVizContainer');
 
-    // AC6 invariants: NO tableau-viz rendered
+    // NO tableau-viz rendered
     expect(container?.querySelector('tableau-viz')).toBeNull();
 
-    // AC6 invariants: error UI IS displayed
+    // error UI IS displayed
     const errorElement = container?.querySelector('.mcp-app-error');
     expect(errorElement).toBeTruthy();
 
@@ -91,10 +91,10 @@ describe('handleToolResult', () => {
 
     const container = document.getElementById('tableauVizContainer');
 
-    // AC6 invariants: NO tableau-viz rendered
+    // NO tableau-viz rendered
     expect(container?.querySelector('tableau-viz')).toBeNull();
 
-    // AC6 invariants: error UI IS displayed
+    // error UI IS displayed
     const errorElement = container?.querySelector('.mcp-app-error');
     expect(errorElement).toBeTruthy();
 
@@ -143,10 +143,10 @@ describe('handleToolResult', () => {
 
     const container = document.getElementById('tableauVizContainer');
 
-    // AC6 invariants: NO tableau-viz rendered
+    // NO tableau-viz rendered
     expect(container?.querySelector('tableau-viz')).toBeNull();
 
-    // AC6 invariants: error UI IS displayed
+    // error UI IS displayed
     const errorElement = container?.querySelector('.mcp-app-error');
     expect(errorElement).toBeTruthy();
 
@@ -203,10 +203,10 @@ describe('handleToolResult', () => {
 
     const container = document.getElementById('tableauVizContainer');
 
-    // AC6 invariants: NO tableau-viz rendered
+    // NO tableau-viz rendered
     expect(container?.querySelector('tableau-viz')).toBeNull();
 
-    // AC6 invariants: error UI IS displayed
+    // error UI IS displayed
     const errorElement = container?.querySelector('.mcp-app-error');
     expect(errorElement).toBeTruthy();
 
@@ -242,10 +242,10 @@ describe('handleToolResult', () => {
 
     const container = document.getElementById('tableauVizContainer');
 
-    // AC6 invariants: NO tableau-viz rendered
+    // NO tableau-viz rendered
     expect(container?.querySelector('tableau-viz')).toBeNull();
 
-    // AC6 invariants: error UI IS displayed
+    // error UI IS displayed
     const errorElement = container?.querySelector('.mcp-app-error');
     expect(errorElement).toBeTruthy();
 
@@ -289,10 +289,10 @@ describe('handleToolResult', () => {
 
     const container = document.getElementById('tableauVizContainer');
 
-    // AC6 invariants: viz was replaced (removed)
+    // viz was replaced (removed)
     expect(container?.querySelector('tableau-viz')).toBeNull();
 
-    // AC6 invariants: error UI IS displayed
+    // error UI IS displayed
     const errorElement = container?.querySelector('.mcp-app-error');
     expect(errorElement).toBeTruthy();
 
