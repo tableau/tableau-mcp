@@ -1,7 +1,7 @@
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import z from 'zod';
 
-import { DatasourceNotAllowedError } from '../../../../errors/mcpToolError.js';
+import { ArgsValidationError, DatasourceNotAllowedError } from '../../../../errors/mcpToolError.js';
 import { useRestApi } from '../../../../restApiInstance.js';
 import {
   pulseBundleRequestSchema,
@@ -10,6 +10,7 @@ import {
 } from '../../../../sdks/tableau/types/pulse.js';
 import { WebMcpServer } from '../../../../server.web.js';
 import { WebTool } from '../../tool.js';
+import { validateBundleRequest } from '../validatePulsePayload.js';
 
 const paramsSchema = {
   bundleRequest: pulseBundleRequestSchema,
@@ -143,6 +144,11 @@ Generate an insight bundle for the current aggregated value for Pulse Metric usi
         extra,
         args: { bundleRequest, bundleType },
         callback: async () => {
+          const validationError = validateBundleRequest(bundleRequest);
+          if (validationError) {
+            return new ArgsValidationError(validationError).toErr();
+          }
+
           const configWithOverrides = await extra.getConfigWithOverrides();
 
           const { datasourceIds } = configWithOverrides.boundedContext;

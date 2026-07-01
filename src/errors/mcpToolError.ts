@@ -120,6 +120,19 @@ export class QueryValidationError extends McpToolError {
   }
 }
 
+export class PulseInsightsApiError extends McpToolError {
+  constructor(message: string, statusCode: number, errorCode?: string, details?: string) {
+    super({
+      type: 'pulse-insights-api-error',
+      message,
+      statusCode,
+      internalStatusCode: statusCode,
+      internalError: errorCode,
+      internalErrorDetails: details,
+    });
+  }
+}
+
 export class EmbedTokenNotAvailableError extends McpToolError {
   constructor() {
     super({
