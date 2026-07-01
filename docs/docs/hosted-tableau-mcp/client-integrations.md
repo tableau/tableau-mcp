@@ -89,16 +89,20 @@ When everything is configured it should look like this:
 </div>
 
 ### Claude Code
-Add Tableau MCP with the CLI, passing a Bearer token:
+Add Tableau MCP with the CLI:
 
 ```bash
+<<<<<<< HEAD
 claude mcp add --transport http tableau-mcp https://mcp.tableau.com/
+=======
+claude mcp add --transport http Tableau https://mcp.tableau.com/mcp 
+>>>>>>> 3c08bc94 (more details)
 ```
 
 then restart your claude code session and run `/mcp` inside Claude Code and approve the Tableau sign-in:
 
 
-Verify with `claude mcp list`.
+Verify with `claude mcp list` or `/mcp`, then select `Tableau` and `authenticate`.
 
 ## OpenAI Product Suite
 A Tableau ChatGPT app and Tableau plugin for Codex is coming soon!
