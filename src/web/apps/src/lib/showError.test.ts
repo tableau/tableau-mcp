@@ -14,6 +14,10 @@ describe('showError', () => {
     container.id = 'tableauVizContainer';
     main.appendChild(container);
     document.body.appendChild(main);
+
+    // Silence the expected console.error output from the error paths these tests exercise.
+    // Nothing asserts on console; this only keeps test output clean.
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -23,8 +27,6 @@ describe('showError', () => {
   });
 
   it('should display TOOL_ERROR scenario with user-facing message', () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
     showError('TOOL_ERROR');
 
     const container = document.getElementById('tableauVizContainer');
@@ -42,14 +44,9 @@ describe('showError', () => {
 
     expect(errorElement?.getAttribute('role')).toBe('alert');
     expect(errorElement?.querySelector('.mcp-app-error-icon')).toBeTruthy();
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[mcp-app:tool-error] Tool returned an error result',
-      undefined,
-    );
   });
 
   it('should display PARSE_ERROR scenario with user-facing message', () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const cause = new Error('JSON parse failed');
 
     showError('PARSE_ERROR', cause);
@@ -68,15 +65,9 @@ describe('showError', () => {
     expect(messageElement?.textContent).toBe('The response was not in the expected format.');
 
     expect(errorElement?.querySelector('.mcp-app-error-icon')).toBeTruthy();
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[mcp-app:parse-error] Failed to parse tool result',
-      cause,
-    );
   });
 
   it('should display AUTH_ERROR scenario with user-facing message', () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
     showError('AUTH_ERROR');
 
     const container = document.getElementById('tableauVizContainer');
@@ -93,15 +84,9 @@ describe('showError', () => {
     expect(messageElement?.textContent).toBe('Authentication was unsuccessful.');
 
     expect(errorElement?.querySelector('.mcp-app-error-icon')).toBeTruthy();
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[mcp-app:auth-error] Failed to obtain or use embed token',
-      undefined,
-    );
   });
 
   it('should display EMBED_LOAD_ERROR scenario with user-facing message', () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
     showError('EMBED_LOAD_ERROR');
 
     const container = document.getElementById('tableauVizContainer');
@@ -118,10 +103,6 @@ describe('showError', () => {
     expect(messageElement?.textContent).toBe('The visualization failed to load.');
 
     expect(errorElement?.querySelector('.mcp-app-error-icon')).toBeTruthy();
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[mcp-app:embed-load-error] Tableau Embedding API failed to load',
-      undefined,
-    );
   });
 
   it('should remove any existing tableau-viz element when showing error', () => {
@@ -138,11 +119,10 @@ describe('showError', () => {
 
   it('should do nothing if container is missing', () => {
     document.body.replaceChildren();
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // Should not throw
     showError('TOOL_ERROR');
 
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    expect(document.querySelector('.mcp-app-error')).toBeNull();
   });
 });

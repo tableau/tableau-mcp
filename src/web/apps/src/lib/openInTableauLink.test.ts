@@ -21,10 +21,15 @@ describe('setupOpenInTableauLink', () => {
       openLink: vi.fn().mockResolvedValue({}),
       getHostCapabilities: vi.fn().mockReturnValue({ openLinks: true }),
     } as unknown as App;
+
+    // Silence the expected console.warn output from the link-open failure paths these tests exercise.
+    // Nothing asserts on console; this only keeps test output clean.
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     container.remove();
+    vi.restoreAllMocks();
   });
 
   it('should create link with correct attributes and reveal when URL is provided and host supports openLinks', () => {
@@ -106,10 +111,9 @@ describe('setupOpenInTableauLink', () => {
     expect(preventDefaultSpy).toHaveBeenCalled();
   });
 
-  it('should log warning when openLink returns isError true', async () => {
+  it('should show inline error when openLink returns isError true', async () => {
     const url = 'https://tableau.example.com/views/workbook/view';
     mockApp.openLink = vi.fn().mockResolvedValue({ isError: true });
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     setupOpenInTableauLink(mockApp, url, container);
 
@@ -119,21 +123,18 @@ describe('setupOpenInTableauLink', () => {
     // Click the link
     linkElement.click();
 
-    // Wait for async handler
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Wait for the async click handler to render the inline error
+    await vi.waitFor(() => {
+      expect(container.querySelector('.open-in-tableau-error')).not.toBeNull();
+    });
 
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('denied'),
-      expect.objectContaining({ url }),
-    );
-
-    consoleWarnSpy.mockRestore();
+    const errorMessage = container.querySelector('.open-in-tableau-error');
+    expect(errorMessage?.textContent).toBe('The URL was unable to be opened.');
   });
 
-  it('should handle openLink throwing an error', async () => {
+  it('should show inline error when openLink throws', async () => {
     const url = 'https://tableau.example.com/views/workbook/view';
     mockApp.openLink = vi.fn().mockRejectedValue(new Error('Connection lost'));
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     setupOpenInTableauLink(mockApp, url, container);
 
@@ -143,15 +144,13 @@ describe('setupOpenInTableauLink', () => {
     // Click the link
     linkElement.click();
 
-    // Wait for async handler
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Wait for the async click handler to render the inline error
+    await vi.waitFor(() => {
+      expect(container.querySelector('.open-in-tableau-error')).not.toBeNull();
+    });
 
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('failed'),
-      expect.objectContaining({ url }),
-    );
-
-    consoleWarnSpy.mockRestore();
+    const errorMessage = container.querySelector('.open-in-tableau-error');
+    expect(errorMessage?.textContent).toBe('The URL was unable to be opened.');
   });
 
   it('should be idempotent - calling twice results in exactly one link', () => {
