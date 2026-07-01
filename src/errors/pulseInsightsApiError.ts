@@ -1,7 +1,3 @@
-/**
- * Human-readable guidance for Pulse service error codes.
- * Codes are from ntbue-service-chassis/errors/service_error_codes.go.
- */
 const PULSE_INSIGHTS_ERROR_GUIDANCE: Record<string, string> = {
   // Measurement period / comparison
   '400732':
