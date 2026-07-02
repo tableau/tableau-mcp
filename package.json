@@ -67,7 +67,7 @@
     "fast-levenshtein": "^3.0.0",
     "jose": "^6.0.12",
     "ssrfcheck": "^1.2.0",
-    "ts-results-es": "^5.0.1",
+    "ts-results-es": "^7.1.0",
     "xpath": "^0.0.34",
     "zod": "^3.24.3",
     "zod-validation-error": "^4.0.1"
