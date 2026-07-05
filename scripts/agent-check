@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Repo verification contract for tableau-mcp (global agent OS).
+# Strongest SAFE local checks: lint + typecheck + unit tests. CI-safe (no watch, no live services).
+# Never installs dependencies. Never mutates external systems.
+# Prints "== agent-check: ALL GREEN ==" only when all executed checks pass.
+#
+# Staged copy. Target path on apply: repo root scripts/agent-check (chmod +x).
+# tableau-mcp specifics encoded here (do NOT regress to the generic template):
+#   - `npm test` is `vitest` (WATCH mode) -> would hang an agent loop. Use `vitest run`.
+#   - No `typecheck` npm script exists, and the esbuild/tsx build does NOT typecheck. Use `tsc --noEmit`.
+#   - E2E/eval/OAuth/Playwright suites need live services/browsers -> intentionally excluded here.
+set -euo pipefail
+
+ran=0
+fail=0
+
+run() {
+  local label="$1"; shift
+  echo "== agent-check: $label =="
+  ran=$((ran + 1))
+  if "$@"; then
+    echo "PASS: $label"
+  else
+    echo "FAIL: $label"
+    fail=$((fail + 1))
+  fi
+}
+
+skip() { echo "SKIP: $1"; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+if [ ! -f package.json ]; then
+  echo "== agent-check: NO package.json — wrong directory? =="
+  exit 2
+fi
+
+if ! have npm; then
+  echo "== agent-check: npm not on PATH =="
+  exit 2
+fi
+
+if [ ! -d node_modules ]; then
+  echo "== agent-check: node_modules missing. Run 'npm ci' first (agent-check never auto-installs). =="
+  exit 2
+fi
+
+# ---- Lint (eslint via npm script) -------------------------------------------
+run "lint" npm run lint
+
+# ---- Typecheck (no npm script; build uses esbuild, so tsc --noEmit is the gate)
+if have npx; then
+  run "typecheck" npx --no-install tsc --noEmit
+else
+  skip "typecheck (npx unavailable)"
+fi
+
+# ---- Unit tests (vitest RUN mode — never bare `npm test`/watch) --------------
+if have npx; then
+  run "unit tests" npx --no-install vitest run --config ./vitest.config.ts
+else
+  skip "unit tests (npx unavailable)"
+fi
+
+# ---- Verdict -----------------------------------------------------------------
+echo
+if [ "$ran" -eq 0 ]; then
+  echo "== agent-check: NO CHECKS RAN =="
+  exit 2
+fi
+if [ "$fail" -ne 0 ]; then
+  echo "== agent-check: $fail of $ran FAILED =="
+  exit 1
+fi
+echo "== agent-check: ALL GREEN ($ran checks) =="
