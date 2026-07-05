@@ -43,6 +43,40 @@ export interface PortabilityEvidence {
   fixture_bind: boolean;
   /** Hand-stamped: `live-YYYY-MM-DD` when render-readback proven, else `'none'`. */
   render_verified: string;
+  /**
+   * OPTIONAL provenance for a HAND-STAMP (attacks 5+10). Required by contract whenever
+   * `render_verified` is a `live-*` stamp that was NOT produced by the golden-parity gate:
+   * a generic template with no pixel oracle for its anchor, whose composite is therefore not
+   * computable (an anchor-only pixel leg is circular and is not credited). Records the
+   * substantive basis — live render + structural parity + human review — so the stamp is
+   * auditable rather than a bare date. Absent ⇒ a gate-produced stamp (golden-anchored
+   * template) or `render_verified === 'none'`. `validateManifest` treats it as pass-through
+   * (unknown-but-typed), so it is additive and never re-derives the gate.
+   */
+  render_evidence?: RenderEvidence;
+}
+
+/**
+ * The auditable basis behind a HAND-STAMPED `render_verified` (see PortabilityEvidence).
+ * `gate_composite` is the golden-parity composite when a real pixel oracle exists and the
+ * score is computable; it is `null` for a hand-stamp where no pixel oracle exists (the
+ * only credible pixel comparison would be anchor-to-itself, which is circular).
+ */
+export interface RenderEvidence {
+  /** One-line human description of what earned the stamp. */
+  basis: string;
+  /** The lane/session that measured and applied the stamp. */
+  lane: string;
+  /** Live structural-parity score 0..1 (golden-parity structuralParity leg). */
+  structural: number;
+  /** CRITICAL (salience-5) pass-list ratio, e.g. "5/5". */
+  critical_pass: string;
+  /** HIGH (salience-4) pass-list ratio, e.g. "3/3". */
+  high_pass: string;
+  /** Pixel-oracle status; a `none (…)` note when no credible oracle exists. */
+  pixel_oracle: string;
+  /** Golden-parity composite when computable; `null` when no pixel oracle exists. */
+  gate_composite: number | null;
 }
 
 /** Datatype/role family a slot accepts. Derived from FieldReference {role,type,datatype}. */
@@ -197,8 +231,75 @@ export interface GoldenSpec {
   checkpoint_render: string;
 }
 
+/**
+ * Datasource-level MARK STYLE sidecar (the fidelity fix, productized 2026-07-05).
+ *
+ * Golden workbooks carry value→hex/glyph maps at DATASOURCE scope, OUTSIDE the
+ * <worksheet> that `extractWorksheet` slices — so a worksheet-only template drops
+ * them (marks fall back to the default palette + default shape on apply). This
+ * sidecar captures that dropped fidelity so the apply path can re-splice it:
+ *   - `style_rule` — the datasource-scope `<style-rule element='mark'>…</style-rule>`
+ *     (the color palette + shape glyph maps), calc refs left in TEMPLATE-CANONICAL
+ *     (un-namespaced) form so the per-apply `_tpl_<hex>` calc namespacing can rewrite
+ *     them identically to the worksheet fragment.
+ *   - `column_instances` — the datasource-scope `<column-instance …/>` declaration(s)
+ *     the style-rule's field refs require. WITHOUT the referenced instance declared at
+ *     datasource scope the maps are silently dropped on live apply / inert on file open
+ *     (proven live 2026-07-05).
+ *   - `maps` — convenience counts of the color/shape value maps carried (audit only,
+ *     not load-bearing).
+ *
+ * Apply-side splice logic + the proven insertion anchors live in
+ * `evals/lib/tier1-fastpath.mjs` (`spliceDatasourceStyle`): column-instance(s) go
+ * before `<layout>`; the `<style>` block goes before `<semantic-values>` (else before
+ * `</datasource>`).
+ */
+export interface DatasourceStyleSidecar {
+  /** The datasource-scope `<style-rule element='mark'>…</style-rule>` XML (calc refs un-namespaced). */
+  style_rule: string;
+  /** Datasource-scope `<column-instance …/>` declarations the style-rule's field refs require. */
+  column_instances: string[];
+  /** Convenience counts of the value maps carried per encoding attr (audit, not load-bearing). */
+  maps: { color: number; shape: number };
+}
+
+/**
+ * Load-time PROVENANCE (W2-C1 local side-load). NOT part of the on-disk manifest
+ * schema and NOT written by any generator — these are stamped onto the in-memory
+ * manifest by `loadManifests()` so the classifier/apply path can tell a repo
+ * template from a runtime-side-loaded LOCAL one WITHOUT the local XML/manifest
+ * ever entering the repo tree. `validateManifest` ignores them (unknown fields
+ * pass), so a disk manifest never needs to carry them.
+ *   - `'repo'`  — loaded from `data/template-manifests/` (the committed set).
+ *   - `'local'` — side-loaded from the local compiled store pointed at by
+ *                 `A2TD_LOCAL_TEMPLATE_DIR`. Local templates arrive UNSTAMPED
+ *                 (readiness YELLOW, render_verified 'none', fast_path_eligible
+ *                 false) and can only be stamped by the golden-parity gate.
+ * Absent ⇒ treat as a repo manifest (back-compat with synthetic fixtures).
+ */
+export type TemplateSource = 'repo' | 'local';
+
 export interface TemplateManifest {
   template: string; // == filename == inject-template template_name
+  /**
+   * Load-time provenance (W2-C1). Set to `'local'` for a runtime-side-loaded
+   * template; absent/`'repo'` for the committed set. Never serialized to disk.
+   */
+  source?: TemplateSource;
+  /**
+   * LOCAL side-load ONLY: absolute path to this template's XML in the local
+   * compiled store (`<dir>/<workbook-slug>/<sheet-slug>/<template>.xml`). The
+   * apply/inject path resolves side-loaded slugs here instead of the repo's
+   * `data/data-visualization-templates-xml/`. Never a repo-relative path; the
+   * local XML is never copied into the repo (licensing wall).
+   */
+  local_xml_path?: string;
+  /**
+   * LOCAL side-load ONLY: the PRECISE chart family from the compiled index
+   * (e.g. `'gantt'` for a template whose closed-enum `family` is `'time-series'`).
+   * Refines within-family routing without widening the closed `Family` enum.
+   */
+  family_precise?: string;
   family: Family; // required chart-intent family (attack 2)
   readiness: Readiness; // corrected verification value
   /**
@@ -232,4 +333,11 @@ export interface TemplateManifest {
    * `golden.checkpoint_render` (see GoldenSpec). Absent for hand-authored templates.
    */
   golden?: GoldenSpec;
+  /**
+   * Optional datasource-level MARK STYLE sidecar (the fidelity fix). Present when the
+   * golden's datasource carried a `<style-rule element='mark'>` value→hex/glyph map the
+   * worksheet-only template would otherwise drop; the apply path re-splices it at the
+   * proven datasource anchors. Absent ⇒ the template carries no datasource-scope style.
+   */
+  datasource_style?: DatasourceStyleSidecar;
 }

@@ -15,6 +15,7 @@
 import fs from 'fs';
 import path from 'path';
 
+import { calcForcedSlotIds } from './calc-derivation.js';
 import type {
   BlockerCode,
   Derivation,
@@ -167,22 +168,6 @@ function fixtureFieldFitsKind(kind: SlotKind, f: FixtureField): boolean {
     default:
       return false; // non-bindable kinds are never fixture-bound
   }
-}
-
-/**
- * The set of bindable slot_ids a REQUIRED calc forces to bind (H3 calc-input
- * proof). A required calc cannot compute unless every bindable slot its formula
- * references is bound, so those slots must fixture-bind even when the slot itself
- * is authored OPTIONAL. `depends_on_slots` already lists exactly the bindable deps
- * (template-internal refs are excluded), so it is the source of truth here.
- */
-export function calcForcedSlotIds(m: { calcs?: TemplateManifest['calcs'] }): Set<string> {
-  const forced = new Set<string>();
-  for (const c of m.calcs ?? []) {
-    if (!c.required) continue;
-    for (const dep of c.depends_on_slots) forced.add(dep);
-  }
-  return forced;
 }
 
 /**
@@ -555,6 +540,42 @@ export function validateManifest(m: unknown): string[] {
       m.golden.checkpoint_render.trim().length === 0
     ) {
       errors.push('golden must be an object { checkpoint_render: non-empty string } when present');
+    }
+  }
+
+  // datasource_style is OPTIONAL (the fidelity fix): a captured datasource-level mark
+  // style sidecar {style_rule, column_instances[], maps}. When present the style_rule
+  // must carry a <style-rule> element, column_instances must be a non-empty array of
+  // <column-instance> XML strings (the declarations the maps' field refs require), and
+  // maps must carry numeric color/shape counts.
+  if (m.datasource_style !== undefined) {
+    const ds = m.datasource_style;
+    if (!isRecord(ds)) {
+      errors.push(
+        'datasource_style must be an object { style_rule, column_instances, maps } when present',
+      );
+    } else {
+      if (typeof ds.style_rule !== 'string' || !ds.style_rule.includes('<style-rule')) {
+        errors.push(
+          'datasource_style.style_rule must be a string containing a <style-rule> element',
+        );
+      }
+      if (
+        !Array.isArray(ds.column_instances) ||
+        ds.column_instances.length === 0 ||
+        !ds.column_instances.every((c) => typeof c === 'string' && c.includes('<column-instance'))
+      ) {
+        errors.push(
+          'datasource_style.column_instances must be a non-empty array of <column-instance> XML strings',
+        );
+      }
+      if (
+        !isRecord(ds.maps) ||
+        typeof ds.maps.color !== 'number' ||
+        typeof ds.maps.shape !== 'number'
+      ) {
+        errors.push('datasource_style.maps must be an object { color: number, shape: number }');
+      }
     }
   }
 

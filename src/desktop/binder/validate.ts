@@ -390,17 +390,29 @@ export function validateBinding(
   }
 
   // ── Gate 6: calc dependency closure ──────────────────────────────
+  // Prefer the first-class `inputs` contract (H3): each REQUIRED, slot-referencing
+  // input must resolve to a bound bindable slot, else the calc's formula ref would
+  // dangle after rewriteFormulaFieldRefs. Template-INTERNAL inputs (the template
+  // owns the field) are not user-bound and never block here. Legacy/opaque calc
+  // entries with no derived inputs fall back to `depends_on_slots`.
   for (const calc of m.calcs) {
-    for (const dep of calc.depends_on_slots) {
+    const checkDep = (dep: string, refLabel: string): void => {
       const depSlot = slotById.get(dep);
-      // A dependency is satisfied only when it is a bound, resolvable bindable slot.
       if (!depSlot || !depSlot.bindable || !resolved.has(dep)) {
         blockers.push({
           code: 'calc-dependency-unmet',
           slot_id: calc.slot_id,
-          detail: `calc '${calc.slot_id}' depends on slot '${dep}', which is not bound; ${calc.template_field} would dangle`,
+          detail: `calc '${calc.slot_id}' ${refLabel} resolves to slot '${dep}', which is not bound; ${calc.template_field} would dangle`,
         });
       }
+    };
+    if (Array.isArray(calc.inputs) && calc.inputs.length > 0) {
+      for (const input of calc.inputs) {
+        if (!input.required || input.template_internal || input.slot_id === null) continue;
+        checkDep(input.slot_id, `input [${input.ref}]`);
+      }
+    } else {
+      for (const dep of calc.depends_on_slots) checkDep(dep, 'dependency');
     }
   }
 

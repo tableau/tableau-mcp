@@ -18,6 +18,7 @@
 
 import Fuse from 'fuse.js';
 
+import { calcForcedSlotIds } from './calc-derivation.js';
 import type { Derivation, SlotKind, TemplateManifest } from './manifest-types.js';
 import { bareName, type SchemaField, type SchemaSummary } from './schema-summary.js';
 
@@ -97,13 +98,18 @@ function escapeRegex(s: string): string {
 
 /**
  * Index of the first whole-token occurrence of `phrase` in `ask`, else -1.
- * Boundaries are non-alphanumeric so "bar" matches "bar chart" but not "sidebar";
- * hyphenated keywords ("over-time") are matched literally as a single phrase.
+ * Boundaries are non-alphanumeric so "bar" matches "bar chart" but not "sidebar".
+ * A HYPHEN in a keyword matches a hyphen OR whitespace in the ask, so a compound
+ * keyword written with hyphens ("stacked-bar", "over-time", "vertical-bar") also
+ * matches the natural spaced form a user types ("stacked bar", "over time"). This
+ * lets a distinctive multi-token chart noun keep its keyword-match specificity when
+ * the ask spells it with a space — the classifier stays no-LLM and deterministic.
  */
 function phraseIndexInAsk(ask: string, phrase: string): number {
   const p = phrase.toLowerCase().trim();
   if (!p) return -1;
-  const re = new RegExp(`(^|[^a-z0-9])${escapeRegex(p)}([^a-z0-9]|$)`);
+  const body = escapeRegex(p).replace(/-/g, '[\\s-]+');
+  const re = new RegExp(`(^|[^a-z0-9])${body}([^a-z0-9]|$)`);
   const match = re.exec(ask.toLowerCase());
   return match ? match.index : -1;
 }
@@ -264,6 +270,62 @@ function matchedKeywords(ask: string, keywords: string[]): string[] {
 function keywordSpecificity(ask: string, keywords: string[]): number {
   let best = 0;
   for (const kw of matchedKeywords(ask, keywords)) {
+    const tokens = kw.split(/[^a-z0-9]+/i).filter(Boolean).length;
+    const s = tokens * 1000 + kw.length;
+    if (s > best) best = s;
+  }
+  return best;
+}
+
+/**
+ * DISTINCTIVE CHART-SHAPE / ORIENTATION nouns (lowercased intent_keyword tokens).
+ * Each names a specific chart TYPE, so a match is a DETERMINISTIC type selector —
+ * never a "borrowed" cross-family keyword. Two uses in selectWithinFamily:
+ *
+ *  (1) LONE-WINNER EXEMPTION — a lone keyword winner that won on a chart noun binds
+ *      even when that noun is not family-native by strict majority. This is the
+ *      sibling-scaling fix: stamping an eligible sibling (a second "ranking" bar/
+ *      column, a second "part-to-whole" stacked-bar/treemap/pie) drops a distinctive
+ *      noun like "bar"/"column"/"pie" BELOW the majority threshold, which must NOT
+ *      demote an otherwise clear one-shot ask to propose.
+ *
+ *  (2) CROSS-FAMILY TIE-BREAK — a keyword tie that spans families resolves to the
+ *      strictly-most-specific chart noun ("stacked bar" beats a generic "bar" →
+ *      part-to-whole, not ranking); with no unique chart-noun winner it stays
+ *      fail-closed (propose), so genuinely ambiguous asks are unaffected.
+ *
+ * A keyword NOT in this table (e.g. a family name a template merely borrowed) is
+ * still governed by the family-native guard / fail-closed rules — the guard is not
+ * weakened. Grow this table as new distinct-shape templates are stamped eligible.
+ */
+const CHART_NOUN_KEYWORDS: ReadonlySet<string> = new Set([
+  'bar',
+  'sorted-bar',
+  'column',
+  'sorted-column',
+  'vertical-bar',
+  'stacked-bar',
+  'treemap',
+  'pie',
+  'donut',
+]);
+
+/** True when at least one ask-matched keyword is a distinctive chart noun. */
+function wonChartNoun(ask: string, keywords: string[]): boolean {
+  return matchedKeywords(ask, keywords).some((kw) => CHART_NOUN_KEYWORDS.has(kw.toLowerCase()));
+}
+
+/**
+ * Max keyword specificity among the ask-matched keywords that are CHART NOUNS (0
+ * when none matched). Same specificity scale as `keywordSpecificity` (token count
+ * dominates, char length breaks within-count ties) but restricted to chart nouns,
+ * so the cross-family tie-break can only ever fire on a deterministic chart-type
+ * token — a borrowed non-chart keyword scores 0 here and stays fail-closed.
+ */
+function chartNounSpecificity(ask: string, keywords: string[]): number {
+  let best = 0;
+  for (const kw of matchedKeywords(ask, keywords)) {
+    if (!CHART_NOUN_KEYWORDS.has(kw.toLowerCase())) continue;
     const tokens = kw.split(/[^a-z0-9]+/i).filter(Boolean).length;
     const s = tokens * 1000 + kw.length;
     if (s > best) best = s;
@@ -471,6 +533,10 @@ function roleGreedyBind(
 ): Array<{ slot_id: string; field: string; derivation?: Derivation }> | null {
   const used = new Set<SchemaField>();
   const bindings: Array<{ slot_id: string; field: string; derivation?: Derivation }> = [];
+  // A REQUIRED calc forces its bindable input slots to bind even when the slot is
+  // authored optional (H3) — otherwise the calc's formula ref would dangle and the
+  // no-LLM path would needlessly escalate.
+  const forced = calcForcedSlotIds(m);
 
   const take = (pred: (f: SchemaField) => boolean): SchemaField | null => {
     for (const f of matched) {
@@ -483,7 +549,7 @@ function roleGreedyBind(
   };
 
   for (const slot of m.slots) {
-    if (!slot.bindable || !slot.required) continue;
+    if (!slot.bindable || !(slot.required || forced.has(slot.slot_id))) continue;
     let chosen: SchemaField | null = null;
     switch (slot.kind) {
       case 'quantitative':
@@ -521,18 +587,25 @@ function roleGreedyBind(
  *
  *  • SINGLE keyword winner (top.length === 1) — SOLE-WRONG-MATCHER GUARD. A lone
  *    matcher may auto-bind only if at least one keyword it matched is FAMILY-NATIVE
- *    (`familyNativeKeywords`). This kills the ramp-up wrong-family bind where a
- *    template is the SOLE matcher of another (uncovered) family's keyword it merely
- *    borrowed — that borrowed keyword is not family-native, so the match demotes.
+ *    (`familyNativeKeywords`) OR is a distinctive CHART NOUN (`CHART_NOUN_KEYWORDS`).
+ *    The family-native rule kills the ramp-up wrong-family bind where a template is
+ *    the SOLE matcher of another family's keyword it merely borrowed (that borrowed
+ *    keyword is not native → demote). The chart-noun exemption is the sibling-scaling
+ *    fix: adding an eligible sibling drops a distinctive noun like "bar"/"column"/
+ *    "pie" below the majority threshold, but a chart noun deterministically names a
+ *    type, so a lone chart-noun winner must still one-shot rather than escalate.
  *
- *  • TIE (top.length > 1) — INTRA-FAMILY TIEBREAK. A tie SPANNING more than one
- *    family is genuinely cross-family ambiguous → fail closed (propose, as before).
+ *  • TIE (top.length > 1) — INTRA- or CROSS-FAMILY TIEBREAK.
  *    A tie WITHIN one family has an unambiguous family, so rather than fail closed
  *    we bind: among the candidates whose required slots the ask's fields satisfy,
  *    rank by keyword specificity (longer/multi-token first), break remaining ties by
- *    template name, take the top. If NO tied candidate is slot-satisfiable, propose
- *    (a bind would fail the gate anyway). Whatever is picked is family-correct by
- *    construction, so this can never introduce a wrong-family bind.
+ *    template name, take the top. If NO tied candidate is slot-satisfiable, propose.
+ *    A tie SPANNING families is genuinely ambiguous EXCEPT when a single candidate's
+ *    most-specific matched CHART NOUN strictly outranks every other's ("stacked bar"
+ *    → part-to-whole beats a generic ranking "bar"): that deterministic chart-type
+ *    winner binds if slot-satisfiable. No unique chart-noun winner → fail closed
+ *    (propose), preserving the ambiguous-ask contract. Whatever is picked is a chart
+ *    the ask explicitly named, so this never introduces a wrong bind.
  */
 function selectWithinFamily(
   top: Array<{ m: TemplateManifest }>,
@@ -545,11 +618,25 @@ function selectWithinFamily(
     const m = top[0].m;
     const native = familyNativeKeywords(m.family, manifests);
     const won = matchedKeywords(maskedAsk, m.intent_keywords);
-    return won.some((kw) => native.has(kw.toLowerCase())) ? m : null;
+    const decisive =
+      won.some((kw) => native.has(kw.toLowerCase())) || wonChartNoun(maskedAsk, m.intent_keywords);
+    return decisive ? m : null;
   }
 
   const families = new Set(top.map((t) => t.m.family));
-  if (families.size > 1) return null; // cross-family tie → fail closed (propose)
+  if (families.size > 1) {
+    // CROSS-family tie: fail closed UNLESS one candidate's most-specific matched
+    // chart noun strictly outranks the rest. Rank slot-satisfiable chart-noun
+    // matchers by chart-noun specificity, break ties by template name; a strict
+    // #1 binds, a #1/#2 specificity tie (or no chart-noun matcher) stays null.
+    const byNoun = top
+      .map((t) => ({ m: t.m, spec: chartNounSpecificity(maskedAsk, t.m.intent_keywords) }))
+      .filter((c) => c.spec > 0 && roleGreedyBind(c.m, matched, aggOverride) !== null)
+      .sort((a, b) => b.spec - a.spec || a.m.template.localeCompare(b.m.template));
+    if (byNoun.length === 0) return null;
+    if (byNoun.length > 1 && byNoun[0].spec === byNoun[1].spec) return null;
+    return byNoun[0].m;
+  }
 
   const bindable = top
     .map((t) => ({ m: t.m, spec: keywordSpecificity(maskedAsk, t.m.intent_keywords) }))
@@ -624,21 +711,28 @@ export function buildLlmInput(
   opts?: { maxFields?: number },
 ): LlmProposeInput {
   const maxFields = opts?.maxFields ?? DEFAULT_MAX_FIELDS;
-  const eligible = [...manifests.values()].filter((m) => m.fast_path_eligible);
+  // ROUTABLE pool = fast-path-eligible templates PLUS side-loaded LOCAL templates
+  // (W2-C1). Local templates arrive UNSTAMPED (fast_path_eligible false), so they
+  // never enter classifyNoLlm's auto-bind, but they MUST be visible to the propose
+  // shortlist by family/keyword so the model can route to them. When no local set
+  // is side-loaded this is byte-identical to the eligible-only pool.
+  const routable = [...manifests.values()].filter(
+    (m) => m.fast_path_eligible || m.source === 'local',
+  );
 
-  let candidates = eligible
+  let candidates = routable
     .map((m) => ({ m, score: keywordScore(ask, m.intent_keywords) }))
     .filter((x) => x.score > 0);
 
   if (candidates.length === 0) {
     // No exact keyword hit: use Fuse over keywords/description to surface the
-    // nearest templates; if even that is empty, offer all eligible templates.
-    const fuse = new Fuse(eligible, {
+    // nearest templates; if even that is empty, offer all routable templates.
+    const fuse = new Fuse(routable, {
       keys: ['intent_keywords', 'description'],
       threshold: 0.5,
     });
     const hits = fuse.search(ask).map((r) => r.item);
-    const chosen = hits.length > 0 ? hits : eligible;
+    const chosen = hits.length > 0 ? hits : routable;
     candidates = chosen.map((m) => ({ m, score: 0 }));
   }
 
