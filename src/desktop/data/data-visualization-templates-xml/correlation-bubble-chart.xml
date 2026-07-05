@@ -1,0 +1,57 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column datatype='real' name='[Discount]' role='measure' type='quantitative' />
+        <column datatype='string' name='[Order ID]' role='dimension' type='nominal' />
+        <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column datatype='real' name='[Sales]' role='measure' type='quantitative' />
+        <column-instance column='[Discount]' derivation='Avg' name='[avg:Discount:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Order ID]' derivation='None' name='[none:Order ID:nk]' pivot='key' type='nominal' />
+        <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+        <column-instance column='[Sales]' derivation='Sum' name='[sum:Sales:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style />
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Circle' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <size column='[{{DATASOURCE}}].[sum:Sales:qk]' />
+          <lod column='[{{DATASOURCE}}].[none:Order ID:nk]' />
+        </encodings>
+        <style>
+          <style-rule element='mark'>
+            <format attr='mark-transparency' value='157' />
+            <format attr='has-stroke' value='true' />
+            <format attr='stroke-color' value='#ffffff' />
+            <format attr='size' value='1.6811602115631104' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[{{DATASOURCE}}].[avg:Discount:qk]</rows>
+    <cols>[{{DATASOURCE}}].[sum:Profit:qk]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>

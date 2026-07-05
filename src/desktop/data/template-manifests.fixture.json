@@ -1,0 +1,17 @@
+{
+  "_comment": "Committed binder schema fixture (attacks 5+10). The generator (scripts/build-template-manifests.js) and manifest.test.ts bind each manifest's required, bindable slots against THESE fields to COMPUTE portability_evidence.fixture_bind. Fixture binding is NECESSARY, not sufficient — render_verified (hand-stamped, live render-readback) is the completing eligibility proof. Do NOT claim 'any dataset'; claim 'portable across the committed fixture classes + render-verified'.",
+  "datasource": "FixtureDS",
+  "fields": [
+    { "name": "Region", "role": "dimension", "type": "nominal", "datatype": "string" },
+    { "name": "Category", "role": "dimension", "type": "nominal", "datatype": "string" },
+    { "name": "Sub-Category", "role": "dimension", "type": "nominal", "datatype": "string" },
+    { "name": "Customer Name", "role": "dimension", "type": "nominal", "datatype": "string" },
+    { "name": "Country/Region", "role": "dimension", "type": "nominal", "datatype": "string" },
+    { "name": "State/Province", "role": "dimension", "type": "nominal", "datatype": "string" },
+    { "name": "Order ID", "role": "dimension", "type": "nominal", "datatype": "string" },
+    { "name": "Order Date", "role": "dimension", "type": "ordinal", "datatype": "date" },
+    { "name": "Sales", "role": "measure", "type": "quantitative", "datatype": "real" },
+    { "name": "Profit", "role": "measure", "type": "quantitative", "datatype": "real" },
+    { "name": "Discount", "role": "measure", "type": "quantitative", "datatype": "real" }
+  ]
+}

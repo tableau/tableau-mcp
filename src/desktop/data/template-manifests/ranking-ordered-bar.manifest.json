@@ -1,0 +1,24 @@
+{
+  "template": "ranking-ordered-bar",
+  "family": "ranking",
+  "readiness": "GREEN",
+  "fast_path_eligible": true,
+  "fast_path_blockers": [],
+  "portability_evidence": { "fixture_bind": true, "render_verified": "live-2026-07-04" },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["ranking", "sorted-bar", "bar", "top", "highest", "lowest"],
+  "description": "Horizontal bars, one per category; bar length = measure; sorted descending by the measure.",
+  "slots": [
+    { "slot_id": "region", "template_field": "Region", "derivation": "none",
+      "role": ["rows", "sort-dimension"], "kind": "categorical", "bindable": true, "required": true },
+    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
+      "role": ["cols", "sort-measure"], "kind": "quantitative", "bindable": true, "required": true }
+  ],
+  "calcs": [],
+  "hazards": [
+    { "code": "computed-sort-pill-coupling",
+      "detail": "computed-sort binds the dimension instance to the measure instance; both slots must bind or the sort dangles (both are required, so this is satisfied by coverage).",
+      "xml": "ranking-ordered-bar.xml:24" }
+  ]
+}

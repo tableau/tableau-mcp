@@ -1,0 +1,1138 @@
+{
+  "_generated": true,
+  "_generator": "scripts/build-template-manifests.js",
+  "_warning": "GENERATED FILE — do not hand-edit. Edit data/template-manifests/*.manifest.json and re-run `node scripts/build-template-manifests.js`.",
+  "_source": "data/template-manifests/*.manifest.json",
+  "count": 15,
+  "fast_path_templates": [
+    "kpi-text",
+    "part-to-whole-treemap-chart",
+    "ranking-ordered-bar",
+    "trend-line-chart"
+  ],
+  "templates": [
+    {
+      "template": "change-over-time-area-chart",
+      "family": "time-series",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "area",
+        "over-time",
+        "change-over-time",
+        "trend",
+        "time-series",
+        "filled-line"
+      ],
+      "description": "A filled area of an aggregated measure over a truncated date; a color dimension splits the area into bands.",
+      "slots": [
+        {
+          "slot_id": "order_date",
+          "template_field": "Order Date",
+          "derivation": "tqr",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "XML instance [tqr:Order Date:qk] derivation='Quarter-Trunc'; short-form 'tqr' IS a derivationMap key (long form differs: 'TruncQuarter'). Kept verbatim."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "rows"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "template column has aggregate-role-from='[State/Province]'; a cosmetic secondary-role hint carried onto the target, not rewritten (verification-report correction: GREEN -> YELLOW)."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "hidden-aggregate-role-from",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten by replaceFieldReferences; the target field inherits the template's secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding (cosmetic), so fast_path_eligible stays true.",
+          "xml": "change-over-time-area-chart.xml:11"
+        }
+      ]
+    },
+    {
+      "template": "change-over-time-stacked-area-chart",
+      "family": "time-series",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "stacked-area",
+        "area",
+        "over-time",
+        "change-over-time",
+        "composition-over-time",
+        "time-series"
+      ],
+      "description": "Stacked filled areas of an aggregated measure over a truncated date; a color dimension stacks the bands.",
+      "slots": [
+        {
+          "slot_id": "order_date",
+          "template_field": "Order Date",
+          "derivation": "tqr",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "XML instance [tqr:Order Date:qk] derivation='Quarter-Trunc'; short-form 'tqr' IS a derivationMap key. Kept verbatim."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "rows"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "template column has aggregate-role-from='[State/Province]'; cosmetic secondary-role hint carried onto the target (verification-report correction: GREEN -> YELLOW)."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "hidden-aggregate-role-from",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
+          "xml": "change-over-time-stacked-area-chart.xml:11"
+        }
+      ]
+    },
+    {
+      "template": "control-chart-xmr",
+      "family": "deviation",
+      "readiness": "GREEN",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "control-chart",
+        "xmr",
+        "process-control",
+        "reference-line",
+        "spc"
+      ],
+      "description": "An aggregated measure over an exact date with template-owned average and +/-3-sigma reference lines/bands.",
+      "slots": [
+        {
+          "slot_id": "order_date",
+          "template_field": "Order Date",
+          "derivation": "tdy",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "XML instance is [md:Order Date:ok] derivation='MDY' (exact date, discrete/ordinal). 'md'/'MDY' is NOT a derivationMap key nor a §2.2 Derivation member. Normalized to the closest canonical token 'tdy' (TruncDay = day-level date). See non-canonical-template-derivation hazard for the fidelity caveat."
+        },
+        {
+          "slot_id": "profit",
+          "template_field": "Profit",
+          "derivation": "sum",
+          "role": [
+            "rows",
+            "color"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "same [sum:Profit:qk] instance drives rows, color, and the average/stdev reference lines (template-owned analytics)."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "non-canonical-template-derivation",
+          "detail": "Template date instance uses derivation short-form 'md' (long 'MDY', an exact discrete date), absent from templates.ts derivationMap and the §2.2 Derivation union. Manifest records the closest canonical 'tdy' (TruncDay). RESIDUAL RISK: TruncDay (continuous day) differs from MDY (discrete exact date) at runtime; the fast-path date binding may render continuous rather than discrete. XML trusted for slot/field structure; derivation token normalized.",
+          "xml": "control-chart-xmr.xml:13"
+        },
+        {
+          "code": "template-owned-reference-lines",
+          "detail": "average and sample-stdev (+/-3 factor) reference lines/bands are bound to [sum:Profit:qk] and repaired only because Profit is a bound slot; no dataset-specific calc IDs are referenced, so this is not a DATASET_SPECIFIC_FORMULA blocker.",
+          "xml": "control-chart-xmr.xml:47-51"
+        }
+      ]
+    },
+    {
+      "template": "correlation-bubble-chart",
+      "family": "correlation",
+      "readiness": "GREEN",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "bubble",
+        "correlation",
+        "scatter",
+        "relationship",
+        "three-measures",
+        "sized-scatter"
+      ],
+      "description": "One bubble per detail-grain member; X and Y are two measures, bubble size is a third measure.",
+      "slots": [
+        {
+          "slot_id": "discount",
+          "template_field": "Discount",
+          "derivation": "avg",
+          "role": [
+            "rows"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "profit",
+          "template_field": "Profit",
+          "derivation": "sum",
+          "role": [
+            "cols"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "size"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "order_id",
+          "template_field": "Order ID",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "detail/grain dimension: one bubble per member."
+        }
+      ],
+      "calcs": [],
+      "hazards": []
+    },
+    {
+      "template": "correlation-dual-axis-chart",
+      "family": "correlation",
+      "readiness": "GREEN",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "dual-axis",
+        "combo",
+        "two-measures",
+        "correlation",
+        "combined-axes"
+      ],
+      "description": "Two measures on a shared/combined axis over a truncated date; Measure Names colors the two series (template-owned).",
+      "avoid_when": [
+        "The two measures share the same scale - use a single shared axis instead of a dual axis",
+        "Axes are not synchronized or have different zero points - unsynchronized dual axes imply a false correlation",
+        "More than two measures are involved - use separate charts",
+        "The measures are unrelated - never overlay unrelated measures on a dual axis to manufacture a pattern"
+      ],
+      "slots": [
+        {
+          "slot_id": "profit",
+          "template_field": "Profit",
+          "derivation": "sum",
+          "role": [
+            "rows",
+            "dual-axis-measure"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "discount",
+          "template_field": "Discount",
+          "derivation": "avg",
+          "role": [
+            "rows",
+            "dual-axis-measure"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "order_date",
+          "template_field": "Order Date",
+          "derivation": "tmn",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "XML instance is [tmn:Order Date:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim. templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'."
+        },
+        {
+          "slot_id": "measure_names",
+          "template_field": "Measure Names",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "pseudo",
+          "bindable": false,
+          "required": true,
+          "notes": "Tableau pseudo-field [:Measure Names]; template owns it fully. Not a <column> declaration, so it is exempt from the column-existence check. Never user-bindable."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "month-trunc-short-form-ruling",
+          "detail": "RULING (H3.2 tmn/tmo reconciliation): 'tmn' is the REAL Month-Trunc short-form live Tableau writes — confirmed in this template XML (derivation='Month-Trunc' name='[tmn:Order Date:qk]'), in real Tableau Public workbooks (data/twb-example-index.json), in src/metadata/fields.ts:434, and in tactics/tree/column-instance-prefixes.md. The binder/manifests standardize on canonical 'tmn'; templates.ts derivationMap accepts BOTH 'tmn' and legacy 'tmo' as aliases → 'Month-Trunc'. XML is ground truth; no derivation normalization is applied.",
+          "xml": "correlation-dual-axis-chart.xml:15"
+        },
+        {
+          "code": "pseudo-field-template-owned",
+          "detail": "color encoding uses the [:Measure Names] pseudo-field. It is template-owned and non-bindable; PSEUDO_FIELD_REQUIRED is NOT a blocker here (readiness stays GREEN).",
+          "xml": "correlation-dual-axis-chart.xml:34"
+        },
+        {
+          "code": "dual-axis-combined-measures",
+          "detail": "rows shelf is a combined-axis expression ([sum:Profit:qk] + [avg:Discount:qk]); both measure slots must bind or the combined axis dangles (both required, satisfied by coverage).",
+          "xml": "correlation-dual-axis-chart.xml:57"
+        }
+      ]
+    },
+    {
+      "template": "correlation-scatter-plot-chart",
+      "family": "correlation",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "scatter",
+        "correlation",
+        "relationship",
+        "vs",
+        "versus",
+        "against"
+      ],
+      "description": "One point per detail-grain member; X and Y are two measures; color is a template calc; a second dimension adds detail.",
+      "slots": [
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "cols",
+            "formula-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "profit",
+          "template_field": "Profit",
+          "derivation": "sum",
+          "role": [
+            "rows",
+            "formula-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "customer_name",
+          "template_field": "Customer Name",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "template column has aggregate-role-from='[State/Province]'; NOT rewritten by replaceFieldReferences (cosmetic secondary-role hint carried onto the target)."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "profit_ratio_calc",
+          "template_field": "Calculation_1368249927221915648",
+          "derivation": "usr",
+          "role": [
+            "color"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "SUM([Profit])/SUM([Sales])",
+          "formula_refs": [
+            "Profit",
+            "Sales"
+          ],
+          "depends_on_slots": [
+            "profit",
+            "sales"
+          ]
+        }
+      ],
+      "hazards": [
+        {
+          "code": "raw-formula-refs",
+          "detail": "Calc formula references bare [Profit]/[Sales]; rewriteFormulaFieldRefs repairs them ONLY because Profit & Sales are bindable bare-key slots. Gate #6 asserts both are bound.",
+          "xml": "correlation-scatter-plot-chart.xml:10-11"
+        },
+        {
+          "code": "hidden-aggregate-role-from",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target field inherits the template's secondary-role hint (verification-report correction).",
+          "xml": "correlation-scatter-plot-chart.xml:15"
+        }
+      ]
+    },
+    {
+      "template": "distribution-bar-code-chart",
+      "family": "distribution",
+      "readiness": "GREEN",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "bar-code",
+        "strip-plot",
+        "distribution",
+        "spread",
+        "jitter",
+        "gantt-strip",
+        "dot-strip"
+      ],
+      "description": "A strip/bar-code plot: one tick per detail-grain member along an aggregated measure axis, grouped by a category on rows.",
+      "slots": [
+        {
+          "slot_id": "sub_category",
+          "template_field": "Sub-Category",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "avg",
+          "role": [
+            "cols"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "template aggregates Sales with Avg (not Sum): [avg:Sales:qk]."
+        },
+        {
+          "slot_id": "country_region",
+          "template_field": "Country/Region",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "geo",
+          "bindable": true,
+          "required": true,
+          "notes": "detail/grain dimension carrying semantic-role='[Country].[ISO3166_2]'; the geo semantic-role is a cosmetic hint carried onto the target."
+        },
+        {
+          "slot_id": "state_province",
+          "template_field": "State/Province",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "geo",
+          "bindable": true,
+          "required": true,
+          "notes": "detail/grain dimension carrying semantic-role='[State].[Name]'; cosmetic hint carried onto the target."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "geo-semantic-role",
+          "detail": "[Country/Region] and [State/Province] carry semantic-role attributes; these are not rewritten by replaceFieldReferences and are carried onto the target fields. They define mark grain, not a geographic map. Verification report agrees the readiness is GREEN (contrast spatial-filled-map which stays YELLOW).",
+          "xml": "distribution-bar-code-chart.xml:10,12"
+        }
+      ]
+    },
+    {
+      "template": "kpi-text",
+      "family": "kpi",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-04"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "kpi",
+        "metric",
+        "big-number",
+        "single-value",
+        "total",
+        "text",
+        "scorecard"
+      ],
+      "description": "A single big-number text card: one measure aggregated and shown as label text.",
+      "slots": [
+        {
+          "slot_id": "value",
+          "template_field": "Value",
+          "derivation": "sum",
+          "role": [
+            "text"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "template field is the generic name 'Value'; binds a single quantitative measure. Portability is 'across the committed fixture classes + render-verified' (see portability_evidence), not a blanket 'any dataset'."
+        }
+      ],
+      "calcs": [],
+      "hazards": []
+    },
+    {
+      "template": "part-to-whole-pie-chart",
+      "family": "part-to-whole",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "pie",
+        "part-to-whole",
+        "composition",
+        "proportion",
+        "share",
+        "percentage",
+        "donut"
+      ],
+      "description": "A pie whose wedge angles are an aggregated measure, one wedge per category (color).",
+      "avoid_when": [
+        "More than ~3-5 categories - humans compare angles poorly; a sorted horizontal bar reads more precisely and scales to any count",
+        "Slice sizes are close in value - the differences become impossible to judge by angle",
+        "Showing change over time - use a line or stacked area instead",
+        "Any analytical context where parts must be compared precisely - prefer a stacked bar or treemap (pie is usually the wrong choice)",
+        "Never render as a 3D pie - perspective distorts the proportions"
+      ],
+      "slots": [
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "template column has aggregate-role-from='[State/Province]'; cosmetic secondary-role hint carried onto the target (verification-report correction: GREEN -> YELLOW)."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "wedge-size"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "hidden-aggregate-role-from",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
+          "xml": "part-to-whole-pie-chart.xml:10"
+        }
+      ]
+    },
+    {
+      "template": "part-to-whole-stacked-bar-chart",
+      "family": "part-to-whole",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "stacked-bar",
+        "part-to-whole",
+        "composition",
+        "proportion",
+        "share",
+        "breakdown"
+      ],
+      "description": "Horizontal bars per category (rows) whose length is a measure, segmented by a second dimension (color); sorted by the measure.",
+      "slots": [
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "rows",
+            "sort-dimension"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "template column has aggregate-role-from='[State/Province]'; cosmetic secondary-role hint carried onto the target (verification-report correction: GREEN -> YELLOW)."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "cols",
+            "sort-measure"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "category",
+          "template_field": "Category",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "shelf-sort-pill-coupling",
+          "detail": "shelf-sort-v2 sorts [none:Region:nk] by measure [sum:Sales:qk]; both slots must bind or the sort dangles (both required, satisfied by coverage).",
+          "xml": "part-to-whole-stacked-bar-chart.xml:18"
+        },
+        {
+          "code": "hidden-aggregate-role-from",
+          "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
+          "xml": "part-to-whole-stacked-bar-chart.xml:11"
+        }
+      ]
+    },
+    {
+      "template": "part-to-whole-treemap-chart",
+      "family": "part-to-whole",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-04"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "treemap",
+        "part-to-whole",
+        "composition",
+        "proportion",
+        "share",
+        "nested"
+      ],
+      "description": "Nested rectangles sized by a measure and colored by a category; a second dimension adds detail grain.",
+      "slots": [
+        {
+          "slot_id": "category",
+          "template_field": "Category",
+          "derivation": "none",
+          "role": [
+            "color",
+            "text"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "size",
+            "text"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "sub_category",
+          "template_field": "Sub-Category",
+          "derivation": "none",
+          "role": [
+            "detail"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "detail/grain dimension: defines the rectangle-per-member grain."
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "shared-instance-multi-encoding",
+          "detail": "Category's [none:Category:nk] instance appears on both color and text; Sales' [sum:Sales:qk] on both size and text. Single instance reused across encodings (same derivation) — no qualified key needed.",
+          "xml": "part-to-whole-treemap-chart.xml:27-31"
+        }
+      ]
+    },
+    {
+      "template": "ranking-ordered-bar",
+      "family": "ranking",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-04"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "ranking",
+        "sorted-bar",
+        "bar",
+        "top",
+        "highest",
+        "lowest"
+      ],
+      "description": "Horizontal bars, one per category; bar length = measure; sorted descending by the measure.",
+      "slots": [
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "rows",
+            "sort-dimension"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "cols",
+            "sort-measure"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "computed-sort-pill-coupling",
+          "detail": "computed-sort binds the dimension instance to the measure instance; both slots must bind or the sort dangles (both are required, so this is satisfied by coverage).",
+          "xml": "ranking-ordered-bar.xml:24"
+        }
+      ]
+    },
+    {
+      "template": "ranking-ordered-column",
+      "family": "ranking",
+      "readiness": "GREEN",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "ranking",
+        "sorted-column",
+        "column",
+        "vertical-bar",
+        "top",
+        "highest",
+        "lowest"
+      ],
+      "description": "Vertical columns, one per category; column height = measure; sorted descending by the measure.",
+      "slots": [
+        {
+          "slot_id": "region",
+          "template_field": "Region",
+          "derivation": "none",
+          "role": [
+            "cols",
+            "sort-dimension"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "rows",
+            "sort-measure"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "computed-sort-pill-coupling",
+          "detail": "computed-sort sorts [none:Region:nk] using [sum:Sales:qk]; both slots must bind or the sort dangles (both are required, so coverage satisfies this). [Region] has NO aggregate-role-from here, so GREEN stands (verification: AGREE).",
+          "xml": "ranking-ordered-column.xml:24"
+        }
+      ]
+    },
+    {
+      "template": "trend-line-chart",
+      "family": "time-series",
+      "readiness": "GREEN",
+      "fast_path_eligible": true,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "live-2026-07-04"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "trend",
+        "over-time",
+        "line",
+        "time-series",
+        "timeline",
+        "by-month",
+        "sales-over-time"
+      ],
+      "description": "A line of an aggregated measure over a truncated date on the x-axis; shows trend across time.",
+      "slots": [
+        {
+          "slot_id": "order_date",
+          "template_field": "Order Date",
+          "derivation": "tmn",
+          "role": [
+            "cols"
+          ],
+          "kind": "temporal",
+          "bindable": true,
+          "required": true,
+          "notes": "XML instance is [tmn:Order Date:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim (no normalization). templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'."
+        },
+        {
+          "slot_id": "sales",
+          "template_field": "Sales",
+          "derivation": "sum",
+          "role": [
+            "rows"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true
+        }
+      ],
+      "calcs": [],
+      "hazards": [
+        {
+          "code": "month-trunc-short-form-ruling",
+          "detail": "RULING (H3.2 tmn/tmo reconciliation): 'tmn' is the REAL Month-Trunc short-form live Tableau writes — confirmed in this template XML (derivation='Month-Trunc' name='[tmn:Order Date:qk]'), in real Tableau Public workbooks (data/twb-example-index.json: [sqlserver…].[tmn:Order Date:qk], [dataengine…].[tmn:DateTime (Days):ok]), in src/metadata/fields.ts:434, and in tactics/tree/column-instance-prefixes.md. The binder/manifests standardize on canonical 'tmn'; templates.ts derivationMap accepts BOTH 'tmn' and legacy 'tmo' as aliases → 'Month-Trunc'. XML is ground truth; no derivation normalization is applied.",
+          "xml": "trend-line-chart.xml:13"
+        }
+      ]
+    },
+    {
+      "template": "ww-floating-bars",
+      "family": "deviation",
+      "readiness": "YELLOW",
+      "fast_path_eligible": false,
+      "fast_path_blockers": [],
+      "portability_evidence": {
+        "fixture_bind": true,
+        "render_verified": "none"
+      },
+      "datasource_placeholder": true,
+      "placeholders": [
+        "TITLE",
+        "DATASOURCE"
+      ],
+      "intent_keywords": [
+        "floating-bar",
+        "gantt",
+        "over-under",
+        "betting-line",
+        "final-vs-line",
+        "actual-vs-line"
+      ],
+      "description": "One floating (gantt) bar per category: the bar starts at a reference-line measure and its length is a template calc = parsed actual value − reference line. Deviation of an actual from a reference, per member.",
+      "avoid_when": [
+        "the actual/score field is not a leading-numeric string — INT() parses only a leading integer, so compound strings like '35-31' or non-numeric text produce the wrong bar length",
+        "both endpoints are already numeric measures — bind a simpler dual-measure or reference-line deviation chart instead of the string-parse calc"
+      ],
+      "slots": [
+        {
+          "slot_id": "row_dimension",
+          "template_field": "Category",
+          "derivation": "none",
+          "role": [
+            "rows"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "The row/category each floating bar is drawn for (one mark per member)."
+        },
+        {
+          "slot_id": "line_measure",
+          "template_field": "Reference Value",
+          "derivation": "min",
+          "role": [
+            "cols",
+            "formula-input"
+          ],
+          "kind": "quantitative",
+          "bindable": true,
+          "required": true,
+          "notes": "The reference-line endpoint on columns AND a formula input to the size calc. Derivation 'min' is authored fidelity from the checkpoint — correct only at one-row-per-category grain (see min-derivation-per-row hazard)."
+        },
+        {
+          "slot_id": "actual_input",
+          "template_field": "Actual Input",
+          "derivation": "none",
+          "role": [
+            "formula-input"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "Compound-score STRING parsed by INT() inside the size calc. Bindable + required so templates.ts rewriteFormulaFieldRefs repairs the bare [Actual Input] token and Gate 6 can prove the dependency is bound. Never placed on a shelf (no column-instance)."
+        },
+        {
+          "slot_id": "color_dimension",
+          "template_field": "Segment",
+          "derivation": "none",
+          "role": [
+            "color"
+          ],
+          "kind": "categorical",
+          "bindable": true,
+          "required": true,
+          "notes": "FIDELITY from the final 'format' rung (absent in rung-1 floating-bars.xml): the over/under COLOR split (teal=over/right, red=under/left). A plain categorical color column-instance [none:Segment:nk]; parameterized like any bindable dimension so replaceFieldReferences substitutes it — never hardcoded to the Super Bowl O/U Winner field. Required so computeFixtureBind proves a full 4-field bind and the color encoding is never left dangling on an unbound field."
+        }
+      ],
+      "calcs": [
+        {
+          "slot_id": "bar_size_calc",
+          "template_field": "Calculation_GanttSize",
+          "derivation": "min",
+          "role": [
+            "size"
+          ],
+          "kind": "calc",
+          "bindable": false,
+          "required": true,
+          "formula": "INT([Actual Input]) - [Reference Value]",
+          "formula_refs": [
+            "Actual Input",
+            "Reference Value"
+          ],
+          "depends_on_slots": [
+            "actual_input",
+            "line_measure"
+          ],
+          "notes": "Bar length = parsed actual − reference. formula_refs are the template_field names of the two bindable dependency slots; rewriteFormulaFieldRefs repairs them on bind (same mechanism as correlation-scatter's Profit Ratio)."
+        }
+      ],
+      "hazards": [
+        {
+          "code": "dataset-specific-formula",
+          "detail": "INT([Actual Input]) parses a leading integer out of a compound score string; the parse is dataset-shape-specific (yields NULL/garbage on non-numeric or embedded-format text). Advisory only — surfaced via avoid_when and gated by render_verified, not a hard fast_path_blocker.",
+          "xml": "ww-floating-bars.xml:11"
+        },
+        {
+          "code": "raw-formula-refs",
+          "detail": "The size calc references bare [Actual Input]/[Reference Value]; templates.ts rewriteFormulaFieldRefs repairs them ONLY because both are bindable bare-key slots. Gate 6 asserts both are bound before injection.",
+          "xml": "ww-floating-bars.xml:11"
+        },
+        {
+          "code": "min-derivation-per-row",
+          "detail": "The size calc and the reference line use derivation 'min' (authored fidelity from the checkpoint). Min equals the row value only when there is exactly one mark per Category; a category with multiple rows collapses to the minimum. Bind at one-row-per-category grain or override the derivation.",
+          "xml": "ww-floating-bars.xml:17"
+        }
+      ],
+      "golden": {
+        "checkpoint_render": "evals/checkpoints/ww-2026-23-gantt-superbowl/best/format.xml"
+      }
+    }
+  ]
+}

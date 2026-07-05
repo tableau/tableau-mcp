@@ -1,0 +1,42 @@
+{
+  "template": "correlation-dual-axis-chart",
+  "family": "correlation",
+  "readiness": "GREEN",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": { "fixture_bind": true, "render_verified": "none" },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["dual-axis", "combo", "two-measures", "correlation", "combined-axes"],
+  "description": "Two measures on a shared/combined axis over a truncated date; Measure Names colors the two series (template-owned).",
+  "avoid_when": [
+    "The two measures share the same scale - use a single shared axis instead of a dual axis",
+    "Axes are not synchronized or have different zero points - unsynchronized dual axes imply a false correlation",
+    "More than two measures are involved - use separate charts",
+    "The measures are unrelated - never overlay unrelated measures on a dual axis to manufacture a pattern"
+  ],
+  "slots": [
+    { "slot_id": "profit", "template_field": "Profit", "derivation": "sum",
+      "role": ["rows", "dual-axis-measure"], "kind": "quantitative", "bindable": true, "required": true },
+    { "slot_id": "discount", "template_field": "Discount", "derivation": "avg",
+      "role": ["rows", "dual-axis-measure"], "kind": "quantitative", "bindable": true, "required": true },
+    { "slot_id": "order_date", "template_field": "Order Date", "derivation": "tmn",
+      "role": ["cols"], "kind": "temporal", "bindable": true, "required": true,
+      "notes": "XML instance is [tmn:Order Date:qk] derivation='Month-Trunc'. 'tmn' is the real Month-Trunc short-form live Tableau writes; the manifest emits it verbatim. templates.ts derivationMap keys both 'tmn' (canonical) and legacy 'tmo' to 'Month-Trunc'." },
+    { "slot_id": "measure_names", "template_field": "Measure Names", "derivation": "none",
+      "role": ["color"], "kind": "pseudo", "bindable": false, "required": true,
+      "notes": "Tableau pseudo-field [:Measure Names]; template owns it fully. Not a <column> declaration, so it is exempt from the column-existence check. Never user-bindable." }
+  ],
+  "calcs": [],
+  "hazards": [
+    { "code": "month-trunc-short-form-ruling",
+      "detail": "RULING (H3.2 tmn/tmo reconciliation): 'tmn' is the REAL Month-Trunc short-form live Tableau writes — confirmed in this template XML (derivation='Month-Trunc' name='[tmn:Order Date:qk]'), in real Tableau Public workbooks (data/twb-example-index.json), in src/metadata/fields.ts:434, and in tactics/tree/column-instance-prefixes.md. The binder/manifests standardize on canonical 'tmn'; templates.ts derivationMap accepts BOTH 'tmn' and legacy 'tmo' as aliases → 'Month-Trunc'. XML is ground truth; no derivation normalization is applied.",
+      "xml": "correlation-dual-axis-chart.xml:15" },
+    { "code": "pseudo-field-template-owned",
+      "detail": "color encoding uses the [:Measure Names] pseudo-field. It is template-owned and non-bindable; PSEUDO_FIELD_REQUIRED is NOT a blocker here (readiness stays GREEN).",
+      "xml": "correlation-dual-axis-chart.xml:34" },
+    { "code": "dual-axis-combined-measures",
+      "detail": "rows shelf is a combined-axis expression ([sum:Profit:qk] + [avg:Discount:qk]); both measure slots must bind or the combined axis dangles (both required, satisfied by coverage).",
+      "xml": "correlation-dual-axis-chart.xml:57" }
+  ]
+}

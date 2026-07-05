@@ -1,0 +1,507 @@
+import { beforeAll, describe, expect, it } from 'vitest';
+
+import {
+  type BindingProposal,
+  bindTemplate,
+  buildLlmInput,
+  classifyNoLlm,
+  PROPOSAL_OUTPUT_SCHEMA,
+  summarizeSchema,
+} from './binder.js';
+import { loadManifests } from './manifest.js';
+import type { Family, TemplateManifest } from './manifest-types.js';
+
+// Minimal Superstore-shaped workbook: workbook-level <datasources> is what
+// listAvailableFields reads (top-level <column> with role/type/datatype).
+const WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Superstore'>
+      <column name='[Region]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Category]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Sub-Category]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Customer Name]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Country/Region]' role='dimension' type='nominal' datatype='string' />
+      <column name='[State/Province]' role='dimension' type='nominal' datatype='string' />
+      <column name='[Order Date]' role='dimension' type='ordinal' datatype='date' />
+      <column name='[Sales]' role='measure' type='quantitative' datatype='real' />
+      <column name='[Profit]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+let manifests: Map<string, TemplateManifest>;
+beforeAll(() => {
+  manifests = loadManifests();
+});
+
+// The evidence gate (attacks 5+10) shrinks fast_path_eligible to the 4 render-
+// verified templates. A few orchestrator behaviors below depend on a template-owned
+// calc (scatter) or avoid_when guidance (pie) — features the render-verified
+// eligible-4 do NOT carry. To exercise those code paths in isolation from the
+// (separately asserted) eligibility shrink, force the named templates eligible in a
+// cloned manifest map. This does not weaken the gate: the gate itself is proven by
+// manifest.test.ts and the "not-fast-path" test below.
+function withForcedEligible(names: string[]): Map<string, TemplateManifest> {
+  const out = new Map<string, TemplateManifest>();
+  for (const [k, v] of loadManifests()) {
+    out.set(
+      k,
+      names.includes(k)
+        ? {
+            ...v,
+            fast_path_eligible: true,
+            portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
+          }
+        : v,
+    );
+  }
+  return out;
+}
+
+describe('binder/schema-summary', () => {
+  it('summarizes the workbook and picks Superstore as primary', () => {
+    const s = summarizeSchema(WORKBOOK_XML);
+    expect(s.datasource).toBe('Superstore');
+    expect(s.fields.find((f) => f.name === 'Sales')?.role).toBe('measure');
+    expect(s.fields.find((f) => f.name === 'Region')?.role).toBe('dimension');
+  });
+});
+
+describe('binder/classifyNoLlm', () => {
+  it('picks ranking-ordered-bar for a clear bar ask and binds by kind', () => {
+    const s = summarizeSchema(WORKBOOK_XML);
+    const cls = classifyNoLlm('bar chart of Sales by Region', manifests, s);
+    expect(cls).not.toBeNull();
+    expect(cls!.template).toBe('ranking-ordered-bar');
+    expect(cls!.bindings).toEqual([
+      { slot_id: 'region', field: 'Region' },
+      { slot_id: 'sales', field: 'Sales' },
+    ]);
+  });
+
+  it('returns null (fail-closed) when no keyword clearly wins', () => {
+    const s = summarizeSchema(WORKBOOK_XML);
+    expect(classifyNoLlm('hello there', manifests, s)).toBeNull();
+  });
+});
+
+describe('binder/bindTemplate — Call 1 no-LLM (bound)', () => {
+  it("'bar chart of Sales by Region' → ranking-ordered-bar, exact field_mapping, used_llm=false", async () => {
+    const res = await bindTemplate({
+      ask: 'bar chart of Sales by Region',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.used_llm).toBe(false);
+      expect(res.args.template_name).toBe('ranking-ordered-bar');
+      expect(res.args.sheet_type).toBe('worksheet');
+      expect(res.args.template_parameters.DATASOURCE).toBe('Superstore');
+      expect(res.args.field_mapping).toEqual({
+        Region: '[Superstore].[none:Region:nk]',
+        Sales: '[Superstore].[sum:Sales:qk]',
+      });
+      // IMPORTANT NEW FACT: bound result exposes the worksheet-path apply hint so a
+      // caller can run the worksheet-level chain (tabdoc:new-worksheet → substitute →
+      // apply-worksheet) OR the inject-template + apply-workbook chain from one result.
+      expect(res.apply_hint).toBe('worksheet-path');
+      expect(res.apply_instruction).toMatch(/tabdoc:new-worksheet/);
+      expect(res.apply_instruction).toMatch(/apply-worksheet/);
+    }
+  });
+});
+
+describe('binder/bindTemplate — Call 1 miss (propose)', () => {
+  // scatter is render-unverified post-gate; force it eligible to test the propose
+  // payload shape (calc-excluded bindable slots) independent of the shrink.
+  const scatterManifests = (): Map<string, TemplateManifest> =>
+    withForcedEligible(['correlation-scatter-plot-chart']);
+
+  it('under-specified scatter ask → propose payload with only bindable slots + fields + schema', async () => {
+    const res = await bindTemplate({
+      ask: 'scatter of Profit vs Sales',
+      workbookXml: WORKBOOK_XML,
+      manifests: scatterManifests(),
+    });
+    expect(res.status).toBe('propose');
+    if (res.status === 'propose') {
+      const scatter = res.llm_input.candidate_templates.find(
+        (c) => c.template === 'correlation-scatter-plot-chart',
+      );
+      expect(scatter).toBeDefined();
+      // Only the 4 BINDABLE slots — the template-owned calc is excluded.
+      expect(scatter!.slots.length).toBe(4);
+      expect(scatter!.slots.every((sl) => (sl.kind as string) !== 'calc')).toBe(true);
+      // Fields carried for the model to choose from.
+      expect(res.llm_input.fields.some((f) => f.name === 'Profit')).toBe(true);
+      expect(res.llm_input.fields.some((f) => f.name === 'Region')).toBe(true);
+      // Strict output schema is echoed.
+      expect(res.output_schema).toBe(PROPOSAL_OUTPUT_SCHEMA);
+      expect((res.output_schema as { type?: string }).type).toBe('object');
+    }
+  });
+
+  it('every propose candidate exposes only bindable slots', async () => {
+    const forced = scatterManifests();
+    const res = await bindTemplate({
+      ask: 'scatter of Profit vs Sales',
+      workbookXml: WORKBOOK_XML,
+      manifests: forced,
+    });
+    if (res.status === 'propose') {
+      for (const c of res.llm_input.candidate_templates) {
+        const m = forced.get(c.template)!;
+        const bindableCount = m.slots.filter((sl) => sl.bindable).length;
+        expect(c.slots.length).toBe(bindableCount);
+      }
+    } else {
+      throw new Error(`expected propose, got ${res.status}`);
+    }
+  });
+});
+
+describe('binder/bindTemplate — Call 2 (agent proposal)', () => {
+  it('valid scatter proposal → bound with used_llm=true and 4-slot mapping', async () => {
+    const proposal: BindingProposal = {
+      template: 'correlation-scatter-plot-chart',
+      title: 'Profit vs Sales',
+      bindings: [
+        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'profit', field: 'Profit' },
+        { slot_id: 'customer_name', field: 'Customer Name' },
+        { slot_id: 'region', field: 'Region' },
+      ],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'scatter of Profit vs Sales',
+      workbookXml: WORKBOOK_XML,
+      manifests: withForcedEligible(['correlation-scatter-plot-chart']),
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.used_llm).toBe(true);
+      expect(res.args.field_mapping).toEqual({
+        Sales: '[Superstore].[sum:Sales:qk]',
+        Profit: '[Superstore].[sum:Profit:qk]',
+        'Customer Name': '[Superstore].[none:Customer Name:nk]',
+        Region: '[Superstore].[none:Region:nk]',
+      });
+    }
+  });
+
+  it('unknown template → escalate template-not-found', async () => {
+    const proposal: BindingProposal = { template: 'does-not-exist', title: 't', bindings: [] };
+    const res = await bindTemplate({ ask: 'x', workbookXml: WORKBOOK_XML, manifests, proposal });
+    expect(res.status).toBe('escalate');
+    if (res.status === 'escalate') expect(res.reason).toBe('template-not-found');
+  });
+
+  it('below-floor confidence → escalate low-confidence', async () => {
+    const proposal: BindingProposal = {
+      template: 'ranking-ordered-bar',
+      title: 't',
+      bindings: [
+        { slot_id: 'region', field: 'Region' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+      confidence: 0.1,
+    };
+    const res = await bindTemplate({
+      ask: 'bar of sales by region',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+      minConfidence: 0.6,
+    });
+    expect(res.status).toBe('escalate');
+    if (res.status === 'escalate') expect(res.reason).toBe('low-confidence');
+  });
+
+  it('unresolvable field → escalate field-not-found (carries candidates)', async () => {
+    const proposal: BindingProposal = {
+      template: 'ranking-ordered-bar',
+      title: 't',
+      bindings: [
+        { slot_id: 'region', field: 'Nope Field' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+    };
+    const res = await bindTemplate({
+      ask: 'bar of sales by region',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('escalate');
+    if (res.status === 'escalate') {
+      expect(res.reason).toBe('field-not-found');
+      expect(res.proposal).toBeDefined();
+    }
+  });
+});
+
+// Betting-shaped workbook whose measure name ('O/U Line') contains the token
+// 'line' — a trap for the trend-line-chart intent keyword. The no-LLM path must
+// pick kpi-text on 'kpi' regardless of the field name.
+const KPI_WORKBOOK_XML = `<?xml version='1.0' encoding='utf-8'?>
+<workbook>
+  <datasources>
+    <datasource name='Bets'>
+      <column name='[Team]' role='dimension' type='nominal' datatype='string' />
+      <column name='[O/U Line]' role='measure' type='quantitative' datatype='real' />
+    </datasource>
+  </datasources>
+</workbook>`;
+
+describe('binder/bindTemplate — derivation override (no-LLM)', () => {
+  it("'average O/U Line as a KPI' binds kpi-text with an avg override via the no-LLM path", async () => {
+    const res = await bindTemplate({
+      ask: 'average O/U Line as a KPI',
+      workbookXml: KPI_WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.used_llm).toBe(false);
+      expect(res.args.template_name).toBe('kpi-text');
+      // Manifest default is sum; the ask said 'average', so the emitted value is avg.
+      expect(res.args.field_mapping['Value']).toBe('[Bets].[avg:O/U Line:qk]');
+    }
+  });
+
+  it('no aggregation word in the ask → no override (template default sum is kept)', async () => {
+    const res = await bindTemplate({
+      ask: 'O/U Line as a KPI',
+      workbookXml: KPI_WORKBOOK_XML,
+      manifests,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.args.field_mapping['Value']).toBe('[Bets].[sum:O/U Line:qk]');
+    }
+  });
+});
+
+describe('binder/PROPOSAL_OUTPUT_SCHEMA — optional derivation field', () => {
+  it("the strict output schema's binding items expose an optional derivation enum", () => {
+    const schema = PROPOSAL_OUTPUT_SCHEMA as {
+      properties: {
+        bindings: {
+          items: {
+            properties: Record<string, { type?: string; enum?: string[] }>;
+            required: string[];
+          };
+        };
+      };
+    };
+    const itemProps = schema.properties.bindings.items.properties;
+    expect(itemProps.derivation).toBeDefined();
+    expect(Array.isArray(itemProps.derivation.enum)).toBe(true);
+    expect(itemProps.derivation.enum).toContain('avg');
+    // derivation is optional: not in the required list.
+    expect(schema.properties.bindings.items.required).not.toContain('derivation');
+  });
+});
+
+describe('binder/bindTemplate — avoid_when consumption (H3.2)', () => {
+  // NB: the asks below use "per" (not "by") to join the measure/dimension. avoid_when
+  // lives only on pie + dual-axis, which are render-unverified post-gate; force pie
+  // eligible so the demote/warnings behavior is testable independent of the shrink.
+  const pieManifests = (): Map<string, TemplateManifest> =>
+    withForcedEligible(['part-to-whole-pie-chart']);
+
+  // (b) DEMOTE: a pie ask whose terms hit the template's avoid_when guidance
+  // must fall through to the propose leg so the model weighs the caution.
+  it("pie ask with 'precise comparison' terms demotes the no-LLM shortcut → propose", async () => {
+    const res = await bindTemplate({
+      ask: 'pie chart of Sales per Region for precise comparison',
+      workbookXml: WORKBOOK_XML,
+      manifests: pieManifests(),
+    });
+    expect(res.status).toBe('propose');
+    if (res.status === 'propose') {
+      // (a) the propose payload carries the pie's avoid_when so the model sees it.
+      const pie = res.llm_input.candidate_templates.find(
+        (c) => c.template === 'part-to-whole-pie-chart',
+      );
+      expect(pie).toBeDefined();
+      expect(pie!.avoid_when && pie!.avoid_when.length > 0).toBe(true);
+    }
+  });
+
+  // A clean pie ask (no caution terms) still binds via the zero-latency no-LLM
+  // path with no warnings. NB: this control forces pie the SOLE part-to-whole
+  // fast-path template (treemap made ineligible). With BOTH treemap and pie
+  // eligible, the stage-2b sole-wrong-matcher guard would conservatively demote
+  // "pie" (a keyword carried by only one of two same-family fast-path templates
+  // → not family-native by strict majority) to propose — safe, never wrong, but
+  // it would confound this "clean ask binds" vs "caution ask demotes" contrast.
+  // Isolating pie as the lone part-to-whole template (its keywords are then all
+  // family-native) tests exactly the intended clean-bind behavior. See
+  // within-family-disambiguation.test.ts for the guard's demotion coverage.
+  const pieOnlyManifests = (): Map<string, TemplateManifest> => {
+    const out = pieManifests();
+    const treemap = out.get('part-to-whole-treemap-chart');
+    if (treemap) out.set('part-to-whole-treemap-chart', { ...treemap, fast_path_eligible: false });
+    return out;
+  };
+  it('clean pie ask still binds no-LLM with no warnings', async () => {
+    const res = await bindTemplate({
+      ask: 'pie chart of Sales per Region',
+      workbookXml: WORKBOOK_XML,
+      manifests: pieOnlyManifests(),
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.used_llm).toBe(false);
+      expect(res.args.template_name).toBe('part-to-whole-pie-chart');
+      expect(res.warnings).toBeUndefined();
+    }
+  });
+
+  // (c) WARNINGS: if the model (Call 2) still proposes the pie for a caution-
+  // matching ask, the matched avoid_when strings ride along as advisory warnings
+  // on the bound result — never blocking.
+  it('Call 2 pie proposal for a caution-matching ask → bound with warnings', async () => {
+    const proposal: BindingProposal = {
+      template: 'part-to-whole-pie-chart',
+      title: 'Share',
+      bindings: [
+        { slot_id: 'region', field: 'Region' },
+        { slot_id: 'sales', field: 'Sales' },
+      ],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'pie chart of Sales per Region for precise comparison',
+      workbookXml: WORKBOOK_XML,
+      manifests: pieManifests(),
+      proposal,
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') {
+      expect(res.warnings && res.warnings.length > 0).toBe(true);
+      expect(res.warnings!.some((w) => /precise/i.test(w))).toBe(true);
+    }
+  });
+});
+
+describe('binder/buildLlmInput — family-aware truncation (attack 2)', () => {
+  function synth(template: string, family: Family, keyword: string): TemplateManifest {
+    return {
+      template,
+      family,
+      readiness: 'GREEN',
+      fast_path_eligible: true,
+      fast_path_blockers: [],
+      portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-04' },
+      datasource_placeholder: true,
+      placeholders: ['TITLE', 'DATASOURCE'],
+      intent_keywords: [keyword],
+      description: `${family} chart`,
+      slots: [
+        {
+          slot_id: 'value',
+          template_field: 'Value',
+          derivation: 'sum',
+          role: ['text'],
+          kind: 'quantitative',
+          bindable: true,
+          required: true,
+        },
+      ],
+      calcs: [],
+      hazards: [],
+    };
+  }
+
+  it('caps at K but never silently drops a whole matching family (>K families ⇒ propose leg)', () => {
+    // 6 eligible templates across 6 distinct families, all matching the ask.
+    const fams: Family[] = [
+      'time-series',
+      'ranking',
+      'part-to-whole',
+      'correlation',
+      'distribution',
+      'deviation',
+    ];
+    const m = new Map<string, TemplateManifest>();
+    fams.forEach((f, i) => m.set(`t${i}`, synth(`t${i}`, f, `kw${i}`)));
+    const ask = fams.map((_, i) => `kw${i}`).join(' '); // every keyword scores
+    const summary = summarizeSchema(WORKBOOK_XML);
+
+    const input = buildLlmInput(ask, m, summary);
+    const familiesShown = new Set(input.candidate_templates.map((c) => m.get(c.template)!.family));
+    // A naive slice(0,5) would drop one whole family (5 of 6). Family-aware keeps all 6.
+    expect(familiesShown.size).toBe(6);
+  });
+
+  it('within K, still fills headroom with the next-best candidates', () => {
+    // 3 families, 5 templates: family 'correlation' has 3 members. K=5 so all 5 fit.
+    const m = new Map<string, TemplateManifest>();
+    m.set('a', synth('a', 'ranking', 'kwa'));
+    m.set('b', synth('b', 'time-series', 'kwb'));
+    m.set('c1', synth('c1', 'correlation', 'kwc1'));
+    m.set('c2', synth('c2', 'correlation', 'kwc2'));
+    m.set('c3', synth('c3', 'correlation', 'kwc3'));
+    const ask = 'kwa kwb kwc1 kwc2 kwc3';
+    const input = buildLlmInput(ask, m, summarizeSchema(WORKBOOK_XML));
+    expect(input.candidate_templates.length).toBe(5);
+  });
+});
+
+describe('binder/bindTemplate — evidence gate escalation (attacks 5+10)', () => {
+  it('a render-unverified template escalates not-fast-path', async () => {
+    // correlation-scatter-plot-chart binds the fixture but is render_verified:'none'
+    // ⇒ fast_path_eligible:false ⇒ the binder must refuse it (honest shrink).
+    const proposal: BindingProposal = {
+      template: 'correlation-scatter-plot-chart',
+      title: 'Scatter',
+      bindings: [
+        { slot_id: 'sales', field: 'Sales' },
+        { slot_id: 'profit', field: 'Profit' },
+        { slot_id: 'customer_name', field: 'Customer Name' },
+        { slot_id: 'region', field: 'Region' },
+      ],
+      confidence: 0.9,
+    };
+    const res = await bindTemplate({
+      ask: 'scatter of Profit vs Sales',
+      workbookXml: WORKBOOK_XML,
+      manifests,
+      proposal,
+    });
+    expect(res.status).toBe('escalate');
+    if (res.status === 'escalate') expect(res.reason).toBe('not-fast-path');
+  });
+});
+
+describe('binder/bindTemplate — eval-only injected llmPropose', () => {
+  it('Call 1 miss + injected llmPropose closes the loop in-process (used_llm=true)', async () => {
+    const res = await bindTemplate({
+      ask: 'scatter of Profit vs Sales',
+      workbookXml: WORKBOOK_XML,
+      manifests: withForcedEligible(['correlation-scatter-plot-chart']),
+      llmPropose: (input) => {
+        expect(input.candidate_templates.length).toBeGreaterThan(0);
+        return Promise.resolve({
+          template: 'correlation-scatter-plot-chart',
+          title: 'Profit vs Sales',
+          bindings: [
+            { slot_id: 'sales', field: 'Sales' },
+            { slot_id: 'profit', field: 'Profit' },
+            { slot_id: 'customer_name', field: 'Customer Name' },
+            { slot_id: 'region', field: 'Region' },
+          ],
+          confidence: 0.95,
+        });
+      },
+    });
+    expect(res.status).toBe('bound');
+    if (res.status === 'bound') expect(res.used_llm).toBe(true);
+  });
+});

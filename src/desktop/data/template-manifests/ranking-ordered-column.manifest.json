@@ -1,0 +1,24 @@
+{
+  "template": "ranking-ordered-column",
+  "family": "ranking",
+  "readiness": "GREEN",
+  "fast_path_eligible": false,
+  "fast_path_blockers": [],
+  "portability_evidence": { "fixture_bind": true, "render_verified": "none" },
+  "datasource_placeholder": true,
+  "placeholders": ["TITLE", "DATASOURCE"],
+  "intent_keywords": ["ranking", "sorted-column", "column", "vertical-bar", "top", "highest", "lowest"],
+  "description": "Vertical columns, one per category; column height = measure; sorted descending by the measure.",
+  "slots": [
+    { "slot_id": "region", "template_field": "Region", "derivation": "none",
+      "role": ["cols", "sort-dimension"], "kind": "categorical", "bindable": true, "required": true },
+    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
+      "role": ["rows", "sort-measure"], "kind": "quantitative", "bindable": true, "required": true }
+  ],
+  "calcs": [],
+  "hazards": [
+    { "code": "computed-sort-pill-coupling",
+      "detail": "computed-sort sorts [none:Region:nk] using [sum:Sales:qk]; both slots must bind or the sort dangles (both are required, so coverage satisfies this). [Region] has NO aggregate-role-from here, so GREEN stands (verification: AGREE).",
+      "xml": "ranking-ordered-column.xml:24" }
+  ]
+}

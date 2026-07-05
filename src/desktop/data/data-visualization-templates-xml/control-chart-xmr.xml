@@ -1,0 +1,73 @@
+<workbook>
+  <worksheets>
+    <worksheet name='{{TITLE}}'>
+  <repository-location id='ControlChartXmR' path='/workbooks/VizCatalog' revision='' />
+  <table>
+    <view>
+      <datasources>
+        <datasource name='{{DATASOURCE}}' />
+      </datasources>
+      <datasource-dependencies datasource='{{DATASOURCE}}'>
+        <column datatype='date' name='[Order Date]' role='dimension' type='ordinal' />
+        <column datatype='real' name='[Profit]' role='measure' type='quantitative' />
+        <column-instance column='[Order Date]' derivation='MDY' name='[md:Order Date:ok]' pivot='key' type='ordinal' />
+        <column-instance column='[Profit]' derivation='Sum' name='[sum:Profit:qk]' pivot='key' type='quantitative' />
+      </datasource-dependencies>
+      <aggregation value='true' />
+    </view>
+    <style>
+      <style-rule element='mark'>
+        <encoding attr='color' field='[{{DATASOURCE}}].[sum:Profit:qk]' num-steps='3' type='interpolated' />
+      </style-rule>
+      <style-rule element='refline'>
+        <format attr='fill-above' id='refline0' value='#00000000' />
+        <format attr='fill-below' id='refline0' value='#00000000' />
+        <format attr='line-visibility' id='refline0' value='on' />
+        <format attr='line-pattern-only' id='refline0' value='dashed' />
+        <format attr='stroke-color' id='refline0' value='#000000' />
+      </style-rule>
+      <style-rule element='refband'>
+        <format attr='reverse-palette' id='refline1' value='false' />
+        <format attr='fill-color' id='refline1' value='#f5f5f5' />
+        <format attr='line-visibility' id='refline1' value='on' />
+        <format attr='line-pattern-only' id='refline1' value='dashed' />
+        <format attr='stroke-color' id='refline1' value='#e15759' />
+      </style-rule>
+    </style>
+    <panes>
+      <pane selection-relaxation-option='selection-relaxation-allow'>
+        <view>
+          <breakdown value='auto' />
+        </view>
+        <mark class='Automatic' />
+        <mark-sizing mark-sizing-setting='marks-scaling-off' />
+        <encodings>
+          <color column='[{{DATASOURCE}}].[sum:Profit:qk]' />
+        </encodings>
+        <reference-line axis-column='[{{DATASOURCE}}].[sum:Profit:qk]' enable-instant-analytics='true' formula='average' id='refline0' label-type='automatic' probability='95' scope='per-pane' value-column='[{{DATASOURCE}}].[sum:Profit:qk]' z-order='1' />
+        <reference-line axis-column='[{{DATASOURCE}}].[sum:Profit:qk]' enable-instant-analytics='false' fill-above='false' fill-below='false' formula='stdev' id='refline1' label-type='automatic' scope='per-pane' symmetric='false' type='sample' value-column='[{{DATASOURCE}}].[sum:Profit:qk]' z-order='2'>
+          <reference-line-value factor='-3' />
+          <reference-line-value factor='3' />
+        </reference-line>
+        <style>
+          <style-rule element='mark'>
+            <format attr='size' value='0.0099999997764825821' />
+          </style-rule>
+        </style>
+      </pane>
+    </panes>
+    <rows>[{{DATASOURCE}}].[sum:Profit:qk]</rows>
+    <cols>[{{DATASOURCE}}].[md:Order Date:ok]</cols>
+  </table>
+  <simple-id uuid='00000000-0000-0000-0000-000000000001' />
+</worksheet>
+  </worksheets>
+  <windows>
+    <window class='worksheet' maximized='true' name='{{TITLE}}'>
+  <viewpoint>
+    <zoom type='entire-view' />
+  </viewpoint>
+  <simple-id uuid='00000000-0000-0000-0000-000000000002' />
+</window>
+  </windows>
+</workbook>
