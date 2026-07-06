@@ -16,6 +16,7 @@ import {
 } from './methods/authenticationMethods.js';
 import ContentExplorationMethods from './methods/contentExplorationMethods.js';
 import DatasourcesMethods from './methods/datasourcesMethods.js';
+import FlowDocumentMethods from './methods/flowDocumentMethods.js';
 import FlowsMethods from './methods/flowsMethods.js';
 import JobsMethods from './methods/jobsMethods.js';
 import McpSettingsMethods from './methods/mcpSettingsMethods.js';
@@ -180,6 +181,18 @@ export class RestApi {
     });
     this._addInterceptors(RestApi.baseUrl, flowsMethods.interceptors);
     return flowsMethods;
+  }
+
+  get flowDocumentMethods(): FlowDocumentMethods {
+    // Experimental endpoint lives under `/api/exp`, not the versioned `/api/3.x`
+    // path used by the other flow methods.
+    const baseUrl = `${RestApi.host}/api/exp`;
+    const flowDocumentMethods = new FlowDocumentMethods(baseUrl, this.creds, {
+      timeout: this._maxRequestTimeoutMs,
+      signal: this._signal,
+    });
+    this._addInterceptors(baseUrl, flowDocumentMethods.interceptors);
+    return flowDocumentMethods;
   }
 
   get metadataMethods(): MetadataMethods {

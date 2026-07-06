@@ -51,7 +51,7 @@ describe('server', () => {
         'confirm-update-cloud-extract-refresh-task',
       ];
       // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
-      const flowTools: ReadonlyArray<WebToolName> = ['list-flows', 'get-flow'];
+      const flowTools: ReadonlyArray<WebToolName> = ['list-flows', 'get-flow', 'describe-flow'];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = [
         'generate-insight-cards',
@@ -156,7 +156,7 @@ describe('server', () => {
         'confirm-update-cloud-extract-refresh-task',
       ];
       // flow tools are gated off by default (FLOW_TOOLS_ENABLED)
-      const flowTools: ReadonlyArray<WebToolName> = ['list-flows', 'get-flow'];
+      const flowTools: ReadonlyArray<WebToolName> = ['list-flows', 'get-flow', 'describe-flow'];
       // insights tools are gated off by default (INSIGHTS_TOOLS_ENABLED)
       const insightsTools: ReadonlyArray<WebToolName> = [
         'generate-insight-cards',

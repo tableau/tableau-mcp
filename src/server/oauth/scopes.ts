@@ -37,6 +37,7 @@ export type TableauApiScope =
   | 'tableau:views:download'
   | 'tableau:views:embed'
   | 'tableau:flows:read'
+  | 'tableau:flows:download'
   | 'tableau:flow_connections:read'
   | 'tableau:flow_runs:read'
   | 'tableau:insight_definitions_metrics:read'
@@ -134,6 +135,17 @@ export const LIST_FLOW_RUNS_PRIMARY_API_SCOPES: ReadonlyArray<TableauApiScope> =
 export const LIST_FLOW_RUNS_FAILURE_INSIGHT_API_SCOPE: TableauApiScope = 'tableau:flows:read';
 
 /**
+ * Minimum scopes needed by `describe-flow`. This is also the tool's complete
+ * static scope surface, so both runtime JWT minting and OAuth discovery share
+ * one source of truth.
+ */
+export const DESCRIBE_FLOW_API_SCOPES: ReadonlyArray<TableauApiScope> = [
+  'tableau:flows:read',
+  'tableau:flows:download',
+  'tableau:mcp_site_settings:read',
+];
+
+/**
  * Validates that a scope string is a valid MCP scope
  */
 export async function isValidScope(scope: string): Promise<boolean> {
@@ -217,6 +229,10 @@ const toolScopeMap: Record<
   'list-flow-tasks': {
     mcp: ['tableau:mcp:flow:read'],
     api: new Set(['tableau:flow_tasks:read', 'tableau:mcp_site_settings:read']),
+  },
+  'describe-flow': {
+    mcp: ['tableau:mcp:flow:read'],
+    api: new Set(DESCRIBE_FLOW_API_SCOPES),
   },
   'query-datasource': {
     mcp: ['tableau:mcp:datasource:read'],
@@ -404,6 +420,7 @@ async function getEnabledToolNames(): Promise<Set<WebToolName>> {
     enabledTools.delete('get-flow');
     enabledTools.delete('list-flow-runs');
     enabledTools.delete('list-flow-tasks');
+    enabledTools.delete('describe-flow');
   }
 
   return enabledTools;
