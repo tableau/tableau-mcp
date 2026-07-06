@@ -1,0 +1,54 @@
+name: PR Feature Label
+
+on:
+  pull_request:
+    branches:
+      - 'feature/**'
+    types: [opened]
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    # Skip fork PRs (read-only token can't label) and dependabot — matches repo convention
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    permissions:
+      issues: write # create the label if it doesn't exist yet
+      pull-requests: write # add the label to the PR
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const prefix = 'feature/';
+            const baseRef = context.payload.pull_request.base.ref;
+
+            // The `branches` filter already scopes to feature/** base branches;
+            // guard defensively in case the trigger scope ever changes.
+            if (!baseRef.startsWith(prefix)) {
+              console.log(`Base branch "${baseRef}" is not a feature branch; nothing to do.`);
+              return;
+            }
+
+            const label = `feature:${baseRef.slice(prefix.length)}`;
+
+            // Create the label on the fly if it doesn't exist yet.
+            try {
+              await github.rest.issues.getLabel({ ...context.repo, name: label });
+            } catch (error) {
+              if (error.status === 404) {
+                await github.rest.issues.createLabel({
+                  ...context.repo,
+                  name: label,
+                  color: 'ededed',
+                });
+                console.log(`Created label "${label}"`);
+              } else {
+                throw error;
+              }
+            }
+
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: context.payload.pull_request.number,
+              labels: [label],
+            });
+            console.log(`Applied label "${label}" to PR #${context.payload.pull_request.number}`);
