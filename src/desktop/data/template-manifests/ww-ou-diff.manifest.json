@@ -368,5 +368,18 @@
   ],
   "golden": {
     "checkpoint_render": "evals/cases/ww-2026-23-gantt-superbowl/golden/Super Bowl by the Numbers.twbx"
+  },
+  "derivation": {
+    "parent_template": "ww-ou-arrow",
+    "removed_facets": [
+      "color-encoding-presence",
+      "shape-encoding-presence"
+    ],
+    "changed_facets": [
+      "mark-classes-per-pane",
+      "diff-calc-on-cols",
+      "label-column-instances",
+      "axis-titles"
+    ]
   }
 }

@@ -18,25 +18,73 @@
     }
   },
   "datasource_placeholder": true,
-  "placeholders": ["TITLE", "DATASOURCE"],
-  "intent_keywords": ["stacked-bar", "part-to-whole", "composition", "proportion", "share", "breakdown"],
+  "placeholders": [
+    "TITLE",
+    "DATASOURCE"
+  ],
+  "intent_keywords": [
+    "stacked-bar",
+    "part-to-whole",
+    "composition",
+    "proportion",
+    "share",
+    "breakdown",
+    "segmented",
+    "segmented-bar"
+  ],
   "description": "Horizontal bars per category (rows) whose length is a measure, segmented by a second dimension (color); sorted by the measure.",
+  "avoid_when": [
+    "The ask wants a single market-share value — one measure divided by another to get a 'market share' number or ratio — which is a single KPI, not a segmented composition to break across categories in a stacked bar."
+  ],
   "slots": [
-    { "slot_id": "region", "template_field": "Region", "derivation": "none",
-      "role": ["rows", "sort-dimension"], "kind": "categorical", "bindable": true, "required": true,
-      "notes": "template column has aggregate-role-from='[State/Province]'; cosmetic secondary-role hint carried onto the target (verification-report correction: GREEN -> YELLOW)." },
-    { "slot_id": "sales", "template_field": "Sales", "derivation": "sum",
-      "role": ["cols", "sort-measure"], "kind": "quantitative", "bindable": true, "required": true },
-    { "slot_id": "category", "template_field": "Category", "derivation": "none",
-      "role": ["color"], "kind": "categorical", "bindable": true, "required": true }
+    {
+      "slot_id": "region",
+      "template_field": "Region",
+      "derivation": "none",
+      "role": [
+        "rows",
+        "sort-dimension"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true,
+      "notes": "template column has aggregate-role-from='[State/Province]'; cosmetic secondary-role hint carried onto the target (verification-report correction: GREEN -> YELLOW)."
+    },
+    {
+      "slot_id": "sales",
+      "template_field": "Sales",
+      "derivation": "sum",
+      "role": [
+        "cols",
+        "sort-measure"
+      ],
+      "kind": "quantitative",
+      "bindable": true,
+      "required": true
+    },
+    {
+      "slot_id": "category",
+      "template_field": "Category",
+      "derivation": "none",
+      "role": [
+        "color"
+      ],
+      "kind": "categorical",
+      "bindable": true,
+      "required": true
+    }
   ],
   "calcs": [],
   "hazards": [
-    { "code": "shelf-sort-pill-coupling",
+    {
+      "code": "shelf-sort-pill-coupling",
       "detail": "shelf-sort-v2 sorts [none:Region:nk] by measure [sum:Sales:qk]; both slots must bind or the sort dangles (both required, satisfied by coverage).",
-      "xml": "part-to-whole-stacked-bar-chart.xml:18" },
-    { "code": "hidden-aggregate-role-from",
+      "xml": "part-to-whole-stacked-bar-chart.xml:18"
+    },
+    {
+      "code": "hidden-aggregate-role-from",
       "detail": "[Region] aggregate-role-from='[State/Province]' is not rewritten; target inherits the secondary-role hint. Verification report corrects this template from GREEN to YELLOW. Safe under binding, so fast_path_eligible stays true.",
-      "xml": "part-to-whole-stacked-bar-chart.xml:11" }
+      "xml": "part-to-whole-stacked-bar-chart.xml:11"
+    }
   ]
 }

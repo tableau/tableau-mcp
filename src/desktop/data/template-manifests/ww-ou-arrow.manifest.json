@@ -369,7 +369,8 @@
     }
   ],
   "golden": {
-    "checkpoint_render": "evals/cases/ww-2026-23-gantt-superbowl/golden/Super Bowl by the Numbers.twbx"
+    "checkpoint_render": "evals/cases/ww-2026-23-gantt-superbowl/golden/Super Bowl by the Numbers.twbx",
+    "anchor_sha256": "f6cd92c460838ff6ec8aebb83c9201fda37ef12f1f95cb74e4b39a912141c9c5"
   },
   "datasource_style": {
     "style_rule": "<style-rule element='mark'>\n          <encoding attr='color' field='[sum:Calculation_3985421012422657:ok]' type='palette'>\n            <map to='#76b7b2'>\n              <bucket>1</bucket>\n            </map>\n            <map to='#e15759'>\n              <bucket>-1</bucket>\n            </map>\n          </encoding>\n          <encoding attr='shape' field='[sum:Calculation_3985421012422657:ok]' type='shape'>\n            <map to=':filled/left-triangle'>\n              <bucket>-1</bucket>\n            </map>\n            <map to=':filled/right-triangle'>\n              <bucket>1</bucket>\n            </map>\n          </encoding>\n        </style-rule>",

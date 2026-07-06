@@ -903,17 +903,19 @@ describe('binder/validate — field_mapping covers calc inputs (H3, item 4)', ()
   });
 
   it('floating-bars: every slot-referencing calc input ref is covered by the emitted field_mapping', () => {
-    // PORT ADAPTATION (documented in authoring-migration-drift.md): the snapshot's
-    // ww-floating-bars was post-fidelity-grafted into a THREE-calc variant (a SPLIT
-    // actual-score calc, the span/size calc, and a SIGN over/under COLOR calc) with NO
-    // bound color_dimension slot — color became a template-owned calc. That variant needs
-    // the unshipped golden 'O_U Line' render XML, so it is part of the DEFERRED structural
-    // sync. This repo ships the rung-1+format 4-BINDABLE-SLOT variant (color_dimension is
-    // a bound Segment slot, not a template-owned over/under calc), so we bind all FOUR
-    // required slots. The coverage LOGIC below is identical to the scatter sibling; on this
-    // repo's single inputs-less bar_size_calc it currently iterates zero inputs (the H3
-    // `inputs` annotation rides with the deferred structural sync) and is proven live by the
-    // scatter case above. It will strengthen automatically once floating-bars is fully synced.
+    // W28-D byte-for-byte sync (re-baseline): ww-floating-bars now mirrors the factory
+    // THREE-calc variant verbatim — a SPLIT actual-score calc (Calculation_ActualScore),
+    // the span/size calc (Calculation_GanttSize), and a SIGN over/under COLOR calc
+    // (Calculation_OverUnder). Color is now a TEMPLATE-OWNED calc, NOT a bindable slot, so
+    // the factory-true bindable set is exactly THREE slots (row_dimension / line_measure /
+    // actual_input); the previously shipped rung-1+format variant's bound Segment
+    // `color_dimension` slot is GONE (binding it would name an unknown slot → gate-1 fail).
+    // The coverage LOGIC below is unchanged from the scatter sibling, but it now iterates the
+    // factory calcs' REAL inputs — actual_score_calc's bindable [Actual Input] and the
+    // bar_size/over_under calcs' bindable [Reference Value] (the template-internal
+    // [Calculation_ActualScore] ref is skipped) — so it now ACTIVELY proves every
+    // slot-referencing calc input ref lands in the emitted field_mapping (the strengthening
+    // the deferred sync promised), rather than iterating zero inputs.
     const m = manifests.get('ww-floating-bars')!;
     const p: BindingProposal = {
       template: m.template,
@@ -922,7 +924,6 @@ describe('binder/validate — field_mapping covers calc inputs (H3, item 4)', ()
         { slot_id: 'row_dimension', field: 'Region' },
         { slot_id: 'line_measure', field: 'Sales' },
         { slot_id: 'actual_input', field: 'Category' },
-        { slot_id: 'color_dimension', field: 'Customer Name' },
       ],
     };
     const r = validateBinding(m, p, SUMMARY);
