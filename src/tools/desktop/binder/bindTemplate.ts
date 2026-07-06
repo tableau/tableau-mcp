@@ -9,7 +9,6 @@ import {
   bindTemplate,
   type Blocker,
   DERIVATION_OVERRIDE_INSTRUCTION,
-  DERIVATION_SHORT_FORMS,
   type EscalateReason,
 } from '../../../desktop/binder/binder.js';
 import { loadManifests } from '../../../desktop/binder/manifest.js';
@@ -17,41 +16,12 @@ import { getWorkbookXml } from '../../../desktop/commands/workbook/getWorkbookXm
 import { DesktopCommandExecutionError } from '../../../errors/mcpToolError.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import { DesktopTool } from '../tool.js';
-
 // The nested `proposal` mirrors the binder library's public data contract
-// (`BindingProposal` / `PROPOSAL_OUTPUT_SCHEMA`) verbatim so a Call-1 `propose`
-// payload round-trips into a Call-2 `proposal` unchanged. The snake_case inside
-// `bindings` is that serialized contract, NOT a tool-ergonomics choice — the
-// top-level tool params below stay camelCase per AGENTS.md.
-const bindingSchema = z.object({
-  slot_id: z
-    .string()
-    .describe(
-      "A slot_id from the chosen template's bindable slots (see llm_input.candidate_templates).",
-    ),
-  field: z.string().describe('The exact field NAME (from llm_input.fields) to bind to this slot.'),
-  derivation: z
-    .enum(DERIVATION_SHORT_FORMS)
-    .optional()
-    .describe(
-      `Optional per-slot aggregation/date-grain override (canonical short form). ${DERIVATION_OVERRIDE_INSTRUCTION}.`,
-    ),
-});
-
-const proposalSchema = z.object({
-  template: z.string().describe('The chosen template name (from llm_input.candidate_templates).'),
-  // The library uses proposal.title VERBATIM on the Call-2 path (validateAndBuild →
-  // InjectTemplateArgs.title); only the no-LLM Call-1 title is truncated (makeTitle).
-  // The library's own declared contract (PROPOSAL_OUTPUT_SCHEMA.title.maxLength = 80)
-  // is the enforcer here — mirror it at the tool boundary so a Call-2 proposal cannot
-  // slip an over-long title past the gate. Tool-layer only; library behavior unchanged.
-  title: z.string().max(80).describe('Worksheet title (<= 80 chars).'),
-  bindings: z.array(bindingSchema).describe('One entry per bindable slot: slot_id -> field name.'),
-  // Required, matching the binder's PROPOSAL_OUTPUT_SCHEMA: the library's floor check
-  // skips an undefined confidence, so an optional field here would let a proposal
-  // bypass the low-confidence escalation entirely (fail-open).
-  confidence: z.number().min(0).max(1).describe('0..1 self-rated confidence.'),
-});
+// (`BindingProposal` / `PROPOSAL_OUTPUT_SCHEMA`) verbatim so a Call-1 `propose` payload
+// round-trips into a Call-2 `proposal` unchanged. The schema (incl. the watch-class
+// confidence-required + title-max-80 tightening) is SHARED with validate-proposal so the
+// two tools cannot drift — see proposalSchema.ts.
+import { proposalSchema } from './proposalSchema.js';
 
 const paramsSchema = {
   session: z.string().describe('Tableau instance Session ID from list-instances.'),

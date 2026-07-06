@@ -27,6 +27,8 @@ export const desktopToolNames = [
   'execute-tableau-command',
   'bind-template',
   'list-templates',
+  'propose-template',
+  'validate-proposal',
 ] as const;
 export type DesktopToolName = (typeof desktopToolNames)[number];
 

@@ -85,15 +85,42 @@ const globalValues: Record<GlobalIdentifierName, string> = {
 
   await chmod(buildOptions.outfile, '755');
 
-  // Stage the bundled authoring data (template manifests + generated index/content
-  // manifest, template XML, and the desktop reference corpora) into the build output.
-  // esbuild bundles CODE only — these are read at runtime via fs, so a published /
-  // npm-installed server has no data unless we copy them. The target path matches the
-  // package-relative `build/desktop/data` layout that manifest.ts resolveDataDir()
-  // probes as candidate 2 (`__dirname/desktop/data`, where __dirname === build/).
-  console.log('🏗️ Staging desktop data...');
-  await cp('./src/desktop/data', './build/desktop/data', { recursive: true });
-  console.log('✅ Desktop data staged to build/desktop/data');
+  // Stage the bundled authoring data into the build output. esbuild bundles CODE
+  // only — these files are read at runtime via fs, so a published / npm-installed
+  // server has no data unless we copy them. The target `build/desktop/data` is the
+  // path manifest.ts resolveDataDir() probes as candidate 2 (`__dirname/desktop/data`,
+  // where __dirname === build/ in the bundle).
+  //
+  // EXPLICIT ALLOWLIST, not a blocklist (Lane M5 day-5 tarball scoping): copy only
+  // the inputs a shipped tool reads THROUGH this package-relative path, so a large
+  // asset can never silently ride into the npm tarball again. Every entry below is
+  // resolved package-relative by manifest.ts (DATA_DIR) and feeds the binder core or
+  // the BundledIntelligenceProvider — the surfaces behind bind-template / list-templates.
+  //
+  // DELIBERATELY EXCLUDED (verified day-5): twb-example-index.json (10.3 MB),
+  // tableau-desktop-commands-reference.json (969 kB), workbook-schema-reference.json
+  // (212 kB), corpus.json (178 kB), and examples/. Each IS read by a shipped search
+  // tool (search-workbook-examples/search-examples/search-commands/lookup-workbook-schema),
+  // but ONLY via a process.cwd()-relative path (searchLibrary.ts dataPath();
+  // searchExamples/searchWorkbookExamples CORPUS_PATH) — NEVER __dirname/desktop/data.
+  // A copy here is therefore consulted by no consumer: pure tarball weight. (Their
+  // cwd-relative resolution also means they aren't reachable from a published install
+  // at all — a separate resolution gap, tracked for a later lane, not fixed by staging.)
+  console.log('🏗️ Staging desktop data (allowlist)...');
+  const desktopDataSrc = './src/desktop/data';
+  const desktopDataOut = './build/desktop/data';
+  const stagedDesktopData = [
+    'template-manifests', // MANIFESTS_DIR — loadManifests() (binder + provider)
+    'template-manifests.index.json', // MANIFEST_INDEX_PATH — loadManifests()
+    'template-manifests.fixture.json', // BINDER_FIXTURE_PATH — eligibility gate
+    'content-manifest.json', // CONTENT_MANIFEST_PATH — provider.getStatus/getContentManifest
+    'data-visualization-templates-xml', // TEMPLATE_XML_DIR — provider.getTemplateXmlFragment + content-manifest hashes
+  ];
+  await mkdir(desktopDataOut, { recursive: true });
+  for (const entry of stagedDesktopData) {
+    await cp(`${desktopDataSrc}/${entry}`, `${desktopDataOut}/${entry}`, { recursive: true });
+  }
+  console.log(`✅ Desktop data staged to ${desktopDataOut} (${stagedDesktopData.length} entries)`);
 
   console.log('🏗️ Building MCP Apps...');
   try {
