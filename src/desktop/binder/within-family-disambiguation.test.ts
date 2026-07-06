@@ -314,6 +314,54 @@ describe('classifyNoLlm — geo slot name affinity', () => {
   });
 });
 
+// ── (5) PLURAL CHART-NOUN BOUNDARY (FS4b) ─────────────────────────────────────
+// phraseIndexInAsk tolerates a trailing plural `s` on the FINAL token of a keyword
+// phrase, but ONLY when that final token is a chart noun (bar→bars, column→columns,
+// map→maps, stacked-bar→stacked bars). Non-noun keywords get NO plural tolerance,
+// so matching is not broadened for them. Evidence asks: R008/R043 (stacked bars),
+// R020 (Maps).
+describe('classifyNoLlm — plural chart-noun boundary', () => {
+  it('binds when the ask pluralizes a single-token chart noun ("bars" → "bar")', () => {
+    const m = mapOf(synth('rank', 'ranking', ['bar'], catVal()));
+    const res = classifyNoLlm('bars of Sales by Region', m, SUMMARY);
+    expect(res).not.toBeNull();
+    expect(res!.template).toBe('rank');
+  });
+
+  it('binds when the ask pluralizes the FINAL token of a multi-token chart noun ("stacked bars" → "stacked-bar")', () => {
+    const m = mapOf(synth('p2w', 'part-to-whole', ['stacked-bar'], catVal()));
+    const res = classifyNoLlm('Stacked bars of Sales by Region', m, SUMMARY);
+    expect(res).not.toBeNull();
+    expect(res!.template).toBe('p2w');
+  });
+
+  it('binds when the ask pluralizes the "map" chart noun ("Maps" → "map")', () => {
+    const m = mapOf(synth('geo', 'spatial', ['map'], catVal()));
+    const res = classifyNoLlm('Maps of Sales by Region', m, SUMMARY);
+    expect(res).not.toBeNull();
+    expect(res!.template).toBe('geo');
+  });
+
+  it('does NOT grant plural tolerance to a non-chart-noun keyword ("trends" ≠ "trend")', () => {
+    const m = mapOf(synth('ts', 'time-series', ['trend'], catVal()));
+    expect(classifyNoLlm('trends of Sales by Region', m, SUMMARY)).toBeNull();
+  });
+
+  it('leaves an exact singular chart-noun match unchanged', () => {
+    const m = mapOf(synth('rank', 'ranking', ['bar'], catVal()));
+    const res = classifyNoLlm('bar chart of Sales by Region', m, SUMMARY);
+    expect(res).not.toBeNull();
+    expect(res!.template).toBe('rank');
+  });
+
+  it('tolerates ONLY a trailing +s, not a fuzzy prefix ("bare" ≠ "bar")', () => {
+    // Guards against over-broadening: the plural rule appends an optional `s`, so a
+    // longer word that merely starts with the noun ("bare") must still fail closed.
+    const m = mapOf(synth('rank', 'ranking', ['bar'], catVal()));
+    expect(classifyNoLlm('bare of Sales by Region', m, SUMMARY)).toBeNull();
+  });
+});
+
 // ── determinism ───────────────────────────────────────────────────────────────
 describe('classifyNoLlm — determinism', () => {
   it('same inputs produce identical selection + bindings', () => {
