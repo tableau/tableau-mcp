@@ -5,8 +5,11 @@
 // behind an injected transport + clock + store + verifier + bundled fallback. Resolution
 // is fully SYNCHRONOUS (over the injected store) so it fits the sync provider interface;
 // the only async surface is `refresh()`, which is the seam for the REAL fetch transport
-// that lands later. With the shipped `NotConfiguredTransport`, `refresh()` performs no
-// network I/O and leaves the bundled fallback in place.
+// that lands later. `refresh()` VERIFIES the signed manifest in full (funnel steps 1–5,
+// signature included) BEFORE it fetches any declared resources, so an unverified/forged
+// manifest can never drive the transport to pull arbitrary bytes. With the shipped
+// `NotConfiguredTransport`, `refresh()` performs no network I/O and leaves the bundled
+// fallback in place.
 //
 // Fallback ladder (docs/authoring-content-pack.md §5), evaluated on EVERY load
 // (construction + reload + successful refresh) so a tampered cache is caught late:
@@ -27,6 +30,7 @@ import {
   type SignatureVerifier,
   type VerifiedPack,
   verifyPack,
+  verifyPackManifest,
 } from './packVerification.js';
 import type {
   AuthoringIntelligenceProvider,
@@ -98,7 +102,8 @@ const XML_SUFFIX = '.xml';
  * inner manifest that is not valid JSON / fails shape validation / disagrees with its
  * filename fails the WHOLE materialization (caller drops to bundled — never a half-state).
  * Non-manifest / non-XML resources (index, fixture) are hash-verified but not part of
- * the served surface, so they are skipped here.
+ * the served surface, so they are skipped here. A pack that verifies but yields ZERO
+ * template manifests is rejected (Err) rather than served as an empty template set.
  */
 export function materializePackSource(
   verified: VerifiedPack,
@@ -133,6 +138,14 @@ export function materializePackSource(
       const name = p.slice(XML_PREFIX.length, p.length - XML_SUFFIX.length);
       xmlFragments.set(name, content);
     }
+  }
+
+  // A verified pack that declares ZERO template manifests would materialize an empty
+  // template set yet report `remote-pack-fresh` — silent capability loss, when the
+  // bundled snapshot would have been strictly better. Fail closed: the caller maps this
+  // Err to the bundled fallback (`malformed-pack`), the correct fallback-ladder rung.
+  if (templateManifests.size === 0) {
+    return new Err('pack contains no template manifests — refusing to serve an empty template set');
   }
 
   const m = verified.manifest;
@@ -225,9 +238,14 @@ export class RemotePackIntelligenceProvider implements AuthoringIntelligenceProv
   }
 
   /**
-   * The async fetch seam. Uses the injected transport to fetch+verify+store a pack,
-   * then re-resolves the active source. With `NotConfiguredTransport` this is a no-op
-   * that reports `not-configured` and leaves the bundled fallback in place (NO network).
+   * The async fetch seam. Fetch the signed manifest, VERIFY it in full (funnel steps
+   * 1–5: parse + schema/pack-format/engine gates + signature over the canonical bytes)
+   * BEFORE fetching any resources, then fetch the pack for the VERIFIED manifest,
+   * hash-verify the fetched bytes (defense-in-depth: re-run the whole funnel), store,
+   * and re-resolve. Verifying the manifest first means a future real transport is never
+   * driven to pull arbitrary resources declared by an unverified/forged manifest. With
+   * `NotConfiguredTransport` this is a no-op that reports `not-configured` and leaves
+   * the bundled fallback in place (NO network).
    */
   async refresh(): Promise<RefreshOutcome> {
     const manifestResult = await this.deps.transport.fetchManifest();
@@ -235,7 +253,18 @@ export class RemotePackIntelligenceProvider implements AuthoringIntelligenceProv
       return { refreshed: false, reason: manifestResult.error.reason };
     }
     const signedManifest = manifestResult.value;
-    const resourcesResult = await this.deps.transport.fetchPack(signedManifest.manifest);
+
+    // Funnel steps 1–5 FIRST — the manifest's signature must cover its canonical bytes
+    // before we trust it to name the resources we fetch next. No resource I/O yet.
+    const verifiedManifest = verifyPackManifest(signedManifest, {
+      verifier: this.deps.verifier,
+      engine: this.deps.engine,
+    });
+    if (verifiedManifest.isErr()) {
+      return { refreshed: false, reason: verifiedManifest.error.reason };
+    }
+
+    const resourcesResult = await this.deps.transport.fetchPack(verifiedManifest.value);
     if (resourcesResult.isErr()) {
       return { refreshed: false, reason: resourcesResult.error.reason };
     }
@@ -244,6 +273,8 @@ export class RemotePackIntelligenceProvider implements AuthoringIntelligenceProv
       resources: resourcesResult.value,
       fetched_at: this.deps.clock.now().toISOString(),
     };
+    // Defense-in-depth: re-run the WHOLE funnel (steps 1–7) so the sha256 + fetched_at
+    // gates cover the just-fetched bytes before we persist or serve them.
     const verified = verifyPack(cached, { verifier: this.deps.verifier, engine: this.deps.engine });
     if (verified.isErr()) {
       return { refreshed: false, reason: verified.error.reason };

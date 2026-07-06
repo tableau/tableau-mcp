@@ -1,5 +1,7 @@
+import { Ok, type Result } from 'ts-results-es';
 import { describe, expect, it } from 'vitest';
 
+import type { PackManifest, SignedPackManifest } from './contentPack.js';
 import { InMemoryPackStore, type PackStore } from './packCache.js';
 import { buildCachedPack, fakeVerifier, TEST_ENGINE } from './packFixtures.js';
 import type { SignatureVerifier } from './packVerification.js';
@@ -9,8 +11,31 @@ import {
   materializePackSource,
   NotConfiguredTransport,
   type PackTransport,
+  type PackTransportUnavailable,
   RemotePackIntelligenceProvider,
 } from './remoteProvider.js';
+
+/**
+ * A transport test-double that serves a fixed manifest + resources and RECORDS whether
+ * fetchPack was ever called — the seam for proving refresh() verifies the manifest
+ * BEFORE fetching any resources (Finding 1).
+ */
+class RecordingTransport implements PackTransport {
+  fetchPackCalled = false;
+  constructor(
+    private readonly signed: SignedPackManifest,
+    private readonly resources: Record<string, string>,
+  ) {}
+  fetchManifest(): Promise<Result<SignedPackManifest, PackTransportUnavailable>> {
+    return Promise.resolve(new Ok(this.signed));
+  }
+  fetchPack(
+    _manifest: PackManifest,
+  ): Promise<Result<Record<string, string>, PackTransportUnavailable>> {
+    this.fetchPackCalled = true;
+    return Promise.resolve(new Ok(this.resources));
+  }
+}
 
 const TTL_MS = 24 * 60 * 60 * 1000;
 const clockAt = (iso: string): Clock => ({ now: () => new Date(iso) });
@@ -82,6 +107,26 @@ describe('remoteProvider — fallback to bundled (honest status)', () => {
     });
     const p = makeProvider({ store: new InMemoryPackStore(cached) });
     expect(p.getStatus().fallback).toBe('malformed-pack');
+  });
+
+  it('falls back to bundled (malformed-pack) for a verified pack with ZERO template manifests', () => {
+    // A pack that verifies but declares only non-manifest resources (here: an XML
+    // fragment, no template-manifests/*.manifest.json) would materialize an EMPTY
+    // template set and be served as remote-pack-fresh — silent capability loss. It must
+    // instead drop to the strictly-better bundled snapshot (Finding 3).
+    const cached = buildCachedPack({
+      resources: [
+        {
+          path: 'data-visualization-templates-xml/ranking-ordered-bar.xml',
+          content: '<worksheet/>',
+        },
+      ],
+    });
+    const p = makeProvider({ store: new InMemoryPackStore(cached) });
+    const s = p.getStatus();
+    expect(s.kind).toBe('bundled');
+    expect(s.fallback).toBe('malformed-pack');
+    expect(s.note).toMatch(/no template manifests/i);
   });
 });
 
@@ -170,5 +215,56 @@ describe('remoteProvider/refresh — transport seam (no network with NotConfigur
       expect(outcome.reason).toBe('not-configured');
     }
     expect(p.getStatus().kind).toBe('bundled');
+  });
+});
+
+describe('remoteProvider/refresh — verify manifest BEFORE fetching resources (Finding 1)', () => {
+  it('fetches + verifies + serves a valid pack (happy path, fetchPack IS called)', async () => {
+    const cached = buildCachedPack();
+    const transport = new RecordingTransport(cached.signedManifest, cached.resources);
+    const p = makeProvider({ transport, clockIso: '2026-07-06T01:00:00.000Z' });
+
+    const outcome = await p.refresh();
+    expect(outcome.refreshed).toBe(true);
+    expect(transport.fetchPackCalled).toBe(true);
+    const s = p.getStatus();
+    expect(s.kind).toBe('remote-pack');
+    expect(s.freshness).toBe('remote-pack-fresh');
+  });
+
+  it('NEVER calls fetchPack when the manifest signature is bad', async () => {
+    const cached = buildCachedPack({ signatureOverride: 'not-the-real-signature' });
+    const transport = new RecordingTransport(cached.signedManifest, cached.resources);
+    const p = makeProvider({ transport });
+
+    const outcome = await p.refresh();
+    expect(outcome.refreshed).toBe(false);
+    if (!outcome.refreshed) expect(outcome.reason).toBe('bad-signature');
+    expect(transport.fetchPackCalled).toBe(false);
+    expect(p.getStatus().kind).toBe('bundled');
+  });
+
+  it('NEVER calls fetchPack when the manifest schema is too new for the engine', async () => {
+    const cached = buildCachedPack({ manifestOverrides: { schema_version: '2' } });
+    const transport = new RecordingTransport(cached.signedManifest, cached.resources);
+    const p = makeProvider({ transport });
+
+    const outcome = await p.refresh();
+    expect(outcome.refreshed).toBe(false);
+    if (!outcome.refreshed) expect(outcome.reason).toBe('schema-too-new');
+    expect(transport.fetchPackCalled).toBe(false);
+  });
+
+  it('NEVER calls fetchPack when the manifest is malformed', async () => {
+    const cached = buildCachedPack();
+    // Corrupt the manifest so parse (funnel step 1) rejects it before any fetch.
+    (cached.signedManifest.manifest as { schema_version: string }).schema_version = 'x';
+    const transport = new RecordingTransport(cached.signedManifest, cached.resources);
+    const p = makeProvider({ transport });
+
+    const outcome = await p.refresh();
+    expect(outcome.refreshed).toBe(false);
+    if (!outcome.refreshed) expect(outcome.reason).toBe('malformed');
+    expect(transport.fetchPackCalled).toBe(false);
   });
 });

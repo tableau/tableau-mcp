@@ -2,12 +2,12 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { loadManifests } from '../../../desktop/binder/manifest.js';
-import type { Family } from '../../../desktop/binder/manifest-types.js';
+import type { Family, TemplateManifest } from '../../../desktop/binder/manifest-types.js';
 import { DesktopMcpServer } from '../../../server.desktop.js';
 import invariant from '../../../utils/invariant.js';
 import { Provider } from '../../../utils/provider.js';
 import { getMockRequestHandlerExtra } from '../toolContext.mock.js';
-import { getListTemplatesTool } from './listTemplates.js';
+import { deriveFastPathBlockers, getListTemplatesTool } from './listTemplates.js';
 
 // Exercises the tool against the REAL bundled provider (the data ships in-repo, so this
 // stays hermetic) — proving list-templates is a genuine consumer of the milestone-1
@@ -79,6 +79,50 @@ describe('listTemplatesTool', () => {
     expect(body.count).toBe(expectedFastPath);
     expect(body.fastPathCount).toBe(expectedFastPath);
     expect(body.templates.every((t) => t.fast_path_eligible)).toBe(true);
+  });
+
+  it('derives an honest fast_path_blocker for ineligible templates the manifest left empty', async () => {
+    // A GREEN template that is fast_path_eligible: false with an EMPTY explicit blocker
+    // list would otherwise report `[]` — no signal. render_verified 'none' yields the
+    // single derived, manifest-traceable blocker (Finding 7).
+    const ineligibleEmpty: Pick<
+      TemplateManifest,
+      'fast_path_eligible' | 'fast_path_blockers' | 'portability_evidence'
+    > = {
+      fast_path_eligible: false,
+      fast_path_blockers: [],
+      portability_evidence: { fixture_bind: true, render_verified: 'none' },
+    };
+    expect(deriveFastPathBlockers(ineligibleEmpty)).toEqual([
+      'not-live-render-verified: this template has no live render verification stamp',
+    ]);
+  });
+
+  it('passes explicit manifest blockers through untouched (no derivation)', () => {
+    const withBlockers: Pick<
+      TemplateManifest,
+      'fast_path_eligible' | 'fast_path_blockers' | 'portability_evidence'
+    > = {
+      fast_path_eligible: false,
+      fast_path_blockers: ['GENERATED_GEO_REQUIRED', 'PARAMETER_REQUIRED'],
+      portability_evidence: { fixture_bind: false, render_verified: 'none' },
+    };
+    expect(deriveFastPathBlockers(withBlockers)).toEqual([
+      'GENERATED_GEO_REQUIRED',
+      'PARAMETER_REQUIRED',
+    ]);
+  });
+
+  it('derives no blocker for a fast-path-eligible template', () => {
+    const eligible: Pick<
+      TemplateManifest,
+      'fast_path_eligible' | 'fast_path_blockers' | 'portability_evidence'
+    > = {
+      fast_path_eligible: true,
+      fast_path_blockers: [],
+      portability_evidence: { fixture_bind: true, render_verified: 'live-2026-07-06' },
+    };
+    expect(deriveFastPathBlockers(eligible)).toEqual([]);
   });
 
   it('rejects an out-of-taxonomy family at the schema layer (fail-open watch-class guard)', async () => {

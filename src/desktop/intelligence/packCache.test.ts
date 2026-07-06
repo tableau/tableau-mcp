@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { evaluateCachedPack, InMemoryPackStore } from './packCache.js';
+import { evaluateCachedPack, InMemoryPackStore, MAX_CLOCK_SKEW_MS } from './packCache.js';
 import { buildCachedPack, fakeVerifier, TEST_ENGINE } from './packFixtures.js';
 
 const TTL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -65,5 +65,33 @@ describe('packCache/evaluateCachedPack — pure state machine', () => {
     if (s.state === 'rejected') {
       expect(s.reason).toBe('schema-too-new');
     }
+  });
+
+  // Finding 2: a future-dated fetched_at (now BEFORE fetched_at) cannot be a legitimately
+  // written cache stamp beyond a small skew — reject it rather than let a negative age
+  // read as `fresh` forever. Within skew, treat age as 0 (benign clock disagreement).
+  const fetchedMs = new Date(FETCHED).getTime();
+
+  it('rejects a fetched_at dated into the future BEYOND the skew allowance as tampered', () => {
+    const now = new Date(fetchedMs - (MAX_CLOCK_SKEW_MS + 60_000)); // 1 min past the allowance
+    const s = evaluateCachedPack(buildCachedPack({ fetched_at: FETCHED }), deps(now));
+    expect(s.state).toBe('rejected');
+    if (s.state === 'rejected') {
+      expect(s.reason).toBe('tampered');
+    }
+  });
+
+  it('treats a fetched_at in the future WITHIN the skew allowance as fresh (age clamped to 0)', () => {
+    const now = new Date(fetchedMs - (MAX_CLOCK_SKEW_MS - 60_000)); // 1 min inside the allowance
+    expect(evaluateCachedPack(buildCachedPack({ fetched_at: FETCHED }), deps(now)).state).toBe(
+      'fresh',
+    );
+  });
+
+  it('treats the exact skew boundary as fresh (inclusive), not tampered', () => {
+    const now = new Date(fetchedMs - MAX_CLOCK_SKEW_MS); // exactly at the allowance
+    expect(evaluateCachedPack(buildCachedPack({ fetched_at: FETCHED }), deps(now)).state).toBe(
+      'fresh',
+    );
   });
 });

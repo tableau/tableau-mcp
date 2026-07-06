@@ -47,6 +47,14 @@ export class InMemoryPackStore implements PackStore {
   }
 }
 
+/**
+ * Allowance for benign clock disagreement between the cache-writer's clock and the
+ * evaluation clock. A `fetched_at` up to this far into the FUTURE is tolerated (treated
+ * as age 0); beyond it, the timestamp cannot be a legitimately-written cache stamp and
+ * is rejected as `tampered` (a forged-future stamp must not confer freshness forever).
+ */
+export const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000; // 5 minutes
+
 /** The evaluated state of the cache. Exactly one of these describes any load. */
 export type CacheState =
   | { state: 'absent' }
@@ -56,11 +64,17 @@ export type CacheState =
 
 /**
  * Pure evaluation of a cached pack:
- *   - no cache            → absent
- *   - fails ANY §4 gate   → rejected (integrity/compat beats TTL — a tampered pack is
- *                           never served, never "stale")
- *   - verified & in TTL   → fresh  (now - fetchedAt <= ttlMs, inclusive)
- *   - verified & past TTL → stale
+ *   - no cache                       → absent
+ *   - fails ANY §4 gate              → rejected (integrity/compat beats TTL — a tampered
+ *                                      pack is never served, never "stale")
+ *   - fetched_at in the FUTURE beyond → rejected 'tampered' (a legitimately-written cache
+ *     MAX_CLOCK_SKEW_MS               timestamp cannot be meaningfully in the future;
+ *                                      forging it forward would otherwise give a negative
+ *                                      age → `fresh` forever — integrity beats TTL)
+ *   - fetched_at in the future WITHIN → age clamped to 0 → fresh (benign clock skew)
+ *     MAX_CLOCK_SKEW_MS (inclusive)
+ *   - verified & in TTL              → fresh  (now - fetchedAt <= ttlMs, inclusive)
+ *   - verified & past TTL            → stale
  */
 export function evaluateCachedPack(
   cached: CachedPack | null,
@@ -75,5 +89,15 @@ export function evaluateCachedPack(
   }
   const pack = verified.value;
   const ageMs = deps.now.getTime() - pack.fetchedAt.getTime();
-  return ageMs <= deps.ttlMs ? { state: 'fresh', pack } : { state: 'stale', pack };
+  // A future-dated fetched_at beyond the skew allowance is integrity-suspect, not fresh.
+  if (ageMs < -MAX_CLOCK_SKEW_MS) {
+    return {
+      state: 'rejected',
+      reason: 'tampered',
+      detail: `fetched_at ${pack.fetchedAt.toISOString()} is ${-ageMs}ms in the future (> ${MAX_CLOCK_SKEW_MS}ms skew)`,
+    };
+  }
+  // Within-skew future → treat as age 0 (fresh); otherwise the real elapsed age.
+  const effectiveAgeMs = Math.max(0, ageMs);
+  return effectiveAgeMs <= deps.ttlMs ? { state: 'fresh', pack } : { state: 'stale', pack };
 }

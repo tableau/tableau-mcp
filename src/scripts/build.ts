@@ -106,21 +106,38 @@ const globalValues: Record<GlobalIdentifierName, string> = {
   // A copy here is therefore consulted by no consumer: pure tarball weight. (Their
   // cwd-relative resolution also means they aren't reachable from a published install
   // at all — a separate resolution gap, tracked for a later lane, not fixed by staging.)
-  console.log('🏗️ Staging desktop data (allowlist)...');
-  const desktopDataSrc = './src/desktop/data';
-  const desktopDataOut = './build/desktop/data';
-  const stagedDesktopData = [
-    'template-manifests', // MANIFESTS_DIR — loadManifests() (binder + provider)
-    'template-manifests.index.json', // MANIFEST_INDEX_PATH — loadManifests()
-    'template-manifests.fixture.json', // BINDER_FIXTURE_PATH — eligibility gate
-    'content-manifest.json', // CONTENT_MANIFEST_PATH — provider.getStatus/getContentManifest
-    'data-visualization-templates-xml', // TEMPLATE_XML_DIR — provider.getTemplateXmlFragment + content-manifest hashes
-  ];
-  await mkdir(desktopDataOut, { recursive: true });
-  for (const entry of stagedDesktopData) {
-    await cp(`${desktopDataSrc}/${entry}`, `${desktopDataOut}/${entry}`, { recursive: true });
+  // VARIANT-GATED: only the desktop tool surface (the `desktop` and `combined` variants)
+  // ever resolves `build/desktop/data` at runtime (manifest.ts resolveDataDir candidate 2).
+  // The `default` variant's server (src/index.ts) never reads it — and `default` is the
+  // ONLY variant the publish pipeline builds — so staging it there is pure orphaned tarball
+  // weight (~173 KB per install). Gate the staging on the variant so the default package
+  // stays lean; desktop/combined still stage the full allowlist below.
+  if (variant === 'desktop' || variant === 'combined') {
+    console.log('🏗️ Staging desktop data (allowlist)...');
+    const desktopDataSrc = './src/desktop/data';
+    const desktopDataOut = './build/desktop/data';
+    // LOCKSTEP: this allowlist is mirrored in
+    // src/desktop/intelligence/content-manifest-staging.test.ts (STAGED_DESKTOP_DATA).
+    // build.ts runs an IIFE at import (can't be imported without side effects), so the
+    // test duplicates the list; keep the two in sync. That test also PROVES every
+    // content-manifest.json resource lands under one of these roots.
+    const stagedDesktopData = [
+      'template-manifests', // MANIFESTS_DIR — loadManifests() (binder + provider)
+      'template-manifests.index.json', // MANIFEST_INDEX_PATH — loadManifests()
+      'template-manifests.fixture.json', // BINDER_FIXTURE_PATH — eligibility gate
+      'content-manifest.json', // CONTENT_MANIFEST_PATH — provider.getStatus/getContentManifest
+      'data-visualization-templates-xml', // TEMPLATE_XML_DIR — provider.getTemplateXmlFragment + content-manifest hashes
+    ];
+    await mkdir(desktopDataOut, { recursive: true });
+    for (const entry of stagedDesktopData) {
+      await cp(`${desktopDataSrc}/${entry}`, `${desktopDataOut}/${entry}`, { recursive: true });
+    }
+    console.log(
+      `✅ Desktop data staged to ${desktopDataOut} (${stagedDesktopData.length} entries)`,
+    );
+  } else {
+    console.log(`⏭️ Skipping desktop data staging for the '${variant}' variant (not read by it).`);
   }
-  console.log(`✅ Desktop data staged to ${desktopDataOut} (${stagedDesktopData.length} entries)`);
 
   console.log('🏗️ Building MCP Apps...');
   try {
