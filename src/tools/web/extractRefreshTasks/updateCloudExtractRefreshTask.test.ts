@@ -431,7 +431,7 @@ describe('updateCloudExtractRefreshTaskTool', () => {
       expect(result.content[0].text).toContain('Preview');
       expect(result.content[0].text).toContain(validTaskId);
       expect(result.content[0].text).toContain('Weekly');
-      // Token is the deterministic sha256(siteId:taskId)[0..12].
+      // Token is the deterministic sha256(siteId:taskId:stableStringify(schedule))[0..12].
       expect(result.content[0].text).toContain(validToken);
       expect(result.content[0].text).toContain('confirm: true and confirmationToken');
       // No Tableau call in the preview phase — admin gate runs but the update endpoint does not.
